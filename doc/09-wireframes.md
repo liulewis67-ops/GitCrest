@@ -31,41 +31,84 @@
 - 打开失败时在行内显示错误，不跳转空白页。
 - 克隆仓库使用弹窗，要求 URL、目标路径、认证方式。
 
-## 2. 主窗口默认布局
+## 2. 主窗口默认布局（提交图模式）
 
-用途：完成大多数 Git 工作。
+用途：浏览历史、查看提交详情。是默认进入主窗口时的视图。
 
 ```text
 +--------------------------------------------------------------------------------+
 | GitCrest | repo-a x | repo-b x | + | Search | Cmd K | main ↑2 ↓0 | Sync        |
 +--------------------------------------------------------------------------------+
-| Files / Branches       | Commit Graph                 | Commit Detail / Diff    |
-|------------------------+------------------------------+-------------------------|
-| Files                  | o  feat: add parser          | Commit                  |
-|  src/                  | |  fix: cache status          | abc1234                 |
-|    M main.rs           | o--o merge branch            | Author  Time            |
-|    A parser.rs         | |  refactor diff              |                         |
-|  tests/                | o  init                      | Changed Files           |
-| Branches               |                              | M src/main.rs           |
-|  * main                |                              | A src/parser.rs         |
-|    feature/diff        |                              |                         |
-| Remotes                |                              | Diff Preview            |
-|  origin/main           |                              | + new code              |
-| Shelves                |                              | - old code              |
-|  WIP conflict fix      |                              |                         |
-|------------------------+------------------------------+-------------------------|
-| Working Tree           | Staged Changes               | Commit Message          |
-| M src/main.rs          | A src/parser.rs              | feat(parser): ...       |
-| ? scratch.txt          |                              | [AI] [Commit]           |
+| Changes / Branches    | [Graph] Diff                 | Commit Detail            |
+|-----------------------+------------------------------+--------------------------|
+| Changes  6            | o  feat: add parser          | feat: add parser         |
+| Unstaged              | |  fix: cache status         | a91f2d8  Wei  7m         |
+|  M src/main.rs   +23  | o--o merge branch            |                          |
+|  M src/util.rs   +14  | |  refactor diff              | Files (5)                |
+|  ? scratch.txt   --   | o  init                      |   M src/main.rs +84 -21  |
+| Staged                |                              |   A src/parser.rs +62 -0 |
+|  A src/parser.rs +62  |                              |   M ...                  |
+|                       |                              |                          |
+| Branches              |                              | [Copy SHA] [Cherry-pick] |
+|  * feature/diff       |                              | [Tag] [Revert]           |
+|    main          ↓5   |                              |                          |
+| Remotes               |                              |                          |
+|  origin               |                              |                          |
+| Shelves               |                              |                          |
+|  WIP conflict-fix     |                              |                          |
+|-----------------------+------------------------------+--------------------------|
+| Working Tree          | Staged Changes               | Commit Message           |
+| M src/main.rs         | A src/parser.rs              | feat(parser): ...        |
+| ? scratch.txt         |                              | [AI] [Commit]            |
 +--------------------------------------------------------------------------------+
 ```
 
 关键交互：
 
-- 左侧栏、右侧栏、底部工作区均可拖拽调整。
+- 左侧栏不展示完整文件树。Changes 区只列出有 Git 状态的文件，分未暂存 / 已暂存两组。
+- 模式切换按钮（Graph / Diff）始终常驻在主区顶部。提交图模式下「Diff」处于待激活状态，点击 Changes 中的文件或提交详情中的文件后才会激活。
 - 提交图选中状态驱动右侧详情。
-- 工作区选中文件时，右侧切换为工作区 Diff。
-- 仓库 Tab 切换保留当前上下文。
+- 仓库 Tab 切换保留各自的模式与选中对象。
+
+## 2.1 主窗口 Diff 模式
+
+用途：审阅一个文件的具体差异，可来自工作区（未提交）或某个提交。
+
+```text
++--------------------------------------------------------------------------------+
+| GitCrest | repo-a x | repo-b x | + | Search | Cmd K | main ↑2 ↓0 | Sync        |
++--------------------------------------------------------------------------------+
+| Changes / Branches    | Graph [Diff]  src/main.rs  < prev   next >  Split  ⚙   |
+|-----------------------+------------------------------------------------------- |
+| Changes  6            |  Old (HEAD)               │   │ New (working tree)     |
+| Unstaged              | 42 pub fn compute(...)     │   │ 42 pub fn compute(...) |
+|  M src/main.rs   +23 ◀| 43 -let diff = ...         │▌▌▌│ 43 +let old_tree = .. |
+|  M src/util.rs   +14  |                            │▌▌▌│ 44 +let new_tree = .. |
+|  ? scratch.txt   --   |                            │▌▌▌│ 45 +let diff = ...    |
+| Staged                | 44                         │   │ 46                    |
+|  A src/parser.rs +62  | 45 -ret old_call(...)      │▌▌▌│ 47 +ret new_call(...) |
+|                       | 46 }                       │   │ 48 }                  |
+| Branches              |                                                        |
+|  * feature/diff       |  ── 12 unchanged lines ──                              |
+|    main          ↓5   |                                                        |
+| Remotes               | 88 fn legacy() { ... }     │▌▌▌│                       |
+|  origin               |                                                        |
+| Shelves               | [Stage hunk] [Stage line] [Discard]    Rust · UTF-8    |
+|-----------------------+--------------------------------------------------------|
+| Working Tree          | Staged Changes               | Commit Message           |
+| M src/main.rs         | A src/parser.rs              | feat(parser): ...        |
+| ? scratch.txt         |                              | [AI] [Commit]            |
++--------------------------------------------------------------------------------+
+```
+
+关键交互：
+
+- Diff 模式下右侧提交详情栏收起，让左右分栏获得更多水平空间。点击「Graph」按钮或按 `Cmd/Ctrl+H` 立即回到提交图模式，且保留刚才选中的提交和滚动位置。
+- 顶部工具栏：Old 来源（HEAD / 提交 SHA）、New 来源（工作区 / 目标提交）、前/后变更块导航、Split/Unified 切换（主区只支持 Split，Unified 仅在独立 Diff 窗口提供）。
+- 两栏之间的中央通道用颜色梯形连接对应变更块：绿色 = 新增、红色 = 删除、黄色 = 修改。
+- 折叠带显示未修改上下文的行数，可点击展开。
+- 当 Diff 来源是工作区，底部出现 Stage hunk / Stage line / Discard；当来源是某个提交，这些操作禁用。
+- 左侧 Changes 列表中点击其他文件时主区直接切换文件，不离开 Diff 模式。
 
 ## 3. 工作区和提交表单
 

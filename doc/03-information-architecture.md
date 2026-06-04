@@ -22,9 +22,9 @@
 核心区域：
 
 - 标题栏和仓库 Tab。
-- 左侧仓库文件树和分支区域。
-- 中央提交图。
-- 右侧提交详情和 Diff 预览。
+- 左侧 Changes 列表（仅显示有 Git 状态的文件）和分支 / Remotes / Shelves 区。
+- 中央主区：双模式 —— 提交图模式 / Diff 模式（IDEA-Split 左右分栏）。两模式互斥但可随时切换。
+- 右侧提交详情（仅提交图模式下显示；Diff 模式下收起）。
 - 底部工作区和暂存区。
 
 ### Diff 窗口
@@ -67,16 +67,19 @@
 
 ## 3. 主窗口布局
 
-建议采用高密度三栏加底部工作区布局：
+采用高密度三栏加底部工作区布局，中央主区在两种模式间切换：
 
 ```text
 Title Bar: Repo Tabs / Search / Command / Sync Status
-Left: Repository Tree / Branches / Remotes
-Center: Commit Graph
-Right: Commit Detail / File Diff Preview
+Left:   Changes (modified files only) / Branches / Remotes / Shelves
+Center: [Graph mode]  Commit Graph
+        [Diff  mode]  IDEA-style Split Diff (full-width; right panel collapses)
+Right:  Commit Detail (only in Graph mode)
 Bottom: Working Tree / Staged / Commit Form
-Status Bar: Current branch / ahead-behind / background tasks / AI mode
+Status: Current branch / ahead-behind / background tasks / AI mode
 ```
+
+模式切换入口常驻于中央主区顶部；快捷键 `Cmd/Ctrl+H` 回到 Graph，`Cmd/Ctrl+D` 进入 Diff。
 
 ## 4. 导航模型
 
@@ -85,8 +88,10 @@ Status Bar: Current branch / ahead-behind / background tasks / AI mode
 | 入口 | 目标 |
 |---|---|
 | 仓库 Tab | 切换仓库上下文 |
-| 文件树 | 查看工作区状态、打开 Diff |
+| Changes 列表 | 列出未暂存 / 已暂存 / 冲突文件；点击直接进入 Diff 模式 |
 | 提交图 | 浏览历史、查看提交详情 |
+| 提交详情中的文件 | 进入 Diff 模式查看该提交的文件差异 |
+| 模式切换按钮 | 在 Graph 与 Diff 模式间切换 |
 | 工作区 | 暂存、取消暂存、提交 |
 | 分支列表 | 切换、创建、删除、收藏 |
 | 命令面板 | 全局操作入口 |
@@ -106,10 +111,11 @@ Status Bar: Current branch / ahead-behind / background tasks / AI mode
 | 区域 | 子页面/状态 |
 |---|---|
 | 欢迎页 | 最近仓库、克隆仓库、打开本地、初始化 |
-| 主工作台 | 默认布局、搜索结果、后台任务展开 |
-| 文件树 | 按目录、按状态、搜索过滤 |
+| 主工作台 | Graph 模式、Diff 模式、搜索结果、后台任务展开 |
+| Changes 列表 | 未暂存、已暂存、冲突分组；按状态、按路径过滤 |
 | 提交图 | 默认、搜索、高亮分支、选中提交 |
-| 提交详情 | 文件列表、Diff、提交信息、父提交 |
+| 提交详情 | 文件列表、提交信息、父提交（点击文件进入 Diff 模式） |
+| Diff 模式 | Split 双栏、变更块导航、Stage hunk/line（仅工作区来源） |
 | 工作区 | 未暂存、已暂存、冲突、Shelve |
 | 分支面板 | 本地、远程、收藏、Gitflow |
 | 远程面板 | remotes、fetch/pull/push 结果 |

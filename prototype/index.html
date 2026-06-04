@@ -37,8 +37,12 @@
 
   --diff-add-bg:       rgba(16,185,129,0.16);
   --diff-del-bg:       rgba(239,68,68,0.16);
-  --diff-add-token:    rgba(16,185,129,0.32);
-  --diff-del-token:    rgba(239,68,68,0.32);
+  --diff-add-bg-faint: rgba(16,185,129,0.08);
+  --diff-del-bg-faint: rgba(239,68,68,0.08);
+  --diff-add-token:    rgba(16,185,129,0.36);
+  --diff-del-token:    rgba(239,68,68,0.36);
+  --diff-mod-bg:       rgba(245,158,11,0.14);
+  --diff-empty-bg:     rgba(255,255,255,0.018);
 
   --shadow-pop: 0 10px 30px rgba(0,0,0,.45), 0 2px 6px rgba(0,0,0,.35);
 }
@@ -68,8 +72,12 @@
 
   --diff-add-bg:       #DCFCE7;
   --diff-del-bg:       #FEE2E2;
-  --diff-add-token:    #BBF7D0;
-  --diff-del-token:    #FECACA;
+  --diff-add-bg-faint: #ECFDF5;
+  --diff-del-bg-faint: #FEF2F2;
+  --diff-add-token:    #86EFAC;
+  --diff-del-token:    #FCA5A5;
+  --diff-mod-bg:       #FEF3C7;
+  --diff-empty-bg:     rgba(0,0,0,0.025);
 
   --shadow-pop: 0 10px 30px rgba(15,23,42,.10), 0 2px 6px rgba(15,23,42,.08);
 }
@@ -130,7 +138,6 @@ input { font: inherit; color: inherit; }
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   padding-right: var(--space-2);
-  -webkit-app-region: drag;
 }
 .brand {
   display: flex;
@@ -157,12 +164,7 @@ input { font: inherit; color: inherit; }
   border-bottom-left-radius: 4px;
 }
 
-.tabs {
-  display: flex;
-  align-items: stretch;
-  flex: 0 0 auto;
-  -webkit-app-region: no-drag;
-}
+.tabs { display: flex; align-items: stretch; flex: 0 0 auto; }
 .tab {
   display: flex;
   align-items: center;
@@ -191,11 +193,8 @@ input { font: inherit; color: inherit; }
 .tab-add:hover { color: var(--color-text); background: var(--color-bg); }
 
 .toolbar-spacer { flex: 1; }
+.toolbar-actions { display: flex; align-items: center; gap: var(--space-2); }
 
-.toolbar-actions {
-  display: flex; align-items: center; gap: var(--space-2);
-  -webkit-app-region: no-drag;
-}
 .search {
   display: flex; align-items: center; gap: var(--space-2);
   background: var(--color-bg);
@@ -237,14 +236,18 @@ input { font: inherit; color: inherit; }
 /* Main grid ------------------------------------------------------- */
 .main {
   display: grid;
-  grid-template-columns: 260px 1fr 380px;
+  grid-template-columns: 280px 1fr 380px;
   grid-template-rows: 1fr 240px;
   min-height: 0;
+  transition: grid-template-columns 140ms ease;
 }
-.left  { grid-row: 1 / span 2; border-right: 1px solid var(--color-border); display: flex; flex-direction: column; min-height: 0; background: var(--color-surface); }
-.graph { border-right: 1px solid var(--color-border); min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--color-bg); }
-.detail{ min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); }
-.work  { grid-column: 2 / span 2; border-top: 1px solid var(--color-border); display: grid; grid-template-columns: 1fr 1fr 320px; min-height: 0; background: var(--color-surface); }
+.app[data-mode="diff"] .main { grid-template-columns: 280px 1fr 0px; }
+.app[data-mode="diff"] .detail { display: none; }
+
+.left   { grid-row: 1 / span 2; border-right: 1px solid var(--color-border); display: flex; flex-direction: column; min-height: 0; background: var(--color-surface); }
+.center { border-right: 1px solid var(--color-border); min-height: 0; min-width: 0; display: flex; flex-direction: column; background: var(--color-bg); }
+.detail { min-height: 0; display: flex; flex-direction: column; background: var(--color-surface); }
+.work   { grid-column: 2 / span 2; border-top: 1px solid var(--color-border); display: grid; grid-template-columns: 1fr 1fr 320px; min-height: 0; background: var(--color-surface); }
 
 /* Section header common ------------------------------------------ */
 .section-head {
@@ -260,55 +263,78 @@ input { font: inherit; color: inherit; }
 }
 .section-head .actions { display: flex; gap: 2px; }
 .section-head .actions .icon-btn { width: 22px; height: 22px; }
+.section-head .meta-tag {
+  text-transform: none; letter-spacing: 0;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
 
 /* Left sidebar --------------------------------------------------- */
 .left .pane { display: flex; flex-direction: column; min-height: 0; }
-.left .pane.files { flex: 1 1 auto; min-height: 120px; }
+.left .pane.changes { flex: 1 1 auto; min-height: 140px; }
 .left .pane.branches { flex: 0 0 auto; max-height: 220px; }
 .left .pane.remotes { flex: 0 0 auto; }
 .left .pane.shelves { flex: 0 0 auto; }
 
-.tree {
-  flex: 1; overflow: auto; padding: var(--space-1) 0;
-  font-family: var(--font-ui);
-  font-size: var(--text-sm);
+/* Changes list (replaces the file tree) */
+.changes-body { flex: 1; overflow: auto; padding: 0 0 var(--space-2); }
+.changes-group {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--color-text-dim);
+  padding: 6px var(--space-3) 2px;
+  display: flex; align-items: center; justify-content: space-between;
 }
-.tree-row {
+.changes-group .count {
+  color: var(--color-text-muted);
+  letter-spacing: 0; text-transform: none;
+  font-family: var(--font-code);
+}
+.change-row {
   display: flex; align-items: center; gap: 6px;
   height: var(--row-h);
-  padding: 0 var(--space-2);
-  color: var(--color-text);
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
   cursor: pointer;
   position: relative;
 }
-.tree-row.indent-1 { padding-left: 20px; }
-.tree-row.indent-2 { padding-left: 36px; }
-.tree-row.indent-3 { padding-left: 52px; }
-.tree-row:hover { background: var(--color-surface-hover); }
-.tree-row.selected { background: var(--color-accent-soft); }
-.tree-row.selected::before {
+.change-row:hover { background: var(--color-surface-hover); }
+.change-row.selected { background: var(--color-accent-soft); }
+.change-row.selected::before {
   content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--color-accent);
 }
-.tree-row .caret { width: 12px; color: var(--color-text-dim); display: inline-flex; justify-content: center; }
-.tree-row .icon  { width: 14px; color: var(--color-text-muted); display: inline-flex; justify-content: center; }
-.tree-row .name  { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tree-row .tag   { font-size: var(--text-xs); color: var(--color-text-dim); }
+.change-row input[type="checkbox"] { accent-color: var(--color-accent); margin: 0; flex-shrink: 0; }
+.change-row .badge {
+  width: 14px; text-align: center; flex-shrink: 0;
+  font-family: var(--font-code); font-size: var(--text-xs); font-weight: 700;
+}
+.change-row .path-cell {
+  flex: 1; min-width: 0;
+  display: flex; align-items: baseline; gap: 6px;
+}
+.change-row .path-cell .file  { font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.change-row .path-cell .dir   { color: var(--color-text-dim); font-size: var(--text-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.change-row .delta {
+  font-family: var(--font-code); font-size: var(--text-xs);
+  display: flex; gap: 4px; flex-shrink: 0;
+}
+.change-row .delta .plus  { color: var(--git-added); }
+.change-row .delta .minus { color: var(--git-deleted); }
 
-.tag-M { color: var(--git-modified); }
-.tag-A { color: var(--git-added); }
-.tag-D { color: var(--git-deleted); }
-.tag-R { color: var(--git-renamed); }
-.tag-U { color: var(--git-untracked); }
-.tag-C { color: var(--git-conflicted); }
-.tag-I { color: var(--git-ignored); }
+.badge.b-M { color: var(--git-modified); }
+.badge.b-A { color: var(--git-added); }
+.badge.b-D { color: var(--git-deleted); }
+.badge.b-R { color: var(--git-renamed); }
+.badge.b-U { color: var(--git-untracked); }
+.badge.b-C { color: var(--git-conflicted); }
+.change-row.kind-conflicted .file { color: var(--git-conflicted); font-weight: 600; }
+.change-row.kind-deleted    .file { color: var(--git-deleted); text-decoration: line-through; text-decoration-color: rgba(239,68,68,0.5); }
+.change-row.kind-untracked  .file { color: var(--git-untracked); }
+.change-row.kind-added      .file { color: var(--git-added); }
 
-.tree-row.tag-modified  .name { color: var(--git-modified); }
-.tree-row.tag-added     .name { color: var(--git-added); }
-.tree-row.tag-deleted   .name { color: var(--git-deleted); }
-.tree-row.tag-untracked .name { color: var(--git-untracked); }
-.tree-row.tag-conflicted .name { color: var(--git-conflicted); font-weight: 600; }
-
-/* Branch list */
+/* Branch list ---------------------------------------------------- */
+.branch-list { overflow: auto; }
 .branch-row {
   display: flex; align-items: center; gap: 6px;
   height: var(--row-h);
@@ -322,19 +348,69 @@ input { font: inherit; color: inherit; }
 .branch-row.remote .name { color: var(--color-text-muted); }
 .branch-row .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .branch-row .ahead-behind {
-  font-size: var(--text-xs);
-  color: var(--color-text-muted);
+  font-size: var(--text-xs); color: var(--color-text-muted);
   display: flex; gap: 4px;
 }
 .branch-row .ahead-behind .ah { color: var(--git-added); }
 .branch-row .star { width: 12px; color: var(--git-renamed); }
 
-/* Graph ---------------------------------------------------------- */
+/* Center area (mode-switching: graph | diff) -------------------- */
+.center-toolbar {
+  display: flex; align-items: center;
+  gap: var(--space-2);
+  padding: 0 var(--space-3);
+  height: 36px;
+  border-bottom: 1px solid var(--color-border-soft);
+  background: var(--color-surface);
+  flex: 0 0 auto;
+}
+.mode-switch {
+  display: inline-flex;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+  gap: 2px;
+}
+.mode-switch button {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 22px; padding: 0 10px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.mode-switch button:hover { color: var(--color-text); }
+.mode-switch button.active {
+  background: var(--color-surface-raised);
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+.mode-switch button.disabled { opacity: .45; cursor: not-allowed; }
+
+.center-context {
+  display: flex; align-items: center; gap: var(--space-2);
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  margin-left: var(--space-3); flex: 1; min-width: 0;
+}
+.center-context .crumb {
+  font-family: var(--font-code);
+  color: var(--color-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+.center-body { flex: 1; position: relative; min-height: 0; }
+.view { position: absolute; inset: 0; display: none; flex-direction: column; min-height: 0; }
+.app[data-mode="graph"] .view-graph { display: flex; }
+.app[data-mode="diff"]  .view-diff  { display: flex; }
+
+/* Graph view ----------------------------------------------------- */
 .graph-head {
   display: flex; align-items: center; justify-content: space-between;
   padding: 0 var(--space-3);
   border-bottom: 1px solid var(--color-border-soft);
-  height: 32px;
+  height: 30px;
+  flex: 0 0 auto;
+  background: var(--color-bg);
 }
 .graph-head .left-cluster { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-sm); color: var(--color-text-muted); }
 .graph-head .filter {
@@ -347,20 +423,9 @@ input { font: inherit; color: inherit; }
 }
 .graph-head .filter:hover { background: var(--color-surface-hover); }
 
-.graph-body {
-  flex: 1;
-  overflow: auto;
-  position: relative;
-}
-.graph-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: var(--text-sm);
-}
-.graph-table tr.row {
-  height: 28px;
-  cursor: pointer;
-}
+.graph-body { flex: 1; overflow: auto; position: relative; }
+.graph-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm); }
+.graph-table tr.row { height: 28px; cursor: pointer; }
 .graph-table tr.row:hover { background: var(--color-surface-hover); }
 .graph-table tr.row.selected { background: var(--color-accent-soft); }
 .graph-table tr.row.selected td:first-child::before {
@@ -373,10 +438,7 @@ input { font: inherit; color: inherit; }
 .graph-table td.col-time    { color: var(--color-text-dim); width: 80px; text-align: right; }
 .graph-table td.col-sha     { color: var(--color-text-dim); width: 80px; font-family: var(--font-code); font-size: var(--text-xs); }
 
-.graph-canvas {
-  position: absolute; top: 0; left: 0;
-  pointer-events: none;
-}
+.graph-canvas { position: absolute; top: 0; left: 0; pointer-events: none; }
 
 .ref-badge {
   display: inline-flex; align-items: center; gap: 4px;
@@ -392,7 +454,184 @@ input { font: inherit; color: inherit; }
 .ref-badge.tag     { background: rgba(245,158,11,.12); color: var(--color-warning); border-color: rgba(245,158,11,.35); }
 .ref-badge.head    { background: rgba(16,185,129,.14); color: var(--git-added); border-color: rgba(16,185,129,.35); font-weight: 600; }
 
-/* Detail / Diff panel ------------------------------------------- */
+/* Diff view (IDEA-style split) ---------------------------------- */
+.diff-toolbar {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: 0 var(--space-3);
+  height: 32px;
+  border-bottom: 1px solid var(--color-border-soft);
+  background: var(--color-surface);
+  font-size: var(--text-xs);
+  flex: 0 0 auto;
+}
+.diff-toolbar .path {
+  font-family: var(--font-code);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; max-width: 50%;
+}
+.diff-toolbar .source-badge {
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--color-border);
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  font-family: var(--font-code);
+  white-space: nowrap;
+}
+.diff-toolbar .source-badge.working { color: var(--git-modified); border-color: rgba(59,130,246,.4); }
+.diff-toolbar .source-badge.commit  { color: var(--color-warning); border-color: rgba(245,158,11,.4); }
+
+.diff-toolbar .stats { font-family: var(--font-code); color: var(--color-text-dim); }
+.diff-toolbar .stats .plus  { color: var(--git-added); }
+.diff-toolbar .stats .minus { color: var(--git-deleted); }
+.diff-toolbar .spacer { flex: 1; }
+.diff-toolbar button.tb {
+  height: 22px; padding: 0 8px;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-xs);
+  display: inline-flex; align-items: center; gap: 4px;
+}
+.diff-toolbar button.tb:hover { color: var(--color-text); background: var(--color-surface-raised); }
+.diff-toolbar .seg {
+  display: inline-flex;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.diff-toolbar .seg button { height: 22px; padding: 0 8px; color: var(--color-text-muted); border-radius: 0; font-size: var(--text-xs); }
+.diff-toolbar .seg button.active { background: var(--color-surface-raised); color: var(--color-text); }
+.diff-toolbar .change-counter {
+  font-family: var(--font-code);
+  color: var(--color-text-dim);
+  font-size: var(--text-xs);
+  padding: 0 4px;
+}
+.diff-toolbar .divider { width: 1px; height: 18px; background: var(--color-border); margin: 0 2px; }
+.diff-toolbar .write-actions { display: inline-flex; gap: 4px; }
+.diff-toolbar .write-actions button {
+  height: 22px; padding: 0 8px;
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  font-size: var(--text-xs);
+}
+.diff-toolbar .write-actions button:hover { background: var(--color-surface-hover); }
+.diff-toolbar .write-actions button.danger { color: var(--color-danger); border-color: rgba(239,68,68,.3); }
+.diff-toolbar .write-actions[data-disabled="true"] button { opacity: .35; pointer-events: none; }
+
+.split-body {
+  flex: 1; overflow: auto;
+  font-family: var(--font-code);
+  font-size: var(--text-sm);
+}
+.split {
+  display: grid;
+  grid-template-columns: 1fr 18px 1fr;
+  align-items: stretch;
+}
+.split .full {
+  grid-column: 1 / -1;
+}
+.split .hunk-h {
+  grid-column: 1 / -1;
+  background: var(--color-surface-raised);
+  color: var(--color-text-muted);
+  padding: 3px var(--space-3);
+  font-size: var(--text-xs);
+  border-top: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-border-soft);
+}
+.split .fold-h {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 6px;
+  color: var(--color-text-dim);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-border-soft);
+  border-bottom: 1px solid var(--color-border-soft);
+  cursor: pointer;
+  font-size: var(--text-xs);
+}
+.split .fold-h:hover { color: var(--color-text); background: var(--color-surface-raised); }
+
+.split .srow {
+  display: flex; align-items: stretch;
+  min-height: 20px;
+  line-height: 20px;
+}
+.split .srow.side { padding: 0; }
+.split .srow.side .ln {
+  width: 44px;
+  flex-shrink: 0;
+  text-align: right;
+  padding: 0 6px;
+  color: var(--color-text-dim);
+  font-size: 11px;
+  user-select: none;
+  border-right: 1px solid var(--color-border-soft);
+  background: rgba(255,255,255,0.012);
+}
+:root[data-theme="light"] .split .srow.side .ln { background: rgba(0,0,0,0.02); }
+.split .srow.side .code {
+  flex: 1;
+  padding: 0 8px;
+  white-space: pre;
+  overflow-x: auto;
+  color: var(--color-text);
+}
+.split .srow.side.empty { background: var(--diff-empty-bg); }
+.split .srow.side.empty .ln { color: transparent; }
+.split .srow.side.ctx { }
+.split .srow.side.add { background: var(--diff-add-bg); }
+.split .srow.side.del { background: var(--diff-del-bg); }
+
+/* Subtle faint band for the side that has content in a mod row */
+.split .srow.side.mod-old { background: var(--diff-del-bg); }
+.split .srow.side.mod-new { background: var(--diff-add-bg); }
+
+/* Token-level highlights */
+.split .srow .code .tk-add { background: var(--diff-add-token); border-radius: 2px; }
+.split .srow .code .tk-del { background: var(--diff-del-token); border-radius: 2px; }
+
+/* Connector column (between old and new) */
+.split .srow.conn {
+  border-left: 1px solid var(--color-border-soft);
+  border-right: 1px solid var(--color-border-soft);
+  background: var(--color-bg);
+}
+.split .srow.conn.add { background: var(--diff-add-bg); }
+.split .srow.conn.del { background: var(--diff-del-bg); }
+.split .srow.conn.mod {
+  background: linear-gradient(90deg, var(--diff-del-bg) 0%, var(--diff-mod-bg) 50%, var(--diff-add-bg) 100%);
+}
+
+/* Hover row highlight (affects both sides + connector at same index) */
+.split .srow.hover-on { filter: brightness(1.08); }
+
+/* Current change block — a brighter left edge marker */
+.split .srow.side.cur-block::before {
+  content: ""; display: inline-block; width: 2px; align-self: stretch;
+  background: var(--color-accent);
+  margin-right: -2px;
+}
+
+/* Status bar inside diff */
+.diff-statusbar {
+  display: flex; align-items: center; gap: var(--space-3);
+  padding: 0 var(--space-3);
+  height: 22px;
+  border-top: 1px solid var(--color-border-soft);
+  background: var(--color-surface);
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  flex: 0 0 auto;
+}
+
+/* Detail panel -------------------------------------------------- */
 .detail-head {
   padding: var(--space-3);
   border-bottom: 1px solid var(--color-border-soft);
@@ -407,7 +646,7 @@ input { font: inherit; color: inherit; }
   background: var(--color-surface-raised); padding: 1px 6px; border-radius: var(--radius-xs);
 }
 .detail-head .actions {
-  display: flex; gap: 4px; margin-top: var(--space-2);
+  display: flex; gap: 4px; margin-top: var(--space-2); flex-wrap: wrap;
 }
 .detail-head .actions button {
   height: 24px;
@@ -422,9 +661,13 @@ input { font: inherit; color: inherit; }
 .detail-head .actions button.danger { color: var(--color-danger); border-color: rgba(239,68,68,.3); }
 
 .detail-body { flex: 1; overflow: auto; min-height: 0; }
-
-.changed-files {
-  border-bottom: 1px solid var(--color-border-soft);
+.changed-files { padding: var(--space-2) 0; }
+.changed-files .group-h {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--color-text-dim);
+  padding: var(--space-2) var(--space-3) 4px;
 }
 .changed-file {
   display: flex; align-items: center; gap: 8px;
@@ -435,78 +678,11 @@ input { font: inherit; color: inherit; }
 }
 .changed-file:hover { background: var(--color-surface-hover); }
 .changed-file.selected { background: var(--color-accent-soft); }
-.changed-file .stat { font-family: var(--font-code); font-size: var(--text-xs); display: flex; gap: 6px; color: var(--color-text-dim); }
+.changed-file .stat { font-family: var(--font-code); font-size: var(--text-xs); display: flex; gap: 6px; color: var(--color-text-dim); flex-shrink: 0; }
 .changed-file .stat .plus  { color: var(--git-added); }
 .changed-file .stat .minus { color: var(--git-deleted); }
-.changed-file .path  { flex: 1; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
-
-.diff-pane {
-  font-family: var(--font-code);
-  font-size: var(--text-sm);
-  line-height: 1.55;
-}
-.diff-file-head {
-  position: sticky; top: 0;
-  background: var(--color-surface);
-  border-bottom: 1px solid var(--color-border-soft);
-  padding: 4px var(--space-3);
-  display: flex; gap: var(--space-3); align-items: center;
-  font-family: var(--font-ui); font-size: var(--text-xs); color: var(--color-text-muted);
-}
-.diff-file-head .lang { color: var(--color-text); }
-.diff-file-head .stats .plus { color: var(--git-added); }
-.diff-file-head .stats .minus { color: var(--git-deleted); }
-.diff-file-head .toggle {
-  margin-left: auto;
-  display: inline-flex;
-  background: var(--color-bg);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.diff-file-head .toggle button {
-  padding: 2px 8px; font-size: var(--text-xs); color: var(--color-text-muted);
-}
-.diff-file-head .toggle button.active { background: var(--color-surface-raised); color: var(--color-text); }
-
-.hunk-head {
-  padding: 2px var(--space-3);
-  color: var(--color-text-muted);
-  font-size: var(--text-xs);
-  background: var(--color-surface-raised);
-  border-top: 1px solid var(--color-border-soft);
-  border-bottom: 1px solid var(--color-border-soft);
-  font-family: var(--font-code);
-}
-
-.diff-line {
-  display: grid;
-  grid-template-columns: 36px 36px 14px 1fr;
-  min-height: 18px;
-  padding: 0;
-}
-.diff-line .gutter { color: var(--color-text-dim); text-align: right; padding: 0 6px; font-size: 11px; user-select: none; }
-.diff-line .sign   { text-align: center; color: var(--color-text-dim); }
-.diff-line .src    { padding-right: var(--space-3); white-space: pre; overflow-x: auto; }
-.diff-line.add { background: var(--diff-add-bg); }
-.diff-line.add .sign { color: var(--git-added); }
-.diff-line.del { background: var(--diff-del-bg); }
-.diff-line.del .sign { color: var(--git-deleted); }
-.diff-line.ctx .src { color: var(--color-text); }
-.diff-line .src .tok-add { background: var(--diff-add-token); border-radius: 2px; }
-.diff-line .src .tok-del { background: var(--diff-del-token); border-radius: 2px; }
-
-.diff-fold {
-  text-align: center;
-  font-size: var(--text-xs);
-  color: var(--color-text-dim);
-  background: var(--color-surface);
-  padding: 4px;
-  border-top: 1px solid var(--color-border-soft);
-  border-bottom: 1px solid var(--color-border-soft);
-  cursor: pointer;
-}
-.diff-fold:hover { color: var(--color-text); background: var(--color-surface-raised); }
+.changed-file .badge { width: 14px; text-align: center; font-family: var(--font-code); font-size: var(--text-xs); font-weight: 700; }
+.changed-file .path  { flex: 1; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 
 /* Working tree --------------------------------------------------- */
 .work-col {
@@ -527,19 +703,12 @@ input { font: inherit; color: inherit; }
 }
 .work-row:hover { background: var(--color-surface-hover); }
 .work-row input[type="checkbox"] { accent-color: var(--color-accent); }
-.work-row .badge {
-  width: 16px; text-align: center;
-  font-family: var(--font-code); font-size: var(--text-xs); font-weight: 600;
-}
-.work-row .path { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-text); }
+.work-row .badge { width: 16px; text-align: center; font-family: var(--font-code); font-size: var(--text-xs); font-weight: 700; }
+.work-row .path { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--color-text); min-width: 0; }
 .work-row .delta { font-size: var(--text-xs); color: var(--color-text-dim); }
 
 /* Commit form */
-.commit-form {
-  display: flex; flex-direction: column;
-  padding: var(--space-3);
-  gap: var(--space-2);
-}
+.commit-form { display: flex; flex-direction: column; padding: var(--space-3); gap: var(--space-2); }
 .commit-form .field-label {
   display: flex; align-items: center; justify-content: space-between;
   font-size: var(--text-xs); color: var(--color-text-muted);
@@ -553,8 +722,7 @@ input { font: inherit; color: inherit; }
   font-size: var(--text-xs);
 }
 .commit-form .field-label .ai-btn:hover { background: var(--color-accent-soft); }
-.commit-form input.subject,
-.commit-form textarea.body {
+.commit-form input.subject, .commit-form textarea.body {
   background: var(--color-bg);
   border: 1px solid var(--color-border);
   color: var(--color-text);
@@ -566,8 +734,7 @@ input { font: inherit; color: inherit; }
   resize: none;
   width: 100%;
 }
-.commit-form input.subject:focus,
-.commit-form textarea.body:focus { border-color: var(--color-accent); }
+.commit-form input.subject:focus, .commit-form textarea.body:focus { border-color: var(--color-accent); }
 .commit-form textarea.body { min-height: 70px; line-height: 1.45; }
 .commit-form .actions { display: flex; gap: var(--space-2); align-items: center; margin-top: 4px; }
 .commit-form .actions label { font-size: var(--text-xs); color: var(--color-text-muted); display: inline-flex; align-items: center; gap: 4px; }
@@ -642,8 +809,6 @@ input { font: inherit; color: inherit; }
 .palette .cmd .name { flex: 1; }
 .palette .cmd .kbd { font-family: var(--font-code); font-size: var(--text-xs); color: var(--color-text-muted); }
 .palette .cmd .danger-tag { color: var(--color-danger); font-size: var(--text-xs); }
-.palette .cmd.disabled { opacity: .5; cursor: not-allowed; }
-.palette .cmd .desc { color: var(--color-text-muted); font-size: var(--text-xs); }
 
 /* Toast */
 .toast-wrap {
@@ -666,10 +831,9 @@ input { font: inherit; color: inherit; }
 .toast.warn    { border-left-color: var(--color-warning); }
 @keyframes rise { from { opacity: 0; transform: translateY(6px) } to { opacity: 1; transform: none } }
 
-/* Lucide-ish icons via inline SVG */
+/* Icons */
 .i { width: 14px; height: 14px; display: inline-block; vertical-align: -2px; }
 
-/* Tooltip-ish hint near AI button */
 .spark {
   display: inline-block;
   width: 8px; height: 8px;
@@ -689,14 +853,13 @@ input { font: inherit; color: inherit; }
 }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-dim); background-clip: padding-box; border: 2px solid transparent; }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0s !important; transition: none !important; }
 }
 </style>
 </head>
 <body>
-<div class="app" id="app">
+<div class="app" id="app" data-mode="graph">
 
   <!-- Title bar ------------------------------------------------------ -->
   <div class="titlebar">
@@ -752,17 +915,14 @@ input { font: inherit; color: inherit; }
   <!-- Main grid ----------------------------------------------------- -->
   <div class="main">
 
-    <!-- LEFT -->
+    <!-- LEFT — Changes / Branches / Remotes / Shelves -->
     <aside class="left">
-      <div class="pane files">
+      <div class="pane changes">
         <div class="section-head">
-          Files
-          <div class="actions">
-            <button class="icon-btn" title="按状态过滤"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M6 12h12M10 18h4"/></svg></button>
-            <button class="icon-btn" title="搜索文件"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></button>
-          </div>
+          Changes
+          <span class="meta-tag" id="changesCount">6 files · +47 −59</span>
         </div>
-        <div class="tree" id="fileTree"></div>
+        <div class="changes-body" id="changesBody"></div>
       </div>
 
       <div class="pane branches">
@@ -772,7 +932,7 @@ input { font: inherit; color: inherit; }
             <button class="icon-btn" title="新建分支">＋</button>
           </div>
         </div>
-        <div class="tree" id="branchList">
+        <div class="branch-list">
           <div class="branch-row current">
             <span class="star">★</span>
             <span class="name">feature/diff-engine</span>
@@ -828,46 +988,69 @@ input { font: inherit; color: inherit; }
       </div>
     </aside>
 
-    <!-- GRAPH -->
-    <section class="graph">
-      <div class="graph-head">
-        <div class="left-cluster">
-          <div class="filter" title="按分支过滤">
-            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 9v6l-4-2v-4z"/></svg>
-            All branches
-          </div>
-          <div class="filter" title="按作者过滤">
-            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
-            All authors
-          </div>
-          <span style="color: var(--color-text-dim)">14 / 12,847 commits</span>
+    <!-- CENTER — mode-switching: Graph | Diff -->
+    <section class="center" id="center">
+      <div class="center-toolbar">
+        <div class="mode-switch" id="modeSwitch">
+          <button data-mode="graph" class="active" title="提交图 (Ctrl+H)">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 8v8M8 6h8a2 2 0 0 1 2 2v2M8 18h8a2 2 0 0 0 2-2v-2"/></svg>
+            提交图
+          </button>
+          <button data-mode="diff" title="文件 Diff (Ctrl+D)">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h6v16H3zM15 4h6v16h-6z"/><path d="M11 8h2M11 12h2M11 16h2"/></svg>
+            Diff
+          </button>
         </div>
-        <div class="left-cluster">
-          <span style="color: var(--color-text-dim)">已加载 · 100% 上次刷新 12s 前</span>
+        <div class="center-context" id="centerContext">
+          <span style="color: var(--color-text-dim)">14 / 12,847 commits · 上次刷新 12s 前</span>
         </div>
       </div>
-      <div class="graph-body" id="graphBody">
-        <canvas class="graph-canvas" id="graphCanvas" width="180" height="800"></canvas>
-        <table class="graph-table" id="graphTable">
-          <colgroup>
-            <col style="width:180px">
-            <col>
-            <col style="width:160px">
-            <col style="width:80px">
-            <col style="width:80px">
-          </colgroup>
-          <tbody id="graphRows"></tbody>
-        </table>
+
+      <div class="center-body">
+        <!-- Graph view -->
+        <div class="view view-graph">
+          <div class="graph-head">
+            <div class="left-cluster">
+              <div class="filter" title="按分支过滤">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 4h18l-7 9v6l-4-2v-4z"/></svg>
+                All branches
+              </div>
+              <div class="filter" title="按作者过滤">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>
+                All authors
+              </div>
+            </div>
+          </div>
+          <div class="graph-body" id="graphBody">
+            <canvas class="graph-canvas" id="graphCanvas" width="180" height="800"></canvas>
+            <table class="graph-table" id="graphTable">
+              <colgroup>
+                <col style="width:180px">
+                <col>
+                <col style="width:160px">
+                <col style="width:80px">
+                <col style="width:80px">
+              </colgroup>
+              <tbody id="graphRows"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Diff view (IDEA-style split) -->
+        <div class="view view-diff">
+          <div class="diff-toolbar" id="diffToolbar"></div>
+          <div class="split-body" id="splitBody"></div>
+          <div class="diff-statusbar" id="diffStatusbar"></div>
+        </div>
       </div>
     </section>
 
-    <!-- DETAIL -->
+    <!-- DETAIL (Graph mode only) -->
     <aside class="detail">
-      <div class="detail-head" id="detailHead">
-        <!-- populated by JS -->
+      <div class="detail-head" id="detailHead"></div>
+      <div class="detail-body">
+        <div class="changed-files" id="changedFiles"></div>
       </div>
-      <div class="changed-files" id="changedFiles"></div>
-      <div class="detail-body diff-pane" id="diffPane"></div>
     </aside>
 
     <!-- WORKING TREE -->
@@ -877,7 +1060,6 @@ input { font: inherit; color: inherit; }
           Working Tree
           <div class="actions">
             <button class="icon-btn" title="全部暂存 Ctrl+Shift+A">＋All</button>
-            <button class="icon-btn" title="按状态过滤"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M6 12h12M10 18h4"/></svg></button>
           </div>
         </div>
         <div class="list" id="unstaged"></div>
@@ -885,14 +1067,14 @@ input { font: inherit; color: inherit; }
       <div class="work-col">
         <div class="section-head">
           Staged
-          <span style="color: var(--color-text-muted); text-transform: none; letter-spacing: 0">2 files · +47 −12</span>
+          <span class="meta-tag">2 files · +47 −12</span>
         </div>
         <div class="list" id="staged"></div>
       </div>
       <div class="work-col">
         <div class="section-head">
           Commit
-          <span style="color: var(--color-text-muted); text-transform: none; letter-spacing: 0" id="commitTargetBranch">→ feature/diff-engine</span>
+          <span class="meta-tag" id="commitTargetBranch">→ feature/diff-engine</span>
         </div>
         <form class="commit-form" id="commitForm" onsubmit="return false">
           <div class="field-label">
@@ -922,7 +1104,7 @@ input { font: inherit; color: inherit; }
   <!-- Status bar --------------------------------------------------- -->
   <div class="statusbar">
     <span class="item ok">●</span>
-    <span class="item">working tree clean (后台模拟)</span>
+    <span class="item" id="appStatus">feature/diff-engine · 6 changes</span>
     <span class="item">Rust 1.77.2</span>
     <span class="item">tree-sitter ready</span>
     <span class="item warn" id="bgTask" style="display:none">
@@ -946,24 +1128,27 @@ input { font: inherit; color: inherit; }
   </div>
 </div>
 
-<!-- Toasts -->
 <div class="toast-wrap" id="toasts"></div>
 
 <script>
 /* ==================================================================
-   GitCrest prototype runtime
+   GitCrest prototype runtime  (v2 — IDEA-style split diff)
    Pure DOM + Canvas. No build step. No dependencies.
 ================================================================== */
 
 const $  = (s, r=document) => r.querySelector(s);
 const $$ = (s, r=document) => Array.from(r.querySelectorAll(s));
 const html = (s, ...v) => s.reduce((a,b,i)=>a+b+(v[i]??''),'');
+const escapeHtml = (s) => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-/* ---------- Sample data ---------- */
+const app = $('#app');
 
+/* ============================  Data  ============================ */
+
+/* Commit graph data */
 const COMMITS = [
   { sha:'a91f2d8', x:0, parent:['7b2e9c1'], refs:[{type:'head',name:'HEAD'},{type:'branch',name:'feature/diff-engine'}],
-    subject:'feat(diff): 接入 tree-sitter 的词级 diff 注入', author:'You',          when:'7 分钟前',
+    subject:'feat(diff): 接入 tree-sitter 的词级 diff 注入', author:'You', when:'7 分钟前',
     files:[
       { path:'src-tauri/src/git/diff.rs', kind:'modified', adds:84, dels:21 },
       { path:'src-tauri/src/git/parser_cache.rs', kind:'added',    adds:62, dels:0 },
@@ -972,7 +1157,7 @@ const COMMITS = [
       { path:'tests/snapshots/diff_word_inject.snap', kind:'added', adds:54, dels:0 },
     ] },
   { sha:'7b2e9c1', x:0, parent:['4a01ff7'], refs:[],
-    subject:'refactor(diff): 抽离 hunk grouping 到独立模块',     author:'Wei Chen',     when:'42 分钟前',
+    subject:'refactor(diff): 抽离 hunk grouping 到独立模块', author:'Wei Chen', when:'42 分钟前',
     files:[
       { path:'src-tauri/src/git/diff.rs', kind:'modified', adds:18, dels:64 },
       { path:'src-tauri/src/git/hunk.rs',  kind:'added',    adds:71, dels:0 },
@@ -985,266 +1170,332 @@ const COMMITS = [
       { path:'docs/ai-providers.md',       kind:'modified', adds:22, dels:6 },
     ] },
   { sha:'82c9114', x:0, parent:['c33a5b6','f01b2e9'], refs:[],
-    subject:"merge: feature/branch-favorites into feature/diff-engine", author:'You',          when:'昨天',
+    subject:'merge: feature/branch-favorites into feature/diff-engine', author:'You', when:'昨天',
     files:[
       { path:'src/stores/branchStore.ts', kind:'modified', adds:18, dels:5 },
       { path:'src/components/BranchList/FavoriteRow.tsx', kind:'added', adds:42, dels:0 },
     ] },
   { sha:'c33a5b6', x:0, parent:['e4d77a3'], refs:[],
-    subject:'fix(graph): canvas 缩放在 4K 显示器下模糊',                  author:'You',          when:'昨天',
-    files:[
-      { path:'src/components/CommitGraph/canvas.ts', kind:'modified', adds:9, dels:3 },
-    ] },
+    subject:'fix(graph): canvas 缩放在 4K 显示器下模糊', author:'You', when:'昨天',
+    files:[{ path:'src/components/CommitGraph/canvas.ts', kind:'modified', adds:9, dels:3 }] },
   { sha:'f01b2e9', x:1, parent:['e4d77a3'], refs:[{type:'tag',name:'v0.9.0-beta.3'}],
-    subject:'chore(release): 0.9.0-beta.3',                              author:'CI Bot',       when:'2 天前',
+    subject:'chore(release): 0.9.0-beta.3', author:'CI Bot', when:'2 天前',
     files:[
       { path:'package.json', kind:'modified', adds:1, dels:1 },
       { path:'src-tauri/Cargo.toml', kind:'modified', adds:1, dels:1 },
       { path:'CHANGELOG.md', kind:'modified', adds:46, dels:0 },
     ] },
   { sha:'e4d77a3', x:0, parent:['11b08a0'], refs:[{type:'branch',name:'main'},{type:'remote',name:'origin/main'}],
-    subject:'feat(rebase): 交互式 rebase 拖拽排序',                        author:'Wei Chen',     when:'3 天前',
+    subject:'feat(rebase): 交互式 rebase 拖拽排序', author:'Wei Chen', when:'3 天前',
     files:[
       { path:'src/windows/rebase/Editor.tsx', kind:'added', adds:241, dels:0 },
       { path:'src-tauri/src/commands/rebase.rs', kind:'modified', adds:88, dels:12 },
     ] },
   { sha:'11b08a0', x:0, parent:['9c14e22'], refs:[],
-    subject:'perf(log): gitoxide 替换 git2 用于 walk',                    author:'Maya Singh',   when:'3 天前',
-    files:[
-      { path:'src-tauri/src/git/log.rs', kind:'modified', adds:121, dels:74 },
-    ] },
+    subject:'perf(log): gitoxide 替换 git2 用于 walk', author:'Maya Singh', when:'3 天前',
+    files:[{ path:'src-tauri/src/git/log.rs', kind:'modified', adds:121, dels:74 }] },
   { sha:'9c14e22', x:0, parent:['6701aac'], refs:[],
-    subject:"refactor(store): zustand v5 切片化",                          author:'You',          when:'4 天前',
+    subject:'refactor(store): zustand v5 切片化', author:'You', when:'4 天前',
     files:[
       { path:'src/stores/index.ts', kind:'modified', adds:31, dels:88 },
       { path:'src/stores/repoStore.ts', kind:'modified', adds:24, dels:14 },
     ] },
   { sha:'6701aac', x:0, parent:['38ddb14'], refs:[],
-    subject:'fix(keychain): Linux libsecret 在容器内的回退',                author:'Tom Park',     when:'5 天前',
-    files:[
-      { path:'src-tauri/src/store/keychain.rs', kind:'modified', adds:42, dels:11 },
-    ] },
+    subject:'fix(keychain): Linux libsecret 在容器内的回退', author:'Tom Park', when:'5 天前',
+    files:[{ path:'src-tauri/src/store/keychain.rs', kind:'modified', adds:42, dels:11 }] },
   { sha:'38ddb14', x:0, parent:['cc5ee9a'], refs:[],
-    subject:'docs: 更新 README 三平台构建说明',                            author:'Wei Chen',     when:'5 天前',
-    files:[
-      { path:'README.md', kind:'modified', adds:78, dels:12 },
-    ] },
+    subject:'docs: 更新 README 三平台构建说明', author:'Wei Chen', when:'5 天前',
+    files:[{ path:'README.md', kind:'modified', adds:78, dels:12 }] },
   { sha:'cc5ee9a', x:0, parent:['fae0021'], refs:[],
-    subject:'test(diff): patience diff 语义快照测试',                      author:'You',          when:'6 天前',
+    subject:'test(diff): patience diff 语义快照测试', author:'You', when:'6 天前',
     files:[
       { path:'src-tauri/tests/diff_patience.rs', kind:'added', adds:184, dels:0 },
       { path:'src-tauri/tests/snapshots/patience.snap', kind:'added', adds:96, dels:0 },
     ] },
   { sha:'fae0021', x:0, parent:['c0c4471'], refs:[],
-    subject:'ci: 启用 Apple Notarization',                                author:'CI Bot',       when:'1 周前',
-    files:[
-      { path:'.github/workflows/build.yml', kind:'modified', adds:32, dels:4 },
-    ] },
+    subject:'ci: 启用 Apple Notarization', author:'CI Bot', when:'1 周前',
+    files:[{ path:'.github/workflows/build.yml', kind:'modified', adds:32, dels:4 }] },
   { sha:'c0c4471', x:0, parent:[], refs:[],
-    subject:'chore: 初始化 Tauri 2 + React 18 + Rust 工作区',              author:'Wei Chen',     when:'1 周前',
+    subject:'chore: 初始化 Tauri 2 + React 18 + Rust 工作区', author:'Wei Chen', when:'1 周前',
     files:[
       { path:'package.json', kind:'added', adds:48, dels:0 },
       { path:'src-tauri/Cargo.toml', kind:'added', adds:35, dels:0 },
     ] },
 ];
 
-/* Working tree files (the current uncommitted state) */
+/* Working tree (the source of the left "Changes" pane) */
 const UNSTAGED = [
-  { path:'src-tauri/src/git/engine.rs',     kind:'M', adds:23, dels:5 },
-  { path:'src-tauri/src/git/walker.rs',     kind:'M', adds:8,  dels:12 },
-  { path:'docs/architecture-notes.md',       kind:'M', adds:14, dels:2 },
-  { path:'scratch/perf_bench.rs',            kind:'?', adds:0,  dels:0 },
-  { path:'src/lib/oldFormatter.ts',           kind:'D', adds:0,  dels:42 },
-  { path:'src-tauri/src/git/conflict.rs',     kind:'C', adds:0,  dels:0 },
+  { path:'src-tauri/src/git/conflict.rs', kind:'C', adds:0,  dels:0 },
+  { path:'src-tauri/src/git/engine.rs',   kind:'M', adds:23, dels:5 },
+  { path:'src-tauri/src/git/walker.rs',   kind:'M', adds:8,  dels:12 },
+  { path:'docs/architecture-notes.md',    kind:'M', adds:14, dels:2 },
+  { path:'src/lib/oldFormatter.ts',       kind:'D', adds:0,  dels:42 },
+  { path:'scratch/perf_bench.rs',         kind:'U', adds:0,  dels:0 },
 ];
 const STAGED = [
   { path:'src-tauri/src/git/diff.rs',         kind:'M', adds:31, dels:7 },
   { path:'src-tauri/src/git/parser_cache.rs', kind:'A', adds:16, dels:0 },
 ];
 
-/* File tree (left sidebar) */
-const FILE_TREE = [
-  { name:'src-tauri', icon:'📁', open:true, kind:null, children:[
-    { name:'src', icon:'📁', open:true, kind:null, children:[
-      { name:'git', icon:'📁', open:true, kind:null, children:[
-        { name:'engine.rs',        icon:'🦀', kind:'modified',  tag:'M' },
-        { name:'walker.rs',        icon:'🦀', kind:'modified',  tag:'M' },
-        { name:'diff.rs',          icon:'🦀', kind:'modified',  tag:'M', staged:true },
-        { name:'parser_cache.rs',  icon:'🦀', kind:'added',     tag:'A', staged:true },
-        { name:'conflict.rs',      icon:'🦀', kind:'conflicted',tag:'!' },
-        { name:'graph.rs',         icon:'🦀', kind:null,        tag:'' },
-      ]},
-      { name:'commands', icon:'📁', open:false, kind:null, children:[
-        { name:'repo.rs',   icon:'🦀', kind:null, tag:'' },
-        { name:'commit.rs', icon:'🦀', kind:null, tag:'' },
-        { name:'diff.rs',   icon:'🦀', kind:null, tag:'' },
-      ]},
-      { name:'main.rs', icon:'🦀', kind:null, tag:'' },
-    ]},
-    { name:'Cargo.toml', icon:'⚙️', kind:null, tag:'' },
-  ]},
-  { name:'src', icon:'📁', open:true, kind:null, children:[
-    { name:'components', icon:'📁', open:true, kind:null, children:[
-      { name:'DiffViewer', icon:'📁', open:false, kind:null, children:[
-        { name:'index.tsx',           icon:'⚛️', kind:null,     tag:'' },
-        { name:'wordDecorations.ts',  icon:'TS', kind:null,     tag:'' },
-      ]},
-      { name:'CommitGraph', icon:'📁', open:false, kind:null, children:[]},
-    ]},
-    { name:'lib', icon:'📁', open:false, kind:null, children:[
-      { name:'oldFormatter.ts', icon:'TS', kind:'deleted', tag:'D' },
-    ]},
-  ]},
-  { name:'docs', icon:'📁', open:false, kind:null, children:[
-    { name:'architecture-notes.md', icon:'📝', kind:'modified', tag:'M' },
-  ]},
-  { name:'scratch', icon:'📁', open:false, kind:null, children:[
-    { name:'perf_bench.rs', icon:'🦀', kind:'untracked', tag:'?' },
-  ]},
-  { name:'README.md', icon:'📝', kind:null, tag:'' },
-];
-
-/* Diff sample (per-file) */
-const DIFFS = {
-  'src-tauri/src/git/diff.rs': {
-    lang: 'Rust',
-    hunks: [
-      { header: '@@ -42,12 +42,18 @@ impl DiffEngine {',
-        lines: [
-          { kind:'ctx', old:42, new:42, src:"    pub fn compute(&self, old: &str, new: &str, lang: &str) -> Vec<DiffHunk> {" },
-          { kind:'del', old:43, new:null, src:"        let diff = similar::TextDiff::from_lines(old, new);" },
-          { kind:'add', old:null, new:43, src:"        let old_tree = self.parser_cache.parse(old, lang);", tokens:[{a:30,b:38,t:'add'}] },
-          { kind:'add', old:null, new:44, src:"        let new_tree = self.parser_cache.parse(new, lang);", tokens:[{a:30,b:38,t:'add'}] },
-          { kind:'add', old:null, new:45, src:"        let diff = similar::TextDiff::configure()" },
-          { kind:'add', old:null, new:46, src:"            .algorithm(Algorithm::Patience)" },
-          { kind:'add', old:null, new:47, src:"            .diff_lines(old, new);" },
-          { kind:'ctx', old:44, new:48, src:"" },
-          { kind:'del', old:45, new:null, src:"        diff.iter_all_changes().map(|ch| DiffLine::from(ch)).collect()" },
-          { kind:'add', old:null, new:49, src:"        enrich_with_word_diff(diff, &old_tree, &new_tree)", tokens:[{a:8,b:32,t:'add'}] },
-          { kind:'ctx', old:46, new:50, src:"    }" },
-        ]},
-      { header: '@@ -88,4 +94,22 @@', fold:'12 unchanged lines',
-        lines: [
-          { kind:'add', old:null, new:94, src:'fn enrich_with_word_diff(' },
-          { kind:'add', old:null, new:95, src:'    diff: TextDiff,' },
-          { kind:'add', old:null, new:96, src:'    old_tree: &Tree,' },
-          { kind:'add', old:null, new:97, src:'    new_tree: &Tree,' },
-          { kind:'add', old:null, new:98, src:') -> Vec<DiffHunk> {' },
-          { kind:'add', old:null, new:99, src:'    diff.grouped_ops(3).iter().map(|group| {' },
-          { kind:'add', old:null, new:100,src:'        let lines = emit_lines(group, old_tree, new_tree);' },
-          { kind:'add', old:null, new:101,src:'        DiffHunk { lines, ..Default::default() }' },
-          { kind:'add', old:null, new:102,src:'    }).collect()' },
-          { kind:'add', old:null, new:103,src:'}' },
-        ]},
-    ]
-  },
-  'src-tauri/src/git/parser_cache.rs': {
-    lang: 'Rust',
-    hunks: [
-      { header: '@@ -0,0 +1,62 @@ (new file)',
-        lines: [
-          { kind:'add', old:null, new:1, src:'use std::collections::HashMap;' },
-          { kind:'add', old:null, new:2, src:'use tree_sitter::{Language, Parser, Tree};' },
-          { kind:'add', old:null, new:3, src:'' },
-          { kind:'add', old:null, new:4, src:'pub struct ParserCache {' },
-          { kind:'add', old:null, new:5, src:'    parsers: HashMap<String, Parser>,' },
-          { kind:'add', old:null, new:6, src:'}' },
-          { kind:'add', old:null, new:7, src:'' },
-          { kind:'add', old:null, new:8, src:'impl ParserCache {' },
-          { kind:'add', old:null, new:9, src:'    pub fn parse(&mut self, src: &str, lang: &str) -> Tree {' },
-          { kind:'add', old:null, new:10,src:'        let parser = self.parsers.entry(lang.into())' },
-          { kind:'add', old:null, new:11,src:'            .or_insert_with(|| Self::build_parser(lang));' },
-          { kind:'add', old:null, new:12,src:'        parser.parse(src, None).expect("parser failed")' },
-          { kind:'add', old:null, new:13,src:'    }' },
-          { kind:'add', old:null, new:14,src:'}' },
-        ]},
-    ]
-  },
-  'src/components/DiffViewer/wordDecorations.ts': {
-    lang: 'TypeScript',
-    hunks: [
-      { header: '@@ -12,10 +12,15 @@ export function applyWordDiffDecorations(',
-        lines: [
-          { kind:'ctx', old:12, new:12, src:'  hunks: DiffHunk[],' },
-          { kind:'ctx', old:13, new:13, src:') {' },
-          { kind:'del', old:14, new:null, src:'  const decorations = hunks.flatMap(buildLineDecorations);' },
-          { kind:'add', old:null, new:14, src:'  const decorations = hunks.flatMap((hunk) =>' },
-          { kind:'add', old:null, new:15, src:'    hunk.lines.flatMap((line) => buildTokenDecorations(line))' },
-          { kind:'add', old:null, new:16, src:'  );' },
-          { kind:'ctx', old:15, new:17, src:'  diffEditor.deltaDecorations([], decorations);' },
-          { kind:'ctx', old:16, new:18, src:'}' },
-        ]},
-    ]
-  },
+const KIND_META = {
+  M:{cls:'modified',  label:'已修改'},
+  A:{cls:'added',     label:'新增'},
+  D:{cls:'deleted',   label:'已删除'},
+  R:{cls:'renamed',   label:'重命名'},
+  U:{cls:'untracked', label:'未追踪'},
+  C:{cls:'conflicted',label:'冲突'},
 };
-['src/components/DiffViewer/index.tsx','tests/snapshots/diff_word_inject.snap','src-tauri/src/git/hunk.rs','src-tauri/src/ai/claude.rs','src-tauri/src/ai/mod.rs','docs/ai-providers.md','src/stores/branchStore.ts','src/components/BranchList/FavoriteRow.tsx','src/components/CommitGraph/canvas.ts','package.json','src-tauri/Cargo.toml','CHANGELOG.md','src/windows/rebase/Editor.tsx','src-tauri/src/commands/rebase.rs','src-tauri/src/git/log.rs','src/stores/index.ts','src/stores/repoStore.ts','src-tauri/src/store/keychain.rs','README.md','src-tauri/tests/diff_patience.rs','src-tauri/tests/snapshots/patience.snap','.github/workflows/build.yml'].forEach(p=>{
-  if (!DIFFS[p]) DIFFS[p] = { lang: 'Generic', hunks:[
-    { header: '@@ -1,4 +1,4 @@', lines:[
-      { kind:'ctx', old:1, new:1, src:'// (Prototype) 此文件的 diff 内容为示意，渲染管线已就绪。' },
-      { kind:'del', old:2, new:null, src:'  legacyCallSite();' },
-      { kind:'add', old:null, new:2, src:'  modernCallSite({ token: true });', tokens:[{a:2,b:18,t:'add'}] },
-      { kind:'ctx', old:3, new:3, src:'  return result;' },
-    ]}
-  ]};
+
+/* Diff data (per-file).  Lines authored as a unified sequence;
+   the split renderer pairs adjacent del/add lines into mod rows. */
+const DIFFS = {
+  'src-tauri/src/git/diff.rs': { lang:'Rust', hunks:[
+    { header:'@@ -42,12 +42,18 @@ impl DiffEngine {', lines:[
+      { kind:'ctx', old:42, new:42, src:'    pub fn compute(&self, old: &str, new: &str, lang: &str) -> Vec<DiffHunk> {' },
+      { kind:'del', old:43, new:null, src:'        let diff = similar::TextDiff::from_lines(old, new);' },
+      { kind:'add', old:null, new:43, src:'        let old_tree = self.parser_cache.parse(old, lang);', tokens:[{a:8,b:21,t:'add'},{a:24,b:51,t:'add'}] },
+      { kind:'add', old:null, new:44, src:'        let new_tree = self.parser_cache.parse(new, lang);', tokens:[{a:8,b:21,t:'add'},{a:24,b:51,t:'add'}] },
+      { kind:'add', old:null, new:45, src:'        let diff = similar::TextDiff::configure()' },
+      { kind:'add', old:null, new:46, src:'            .algorithm(Algorithm::Patience)' },
+      { kind:'add', old:null, new:47, src:'            .diff_lines(old, new);' },
+      { kind:'ctx', old:44, new:48, src:'' },
+      { kind:'del', old:45, new:null, src:'        diff.iter_all_changes().map(|ch| DiffLine::from(ch)).collect()' },
+      { kind:'add', old:null, new:49, src:'        enrich_with_word_diff(diff, &old_tree, &new_tree)', tokens:[{a:8,b:32,t:'add'}] },
+      { kind:'ctx', old:46, new:50, src:'    }' },
+    ]},
+    { header:'@@ -88,4 +94,22 @@', fold:'24 unchanged lines', lines:[
+      { kind:'add', old:null, new:94, src:'fn enrich_with_word_diff(' },
+      { kind:'add', old:null, new:95, src:'    diff: TextDiff,' },
+      { kind:'add', old:null, new:96, src:'    old_tree: &Tree,' },
+      { kind:'add', old:null, new:97, src:'    new_tree: &Tree,' },
+      { kind:'add', old:null, new:98, src:') -> Vec<DiffHunk> {' },
+      { kind:'add', old:null, new:99, src:'    diff.grouped_ops(3).iter().map(|group| {' },
+      { kind:'add', old:null, new:100,src:'        let lines = emit_lines(group, old_tree, new_tree);' },
+      { kind:'add', old:null, new:101,src:'        DiffHunk { lines, ..Default::default() }' },
+      { kind:'add', old:null, new:102,src:'    }).collect()' },
+      { kind:'add', old:null, new:103,src:'}' },
+    ]},
+  ]},
+  'src-tauri/src/git/parser_cache.rs': { lang:'Rust', hunks:[
+    { header:'@@ -0,0 +1,62 @@ (new file)', lines:[
+      { kind:'add', old:null, new:1, src:'use std::collections::HashMap;' },
+      { kind:'add', old:null, new:2, src:'use tree_sitter::{Language, Parser, Tree};' },
+      { kind:'add', old:null, new:3, src:'' },
+      { kind:'add', old:null, new:4, src:'pub struct ParserCache {' },
+      { kind:'add', old:null, new:5, src:'    parsers: HashMap<String, Parser>,' },
+      { kind:'add', old:null, new:6, src:'}' },
+      { kind:'add', old:null, new:7, src:'' },
+      { kind:'add', old:null, new:8, src:'impl ParserCache {' },
+      { kind:'add', old:null, new:9, src:'    pub fn parse(&mut self, src: &str, lang: &str) -> Tree {' },
+      { kind:'add', old:null, new:10,src:'        let parser = self.parsers.entry(lang.into())' },
+      { kind:'add', old:null, new:11,src:'            .or_insert_with(|| Self::build_parser(lang));' },
+      { kind:'add', old:null, new:12,src:'        parser.parse(src, None).expect("parser failed")' },
+      { kind:'add', old:null, new:13,src:'    }' },
+      { kind:'add', old:null, new:14,src:'}' },
+    ]},
+  ]},
+  'src/components/DiffViewer/wordDecorations.ts': { lang:'TypeScript', hunks:[
+    { header:'@@ -12,10 +12,15 @@ export function applyWordDiffDecorations(', lines:[
+      { kind:'ctx', old:12, new:12, src:'  hunks: DiffHunk[],' },
+      { kind:'ctx', old:13, new:13, src:') {' },
+      { kind:'del', old:14, new:null, src:'  const decorations = hunks.flatMap(buildLineDecorations);' },
+      { kind:'add', old:null, new:14, src:'  const decorations = hunks.flatMap((hunk) =>', tokens:[{a:36,b:46,t:'add'}] },
+      { kind:'add', old:null, new:15, src:'    hunk.lines.flatMap((line) => buildTokenDecorations(line))' },
+      { kind:'add', old:null, new:16, src:'  );' },
+      { kind:'ctx', old:15, new:17, src:'  diffEditor.deltaDecorations([], decorations);' },
+      { kind:'ctx', old:16, new:18, src:'}' },
+    ]},
+  ]},
+
+  /* === Working tree (uncommitted) diffs === */
+  'src-tauri/src/git/engine.rs': { lang:'Rust', hunks:[
+    { header:'@@ -120,8 +120,26 @@ impl Engine {', lines:[
+      { kind:'ctx', old:120, new:120, src:'    pub fn status(&self, repo: &Repository) -> Result<WorktreeStatus> {' },
+      { kind:'ctx', old:121, new:121, src:'        let mut opts = StatusOptions::new();' },
+      { kind:'del', old:122, new:null, src:'        opts.include_untracked(true);' },
+      { kind:'add', old:null, new:122, src:'        opts.include_untracked(true).recurse_untracked_dirs(true);', tokens:[{a:30,b:60,t:'add'}] },
+      { kind:'ctx', old:123, new:123, src:'        opts.renames_head_to_index(true);' },
+      { kind:'add', old:null, new:124, src:'        opts.renames_index_to_workdir(true);' },
+      { kind:'add', old:null, new:125, src:'        opts.update_index(false);' },
+      { kind:'ctx', old:124, new:126, src:'' },
+      { kind:'del', old:125, new:null, src:'        let statuses = repo.repo.statuses(Some(&mut opts))?;' },
+      { kind:'add', old:null, new:127, src:'        let started = Instant::now();' },
+      { kind:'add', old:null, new:128, src:'        let statuses = repo.repo.statuses(Some(&mut opts))?;' },
+      { kind:'add', old:null, new:129, src:'        tracing::debug!(took=?started.elapsed(), n=statuses.len(), "status scan");' },
+      { kind:'ctx', old:126, new:130, src:'        Ok(self.translate(statuses))' },
+      { kind:'ctx', old:127, new:131, src:'    }' },
+    ]},
+  ]},
+  'src-tauri/src/git/walker.rs': { lang:'Rust', hunks:[
+    { header:'@@ -44,12 +44,8 @@ pub fn walk(repo: &Repository, opts: WalkOpts) -> Walk {', lines:[
+      { kind:'ctx', old:44, new:44, src:'    let mut revwalk = repo.revwalk().unwrap();' },
+      { kind:'del', old:45, new:null, src:'    if opts.first_parent {' },
+      { kind:'del', old:46, new:null, src:'        revwalk.simplify_first_parent().unwrap();' },
+      { kind:'del', old:47, new:null, src:'    }' },
+      { kind:'del', old:48, new:null, src:'    revwalk.set_sorting(Sort::TIME | Sort::TOPOLOGICAL).unwrap();' },
+      { kind:'add', old:null, new:45, src:'    revwalk.set_sorting(Sort::TIME | Sort::TOPOLOGICAL).ok();' },
+      { kind:'ctx', old:49, new:46, src:'    Walk { inner: revwalk }' },
+      { kind:'ctx', old:50, new:47, src:'}' },
+    ]},
+  ]},
+  'docs/architecture-notes.md': { lang:'Markdown', hunks:[
+    { header:'@@ -8,6 +8,18 @@', lines:[
+      { kind:'ctx', old:8, new:8, src:'## 中央主区双模式' },
+      { kind:'ctx', old:9, new:9, src:'' },
+      { kind:'add', old:null, new:10, src:'中央区在「提交图」与「Diff」两模式间切换。两者互斥但可随时回切。' },
+      { kind:'add', old:null, new:11, src:'' },
+      { kind:'add', old:null, new:12, src:'- 默认进入提交图。' },
+      { kind:'add', old:null, new:13, src:'- 点击 Changes 中的文件或提交详情中的文件 → 进入 Diff。' },
+      { kind:'add', old:null, new:14, src:'- 点击工具栏「提交图」或按 Ctrl+H → 回到提交图。' },
+      { kind:'add', old:null, new:15, src:'- Diff 模式下右侧提交详情栏收起。' },
+      { kind:'add', old:null, new:16, src:'' },
+      { kind:'add', old:null, new:17, src:'## Changes 列表' },
+      { kind:'add', old:null, new:18, src:'' },
+      { kind:'add', old:null, new:19, src:'仅显示有 Git 状态的文件，不展示完整文件树。' },
+      { kind:'ctx', old:10, new:20, src:'' },
+      { kind:'ctx', old:11, new:21, src:'## 性能假设' },
+    ]},
+  ]},
+  'src/lib/oldFormatter.ts': { lang:'TypeScript', hunks:[
+    { header:'@@ -1,42 +0,0 @@ (file deleted)', lines:[
+      { kind:'del', old:1, new:null, src:'// 旧 diff 格式化器，已被 wordDecorations 替代。' },
+      { kind:'del', old:2, new:null, src:'export function formatDiff(hunks: any[]): string {' },
+      { kind:'del', old:3, new:null, src:'  return hunks.map((h) => h.header + "\\n" + h.lines.join("\\n")).join("\\n");' },
+      { kind:'del', old:4, new:null, src:'}' },
+    ]},
+  ]},
+  'scratch/perf_bench.rs': { lang:'Rust', hunks:[
+    { header:'@@ -0,0 +1,12 @@ (untracked)', lines:[
+      { kind:'add', old:null, new:1, src:'// 未追踪：临时性能 bench，未加入 git。' },
+      { kind:'add', old:null, new:2, src:'fn main() {' },
+      { kind:'add', old:null, new:3, src:'    let start = std::time::Instant::now();' },
+      { kind:'add', old:null, new:4, src:'    for _ in 0..1_000_000 { black_box(()); }' },
+      { kind:'add', old:null, new:5, src:'    println!("{:?}", start.elapsed());' },
+      { kind:'add', old:null, new:6, src:'}' },
+    ]},
+  ]},
+  'src-tauri/src/git/conflict.rs': { lang:'Rust', hunks:[
+    { header:'@@ -64,7 +64,12 @@ pub fn detect(repo: &Repository) -> Vec<Conflict> {', lines:[
+      { kind:'ctx', old:64, new:64, src:'    for entry in index.conflicts().unwrap() {' },
+      { kind:'add', old:null, new:65, src:'<<<<<<< HEAD' },
+      { kind:'add', old:null, new:66, src:'        let conflict = entry.unwrap();' },
+      { kind:'add', old:null, new:67, src:'        results.push(translate(conflict));' },
+      { kind:'add', old:null, new:68, src:'=======' },
+      { kind:'add', old:null, new:69, src:'        let c = entry?;' },
+      { kind:'add', old:null, new:70, src:'        results.push(Conflict::from(c));' },
+      { kind:'add', old:null, new:71, src:'>>>>>>> origin/main' },
+      { kind:'ctx', old:65, new:72, src:'    }' },
+    ]},
+  ]},
+};
+/* Fallback diff for any other path */
+[
+  'src/components/DiffViewer/index.tsx','tests/snapshots/diff_word_inject.snap',
+  'src-tauri/src/git/hunk.rs','src-tauri/src/ai/claude.rs','src-tauri/src/ai/mod.rs',
+  'docs/ai-providers.md','src/stores/branchStore.ts','src/components/BranchList/FavoriteRow.tsx',
+  'src/components/CommitGraph/canvas.ts','package.json','src-tauri/Cargo.toml','CHANGELOG.md',
+  'src/windows/rebase/Editor.tsx','src-tauri/src/commands/rebase.rs','src-tauri/src/git/log.rs',
+  'src/stores/index.ts','src/stores/repoStore.ts','src-tauri/src/store/keychain.rs','README.md',
+  'src-tauri/tests/diff_patience.rs','src-tauri/tests/snapshots/patience.snap','.github/workflows/build.yml',
+].forEach(p => { if (!DIFFS[p]) DIFFS[p] = { lang:'Generic', hunks:[
+  { header:'@@ -1,4 +1,4 @@', lines:[
+    { kind:'ctx', old:1, new:1, src:'// (Prototype) 此文件的 diff 内容为示意，渲染管线已就绪。' },
+    { kind:'del', old:2, new:null, src:'  legacyCallSite();' },
+    { kind:'add', old:null, new:2, src:'  modernCallSite({ token: true });', tokens:[{a:2,b:32,t:'add'}] },
+    { kind:'ctx', old:3, new:3, src:'  return result;' },
+  ]}
+]}; });
+
+/* ==================================================================
+   View mode: graph | diff
+================================================================== */
+let viewMode = 'graph';
+let currentDiff = null;  // { path, source: 'working'|'commit', commitSha? }
+
+function setMode(mode) {
+  if (mode === viewMode) return;
+  viewMode = mode;
+  app.dataset.mode = mode;
+  $$('#modeSwitch button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  if (mode === 'graph') {
+    $('#centerContext').innerHTML = `<span style="color: var(--color-text-dim)">14 / 12,847 commits · 上次刷新 12s 前</span>`;
+  } else if (currentDiff) {
+    const src = currentDiff.source === 'working' ? 'Working tree' : `Commit ${currentDiff.commitSha?.slice(0,7)}`;
+    $('#centerContext').innerHTML = `<span class="crumb">${escapeHtml(currentDiff.path)}</span> <span style="color:var(--color-text-dim)">· 来自 ${escapeHtml(src)}</span>`;
+  }
+}
+$$('#modeSwitch button').forEach(b => {
+  b.addEventListener('click', () => {
+    if (b.dataset.mode === 'diff' && !currentDiff) {
+      toast('点击左侧 Changes 中的文件，或提交详情中的文件以进入 Diff 模式');
+      return;
+    }
+    setMode(b.dataset.mode);
+  });
 });
 
 /* ==================================================================
-   File tree
+   Left "Changes" pane
 ================================================================== */
-function renderTree(root, nodes, depth=0, parentPath='') {
-  const frag = document.createDocumentFragment();
-  for (const node of nodes) {
-    const fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
-    const row = document.createElement('div');
-    row.className = `tree-row indent-${Math.min(depth,3)}` + (node.kind ? ` tag-${node.kind}` : '');
-    row.dataset.path = fullPath;
-    const caret = node.children ? (node.open ? '▾' : '▸') : '';
-    const icon  = typeof node.icon === 'string' ? node.icon : '·';
-    const tagCls = node.tag ? ` tag-${node.tag}` : '';
-    row.innerHTML = html`
-      <span class="caret">${caret}</span>
-      <span class="icon">${icon}</span>
-      <span class="name">${node.name}</span>
-      ${node.tag ? `<span class="tag${tagCls}">${node.tag}</span>` : ''}
-    `;
-    if (node.children) {
-      row.addEventListener('click', (e) => {
-        node.open = !node.open;
-        e.stopPropagation();
-        $('#fileTree').innerHTML = '';
-        $('#fileTree').appendChild(buildTreeFragment(FILE_TREE));
-      });
-    } else {
-      row.addEventListener('click', () => selectWorkingFile(fullPath, row));
-    }
-    frag.appendChild(row);
-    if (node.children && node.open) {
-      const sub = document.createElement('div');
-      sub.appendChild(renderTree(root, node.children, depth+1, fullPath));
-      frag.appendChild(sub);
-    }
-  }
-  return frag;
-}
-function buildTreeFragment(nodes) { return renderTree(null, nodes, 0, ''); }
-$('#fileTree').appendChild(buildTreeFragment(FILE_TREE));
+function renderChanges() {
+  const totalAdds = [...UNSTAGED, ...STAGED].reduce((a,b)=>a+(b.adds||0),0);
+  const totalDels = [...UNSTAGED, ...STAGED].reduce((a,b)=>a+(b.dels||0),0);
+  $('#changesCount').textContent = `${UNSTAGED.length+STAGED.length} files · +${totalAdds} −${totalDels}`;
+  $('#appStatus').textContent = `feature/diff-engine · ${UNSTAGED.length+STAGED.length} changes`;
 
-function selectWorkingFile(path, rowEl) {
-  $$('#fileTree .tree-row.selected').forEach(r=>r.classList.remove('selected'));
-  rowEl?.classList.add('selected');
-  /* Show this file's diff in the right panel (synthesize a "working-tree" pseudo-commit) */
-  const file = [...UNSTAGED, ...STAGED].find(f=>f.path===path) || { path, kind:'M', adds:0, dels:0 };
-  showWorkingDiff(file);
+  const body = $('#changesBody');
+  body.innerHTML = '';
+
+  function groupHeader(label, count) {
+    return html`<div class="changes-group">${label}<span class="count">${count}</span></div>`;
+  }
+  function renderRow(f, staged) {
+    const meta = KIND_META[f.kind] || KIND_META.M;
+    const parts = f.path.split('/');
+    const file = parts.pop();
+    const dir  = parts.join('/');
+    return html`
+      <div class="change-row kind-${meta.cls}" data-path="${escapeHtml(f.path)}" data-source="working">
+        <input type="checkbox" ${staged?'checked':''} title="${staged?'已暂存':'未暂存'}" />
+        <span class="badge b-${f.kind}">${f.kind}</span>
+        <div class="path-cell">
+          <span class="file">${escapeHtml(file)}</span>
+          ${dir ? `<span class="dir">${escapeHtml(dir)}</span>` : ''}
+        </div>
+        ${(f.adds||f.dels) ? `<span class="delta"><span class="plus">+${f.adds}</span><span class="minus">−${f.dels}</span></span>` : ''}
+      </div>
+    `;
+  }
+
+  const conflicts = UNSTAGED.filter(f => f.kind === 'C');
+  if (conflicts.length) {
+    body.insertAdjacentHTML('beforeend', groupHeader('冲突', conflicts.length));
+    conflicts.forEach(f => body.insertAdjacentHTML('beforeend', renderRow(f, false)));
+  }
+  const rest = UNSTAGED.filter(f => f.kind !== 'C');
+  body.insertAdjacentHTML('beforeend', groupHeader('未暂存', rest.length));
+  rest.forEach(f => body.insertAdjacentHTML('beforeend', renderRow(f, false)));
+  body.insertAdjacentHTML('beforeend', groupHeader('已暂存', STAGED.length));
+  STAGED.forEach(f => body.insertAdjacentHTML('beforeend', renderRow(f, true)));
+
+  body.querySelectorAll('.change-row').forEach(row => {
+    row.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      body.querySelectorAll('.change-row.selected').forEach(r => r.classList.remove('selected'));
+      row.classList.add('selected');
+      openDiff({ path: row.dataset.path, source: 'working' });
+    });
+  });
 }
+renderChanges();
 
 /* ==================================================================
-   Commit graph (Canvas)
+   Commit graph
 ================================================================== */
 const ROW_H = 28;
 const LANE_W = 14;
 const PAD_LEFT = 14;
 const BRANCH_COLORS = ['#4F8CFF','#10B981','#F59E0B','#A78BFA','#EC4899','#F97316','#22D3EE'];
-
 function shortSha(s){return s.substring(0,7);}
 
 function renderGraphRows() {
@@ -1254,17 +1505,12 @@ function renderGraphRows() {
     const tr = document.createElement('tr');
     tr.className = 'row' + (i===0 ? ' selected' : '');
     tr.dataset.sha = c.sha;
-
-    const refs = c.refs.map(r => {
-      const cls = r.type;
-      return `<span class="ref-badge ${cls}">${r.type==='head'?'⇡ ':''}${r.name}</span>`;
-    }).join('');
-
+    const refs = c.refs.map(r => `<span class="ref-badge ${r.type}">${r.type==='head'?'⇡ ':''}${escapeHtml(r.name)}</span>`).join('');
     tr.innerHTML = html`
       <td class="col-graph"></td>
       <td class="col-subject">${refs}${escapeHtml(c.subject)}</td>
-      <td class="col-author">${c.author}</td>
-      <td class="col-time">${c.when}</td>
+      <td class="col-author">${escapeHtml(c.author)}</td>
+      <td class="col-time">${escapeHtml(c.when)}</td>
       <td class="col-sha">${shortSha(c.sha)}</td>
     `;
     tr.addEventListener('click', () => selectCommit(c.sha));
@@ -1272,8 +1518,6 @@ function renderGraphRows() {
   });
   paintGraphCanvas();
 }
-function escapeHtml(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-
 function paintGraphCanvas() {
   const canvas = $('#graphCanvas');
   const dpr = window.devicePixelRatio || 1;
@@ -1287,7 +1531,6 @@ function paintGraphCanvas() {
   ctx.scale(dpr, dpr);
   ctx.clearRect(0,0,cssW,cssH);
 
-  /* Edges */
   ctx.lineWidth = 1.6;
   COMMITS.forEach((c,i)=>{
     const x = PAD_LEFT + c.x * LANE_W;
@@ -1300,17 +1543,14 @@ function paintGraphCanvas() {
       ctx.strokeStyle = BRANCH_COLORS[COMMITS[pIdx].x % BRANCH_COLORS.length];
       ctx.beginPath();
       ctx.moveTo(x,y);
-      if (px === x) {
-        ctx.lineTo(px,py);
-      } else {
+      if (px === x) ctx.lineTo(px,py);
+      else {
         const midY = (y + py) / 2;
         ctx.bezierCurveTo(x, midY, px, midY, px, py);
       }
       ctx.stroke();
     });
   });
-
-  /* Nodes */
   COMMITS.forEach((c,i)=>{
     const x = PAD_LEFT + c.x * LANE_W;
     const y = i*ROW_H + ROW_H/2;
@@ -1319,7 +1559,6 @@ function paintGraphCanvas() {
     ctx.arc(x,y,4.5,0,Math.PI*2);
     ctx.fillStyle = color;
     ctx.fill();
-    /* Hollow ring around HEAD */
     if (c.refs.some(r=>r.type==='head')) {
       ctx.beginPath();
       ctx.arc(x,y,7,0,Math.PI*2);
@@ -1335,28 +1574,30 @@ function selectCommit(sha) {
   if (!c) return;
   $$('.graph-table tr.row').forEach(r=>r.classList.toggle('selected', r.dataset.sha===sha));
   renderDetail(c);
+  $$('#changesBody .change-row.selected').forEach(r=>r.classList.remove('selected'));
 }
-
 renderGraphRows();
 window.addEventListener('resize', paintGraphCanvas);
 
 /* ==================================================================
-   Detail panel
+   Detail panel (graph mode)
 ================================================================== */
 function renderDetail(c) {
   const head = $('#detailHead');
-  const refs = c.refs.map(r => `<span class="ref-badge ${r.type}">${r.name}</span>`).join('');
+  const refs = c.refs.map(r => `<span class="ref-badge ${r.type}">${escapeHtml(r.name)}</span>`).join('');
+  const adds = c.files.reduce((a,b)=>a+b.adds,0);
+  const dels = c.files.reduce((a,b)=>a+b.dels,0);
   head.innerHTML = html`
     <div class="subject">${refs}${escapeHtml(c.subject)}</div>
     <div class="meta">
       <span class="sha">${c.sha}</span>
-      <span>${c.author}</span>
-      <span>${c.when}</span>
+      <span>${escapeHtml(c.author)}</span>
+      <span>${escapeHtml(c.when)}</span>
       <span class="pill">${c.files.length} 个文件</span>
-      <span class="pill">+${c.files.reduce((a,b)=>a+b.adds,0)} −${c.files.reduce((a,b)=>a+b.dels,0)}</span>
+      <span class="pill"><span style="color:var(--git-added)">+${adds}</span> <span style="color:var(--git-deleted)">−${dels}</span></span>
     </div>
     <div class="actions">
-      <button title="复制完整 SHA"><svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg> Copy SHA</button>
+      <button title="复制完整 SHA">Copy SHA</button>
       <button>Cherry-pick</button>
       <button>Tag</button>
       <button>Open in new window</button>
@@ -1365,113 +1606,248 @@ function renderDetail(c) {
   `;
 
   const files = $('#changedFiles');
-  files.innerHTML = c.files.map((f,i)=>html`
-    <div class="changed-file ${i===0?'selected':''}" data-path="${f.path}">
-      <span class="tag tag-${f.kind==='added'?'A':f.kind==='deleted'?'D':f.kind==='renamed'?'R':f.kind==='conflicted'?'C':'M'}">${
-        ({added:'A',deleted:'D',renamed:'R',conflicted:'!',modified:'M'})[f.kind]||'M'
-      }</span>
-      <span class="path">${f.path}</span>
-      <span class="stat"><span class="plus">+${f.adds}</span><span class="minus">−${f.dels}</span></span>
-    </div>
-  `).join('');
+  files.innerHTML = html`
+    <div class="group-h">Files (${c.files.length})</div>
+    ${c.files.map((f,i)=>{
+      const k = ({added:'A',deleted:'D',renamed:'R',conflicted:'C',modified:'M'})[f.kind] || 'M';
+      return html`
+        <div class="changed-file" data-path="${escapeHtml(f.path)}">
+          <span class="badge b-${k}">${k}</span>
+          <span class="path">${escapeHtml(f.path)}</span>
+          <span class="stat"><span class="plus">+${f.adds}</span><span class="minus">−${f.dels}</span></span>
+        </div>
+      `;
+    }).join('')}
+  `;
   files.querySelectorAll('.changed-file').forEach(el=>{
     el.addEventListener('click',()=>{
       files.querySelectorAll('.changed-file').forEach(x=>x.classList.remove('selected'));
       el.classList.add('selected');
-      renderDiff(el.dataset.path);
+      openDiff({ path: el.dataset.path, source: 'commit', commitSha: c.sha });
     });
   });
+}
+selectCommit(COMMITS[0].sha);
 
-  renderDiff(c.files[0].path);
+/* ==================================================================
+   IDEA-style split diff renderer
+================================================================== */
+
+/* Pair sequential diff lines into split rows.
+   - ctx → row with both sides showing the same content
+   - del followed by add → mod row (old | conn | new)
+   - del without matching add → row with old side, empty new
+   - add without preceding del → row with empty old, new side
+*/
+function pairLines(lines) {
+  const out = [];
+  const dels = [];
+  function flushDels() {
+    while (dels.length) {
+      const d = dels.shift();
+      out.push({ kind:'del', oldLine:d.old, newLine:null, oldSrc:d.src, newSrc:'',
+                 oldTokens:d.tokens||[], newTokens:[] });
+    }
+  }
+  for (const l of lines) {
+    if (l.kind === 'del') { dels.push(l); continue; }
+    if (l.kind === 'add') {
+      if (dels.length) {
+        const d = dels.shift();
+        out.push({ kind:'mod', oldLine:d.old, newLine:l.new, oldSrc:d.src, newSrc:l.src,
+                   oldTokens:d.tokens||[], newTokens:l.tokens||[] });
+      } else {
+        out.push({ kind:'add', oldLine:null, newLine:l.new, oldSrc:'', newSrc:l.src,
+                   oldTokens:[], newTokens:l.tokens||[] });
+      }
+      continue;
+    }
+    /* ctx */
+    flushDels();
+    out.push({ kind:'ctx', oldLine:l.old, newLine:l.new, oldSrc:l.src, newSrc:l.src,
+               oldTokens:[], newTokens:[] });
+  }
+  flushDels();
+  return out;
 }
 
-function renderDiff(path) {
+function renderTokens(src, tokens, sideKind) {
+  /* sideKind: 'add' | 'del' | null (which CSS class to use for highlights). */
+  if (!src) return '';
+  if (!tokens || tokens.length === 0 || !sideKind) return escapeHtml(src);
+  const sorted = [...tokens].filter(t => t.a < t.b && t.b <= src.length).sort((a,b)=>a.a-b.a);
+  let out = '', cur = 0;
+  for (const tok of sorted) {
+    if (tok.a > cur) out += escapeHtml(src.slice(cur, tok.a));
+    out += `<span class="tk-${sideKind}">${escapeHtml(src.slice(tok.a, tok.b))}</span>`;
+    cur = tok.b;
+  }
+  if (cur < src.length) out += escapeHtml(src.slice(cur));
+  return out;
+}
+
+function countChangeBlocks(paired) {
+  let count = 0, inBlock = false;
+  for (const r of paired) {
+    if (r.kind === 'ctx') inBlock = false;
+    else if (!inBlock) { count++; inBlock = true; }
+  }
+  return count;
+}
+
+function openDiff({ path, source, commitSha }) {
+  currentDiff = { path, source, commitSha };
+  renderSplitDiff();
+  setMode('diff');
+
+  /* Sync selection in opposite panel */
+  if (source === 'working') {
+    $$('#changesBody .change-row').forEach(r => r.classList.toggle('selected', r.dataset.path === path));
+  } else if (source === 'commit') {
+    $$('#changedFiles .changed-file').forEach(r => r.classList.toggle('selected', r.dataset.path === path));
+  }
+}
+
+function renderSplitDiff() {
+  const { path, source, commitSha } = currentDiff;
   const d = DIFFS[path];
-  if (!d) { $('#diffPane').innerHTML = ''; return; }
-  const adds = d.hunks.flatMap(h=>h.lines).filter(l=>l.kind==='add').length;
-  const dels = d.hunks.flatMap(h=>h.lines).filter(l=>l.kind==='del').length;
-  let head = html`
-    <div class="diff-file-head">
-      <span class="lang">${d.lang}</span>
-      <span>${path}</span>
-      <span class="stats"><span class="plus">+${adds}</span> <span class="minus">−${dels}</span></span>
-      <span class="toggle">
-        <button class="active">Split</button>
-        <button>Unified</button>
-        <button>Blame</button>
-      </span>
+  if (!d) { $('#splitBody').innerHTML = `<div style="padding:24px;color:var(--color-text-muted)">No diff data for ${escapeHtml(path)}</div>`; return; }
+
+  const allPaired = d.hunks.map(h => ({ header:h.header, fold:h.fold, paired: pairLines(h.lines) }));
+  const totalAdds = allPaired.flatMap(h => h.paired).filter(r => r.kind==='add' || r.kind==='mod').length;
+  const totalDels = allPaired.flatMap(h => h.paired).filter(r => r.kind==='del' || r.kind==='mod').length;
+  const totalBlocks = allPaired.reduce((a, h) => a + countChangeBlocks(h.paired), 0);
+
+  /* Toolbar */
+  const isWorking = source === 'working';
+  const sourceBadge = isWorking
+    ? `<span class="source-badge working">Working tree</span>`
+    : `<span class="source-badge commit">Commit ${shortSha(commitSha)}</span>`;
+  $('#diffToolbar').innerHTML = html`
+    <div class="path" title="${escapeHtml(path)}">${escapeHtml(path)}</div>
+    ${sourceBadge}
+    <span class="stats"><span class="plus">+${totalAdds}</span> <span class="minus">−${totalDels}</span></span>
+    <span class="change-counter" id="changeCounter">1 / ${totalBlocks}</span>
+    <button class="tb" id="prevBlock" title="上一变更块 (Shift+F7)">◀</button>
+    <button class="tb" id="nextBlock" title="下一变更块 (F7)">▶</button>
+    <div class="spacer"></div>
+    <div class="seg">
+      <button class="active">Split</button>
+      <button title="Unified 仅在独立 Diff 窗口可用" disabled style="cursor:not-allowed;opacity:.5">Unified</button>
+    </div>
+    <button class="tb" title="忽略空白">◇ WS</button>
+    <button class="tb" title="Blame">Blame</button>
+    <div class="divider"></div>
+    <div class="write-actions" data-disabled="${!isWorking}">
+      <button title="暂存当前 hunk">Stage hunk</button>
+      <button title="暂存当前选中行">Stage line</button>
+      <button class="danger" title="放弃当前 hunk">Discard</button>
     </div>
   `;
-  let body = '';
-  for (const h of d.hunks) {
-    if (h.fold) body += `<div class="diff-fold">▸ ${h.fold}</div>`;
-    body += `<div class="hunk-head">${escapeHtml(h.header)}</div>`;
-    for (const l of h.lines) {
-      const sign = l.kind==='add' ? '+' : l.kind==='del' ? '−' : ' ';
-      let src = escapeHtml(l.src);
-      if (l.tokens) {
-        // simple token highlight insertion (assumes ASCII width)
-        // tokens annotated by indexes into the original (unescaped) string;
-        // since escapeHtml may alter widths only for &<>", which are rare in code samples here,
-        // we approximate by wrapping using indexOf of a slice — robust enough for the demo.
-        l.tokens.forEach(t => {
-          const slice = escapeHtml(l.src.slice(t.a,t.b));
-          src = src.replace(slice, `<span class="tok-${t.t}">${slice}</span>`);
-        });
-      }
-      body += `<div class="diff-line ${l.kind}">
-        <div class="gutter">${l.old ?? ''}</div>
-        <div class="gutter">${l.new ?? ''}</div>
-        <div class="sign">${sign}</div>
-        <div class="src">${src}</div>
+
+  /* Status bar */
+  $('#diffStatusbar').innerHTML = html`
+    <span>${escapeHtml(d.lang)}</span>
+    <span>UTF-8</span>
+    <span>LF</span>
+    <span style="margin-left:auto">${totalBlocks} 变更块 · 滚动同步</span>
+  `;
+
+  /* Body */
+  const body = $('#splitBody');
+  let out = `<div class="split">`;
+  for (const h of allPaired) {
+    if (h.fold) out += `<div class="fold-h">▸ ${escapeHtml(h.fold)} · 点击展开</div>`;
+    out += `<div class="hunk-h">${escapeHtml(h.header)}</div>`;
+    for (const r of h.paired) {
+      const oldCls = r.kind==='ctx' ? 'ctx'
+                  : r.kind==='del' ? 'del'
+                  : r.kind==='add' ? 'empty'
+                  : 'mod-old';
+      const newCls = r.kind==='ctx' ? 'ctx'
+                  : r.kind==='add' ? 'add'
+                  : r.kind==='del' ? 'empty'
+                  : 'mod-new';
+      const oldTokKind = (r.kind==='mod' || r.kind==='del') ? 'del' : null;
+      const newTokKind = (r.kind==='mod' || r.kind==='add') ? 'add' : null;
+      out += `<div class="srow side old ${oldCls}">
+        <span class="ln">${r.oldLine ?? ''}</span>
+        <span class="code">${renderTokens(r.oldSrc, r.oldTokens, oldTokKind)}</span>
+      </div>`;
+      out += `<div class="srow conn ${r.kind}"></div>`;
+      out += `<div class="srow side new ${newCls}">
+        <span class="ln">${r.newLine ?? ''}</span>
+        <span class="code">${renderTokens(r.newSrc, r.newTokens, newTokKind)}</span>
       </div>`;
     }
   }
-  $('#diffPane').innerHTML = head + body;
+  out += `</div>`;
+  body.innerHTML = out;
+
+  /* Toolbar buttons */
+  $('#prevBlock').addEventListener('click', () => navigateBlock(-1));
+  $('#nextBlock').addEventListener('click', () => navigateBlock(+1));
+
+  /* Click on a fold band expands it (visual only) */
+  body.querySelectorAll('.fold-h').forEach(el => el.addEventListener('click', () => {
+    el.textContent = '— 已展开（演示）—';
+    el.style.cursor = 'default';
+  }));
 }
 
-function showWorkingDiff(file) {
-  const path = file.path;
-  $('#detailHead').innerHTML = html`
-    <div class="subject">未提交变更 · ${path.split('/').pop()}</div>
-    <div class="meta">
-      <span class="pill">Working tree</span>
-      <span>${file.kind==='M'?'已修改':file.kind==='A'?'新增':file.kind==='D'?'已删除':file.kind==='?'?'未追踪':'变更'}</span>
-      <span class="pill">+${file.adds} −${file.dels}</span>
-    </div>
-    <div class="actions">
-      <button>Stage file</button>
-      <button>Stage hunk</button>
-      <button>Discard changes</button>
-      <button class="danger">Drop</button>
-    </div>
-  `;
-  $('#changedFiles').innerHTML = '';
-  renderDiff(path);
+/* Walk through change blocks via F7 / Shift+F7 (or buttons) */
+function navigateBlock(dir) {
+  const rows = $$('#splitBody .srow.side');
+  /* Group into blocks (consecutive non-ctx) per visual row */
+  const blocks = [];
+  let curBlock = null;
+  /* Each visual row = 3 children (old, conn, new); use only `old` rows as anchors */
+  const anchors = $$('#splitBody .srow.side.old');
+  anchors.forEach((el, idx) => {
+    const isCtx = el.classList.contains('ctx');
+    if (!isCtx) {
+      if (!curBlock) { curBlock = { start: idx, els: [] }; blocks.push(curBlock); }
+      curBlock.els.push(el);
+    } else {
+      curBlock = null;
+    }
+  });
+  if (blocks.length === 0) return;
+  let idx = anchors.findIndex(el => el.classList.contains('cur-block'));
+  let curIdx = idx >= 0 ? blocks.findIndex(b => b.els.includes(anchors[idx])) : -1;
+  curIdx = (curIdx + dir + blocks.length) % blocks.length;
+  /* Clear, then mark */
+  anchors.forEach(el => el.classList.remove('cur-block'));
+  $$('#splitBody .srow.side.new').forEach(el => el.classList.remove('cur-block'));
+  blocks[curIdx].els.forEach(el => el.classList.add('cur-block'));
+  const firstOld = blocks[curIdx].els[0];
+  firstOld.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  $('#changeCounter').textContent = `${curIdx+1} / ${blocks.length}`;
 }
 
-selectCommit(COMMITS[0].sha);
+/* Synchronize scroll between old/new columns (since they share the same scroll container,
+   horizontal scroll inside each .code element is the only divergent axis — we mirror it). */
+document.addEventListener('scroll', () => {}, true);
 
 /* ==================================================================
    Working tree lists + commit form
 ================================================================== */
 function renderWorkList(target, list, staged) {
   target.innerHTML = list.map(f => {
-    const cls = ({M:'modified',A:'added',D:'deleted','?':'untracked',R:'renamed',C:'conflicted'})[f.kind] || 'modified';
-    const tag = f.kind;
+    const meta = KIND_META[f.kind] || KIND_META.M;
     return html`
-      <div class="work-row" data-path="${f.path}">
+      <div class="work-row" data-path="${escapeHtml(f.path)}">
         <input type="checkbox" ${staged?'checked':''} />
-        <span class="badge tag-${tag}">${tag}</span>
-        <span class="path">${f.path}</span>
-        ${f.adds||f.dels ? `<span class="delta"><span class="tag-A">+${f.adds}</span> <span class="tag-D">−${f.dels}</span></span>` : ''}
+        <span class="badge b-${f.kind}">${f.kind}</span>
+        <span class="path">${escapeHtml(f.path)}</span>
+        ${(f.adds||f.dels) ? `<span class="delta"><span style="color:var(--git-added)">+${f.adds}</span> <span style="color:var(--git-deleted)">−${f.dels}</span></span>` : ''}
       </div>
     `;
   }).join('');
   target.querySelectorAll('.work-row').forEach(r=>{
     r.addEventListener('click',(e)=>{
       if (e.target.tagName==='INPUT') return;
-      showWorkingDiff(list.find(x=>x.path===r.dataset.path));
+      openDiff({ path: r.dataset.path, source: 'working' });
     });
   });
 }
@@ -1496,7 +1872,6 @@ commitBtn.addEventListener('click', () => {
   refreshCommitBtn();
 });
 
-/* AI button: simulate generation */
 $('#aiBtn').addEventListener('click', async () => {
   const btn = $('#aiBtn');
   btn.disabled = true;
@@ -1504,9 +1879,7 @@ $('#aiBtn').addEventListener('click', async () => {
   btn.innerHTML = `<span class="spark"></span> 生成中...`;
   $('#bgTask').style.display = 'inline-flex';
   $('#bgTask').firstChild.textContent = ' AI 生成提交信息 ';
-
-  await new Promise(r=>setTimeout(r, 900));
-
+  await new Promise(r=>setTimeout(r, 800));
   subjectInput.value = 'feat(diff): 接入 tree-sitter 的词级 diff 注入';
   bodyInput.value =
 `- 在 DiffEngine 中改用 patience 算法并接入 tree-sitter 解析缓存
@@ -1525,20 +1898,25 @@ Closes #182, refs ADR-014`;
    Command palette
 ================================================================== */
 const COMMANDS = [
+  { name:'Switch to Commit Graph',           kbd:'Ctrl+H', do:()=>setMode('graph') },
+  { name:'Switch to Diff view',              kbd:'Ctrl+D', do:()=>{
+      if (!currentDiff) { toast('先选择一个文件以打开 Diff'); return; }
+      setMode('diff');
+    } },
   { name:'Push current branch',              kbd:'Ctrl+Shift+P', do:()=>simulatePush() },
-  { name:'Force push with lease',            kbd:'',             danger:true, do:()=>toast('已触发 force-push-with-lease（演示）','warn') },
+  { name:'Force push with lease',            kbd:'',             danger:true, do:()=>toast('已请求 force-push-with-lease 确认（演示）','warn') },
   { name:'Fetch all remotes',                kbd:'Ctrl+Shift+F', do:()=>simulateFetch() },
   { name:'Pull (rebase)',                    kbd:'Ctrl+Shift+L', do:()=>toast('Pull --rebase 完成','success') },
   { name:'Switch branch...',                 kbd:'Ctrl+B',       do:()=>toast('打开分支切换器（演示）') },
   { name:'New branch from current...',       kbd:'',             do:()=>toast('已创建 feature/new-from-HEAD（演示）','success') },
-  { name:'Open Diff window for selected file', kbd:'Ctrl+D',     do:()=>toast('打开独立 Diff 窗口（演示）') },
   { name:'Interactive rebase from selected commit', kbd:'Ctrl+I', do:()=>toast('打开交互式 rebase 编辑器（演示）') },
   { name:'Cherry-pick selected commit',      kbd:'Ctrl+Shift+C', do:()=>toast('Cherry-pick 已完成（演示）','success') },
   { name:'Generate AI commit message',       kbd:'Ctrl+G',       do:()=>$('#aiBtn').click() },
+  { name:'Next change block',                kbd:'F7',           do:()=>{ if (viewMode==='diff') navigateBlock(+1); } },
+  { name:'Previous change block',            kbd:'Shift+F7',     do:()=>{ if (viewMode==='diff') navigateBlock(-1); } },
   { name:'Shelve current changes',           kbd:'Ctrl+Shift+S', do:()=>toast('已搁置到 WIP shelf（演示）','success') },
   { name:'Undo last operation',              kbd:'Ctrl+Z',       do:()=>toast('已撤销最近一次 Git 操作','success') },
   { name:'Open Settings',                    kbd:'Ctrl+,',       do:()=>toast('打开设置（演示）') },
-  { name:'Toggle Split / Unified diff',      kbd:'Ctrl+\\',      do:()=>toast('Diff 视图已切换') },
   { name:'Reset HEAD --hard',                kbd:'',             danger:true, do:()=>toast('已请求确认（不会执行）','warn') },
 ];
 
@@ -1546,7 +1924,6 @@ const overlay = $('#paletteOverlay');
 const paletteInput = $('#paletteInput');
 const paletteList = $('#paletteList');
 let paletteCursor = 0;
-
 function openPalette() {
   overlay.classList.add('open');
   paletteInput.value = '';
@@ -1555,15 +1932,14 @@ function openPalette() {
   setTimeout(()=>paletteInput.focus(), 0);
 }
 function closePalette() { overlay.classList.remove('open'); }
-
 function renderPalette(q) {
   const ql = q.toLowerCase();
   const items = COMMANDS.filter(c => c.name.toLowerCase().includes(ql));
   paletteList.innerHTML = items.map((c,i)=>html`
-    <div class="cmd ${i===paletteCursor?'active':''} ${c.danger?'':''}" data-i="${i}">
+    <div class="cmd ${i===paletteCursor?'active':''}" data-i="${i}">
       <span class="name">${escapeHtml(c.name)}</span>
       ${c.danger ? `<span class="danger-tag">Dangerous · 需确认</span>` : ''}
-      <span class="kbd">${c.kbd||''}</span>
+      <span class="kbd">${escapeHtml(c.kbd||'')}</span>
     </div>
   `).join('');
   paletteList.querySelectorAll('.cmd').forEach(el=>{
@@ -1580,16 +1956,27 @@ paletteInput.addEventListener('keydown',(e)=>{
   if (e.key==='Escape')    { closePalette(); }
 });
 overlay.addEventListener('click', (e)=>{ if (e.target===overlay) closePalette(); });
-
 $('#cmdkBtn').addEventListener('click', openPalette);
+
+/* ==================================================================
+   Global keyboard shortcuts
+================================================================== */
 document.addEventListener('keydown', (e) => {
-  if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='k') { e.preventDefault(); openPalette(); }
-  if ((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='g') { e.preventDefault(); $('#aiBtn').click(); }
-  if ((e.ctrlKey||e.metaKey) && e.key==='Enter')           { e.preventDefault(); if (!commitBtn.disabled) commitBtn.click(); }
+  const meta = e.ctrlKey || e.metaKey;
+  if (meta && e.key.toLowerCase()==='k') { e.preventDefault(); openPalette(); }
+  if (meta && e.key.toLowerCase()==='g') { e.preventDefault(); $('#aiBtn').click(); }
+  if (meta && e.key.toLowerCase()==='h') { e.preventDefault(); setMode('graph'); }
+  if (meta && e.key.toLowerCase()==='d') { e.preventDefault();
+    if (currentDiff) setMode('diff');
+    else toast('先选择一个文件以打开 Diff');
+  }
+  if (meta && e.key==='Enter')           { e.preventDefault(); if (!commitBtn.disabled) commitBtn.click(); }
+  if (e.key === 'F7' && !e.shiftKey)     { if (viewMode==='diff') { e.preventDefault(); navigateBlock(+1); } }
+  if (e.key === 'F7' && e.shiftKey)      { if (viewMode==='diff') { e.preventDefault(); navigateBlock(-1); } }
 });
 
 /* ==================================================================
-   Misc — tabs, theme, sync, toasts
+   Tabs, theme, sync, toasts
 ================================================================== */
 $$('#tabs .tab').forEach(t => {
   t.addEventListener('click', (e) => {
@@ -1599,7 +1986,7 @@ $$('#tabs .tab').forEach(t => {
     }
     $$('#tabs .tab').forEach(x=>x.classList.remove('active'));
     t.classList.add('active');
-    toast(`切换到 ${t.dataset.repo}（保留上下文）`);
+    toast(`切换到 ${t.dataset.repo}（保留模式与选中对象）`);
   });
 });
 $('#tabAdd').addEventListener('click', () => toast('打开/克隆新仓库（演示）'));
@@ -1617,7 +2004,7 @@ function simulatePush() {
   setTimeout(()=>{
     $('#bgTask').style.display = 'none';
     toast('已推送 2 个提交到 origin/feature/diff-engine', 'success');
-  }, 1200);
+  }, 1100);
 }
 function simulateFetch() {
   $('#bgTask').style.display = 'inline-flex';
@@ -1625,7 +2012,7 @@ function simulateFetch() {
   setTimeout(()=>{
     $('#bgTask').style.display = 'none';
     toast('Fetch 完成 · main 落后 5 个提交', 'warn');
-  }, 1000);
+  }, 900);
 }
 $('#syncBtn').addEventListener('click', simulateFetch);
 $('#branchPill').addEventListener('click', () => toast('打开分支切换器（按 Ctrl+B 也可）'));
@@ -1640,8 +2027,7 @@ function toast(text, kind='') {
   setTimeout(()=>el.remove(), 3500);
 }
 
-/* Initial welcome ping */
-setTimeout(()=>toast('GitCrest 原型已就绪 · 按 Ctrl+K 打开命令面板', 'success'), 250);
+setTimeout(()=>toast('GitCrest 原型 v2 · 点击 Changes 中的文件进入 Diff 模式，Ctrl+H 回到提交图', 'success'), 250);
 </script>
 </body>
 </html>
