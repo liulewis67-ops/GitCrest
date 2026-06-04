@@ -1378,6 +1378,7 @@ CREATE TABLE commit_history (
 |------|-------|----------------|------|
 | **打开命令面板** | `Cmd+K` | `Ctrl+K` | 搜索所有命令 |
 | **提交** | `Cmd+Enter` | `Ctrl+Enter` | 暂存并提交当前变更 |
+| **提交并推送** | `Cmd+Shift+Enter` | `Ctrl+Shift+Enter` | 提交后推送到默认 upstream |
 | **全部暂存** | `Cmd+Shift+A` | `Ctrl+Shift+A` | 暂存所有变更文件 |
 | **切换分支** | `Cmd+B` | `Ctrl+B` | 打开分支快速切换器 |
 | **Fetch** | `Cmd+Shift+F` | `Ctrl+Shift+F` | 从所有 remote 拉取 |

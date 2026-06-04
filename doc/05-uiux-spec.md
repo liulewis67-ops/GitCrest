@@ -155,8 +155,28 @@ Commit 表单：
 - 正文折叠区。
 - 模板选择。
 - AI message 按钮。
-- 提交按钮。
+- 提交按钮（Split Button）。
 - amend 选项。
+
+#### Commit 按钮（Split Button）
+
+提交按钮采用 JetBrains / Tower 同款 **分裂按钮（Split Button）** 模式：左侧是主操作，右侧是 ▾ 下拉箭头，点击展开操作菜单。
+
+主操作候选：
+
+| 操作 | 快捷键 | 说明 |
+|---|---|---|
+| Commit | `Cmd/Ctrl+Enter` | 仅创建本地提交，不推送 |
+| Commit and Push | `Cmd/Ctrl+Shift+Enter` | 提交后推送当前分支到默认 upstream |
+| Commit and Push to… | — | 提交后弹窗选择 remote / branch 后推送 |
+| Commit and Push (force-with-lease) | — | 危险操作，菜单中以 danger 色标识，需要二次确认 |
+
+行为：
+
+- 用户在下拉菜单中选择的操作会立即执行，并成为该仓库 Tab 下次会话的默认主操作（持久化到布局状态）。下次显示在按钮主区，避免重复展开菜单。
+- 主操作按钮的标签随当前选中变化，确保用户随时知道点击会发生什么；危险变体（force-with-lease）即使被选为默认也会用 danger 色提示。
+- 推送阶段失败不会回滚提交：本地提交保留，按钮状态恢复，状态栏出现可重试的「推送失败 · 重试」入口，避免重复提交。
+- amend、sign 复选框对所有变体均生效。amend 勾选时，主操作按钮显示「Amend」，菜单中的「and Push」自动改为「and Push --force-with-lease」（amend 已发布的提交需要 force）。
 
 ## 3. Diff（中央 Diff 模式 和 独立 Diff 窗口）
 

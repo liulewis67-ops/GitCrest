@@ -739,16 +739,84 @@ input { font: inherit; color: inherit; }
 .commit-form .actions { display: flex; gap: var(--space-2); align-items: center; margin-top: 4px; }
 .commit-form .actions label { font-size: var(--text-xs); color: var(--color-text-muted); display: inline-flex; align-items: center; gap: 4px; }
 .commit-form .actions .grow { flex: 1; }
-.commit-form .commit-btn {
+/* Split button: main commit action + caret menu */
+.commit-split {
+  display: inline-flex;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
   background: var(--color-accent);
   color: white;
-  font-weight: 600;
-  padding: 6px 14px;
-  border-radius: var(--radius-sm);
   font-size: var(--text-sm);
+  font-weight: 600;
+  box-shadow: 0 1px 0 rgba(0,0,0,.2);
 }
-.commit-form .commit-btn:disabled { opacity: .5; cursor: not-allowed; }
-.commit-form .commit-btn:hover:not(:disabled) { filter: brightness(1.06); }
+.commit-split.is-danger { background: var(--color-danger); }
+.commit-split.disabled { opacity: .5; pointer-events: none; }
+
+.commit-split .commit-main {
+  padding: 6px 14px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  border-right: 1px solid rgba(0,0,0,.20);
+  white-space: nowrap;
+}
+.commit-split .commit-main:hover { filter: brightness(1.06); background: rgba(255,255,255,.06); }
+
+.commit-split .commit-caret {
+  padding: 0 8px;
+  color: inherit;
+  display: grid; place-items: center;
+  background: transparent;
+}
+.commit-split .commit-caret:hover { filter: brightness(1.06); background: rgba(255,255,255,.06); }
+.commit-split .commit-caret.open { background: rgba(0,0,0,.18); }
+
+/* Commit options menu */
+.commit-menu {
+  position: fixed;
+  z-index: 70;
+  min-width: 280px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  padding: 4px;
+  display: none;
+}
+.commit-menu.open { display: block; }
+.commit-menu .opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  cursor: pointer;
+}
+.commit-menu .opt:hover { background: var(--color-accent-soft); }
+.commit-menu .opt .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: transparent;
+  flex-shrink: 0;
+}
+.commit-menu .opt.selected .dot { background: var(--color-accent); }
+.commit-menu .opt.danger { color: var(--color-danger); }
+.commit-menu .opt .label { flex: 1; }
+.commit-menu .opt .kbd { font-family: var(--font-code); font-size: var(--text-xs); color: var(--color-text-muted); }
+.commit-menu .opt.danger .kbd { color: var(--color-danger); opacity: .8; }
+.commit-menu .opt.disabled { opacity: .5; cursor: not-allowed; }
+.commit-menu .sep {
+  height: 1px;
+  background: var(--color-border);
+  margin: 4px 0;
+}
+.commit-menu .desc {
+  padding: 4px 10px 6px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  border-top: 1px solid var(--color-border-soft);
+  margin-top: 2px;
+}
 
 /* Status bar ----------------------------------------------------- */
 .statusbar {
@@ -1093,9 +1161,15 @@ input { font: inherit; color: inherit; }
             <label><input type="checkbox" id="amendChk"> amend</label>
             <label><input type="checkbox" id="signChk" checked> sign</label>
             <div class="grow"></div>
-            <button class="commit-btn" id="commitBtn" disabled>Commit</button>
+            <div class="commit-split disabled" id="commitSplit" role="group" aria-label="Commit options">
+              <button type="button" class="commit-main" id="commitMainBtn">Commit</button>
+              <button type="button" class="commit-caret" id="commitCaretBtn" title="More commit options" aria-haspopup="menu">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m6 9 6 6 6-6"/></svg>
+              </button>
+            </div>
           </div>
         </form>
+        <div class="commit-menu" id="commitMenu" role="menu"></div>
       </div>
     </section>
 
@@ -1854,22 +1928,131 @@ function renderWorkList(target, list, staged) {
 renderWorkList($('#unstaged'), UNSTAGED, false);
 renderWorkList($('#staged'),   STAGED,   true);
 
-const subjectInput = $('#commitSubject');
-const bodyInput    = $('#commitBody');
-const commitBtn    = $('#commitBtn');
+const subjectInput  = $('#commitSubject');
+const bodyInput     = $('#commitBody');
+const amendChk      = $('#amendChk');
+const commitSplit   = $('#commitSplit');
+const commitMainBtn = $('#commitMainBtn');
+const commitCaretBtn= $('#commitCaretBtn');
+const commitMenu    = $('#commitMenu');
+
+/* Persisted choice — becomes the default action on the split button. */
+const COMMIT_OPTIONS = [
+  { id:'commit',      label:'Commit',                            kbd:'Ctrl+Enter',       danger:false },
+  { id:'commit-push', label:'Commit and Push',                   kbd:'Ctrl+Shift+Enter', danger:false },
+  { id:'commit-push-to', label:'Commit and Push to…',            kbd:'',                 danger:false },
+  { id:'commit-push-force', label:'Commit and Push (force-with-lease)', kbd:'',          danger:true  },
+];
+let commitMode = 'commit';   // current default
+
+function effectiveOption() {
+  /* Amend morphs the push variants into force-with-lease (described in 05-uiux-spec §2.5). */
+  const opt = COMMIT_OPTIONS.find(o => o.id === commitMode);
+  if (!amendChk.checked) return opt;
+  if (opt.id === 'commit')          return { ...opt, label: 'Amend' };
+  if (opt.id === 'commit-push')     return { ...opt, label: 'Amend and Push (force-with-lease)', danger: true };
+  if (opt.id === 'commit-push-to')  return { ...opt, label: 'Amend and Push to… (force-with-lease)', danger: true };
+  return opt;
+}
+
 function refreshCommitBtn() {
-  commitBtn.disabled = !subjectInput.value.trim() || STAGED.length === 0;
+  const opt = effectiveOption();
+  commitMainBtn.textContent = opt.label;
+  commitSplit.classList.toggle('is-danger', !!opt.danger);
+  const disabled = !subjectInput.value.trim() || STAGED.length === 0;
+  commitSplit.classList.toggle('disabled', disabled);
 }
 subjectInput.addEventListener('input', refreshCommitBtn);
+amendChk.addEventListener('change', refreshCommitBtn);
 refreshCommitBtn();
 
-commitBtn.addEventListener('click', () => {
+function runCommit(modeId) {
   const msg = subjectInput.value.trim();
   if (!msg) return;
-  toast(`已提交到 feature/diff-engine: ${msg}`, 'success');
+  const opt = COMMIT_OPTIONS.find(o => o.id === modeId);
+  const isDanger = opt.danger || (amendChk.checked && modeId !== 'commit');
+
+  /* For dangerous variants we'd normally show a confirm dialog. The prototype
+     just signals it via a warn toast — see 05-uiux-spec §2.5 for the real flow. */
+  if (isDanger) {
+    toast(`已请求确认 · ${opt.label} (演示中不会真的执行 force push)`, 'warn');
+  }
+
+  /* Commit phase (always succeeds in the prototype) */
+  const commitVerb = amendChk.checked ? '已修订' : '已提交';
+  toast(`${commitVerb}到 feature/diff-engine: ${msg}`, 'success');
   subjectInput.value = '';
   bodyInput.value = '';
+
+  /* Push phase (separate visible task so the user can see commit succeeded
+     even if push fails — see 04-user-flows §2 异常补充). */
+  if (modeId === 'commit-push' || modeId === 'commit-push-to' || modeId === 'commit-push-force') {
+    const target = modeId === 'commit-push-to' ? 'upstream/feature/diff-engine' : 'origin/feature/diff-engine';
+    $('#bgTask').style.display = 'inline-flex';
+    $('#bgTask').firstChild.textContent = ` 推送到 ${target} `;
+    setTimeout(() => {
+      $('#bgTask').style.display = 'none';
+      toast(`已推送到 ${target}`, 'success');
+    }, 900);
+  }
+
   refreshCommitBtn();
+}
+
+commitMainBtn.addEventListener('click', () => {
+  if (commitSplit.classList.contains('disabled')) return;
+  runCommit(commitMode);
+});
+
+/* Caret → menu */
+function buildCommitMenu() {
+  commitMenu.innerHTML =
+    COMMIT_OPTIONS.map(o => html`
+      <div class="opt ${o.id===commitMode?'selected':''} ${o.danger?'danger':''}" data-id="${o.id}" role="menuitem">
+        <span class="dot"></span>
+        <span class="label">${escapeHtml(o.label)}</span>
+        ${o.kbd ? `<span class="kbd">${escapeHtml(o.kbd)}</span>` : ''}
+      </div>
+    `).join('') +
+    `<div class="sep"></div>
+     <div class="desc">所选操作将成为本仓库 Tab 的默认操作。提交完成后失败的推送不会回滚本地提交。</div>`;
+
+  commitMenu.querySelectorAll('.opt').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.dataset.id;
+      commitMode = id;
+      buildCommitMenu();
+      refreshCommitBtn();
+      closeCommitMenu();
+      if (!commitSplit.classList.contains('disabled')) runCommit(id);
+    });
+  });
+}
+function openCommitMenu() {
+  buildCommitMenu();
+  commitMenu.classList.add('open');
+  commitCaretBtn.classList.add('open');
+  /* Position menu above the split button, right-aligned to it. */
+  const r = commitSplit.getBoundingClientRect();
+  const menuW = 280;
+  const top = r.top - 8 - commitMenu.offsetHeight;
+  const left = Math.min(window.innerWidth - menuW - 8, r.right - menuW);
+  commitMenu.style.top  = `${Math.max(8, top)}px`;
+  commitMenu.style.left = `${Math.max(8, left)}px`;
+  setTimeout(() => document.addEventListener('mousedown', onMenuOutside), 0);
+}
+function closeCommitMenu() {
+  commitMenu.classList.remove('open');
+  commitCaretBtn.classList.remove('open');
+  document.removeEventListener('mousedown', onMenuOutside);
+}
+function onMenuOutside(e) {
+  if (commitMenu.contains(e.target) || commitCaretBtn.contains(e.target)) return;
+  closeCommitMenu();
+}
+commitCaretBtn.addEventListener('click', () => {
+  if (commitMenu.classList.contains('open')) closeCommitMenu();
+  else openCommitMenu();
 });
 
 $('#aiBtn').addEventListener('click', async () => {
@@ -1902,6 +2085,18 @@ const COMMANDS = [
   { name:'Switch to Diff view',              kbd:'Ctrl+D', do:()=>{
       if (!currentDiff) { toast('先选择一个文件以打开 Diff'); return; }
       setMode('diff');
+    } },
+  { name:'Commit',                           kbd:'Ctrl+Enter',       do:()=>{
+      if (commitSplit.classList.contains('disabled')) { toast('提交按钮已禁用：检查暂存与 message'); return; }
+      runCommit('commit');
+    } },
+  { name:'Commit and Push',                  kbd:'Ctrl+Shift+Enter', do:()=>{
+      if (commitSplit.classList.contains('disabled')) { toast('提交按钮已禁用：检查暂存与 message'); return; }
+      commitMode = 'commit-push'; refreshCommitBtn(); runCommit('commit-push');
+    } },
+  { name:'Commit and Push to…',              kbd:'',                 do:()=>{
+      if (commitSplit.classList.contains('disabled')) { toast('提交按钮已禁用：检查暂存与 message'); return; }
+      commitMode = 'commit-push-to'; refreshCommitBtn(); runCommit('commit-push-to');
     } },
   { name:'Push current branch',              kbd:'Ctrl+Shift+P', do:()=>simulatePush() },
   { name:'Force push with lease',            kbd:'',             danger:true, do:()=>toast('已请求 force-push-with-lease 确认（演示）','warn') },
@@ -1970,7 +2165,18 @@ document.addEventListener('keydown', (e) => {
     if (currentDiff) setMode('diff');
     else toast('先选择一个文件以打开 Diff');
   }
-  if (meta && e.key==='Enter')           { e.preventDefault(); if (!commitBtn.disabled) commitBtn.click(); }
+  if (meta && e.key==='Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (!commitSplit.classList.contains('disabled')) runCommit('commit');
+  }
+  if (meta && e.key==='Enter' && e.shiftKey) {
+    e.preventDefault();
+    if (!commitSplit.classList.contains('disabled')) {
+      commitMode = 'commit-push';
+      refreshCommitBtn();
+      runCommit('commit-push');
+    }
+  }
   if (e.key === 'F7' && !e.shiftKey)     { if (viewMode==='diff') { e.preventDefault(); navigateBlock(+1); } }
   if (e.key === 'F7' && e.shiftKey)      { if (viewMode==='diff') { e.preventDefault(); navigateBlock(-1); } }
 });

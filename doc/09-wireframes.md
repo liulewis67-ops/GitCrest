@@ -59,7 +59,7 @@
 |-----------------------+------------------------------+--------------------------|
 | Working Tree          | Staged Changes               | Commit Message           |
 | M src/main.rs         | A src/parser.rs              | feat(parser): ...        |
-| ? scratch.txt         |                              | [AI] [Commit]            |
+| ? scratch.txt         |                              | [AI] [Commit ▾]          |
 +--------------------------------------------------------------------------------+
 ```
 
@@ -97,7 +97,7 @@
 |-----------------------+--------------------------------------------------------|
 | Working Tree          | Staged Changes               | Commit Message           |
 | M src/main.rs         | A src/parser.rs              | feat(parser): ...        |
-| ? scratch.txt         |                              | [AI] [Commit]            |
+| ? scratch.txt         |                              | [AI] [Commit ▾]          |
 +--------------------------------------------------------------------------------+
 ```
 

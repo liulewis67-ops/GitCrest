@@ -32,8 +32,14 @@
 4. 用户在 Diff 中选择 hunk 或行进行暂存（也可在 Changes 中按文件级勾选）。
 5. 用户手写 commit message，或按 `Cmd/Ctrl+G` 生成。
 6. 用户编辑 message。
-7. 用户按 `Cmd/Ctrl+Enter` 提交。
-8. 提交成功后，工作区变干净；用户按 `Cmd/Ctrl+H`（或点击主区顶部「Graph」）回到提交图，看到新节点。
+7. 用户按 `Cmd/Ctrl+Enter` 提交（或按 `Cmd/Ctrl+Shift+Enter` 提交并推送，或点击提交按钮右侧 ▾ 选择 Commit and Push / Commit and Push to…）。
+8. 提交成功后，工作区变干净；如选择「Commit and Push」，状态栏显示后台推送进度。
+9. 用户按 `Cmd/Ctrl+H`（或点击主区顶部「Graph」）回到提交图，看到新节点；如已推送，本地分支与远程分支 ahead/behind 同步刷新。
+
+异常补充：
+
+- 推送阶段失败（认证、被拒绝、网络）：本地提交保留，状态栏给出可重试的「推送失败 · 重试」入口，不重复创建提交。
+- force-with-lease 推送被远程的新提交阻挡：阻止执行并提示先 fetch。
 
 异常：
 
