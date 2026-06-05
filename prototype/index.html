@@ -149,7 +149,9 @@ input { font: inherit; color: inherit; }
   letter-spacing: .2px;
   color: var(--color-text);
   border-right: 1px solid var(--color-border);
+  cursor: pointer;
 }
+.brand:hover { background: var(--color-bg); }
 .brand .crest {
   width: 18px; height: 18px;
   background: linear-gradient(135deg, var(--color-accent), #8B5CF6);
@@ -910,6 +912,346 @@ input { font: inherit; color: inherit; }
   transform: rotate(45deg);
 }
 
+/* ------------------------------------------------------------------
+   Welcome screen
+------------------------------------------------------------------ */
+.app[data-screen="welcome"] > .main,
+.app[data-screen="welcome"] > .statusbar { display: none; }
+.titlebar-main { display: contents; }
+.app[data-screen="welcome"] .titlebar-main { display: none; }
+.app[data-screen="welcome"] .titlebar-welcome { display: flex; }
+.titlebar-welcome { display: none; align-items: center; gap: var(--space-2); margin-left: auto; padding-left: var(--space-2); }
+.titlebar-welcome .icon-btn { width: 28px; height: 26px; }
+.titlebar-welcome .label-btn {
+  height: 26px; padding: 0 10px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+}
+.titlebar-welcome .label-btn:hover { background: var(--color-surface-raised); color: var(--color-text); }
+
+.welcome { display: none; }
+.app[data-screen="welcome"] .welcome {
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  overflow: auto;
+}
+.welcome-inner {
+  width: 100%;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 32px 60px;
+  display: flex; flex-direction: column;
+  gap: var(--space-6);
+}
+.welcome-greeting {
+  display: flex; flex-direction: column; gap: 2px;
+}
+.welcome-greeting h1 {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text);
+  letter-spacing: -.1px;
+}
+.welcome-greeting .sub {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+.welcome-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--space-6);
+  align-items: start;
+}
+
+/* Welcome card pattern (panel, not big-shadow card) */
+.w-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.w-card-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--color-border-soft);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: .6px;
+  color: var(--color-text-dim);
+}
+.w-card-head .count {
+  margin-left: auto;
+  text-transform: none; letter-spacing: 0;
+  color: var(--color-text-muted);
+  font-family: var(--font-code);
+}
+.w-card-head input.filter {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 2px 8px;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+  width: 180px;
+  outline: none;
+  text-transform: none; letter-spacing: 0;
+}
+.w-card-head input.filter:focus { border-color: var(--color-accent); }
+
+/* Recent repos list */
+.repo-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0 var(--space-3);
+  height: 38px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-soft);
+  font-size: var(--text-sm);
+}
+.repo-row:last-child { border-bottom: 0; }
+.repo-row:hover { background: var(--color-surface-hover); }
+.repo-row.focused {
+  background: var(--color-accent-soft);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+}
+.repo-row .repo-icon {
+  width: 18px; height: 18px;
+  border-radius: var(--radius-xs);
+  display: grid; place-items: center;
+  color: var(--color-bg);
+  font-family: var(--font-code);
+  font-size: 10px;
+  font-weight: 700;
+}
+.repo-row .name-cell { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.repo-row .name-cell .name { font-weight: 500; color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.repo-row .name-cell .path { font-size: var(--text-xs); color: var(--color-text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-code); }
+.repo-row .branch-pill-sm {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: var(--text-xs);
+  padding: 1px 6px;
+  border-radius: var(--radius-xs);
+  border: 1px solid rgba(79,140,255,.4);
+  background: rgba(79,140,255,.10);
+  color: var(--color-accent);
+  font-family: var(--font-code);
+  white-space: nowrap;
+}
+.repo-row .dirty-dot {
+  display: inline-block; width: 6px; height: 6px;
+  background: var(--git-modified);
+  border-radius: 50%;
+}
+.repo-row .time {
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  white-space: nowrap;
+}
+.repo-row.has-error { background: rgba(239,68,68,.06); }
+.repo-row.has-error .name { color: var(--color-text-muted); }
+
+.repo-error {
+  padding: 6px var(--space-3) 10px;
+  background: rgba(239,68,68,.05);
+  border-bottom: 1px solid var(--color-border-soft);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  display: flex; align-items: center; gap: var(--space-2);
+}
+.repo-error .msg { color: var(--color-danger); flex: 1; }
+.repo-error button {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xs);
+  padding: 2px 8px;
+  font-size: var(--text-xs);
+  color: var(--color-text);
+}
+.repo-error button:hover { background: var(--color-surface-hover); }
+.repo-error button.danger { color: var(--color-danger); border-color: rgba(239,68,68,.3); }
+
+/* Quick actions card */
+.qa-list { display: flex; flex-direction: column; padding: var(--space-2); gap: 2px; }
+.qa-btn {
+  display: flex; align-items: center; gap: var(--space-3);
+  height: 36px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  text-align: left;
+}
+.qa-btn:hover { background: var(--color-surface-hover); }
+.qa-btn.primary { background: var(--color-accent); color: white; font-weight: 500; }
+.qa-btn.primary:hover { filter: brightness(1.06); }
+.qa-btn .qa-icon {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-xs);
+  flex-shrink: 0;
+}
+.qa-btn.primary .qa-icon { background: rgba(255,255,255,.18); }
+.qa-btn .qa-label { flex: 1; }
+.qa-btn .qa-kbd {
+  font-family: var(--font-code);
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}
+.qa-btn.primary .qa-kbd { color: rgba(255,255,255,.7); }
+
+.qa-tip {
+  margin-top: 4px;
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-border-soft);
+  font-size: var(--text-xs);
+  color: var(--color-text-dim);
+  display: flex; align-items: center; gap: 6px;
+}
+
+/* Drop zone */
+.drop-zone {
+  margin: var(--space-2);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3);
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+  transition: all 120ms ease;
+}
+.drop-zone.drag-over {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+  color: var(--color-text);
+}
+
+/* Favorites */
+.fav-row {
+  display: grid;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 0 var(--space-3);
+  height: 28px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border-soft);
+  font-size: var(--text-sm);
+}
+.fav-row:last-child { border-bottom: 0; }
+.fav-row:hover { background: var(--color-surface-hover); }
+.fav-row .star { color: var(--git-renamed); }
+.fav-row .name { color: var(--color-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Welcome footer tips */
+.welcome-footer {
+  display: flex; align-items: center; gap: var(--space-4);
+  font-size: var(--text-xs); color: var(--color-text-dim);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-border-soft);
+}
+.welcome-footer .kbd { font-family: var(--font-code); color: var(--color-text-muted); }
+.welcome-footer .spacer { flex: 1; }
+.welcome-footer .ver { font-family: var(--font-code); }
+
+/* Clone modal */
+.modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.55);
+  display: none;
+  align-items: center; justify-content: center;
+  z-index: 80;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  width: 520px; max-width: 92vw;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-pop);
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; align-items: center; gap: var(--space-2);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--text-md); font-weight: 600;
+}
+.modal-head .close {
+  margin-left: auto;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: var(--radius-xs);
+  color: var(--color-text-muted);
+}
+.modal-head .close:hover { background: var(--color-surface-hover); color: var(--color-text); }
+.modal-body { padding: var(--space-3); display: flex; flex-direction: column; gap: var(--space-3); }
+.modal-body .field { display: flex; flex-direction: column; gap: 4px; }
+.modal-body .field-label {
+  font-size: var(--text-xs); color: var(--color-text-muted);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.modal-body .field input,
+.modal-body .field select {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+  font-size: var(--text-sm);
+  color: var(--color-text);
+  font-family: var(--font-code);
+  outline: none;
+}
+.modal-body .field input:focus,
+.modal-body .field select:focus { border-color: var(--color-accent); }
+.modal-body .field .with-button {
+  display: flex; gap: 4px;
+}
+.modal-body .field .with-button input { flex: 1; }
+.modal-body .field .with-button button {
+  padding: 0 10px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--color-text);
+}
+.modal-body .field .with-button button:hover { background: var(--color-surface-hover); }
+.modal-body .field-hint { font-size: var(--text-xs); color: var(--color-text-dim); }
+.modal-foot {
+  padding: var(--space-3);
+  display: flex; gap: var(--space-2); align-items: center;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+.modal-foot .spacer { flex: 1; }
+.modal-foot button {
+  height: 28px;
+  padding: 0 14px;
+  font-size: var(--text-sm);
+  border-radius: var(--radius-sm);
+  font-weight: 500;
+}
+.modal-foot button.secondary {
+  color: var(--color-text);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+}
+.modal-foot button.secondary:hover { background: var(--color-surface-hover); }
+.modal-foot button.primary {
+  color: white;
+  background: var(--color-accent);
+  border: 1px solid var(--color-accent);
+}
+.modal-foot button.primary:hover { filter: brightness(1.06); }
+.modal-foot button:disabled { opacity: .5; cursor: not-allowed; }
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -927,14 +1269,29 @@ input { font: inherit; color: inherit; }
 </style>
 </head>
 <body>
-<div class="app" id="app" data-mode="graph">
+<div class="app" id="app" data-mode="graph" data-screen="welcome">
 
   <!-- Title bar ------------------------------------------------------ -->
   <div class="titlebar">
-    <div class="brand">
+    <div class="brand" id="brandBtn" title="返回欢迎页">
       <span class="crest" aria-hidden="true"></span>
       GitCrest
     </div>
+
+    <!-- Title bar tail when in welcome screen -->
+    <div class="titlebar-welcome">
+      <button class="label-btn" title="设置">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3 1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8 1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"/></svg>
+        Settings
+      </button>
+      <button class="label-btn" title="帮助">
+        <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg>
+        Help
+      </button>
+    </div>
+
+    <!-- Title bar tail when in main screen -->
+    <div class="titlebar-main">
     <div class="tabs" id="tabs">
       <div class="tab active" data-repo="gitcrest-core">
         <span class="dot" style="background: var(--color-accent)"></span>
@@ -978,7 +1335,83 @@ input { font: inherit; color: inherit; }
         <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/></svg>
       </button>
     </div>
+    </div><!-- /.titlebar-main -->
   </div>
+
+  <!-- Welcome screen ------------------------------------------------ -->
+  <section class="welcome" id="welcome">
+    <div class="welcome-inner">
+      <div class="welcome-greeting">
+        <h1 id="welcomeGreeting">Welcome back</h1>
+        <div class="sub">回到刚才的仓库，或开一个新的</div>
+      </div>
+
+      <div class="welcome-grid">
+        <!-- Recent + Favorites column -->
+        <div style="display:flex; flex-direction: column; gap: var(--space-4);">
+          <div class="w-card">
+            <div class="w-card-head">
+              Recent Repositories
+              <input class="filter" id="recentFilter" placeholder="按名称或路径筛选…" />
+              <span class="count" id="recentCount"></span>
+            </div>
+            <div id="recentList"></div>
+          </div>
+
+          <div class="w-card">
+            <div class="w-card-head">
+              Favorites
+              <span class="count" id="favCount"></span>
+            </div>
+            <div id="favList"></div>
+          </div>
+        </div>
+
+        <!-- Quick actions column -->
+        <div class="w-card">
+          <div class="w-card-head">Quick Actions</div>
+          <div class="qa-list">
+            <button class="qa-btn primary" id="qaOpen">
+              <span class="qa-icon">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+              </span>
+              <span class="qa-label">Open Local Repo</span>
+              <span class="qa-kbd">Ctrl+O</span>
+            </button>
+            <button class="qa-btn" id="qaClone">
+              <span class="qa-icon">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3M12 3l-4 4M12 3l4 4M5 21h14a2 2 0 0 0 2-2v-4H3v4a2 2 0 0 0 2 2z"/></svg>
+              </span>
+              <span class="qa-label">Clone Repository</span>
+              <span class="qa-kbd">Ctrl+Shift+O</span>
+            </button>
+            <button class="qa-btn" id="qaInit">
+              <span class="qa-icon">
+                <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+              </span>
+              <span class="qa-label">Initialize New Repo</span>
+              <span class="qa-kbd">Ctrl+N</span>
+            </button>
+          </div>
+          <div class="drop-zone" id="dropZone">
+            或拖一个文件夹到这里
+          </div>
+          <div class="qa-tip">
+            <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+            按 <span class="welcome-footer kbd" style="border:0;padding:0;font-family:var(--font-code);color:var(--color-text-muted)">↑ ↓</span> 选择，Enter 打开
+          </div>
+        </div>
+      </div>
+
+      <div class="welcome-footer">
+        <span class="kbd">Ctrl+K</span><span>命令面板</span>
+        <span class="kbd">Ctrl+O</span><span>打开本地</span>
+        <span class="kbd">Ctrl+Shift+O</span><span>克隆</span>
+        <span class="spacer"></span>
+        <span class="ver">GitCrest 0.9.0-beta.3 · Tauri 2 · Rust 1.77</span>
+      </div>
+    </div>
+  </section>
 
   <!-- Main grid ----------------------------------------------------- -->
   <div class="main">
@@ -1199,6 +1632,50 @@ input { font: inherit; color: inherit; }
   <div class="palette" role="dialog" aria-label="Command palette">
     <input id="paletteInput" placeholder="输入命令或操作..." autocomplete="off" />
     <div class="list" id="paletteList"></div>
+  </div>
+</div>
+
+<!-- Clone modal -->
+<div class="modal-overlay" id="cloneOverlay">
+  <div class="modal" role="dialog" aria-label="Clone Repository">
+    <div class="modal-head">
+      <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15V3M12 3l-4 4M12 3l4 4M5 21h14a2 2 0 0 0 2-2v-4H3v4a2 2 0 0 0 2 2z"/></svg>
+      Clone Repository
+      <button class="close" id="cloneClose" title="关闭">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="field-label">
+          <span>URL</span>
+          <span class="field-hint">支持 HTTPS / SSH</span>
+        </div>
+        <input id="cloneUrl" placeholder="https://github.com/owner/repo.git" autocomplete="off" />
+      </div>
+      <div class="field">
+        <div class="field-label">
+          <span>Target Path</span>
+          <span class="field-hint">克隆到本地的位置</span>
+        </div>
+        <div class="with-button">
+          <input id="clonePath" placeholder="~/code/" autocomplete="off" />
+          <button id="cloneBrowse" type="button">Browse…</button>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-label"><span>Authentication</span></div>
+        <select id="cloneAuth">
+          <option value="ssh">SSH key (默认 ~/.ssh/id_ed25519)</option>
+          <option value="https">HTTPS token (Personal Access Token)</option>
+          <option value="anon">公开仓库（无认证）</option>
+        </select>
+      </div>
+      <div class="field-hint">凭证将存入系统 Keychain，绝不明文落盘。</div>
+    </div>
+    <div class="modal-foot">
+      <div class="spacer"></div>
+      <button class="secondary" id="cloneCancel">Cancel</button>
+      <button class="primary" id="cloneSubmit" disabled>Clone</button>
+    </div>
   </div>
 </div>
 
@@ -2233,7 +2710,261 @@ function toast(text, kind='') {
   setTimeout(()=>el.remove(), 3500);
 }
 
-setTimeout(()=>toast('GitCrest 原型 v2 · 点击 Changes 中的文件进入 Diff 模式，Ctrl+H 回到提交图', 'success'), 250);
+/* ==================================================================
+   Welcome screen
+================================================================== */
+
+/* Recent repos data — drives the welcome list.
+   The first three correspond to the tabs that are already preloaded
+   in the title bar (gitcrest-core, monorepo-web, design-tokens). */
+const RECENT_REPOS = [
+  { name:'gitcrest-core',   path:'~/code/gitcrest/core',         branch:'feature/diff-engine', when:'7 分钟前',  dirty:true,  color:'#4F8CFF' },
+  { name:'monorepo-web',    path:'~/work/acme/monorepo-web',     branch:'feature/checkout-v2', when:'1 小时前',  dirty:true,  color:'#F59E0B' },
+  { name:'design-tokens',   path:'~/work/acme/design-tokens',    branch:'main',                when:'昨天',      dirty:false, color:'#10B981' },
+  { name:'docs-site',       path:'~/work/acme/docs-site',        branch:'release/v4',          when:'2 天前',    dirty:false, color:'#A78BFA' },
+  { name:'release-tools',   path:'~/work/acme/release-tools',    branch:'main',                when:'1 周前',    dirty:false, color:'#22D3EE' },
+  { name:'sandbox-rust',    path:'D:/oldssd/sandbox-rust',       branch:'(missing)',           when:'2 周前',    dirty:false, color:'#EC4899', error:'目录已不存在（旧 SSD 已弃用）' },
+  { name:'experimental-ai', path:'~/code/lab/experimental-ai',   branch:'spike/llm-routing',   when:'3 周前',    dirty:false, color:'#F97316' },
+];
+
+const FAVORITES = [
+  { name:'product-api',    branch:'main' },
+  { name:'desktop-client', branch:'develop' },
+];
+
+let recentFiltered = [...RECENT_REPOS];
+let recentFocus = 0;
+
+function setScreen(name) {
+  app.dataset.screen = name;
+  if (name === 'welcome') {
+    setTimeout(() => $('#recentFilter')?.focus(), 0);
+  } else {
+    closeCommitMenu?.();
+  }
+}
+
+function renderRecent() {
+  const list = $('#recentList');
+  $('#recentCount').textContent = `${recentFiltered.length} of ${RECENT_REPOS.length}`;
+  if (recentFiltered.length === 0) {
+    list.innerHTML = `<div style="padding: var(--space-3); color: var(--color-text-muted); font-size: var(--text-sm);">没有匹配的仓库 — <a href="#" id="clearFilter" style="color: var(--color-accent); text-decoration: none;">清除筛选</a></div>`;
+    $('#clearFilter')?.addEventListener('click', (e)=>{ e.preventDefault(); $('#recentFilter').value=''; filterRecent(''); });
+    return;
+  }
+  list.innerHTML = recentFiltered.map((r, i) => {
+    const errBlock = r.error
+      ? `<div class="repo-error" data-for="${escapeHtml(r.name)}">
+          <svg class="i" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+          <span class="msg">${escapeHtml(r.error)}</span>
+          <button data-action="locate">Locate folder…</button>
+          <button data-action="remove" class="danger">Remove</button>
+         </div>`
+      : '';
+    return html`
+      <div class="repo-row ${i===recentFocus?'focused':''} ${r.error?'has-error':''}" data-idx="${i}">
+        <span class="repo-icon" style="background:${r.color}">${escapeHtml(r.name[0].toUpperCase())}</span>
+        <div class="name-cell">
+          <span class="name">${escapeHtml(r.name)} ${r.dirty?'<span class="dirty-dot" title="工作区有未提交变更"></span>':''}</span>
+          <span class="path">${escapeHtml(r.path)}</span>
+        </div>
+        <span class="branch-pill-sm">${escapeHtml(r.branch)}</span>
+        <span class="time">${escapeHtml(r.when)}</span>
+      </div>
+      ${errBlock}
+    `;
+  }).join('');
+
+  list.querySelectorAll('.repo-row').forEach(row => {
+    row.addEventListener('click', () => {
+      const idx = +row.dataset.idx;
+      recentFocus = idx;
+      openRepo(recentFiltered[idx]);
+    });
+    row.addEventListener('mouseenter', () => {
+      const idx = +row.dataset.idx;
+      recentFocus = idx;
+      list.querySelectorAll('.repo-row').forEach(r => r.classList.remove('focused'));
+      row.classList.add('focused');
+    });
+  });
+  list.querySelectorAll('.repo-error button').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const action = btn.dataset.action;
+      const wrap = btn.closest('.repo-error');
+      const name = wrap.dataset.for;
+      if (action === 'remove') {
+        const i = RECENT_REPOS.findIndex(r => r.name === name);
+        if (i >= 0) RECENT_REPOS.splice(i, 1);
+        filterRecent($('#recentFilter').value);
+        toast(`已从最近列表移除 ${name}`, 'warn');
+      } else if (action === 'locate') {
+        toast(`选择 ${name} 的新位置（演示）`);
+      }
+    });
+  });
+}
+
+function renderFavorites() {
+  $('#favCount').textContent = `${FAVORITES.length} 个收藏`;
+  $('#favList').innerHTML = FAVORITES.map(f => html`
+    <div class="fav-row" data-name="${escapeHtml(f.name)}">
+      <span class="star">★</span>
+      <span class="name">${escapeHtml(f.name)}</span>
+      <span class="branch-pill-sm">${escapeHtml(f.branch)}</span>
+    </div>
+  `).join('');
+  $$('#favList .fav-row').forEach(r => r.addEventListener('click', () => {
+    toast(`打开收藏：${r.dataset.name}（演示）`);
+    setScreen('main');
+  }));
+}
+
+function filterRecent(q) {
+  const ql = q.toLowerCase();
+  recentFiltered = RECENT_REPOS.filter(r =>
+    r.name.toLowerCase().includes(ql) || r.path.toLowerCase().includes(ql) || r.branch.toLowerCase().includes(ql));
+  recentFocus = 0;
+  renderRecent();
+}
+
+function openRepo(r) {
+  if (r.error) {
+    /* Inline error already visible — keep user here (per wireframe interaction note). */
+    toast(`无法打开 ${r.name} · ${r.error}`, 'warn');
+    return;
+  }
+  /* Map to an existing tab when present; otherwise pretend to add a new one. */
+  const tabEl = $$('#tabs .tab').find(t => t.dataset.repo === r.name);
+  if (tabEl) {
+    $$('#tabs .tab').forEach(x=>x.classList.remove('active'));
+    tabEl.classList.add('active');
+  } else {
+    toast(`已打开 ${r.name}（${r.branch}）— 在标题栏新增 Tab（演示）`, 'success');
+  }
+  setScreen('main');
+}
+
+/* Filter input */
+$('#recentFilter').addEventListener('input', (e) => filterRecent(e.target.value));
+
+/* Arrow keys / Enter on the welcome screen drive the recent list,
+   matching wireframe §1 interaction notes. */
+document.addEventListener('keydown', (e) => {
+  if (app.dataset.screen !== 'welcome') return;
+  if ($('#cloneOverlay').classList.contains('open')) return;
+  if (overlay.classList.contains('open')) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    recentFocus = Math.min(recentFiltered.length-1, recentFocus+1);
+    renderRecent();
+    $$('#recentList .repo-row')[recentFocus]?.scrollIntoView({ block:'nearest' });
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    recentFocus = Math.max(0, recentFocus-1);
+    renderRecent();
+    $$('#recentList .repo-row')[recentFocus]?.scrollIntoView({ block:'nearest' });
+  } else if (e.key === 'Enter' && recentFiltered[recentFocus]) {
+    if (document.activeElement?.tagName === 'INPUT' && document.activeElement.id !== 'recentFilter') return;
+    e.preventDefault();
+    openRepo(recentFiltered[recentFocus]);
+  } else if (e.key === 'Escape' && $('#recentFilter').value) {
+    $('#recentFilter').value = '';
+    filterRecent('');
+  }
+});
+
+/* Quick actions */
+$('#qaOpen').addEventListener('click', () => {
+  toast('打开本地仓库（演示 · 系统会弹出文件夹选择器）');
+  setTimeout(() => { openRepo(RECENT_REPOS[0]); }, 220);
+});
+$('#qaClone').addEventListener('click', openCloneModal);
+$('#qaInit').addEventListener('click', () => {
+  toast('在新目录初始化 git 仓库（演示）', 'success');
+  setTimeout(() => setScreen('main'), 220);
+});
+
+/* Drop zone — simulate */
+const dz = $('#dropZone');
+['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add('drag-over'); }));
+['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove('drag-over'); }));
+dz.addEventListener('drop', () => {
+  toast('已识别为 Git 仓库 · 正在打开（演示）', 'success');
+  setTimeout(() => openRepo(RECENT_REPOS[0]), 200);
+});
+
+/* Brand click → back to welcome */
+$('#brandBtn').addEventListener('click', () => setScreen('welcome'));
+
+/* "+" tab in main screen → welcome (it's the way to open another repo).
+   The earlier `#tabAdd` listener (a toast) was added before this block runs;
+   we append a second listener that flips the screen, so the user gets both. */
+$('#tabAdd').addEventListener('click', () => setScreen('welcome'));
+
+/* ============================  Clone modal  ===================== */
+const cloneOverlay = $('#cloneOverlay');
+const cloneUrl     = $('#cloneUrl');
+const clonePath    = $('#clonePath');
+const cloneSubmit  = $('#cloneSubmit');
+
+function openCloneModal() {
+  cloneOverlay.classList.add('open');
+  cloneUrl.value = '';
+  clonePath.value = '';
+  refreshCloneSubmit();
+  setTimeout(()=>cloneUrl.focus(), 0);
+}
+function closeCloneModal() { cloneOverlay.classList.remove('open'); }
+function refreshCloneSubmit() {
+  cloneSubmit.disabled = !cloneUrl.value.trim() || !clonePath.value.trim();
+}
+cloneUrl.addEventListener('input', () => {
+  refreshCloneSubmit();
+  /* Auto-fill target path based on the URL's last segment, like JetBrains. */
+  if (!clonePath.dataset.touched) {
+    const m = cloneUrl.value.match(/[\/:]([^\/:]+?)(?:\.git)?$/);
+    if (m) clonePath.value = `~/code/${m[1]}`;
+    refreshCloneSubmit();
+  }
+});
+clonePath.addEventListener('input', () => { clonePath.dataset.touched = '1'; refreshCloneSubmit(); });
+$('#cloneBrowse').addEventListener('click', () => toast('选择目标目录（演示）'));
+$('#cloneCancel').addEventListener('click', closeCloneModal);
+$('#cloneClose') .addEventListener('click', closeCloneModal);
+cloneOverlay.addEventListener('click', (e) => { if (e.target === cloneOverlay) closeCloneModal(); });
+cloneSubmit.addEventListener('click', () => {
+  const url = cloneUrl.value.trim();
+  closeCloneModal();
+  $('#bgTask').style.display = 'inline-flex';
+  $('#bgTask').firstChild.textContent = ` 克隆 ${url} `;
+  toast(`Clone 已启动 · ${url}`, 'success');
+  setTimeout(() => {
+    $('#bgTask').style.display = 'none';
+    toast('Clone 完成 · 已打开新仓库（演示）', 'success');
+    setScreen('main');
+  }, 1300);
+});
+
+document.addEventListener('keydown', (e) => {
+  if (cloneOverlay.classList.contains('open') && e.key === 'Escape') closeCloneModal();
+});
+
+/* Welcome-screen-only shortcuts (Ctrl+O, Ctrl+Shift+O, Ctrl+N) */
+document.addEventListener('keydown', (e) => {
+  if (app.dataset.screen !== 'welcome') return;
+  const meta = e.ctrlKey || e.metaKey;
+  if (meta && !e.shiftKey && e.key.toLowerCase() === 'o') { e.preventDefault(); $('#qaOpen').click(); }
+  if (meta && e.shiftKey  && e.key.toLowerCase() === 'o') { e.preventDefault(); $('#qaClone').click(); }
+  if (meta && e.key.toLowerCase() === 'n') { e.preventDefault(); $('#qaInit').click(); }
+});
+
+/* Initial render */
+renderRecent();
+renderFavorites();
+
+setTimeout(()=>toast('GitCrest 原型 v3 · 点击最近仓库进入主窗口；点击左上角 GitCrest 返回欢迎页', 'success'), 250);
 </script>
 </body>
 </html>

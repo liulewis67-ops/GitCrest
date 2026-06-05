@@ -1377,6 +1377,9 @@ CREATE TABLE commit_history (
 | 操作 | macOS | Windows / Linux | 说明 |
 |------|-------|----------------|------|
 | **打开命令面板** | `Cmd+K` | `Ctrl+K` | 搜索所有命令 |
+| **打开本地仓库** | `Cmd+O` | `Ctrl+O` | 欢迎页：选择本地路径打开 |
+| **克隆仓库** | `Cmd+Shift+O` | `Ctrl+Shift+O` | 欢迎页：弹出 Clone 对话框 |
+| **初始化仓库** | `Cmd+N` | `Ctrl+N` | 欢迎页：在新目录中初始化 |
 | **提交** | `Cmd+Enter` | `Ctrl+Enter` | 暂存并提交当前变更 |
 | **提交并推送** | `Cmd+Shift+Enter` | `Ctrl+Shift+Enter` | 提交后推送到默认 upstream |
 | **全部暂存** | `Cmd+Shift+A` | `Ctrl+Shift+A` | 暂存所有变更文件 |
