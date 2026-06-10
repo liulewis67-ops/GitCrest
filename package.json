@@ -1,0 +1,39 @@
+{
+  "name": "gitcrest",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "frontend:dev": "vite",
+    "build": "tsc && vite build",
+    "frontend:build": "tsc && vite build",
+    "preview": "vite preview",
+    "frontend:preview": "vite preview",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:debug": "tauri dev",
+    "tauri:dev:verbose": "tauri -v dev",
+    "tauri:build": "tauri build",
+    "tauri:package:debug": "tauri build --debug",
+    "tauri:bundle": "tauri bundle",
+    "tauri:info": "tauri info",
+    "tauri:inspect": "tauri inspect",
+    "tauri:capability": "tauri capability",
+    "tauri:permission": "tauri permission"
+  },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "@tauri-apps/api": "^2",
+    "@tauri-apps/plugin-opener": "^2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
+    "typescript": "~5.8.3",
+    "vite": "^7.0.4",
+    "@tauri-apps/cli": "^2"
+  }
+}
