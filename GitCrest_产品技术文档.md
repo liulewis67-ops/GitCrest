@@ -257,10 +257,10 @@ Diff视图     Shelve机制    代码签名      Git LFS
 | 层次 | 技术选型 | 版本 | 选型理由 |
 |------|---------|------|---------|
 | **桌面框架** | Electron | v37+ | 自带 Chromium，跨平台 UI 表现一致，多窗口与打包生态成熟 |
-| **前端框架** | React + TypeScript | React 18 / TS 5 | 生态丰富、团队熟悉、组件复用 |
+| **前端框架** | React 18 + TypeScript | React 18.3 / TS 5 | 生态稳定、团队熟悉、组件复用，避免 React 19 新行为影响桌面 MVP |
 | **状态管理** | Zustand | v5 | 轻量、无模板代码、原生 TS 支持 |
 | **异步数据** | TanStack Query | v5 | 缓存、后台刷新、Git 数据天然适配 |
-| **UI 组件库** | shadcn/ui + Tailwind | latest | 无运行时依赖、高可定制 |
+| **UI 组件库** | shadcn/ui + Tailwind CSS | latest | 无运行时依赖、高可定制，适合高密度工具型界面 |
 | **代码编辑器** | Monaco Editor | v0.50+ | VS Code 同款、语法高亮 Diff |
 | **提交图渲染** | Canvas 2D + D3.js | D3 v7 | 百万级提交流畅，DOM 方案不可行 |
 | **Rust 后端** | Rust stable + axum | Rust 1.77+ / axum 0.7+ | 内存安全、零成本抽象，以本地 HTTP/WebSocket 服务承载 Git 能力 |

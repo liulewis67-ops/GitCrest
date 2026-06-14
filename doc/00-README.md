@@ -21,6 +21,8 @@
 | `07-interaction-accessibility.md` | 键盘、命令面板、反馈、撤销、安全确认和无障碍 |
 | `08-development-readiness.md` | 开发前清单、验收标准、测试映射和待验证假设 |
 | `09-wireframes.md` | 主窗口、Diff、冲突解决、设置和欢迎页低保真线框 |
+| `10-electron-rust-architecture.md` | Electron + Rust sidecar 架构、进程模型、本地鉴权和打包策略 |
+| `11-technology-stack.md` | React 18、shadcn/ui、Tailwind CSS、Rust axum 和 Git 库技术栈方案 |
 
 ## 产品一句话
 

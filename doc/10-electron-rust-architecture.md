@@ -18,7 +18,7 @@ Electron preload
   - 不开放 Node.js、文件系统或 shell 能力给 renderer
 
 Electron renderer
-  - React + TypeScript
+  - React 18 + TypeScript + shadcn/ui + Tailwind CSS
   - 负责 GitCrest 用户界面
   - 使用本次启动的 baseUrl 和 token 调用本地 Rust API
 

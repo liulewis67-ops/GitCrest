@@ -32,7 +32,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 
 ### 阶段 1：基础仓库和状态
 
-- Electron + React + TypeScript 工程。
+- Electron + React 18 + TypeScript + shadcn/ui + Tailwind CSS 工程。
 - Rust axum Git HTTP 服务。
 - 打开本地仓库。
 - 最近仓库 SQLite 持久化。
