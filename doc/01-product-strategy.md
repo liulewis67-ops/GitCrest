@@ -56,7 +56,7 @@ GitCrest 不以最低价取胜，而以高性能和高理解度取胜。定价�
 ### 对专业开发者
 
 当前状态：Git 客户端能显示变更，但难以解释变更；大仓库中提交图和 Diff 容易卡顿。  
-GitCrest 做法：使用 Rust/Tauri、Canvas 提交图、tree-sitter 语义 Diff 和 AI 摘要。  
+GitCrest 做法：使用 Electron + Rust sidecar（axum HTTP 服务）、Canvas 提交图、tree-sitter 语义 Diff 和 AI 摘要。  
 改进后状态：用户能在同一个界面中快速理解历史、状态、Diff 和风险。
 
 ### 对团队负责人
@@ -113,7 +113,7 @@ MVP 阶段 OMTM：用户从打开仓库到完成一次有效提交的成功率�
 渠道：
 
 - 开源仓库演示和性能 benchmark。
-- 面向 Rust/Tauri/前端工程师社区发布技术文章。
+- 面向 Electron/Rust/前端工程师社区发布技术文章。
 - 与 GitHub/GitLab 工作流结合，支持常用平台。
 - 免费版降低试用成本，Pro 通过 AI 和商业授权变现。
 
@@ -150,7 +150,6 @@ GitCrest 的防御来自组合能力：
 |---|---|---|
 | 专业开发者愿意使用独立 Git 客户端 | 市场已有 IDE/CLI 替代 | 发布可交互 Alpha，观察 7 日留存 |
 | 语义 Diff 是强差异化 | 用户可能只需要普通 Diff | 对比普通 Diff 和语义 Diff 的任务完成时间 |
-| Tauri + Rust 能显著改善大仓体验 | 实现复杂度高 | 先做提交图和 Diff benchmark |
+| Electron + Rust sidecar（axum HTTP 服务）能显著改善大仓体验 | 实现复杂度高 | 先做提交图和 Diff benchmark |
 | AI Commit Message 有付费价值 | AI 输出可能不稳定 | 记录采纳率、编辑率和撤销率 |
 | 免费版完整功能能带来增长 | 付费转化受影响 | 限制云端 AI、团队能力和商业授权 |
-

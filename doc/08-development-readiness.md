@@ -32,8 +32,8 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 
 ### 阶段 1：基础仓库和状态
 
-- Tauri 2 + React + TypeScript 工程。
-- Rust Git 服务。
+- Electron + React + TypeScript 工程。
+- Rust axum Git HTTP 服务。
 - 打开本地仓库。
 - 最近仓库 SQLite 持久化。
 - 工作区状态。
@@ -175,12 +175,12 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 
 | 假设 | 验证方式 | 责任 |
 |---|---|---|
-| Tauri 2 + Rust 能满足冷启动目标 | 原型 benchmark | 工程 |
+| Electron + Rust sidecar（axum HTTP 服务）能满足启动和内存目标 | 原型 benchmark | 工程 |
 | Canvas 提交图能稳定 60fps | 100,000 和 1,000,000 提交测试 | 前端/Rust |
 | tree-sitter 语义 Diff 对用户有明显价值 | 可用性测试 | 产品/设计 |
 | AI message 用户会采纳 | Beta 采纳率统计 | 产品 |
 | 免费版 + Pro 定价合理 | Alpha/Beta 用户访谈 | 产品 |
-| 多窗口权限模型可实现 | Tauri capability 原型 | 工程 |
+| 多窗口权限模型可实现 | Electron preload bridge 和 sidecar 鉴权原型 | 工程 |
 
 ## 9. 开发交接所需资产
 

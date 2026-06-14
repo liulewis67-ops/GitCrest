@@ -1,7 +1,9 @@
-# Tauri + React + Typescript
+# GitCrest
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+GitCrest is a cross-platform Git desktop client built with Electron, React, TypeScript, and a local Rust sidecar service powered by axum HTTP APIs.
 
-## Recommended IDE Setup
+## Development
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- Install dependencies with `pnpm install`.
+- Build the Rust core with `pnpm core:build`.
+- Start the Electron app with `pnpm dev`.

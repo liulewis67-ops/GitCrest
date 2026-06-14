@@ -1,4 +1,4 @@
-# GitCrest— 产品与技术文档
+﻿# GitCrest— 产品与技术文档
 
 > **专业 Git 管理客户端** · v1.0.0 · 2026年6月
 >
@@ -48,7 +48,7 @@ GitCrest是一款面向专业开发者和工程团队的跨平台 Git 管理客�
 | 价值点 | 说明 |
 |--------|------|
 | 🎯 **代码感知 Diff** | 语义级别变更理解（函数/类粒度），独立 Git 客户端首创 |
-| 🚀 **原生性能** | Tauri 2 + Rust，启动 < 0.5s，百万提交 Monorepo 流畅浏览 |
+| 🚀 **高性能本地核心** | Electron + Rust sidecar，Rust 使用 axum 提供本地 HTTP 服务，百万提交 Monorepo 流畅浏览 |
 | 🤖 **AI 集成** | 自动 commit message、冲突解决建议、变更摘要 |
 | 🖥️ **真三平台** | Windows / macOS / Linux 原生支持，单一代码库 |
 
@@ -256,14 +256,14 @@ Diff视图     Shelve机制    代码签名      Git LFS
 
 | 层次 | 技术选型 | 版本 | 选型理由 |
 |------|---------|------|---------|
-| **桌面框架** | Tauri 2 | v2.9.x | 原生性能 + 真三平台 + 成熟多窗口支持 |
+| **桌面框架** | Electron | v37+ | 自带 Chromium，跨平台 UI 表现一致，多窗口与打包生态成熟 |
 | **前端框架** | React + TypeScript | React 18 / TS 5 | 生态丰富、团队熟悉、组件复用 |
 | **状态管理** | Zustand | v5 | 轻量、无模板代码、原生 TS 支持 |
 | **异步数据** | TanStack Query | v5 | 缓存、后台刷新、Git 数据天然适配 |
 | **UI 组件库** | shadcn/ui + Tailwind | latest | 无运行时依赖、高可定制 |
 | **代码编辑器** | Monaco Editor | v0.50+ | VS Code 同款、语法高亮 Diff |
 | **提交图渲染** | Canvas 2D + D3.js | D3 v7 | 百万级提交流畅，DOM 方案不可行 |
-| **Rust 后端** | Rust stable | 1.77+ | 内存安全、零成本抽象、libgit2 绑定 |
+| **Rust 后端** | Rust stable + axum | Rust 1.77+ / axum 0.7+ | 内存安全、零成本抽象，以本地 HTTP/WebSocket 服务承载 Git 能力 |
 | **Git 引擎（主）** | git2-rs | v0.19 | libgit2 官方绑定，功能完整 |
 | **Git 引擎（辅）** | gitoxide | v0.37 | 纯 Rust，log/parsing 快 2-5x |
 | **Diff 算法** | similar-rs | v2 | patience diff，语义更好 |
@@ -272,10 +272,10 @@ Diff视图     Shelve机制    代码签名      Git LFS
 | **并行处理** | rayon | v1 | 数据并行，提交图计算加速 |
 | **本地数据库** | SQLite + sqlx | sqlx v0.8 | 配置、历史、缓存持久化 |
 | **凭证管理** | keytar-rs | latest | 系统 Keychain 集成 |
-| **构建工具** | Vite | v6 | Tauri 官方推荐，HMR 极速 |
+| **构建工具** | Vite + electron-vite | v6+ | 前端 HMR 极速，统一构建 Electron main/preload/renderer |
 | **测试（前端）** | Vitest + Playwright | latest | 单元测试 + E2E |
 | **测试（Rust）** | cargo test + insta | latest | 快照测试 |
-| **CI/CD** | GitHub Actions + tauri-action | latest | 三平台自动打包、签名 |
+| **CI/CD** | GitHub Actions + electron-builder | latest | 三平台自动打包、签名，随包携带 Rust sidecar 二进制 |
 
 ---
 
@@ -283,7 +283,7 @@ Diff视图     Shelve机制    代码签名      Git LFS
 
 ### 6.1 整体分层架构
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        UI 层（React 18 + TypeScript）                │
 │  ┌──────────────┐ ┌─────────────┐ ┌────────────┐ ┌──────────────┐  │
@@ -292,12 +292,13 @@ Diff视图     Shelve机制    代码签名      Git LFS
 │  └──────────────┘ └─────────────┘ └────────────┘ └──────────────┘  │
 │  状态：Zustand Stores    异步：TanStack Query    路由：React Router  │
 └─────────────────────────┬───────────────────────────────────────────┘
-                          │  Tauri IPC（invoke / emit）
+                          │  HTTP JSON / WebSocket
 ┌─────────────────────────▼───────────────────────────────────────────┐
-│                    IPC 层（Tauri Commands & Events）                  │
-│  invoke("get_git_log") ──→  Rust 命令处理                            │
-│  emit("file-changed")  ←──  Rust 事件推送                            │
-│  capability JSON 控制每窗口可调用命令范围                              │
+│              本地服务层（Rust sidecar + axum）                       │
+│  监听 127.0.0.1:随机端口，所有业务 API 使用 Bearer token 鉴权          │
+│  GET /api/repositories/:id/status ──→  Git 状态查询                  │
+│  POST /api/tasks                    ──→  fetch/pull/push 等长任务    │
+│  WS  /api/events                    ←──  进度、日志、文件变化事件      │
 └─────────────────────────┬───────────────────────────────────────────┘
                           │
 ┌─────────────────────────▼───────────────────────────────────────────┐
@@ -317,79 +318,53 @@ Diff视图     Shelve机制    代码签名      Git LFS
 └───────────────────────┘               └─────────────────────────────┘
 ```
 
+Electron main 负责窗口生命周期、菜单、应用级事件和 Rust sidecar 进程管理。Renderer 不直接获得 Node.js、文件系统或 shell 能力，只通过 preload 获取本次启动的本地服务连接信息，并使用 axum 暴露的 HTTP/WebSocket API 与 Rust 核心通信。
 ### 6.2 项目目录结构
 
-```
-gitflow-pro/
-├── src-tauri/                     # Rust 后端
-│   ├── Cargo.toml
-│   ├── tauri.conf.json            # Tauri 配置（窗口、权限）
-│   ├── capabilities/              # 每窗口 capability 定义
-│   │   ├── main-window.json
-│   │   ├── diff-window.json
-│   │   └── conflict-resolver.json
-│   └── src/
-│       ├── main.rs                # Tauri 启动入口
-│       ├── lib.rs                 # 命令注册
-│       ├── commands/              # Tauri IPC 命令
-│       │   ├── repo.rs            # 仓库管理命令
-│       │   ├── branch.rs          # 分支操作命令
-│       │   ├── commit.rs          # 提交相关命令
-│       │   ├── diff.rs            # Diff 计算命令
-│       │   ├── remote.rs          # 远程操作命令
-│       │   └── ai.rs              # AI 功能命令
-│       ├── git/                   # Git 引擎封装
-│       │   ├── engine.rs          # git2-rs 封装层
-│       │   ├── log.rs             # gitoxide 日志查询
-│       │   ├── diff.rs            # similar-rs + tree-sitter
-│       │   └── graph.rs           # 提交图 DAG 布局算法
-│       ├── ai/                    # AI 服务
-│       │   ├── claude.rs          # Anthropic API
-│       │   ├── openai.rs          # OpenAI API
-│       │   └── local.rs           # llama.cpp 本地推理
-│       ├── store/                 # 数据持久化
-│       │   ├── db.rs              # SQLite 连接池
-│       │   └── keychain.rs        # 系统凭证管理
-│       └── watcher.rs             # 文件系统监听
-│
-├── src/                           # React 前端
-│   ├── main.tsx
-│   ├── App.tsx                    # 路由 & 全局 Provider
-│   ├── windows/                   # 多窗口页面
-│   │   ├── main/                  # 主窗口
-│   │   ├── diff/                  # Diff 窗口
-│   │   └── conflict/              # 冲突解决器
-│   ├── components/                # 共享组件
-│   │   ├── CommitGraph/           # Canvas 提交图
-│   │   ├── DiffViewer/            # Monaco Diff
-│   │   ├── FileTree/              # 文件状态树
-│   │   ├── BranchList/            # 分支列表
-│   │   └── AIAssist/              # AI 辅助面板
-│   ├── stores/                    # Zustand 状态
-│   │   ├── repoStore.ts
-│   │   ├── branchStore.ts
-│   │   ├── diffStore.ts
-│   │   └── settingsStore.ts
-│   ├── hooks/                     # 自定义 Hooks
-│   │   ├── useRepo.ts             # 仓库数据 Hook
-│   │   ├── useGitLog.ts           # 提交历史分页
-│   │   └── useAI.ts               # AI 功能 Hook
-│   ├── ipc/                       # Tauri IPC 封装
-│   │   └── bindings.ts            # 自动生成的 TS 类型
-│   └── lib/                       # 工具函数
-│
-├── tests/                         # E2E 测试
-│   └── playwright/
-├── .github/workflows/
-│   ├── build.yml                  # 三平台构建
-│   └── release.yml                # 版本发布
+```text
+gitcrest/
+├── electron/                       # Electron 桌面壳
+│   ├── main/
+│   │   ├── index.ts                # 窗口、菜单、生命周期、sidecar 初始化
+│   │   └── sidecar.ts              # 启动并监控 Rust sidecar
+│   └── preload/
+│       └── index.ts                # 暴露受控 window.gitcrest API
+├── crates/
+│   └── gitcrest-core/              # Rust 本地服务
+│       ├── Cargo.toml
+│       └── src/
+│           ├── main.rs             # axum HTTP/WebSocket 服务入口
+│           ├── api/                # HTTP 路由、请求/响应 DTO、鉴权中间件
+│           │   ├── mod.rs
+│           │   ├── repositories.rs
+│           │   ├── tasks.rs
+│           │   └── events.rs
+│           ├── git/                # Git 引擎封装
+│           │   ├── engine.rs       # git2-rs 封装层
+│           │   ├── log.rs          # gitoxide 日志查询
+│           │   ├── diff.rs         # Diff 计算
+│           │   ├── branch.rs       # 分支操作
+│           │   └── remote.rs       # 远程操作
+│           ├── graph/              # 提交图布局
+│           ├── ai/                 # AI 辅助
+│           ├── storage/            # SQLite / 缓存
+│           └── security/           # Keychain / token / 权限校验
+├── src/                            # React 前端
+│   ├── app/
+│   ├── components/
+│   ├── features/
+│   │   ├── graph/
+│   │   ├── diff/
+│   │   ├── workspace/
+│   │   └── ai/
+│   ├── services/
+│   │   ├── apiClient.ts            # HTTP/WebSocket 客户端封装
+│   │   └── queryClient.ts          # TanStack Query 配置
+│   └── stores/                     # Zustand 状态
+├── electron.vite.config.ts
+├── vite.config.ts
 └── package.json
 ```
-
----
-
-## 7. 核心模块技术设计
-
 ### 7.1 提交图引擎
 
 #### 7.1.1 DAG 布局算法（Rust 端）
@@ -575,232 +550,200 @@ function applyWordDiffDecorations(hunks: DiffHunk[]) {
 }
 ```
 
-### 7.3 IPC 接口规范
+### 7.3 HTTP API 接口规范
 
-#### 7.3.1 命令定义（Rust 端）
+#### 7.3.1 axum 路由定义（Rust 端）
 
-```rust
-// commands/commit.rs
-
-/// 获取提交历史
-#[tauri::command]
-pub async fn get_git_log(
-    repo_path: String,
-    page: u32,
-    page_size: u32,
-    filter: Option<LogFilter>,
-    state: State<'_, AppState>,
-) -> Result<LogPage, GitError> {
-    let engine = state.git_engine.read().await;
-    engine.get_log(&repo_path, page, page_size, filter).await
-}
-
-/// 创建提交
-#[tauri::command]
-pub async fn create_commit(
-    repo_path: String,
-    message: String,
-    staged_files: Vec<String>,
-    state: State<'_, AppState>,
-) -> Result<String, GitError> {  // 返回新 commit SHA
-    let engine = state.git_engine.write().await;
-    engine.commit(&repo_path, &message, &staged_files).await
-}
-
-/// 计算文件 Diff
-#[tauri::command]
-pub async fn compute_file_diff(
-    repo_path: String,
-    file_path: String,
-    old_sha: Option<String>,
-    new_sha: Option<String>,
-    state: State<'_, AppState>,
-) -> Result<Vec<DiffHunk>, GitError> {
-    state.diff_engine.compute(&repo_path, &file_path, old_sha, new_sha).await
-}
-```
-
-所有命令在 `lib.rs` 统一注册：
+Rust sidecar 使用 axum 暴露本地 HTTP/WebSocket API。Electron main 在启动 sidecar 时生成随机 token，并通过环境变量或 stdin 传入；所有 `/api/*` 业务接口都要求 `Authorization: Bearer <token>`。
 
 ```rust
-pub fn run() {
-    tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![
-            commands::repo::open_repo,
-            commands::repo::clone_repo,
-            commands::branch::list_branches,
-            commands::branch::create_branch,
-            commands::branch::switch_branch,
-            commands::commit::get_git_log,
-            commands::commit::create_commit,
-            commands::diff::compute_file_diff,
-            commands::remote::push,
-            commands::remote::pull,
-            commands::remote::fetch,
-            commands::ai::generate_commit_message,
-            commands::ai::suggest_conflict_resolution,
-        ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
-}
-```
-
-#### 7.3.2 前端调用（TypeScript）
-
-```typescript
-// ipc/bindings.ts — 由 tauri-specta 自动生成，勿手写
-
-import { invoke } from '@tauri-apps/api/core';
-import type { LogPage, DiffHunk, GitError, LogFilter } from './types';
-
-export const gitApi = {
-  getLog: (repoPath: string, page: number, filter?: LogFilter) =>
-    invoke<LogPage>('get_git_log', { repoPath, page, pageSize: 100, filter }),
-
-  createCommit: (repoPath: string, message: string, stagedFiles: string[]) =>
-    invoke<string>('create_commit', { repoPath, message, stagedFiles }),
-
-  computeDiff: (repoPath: string, filePath: string, oldSha?: string, newSha?: string) =>
-    invoke<DiffHunk[]>('compute_file_diff', { repoPath, filePath, oldSha, newSha }),
-
-  push: (repoPath: string, remote: string, branch: string) =>
-    invoke<void>('push', { repoPath, remote, branch }),
+use axum::{
+    extract::{Path, State},
+    routing::{get, post},
+    Json, Router,
 };
+use serde::{Deserialize, Serialize};
 
-// hooks/useGitLog.ts — 通过 TanStack Query 调用
-export function useGitLog(repoPath: string, page = 0, filter?: LogFilter) {
-  return useInfiniteQuery({
-    queryKey: ['gitLog', repoPath, filter],
-    queryFn: ({ pageParam = 0 }) => gitApi.getLog(repoPath, pageParam, filter),
-    getNextPageParam: (lastPage) => lastPage.hasMore ? lastPage.nextPage : undefined,
-    staleTime: 30_000,
-  });
+#[derive(Clone)]
+pub struct AppState {
+    pub git: GitService,
+    pub tasks: TaskService,
+}
+
+pub fn api_router(state: AppState) -> Router {
+    Router::new()
+        .route("/health", get(health))
+        .route("/api/repositories", get(list_repositories).post(open_repository))
+        .route("/api/repositories/:repo_id/status", get(get_repo_status))
+        .route("/api/repositories/:repo_id/log", get(get_git_log))
+        .route("/api/repositories/:repo_id/diff", post(get_diff))
+        .route("/api/tasks", post(create_task))
+        .route("/api/tasks/:task_id", get(get_task))
+        .route("/api/events", get(events_ws))
+        .with_state(state)
+}
+
+async fn get_repo_status(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<RepoStatus>, ApiError> {
+    let status = state.git.repo_status(&repo_id).await?;
+    Ok(Json(status))
 }
 ```
 
+#### 7.3.2 请求与响应模型
+
+```rust
+#[derive(Debug, Deserialize)]
+pub struct OpenRepositoryRequest {
+    pub path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RepositoryResponse {
+    pub id: String,
+    pub path: String,
+    pub name: String,
+    pub head: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateTaskRequest {
+    pub repo_id: String,
+    pub kind: GitTaskKind,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TaskResponse {
+    pub id: String,
+    pub status: TaskStatus,
+    pub progress: Option<f32>,
+    pub message: Option<String>,
+}
+```
+
+#### 7.3.3 前端 API 封装
+
+```ts
+export interface GitCrestConnection {
+  baseUrl: string;
+  token: string;
+}
+
+export class ApiClient {
+  constructor(private readonly connection: GitCrestConnection) {}
+
+  async get<T>(path: string): Promise<T> {
+    const response = await fetch(`${this.connection.baseUrl}${path}`, {
+      headers: {
+        Authorization: `Bearer ${this.connection.token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitCrest API failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<T>;
+  }
+
+  async post<T>(path: string, body: unknown): Promise<T> {
+    const response = await fetch(`${this.connection.baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${this.connection.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error(`GitCrest API failed: ${response.status}`);
+    }
+
+    return response.json() as Promise<T>;
+  }
+}
+```
+
+#### 7.3.4 事件推送
+
+文件变化、长任务进度、远程操作日志通过 WebSocket 推送给前端。事件只携带 repoId、taskId、状态摘要和必要日志，不携带 token、SSH 口令或 AI key。
+
+```text
+WS /api/events
+
+{"type":"task-progress","taskId":"task_123","progress":0.42,"message":"Fetching origin"}
+{"type":"repo-status-changed","repoId":"repo_123"}
+{"type":"task-completed","taskId":"task_123","result":"ok"}
+```
 ### 7.4 多窗口管理
 
-#### 7.4.1 窗口创建（Rust 端）
+Electron main process 负责创建主窗口、Diff 窗口、冲突解决窗口和设置窗口。窗口不直接持有文件系统或 shell 权限，所有 Git 能力都通过 Rust sidecar 的 axum API 访问。
 
-```rust
-use tauri::{Manager, WebviewWindowBuilder, WebviewUrl};
+#### 7.4.1 窗口创建（Electron main）
 
-#[tauri::command]
-pub fn open_diff_window(app: AppHandle, file_path: String, commit_sha: String) {
-    // 基于文件路径生成唯一窗口 label，避免重复创建
-    let label = format!("diff-{}", sha256_short(&file_path));
+```ts
+import { BrowserWindow } from "electron";
+import { join } from "node:path";
 
-    // 如果窗口已存在则聚焦
-    if let Some(win) = app.get_webview_window(&label) {
-        let _ = win.set_focus();
-        let _ = win.emit("navigate", DiffParams { file_path, commit_sha });
-        return;
-    }
-
-    let url = format!("/diff?path={}&sha={}", encode(&file_path), &commit_sha);
-    
-    WebviewWindowBuilder::new(&app, &label, WebviewUrl::App(url.into()))
-        .title(format!("Diff · {}", basename(&file_path)))
-        .inner_size(1280.0, 900.0)
-        .min_inner_size(800.0, 600.0)
-        .position(200.0, 100.0)
-        .decorations(true)
-        .build()
-        .expect("failed to create diff window");
-}
-
-#[tauri::command]
-pub fn open_conflict_resolver(
-    app: AppHandle,
-    repo_path: String,
-    conflicted_file: String,
-) {
-    WebviewWindowBuilder::new(
-        &app,
-        "conflict-resolver",
-        WebviewUrl::App("/conflict".into())
-    )
-    .title(format!("解决冲突 · {}", basename(&conflicted_file)))
-    .inner_size(1600.0, 1000.0)
-    .center()
-    .always_on_top(false)
-    .build()
-    .expect("failed to create conflict window");
-}
-```
-
-#### 7.4.2 窗口间通信
-
-```rust
-// Rust 端：推送实时文件状态变化给主窗口
-fn notify_file_status_changed(app: &AppHandle, status: Vec<FileStatus>) {
-    if let Some(main_win) = app.get_webview_window("main") {
-        let _ = main_win.emit("file-status-changed", status);
-    }
-}
-```
-
-```typescript
-// 前端：监听来自 Rust 的实时推送
-import { listen } from '@tauri-apps/api/event';
-
-useEffect(() => {
-  const unlisten = listen<FileStatus[]>('file-status-changed', (event) => {
-    // 增量更新文件状态，不全量刷新
-    useRepoStore.getState().updateFileStatuses(event.payload);
+export function createDiffWindow(repoId: string, filePath: string) {
+  const win = new BrowserWindow({
+    width: 1200,
+    height: 800,
+    title: `Diff - ${filePath}`,
+    webPreferences: {
+      preload: join(__dirname, "../preload/index.js"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
   });
-  
-  // 组件卸载时取消监听
-  return () => { unlisten.then(fn => fn()); };
-}, []);
-```
 
-#### 7.4.3 Capability 权限配置
+  win.webContents.once("did-finish-load", () => {
+    win.webContents.send("gitcrest:open-diff", { repoId, filePath });
+  });
 
-```json
-// capabilities/diff-window.json
-{
-  "identifier": "diff-window",
-  "description": "Diff 窗口权限：只读访问，只能调用 diff 相关命令",
-  "windows": ["diff-*"],
-  "permissions": [
-    "core:default",
-    "fs:read-files",
-    "gitflow:compute-diff",
-    "gitflow:get-blame"
-  ]
-}
-
-// capabilities/main-window.json
-{
-  "identifier": "main-window",
-  "description": "主窗口权限：完整 Git 操作权限",
-  "windows": ["main"],
-  "permissions": [
-    "core:default",
-    "fs:read-files",
-    "fs:write-files",
-    "gitflow:all",
-    "shell:execute-git"
-  ]
+  return win;
 }
 ```
 
----
+#### 7.4.2 权限模型
 
+- 主窗口：可调用仓库、工作区、提交、分支、远程和任务 API。
+- Diff 窗口：只调用只读 diff/status API，不暴露写操作入口。
+- 冲突解决窗口：只允许读写当前冲突文件和标记 resolved。
+- 设置窗口：只允许配置读写、Keychain 操作和 AI provider 配置。
+
+#### 7.4.3 实时更新
+
+Rust sidecar 使用 `notify` 监听仓库文件变化，合并防抖后通过 WebSocket 向 renderer 推送状态失效事件；前端收到事件后由 TanStack Query 触发对应 repo/status/diff 查询刷新。
+
+```rust
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
+
+fn setup_file_watcher(repo_id: String, repo_path: PathBuf, events: EventBus) {
+    let mut watcher = RecommendedWatcher::new(move |_| {
+        events.publish(ServerEvent::RepoStatusChanged { repo_id: repo_id.clone() });
+    }).unwrap();
+
+    watcher.watch(&repo_path, RecursiveMode::Recursive).unwrap();
+}
+```
 ## 8. 性能目标与优化策略
 
 ### 8.1 性能目标
 
 | 指标 | 目标值 | 测试条件 | 实现方案 |
 |------|--------|---------|---------|
-| **启动时间（冷启动）** | < 500ms | 标准配置电脑 | Rust 原生进程 + 懒加载前端资源 |
+| **启动时间（冷启动）** | < 1.5s | 标准配置电脑 | Electron 窗口懒加载 + Rust sidecar 快速就绪 |
 | **提交图加载** | < 1s | 100,000 提交 | 分页加载 + 虚拟滚动 + 布局缓存 |
 | **Diff 计算** | < 200ms | 1,000 行文件 | Rust 多线程计算 + tree-sitter 增量 |
 | **文件状态刷新** | < 100ms | 工作区 1,000 文件 | 文件系统 notify 事件驱动，非轮询 |
-| **内存占用（空闲）** | < 80MB | 打开单仓库 | 无内嵌 Chromium，原生 WebView |
-| **内存占用（工作中）** | < 300MB | Monorepo 10 万文件 | 增量加载，LRU 缓存淘汰 |
-| **包体大小** | < 20MB（安装包）| Win/Mac/Linux | Tauri 原生，无 Chromium 打包 |
+| **内存占用（空闲）** | < 250MB | 打开单仓库 | Electron 基线 + Rust sidecar 控制常驻缓存 |
+| **内存占用（工作中）** | < 500MB | Monorepo 10 万文件 | 增量加载，LRU 缓存淘汰，长任务在 Rust sidecar 执行 |
+| **包体大小** | < 150MB（安装包）| Win/Mac/Linux | Electron 打包 Chromium，并携带 Rust sidecar |
 | **提交图帧率** | > 60fps | 滚动浏览 | Canvas + requestAnimationFrame |
 
 ### 8.2 关键优化策略
@@ -825,12 +768,11 @@ useEffect(() => {
 // 使用 OS 原生 API，毫秒级感知变更
 use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 
-fn setup_file_watcher(app: AppHandle, repo_path: PathBuf) {
+fn setup_file_watcher(repo_id: String, repo_path: PathBuf, events: EventBus) {
     let mut watcher = RecommendedWatcher::new(move |event| {
         // 防抖：50ms 内的多次变更合并为一次刷新
         debounce(50ms, || {
-            let status = get_repo_status(&repo_path);
-            app.emit("file-status-changed", status);
+            events.publish(ServerEvent::RepoStatusChanged { repo_id: repo_id.clone() });
         });
     }).unwrap();
     
@@ -842,17 +784,18 @@ fn setup_file_watcher(app: AppHandle, repo_path: PathBuf) {
 
 ## 9. 安全设计
 
-### 9.1 Tauri 能力控制
+### 9.1 本地服务与窗口权限控制
 
-GitCrest遵循最小权限原则，每个窗口只授予执行任务所需的最小权限：
+GitCrest 遵循最小权限原则。Electron renderer 不直接获得 Node.js、文件系统或 shell 能力；preload 只暴露受控初始化能力。Rust sidecar 使用 axum 监听 `127.0.0.1:随机端口`，所有业务 API 都需要本次启动生成的 Bearer token。
 
+```text
+主窗口 ────→ 仓库、工作区、提交、分支、远程和任务 API
+Diff 窗口 ──→ 只读 status/diff API
+冲突解决器 ─→ 冲突文件读取、写入解决结果、标记 resolved
+设置窗口 ──→ 配置读写、Keychain 访问、AI provider 配置
 ```
-主窗口 ────→ 完整 Git 操作权限（push/pull/commit/branch）
-Diff 窗口 ──→ 只读 + diff 计算
-冲突解决器 ─→ 读写冲突文件 + 标记已解决
-设置窗口 ──→ 配置读写 + Keychain 访问
-```
 
+高风险操作（force push、reset --hard、删除分支、清理未跟踪文件）必须通过任务系统执行，并在 UI 中展示对象、后果、备份或撤销路径。
 ### 9.2 凭证安全
 
 | 凭证类型 | 存储方式 | 加密 |
@@ -895,7 +838,7 @@ Diff 窗口 ──→ 只读 + diff 计算
 | **Rust 快照测试** | `insta` | Diff 输出格式、布局坐标 | > 70% |
 | **属性测试** | `proptest` | 边界条件、随机输入 | 核心路径 100% |
 | **前端单元测试** | `Vitest + RTL` | 组件渲染、状态逻辑 | > 75% |
-| **集成测试** | `Vitest + MSW` | IPC Mock、API 集成 | > 60% |
+| **集成测试** | `Vitest + MSW` | HTTP API Mock、API 集成 | > 60% |
 | **E2E 测试** | `Playwright` | 核心用户流程 | 主流程 100% |
 | **性能测试** | 自定义 bench | 提交图渲染、Diff 计算耗时 | 对比回归 |
 
@@ -1013,24 +956,26 @@ jobs:
         platform:
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
-            args: '--target x86_64-unknown-linux-gnu'
           - os: macos-latest
             target: universal-apple-darwin
-            args: '--target universal-apple-darwin'
           - os: windows-latest
             target: x86_64-pc-windows-msvc
-            args: '--target x86_64-pc-windows-msvc'
 
     runs-on: ${{ matrix.platform.os }}
 
     steps:
       - uses: actions/checkout@v4
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -1040,43 +985,26 @@ jobs:
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: './crates/gitcrest-core -> target'
 
-      - name: Install Linux dependencies
-        if: matrix.platform.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev \
-            libayatana-appindicator3-dev librsvg2-dev patchelf
-
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Run tests
         run: |
-          cargo test --manifest-path src-tauri/Cargo.toml
-          npm run test
+          cargo test --manifest-path crates/gitcrest-core/Cargo.toml
+          pnpm run build
 
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+      - name: Build Rust sidecar
+        run: pnpm core:build
+
+      - name: Package Electron app
+        run: pnpm electron:package
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-        with:
-          tagName: app-v__VERSION__
-          releaseName: 'GitCrestv__VERSION__'
-          releaseBody: |
-            完整变更日志见 [CHANGELOG.md](CHANGELOG.md)
-          releaseDraft: true
-          prerelease: false
-          args: ${{ matrix.platform.args }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
 ```
-
 ### 11.2 版本发布规范
 
 | 类型 | 版本号规则 | 示例 | 发布频率 |
@@ -1128,8 +1056,7 @@ winget install Rustlang.Rust.MSVC
 # 安装 Node.js
 winget install OpenJS.NodeJS.LTS
 
-# 验证 WebView2 Runtime（Windows 10/11 通常已预装）
-# 如未安装：https://developer.microsoft.com/microsoft-edge/webview2/
+# Electron 自带 Chromium，无需额外安装浏览器运行时
 ```
 
 **Linux（Ubuntu 22.04+）**
@@ -1137,14 +1064,13 @@ winget install OpenJS.NodeJS.LTS
 ```bash
 # 系统依赖
 sudo apt update && sudo apt install -y \
-  libwebkit2gtk-4.1-dev \
-  libgtk-3-dev \
-  libayatana-appindicator3-dev \
-  librsvg2-dev \
-  patchelf \
   build-essential \
   curl \
-  wget
+  wget \
+  libnss3 \
+  libxss1 \
+  libatk-bridge2.0-0 \
+  libgtk-3-0
 
 # Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -1158,48 +1084,49 @@ nvm install 20 && nvm use 20
 
 ```bash
 # 1. 克隆项目
-git clone https://github.com/your-org/gitflow-pro.git
-cd gitflow-pro
+git clone https://github.com/your-org/gitcrest.git
+cd gitcrest
 
-# 2. 安装前端依赖
-npm install
+# 2. 安装前端和 Electron 依赖
+pnpm install
 
-# 3. 验证环境
-npm run tauri info   # 检查所有依赖是否就绪
+# 3. 构建 Rust sidecar（开发环境生成 debug exe）
+cargo build --manifest-path crates/gitcrest-core/Cargo.toml
 
-# 4. 启动开发服务器（自动热更新，前端 + Rust 同时）
-npm run tauri dev
+# 4. 启动开发服务器（Electron + React + Rust sidecar）
+pnpm dev
 
 # 5. 构建生产包
-npm run tauri build
+pnpm electron:build
 
 # 6. 运行全套测试
-cargo test --manifest-path src-tauri/Cargo.toml   # Rust 单元测试
-npm run test                                        # 前端单元测试
-npm run test:e2e                                    # Playwright E2E
+cargo test --manifest-path crates/gitcrest-core/Cargo.toml   # Rust 单元测试
+pnpm run build                                               # TypeScript + Electron/Vite 构建
+pnpm run test:e2e                                            # Playwright E2E
 ```
-
 ### 12.3 开发工具推荐
 
 | 工具 | 用途 | 推荐配置 |
 |------|------|---------|
-| VS Code | 主要 IDE | 安装 rust-analyzer、Tauri、ESLint 插件 |
+| VS Code | 主要 IDE | 安装 rust-analyzer、ESLint、Prettier 插件 |
 | RustRover | Rust 专用 IDE | JetBrains 出品，Rust 支持最佳 |
-| Tauri DevTools | 调试 Tauri 应用 | 内嵌 Chromium DevTools + Rust 日志 |
+| Electron DevTools | 调试 Electron Renderer | Chromium DevTools + React DevTools |
 | SQLiteExpert | 数据库查看 | 调试 SQLite 数据 |
-
+| curl / HTTPie | 本地 API 调试 | 调试 axum HTTP 接口与 Bearer token 鉴权 |
 ### 12.4 环境变量
 
 ```bash
 # .env.local（不提交到 git）
 ANTHROPIC_API_KEY=sk-ant-xxxxx       # Claude API Key
 OPENAI_API_KEY=sk-xxxxx              # OpenAI API Key（可选）
-TAURI_SIGNING_PRIVATE_KEY=xxxxx      # 自动更新签名私钥（CI 用）
+GITCREST_HOST=127.0.0.1              # Rust sidecar 监听地址，默认 127.0.0.1
+GITCREST_PORT=0                      # 0 表示由系统分配随机空闲端口
+GITCREST_AUTH_TOKEN=<session-token>  # Electron main 每次启动生成，不写入磁盘
 
-# 开发模式标志（自动注入，无需手动设置）
-# TAURI_ENV=development
+# Electron 打包签名（CI 用）
+CSC_LINK=xxxxx
+CSC_KEY_PASSWORD=xxxxx
 ```
-
 ---
 
 ## 附录 A：数据模型定义
@@ -1404,3 +1331,5 @@ CREATE TABLE commit_history (
 *GitCrest产品与技术文档 · v1.0.0 · © 2026 GitCrestTeam*
 
 *"版本控制，触手可及"*
+
+

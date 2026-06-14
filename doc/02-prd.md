@@ -11,7 +11,7 @@ GitCrest MVP 是一款跨平台桌面 Git 客户端，面向专业开发者，�
 | 产品负责人 | 范围、优先级、验收标准 |
 | UX/UI 设计 | 信息架构、界面、交互和设计系统 |
 | 前端负责人 | React、窗口 UI、状态管理、Canvas、Monaco |
-| Rust 负责人 | Git 引擎、Diff、数据模型、IPC、安全 |
+| Rust 负责人 | axum HTTP 服务、Git 引擎、Diff、数据模型、安全 |
 | 测试负责人 | E2E、性能、跨平台验证 |
 
 ## 3. 背景
@@ -24,7 +24,7 @@ GitCrest MVP 是一款跨平台桌面 Git 客户端，面向专业开发者，�
 - AI 功能常作为附加能力，未真正嵌入 Git 工作流。
 - 跨平台体验不一致，Linux 支持不足。
 
-GitCrest 通过 Tauri 2 + Rust + React + Canvas + tree-sitter 组合，提供原生性能、代码感知 Diff 和本地优先的安全体验。
+GitCrest 通过 Electron + Rust sidecar（axum HTTP 服务）+ React + Canvas + tree-sitter 组合，提供一致的跨平台界面、高性能本地 Git 能力、代码感知 Diff 和本地优先的安全体验。
 
 ## 4. 目标
 
@@ -158,7 +158,7 @@ GitCrest 用“代码感知”和“安全可控”替代单纯的 Git 命令包
 验收：
 
 - 1,000 行文件 Diff 计算低于 200ms。
-- Diff 窗口只拥有只读权限和 diff 相关 IPC 权限。
+- Diff 窗口只拥有只读权限和 diff 相关 HTTP API 权限。
 - 用户能从文件树、提交详情和工作区打开 Diff。
 
 ### 7.7 合并、冲突和 Rebase
@@ -248,4 +248,3 @@ MVP 不包含：
 - 团队协作。
 - 插件系统。
 - 高级 AI 审查和风险检测。
-

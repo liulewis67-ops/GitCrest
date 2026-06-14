@@ -3,37 +3,52 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "out/main/index.js",
   "scripts": {
-    "dev": "vite",
+    "dev": "electron-vite dev",
     "frontend:dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc --noEmit && electron-vite build",
     "frontend:build": "tsc && vite build",
     "preview": "vite preview",
     "frontend:preview": "vite preview",
-    "tauri": "tauri",
-    "tauri:dev": "tauri dev",
-    "tauri:debug": "tauri dev",
-    "tauri:dev:verbose": "tauri -v dev",
-    "tauri:build": "tauri build",
-    "tauri:package:debug": "tauri build --debug",
-    "tauri:bundle": "tauri bundle",
-    "tauri:info": "tauri info",
-    "tauri:inspect": "tauri inspect",
-    "tauri:capability": "tauri capability",
-    "tauri:permission": "tauri permission"
+    "core:dev": "cargo run --manifest-path crates/gitcrest-core/Cargo.toml",
+    "core:build": "cargo build --manifest-path crates/gitcrest-core/Cargo.toml --release",
+    "electron:dev": "electron-vite dev",
+    "electron:build": "pnpm core:build && tsc --noEmit && electron-vite build",
+    "electron:package": "pnpm electron:build && electron-builder"
   },
   "dependencies": {
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@types/node": "^24.0.0",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "electron": "^37.0.0",
+    "electron-builder": "^26.0.0",
+    "electron-vite": "^4.0.0",
     "@vitejs/plugin-react": "^4.6.0",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4",
-    "@tauri-apps/cli": "^2"
+    "vite": "^7.0.4"
+  },
+  "build": {
+    "appId": "com.lewis.gitcrest",
+    "productName": "GitCrest",
+    "files": [
+      "out/**"
+    ],
+    "extraResources": [
+      {
+        "from": "crates/gitcrest-core/target/release/gitcrest-core.exe",
+        "to": "bin/gitcrest-core.exe",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    }
   }
 }

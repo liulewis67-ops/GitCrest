@@ -1,49 +1,74 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [status, setStatus] = useState("Starting local GitCrest core...");
+  const [coreUrl, setCoreUrl] = useState("");
+  const [version, setVersion] = useState("");
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  useEffect(() => {
+    let cancelled = false;
+
+    async function connect() {
+      try {
+        const connection = await window.gitcrest.getSidecarConnection();
+        const response = await fetch(`${connection.baseUrl}/api/version`, {
+          headers: {
+            Authorization: `Bearer ${connection.token}`,
+          },
+        });
+
+        if (!response.ok) {
+          throw new Error(`Core responded with ${response.status}`);
+        }
+
+        const body = (await response.json()) as { name: string; version: string };
+        if (!cancelled) {
+          setCoreUrl(connection.baseUrl);
+          setVersion(`${body.name} ${body.version}`);
+          setStatus("Connected to local Rust core");
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setStatus(error instanceof Error ? error.message : "Failed to connect to local Rust core");
+        }
+      }
+    }
+
+    void connect();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <main className="shell">
+      <section className="workspace">
+        <div>
+          <p className="eyebrow">GitCrest Desktop</p>
+          <h1>Electron UI with a Rust Git core</h1>
+          <p className="summary">
+            The renderer is running in Chromium while GitCrest core runs as a local Rust sidecar on
+            loopback with per-session authentication.
+          </p>
+        </div>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+        <dl className="statusGrid">
+          <div>
+            <dt>Core status</dt>
+            <dd>{status}</dd>
+          </div>
+          <div>
+            <dt>Core URL</dt>
+            <dd>{coreUrl || "Waiting for sidecar"}</dd>
+          </div>
+          <div>
+            <dt>Core version</dt>
+            <dd>{version || "Not available yet"}</dd>
+          </div>
+        </dl>
+      </section>
     </main>
   );
 }
