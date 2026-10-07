@@ -114,6 +114,33 @@ describe("GitCrestApiClient", () => {
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
   });
 
+  it("sends versioned remote management requests with the OpenAPI payloads", async () => {
+    const task = { taskId: "task_fixture", repoId: "repo_fixture", operation: "remoteAdd", status: "queued", phase: "queued", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response(JSON.stringify(task), {
+      status: 202,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await client.addRepositoryRemote("repo_fixture", "upstream", "https://example.test/org/repo.git");
+    await client.setRepositoryRemoteUrl("repo_fixture", "upstream", "ssh://example.test/org/repo.git");
+    await client.deleteRepositoryRemote("repo_fixture", "upstream");
+    await client.setRepositoryDefaultRemote("repo_fixture", null);
+    await client.setRepositoryBranchUpstream("repo_fixture", "main", "upstream", "main");
+
+    expect(fetcher.mock.calls.map(([url, request]) => [new URL(String(url)).pathname, request?.method, request?.body])).toEqual([
+      ["/api/v1/repositories/repo_fixture/remotes", "POST", JSON.stringify({ name: "upstream", url: "https://example.test/org/repo.git" })],
+      ["/api/v1/repositories/repo_fixture/remotes/url", "PUT", JSON.stringify({ name: "upstream", url: "ssh://example.test/org/repo.git" })],
+      ["/api/v1/repositories/repo_fixture/remotes/delete", "POST", JSON.stringify({ name: "upstream" })],
+      ["/api/v1/repositories/repo_fixture/remotes/default", "PUT", JSON.stringify({ name: null })],
+      ["/api/v1/repositories/repo_fixture/remotes/upstream", "PUT", JSON.stringify({ localBranch: "main", remoteName: "upstream", remoteBranch: "main" })],
+    ]);
+    for (const [, request] of fetcher.mock.calls) {
+      expect(new Headers(request?.headers).get("X-GitCrest-API-Version")).toBe("1");
+      expect(new Headers(request?.headers).get("Authorization")).toBe(`Bearer ${token}`);
+    }
+  });
+
   it("reads local and remote branch tracking state through the versioned API", async () => {
     const response = {
       repoId: "repo_fixture", current: "feature/one", detached: false,

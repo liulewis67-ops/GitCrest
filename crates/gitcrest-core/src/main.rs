@@ -45,7 +45,7 @@ mod tasks;
 
 use cloning::{CloneError, CloneService};
 use diff::{DiffError, DiffScope};
-use git_command::{BranchCommand, GitCommandService, GitOperation};
+use git_command::{BranchCommand, GitCommandService, GitOperation, RemoteCommand};
 use repository::{Repository, RepositoryError, RepositoryManager};
 use tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError};
 
@@ -121,6 +121,10 @@ enum ApiErrorCode {
     BranchWorktreeDirty,
     RemotesUnavailable,
     RemotesTooLarge,
+    RemoteNameInvalid,
+    RemoteUrlInvalid,
+    RemoteAlreadyExists,
+    RemoteNotFound,
     TagAlreadyExists,
     InternalError,
 }
@@ -501,6 +505,16 @@ impl ApiError {
                 ApiErrorCode::RemotesUnavailable,
                 "Git could not read remote configuration.",
             ),
+            remotes::RemoteError::InvalidName => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RemoteNameInvalid,
+                "The remote name is invalid.",
+            ),
+            remotes::RemoteError::InvalidUrl => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RemoteUrlInvalid,
+                "Enter a supported HTTPS or SSH Git remote without embedded credentials.",
+            ),
         }
     }
 
@@ -684,7 +698,26 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/branches/switch",
             post(switch_repository_branch),
         )
-        .route("/v1/repositories/:repo_id/remotes", get(repository_remotes))
+        .route(
+            "/v1/repositories/:repo_id/remotes",
+            get(repository_remotes).post(add_repository_remote),
+        )
+        .route(
+            "/v1/repositories/:repo_id/remotes/url",
+            put(set_repository_remote_url),
+        )
+        .route(
+            "/v1/repositories/:repo_id/remotes/delete",
+            post(delete_repository_remote),
+        )
+        .route(
+            "/v1/repositories/:repo_id/remotes/default",
+            put(set_default_remote),
+        )
+        .route(
+            "/v1/repositories/:repo_id/remotes/upstream",
+            put(set_branch_upstream),
+        )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
             "/v1/repositories/:repo_id/staging/patch",
@@ -1467,6 +1500,373 @@ async fn repository_remotes(
         .await
         .map(Json)
         .map_err(ApiError::from_remote_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RemoteRequest {
+    name: String,
+    #[serde(default)]
+    url: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DefaultRemoteRequest {
+    name: RequiredNullableRemoteName,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum RequiredNullableRemoteName {
+    Value(String),
+    Null(()),
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BranchUpstreamRequest {
+    local_branch: String,
+    remote_name: String,
+    remote_branch: String,
+}
+
+async fn submit_remote_command(
+    state: &AppState,
+    repo_id: String,
+    target: repository::TaskTarget,
+    operation_name: &'static str,
+    operation: RemoteCommand,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation_name,
+            move |context| async move {
+                command
+                    .execute_remote(&path, operation, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn add_repository_remote(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RemoteRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name and URL are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remotes::validate_remote_name(&target.repository_path, &request.name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let url = request.url.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote URL is required.",
+        )
+    })?;
+    remotes::validate_remote_url(&url).map_err(ApiError::from_remote_error)?;
+    let snapshot = remotes::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.name)
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::RemoteAlreadyExists,
+            "A remote with this name already exists.",
+        ));
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteAdd",
+        RemoteCommand::Add {
+            name: request.name,
+            url,
+        },
+    )
+    .await
+}
+
+async fn set_repository_remote_url(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RemoteRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name and URL are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remotes::validate_remote_name(&target.repository_path, &request.name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let url = request.url.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote URL is required.",
+        )
+    })?;
+    remotes::validate_remote_url(&url).map_err(ApiError::from_remote_error)?;
+    let snapshot = remotes::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if !snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.name)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RemoteNotFound,
+            "The remote does not exist.",
+        ));
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteSetUrl",
+        RemoteCommand::SetUrl {
+            name: request.name,
+            url,
+        },
+    )
+    .await
+}
+
+async fn delete_repository_remote(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<BranchNameRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remotes::validate_remote_name(&target.repository_path, &request.name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let snapshot = remotes::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if !snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.name)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RemoteNotFound,
+            "The remote does not exist.",
+        ));
+    }
+    let next_default = if snapshot.default_remote.as_deref() == Some(request.name.as_str()) {
+        Some(
+            snapshot
+                .remotes
+                .iter()
+                .filter(|remote| remote.name != request.name)
+                .map(|remote| remote.name.as_str())
+                .find(|name| *name == "origin")
+                .or_else(|| {
+                    snapshot
+                        .remotes
+                        .iter()
+                        .find(|remote| remote.name != request.name)
+                        .map(|remote| remote.name.as_str())
+                })
+                .unwrap_or_default()
+                .to_owned(),
+        )
+    } else {
+        None
+    };
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteDelete",
+        RemoteCommand::Remove {
+            name: request.name,
+            next_default,
+        },
+    )
+    .await
+}
+
+async fn set_default_remote(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<DefaultRemoteRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name or null is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = remotes::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let name = match request.name {
+        RequiredNullableRemoteName::Value(name) => Some(name),
+        RequiredNullableRemoteName::Null(()) => None,
+    };
+    if let Some(name) = name.as_deref() {
+        remotes::validate_remote_name(&target.repository_path, name)
+            .await
+            .map_err(ApiError::from_remote_error)?;
+        if !snapshot.remotes.iter().any(|remote| remote.name == name) {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RemoteNotFound,
+                "The remote does not exist.",
+            ));
+        }
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteSetDefault",
+        RemoteCommand::SetDefault {
+            name: name.unwrap_or_default(),
+        },
+    )
+    .await
+}
+
+async fn set_branch_upstream(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<BranchUpstreamRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A local branch and remote tracking branch are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    branches::validate_branch_name(&target.repository_path, &request.local_branch)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    remotes::validate_remote_name(&target.repository_path, &request.remote_name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    branches::validate_branch_name(&target.repository_path, &request.remote_branch)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    let remotes_snapshot = remotes::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if !remotes_snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.remote_name)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RemoteNotFound,
+            "The remote does not exist.",
+        ));
+    }
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let branches_snapshot = branches::read_branches(
+        repo_id.clone(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
+    let local_exists = branches_snapshot.branches.iter().any(|branch| {
+        matches!(branch.kind, branches::BranchKind::Local) && branch.name == request.local_branch
+    });
+    let remote_full_name = format!(
+        "refs/remotes/{}/{}",
+        request.remote_name, request.remote_branch
+    );
+    let upstream_exists = branches_snapshot.branches.iter().any(|branch| {
+        matches!(branch.kind, branches::BranchKind::Remote) && branch.full_name == remote_full_name
+    });
+    if !local_exists || !upstream_exists {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::BranchNotFound,
+            "The local branch or remote tracking branch does not exist.",
+        ));
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteSetUpstream",
+        RemoteCommand::SetUpstream {
+            local_branch: request.local_branch,
+            remote_name: request.remote_name,
+            remote_branch: request.remote_branch,
+        },
+    )
+    .await
 }
 
 #[derive(Serialize)]
@@ -2375,6 +2775,17 @@ mod tests {
         builder.body(Body::empty()).unwrap()
     }
 
+    fn json_request(method: Method, uri: &str, body: &str) -> Request<Body> {
+        Request::builder()
+            .method(method)
+            .uri(uri)
+            .header("X-GitCrest-API-Version", API_VERSION)
+            .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+            .header(CONTENT_TYPE, "application/json")
+            .body(Body::from(body.to_owned()))
+            .unwrap()
+    }
+
     async fn error_code(response: Response) -> (StatusCode, String) {
         let status = response.status();
         let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
@@ -2410,6 +2821,195 @@ mod tests {
         })
         .await
         .expect("staging task should reach a terminal state")
+    }
+
+    #[tokio::test]
+    async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging_urls() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "GitCrest Test"]);
+        git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+        std::fs::write(repository_path.join("seed.txt"), "seed\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "-m", "seed"]);
+        let branch = git(&["symbolic-ref", "--short", "HEAD"]);
+
+        let repositories = RepositoryManager::default();
+        let repository = repositories
+            .open_path(repository_path.to_str().unwrap())
+            .await
+            .unwrap();
+        let tasks = TaskService::default();
+        let commands = GitCommandService::default();
+        let app = app_router(
+            AppState {
+                read_write_token: Arc::new(WRITE_TOKEN.to_string()),
+                read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                repositories,
+                tasks: tasks.clone(),
+                git_commands: commands.clone(),
+                clones: CloneService::new(tasks.clone(), commands, RepositoryManager::default()),
+            },
+            None,
+        );
+        let path = format!("/api/v1/repositories/{}/remotes", repository.repo_id);
+        let missing_default = app
+            .clone()
+            .oneshot(json_request(Method::PUT, &format!("{path}/default"), "{}"))
+            .await
+            .unwrap();
+        assert_eq!(missing_default.status(), StatusCode::BAD_REQUEST);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &path,
+                r#"{"name":"team","url":"https://example.test/org/repo.git"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        assert!(completed["logs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|line| !line.as_str().unwrap().contains("example.test")));
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                &format!("{path}/default"),
+                r#"{"name":"team"}"#,
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+
+        git(&["update-ref", &format!("refs/remotes/team/{branch}"), "HEAD"]);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                &format!("{path}/upstream"),
+                &format!(
+                    r#"{{"localBranch":"{branch}","remoteName":"team","remoteBranch":"{branch}"}}"#
+                ),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+
+        let snapshot = app
+            .clone()
+            .oneshot(request(&path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let body = to_bytes(snapshot.into_body(), usize::MAX).await.unwrap();
+        let snapshot: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(snapshot["defaultRemote"], "team");
+        assert_eq!(snapshot["remotes"][0]["name"], "team");
+        let branches = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{}/branches", repository.repo_id),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(branches.into_body(), usize::MAX).await.unwrap();
+        let branches: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            branches["branches"][0]["upstream"],
+            format!("team/{branch}")
+        );
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                &format!("{path}/url"),
+                r#"{"name":"team","url":"ssh://example.test/org/updated.git"}"#,
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("{path}/delete"),
+                r#"{"name":"team"}"#,
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let snapshot = app
+            .clone()
+            .oneshot(request(&path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let body = to_bytes(snapshot.into_body(), usize::MAX).await.unwrap();
+        let snapshot: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(snapshot["remotes"].as_array().unwrap().is_empty());
+        assert_eq!(snapshot["defaultRemote"], serde_json::Value::Null);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                &format!("{path}/default"),
+                r#"{"name":null}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
     }
 
     #[tokio::test]

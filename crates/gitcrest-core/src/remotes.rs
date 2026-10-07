@@ -28,6 +28,8 @@ pub struct RemoteRef {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum RemoteError {
+    InvalidName,
+    InvalidUrl,
     GitUnavailable,
     TimedOut,
     TooLarge,
@@ -67,11 +69,15 @@ pub async fn read_remotes(
             _ => return Err(RemoteError::GitFailed),
         }
     }
-    let default_remote = if remotes.iter().any(|remote| remote.name == "origin") {
-        Some("origin".to_owned())
-    } else {
-        None
-    };
+    let configured = configured_default_remote(repository_path).await?;
+    let default_remote = configured
+        .filter(|name| remotes.iter().any(|remote| remote.name == *name))
+        .or_else(|| {
+            remotes
+                .iter()
+                .any(|remote| remote.name == "origin")
+                .then(|| "origin".to_owned())
+        });
     for remote in &mut remotes {
         remote.is_default = default_remote.as_deref() == Some(remote.name.as_str());
     }
@@ -80,6 +86,31 @@ pub async fn read_remotes(
         default_remote,
         remotes,
     })
+}
+
+pub async fn validate_remote_name(repository_path: &Path, name: &str) -> Result<(), RemoteError> {
+    if name.is_empty()
+        || name.len() > 255
+        || name.chars().any(char::is_control)
+        || name.starts_with('-')
+    {
+        return Err(RemoteError::InvalidName);
+    }
+    let reference = format!("refs/remotes/{name}/HEAD");
+    match run_git(
+        repository_path,
+        &["check-ref-format".into(), reference.into()],
+    )
+    .await
+    {
+        Ok(_) => Ok(()),
+        Err(RemoteError::GitFailed) => Err(RemoteError::InvalidName),
+        Err(error) => Err(error),
+    }
+}
+
+pub fn validate_remote_url(url: &str) -> Result<(), RemoteError> {
+    crate::cloning::validate_remote_url(url).map_err(|_| RemoteError::InvalidUrl)
 }
 
 pub fn safe_remote_url(url: &str) -> String {
@@ -95,6 +126,47 @@ pub fn safe_remote_url(url: &str) -> String {
         format!("{scheme}://[REDACTED]@{host}{suffix}")
     } else {
         format!("{scheme}://{authority}{suffix}")
+    }
+}
+
+async fn configured_default_remote(repository_path: &Path) -> Result<Option<String>, RemoteError> {
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(repository_path)
+        .args(["config", "--local", "--get", "gitcrest.defaultRemote"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    let mut child = command.spawn().map_err(|_| RemoteError::GitUnavailable)?;
+    let stdout = child.stdout.take().ok_or(RemoteError::GitFailed)?;
+    let reader = tokio::spawn(read_limited(stdout, 1024));
+    let status = match tokio::time::timeout(REMOTE_READ_DEADLINE, child.wait()).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(_)) => {
+            let _ = child.kill().await;
+            return Err(RemoteError::GitFailed);
+        }
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err(RemoteError::TimedOut);
+        }
+    };
+    let output = reader
+        .await
+        .map_err(|_| RemoteError::GitFailed)?
+        .map_err(|_| RemoteError::GitFailed)?;
+    if output.len() > 1024 {
+        return Err(RemoteError::TooLarge);
+    }
+    if status.success() {
+        let value = String::from_utf8_lossy(&output).trim().to_owned();
+        Ok((!value.is_empty()).then_some(value))
+    } else if status.code() == Some(1) {
+        Ok(None)
+    } else {
+        Err(RemoteError::GitFailed)
     }
 }
 
@@ -222,5 +294,37 @@ mod tests {
             ["ssh://[REDACTED]@example.test/org/repo.git"]
         );
         assert!(snapshot.remotes[0].is_default);
+
+        git(
+            &repo,
+            &[
+                "remote",
+                "add",
+                "upstream",
+                "https://example.test/upstream.git",
+            ],
+        );
+        git(
+            &repo,
+            &["config", "--local", "gitcrest.defaultRemote", "upstream"],
+        );
+        let snapshot = read_remotes("repo_fixture".into(), &repo).await.unwrap();
+        assert_eq!(snapshot.default_remote.as_deref(), Some("upstream"));
+        assert!(
+            snapshot
+                .remotes
+                .iter()
+                .find(|remote| remote.name == "upstream")
+                .unwrap()
+                .is_default
+        );
+        assert!(
+            !snapshot
+                .remotes
+                .iter()
+                .find(|remote| remote.name == "origin")
+                .unwrap()
+                .is_default
+        );
     }
 }

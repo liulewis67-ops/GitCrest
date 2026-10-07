@@ -192,6 +192,46 @@ export class GitCrestApiClient {
     return this.request<RemoteSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`);
   }
 
+  addRepositoryRemote(repoId: RepoId, name: string, url: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, url } satisfies components["schemas"]["RemoteUrlRequest"]),
+    });
+  }
+
+  setRepositoryRemoteUrl(repoId: RepoId, name: string, url: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes/url`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, url } satisfies components["schemas"]["RemoteUrlRequest"]),
+    });
+  }
+
+  deleteRepositoryRemote(repoId: RepoId, name: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes/delete`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name } satisfies components["schemas"]["BranchNameRequest"]),
+    });
+  }
+
+  setRepositoryDefaultRemote(repoId: RepoId, name: string | null): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes/default`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name } satisfies components["schemas"]["DefaultRemoteRequest"]),
+    });
+  }
+
+  setRepositoryBranchUpstream(repoId: RepoId, localBranch: string, remoteName: string, remoteBranch: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes/upstream`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ localBranch, remoteName, remoteBranch } satisfies components["schemas"]["BranchUpstreamRequest"]),
+    });
+  }
+
   stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/staging`, true, {
       method: "POST",

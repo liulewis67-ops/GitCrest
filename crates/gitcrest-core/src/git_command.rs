@@ -33,6 +33,30 @@ pub enum BranchCommand {
     Delete { name: String, allow_unmerged: bool },
 }
 
+#[derive(Clone, Debug)]
+pub enum RemoteCommand {
+    Add {
+        name: String,
+        url: String,
+    },
+    SetUrl {
+        name: String,
+        url: String,
+    },
+    Remove {
+        name: String,
+        next_default: Option<String>,
+    },
+    SetDefault {
+        name: String,
+    },
+    SetUpstream {
+        local_branch: String,
+        remote_name: String,
+        remote_branch: String,
+    },
+}
+
 impl GitOperation {
     fn arguments(self) -> &'static [&'static str] {
         match self {
@@ -147,6 +171,107 @@ impl GitCommandService {
             task,
         )
         .await
+    }
+
+    pub async fn execute_remote(
+        &self,
+        repository_path: &Path,
+        operation: RemoteCommand,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let (arguments, label, log_label, redactions, next_default) = match operation {
+            RemoteCommand::Add { name, url } => (
+                vec![
+                    "remote".into(),
+                    "add".into(),
+                    name.into(),
+                    url.clone().into(),
+                ],
+                "Add remote",
+                "remote add",
+                vec![url],
+                None,
+            ),
+            RemoteCommand::SetUrl { name, url } => (
+                vec![
+                    "remote".into(),
+                    "set-url".into(),
+                    name.into(),
+                    url.clone().into(),
+                ],
+                "Update remote URL",
+                "remote set-url",
+                vec![url],
+                None,
+            ),
+            RemoteCommand::Remove { name, next_default } => (
+                vec!["remote".into(), "remove".into(), name.into()],
+                "Remove remote",
+                "remote remove",
+                Vec::new(),
+                next_default,
+            ),
+            RemoteCommand::SetDefault { name } => (
+                vec![
+                    "config".into(),
+                    "--local".into(),
+                    "gitcrest.defaultRemote".into(),
+                    name.into(),
+                ],
+                "Set default remote",
+                "config default remote",
+                Vec::new(),
+                None,
+            ),
+            RemoteCommand::SetUpstream {
+                local_branch,
+                remote_name,
+                remote_branch,
+            } => (
+                vec![
+                    "branch".into(),
+                    "--set-upstream-to".into(),
+                    format!("refs/remotes/{remote_name}/{remote_branch}").into(),
+                    local_branch.into(),
+                ],
+                "Set branch upstream",
+                "branch set upstream",
+                Vec::new(),
+                None,
+            ),
+        };
+        run_command(
+            &self.git_program,
+            arguments,
+            Some(log_label.into()),
+            None,
+            redactions,
+            Vec::new(),
+            Some(repository_path),
+            label,
+            task.clone(),
+        )
+        .await?;
+        if let Some(default) = next_default {
+            run_command(
+                &self.git_program,
+                vec![
+                    "config".into(),
+                    "--local".into(),
+                    "gitcrest.defaultRemote".into(),
+                    default.into(),
+                ],
+                None,
+                None,
+                Vec::new(),
+                Vec::new(),
+                Some(repository_path),
+                "Update default remote",
+                task,
+            )
+            .await?;
+        }
+        Ok(())
     }
 
     pub async fn execute_clone(

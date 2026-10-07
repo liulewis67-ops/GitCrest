@@ -627,7 +627,7 @@ paths:
       summary: Read remote names and sanitized fetch/push URLs
       responses:
         "200":
-          description: Remote configuration with the origin remote selected as the default when present.
+          description: Remote configuration with the configured preferred remote, or origin when no preference is set.
           headers:
             X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
           content:
@@ -651,6 +651,130 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+    post:
+      operationId: addRepositoryRemote
+      summary: Queue creation of a Git remote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RemoteUrlRequest" }
+      responses:
+        "202":
+          description: Remote creation task accepted.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409": { description: A remote with this name already exists., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Git or task storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/remotes/url:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    put:
+      operationId: setRepositoryRemoteUrl
+      summary: Queue replacement of a remote URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RemoteUrlRequest" }
+      responses:
+        "202":
+          description: Remote URL task accepted.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or remote is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git or task storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/remotes/delete:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: deleteRepositoryRemote
+      summary: Queue removal of a Git remote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchNameRequest" }
+      responses:
+        "202":
+          description: Remote removal task accepted.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or remote is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git or task storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/remotes/default:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    put:
+      operationId: setRepositoryDefaultRemote
+      summary: Set or clear the preferred default remote
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DefaultRemoteRequest" }
+      responses:
+        "202":
+          description: Default remote task accepted.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or remote is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git or task storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/remotes/upstream:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    put:
+      operationId: setRepositoryBranchUpstream
+      summary: Set a local branch's remote tracking branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchUpstreamRequest" }
+      responses:
+        "202":
+          description: Upstream task accepted.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository, remote or branch is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git or task storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/branches/delete-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1910,6 +2034,27 @@ components:
           type: array
           items: { type: string, description: Display-safe URL; embedded user-info is redacted and query strings are omitted. }
         isDefault: { type: boolean }
+    RemoteUrlRequest:
+      type: object
+      additionalProperties: false
+      required: [name, url]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        url: { type: string, minLength: 1, maxLength: 2048, description: HTTPS or SSH Git URL without embedded credentials. }
+    DefaultRemoteRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: [string, "null"], description: Null clears the preference and restores automatic origin selection. }
+    BranchUpstreamRequest:
+      type: object
+      additionalProperties: false
+      required: [localBranch, remoteName, remoteBranch]
+      properties:
+        localBranch: { type: string, minLength: 1, maxLength: 255 }
+        remoteName: { type: string, minLength: 1, maxLength: 255 }
+        remoteBranch: { type: string, minLength: 1, maxLength: 255 }
     DeleteBranchRequest:
       type: object
       additionalProperties: false
@@ -2116,6 +2261,16 @@ components:
         - BRANCH_NAME_INVALID
         - BRANCH_ALREADY_EXISTS
         - BRANCH_REQUIRES_COMMIT
+        - BRANCH_NOT_FOUND
+        - BRANCH_CURRENT
+        - BRANCH_UNMERGED
+        - BRANCH_WORKTREE_DIRTY
+        - REMOTES_UNAVAILABLE
+        - REMOTES_TOO_LARGE
+        - REMOTE_NAME_INVALID
+        - REMOTE_URL_INVALID
+        - REMOTE_ALREADY_EXISTS
+        - REMOTE_NOT_FOUND
         - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:

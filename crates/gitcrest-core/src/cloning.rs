@@ -211,7 +211,7 @@ fn is_reserved_windows_name(name: &str) -> bool {
             && stem.as_bytes()[3].is_ascii_digit())
 }
 
-fn validate_remote_url(remote: &str) -> Result<(), CloneError> {
+pub(crate) fn validate_remote_url(remote: &str) -> Result<(), CloneError> {
     if remote.is_empty()
         || remote.len() > 2_048
         || remote
