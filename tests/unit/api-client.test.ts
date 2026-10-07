@@ -529,6 +529,35 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify(request));
   });
 
+  it("lists, creates, previews, and deletes shelves with encoded identifiers", async () => {
+    const shelf = {
+      shelfId: "shelf/one", repoId: "repo/fixture", name: "work in progress", description: "notes",
+      paths: ["folder/notes.txt"], headOid: "a".repeat(40), createdAtMs: 1,
+    };
+    const task = { taskId: "task-shelf", repoId: "repo/fixture", operation: "shelfCreate", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const detail = { shelf, patch: "diff --git a/notes.txt b/notes.txt\n" };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify([shelf]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(detail), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    const request = {
+      name: "work in progress", description: "notes", expectedHeadOid: "a".repeat(40),
+      items: [{ path: "folder/notes.txt", scope: "workingTree" as const, revision: "sha256:fixture", selections: [{ hunkIndex: 0 }] }],
+    };
+
+    await expect(client.listRepositoryShelves("repo/fixture")).resolves.toEqual([shelf]);
+    await expect(client.createRepositoryShelf("repo/fixture", request)).resolves.toEqual(task);
+    await expect(client.getRepositoryShelf("repo/fixture", shelf.shelfId)).resolves.toEqual(detail);
+    await expect(client.deleteRepositoryShelf("repo/fixture", shelf.shelfId)).resolves.toBeUndefined();
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/shelves`);
+    expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/shelves`);
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual(request);
+    expect(String(fetcher.mock.calls[2][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/shelves/shelf%2Fone`);
+    expect(fetcher.mock.calls[3][1]?.method).toBe("DELETE");
+  });
+
   it("preserves structured API errors and rejects missing version confirmation", async () => {
     const errorFetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       error: { code: "REPOSITORY_NOT_FOUND", message: "Repository was not found." },

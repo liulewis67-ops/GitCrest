@@ -10,6 +10,9 @@ export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
 export type BlameDocumentResponse = components["schemas"]["BlameDocument"];
 export type StagingRequest = components["schemas"]["StagingRequest"];
 export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
+export type ShelfResponse = components["schemas"]["Shelf"];
+export type ShelfDetailResponse = components["schemas"]["ShelfDetail"];
+export type ShelfCreateRequest = components["schemas"]["ShelfCreateRequest"];
 export type CommitRequest = components["schemas"]["CommitRequest"];
 export type CommitPageResponse = components["schemas"]["CommitPage"];
 export type CommitDetailResponse = components["schemas"]["CommitDetail"];
@@ -269,6 +272,28 @@ export class GitCrestApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
+    });
+  }
+
+  listRepositoryShelves(repoId: RepoId): Promise<ShelfResponse[]> {
+    return this.request<ShelfResponse[]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves`);
+  }
+
+  createRepositoryShelf(repoId: RepoId, request: ShelfCreateRequest): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  }
+
+  getRepositoryShelf(repoId: RepoId, shelfId: string): Promise<ShelfDetailResponse> {
+    return this.request<ShelfDetailResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}`);
+  }
+
+  deleteRepositoryShelf(repoId: RepoId, shelfId: string): Promise<void> {
+    return this.request<void>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}`, true, {
+      method: "DELETE",
     });
   }
 

@@ -41,6 +41,7 @@ mod pull;
 mod push;
 mod remotes;
 mod repository;
+mod shelves;
 mod staging;
 mod status;
 mod storage;
@@ -109,6 +110,7 @@ enum ApiErrorCode {
     RequestInvalid,
     CloneDestinationExists,
     RepositoryFileNotFound,
+    ShelfNotFound,
     DiffTooLarge,
     DiffUnavailable,
     StagingConflict,
@@ -444,6 +446,28 @@ impl ApiError {
                 StatusCode::CONFLICT,
                 ApiErrorCode::ResourceVersionStale,
                 "The diff changed after it was displayed. Refresh it and select the desired changes again.",
+            ),
+        }
+    }
+
+    fn from_shelf_error(error: shelves::ShelfError) -> Self {
+        match error {
+            shelves::ShelfError::InvalidName | shelves::ShelfError::InvalidDescription => {
+                Self::new(
+                    StatusCode::BAD_REQUEST,
+                    ApiErrorCode::RequestInvalid,
+                    "Shelf names must be 1–120 characters and descriptions at most 500 characters.",
+                )
+            }
+            shelves::ShelfError::EmptySelection => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "Select at least one text change to shelve.",
+            ),
+            shelves::ShelfError::PatchTooLarge => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::DiffTooLarge,
+                "A shelf is limited to 10 MiB of selected text changes.",
             ),
         }
     }
@@ -943,6 +967,14 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             post(stage_repository_patch),
         )
         .route(
+            "/v1/repositories/:repo_id/shelves",
+            get(list_repository_shelves).post(create_repository_shelf),
+        )
+        .route(
+            "/v1/repositories/:repo_id/shelves/:shelf_id",
+            get(get_repository_shelf).delete(delete_repository_shelf),
+        )
+        .route(
             "/v1/repositories/:repo_id/commits",
             get(repository_commits).post(commit_repository),
         )
@@ -1433,6 +1465,336 @@ async fn stage_repository_patch(
         .await
         .map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ShelfSelectionRequest {
+    path: String,
+    scope: DiffScope,
+    revision: String,
+    #[serde(default)]
+    selections: Vec<diff::DiffSelection>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ShelfCreateRequest {
+    name: String,
+    description: String,
+    expected_head_oid: Option<String>,
+    items: Vec<ShelfSelectionRequest>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShelfDetailResponse {
+    shelf: shelves::ShelfSnapshot,
+    patch: String,
+}
+
+#[derive(Clone)]
+struct PreparedShelfItem {
+    path: String,
+    scope: DiffScope,
+    patch: Vec<u8>,
+}
+
+async fn list_repository_shelves(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<Vec<shelves::ShelfSnapshot>>, ApiError> {
+    state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let store = state.repositories.store();
+    let shelves = tokio::task::spawn_blocking(move || store.list_shelves(&repo_id))
+        .await
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .map_err(|_| ApiError::task_storage_unavailable())?;
+    Ok(Json(shelves))
+}
+
+async fn get_repository_shelf(
+    State(state): State<AppState>,
+    Path((repo_id, shelf_id)): Path<(String, String)>,
+) -> Result<Json<ShelfDetailResponse>, ApiError> {
+    state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let store = state.repositories.store();
+    let shelf = tokio::task::spawn_blocking(move || store.get_shelf(&repo_id, &shelf_id))
+        .await
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::ShelfNotFound,
+                "This shelf is no longer available.",
+            )
+        })?;
+    let patch = String::from_utf8(shelf.patch).map_err(|_| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            ApiErrorCode::InternalError,
+            "The saved shelf preview could not be decoded.",
+        )
+    })?;
+    Ok(Json(ShelfDetailResponse {
+        shelf: shelf.snapshot,
+        patch,
+    }))
+}
+
+async fn delete_repository_shelf(
+    State(state): State<AppState>,
+    Path((repo_id, shelf_id)): Path<(String, String)>,
+) -> Result<StatusCode, ApiError> {
+    state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let store = state.repositories.store();
+    let deleted = tokio::task::spawn_blocking(move || store.delete_shelf(&repo_id, &shelf_id))
+        .await
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .map_err(|_| ApiError::task_storage_unavailable())?;
+    if !deleted {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::ShelfNotFound,
+            "This shelf is no longer available.",
+        ));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn create_repository_shelf(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<ShelfCreateRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A shelf name, description, HEAD and selected file changes are required.",
+        )
+    })?;
+    shelves::validate_metadata(&request.name, &request.description)
+        .map_err(ApiError::from_shelf_error)?;
+    if request.items.is_empty() || request.items.len() > 100 {
+        return Err(ApiError::from_shelf_error(
+            shelves::ShelfError::EmptySelection,
+        ));
+    }
+    let repository = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    if repository.head != request.expected_head_oid {
+        return Err(ApiError::from_staging_error(
+            staging::StagingError::StaleSelection,
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let prepared = prepare_shelf_items(
+        &state.repositories,
+        &repo_id,
+        &target.repository_path,
+        &request.items,
+    )
+    .await?;
+    let mut patch_bytes = Vec::new();
+    let mut paths = prepared
+        .iter()
+        .map(|item| item.path.clone())
+        .collect::<Vec<_>>();
+    paths.sort();
+    paths.dedup();
+    for item in &prepared {
+        patch_bytes.extend_from_slice(&item.patch);
+        if patch_bytes.last() != Some(&b'\n') {
+            patch_bytes.push(b'\n');
+        }
+        if patch_bytes.len() > shelves::MAX_PATCH_BYTES {
+            return Err(ApiError::from_shelf_error(
+                shelves::ShelfError::PatchTooLarge,
+            ));
+        }
+    }
+    shelves::validate_patch(&patch_bytes, &paths).map_err(ApiError::from_shelf_error)?;
+
+    let repositories = state.repositories.clone();
+    let commands = state.git_commands.clone();
+    let task_repo_id = repo_id.clone();
+    let task_path = target.repository_path;
+    let resource_key = target.resource_key;
+    let expected_head_oid = request.expected_head_oid;
+    let items = request.items;
+    let name = request.name.trim().to_owned();
+    let description = request.description;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id.clone()),
+            None,
+            resource_key,
+            "shelfCreate",
+            move |context| async move {
+                let current_repository = repositories
+                    .refresh_metadata(&task_repo_id)
+                    .await
+                    .map_err(|_| TaskFailure::Failed("Could not recheck the repository HEAD before creating the shelf.".into()))?;
+                if current_repository.head != expected_head_oid {
+                    return Err(TaskFailure::Failed("The repository HEAD changed after shelf review. Refresh the selected diffs and try again.".into()));
+                }
+                let prepared = prepare_shelf_items(&repositories, &task_repo_id, &task_path, &items)
+                    .await
+                    .map_err(|_| TaskFailure::Failed("The selected changes changed after shelf review. Refresh and select them again.".into()))?;
+                let mut patch = Vec::new();
+                let mut paths = prepared.iter().map(|item| item.path.clone()).collect::<Vec<_>>();
+                paths.sort();
+                paths.dedup();
+                for item in &prepared {
+                    patch.extend_from_slice(&item.patch);
+                    if patch.last() != Some(&b'\n') { patch.push(b'\n'); }
+                    if patch.len() > shelves::MAX_PATCH_BYTES {
+                        return Err(TaskFailure::Failed("The selected shelf changes exceed the 10 MiB limit.".into()));
+                    }
+                }
+                shelves::validate_patch(&patch, &paths)
+                    .map_err(|_| TaskFailure::Failed("Select at least one text change to shelve.".into()))?;
+                for item in &prepared {
+                    for (_scope, command) in shelves::check_commands(item.patch.clone(), item.scope) {
+                        commands.execute_staging(&task_path, command, context.clone()).await?;
+                    }
+                }
+
+                let shelf = shelves::ShelfRecord {
+                    snapshot: shelves::ShelfSnapshot {
+                        shelf_id: shelves::new_shelf_id(),
+                        repo_id: task_repo_id.clone(),
+                        name,
+                        description,
+                        paths,
+                        head_oid: expected_head_oid,
+                        created_at_ms: shelves::now_ms(),
+                    },
+                    patch,
+                };
+                let store = repositories.store();
+                let persisted = shelf.clone();
+                tokio::task::spawn_blocking(move || store.save_shelf(&persisted))
+                    .await
+                    .map_err(|_| TaskFailure::Failed("Could not persist the shelf before changing the working tree.".into()))?
+                    .map_err(|_| TaskFailure::Failed("Could not persist the shelf before changing the working tree.".into()))?;
+
+                let mut applied = Vec::<(Vec<u8>, DiffScope)>::new();
+                for item in &prepared {
+                    for (scope, command) in shelves::cleanup_commands(item.patch.clone(), item.scope) {
+                        match commands.execute_staging(&task_path, command, context.clone()).await {
+                            Ok(()) => applied.push((item.patch.clone(), scope)),
+                            Err(TaskFailure::Cancelled) => return Err(TaskFailure::Cancelled),
+                            Err(TaskFailure::Failed(message)) | Err(TaskFailure::WaitingForInput(message)) => {
+                                let mut restored = true;
+                                for (patch, scope) in applied.iter().rev() {
+                                    if commands.execute_staging(&task_path, shelves::rollback_command(patch.clone(), *scope), context.clone()).await.is_err() {
+                                        restored = false;
+                                        break;
+                                    }
+                                }
+                                if restored {
+                                    let store = repositories.store();
+                                    let shelf_id = shelf.snapshot.shelf_id.clone();
+                                    let repo_id = task_repo_id.clone();
+                                    let _ = tokio::task::spawn_blocking(move || store.delete_shelf(&repo_id, &shelf_id)).await;
+                                }
+                                return Err(TaskFailure::Failed(if restored { message } else { format!("{message}. The saved shelf was retained so the selected changes can be recovered.") }));
+                            }
+                        }
+                    }
+                }
+                Ok(Some("Selected changes were saved to a shelf and removed from the working tree.".into()))
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn prepare_shelf_items(
+    repositories: &RepositoryManager,
+    repo_id: &str,
+    repository_path: &std::path::Path,
+    items: &[ShelfSelectionRequest],
+) -> Result<Vec<PreparedShelfItem>, ApiError> {
+    let mut paths = std::collections::HashSet::new();
+    let snapshot = repositories
+        .status_snapshot(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let mut prepared = Vec::with_capacity(items.len());
+    for item in items {
+        if item.scope == DiffScope::Commit || !paths.insert(item.path.as_str()) {
+            return Err(ApiError::from_shelf_error(
+                shelves::ShelfError::EmptySelection,
+            ));
+        }
+        let file = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == item.path)
+            .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
+        let current = diff::read_with_patch(repo_id.to_owned(), repository_path, file, item.scope)
+            .await
+            .map_err(ApiError::from_diff_error)?;
+        if current.document.revision != item.revision {
+            return Err(ApiError::from_staging_error(
+                staging::StagingError::StaleSelection,
+            ));
+        }
+        if current.document.status != diff::DiffContentStatus::Text {
+            return Err(ApiError::from_shelf_error(
+                shelves::ShelfError::EmptySelection,
+            ));
+        }
+        let patch = if item.selections.is_empty() {
+            current.patch
+        } else {
+            diff::select_changes(&current, &item.selections).map_err(|error| {
+                if error == DiffError::InvalidPath {
+                    ApiError::from_shelf_error(shelves::ShelfError::EmptySelection)
+                } else {
+                    ApiError::from_diff_error(error)
+                }
+            })?
+        };
+        shelves::validate_patch(&patch, std::slice::from_ref(&item.path))
+            .map_err(ApiError::from_shelf_error)?;
+        if std::str::from_utf8(&patch).is_err() {
+            return Err(ApiError::from_shelf_error(
+                shelves::ShelfError::EmptySelection,
+            ));
+        }
+        prepared.push(PreparedShelfItem {
+            path: item.path.clone(),
+            scope: item.scope,
+            patch,
+        });
+    }
+    Ok(prepared)
 }
 
 #[derive(Deserialize)]
@@ -4934,6 +5296,284 @@ mod tests {
             .unwrap();
         assert!(cached_after_stale.status.success());
         assert_eq!(cached_after_stale.stdout, cached_before_stale.stdout);
+    }
+
+    #[tokio::test]
+    async fn shelf_api_persists_a_selected_hunk_and_preserves_unselected_working_changes() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("shelf-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |arguments: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "Shelf Test"]);
+        git(&["config", "user.email", "shelf-test@example.invalid"]);
+        let original = (1..=12)
+            .map(|number| format!("line{number}\n"))
+            .collect::<String>();
+        std::fs::write(root.join("notes.txt"), &original).unwrap();
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        let modified = original
+            .replace("line2\n", "changed2\n")
+            .replace("line11\n", "changed11\n");
+        std::fs::write(root.join("notes.txt"), &modified).unwrap();
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": root }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let diff_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=notes.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(diff_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let reviewed_diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(reviewed_diff["hunks"].as_array().unwrap().len(), 2);
+        let stale_request = serde_json::json!({
+            "name": "first hunk",
+            "description": "Keep the later edit in the working tree",
+            "expectedHeadOid": repository["head"],
+            "items": [{
+                "path": "notes.txt",
+                "scope": "workingTree",
+                "revision": reviewed_diff["revision"],
+                "selections": [{ "hunkIndex": 0 }]
+            }]
+        });
+        std::fs::write(root.join("notes.txt"), format!("{modified}external edit\n")).unwrap();
+        let stale = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                &stale_request.to_string(),
+            ))
+            .await
+            .unwrap();
+        let (stale_status, stale_code) = error_code(stale).await;
+        assert_eq!(stale_status, StatusCode::CONFLICT);
+        assert_eq!(stale_code, "RESOURCE_VERSION_STALE");
+        let refreshed = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=notes.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(refreshed.into_body(), usize::MAX).await.unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let request_body = serde_json::json!({
+            "name": "first hunk",
+            "description": "Keep the later edit in the working tree",
+            "expectedHeadOid": repository["head"],
+            "items": [{
+                "path": "notes.txt",
+                "scope": "workingTree",
+                "revision": diff["revision"],
+                "selections": [{ "hunkIndex": 0 }]
+            }]
+        });
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                &request_body.to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let content = std::fs::read_to_string(root.join("notes.txt")).unwrap();
+        assert!(content.lines().any(|line| line == "line2"), "{content}");
+        assert!(content.lines().any(|line| line == "changed11"));
+        assert!(content.lines().any(|line| line == "external edit"));
+        assert!(!content.lines().any(|line| line == "changed2"));
+
+        let shelves_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(shelves_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let shelf_list: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(shelf_list.as_array().unwrap().len(), 1);
+        let shelf_id = shelf_list[0]["shelfId"].as_str().unwrap();
+        assert_eq!(shelf_list[0]["paths"], serde_json::json!(["notes.txt"]));
+        let detail = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(detail.into_body(), usize::MAX).await.unwrap();
+        let detail: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(detail["patch"].as_str().unwrap().contains("changed2"));
+        assert!(detail["patch"].as_str().unwrap().contains("line2"));
+        let deleted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri(format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn shelf_api_removes_reviewed_index_changes_without_losing_unstaged_edits() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("shelf-index-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |arguments: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        let git_output = |arguments: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(arguments)
+                .output()
+                .unwrap()
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "Shelf Test"]);
+        git(&["config", "user.email", "shelf-test@example.invalid"]);
+        let original = (1..=8)
+            .map(|number| format!("line{number}\n"))
+            .collect::<String>();
+        std::fs::write(root.join("notes.txt"), &original).unwrap();
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        std::fs::write(
+            root.join("notes.txt"),
+            original.replace("line2\n", "staged2\n"),
+        )
+        .unwrap();
+        git(&["add", "notes.txt"]);
+        std::fs::write(
+            root.join("notes.txt"),
+            original
+                .replace("line2\n", "staged2\n")
+                .replace("line8\n", "unstaged8\n"),
+        )
+        .unwrap();
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": root }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let diff_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=notes.txt&scope=index"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(diff_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(json_request(Method::POST, &format!("/api/v1/repositories/{repo_id}/shelves"), &serde_json::json!({
+                "name": "staged edit",
+                "description": "keep the unstaged edit",
+                "expectedHeadOid": repository["head"],
+                "items": [{ "path": "notes.txt", "scope": "index", "revision": diff["revision"], "selections": [] }]
+            }).to_string()))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+
+        let content = std::fs::read_to_string(root.join("notes.txt")).unwrap();
+        assert!(content.lines().any(|line| line == "line2"));
+        assert!(content.lines().any(|line| line == "unstaged8"));
+        let cached = git_output(&["diff", "--cached", "--", "notes.txt"]);
+        assert!(cached.status.success());
+        assert!(
+            cached.stdout.is_empty(),
+            "{}",
+            String::from_utf8_lossy(&cached.stdout)
+        );
+        let remaining = git_output(&["diff", "--", "notes.txt"]);
+        assert!(remaining.status.success());
+        let remaining = String::from_utf8_lossy(&remaining.stdout);
+        assert!(remaining.contains("unstaged8"));
+        assert!(!remaining.contains("staged2"));
     }
 
     #[tokio::test]

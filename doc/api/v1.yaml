@@ -1180,6 +1180,170 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/shelves:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: listRepositoryShelves
+      summary: List saved shelves for a repository
+      responses:
+        "200":
+          description: Shelf metadata ordered by creation time.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Shelf"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "503":
+          description: Repository or shelf storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+    post:
+      operationId: createRepositoryShelf
+      summary: Save and remove a reviewed set of text changes
+      description: Each selected diff revision and repository HEAD is checked again while holding the repository write lock. The shelf patch is persisted before selected changes are removed; index and working-tree scope are kept distinct.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShelfCreateRequest"
+      responses:
+        "202":
+          description: Shelf creation task accepted and durably recorded.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: Shelf metadata or selection is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or selected file is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The repository HEAD or selected diff revision became stale.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "413":
+          description: The selected patch exceeds 10 MiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git, task capacity, or shelf storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/shelves/{shelfId}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: shelfId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    get:
+      operationId: getRepositoryShelf
+      summary: Read a shelf and its reviewable patch
+      responses:
+        "200":
+          description: Shelf metadata and the saved unified patch; this operation does not apply it.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShelfDetail"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or shelf is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+    delete:
+      operationId: deleteRepositoryShelf
+      summary: Delete a saved shelf without changing the working tree
+      responses:
+        "204":
+          description: Shelf metadata and patch deleted.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or shelf is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "503":
+          description: Shelf storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/commits:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3002,6 +3166,93 @@ components:
               rowIndex:
                 type: integer
                 minimum: 0
+    ShelfCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, description, expectedHeadOid, items]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 500
+        expectedHeadOid:
+          type: string
+          nullable: true
+          pattern: "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+        items:
+          type: array
+          minItems: 1
+          maxItems: 100
+          items:
+            $ref: "#/components/schemas/ShelfSelection"
+    ShelfSelection:
+      type: object
+      additionalProperties: false
+      required: [path, scope, revision]
+      properties:
+        path:
+          type: string
+          minLength: 1
+        scope:
+          type: string
+          enum: [workingTree, index]
+        revision:
+          type: string
+          minLength: 1
+        selections:
+          type: array
+          maxItems: 5000
+          items:
+            $ref: "#/components/schemas/DiffSelection"
+    DiffSelection:
+      type: object
+      additionalProperties: false
+      required: [hunkIndex]
+      properties:
+        hunkIndex:
+          type: integer
+          minimum: 0
+        rowIndex:
+          type: integer
+          minimum: 0
+    Shelf:
+      type: object
+      additionalProperties: false
+      required: [shelfId, repoId, name, description, paths, headOid, createdAtMs]
+      properties:
+        shelfId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        repoId:
+          $ref: "#/components/schemas/RepoId"
+        name:
+          type: string
+        description:
+          type: string
+        paths:
+          type: array
+          items:
+            type: string
+        headOid:
+          type: string
+          nullable: true
+        createdAtMs:
+          type: integer
+          format: int64
+    ShelfDetail:
+      type: object
+      additionalProperties: false
+      required: [shelf, patch]
+      properties:
+        shelf:
+          $ref: "#/components/schemas/Shelf"
+        patch:
+          type: string
+          description: Unified diff patch stored with this shelf; reading it never applies it.
     OpenRepositoryRequest:
       type: object
       additionalProperties: false
@@ -3107,6 +3358,7 @@ components:
         - DATABASE_UNAVAILABLE
         - REPOSITORY_STATUS_FAILED
         - TASK_NOT_FOUND
+        - SHELF_NOT_FOUND
         - TASK_QUEUE_FULL
         - GIT_UNAVAILABLE
         - REPOSITORY_STATE_CONFLICT

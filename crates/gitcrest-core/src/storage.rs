@@ -3,9 +3,10 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::repository::Repository;
+use crate::shelves::{ShelfRecord, ShelfSnapshot};
 
 #[derive(Clone)]
 pub struct RepositoryStore {
@@ -220,6 +221,114 @@ impl RepositoryStore {
             .map_err(|error| error.to_string())
     }
 
+    pub fn save_shelf(&self, shelf: &ShelfRecord) -> Result<(), String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let paths =
+            serde_json::to_string(&shelf.snapshot.paths).map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "INSERT INTO shelves (shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, patch) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    shelf.snapshot.shelf_id,
+                    shelf.snapshot.repo_id,
+                    shelf.snapshot.name,
+                    shelf.snapshot.description,
+                    paths,
+                    shelf.snapshot.head_oid,
+                    shelf.snapshot.created_at_ms,
+                    shelf.patch,
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_shelves(&self, repo_id: &str) -> Result<Vec<ShelfSnapshot>, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let mut statement = connection
+            .prepare("SELECT shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms FROM shelves WHERE repo_id=?1 ORDER BY created_at_ms DESC, shelf_id DESC")
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([repo_id], |row| {
+                let paths_json: String = row.get(4)?;
+                let paths = serde_json::from_str(&paths_json).map_err(|error| {
+                    rusqlite::Error::FromSqlConversionFailure(
+                        4,
+                        rusqlite::types::Type::Text,
+                        Box::new(error),
+                    )
+                })?;
+                Ok(ShelfSnapshot {
+                    shelf_id: row.get(0)?,
+                    repo_id: row.get(1)?,
+                    name: row.get(2)?,
+                    description: row.get(3)?,
+                    paths,
+                    head_oid: row.get(5)?,
+                    created_at_ms: row.get(6)?,
+                })
+            })
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn get_shelf(&self, repo_id: &str, shelf_id: &str) -> Result<Option<ShelfRecord>, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        connection
+            .query_row(
+                "SELECT shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, patch FROM shelves WHERE repo_id=?1 AND shelf_id=?2",
+                params![repo_id, shelf_id],
+                |row| {
+                    let paths_json: String = row.get(4)?;
+                    let paths = serde_json::from_str(&paths_json).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            4,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        )
+                    })?;
+                    Ok(ShelfRecord {
+                        snapshot: ShelfSnapshot {
+                            shelf_id: row.get(0)?,
+                            repo_id: row.get(1)?,
+                            name: row.get(2)?,
+                            description: row.get(3)?,
+                            paths,
+                            head_oid: row.get(5)?,
+                            created_at_ms: row.get(6)?,
+                        },
+                        patch: row.get(7)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn delete_shelf(&self, repo_id: &str, shelf_id: &str) -> Result<bool, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        connection
+            .execute(
+                "DELETE FROM shelves WHERE repo_id=?1 AND shelf_id=?2",
+                params![repo_id, shelf_id],
+            )
+            .map(|changed| changed > 0)
+            .map_err(|error| error.to_string())
+    }
+
     pub fn save_task_snapshot(
         &self,
         task_id: &str,
@@ -266,7 +375,7 @@ impl RepositoryStore {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 3 {
+    if version > 4 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -280,6 +389,10 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     if version < 3 {
         connection.execute_batch(include_str!("../migrations/0003_branch_favorites.sql"))?;
         connection.pragma_update(None, "user_version", 3)?;
+    }
+    if version < 4 {
+        connection.execute_batch(include_str!("../migrations/0004_shelves.sql"))?;
+        connection.pragma_update(None, "user_version", 4)?;
     }
     Ok(())
 }
@@ -351,10 +464,46 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 4).unwrap();
+        connection.pragma_update(None, "user_version", 5).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
+    }
+
+    #[test]
+    fn shelf_metadata_and_patch_survive_database_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let record = ShelfRecord {
+            snapshot: ShelfSnapshot {
+                shelf_id: "shelf-1".into(),
+                repo_id: "repo-1".into(),
+                name: "before refactor".into(),
+                description: "unfinished function".into(),
+                paths: vec!["src/lib.rs".into(), "notes.md".into()],
+                head_oid: Some("a".repeat(40)),
+                created_at_ms: 123,
+            },
+            patch: b"diff --git a/src/lib.rs b/src/lib.rs\npatch bytes\n".to_vec(),
+        };
+        {
+            let store = RepositoryStore::open(&database).unwrap();
+            store
+                .save_opened(repository("repo-1", "/repo/one", 1))
+                .unwrap();
+            store.save_shelf(&record).unwrap();
+            let listed = store.list_shelves("repo-1").unwrap();
+            assert_eq!(listed.as_slice(), std::slice::from_ref(&record.snapshot));
+        }
+
+        let reopened = RepositoryStore::open(&database).unwrap();
+        assert_eq!(
+            reopened.get_shelf("repo-1", "shelf-1").unwrap(),
+            Some(record.clone())
+        );
+        assert!(reopened.delete_shelf("repo-1", "shelf-1").unwrap());
+        assert!(!reopened.delete_shelf("repo-1", "shelf-1").unwrap());
+        assert!(reopened.list_shelves("repo-1").unwrap().is_empty());
     }
 
     #[test]
