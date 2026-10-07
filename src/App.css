@@ -320,6 +320,9 @@ button:disabled { cursor: not-allowed; }
 .splitDiffNavigation span { margin-right: auto; font: 9px var(--font-mono); }
 .splitDiffNavigation button, .diffHunkToggle { border: 1px solid var(--line-strong); border-radius: 4px; padding: 3px 7px; background: var(--surface); color: var(--text-secondary); font-size: 9px; cursor: pointer; }
 .splitDiffNavigation button:disabled { opacity: .5; cursor: default; }
+.splitDiffNavigation button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
+.diffSyntaxFallback, .monacoDiffLoading { padding: 8px 12px; border-bottom: 1px solid var(--line); color: var(--text-muted); font-size: 10px; }
+.monacoDiffHunk { width: 100%; min-height: 120px; border-bottom: 1px solid var(--line); }
 .splitDiffFileMeta { position: sticky; z-index: 1; top: 0; display: flex; align-items: center; gap: 9px; min-height: 37px; padding: 0 13px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
 .splitDiffFileMeta strong { overflow: hidden; color: var(--text-secondary); font: 10px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .splitDiffFileMeta small { overflow: hidden; color: var(--text-muted); font: 8px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }

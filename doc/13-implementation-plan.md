@@ -312,5 +312,6 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 ### S3.4 — 高级 Diff（进行中）
 - 子阶段 A：变更块导航与折叠，基础交付 commit：`539bec1`。测试：`pnpm exec vitest run --config vitest.config.ts tests/unit/split-diff.test.tsx` 通过，2 个测试；`pnpm build` 通过；`git diff --check` 通过。用例覆盖未聚焦 Diff 时 F7/Shift+F7 循环定位、折叠/展开及导航到折叠块时自动展开。
 - 子阶段 B：行内词/token 差异着色，状态：进行中（基础交付已实现，S3.4 整体仍未验收）。测试：`pnpm test` 通过，32 个测试；`pnpm build` 通过；`git diff --check` 通过。覆盖插入/删除 token、Unicode 标识符、原样保留空白和超过 300,000 个 LCS 单元格时的线性降级。
-- 证据：`src/features/diff/SplitDiff.tsx`、`src/features/diff/inline-diff.ts`、`src/App.css`、`tests/unit/split-diff.test.tsx`、`tests/unit/inline-diff.test.ts`、`tests/unit/app.test.tsx`。
-- 限制/后续：行内词级差异已标亮，但编程语言语法 token 着色尚未实现；Monaco 编辑器、tree-sitter 解析与无支持语言降级、超大文件提示及结构化结果对照 Git 原始 diff 尚未完成，不能将 S3.4 标为已完成。binary 状态已有基础提示，仍需纳入 S3.4 验收。完整 `pnpm check` 留待 S3.4 总体验收。
+- 子阶段 C：Monaco 只读 hunk 语法视图，状态：进行中（基础交付已实现，S3.4 整体仍未验收）。测试：`pnpm test` 通过，35 个测试；`pnpm build` 通过；`pnpm test:e2e` 通过，1 个桌面 E2E。E2E 在 Electron 中创建临时 TypeScript 修改并确认 Monaco 旧/新两侧都显示；组件用例验证未知扩展名回退提示，语言映射用例覆盖 Rust、TypeScript 和纯文本。
+- 证据：`src/features/diff/MonacoDiffHunk.tsx`、`src/features/diff/monaco-language.ts`、`src/features/diff/SplitDiff.tsx`、`src/monaco-language.d.ts`、`tests/unit/monaco-language.test.ts`、`tests/unit/split-diff.test.tsx`、`tests/e2e/desktop.test.ts`、`package.json`、`pnpm-lock.yaml`、`tsconfig.test.json`。
+- 限制/后续：行内词级差异已标亮；Monaco 语法视图按文件扩展名加载内置 tokenizer，未知类型和加载失败时展示纯文本，但 tree-sitter 解析尚未实现。monaco 的只读模式按 hunk 展示，默认 Split 仍是 Git 结构化行和可选暂存的权威视图；超大文件提示及结构化结果与 Git 原始 diff 的最终对照尚未验收。binary 状态已有基础提示，仍需纳入 S3.4 验收。Monaco 相关构建资源的性能留给 S7.2；完整 `pnpm check` 留待 S3.4 总体验收。

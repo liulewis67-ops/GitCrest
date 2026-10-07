@@ -1,9 +1,13 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
+import { promisify } from "node:util";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTempGitRepository } from "../fixtures/temp-repo";
+
+const execFileAsync = promisify(execFile);
 
 describe("desktop startup E2E", () => {
   let app: ElectronApplication | undefined;
@@ -69,6 +73,18 @@ describe("desktop startup E2E", () => {
       expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
 
       await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'hello';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/example.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add source fixture"]);
+      await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'welcome';\n");
+      await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.getByRole("button", { name: "modified src/example.ts" }).click();
+      await window.getByRole("button", { name: "Monaco view" }).click();
+      const monacoLines = window.locator(".monacoDiffHunk .view-lines");
+      await monacoLines.first().waitFor({ state: "visible", timeout: 15_000 });
+      expect(await monacoLines.last().innerText()).toContain("welcome");
+
       await window.setViewportSize({ width: 900, height: 820 });
       expect(await window.locator(".navigationPanel").isVisible()).toBe(false);
       expect(await window.locator(".mainPanel").isVisible()).toBe(true);

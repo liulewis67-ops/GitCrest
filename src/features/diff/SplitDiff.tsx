@@ -1,6 +1,9 @@
 import type { DiffDocumentResponse } from "../../api/client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { splitInlineDiff } from "./inline-diff";
+import { monacoLanguageForPath } from "./monaco-language";
+
+const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({ default: module.MonacoDiffHunk })));
 
 interface SplitDiffProps {
   document: DiffDocumentResponse;
@@ -13,8 +16,10 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
   const [activeHunk, setActiveHunk] = useState<number | null>(null);
+  const [view, setView] = useState<"split" | "monaco">("split");
   const hunkRefs = useRef<Array<HTMLElement | null>>([]);
   const readOnly = document.scope === "commit";
+  const language = monacoLanguageForPath(document.path);
   const navigableHunks = useMemo(() => document.status === "text"
     ? document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.some((row) => row.kind === "change") ? [hunkIndex] : [])
     : [], [document.hunks, document.status]);
@@ -22,6 +27,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
     setSelection([]);
     setCollapsedHunks(new Set());
     setActiveHunk(null);
+    setView("split");
     hunkRefs.current = [];
   }, [document.revision]);
   const navigateHunk = useCallback((direction: -1 | 1) => {
@@ -73,10 +79,13 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
       <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? "COMMIT ↔ FIRST PARENT" : document.scope === "index" ? "INDEX ↔ HEAD" : "WORKING TREE ↔ INDEX"}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
       <div className="splitDiffNavigation" aria-label="Diff navigation">
         <span>{navigableHunks.length ? `${activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1} / ${navigableHunks.length} changes` : "No changes"}</span>
+        <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>Split view</button>
+        <button type="button" aria-pressed={view === "monaco"} onClick={() => setView("monaco")}>Monaco view</button>
         <button type="button" onClick={() => navigateHunk(-1)} disabled={navigableHunks.length === 0} title="Previous change (Shift+F7)">Previous change</button>
         <button type="button" onClick={() => navigateHunk(1)} disabled={navigableHunks.length === 0} title="Next change (F7)">Next change</button>
       </div>
       <div className="splitDiffColumns" aria-hidden="true"><div /><div>OLD</div><div>NEW</div></div>
+      {view === "monaco" && !language.supported && <div className="diffSyntaxFallback" role="status">No syntax tokenizer is bundled for this file type. Monaco is showing plain text.</div>}
       {document.hunks.map((hunk, hunkIndex) => {
         const changeRowIndexes = hunk.rows.flatMap((row, rowIndex) => row.kind === "change" ? [rowIndex] : []);
         const hunkSelected = selection.some((item) => item.hunkIndex === hunkIndex && item.rowIndex === undefined);
@@ -113,7 +122,16 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
               })}
             >{collapsedHunks.has(hunkIndex) ? "Expand" : "Collapse"}</button>
           </div>
-          {!collapsedHunks.has(hunkIndex) && hunk.rows.map((row, rowIndex) => (
+          {!collapsedHunks.has(hunkIndex) && view === "monaco" && <Suspense fallback={<div className="monacoDiffLoading" role="status">Loading Monaco editor…</div>}>
+            <MonacoDiffHunk
+              label={`Monaco diff hunk ${hunkIndex + 1}`}
+              original={hunk.rows.flatMap((row) => row.oldText === null || row.oldText === undefined ? [] : [row.oldText]).join("\n")}
+              modified={hunk.rows.flatMap((row) => row.newText === null || row.newText === undefined ? [] : [row.newText]).join("\n")}
+              language={language.id}
+              height={Math.min(480, Math.max(120, hunk.rows.length * 20 + 24))}
+            />
+          </Suspense>}
+          {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => (
             <div className={`splitDiffRow splitDiffRow-${row.kind}`} key={`${hunkIndex}:${rowIndex}`}>
               {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"
