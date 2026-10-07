@@ -336,4 +336,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 新增只读 switch preflight，返回本地变更文件及与目标分支树差异相交的潜在覆盖路径；切换 API 只接受本地分支、拒绝当前分支和脏工作区，并在任务执行时再次检查工作区。Git switch 成功后刷新并持久化 repository metadata。
 - `Ctrl/Cmd+B` 打开切换器。干净时可提交切换任务；脏时列出文件和覆盖风险，提供提交、Shelve（S5.3 前禁用并说明）、继续（工作区清洁前禁用）及取消；提交后用户可重新检查继续。取消保持分支和工作区原样。
 - 验收：`pnpm api:types`、`pnpm check`（48 Vitest、52 Rust、1 Electron E2E）、`cargo clippy --all-targets -- -D warnings`、`git diff --check` 通过。API 集成覆盖清洁切换、脏工作区拒绝和 untracked 冲突路径；UI 用例覆盖脏工作区选项、取消与后续切换；Electron E2E 在实际 Git 仓库中验证冲突提醒/取消和清洁切换。
-- 证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`src/App.tsx`、`src/App.css`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。完成 commit SHA 待补记。
+- 证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`src/App.tsx`、`src/App.css`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。完成 commit：`e0f7de1`。
