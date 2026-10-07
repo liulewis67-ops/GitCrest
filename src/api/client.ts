@@ -293,6 +293,21 @@ export class GitCrestApiClient {
     });
   }
 
+  preflightRepositoryPull(repoId: RepoId): Promise<components["schemas"]["PullPreflight"]> {
+    return this.request<components["schemas"]["PullPreflight"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pull-preflight`);
+  }
+
+  pullRepository(
+    repoId: RepoId,
+    request: components["schemas"]["PullRequest"],
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pull`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  }
+
   preflightRepositoryPush(repoId: RepoId): Promise<components["schemas"]["PushPreflight"]> {
     return this.request<components["schemas"]["PushPreflight"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/push-preflight`);
   }

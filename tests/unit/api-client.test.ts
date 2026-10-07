@@ -320,6 +320,26 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prune: false }));
   });
 
+  it("reads pull safety state and queues a pull with an explicit strategy", async () => {
+    const preview = {
+      repoId: "repo_fixture", localBranch: "main", remoteName: "origin", remoteBranch: "main",
+      localOid: "a".repeat(40), trackingOid: "b".repeat(40), ahead: 0, behind: 2,
+      isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, hasConflicts: false, operationInProgress: false,
+    };
+    const task = { taskId: "task-pull", repoId: "repo_fixture", operation: "pullMerge", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.preflightRepositoryPull("repo/fixture")).resolves.toEqual(preview);
+    const request = { expectedLocalOid: preview.localOid, expectedTrackingOid: preview.trackingOid, strategy: "merge" as const };
+    await expect(client.pullRepository("repo/fixture", request)).resolves.toEqual(task);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/pull-preflight`);
+    expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/pull`);
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify(request));
+  });
+
   it("reads the push preview for an encoded repository ID", async () => {
     const preview = {
       repoId: "repo_fixture", localBranch: "main", remoteName: "origin", remoteBranch: "main",

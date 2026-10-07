@@ -36,6 +36,7 @@ mod credentials;
 mod diff;
 mod git_command;
 mod history;
+mod pull;
 mod push;
 mod remotes;
 mod repository;
@@ -130,6 +131,10 @@ enum ApiErrorCode {
     RemoteNotFound,
     CredentialInputInvalid,
     CredentialsUnavailable,
+    PullPreflightUnavailable,
+    PullTargetUnavailable,
+    PullPreflightStale,
+    PullRequiresClean,
     PushPreflightUnavailable,
     PushTargetUnavailable,
     PushPreflightStale,
@@ -575,6 +580,31 @@ impl ApiError {
         }
     }
 
+    fn from_pull_error(error: pull::PullError) -> Self {
+        match error {
+            pull::PullError::NoCurrentBranch
+            | pull::PullError::NoUpstream
+            | pull::PullError::InvalidUpstream
+            | pull::PullError::UpstreamGone => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::PullTargetUnavailable,
+                "Pull requires a current branch with a configured, fetched upstream. Review branch and remote settings first.",
+            ),
+            pull::PullError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git is unavailable for pull preflight.",
+            ),
+            pull::PullError::TimedOut | pull::PullError::TooLarge | pull::PullError::GitFailed => {
+                Self::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    ApiErrorCode::PullPreflightUnavailable,
+                    "Pull preflight could not be completed. Refresh repository state and retry.",
+                )
+            }
+        }
+    }
+
     fn from_tag_error(error: tags::TagError) -> Self {
         match error {
             tags::TagError::Invalid => Self::new(
@@ -830,6 +860,11 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route("/v1/repositories/:repo_id/refs", get(repository_refs))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
+        .route(
+            "/v1/repositories/:repo_id/pull-preflight",
+            get(preflight_repository_pull),
+        )
+        .route("/v1/repositories/:repo_id/pull", post(pull_repository))
         .route(
             "/v1/repositories/:repo_id/push-preflight",
             get(preflight_repository_push),
@@ -2713,6 +2748,112 @@ async fn fetch_repository(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
+async fn preflight_repository_pull(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<pull::PullPreflight>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    pull::read_pull_preflight(
+        repo_id,
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_pull_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PullRequest {
+    expected_local_oid: String,
+    expected_tracking_oid: String,
+    strategy: pull::PullStrategy,
+}
+
+async fn pull_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<PullRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Pull requires reviewed local and tracking OIDs and an explicit merge or rebase strategy.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preflight = pull::read_pull_preflight(
+        repo_id.clone(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map_err(ApiError::from_pull_error)?;
+    if preflight.local_oid != request.expected_local_oid
+        || preflight.tracking_oid != request.expected_tracking_oid
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PullPreflightStale,
+            "The local branch or tracked upstream changed after preflight. Refresh the preview before pulling.",
+        ));
+    }
+    if !preflight.is_clean {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PullRequiresClean,
+            "Pull requires a clean worktree with no unresolved conflicts or Git operation in progress. Review the preflight paths first.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let path = target.repository_path;
+    let preflight_for_task = preflight.clone();
+    let strategy = request.strategy;
+    let operation = match strategy {
+        pull::PullStrategy::Merge => "pullMerge",
+        pull::PullStrategy::Rebase => "pullRebase",
+    };
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation,
+            move |context| async move {
+                command
+                    .execute_pull(&path, &preflight_for_task, strategy, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
 async fn preflight_repository_push(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
@@ -3951,6 +4092,155 @@ mod tests {
             .logs
             .iter()
             .any(|line| line == "git fetch --progress"));
+    }
+
+    #[tokio::test]
+    async fn pull_api_requires_a_clean_reviewed_snapshot_and_explicit_strategy() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("repo");
+        let writer_path = directory.path().join("writer");
+        let bare_path = directory.path().join("remote.git");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |path: &std::path::Path, args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&repository_path, &["init", "--quiet"]);
+        git(&repository_path, &["config", "user.name", "Pull API Test"]);
+        git(
+            &repository_path,
+            &["config", "user.email", "pull-api@example.invalid"],
+        );
+        std::fs::write(repository_path.join("seed.txt"), "seed\n").unwrap();
+        git(&repository_path, &["add", "seed.txt"]);
+        git(&repository_path, &["commit", "--quiet", "-m", "seed"]);
+        let bare = std::process::Command::new("git")
+            .arg("init")
+            .arg("--bare")
+            .arg("--quiet")
+            .arg(&bare_path)
+            .output()
+            .unwrap();
+        assert!(bare.status.success());
+        git(
+            &repository_path,
+            &["remote", "add", "origin", bare_path.to_str().unwrap()],
+        );
+        git(
+            &repository_path,
+            &["push", "--quiet", "-u", "origin", "HEAD"],
+        );
+        let clone = std::process::Command::new("git")
+            .args(["clone", "--quiet"])
+            .arg(&bare_path)
+            .arg(&writer_path)
+            .output()
+            .unwrap();
+        assert!(clone.status.success());
+        git(&writer_path, &["config", "user.name", "Pull Writer"]);
+        git(
+            &writer_path,
+            &["config", "user.email", "pull-writer@example.invalid"],
+        );
+        std::fs::write(writer_path.join("remote.txt"), "remote change\n").unwrap();
+        git(&writer_path, &["add", "remote.txt"]);
+        git(&writer_path, &["commit", "--quiet", "-m", "remote change"]);
+        git(&writer_path, &["push", "--quiet", "origin", "HEAD"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+
+        let preview = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/pull-preflight"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview.status(), StatusCode::OK);
+        let body = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(preview["isClean"], true);
+        assert_eq!(preview["behind"], 0);
+        assert_eq!(preview["remoteName"], "origin");
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/pull"),
+                &serde_json::json!({
+                    "expectedLocalOid": preview["localOid"],
+                    "expectedTrackingOid": preview["trackingOid"],
+                    "strategy": "merge",
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        assert!(repository_path.join("remote.txt").exists());
+
+        std::fs::write(repository_path.join("local.txt"), "local edit\n").unwrap();
+        let dirty = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/pull-preflight"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(dirty.into_body(), usize::MAX).await.unwrap();
+        let dirty: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(dirty["isClean"], false);
+        assert_eq!(dirty["dirtyPaths"][0], "local.txt");
+        let rejected = app
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/pull"),
+                &serde_json::json!({
+                    "expectedLocalOid": dirty["localOid"],
+                    "expectedTrackingOid": dirty["trackingOid"],
+                    "strategy": "rebase",
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            error_code(rejected).await,
+            (StatusCode::CONFLICT, "PULL_REQUIRES_CLEAN".into())
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("local.txt")).unwrap(),
+            "local edit\n"
+        );
     }
 
     #[tokio::test]

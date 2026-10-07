@@ -1605,6 +1605,108 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/pull-preflight:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: preflightRepositoryPull
+      summary: Inspect upstream, worktree changes, conflicts and active Git operations before pull
+      responses:
+        "200":
+          description: Pull target, local and tracking OIDs, and bounded worktree safety details.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PullPreflight"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not registered or its path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The current branch has no usable upstream or its tracking ref is gone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git could not complete the bounded pull preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/pull:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: pullRepository
+      summary: Queue a pull with a reviewed snapshot and explicit merge or rebase strategy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PullRequest"
+      responses:
+        "202":
+          description: Pull task accepted and durably recorded before execution.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: Pull request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not registered or its path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The preflight is stale or the worktree is dirty, conflicted, or in another Git operation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/push-preflight:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -2169,6 +2271,32 @@ components:
         isClean: { type: boolean }
         dirtyFiles: { type: array, items: { type: string } }
         potentiallyOverwrittenPaths: { type: array, items: { type: string } }
+    PullPreflight:
+      type: object
+      additionalProperties: false
+      required: [repoId, localBranch, remoteName, remoteBranch, localOid, trackingOid, ahead, behind, isClean, dirtyPaths, omittedDirtyPathCount, hasConflicts, operationInProgress]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        localBranch: { type: string }
+        remoteName: { type: string }
+        remoteBranch: { type: string }
+        localOid: { type: string, minLength: 40, maxLength: 64 }
+        trackingOid: { type: string, minLength: 40, maxLength: 64 }
+        ahead: { type: integer, minimum: 0 }
+        behind: { type: integer, minimum: 0 }
+        isClean: { type: boolean }
+        dirtyPaths: { type: array, maxItems: 200, items: { type: string } }
+        omittedDirtyPathCount: { type: integer, minimum: 0 }
+        hasConflicts: { type: boolean }
+        operationInProgress: { type: boolean }
+    PullRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedLocalOid, expectedTrackingOid, strategy]
+      properties:
+        expectedLocalOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        expectedTrackingOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        strategy: { type: string, enum: [merge, rebase], description: Explicit integration strategy selected by the user. }
     PushPreflight:
       type: object
       additionalProperties: false
@@ -2481,6 +2609,10 @@ components:
         - REMOTE_NOT_FOUND
         - CREDENTIAL_INPUT_INVALID
         - CREDENTIALS_UNAVAILABLE
+        - PULL_PREFLIGHT_UNAVAILABLE
+        - PULL_TARGET_UNAVAILABLE
+        - PULL_PREFLIGHT_STALE
+        - PULL_REQUIRES_CLEAN
         - PUSH_PREFLIGHT_UNAVAILABLE
         - PUSH_TARGET_UNAVAILABLE
         - PUSH_PREFLIGHT_STALE

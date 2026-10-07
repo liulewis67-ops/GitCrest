@@ -115,6 +115,72 @@ impl GitCommandService {
         .await
     }
 
+    pub async fn execute_pull(
+        &self,
+        repository_path: &Path,
+        expected: &crate::pull::PullPreflight,
+        strategy: crate::pull::PullStrategy,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let current = crate::pull::read_pull_preflight(
+            expected.repo_id.clone(),
+            repository_path,
+            Some(&expected.local_branch),
+            false,
+        )
+        .await
+        .map_err(|_| {
+            TaskFailure::Failed(
+                "Pull preflight could not be revalidated. Refresh and review the repository state."
+                    .into(),
+            )
+        })?;
+        if current.local_oid != expected.local_oid
+            || current.tracking_oid != expected.tracking_oid
+            || current.remote_name != expected.remote_name
+            || current.remote_branch != expected.remote_branch
+            || !current.is_clean
+        {
+            return Err(TaskFailure::Failed(
+                "Pull preflight became stale or the worktree is no longer clean. Review repository state before pulling.".into(),
+            ));
+        }
+        let strategy_flag = match strategy {
+            crate::pull::PullStrategy::Merge => "--no-rebase",
+            crate::pull::PullStrategy::Rebase => "--rebase",
+        };
+        run_command(
+            &self.git_program,
+            vec![
+                "pull".into(),
+                "--progress".into(),
+                "--no-edit".into(),
+                strategy_flag.into(),
+                "--".into(),
+                expected.remote_name.clone().into(),
+                expected.remote_branch.clone().into(),
+            ],
+            Some(match strategy {
+                crate::pull::PullStrategy::Merge => {
+                    format!("pull --no-rebase {}", expected.remote_name)
+                }
+                crate::pull::PullStrategy::Rebase => {
+                    format!("pull --rebase {}", expected.remote_name)
+                }
+            }),
+            None,
+            Vec::new(),
+            askpass_environment()?,
+            Some(repository_path),
+            match strategy {
+                crate::pull::PullStrategy::Merge => "Pull with merge",
+                crate::pull::PullStrategy::Rebase => "Pull with rebase",
+            },
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_branch(
         &self,
         repository_path: &Path,
