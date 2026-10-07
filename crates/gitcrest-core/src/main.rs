@@ -1,11 +1,22 @@
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{
+    env,
+    net::SocketAddr,
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc,
+    },
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use axum::{
     body::Body,
-    extract::State,
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        Path, State,
+    },
     http::{
-        header::{AUTHORIZATION, CONTENT_TYPE},
-        HeaderValue, Method, Request, StatusCode,
+        header::{AUTHORIZATION, CONTENT_TYPE, SEC_WEBSOCKET_PROTOCOL},
+        HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode,
     },
     middleware::{self, Next},
     response::{IntoResponse, Response},
@@ -16,12 +27,17 @@ use serde::Serialize;
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+const API_VERSION: &str = "1";
+static NEXT_EVENT_ID: AtomicU64 = AtomicU64::new(1);
+
 #[derive(Clone)]
 struct AppState {
-    token: Arc<String>,
+    read_write_token: Arc<String>,
+    read_only_token: Option<Arc<String>>,
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ReadyMessage<'a> {
     event: &'a str,
     host: &'a str,
@@ -29,9 +45,134 @@ struct ReadyMessage<'a> {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct VersionResponse<'a> {
     name: &'a str,
     version: &'a str,
+    api_version: u8,
+}
+
+#[derive(Clone, Copy, Serialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[allow(dead_code)]
+enum ApiErrorCode {
+    AuthUnauthorized,
+    AuthForbidden,
+    ApiVersionUnsupported,
+    ApiRouteNotFound,
+    RepositoryNotFound,
+    RepositoryStateConflict,
+    ResourceVersionStale,
+    RequestInvalid,
+    InternalError,
+}
+
+#[derive(Serialize)]
+struct ApiErrorBody {
+    error: ApiErrorDetails,
+}
+
+#[derive(Serialize)]
+struct ApiErrorDetails {
+    code: ApiErrorCode,
+    message: String,
+}
+
+struct ApiError {
+    status: StatusCode,
+    code: ApiErrorCode,
+    message: String,
+}
+
+impl ApiError {
+    fn new(status: StatusCode, code: ApiErrorCode, message: impl Into<String>) -> Self {
+        Self {
+            status,
+            code,
+            message: message.into(),
+        }
+    }
+
+    fn unauthorized() -> Self {
+        Self::new(
+            StatusCode::UNAUTHORIZED,
+            ApiErrorCode::AuthUnauthorized,
+            "A valid session bearer token is required.",
+        )
+    }
+
+    fn forbidden() -> Self {
+        Self::new(
+            StatusCode::FORBIDDEN,
+            ApiErrorCode::AuthForbidden,
+            "This window has read-only access.",
+        )
+    }
+
+    fn unsupported_version() -> Self {
+        Self::new(
+            StatusCode::NOT_ACCEPTABLE,
+            ApiErrorCode::ApiVersionUnsupported,
+            "The requested API major version is not supported.",
+        )
+    }
+
+    fn route_not_found() -> Self {
+        Self::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::ApiRouteNotFound,
+            "API route was not found.",
+        )
+    }
+
+    fn repository_not_found() -> Self {
+        Self::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RepositoryNotFound,
+            "Repository was not found in this session.",
+        )
+    }
+
+    #[allow(dead_code)]
+    fn state_conflict(message: impl Into<String>) -> Self {
+        Self::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::RepositoryStateConflict,
+            message,
+        )
+    }
+
+    #[allow(dead_code)]
+    fn stale_resource() -> Self {
+        Self::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::ResourceVersionStale,
+            "The resource changed since it was read. Refresh and retry.",
+        )
+    }
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        let body = ApiErrorBody {
+            error: ApiErrorDetails {
+                code: self.code,
+                message: self.message,
+            },
+        };
+        (self.status, Json(body)).into_response()
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EventEnvelope<'a> {
+    event_id: String,
+    protocol_version: u8,
+    #[serde(rename = "type")]
+    event_type: &'a str,
+    occurred_at_ms: u128,
+    payload: serde_json::Value,
 }
 
 #[tokio::main]
@@ -48,34 +189,25 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .ok()
         .and_then(|value| value.parse::<u16>().ok())
         .unwrap_or(0);
-    let token = env::var("GITCREST_AUTH_TOKEN")
+    let write_token = env::var("GITCREST_AUTH_TOKEN")
         .map_err(|_| "GITCREST_AUTH_TOKEN is required to start gitcrest-core")?;
+    let read_only_token = env::var("GITCREST_READONLY_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty());
+    if read_only_token.as_deref() == Some(write_token.as_str()) {
+        return Err("GITCREST_READONLY_TOKEN must differ from GITCREST_AUTH_TOKEN".into());
+    }
 
     let state = AppState {
-        token: Arc::new(token),
+        read_write_token: Arc::new(write_token),
+        read_only_token: read_only_token.map(Arc::new),
     };
-
-    let api = Router::new()
-        .route("/version", get(version))
-        .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
-
-    let api = match env::var("GITCREST_CORS_ORIGIN") {
-        Ok(origin) if !origin.is_empty() => {
-            let origin = origin.parse::<HeaderValue>()?;
-            api.layer(
-                CorsLayer::new()
-                    .allow_origin(origin)
-                    .allow_methods([Method::GET, Method::OPTIONS])
-                    .allow_headers([AUTHORIZATION, CONTENT_TYPE]),
-            )
-        }
-        _ => api,
-    };
-
-    let app = Router::new()
-        .route("/health", get(health))
-        .nest("/api", api)
-        .with_state(state);
+    let cors_origin = env::var("GITCREST_CORS_ORIGIN")
+        .ok()
+        .filter(|origin| !origin.is_empty())
+        .map(|origin| origin.parse::<HeaderValue>())
+        .transpose()?;
+    let app = app_router(state, cors_origin);
 
     let listener = TcpListener::bind((host.as_str(), port)).await?;
     let address = listener.local_addr()?;
@@ -85,43 +217,499 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
+    let api = Router::new()
+        .route("/version", get(version))
+        .route("/v1/repositories", get(list_repositories))
+        .route("/v1/repositories/:repo_id", get(get_repository))
+        .route("/v1/events", get(events))
+        .fallback(api_not_found);
+
+    #[cfg(test)]
+    let api = api.route("/v1/test/write-probe", axum::routing::post(write_probe));
+
+    let api = api
+        .layer(middleware::from_fn(require_api_version))
+        .layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
+    let api = if let Some(origin) = cors_origin {
+        api.layer(
+            CorsLayer::new()
+                .allow_origin(origin)
+                .allow_methods([
+                    Method::GET,
+                    Method::POST,
+                    Method::PUT,
+                    Method::PATCH,
+                    Method::DELETE,
+                    Method::OPTIONS,
+                ])
+                .allow_headers([
+                    AUTHORIZATION,
+                    CONTENT_TYPE,
+                    HeaderName::from_static("x-gitcrest-api-version"),
+                ]),
+        )
+    } else {
+        api
+    };
+    let api = api.layer(middleware::from_fn(add_api_version_header));
+
+    Router::new()
+        .route("/health", get(health))
+        .nest("/api", api)
+        .with_state(state)
+}
+
 fn announce_ready(host: &str, address: SocketAddr) {
     let message = ReadyMessage {
         event: "ready",
         host,
         port: address.port(),
     };
-
-    println!("{}", serde_json::to_string(&message).expect("ready message serializes"));
+    println!(
+        "{}",
+        serde_json::to_string(&message).expect("ready message serializes")
+    );
 }
 
 async fn health() -> impl IntoResponse {
-    StatusCode::NO_CONTENT
+    (StatusCode::NO_CONTENT, [("Cache-Control", "no-store")])
 }
 
 async fn version() -> impl IntoResponse {
     Json(VersionResponse {
         name: "gitcrest-core",
         version: env!("CARGO_PKG_VERSION"),
+        api_version: 1,
     })
+}
+
+async fn get_repository(Path(_repo_id): Path<String>) -> ApiError {
+    ApiError::repository_not_found()
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RepositorySummary {
+    repo_id: String,
+    path: String,
+    head: Option<String>,
+    state: &'static str,
+}
+
+async fn list_repositories() -> Json<Vec<RepositorySummary>> {
+    Json(Vec::new())
+}
+
+async fn api_not_found() -> ApiError {
+    ApiError::route_not_found()
+}
+
+async fn events(headers: HeaderMap, ws: WebSocketUpgrade) -> Result<Response, ApiError> {
+    let protocols = headers
+        .get(SEC_WEBSOCKET_PROTOCOL)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default();
+    if !protocols
+        .split(',')
+        .any(|protocol| protocol.trim() == "gitcrest.events.v1")
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The gitcrest.events.v1 WebSocket subprotocol is required.",
+        ));
+    }
+
+    Ok(ws
+        .protocols(["gitcrest.events.v1"])
+        .on_upgrade(event_socket)
+        .into_response())
+}
+
+async fn event_socket(mut socket: WebSocket) {
+    let event_id = NEXT_EVENT_ID.fetch_add(1, Ordering::Relaxed);
+    let occurred_at_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis();
+    let event = EventEnvelope {
+        event_id: event_id.to_string(),
+        protocol_version: 1,
+        event_type: "connection.resyncRequired",
+        occurred_at_ms,
+        payload: serde_json::json!({ "reason": "newConnection" }),
+    };
+    if let Ok(message) = serde_json::to_string(&event) {
+        if socket.send(Message::Text(message)).await.is_err() {
+            return;
+        }
+    }
+
+    while let Some(Ok(message)) = socket.recv().await {
+        match message {
+            Message::Ping(payload) => {
+                if socket.send(Message::Pong(payload)).await.is_err() {
+                    break;
+                }
+            }
+            Message::Close(_) => break,
+            _ => {}
+        }
+    }
+}
+
+async fn require_api_version(request: Request<Body>, next: Next) -> Response {
+    let is_bootstrap_version = matches!(request.uri().path(), "/api/version" | "/version");
+    if !is_bootstrap_version {
+        let requested = request
+            .headers()
+            .get("X-GitCrest-API-Version")
+            .and_then(|value| value.to_str().ok());
+        if requested != Some(API_VERSION) {
+            return ApiError::unsupported_version().into_response();
+        }
+    }
+
+    next.run(request).await
+}
+
+async fn add_api_version_header(request: Request<Body>, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    response.headers_mut().insert(
+        "X-GitCrest-API-Version",
+        HeaderValue::from_static(API_VERSION),
+    );
+    response
 }
 
 async fn require_auth(
     State(state): State<AppState>,
     request: Request<Body>,
     next: Next,
-) -> Result<Response, StatusCode> {
-    let expected = format!("Bearer {}", state.token);
-    let authorized = request
+) -> Response {
+    let requires_write = !matches!(
+        request.method(),
+        &Method::GET | &Method::HEAD | &Method::OPTIONS
+    );
+    let token = request
         .headers()
         .get(AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .map(|value| value == expected)
-        .unwrap_or(false);
+        .and_then(|value| value.strip_prefix("Bearer "));
+    match token {
+        Some(token) if token == state.read_write_token.as_str() => {}
+        Some(token)
+            if state
+                .read_only_token
+                .as_deref()
+                .is_some_and(|readonly| token == readonly.as_str()) =>
+        {
+            if requires_write {
+                return ApiError::forbidden().into_response();
+            }
+        }
+        _ => return ApiError::unauthorized().into_response(),
+    }
+    next.run(request).await
+}
 
-    if !authorized {
-        return Err(StatusCode::UNAUTHORIZED);
+#[cfg(test)]
+async fn write_probe() -> impl IntoResponse {
+    StatusCode::NO_CONTENT
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::{
+        body::to_bytes,
+        http::{
+            header::{CONNECTION, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE},
+            Request,
+        },
+    };
+    use futures_util::{SinkExt, StreamExt};
+    use tokio_tungstenite::{
+        connect_async,
+        tungstenite::{
+            client::IntoClientRequest, http::header::SEC_WEBSOCKET_PROTOCOL,
+            Message as ClientMessage,
+        },
+    };
+    use tower::ServiceExt;
+
+    use super::*;
+
+    const WRITE_TOKEN: &str = "test-write-token";
+    const READ_ONLY_TOKEN: &str = "test-read-only-token";
+
+    fn test_app(cors_origin: Option<&str>) -> Router {
+        let state = AppState {
+            read_write_token: Arc::new(WRITE_TOKEN.to_string()),
+            read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+        };
+        app_router(state, cors_origin.map(|origin| origin.parse().unwrap()))
     }
 
-    Ok(next.run(request).await)
+    fn request(uri: &str, token: Option<&str>) -> Request<Body> {
+        let mut builder = Request::builder()
+            .uri(uri)
+            .header("X-GitCrest-API-Version", API_VERSION);
+        if let Some(token) = token {
+            builder = builder.header(AUTHORIZATION, format!("Bearer {token}"));
+        }
+        builder.body(Body::empty()).unwrap()
+    }
+
+    async fn error_code(response: Response) -> (StatusCode, String) {
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        (status, value["error"]["code"].as_str().unwrap().to_string())
+    }
+
+    #[tokio::test]
+    async fn version_requires_auth_and_returns_version_header() {
+        let unauthenticated = Request::builder()
+            .uri("/api/version")
+            .body(Body::empty())
+            .unwrap();
+        let response = test_app(None).oneshot(unauthenticated).await.unwrap();
+        assert_eq!(response.headers()["X-GitCrest-API-Version"], "1");
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(code, "AUTH_UNAUTHORIZED");
+
+        let authenticated = Request::builder()
+            .uri("/api/version")
+            .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+            .body(Body::empty())
+            .unwrap();
+        let response = test_app(None).oneshot(authenticated).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["X-GitCrest-API-Version"], "1");
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let version: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(version["apiVersion"], 1);
+    }
+
+    #[tokio::test]
+    async fn health_is_public_empty_and_does_not_return_session_data() {
+        let response = test_app(None)
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+        assert_eq!(response.headers()["cache-control"], "no-store");
+        assert!(to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn unknown_repository_and_api_route_use_stable_error_envelopes() {
+        let response = test_app(None)
+            .oneshot(request(
+                "/api/v1/repositories/repo_missing",
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(code, "REPOSITORY_NOT_FOUND");
+
+        let response = test_app(None)
+            .oneshot(request("/api/v1/not-a-route", Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(code, "API_ROUTE_NOT_FOUND");
+
+        let response = test_app(None)
+            .oneshot(request("/api/v1/not-a-route", None))
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(code, "AUTH_UNAUTHORIZED");
+    }
+
+    #[tokio::test]
+    async fn read_only_window_cannot_use_write_routes() {
+        let response = test_app(None)
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/test/write-probe")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {READ_ONLY_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(code, "AUTH_FORBIDDEN");
+
+        let response = test_app(None)
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/test/write-probe")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[tokio::test]
+    async fn event_websocket_requires_authentication_and_protocol_version() {
+        let make_upgrade = |token: Option<&str>| {
+            let mut builder = Request::builder()
+                .method(Method::GET)
+                .uri("/api/v1/events")
+                .header("X-GitCrest-API-Version", API_VERSION)
+                .header(CONNECTION, "upgrade")
+                .header(UPGRADE, "websocket")
+                .header(SEC_WEBSOCKET_VERSION, "13")
+                .header(SEC_WEBSOCKET_KEY, "dGhlIHNhbXBsZSBub25jZQ==")
+                .header(SEC_WEBSOCKET_PROTOCOL, "gitcrest.events.v1");
+            if let Some(token) = token {
+                builder = builder.header(AUTHORIZATION, format!("Bearer {token}"));
+            }
+            builder.body(Body::empty()).unwrap()
+        };
+
+        let response = test_app(None).oneshot(make_upgrade(None)).await.unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(code, "AUTH_UNAUTHORIZED");
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, test_app(None)).await.unwrap();
+        });
+
+        let mut request = format!("ws://{address}/api/v1/events")
+            .into_client_request()
+            .unwrap();
+        request
+            .headers_mut()
+            .insert("X-GitCrest-API-Version", API_VERSION.parse().unwrap());
+        request.headers_mut().insert(
+            AUTHORIZATION,
+            format!("Bearer {READ_ONLY_TOKEN}").parse().unwrap(),
+        );
+        request.headers_mut().insert(
+            SEC_WEBSOCKET_PROTOCOL,
+            "gitcrest.events.v1".parse().unwrap(),
+        );
+        let (mut socket, response) = connect_async(request).await.unwrap();
+        assert_eq!(response.status(), StatusCode::SWITCHING_PROTOCOLS);
+        assert_eq!(
+            response.headers()[SEC_WEBSOCKET_PROTOCOL],
+            "gitcrest.events.v1"
+        );
+
+        let message = socket.next().await.unwrap().unwrap();
+        let payload: serde_json::Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
+        assert_eq!(payload["type"], "connection.resyncRequired");
+        assert_eq!(payload["protocolVersion"], 1);
+        socket.send(ClientMessage::Close(None)).await.unwrap();
+        server.abort();
+    }
+
+    #[tokio::test]
+    async fn conflict_and_stale_precondition_codes_keep_distinct_statuses() {
+        let (status, code) =
+            error_code(ApiError::state_conflict("merge is in progress").into_response()).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(code, "REPOSITORY_STATE_CONFLICT");
+
+        let (status, code) = error_code(ApiError::stale_resource().into_response()).await;
+        assert_eq!(status, StatusCode::PRECONDITION_FAILED);
+        assert_eq!(code, "RESOURCE_VERSION_STALE");
+    }
+
+    #[tokio::test]
+    async fn incompatible_api_version_is_rejected() {
+        let response = test_app(None)
+            .oneshot(
+                Request::builder()
+                    .uri("/api/v1/repositories/repo_missing")
+                    .header("X-GitCrest-API-Version", "2")
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::NOT_ACCEPTABLE);
+        assert_eq!(code, "API_VERSION_UNSUPPORTED");
+    }
+
+    #[tokio::test]
+    async fn cors_allows_only_the_configured_renderer_origin() {
+        let app = test_app(Some("http://localhost:5174"));
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/events")
+                    .header("Origin", "http://localhost:5174")
+                    .header("Access-Control-Request-Method", "GET")
+                    .header(
+                        "Access-Control-Request-Headers",
+                        "authorization,x-gitcrest-api-version",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.headers()["Access-Control-Allow-Origin"],
+            "http://localhost:5174"
+        );
+
+        let response = test_app(Some("http://localhost:5174"))
+            .oneshot(
+                Request::builder()
+                    .method(Method::OPTIONS)
+                    .uri("/api/v1/events")
+                    .header("Origin", "http://localhost:5175")
+                    .header("Access-Control-Request-Method", "GET")
+                    .header(
+                        "Access-Control-Request-Headers",
+                        "authorization,x-gitcrest-api-version",
+                    )
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_ne!(
+            response
+                .headers()
+                .get("Access-Control-Allow-Origin")
+                .and_then(|v| v.to_str().ok()),
+            Some("http://localhost:5175")
+        );
+    }
 }

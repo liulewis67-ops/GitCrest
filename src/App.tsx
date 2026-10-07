@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { GitCrestApiClient } from "./api/client";
 import "./App.css";
 
 function App() {
@@ -8,25 +9,32 @@ function App() {
 
   useEffect(() => {
     let cancelled = false;
+    let unsubscribeFromEvents: (() => void) | undefined;
 
     async function connect() {
       try {
         const connection = await window.gitcrest.getSidecarConnection();
-        const response = await fetch(`${connection.baseUrl}/api/version`, {
-          headers: {
-            Authorization: `Bearer ${connection.token}`,
-          },
-        });
-
-        if (!response.ok) {
-          throw new Error(`Core responded with ${response.status}`);
-        }
-
-        const body = (await response.json()) as { name: string; version: string };
+        const api = new GitCrestApiClient(connection.baseUrl, connection.token);
+        const body = await api.getVersion();
         if (!cancelled) {
           setCoreUrl(connection.baseUrl);
-          setVersion(`${body.name} ${body.version}`);
+          setVersion(`${body.name} ${body.version} (API v${body.apiVersion})`);
           setStatus("Connected to local Rust core");
+        }
+
+        const unsubscribe = await window.gitcrest.subscribeToEvents((event) => {
+          if (event.type === "connection.resyncRequired") {
+            void api.listRepositories().catch((syncError: unknown) => {
+              if (!cancelled) {
+                setStatus(syncError instanceof Error ? syncError.message : "Failed to refresh repository state");
+              }
+            });
+          }
+        });
+        if (cancelled) {
+          unsubscribe();
+        } else {
+          unsubscribeFromEvents = unsubscribe;
         }
       } catch (error) {
         if (!cancelled) {
@@ -39,6 +47,7 @@ function App() {
 
     return () => {
       cancelled = true;
+      unsubscribeFromEvents?.();
     };
   }, []);
 

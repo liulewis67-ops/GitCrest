@@ -10,6 +10,8 @@ if (-not (Test-Path -LiteralPath $sidecarPath)) {
 
 $tokenBytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
 $token = [Convert]::ToBase64String($tokenBytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
+$readOnlyTokenBytes = [System.Security.Cryptography.RandomNumberGenerator]::GetBytes(32)
+$readOnlyToken = [Convert]::ToBase64String($readOnlyTokenBytes).TrimEnd("=").Replace("+", "-").Replace("/", "_")
 $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
 $startInfo.FileName = $sidecarPath
 $startInfo.UseShellExecute = $false
@@ -18,6 +20,7 @@ $startInfo.RedirectStandardError = $true
 $startInfo.Environment["GITCREST_HOST"] = "127.0.0.1"
 $startInfo.Environment["GITCREST_PORT"] = "0"
 $startInfo.Environment["GITCREST_AUTH_TOKEN"] = $token
+$startInfo.Environment["GITCREST_READONLY_TOKEN"] = $readOnlyToken
 $startInfo.Environment["GITCREST_CORS_ORIGIN"] = $CorsOrigin
 
 $process = [System.Diagnostics.Process]::new()
@@ -40,20 +43,25 @@ try {
   $baseUrl = "http://127.0.0.1:$($ready.port)"
   $health = Invoke-WebRequest "$baseUrl/health" -SkipHttpErrorCheck
   $unauthorized = Invoke-WebRequest "$baseUrl/api/version" -SkipHttpErrorCheck
-  $authorized = Invoke-WebRequest "$baseUrl/api/version" -Headers @{ Authorization = "Bearer $token" }
-  $version = $authorized.Content | ConvertFrom-Json
+  $versionResponse = Invoke-WebRequest "$baseUrl/api/version" -Headers @{ Authorization = "Bearer $token" }
+  $apiHeaders = @{ "X-GitCrest-API-Version" = "1" }
+  $authorized = Invoke-WebRequest "$baseUrl/api/v1/repositories/repo_missing" -Headers ($apiHeaders + @{ Authorization = "Bearer $token" }) -SkipHttpErrorCheck
+  $readOnly = Invoke-WebRequest "$baseUrl/api/v1/repositories/repo_missing" -Headers ($apiHeaders + @{ Authorization = "Bearer $readOnlyToken" }) -SkipHttpErrorCheck
+  $version = $versionResponse.Content | ConvertFrom-Json
 
   if ($health.StatusCode -ne 204) { throw "Expected /health 204, got $($health.StatusCode)" }
   if ($unauthorized.StatusCode -ne 401) { throw "Expected unauthenticated /api/version 401, got $($unauthorized.StatusCode)" }
-  if ($authorized.StatusCode -ne 200 -or $version.name -ne "gitcrest-core") {
-    throw "Authenticated /api/version returned an unexpected response: $($authorized.Content)"
+  if ($versionResponse.StatusCode -ne 200 -or $version.name -ne "gitcrest-core") {
+    throw "Authenticated /api/version returned an unexpected response: $($versionResponse.StatusCode) $($versionResponse.Content)"
   }
+  if ($authorized.StatusCode -ne 404) { throw "Read-write repository request returned $($authorized.StatusCode)" }
+  if ($readOnly.StatusCode -ne 404) { throw "Read-only repository request returned $($readOnly.StatusCode)" }
 
   if ($CorsOrigin) {
     $preflight = Invoke-WebRequest "$baseUrl/api/version" -Method Options -Headers @{
       Origin = $CorsOrigin
       "Access-Control-Request-Method" = "GET"
-      "Access-Control-Request-Headers" = "authorization"
+      "Access-Control-Request-Headers" = "authorization,x-gitcrest-api-version"
     } -SkipHttpErrorCheck
     if ($preflight.StatusCode -ne 200 -or $preflight.Headers["Access-Control-Allow-Origin"] -ne $CorsOrigin) {
       throw "CORS preflight did not allow the configured renderer origin: $CorsOrigin"
@@ -63,7 +71,7 @@ try {
     $rejectedPreflight = Invoke-WebRequest "$baseUrl/api/version" -Method Options -Headers @{
       Origin = $otherOrigin
       "Access-Control-Request-Method" = "GET"
-      "Access-Control-Request-Headers" = "authorization"
+      "Access-Control-Request-Headers" = "authorization,x-gitcrest-api-version"
     } -SkipHttpErrorCheck
     if ($rejectedPreflight.Headers["Access-Control-Allow-Origin"] -eq $otherOrigin) {
       throw "CORS unexpectedly allowed unconfigured origin: $otherOrigin"
@@ -74,6 +82,7 @@ try {
   "PASS /health returned 204"
   "PASS unauthenticated /api/version returned 401"
   "PASS authenticated /api/version returned 200 ($($version.name) $($version.version))"
+  "PASS read-write and read-only tokens receive structured repository 404 responses"
   if ($CorsOrigin) {
     "PASS CORS preflight allows only configured origin $CorsOrigin"
   }

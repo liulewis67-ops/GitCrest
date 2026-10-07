@@ -1,0 +1,289 @@
+openapi: 3.1.0
+info:
+  title: GitCrest Local API
+  version: 1.0.0
+  description: >-
+    Versioned local API for the GitCrest Electron renderer and its read-only windows.
+servers:
+  - url: http://127.0.0.1:{port}
+    variables:
+      port:
+        default: "49152"
+security:
+  - sessionBearer: []
+paths:
+  /health:
+    get:
+      operationId: health
+      security: []
+      summary: Process liveness probe
+      responses:
+        "204":
+          description: The sidecar is alive. The response has no body or session data.
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                const: no-store
+  /api/version:
+    get:
+      operationId: getVersion
+      summary: Get the engine and API compatibility versions
+      responses:
+        "200":
+          description: Version information
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionResponse"
+              example:
+                name: gitcrest-core
+                version: 0.1.0
+                apiVersion: 1
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /api/v1/repositories/{repoId}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: getRepository
+      summary: Get a registered repository by opaque ID
+      parameters:
+        - name: repoId
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/RepoId"
+      responses:
+        "200":
+          description: Repository state
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The repository ID is not registered in this session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+              example:
+                error:
+                  code: REPOSITORY_NOT_FOUND
+                  message: Repository was not found in this session.
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/repositories:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: listRepositories
+      summary: List repositories registered in this desktop session
+      responses:
+        "200":
+          description: The complete repository list for the current sidecar session.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Repository"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/events:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: subscribeToEvents
+      summary: Subscribe to versioned repository and task events over WebSocket
+      description: See events-v1.md for handshake and reconnect rules.
+      x-websocket: true
+      responses:
+        "101":
+          description: WebSocket upgraded. The authorization header is mandatory.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+components:
+  securitySchemes:
+    sessionBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: session token
+  headers:
+    ApiVersion:
+      description: Major API contract version used by this response.
+      schema:
+        type: string
+        const: "1"
+  responses:
+    Unauthorized:
+      description: Missing or invalid session token.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            error:
+              code: AUTH_UNAUTHORIZED
+              message: A valid session bearer token is required.
+    Forbidden:
+      description: The caller is authenticated but does not have the requested window capability.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            error:
+              code: AUTH_FORBIDDEN
+              message: This window has read-only access.
+    UnsupportedVersion:
+      description: The requested API major version is not supported.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            error:
+              code: API_VERSION_UNSUPPORTED
+              message: The requested API major version is not supported.
+    StateConflict:
+      description: The operation conflicts with the repository's current Git state.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            error:
+              code: REPOSITORY_STATE_CONFLICT
+              message: A merge is already in progress.
+    StaleResource:
+      description: The supplied resource version or precondition has expired.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            error:
+              code: RESOURCE_VERSION_STALE
+              message: The resource changed since it was read. Refresh and retry.
+  parameters:
+    ApiVersion:
+      name: X-GitCrest-API-Version
+      in: header
+      required: true
+      schema:
+        type: string
+        const: "1"
+  schemas:
+    RepoId:
+      type: string
+      minLength: 1
+      maxLength: 128
+      description: Opaque, stable ID assigned by RepositoryManager; never a filesystem path.
+      example: repo_01J9M6G3C4Y4Y2B8YH7AKQ2K8N
+    VersionResponse:
+      type: object
+      additionalProperties: false
+      required: [name, version, apiVersion]
+      properties:
+        name:
+          type: string
+        version:
+          type: string
+        apiVersion:
+          type: integer
+          const: 1
+    Repository:
+      type: object
+      additionalProperties: false
+      required: [repoId, path, head, state]
+      properties:
+        repoId:
+          $ref: "#/components/schemas/RepoId"
+        path:
+          type: string
+        head:
+          type: [string, "null"]
+        state:
+          type: string
+          enum: [normal, merging, rebasing, cherryPicking, bisecting]
+    TaskStatus:
+      type: string
+      enum: [queued, running, waitingForInput, succeeded, failed, cancelled]
+    EventEnvelope:
+      type: object
+      additionalProperties: false
+      required: [eventId, protocolVersion, type, occurredAtMs, payload]
+      properties:
+        eventId:
+          type: string
+          description: Monotonic within a sidecar session; not a durable cursor.
+        protocolVersion:
+          type: integer
+          const: 1
+        repoId:
+          $ref: "#/components/schemas/RepoId"
+        type:
+          type: string
+          enum:
+            - repository.updated
+            - status.changed
+            - log.refsChanged
+            - task.started
+            - task.progress
+            - task.completed
+            - task.failed
+            - connection.resyncRequired
+        occurredAtMs:
+          type: integer
+          format: int64
+          description: Unix timestamp in milliseconds.
+        payload:
+          type: object
+          additionalProperties: true
+    ApiErrorCode:
+      type: string
+      enum:
+        - AUTH_UNAUTHORIZED
+        - AUTH_FORBIDDEN
+        - API_VERSION_UNSUPPORTED
+        - API_ROUTE_NOT_FOUND
+        - REPOSITORY_NOT_FOUND
+        - REPOSITORY_STATE_CONFLICT
+        - RESOURCE_VERSION_STALE
+        - REQUEST_INVALID
+        - INTERNAL_ERROR
+    ApiError:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code:
+          $ref: "#/components/schemas/ApiErrorCode"
+        message:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+    ApiErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ApiError"

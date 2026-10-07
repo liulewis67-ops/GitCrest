@@ -53,7 +53,7 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S0.1 | 验收现有 Electron/React/Rust sidecar 骨架，修复启动、退出和打包路径问题。 | 开发模式启动后主窗口成功读取 `/api/version`；无 token 请求得到 401；sidecar 只绑定 `127.0.0.1` 随机端口；关闭应用会结束子进程；启动失败有可读错误且不会无限等待；`pnpm build`、`cargo test` 通过。 | 已完成 |
-| S0.2 | 固化 API/事件契约与权限边界：repoId、错误码、任务状态、WS 重连、窗口权限、版本策略。 | 前后端共享或由契约生成的请求/响应类型与示例可用；鉴权覆盖所有业务路由和 WS；健康检查无敏感信息；断线重连必须全量重新获取当前仓库状态；Diff 窗口无法调用写 API。契约测试覆盖成功、401、404、冲突/过期状态。 | 未开始 |
+| S0.2 | 固化 API/事件契约与权限边界：repoId、错误码、任务状态、WS 重连、窗口权限、版本策略。 | 前后端共享或由契约生成的请求/响应类型与示例可用；鉴权覆盖所有业务路由和 WS；健康检查无敏感信息；断线重连必须全量重新获取当前仓库状态；Diff 窗口无法调用写 API。契约测试覆盖成功、401、404、冲突/过期状态。 | 已完成 |
 | S0.3 | 建立测试与质量门禁：Rust 单元/集成、前端组件、API mock、桌面 E2E、临时 Git 仓库 fixture。 | 一条可重复执行的本地检查命令覆盖类型检查、构建和两端测试；CI 在提交时运行；E2E 能启动 sidecar、创建临时仓库并在结束后清理；失败退出码非零。 | 未开始 |
 | S0.4 | 建立设计系统与主窗口骨架：主题、三栏加底部区、欢迎页、命令面板入口、响应式拖拽面板。 | 对照 `05`/`09` 文档检查欢迎页和主窗口布局；深浅主题、状态色加文字/图标、焦点可见；窄于最小窗口尺寸时不遮挡主要操作；命令面板能显示上下文禁用原因。 | 未开始 |
 
@@ -153,5 +153,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm build`、`cargo build --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml` 均通过（当前 0 个 Rust 单元测试）；`pwsh -File doc/evidence/S0.1/check-sidecar.ps1 -CorsOrigin http://localhost:5174` 通过，验证随机 loopback 端口、health 204、无 token 401、有效 token 200、进程清理以及精确 CORS origin 放行。
 - 手工验证：Windows Electron 37 `pnpm dev` 窗口显示 `Connected to local Rust core` 和 `gitcrest-core 0.1.0`；正常关闭后 Electron 主进程和 sidecar 均退出。临时移走 sidecar 后显示可读启动错误；用不输出 ready 的 sidecar fixture 验证 10 秒超时会杀掉子进程并显示错误。
 - 证据：`doc/evidence/S0.1/check-sidecar.ps1`、`doc/evidence/S0.1/no-ready-sidecar.rs`、`doc/evidence/S0.1/electron-window.png`、`doc/evidence/S0.1/startup-error.png`、`doc/evidence/S0.1/startup-timeout.png`。
-- 完成 commit：待补记
+- 完成 commit：`f64a4f1`
 - 限制/后续：当前 Rust 测试套件有 0 个单元测试，sidecar/API 自动化覆盖在 S0.3 扩充。跨平台打包路径在 S7.4 验收。
+
+### S0.2 — API/事件契约与权限边界
+- 状态：已完成
+- 日期：2026-10-07
+- 测试：`pnpm api:types`、`pnpm build`、`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo build --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml` 均通过；8 个 Rust 测试覆盖 API 版本、鉴权、404 错误 envelope、只读写保护、冲突/过期状态、健康检查、CORS 和真实 WS upgrade/认证/首条重同步事件。`pwsh -File doc/evidence/S0.1/check-sidecar.ps1 -CorsOrigin http://localhost:5174` 通过，验证随机 loopback 端口、204 健康检查、401/200 鉴权、读写与只读 token 请求及精确 CORS 放行，并确认 sidecar 清理。
+- 手工验证：`pnpm dev` 成功构建 main/preload/renderer 并启动 Electron；当前桌面自动化接口未暴露原生窗口，因此本阶段未取得有效窗口截图或检查渲染结果。开发窗口的首次 API 连接曾在 fetch 绑定修复前失败；修复后 `pnpm build` 与 sidecar 实测均通过。
+- 证据：`doc/api/v1.yaml`、`doc/api/events-v1.md`、`src/api/schema.ts`、`doc/evidence/S0.1/check-sidecar.ps1`。原开发窗口截图在首次 API fetch 修复前生成，已移除，不作为通过证据。
+- 完成 commit：`d04b0b9`
+- 限制/后续：当前 repo list 为空，S0.2 客户端收到 `connection.resyncRequired` 后重新获取 repository list；具体 repository/status/refs/log 快照待 RepositoryManager 与后续状态 API 阶段提供。事件断线重连由 Electron 主进程桥接并在每次服务端重连后触发全量重同步。

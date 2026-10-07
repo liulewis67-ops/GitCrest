@@ -7,6 +7,7 @@ import { app } from "electron";
 export interface SidecarConnection {
   baseUrl: string;
   token: string;
+  readOnlyToken: string;
 }
 
 interface ReadyMessage {
@@ -58,6 +59,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
   }
 
   const token = randomBytes(32).toString("base64url");
+  const readOnlyToken = randomBytes(32).toString("base64url");
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   const corsOrigin = rendererUrl ? new URL(rendererUrl).origin : "";
 
@@ -88,7 +90,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
         reject(new Error("Rust sidecar exited without a valid ready message."));
         return;
       }
-      connection = { baseUrl: `http://${ready.host}:${ready.port}`, token };
+      connection = { baseUrl: `http://${ready.host}:${ready.port}`, token, readOnlyToken };
       resolvePromise(connection);
     };
 
@@ -98,6 +100,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
         GITCREST_HOST: "127.0.0.1",
         GITCREST_PORT: "0",
         GITCREST_AUTH_TOKEN: token,
+        GITCREST_READONLY_TOKEN: readOnlyToken,
         GITCREST_CORS_ORIGIN: corsOrigin,
       },
       windowsHide: true,

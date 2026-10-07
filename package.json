@@ -8,6 +8,7 @@
     "dev": "electron-vite dev",
     "frontend:dev": "vite",
     "build": "tsc --noEmit && electron-vite build",
+    "api:types": "openapi-typescript doc/api/v1.yaml -o src/api/schema.ts",
     "frontend:build": "tsc && vite build",
     "preview": "vite preview",
     "frontend:preview": "vite preview",
@@ -19,16 +20,19 @@
   },
   "dependencies": {
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.18.2",
+    "@vitejs/plugin-react": "^4.6.0",
     "electron": "^37.0.0",
     "electron-builder": "^26.0.0",
     "electron-vite": "^4.0.0",
-    "@vitejs/plugin-react": "^4.6.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "~5.8.3",
     "vite": "^7.0.4"
   },
