@@ -1,5 +1,5 @@
 import type { DiffDocumentResponse } from "../../api/client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface SplitDiffProps {
   document: DiffDocumentResponse;
@@ -10,8 +10,46 @@ interface SplitDiffProps {
 
 export function SplitDiff({ document, onStageSelection, onCommitSelection, disabled }: SplitDiffProps) {
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
+  const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
+  const [activeHunk, setActiveHunk] = useState<number | null>(null);
+  const hunkRefs = useRef<Array<HTMLElement | null>>([]);
   const readOnly = document.scope === "commit";
-  useEffect(() => setSelection([]), [document.revision]);
+  useEffect(() => {
+    setSelection([]);
+    setCollapsedHunks(new Set());
+    setActiveHunk(null);
+    hunkRefs.current = [];
+  }, [document.revision]);
+  const navigableHunks = document.status === "text"
+    ? document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.some((row) => row.kind === "change") ? [hunkIndex] : [])
+    : [];
+  const navigateHunk = (direction: -1 | 1) => {
+    if (navigableHunks.length === 0) return;
+    const activeIndex = activeHunk === null ? -1 : navigableHunks.indexOf(activeHunk);
+    const nextIndex = activeIndex === -1
+      ? (direction === 1 ? 0 : navigableHunks.length - 1)
+      : (activeIndex + direction + navigableHunks.length) % navigableHunks.length;
+    const nextHunk = navigableHunks[nextIndex];
+    if (nextHunk === undefined) return;
+    setCollapsedHunks((current) => {
+      if (!current.has(nextHunk)) return current;
+      const next = new Set(current);
+      next.delete(nextHunk);
+      return next;
+    });
+    setActiveHunk(nextHunk);
+    requestAnimationFrame(() => hunkRefs.current[nextHunk]?.scrollIntoView?.({ block: "nearest" }));
+  };
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "F7" || event.altKey || event.ctrlKey || event.metaKey || navigableHunks.length === 0) return;
+      if (event.target instanceof HTMLElement && event.target.matches("input, textarea, select, [contenteditable='true']")) return;
+      event.preventDefault();
+      navigateHunk(event.shiftKey ? -1 : 1);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [document.revision, navigableHunks.length, activeHunk]);
   if (document.status !== "text") {
     const descriptions: Record<DiffDocumentResponse["status"], string> = {
       text: "Text diff",
@@ -26,15 +64,29 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
   }
 
   return (
-    <div className="splitDiff" aria-label={`${document.scope} diff for ${document.path}`}>
+    <div
+      className="splitDiff"
+      aria-label={`${document.scope} diff for ${document.path}`}
+      tabIndex={0}
+    >
       <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? "COMMIT ↔ FIRST PARENT" : document.scope === "index" ? "INDEX ↔ HEAD" : "WORKING TREE ↔ INDEX"}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
+      <div className="splitDiffNavigation" aria-label="Diff navigation">
+        <span>{navigableHunks.length ? `${activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1} / ${navigableHunks.length} changes` : "No changes"}</span>
+        <button type="button" onClick={() => navigateHunk(-1)} disabled={navigableHunks.length === 0} title="Previous change (Shift+F7)">Previous change</button>
+        <button type="button" onClick={() => navigateHunk(1)} disabled={navigableHunks.length === 0} title="Next change (F7)">Next change</button>
+      </div>
       <div className="splitDiffColumns" aria-hidden="true"><div /><div>OLD</div><div>NEW</div></div>
       {document.hunks.map((hunk, hunkIndex) => {
         const changeRowIndexes = hunk.rows.flatMap((row, rowIndex) => row.kind === "change" ? [rowIndex] : []);
         const hunkSelected = selection.some((item) => item.hunkIndex === hunkIndex && item.rowIndex === undefined);
         const allRowsSelected = changeRowIndexes.length > 0 && changeRowIndexes.every((rowIndex) => selection.some((item) => item.hunkIndex === hunkIndex && (item.rowIndex === undefined || item.rowIndex === rowIndex)));
         return (
-        <section className="splitDiffHunk" key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`} aria-label={`Change hunk ${hunkIndex + 1}`}>
+        <section
+          className={`splitDiffHunk${activeHunk === hunkIndex ? " splitDiffHunk-active" : ""}`}
+          key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`}
+          aria-label={`Change hunk ${hunkIndex + 1}`}
+          ref={(element) => { hunkRefs.current[hunkIndex] = element; }}
+        >
           <div className="splitDiffHunkHeader">
             {!readOnly ? <label className="hunkSelection"><input
               type="checkbox"
@@ -47,8 +99,20 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
               })}
             />Select hunk</label> : <span className="hunkSelection">Hunk {hunkIndex + 1}</span>}
             <code>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</code>
+            <button
+              type="button"
+              className="diffHunkToggle"
+              aria-expanded={!collapsedHunks.has(hunkIndex)}
+              aria-label={`${collapsedHunks.has(hunkIndex) ? "Expand" : "Collapse"} hunk ${hunkIndex + 1}`}
+              onClick={() => setCollapsedHunks((current) => {
+                const next = new Set(current);
+                if (next.has(hunkIndex)) next.delete(hunkIndex);
+                else next.add(hunkIndex);
+                return next;
+              })}
+            >{collapsedHunks.has(hunkIndex) ? "Expand" : "Collapse"}</button>
           </div>
-          {hunk.rows.map((row, rowIndex) => (
+          {!collapsedHunks.has(hunkIndex) && hunk.rows.map((row, rowIndex) => (
             <div className={`splitDiffRow splitDiffRow-${row.kind}`} key={`${hunkIndex}:${rowIndex}`}>
               {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"

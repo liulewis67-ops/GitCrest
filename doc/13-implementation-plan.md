@@ -308,3 +308,9 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：crates/gitcrest-core/src/history.rs、crates/gitcrest-core/src/diff.rs、crates/gitcrest-core/src/tags.rs、crates/gitcrest-core/src/main.rs、doc/api/v1.yaml、src/api/client.ts、src/api/schema.ts、src/features/history/CommitGraph.tsx、src/features/diff/SplitDiff.tsx、src/App.tsx、src/App.css、tests/unit/api-client.test.ts、tests/unit/commit-graph.test.tsx、tests/unit/split-diff.test.tsx。
 - 完成 commit：846e419、c0f7a28、29a661c
 - 限制/后续：SHA 搜索要求唯一可解析的 4–64 位十六进制前缀；日期按 UTC 日历日期解释；路径筛选为仓库内精确路径。提交 Diff 按首父比较，根提交与空树比较；历史 Diff 只读。annotated tag 必须使用新 ref 名，不支持覆盖或删除；ref 快照仍不包含 tags，创建成功后详情面板显示上下文确认。高级 Monaco/tree-sitter Diff、跳转和折叠在 S3.4 实施。
+
+### S3.4 — 高级 Diff（进行中）
+- 子阶段 A：变更块导航与折叠，状态：进行中（基础交付已提交，S3.4 整体仍未验收）。
+- 测试：`pnpm exec vitest run --config vitest.config.ts tests/unit/split-diff.test.tsx` 通过，2 个测试；`pnpm build` 通过；`git diff --check` 通过。新增用例覆盖未聚焦 Diff 时 F7/Shift+F7 循环定位、折叠/展开及导航到折叠块时自动展开。
+- 证据：`src/features/diff/SplitDiff.tsx`、`src/App.css`、`tests/unit/split-diff.test.tsx`。
+- 限制/后续：此交付只覆盖变更块导航和折叠；Monaco 编辑器、词/token 高亮、tree-sitter 解析与无支持语言降级、binary/超大文件提示及结构化结果对照 Git 原始 diff 尚未完成，不能将 S3.4 标为已完成。完整 `pnpm check` 留待 S3.4 总体验收。
