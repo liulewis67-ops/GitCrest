@@ -1,0 +1,307 @@
+use std::sync::Arc;
+
+#[cfg(test)]
+use std::{collections::HashMap, sync::Mutex};
+
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroizing;
+
+const KEYRING_SERVICE: &str = "com.gitcrest.git-https";
+const MAX_CREDENTIAL_BYTES: usize = 64 * 1024;
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CredentialStatus {
+    pub host: String,
+    pub username: Option<String>,
+    pub is_configured: bool,
+}
+
+#[derive(Clone, Deserialize, Serialize)]
+pub struct GitCredential {
+    pub username: String,
+    pub token: Zeroizing<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CredentialError {
+    InvalidInput,
+    Unavailable,
+}
+
+pub trait CredentialStore: Send + Sync {
+    fn get(&self, host: &str) -> Result<Option<GitCredential>, CredentialError>;
+    fn set(&self, host: &str, credential: &GitCredential) -> Result<(), CredentialError>;
+    fn delete(&self, host: &str) -> Result<(), CredentialError>;
+}
+
+#[derive(Clone)]
+pub struct CredentialManager {
+    store: Arc<dyn CredentialStore>,
+}
+
+impl CredentialManager {
+    pub fn system() -> Self {
+        Self {
+            store: Arc::new(SystemCredentialStore),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_store(store: Arc<dyn CredentialStore>) -> Self {
+        Self { store }
+    }
+
+    pub fn status(&self, host: &str) -> Result<CredentialStatus, CredentialError> {
+        let host = normalize_host(host)?;
+        let credential = self.store.get(&host)?;
+        Ok(CredentialStatus {
+            host,
+            username: credential
+                .as_ref()
+                .map(|credential| credential.username.clone()),
+            is_configured: credential.is_some(),
+        })
+    }
+
+    pub fn set(
+        &self,
+        host: &str,
+        username: &str,
+        token: &str,
+    ) -> Result<CredentialStatus, CredentialError> {
+        let host = normalize_host(host)?;
+        if username.is_empty()
+            || username.len() > 255
+            || username.chars().any(char::is_control)
+            || token.is_empty()
+            || token.len() > MAX_CREDENTIAL_BYTES
+            || token.chars().any(char::is_control)
+        {
+            return Err(CredentialError::InvalidInput);
+        }
+        self.store.set(
+            &host,
+            &GitCredential {
+                username: username.to_owned(),
+                token: Zeroizing::new(token.to_owned()),
+            },
+        )?;
+        Ok(CredentialStatus {
+            host,
+            username: Some(username.to_owned()),
+            is_configured: true,
+        })
+    }
+
+    pub fn delete(&self, host: &str) -> Result<(), CredentialError> {
+        self.store.delete(&normalize_host(host)?)
+    }
+
+    #[allow(dead_code)]
+    pub fn get_for_git(&self, host: &str) -> Result<Option<GitCredential>, CredentialError> {
+        self.store.get(&normalize_host(host)?)
+    }
+}
+
+struct SystemCredentialStore;
+
+impl CredentialStore for SystemCredentialStore {
+    fn get(&self, host: &str) -> Result<Option<GitCredential>, CredentialError> {
+        let entry =
+            keyring::Entry::new(KEYRING_SERVICE, host).map_err(|_| CredentialError::Unavailable)?;
+        match entry.get_password() {
+            Ok(value) => serde_json::from_str(&Zeroizing::new(value))
+                .map(Some)
+                .map_err(|_| CredentialError::Unavailable),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(_) => Err(CredentialError::Unavailable),
+        }
+    }
+
+    fn set(&self, host: &str, credential: &GitCredential) -> Result<(), CredentialError> {
+        let entry =
+            keyring::Entry::new(KEYRING_SERVICE, host).map_err(|_| CredentialError::Unavailable)?;
+        let value = Zeroizing::new(
+            serde_json::to_string(credential).map_err(|_| CredentialError::Unavailable)?,
+        );
+        entry
+            .set_password(&value)
+            .map_err(|_| CredentialError::Unavailable)
+    }
+
+    fn delete(&self, host: &str) -> Result<(), CredentialError> {
+        let entry =
+            keyring::Entry::new(KEYRING_SERVICE, host).map_err(|_| CredentialError::Unavailable)?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err(CredentialError::Unavailable),
+        }
+    }
+}
+
+pub fn normalize_host(host: &str) -> Result<String, CredentialError> {
+    if host.is_empty()
+        || host.len() > 260
+        || host.trim() != host
+        || host.chars().any(char::is_control)
+    {
+        return Err(CredentialError::InvalidInput);
+    }
+    let (host_name, port) = if let Some(address) = host.strip_prefix('[') {
+        let (address, suffix) = address
+            .split_once(']')
+            .ok_or(CredentialError::InvalidInput)?;
+        address
+            .parse::<std::net::Ipv6Addr>()
+            .map_err(|_| CredentialError::InvalidInput)?;
+        let port = if suffix.is_empty() {
+            None
+        } else {
+            Some(
+                suffix
+                    .strip_prefix(':')
+                    .ok_or(CredentialError::InvalidInput)?
+                    .parse::<u16>()
+                    .map_err(|_| CredentialError::InvalidInput)?,
+            )
+        };
+        (format!("[{address}]"), port)
+    } else {
+        let (name, port) = match host.rsplit_once(':') {
+            Some((name, port)) if !name.contains(':') => (
+                name,
+                Some(
+                    port.parse::<u16>()
+                        .map_err(|_| CredentialError::InvalidInput)?,
+                ),
+            ),
+            Some(_) => return Err(CredentialError::InvalidInput),
+            None => (host, None),
+        };
+        if name.is_empty()
+            || name.len() > 253
+            || name.split('.').any(|label| {
+                label.is_empty()
+                    || label.len() > 63
+                    || label.starts_with('-')
+                    || label.ends_with('-')
+                    || !label
+                        .chars()
+                        .all(|character| character.is_ascii_alphanumeric() || character == '-')
+            })
+        {
+            return Err(CredentialError::InvalidInput);
+        }
+        (name.to_ascii_lowercase(), port)
+    };
+    if port == Some(0) {
+        return Err(CredentialError::InvalidInput);
+    }
+    Ok(match port.filter(|port| *port != 443) {
+        Some(port) => format!("{host_name}:{port}"),
+        None => host_name,
+    })
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub struct MemoryCredentialStore {
+    values: Mutex<HashMap<String, GitCredential>>,
+}
+
+#[cfg(test)]
+impl CredentialStore for MemoryCredentialStore {
+    fn get(&self, host: &str) -> Result<Option<GitCredential>, CredentialError> {
+        Ok(self
+            .values
+            .lock()
+            .map_err(|_| CredentialError::Unavailable)?
+            .get(host)
+            .cloned())
+    }
+
+    fn set(&self, host: &str, credential: &GitCredential) -> Result<(), CredentialError> {
+        self.values
+            .lock()
+            .map_err(|_| CredentialError::Unavailable)?
+            .insert(host.to_owned(), credential.clone());
+        Ok(())
+    }
+
+    fn delete(&self, host: &str) -> Result<(), CredentialError> {
+        self.values
+            .lock()
+            .map_err(|_| CredentialError::Unavailable)?
+            .remove(host);
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn manager() -> CredentialManager {
+        CredentialManager::with_store(Arc::new(MemoryCredentialStore::default()))
+    }
+
+    #[test]
+    fn normalizes_safe_hosts_and_rejects_url_shaped_or_invalid_hosts() {
+        assert_eq!(normalize_host("GitHub.COM").unwrap(), "github.com");
+        assert_eq!(normalize_host("github.com:443").unwrap(), "github.com");
+        assert_eq!(
+            normalize_host("github.com:8443").unwrap(),
+            "github.com:8443"
+        );
+        assert_eq!(
+            normalize_host("[2001:db8::1]:8443").unwrap(),
+            "[2001:db8::1]:8443"
+        );
+        for host in [
+            "",
+            "https://github.com",
+            "github.com/path",
+            "-bad.example",
+            "github.com:0",
+            "[not-ipv6]",
+        ] {
+            assert_eq!(normalize_host(host), Err(CredentialError::InvalidInput));
+        }
+    }
+
+    #[test]
+    fn stores_only_metadata_in_status_and_can_replace_or_delete_credentials() {
+        let manager = manager();
+        let status = manager.set("GitHub.COM", "lewis", "secret-token").unwrap();
+        assert_eq!(status.host, "github.com");
+        assert_eq!(status.username.as_deref(), Some("lewis"));
+        assert!(status.is_configured);
+        assert_eq!(
+            manager
+                .get_for_git("github.com")
+                .unwrap()
+                .unwrap()
+                .token
+                .as_str(),
+            "secret-token"
+        );
+        assert!(manager.status("github.com").unwrap().is_configured);
+        manager.delete("github.com").unwrap();
+        assert!(!manager.status("github.com").unwrap().is_configured);
+    }
+
+    #[test]
+    fn rejects_empty_or_control_character_secrets_without_storing_them() {
+        let manager = manager();
+        assert_eq!(
+            manager.set("example.com", "user", ""),
+            Err(CredentialError::InvalidInput)
+        );
+        assert_eq!(
+            manager.set("example.com", "user", "secret\nvalue"),
+            Err(CredentialError::InvalidInput)
+        );
+        assert!(!manager.status("example.com").unwrap().is_configured);
+    }
+}

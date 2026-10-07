@@ -17,6 +17,7 @@ export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
+export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
 export type CommitHistoryFilters = Pick<
   NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
@@ -190,6 +191,24 @@ export class GitCrestApiClient {
 
   getRepositoryRemotes(repoId: RepoId): Promise<RemoteSnapshotResponse> {
     return this.request<RemoteSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`);
+  }
+
+  getCredentialStatus(host: string): Promise<CredentialStatusResponse> {
+    const query = new URLSearchParams({ host });
+    return this.request<CredentialStatusResponse>(`/api/v1/credentials?${query}`);
+  }
+
+  setCredential(host: string, username: string, token: string): Promise<CredentialStatusResponse> {
+    return this.request<CredentialStatusResponse>("/api/v1/credentials", true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ host, username, token } satisfies components["schemas"]["SetCredentialRequest"]),
+    });
+  }
+
+  deleteCredential(host: string): Promise<void> {
+    const query = new URLSearchParams({ host });
+    return this.request<void>(`/api/v1/credentials?${query}`, true, { method: "DELETE" });
   }
 
   addRepositoryRemote(repoId: RepoId, name: string, url: string): Promise<TaskSnapshotResponse> {

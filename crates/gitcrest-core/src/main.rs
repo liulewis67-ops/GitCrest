@@ -32,6 +32,7 @@ use tower_http::cors::CorsLayer;
 mod branches;
 mod cloning;
 mod commits;
+mod credentials;
 mod diff;
 mod git_command;
 mod history;
@@ -60,6 +61,7 @@ struct AppState {
     tasks: TaskService,
     git_commands: GitCommandService,
     clones: CloneService,
+    credentials: credentials::CredentialManager,
 }
 
 #[derive(Serialize)]
@@ -125,6 +127,8 @@ enum ApiErrorCode {
     RemoteUrlInvalid,
     RemoteAlreadyExists,
     RemoteNotFound,
+    CredentialInputInvalid,
+    CredentialsUnavailable,
     TagAlreadyExists,
     InternalError,
 }
@@ -518,6 +522,21 @@ impl ApiError {
         }
     }
 
+    fn from_credential_error(error: credentials::CredentialError) -> Self {
+        match error {
+            credentials::CredentialError::InvalidInput => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::CredentialInputInvalid,
+                "The credential host, username or token is invalid.",
+            ),
+            credentials::CredentialError::Unavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::CredentialsUnavailable,
+                "The system credential store is unavailable. Unlock it or check its desktop service, then retry.",
+            ),
+        }
+    }
+
     fn from_tag_error(error: tags::TagError) -> Self {
         match error {
             tags::TagError::Invalid => Self::new(
@@ -635,6 +654,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         tasks,
         git_commands,
         clones,
+        credentials: credentials::CredentialManager::system(),
     };
     let cors_origin = env::var("GITCREST_CORS_ORIGIN")
         .ok()
@@ -717,6 +737,12 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/remotes/upstream",
             put(set_branch_upstream),
+        )
+        .route(
+            "/v1/credentials",
+            get(get_credential_status)
+                .put(set_credential)
+                .delete(delete_credential),
         )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
@@ -1500,6 +1526,79 @@ async fn repository_remotes(
         .await
         .map(Json)
         .map_err(ApiError::from_remote_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CredentialHostQuery {
+    host: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SetCredentialRequest {
+    host: String,
+    username: String,
+    token: zeroize::Zeroizing<String>,
+}
+
+async fn get_credential_status(
+    State(state): State<AppState>,
+    query: Result<Query<CredentialHostQuery>, QueryRejection>,
+) -> Result<Json<credentials::CredentialStatus>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::CredentialInputInvalid,
+            "A valid HTTPS credential host is required.",
+        )
+    })?;
+    let manager = state.credentials.clone();
+    let status = tokio::task::spawn_blocking(move || manager.status(&query.host))
+        .await
+        .map_err(|_| ApiError::from_credential_error(credentials::CredentialError::Unavailable))?
+        .map_err(ApiError::from_credential_error)?;
+    Ok(Json(status))
+}
+
+async fn set_credential(
+    State(state): State<AppState>,
+    request: Result<Json<SetCredentialRequest>, JsonRejection>,
+) -> Result<Json<credentials::CredentialStatus>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::CredentialInputInvalid,
+            "A host, username and token are required.",
+        )
+    })?;
+    let manager = state.credentials.clone();
+    let status = tokio::task::spawn_blocking(move || {
+        manager.set(&request.host, &request.username, request.token.as_str())
+    })
+    .await
+    .map_err(|_| ApiError::from_credential_error(credentials::CredentialError::Unavailable))?
+    .map_err(ApiError::from_credential_error)?;
+    Ok(Json(status))
+}
+
+async fn delete_credential(
+    State(state): State<AppState>,
+    query: Result<Query<CredentialHostQuery>, QueryRejection>,
+) -> Result<StatusCode, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::CredentialInputInvalid,
+            "A valid HTTPS credential host is required.",
+        )
+    })?;
+    let manager = state.credentials.clone();
+    tokio::task::spawn_blocking(move || manager.delete(&query.host))
+        .await
+        .map_err(|_| ApiError::from_credential_error(credentials::CredentialError::Unavailable))?
+        .map_err(ApiError::from_credential_error)?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 #[derive(Deserialize)]
@@ -2750,6 +2849,12 @@ mod tests {
     const WRITE_TOKEN: &str = "test-write-token";
     const READ_ONLY_TOKEN: &str = "test-read-only-token";
 
+    fn test_credentials() -> credentials::CredentialManager {
+        credentials::CredentialManager::with_store(Arc::new(
+            credentials::MemoryCredentialStore::default(),
+        ))
+    }
+
     fn test_app(cors_origin: Option<&str>) -> Router {
         let repositories = RepositoryManager::default();
         let tasks = TaskService::default();
@@ -2757,6 +2862,7 @@ mod tests {
         let state = AppState {
             read_write_token: Arc::new(WRITE_TOKEN.to_string()),
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+            credentials: test_credentials(),
             clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
             repositories,
             tasks,
@@ -2861,6 +2967,7 @@ mod tests {
             AppState {
                 read_write_token: Arc::new(WRITE_TOKEN.to_string()),
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                credentials: test_credentials(),
                 repositories,
                 tasks: tasks.clone(),
                 git_commands: commands.clone(),
@@ -3010,6 +3117,66 @@ mod tests {
             wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
             "succeeded"
         );
+    }
+
+    #[tokio::test]
+    async fn credential_api_returns_metadata_only_and_removes_credentials_idempotently() {
+        let app = test_app(None);
+        let stored = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                "/api/v1/credentials",
+                r#"{"host":"GitHub.COM","username":"lewis","token":"test-personal-access-token"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(stored.status(), StatusCode::OK);
+        let body = to_bytes(stored.into_body(), usize::MAX).await.unwrap();
+        let status: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(status["host"], "github.com");
+        assert_eq!(status["username"], "lewis");
+        assert_eq!(status["isConfigured"], true);
+        assert!(status.get("token").is_none());
+        assert!(!String::from_utf8_lossy(&body).contains("test-personal-access-token"));
+
+        let status = app
+            .clone()
+            .oneshot(request(
+                "/api/v1/credentials?host=github.com",
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(status.into_body(), usize::MAX).await.unwrap();
+        let status: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(status["isConfigured"], true);
+
+        let deleted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::DELETE)
+                    .uri("/api/v1/credentials?host=github.com")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(deleted.status(), StatusCode::NO_CONTENT);
+        let status = app
+            .oneshot(request(
+                "/api/v1/credentials?host=github.com",
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(status.into_body(), usize::MAX).await.unwrap();
+        let status: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(status["username"], serde_json::Value::Null);
+        assert_eq!(status["isConfigured"], false);
     }
 
     #[tokio::test]
@@ -3427,6 +3594,7 @@ mod tests {
             AppState {
                 read_write_token: Arc::new(WRITE_TOKEN.to_string()),
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                credentials: test_credentials(),
                 repositories: RepositoryManager::default(),
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),
@@ -3547,6 +3715,7 @@ mod tests {
             AppState {
                 read_write_token: Arc::new(WRITE_TOKEN.to_string()),
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                credentials: test_credentials(),
                 repositories,
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),

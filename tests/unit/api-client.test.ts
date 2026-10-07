@@ -141,6 +141,25 @@ describe("GitCrestApiClient", () => {
     }
   });
 
+  it("uses the credential API with a write-only token and a host-only status query", async () => {
+    const response = { host: "example.test", username: "lewis", isConfigured: true };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockImplementationOnce(async () => new Response(JSON.stringify(response), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockImplementationOnce(async () => new Response(JSON.stringify(response), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockImplementationOnce(async () => new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getCredentialStatus("example.test:8443")).resolves.toEqual(response);
+    await expect(client.setCredential("example.test", "lewis", "personal-access-token")).resolves.toEqual(response);
+    await expect(client.deleteCredential("example.test")).resolves.toBeUndefined();
+
+    expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.get("host")).toBe("example.test:8443");
+    expect(fetcher.mock.calls[1][1]?.method).toBe("PUT");
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ host: "example.test", username: "lewis", token: "personal-access-token" }));
+    expect(String(fetcher.mock.calls[2][0])).toBe(`${baseUrl}/api/v1/credentials?host=example.test`);
+    expect(fetcher.mock.calls[2][1]?.method).toBe("DELETE");
+  });
+
   it("reads local and remote branch tracking state through the versioned API", async () => {
     const response = {
       repoId: "repo_fixture", current: "feature/one", detached: false,
