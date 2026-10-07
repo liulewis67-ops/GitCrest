@@ -3,7 +3,10 @@ use std::{env, net::SocketAddr, sync::Arc};
 use axum::{
     body::Body,
     extract::State,
-    http::{header::AUTHORIZATION, Request, StatusCode},
+    http::{
+        header::{AUTHORIZATION, CONTENT_TYPE},
+        HeaderValue, Method, Request, StatusCode,
+    },
     middleware::{self, Next},
     response::{IntoResponse, Response},
     routing::get,
@@ -11,6 +14,7 @@ use axum::{
 };
 use serde::Serialize;
 use tokio::net::TcpListener;
+use tower_http::cors::CorsLayer;
 
 #[derive(Clone)]
 struct AppState {
@@ -54,6 +58,19 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let api = Router::new()
         .route("/version", get(version))
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
+
+    let api = match env::var("GITCREST_CORS_ORIGIN") {
+        Ok(origin) if !origin.is_empty() => {
+            let origin = origin.parse::<HeaderValue>()?;
+            api.layer(
+                CorsLayer::new()
+                    .allow_origin(origin)
+                    .allow_methods([Method::GET, Method::OPTIONS])
+                    .allow_headers([AUTHORIZATION, CONTENT_TYPE]),
+            )
+        }
+        _ => api,
+    };
 
     let app = Router::new()
         .route("/health", get(health))

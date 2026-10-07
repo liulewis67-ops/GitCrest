@@ -1,3 +1,5 @@
+param([string]$CorsOrigin = "")
+
 $ErrorActionPreference = "Stop"
 
 $sidecarPath = Join-Path $PSScriptRoot "..\..\..\crates\gitcrest-core\target\debug\gitcrest-core.exe"
@@ -16,6 +18,7 @@ $startInfo.RedirectStandardError = $true
 $startInfo.Environment["GITCREST_HOST"] = "127.0.0.1"
 $startInfo.Environment["GITCREST_PORT"] = "0"
 $startInfo.Environment["GITCREST_AUTH_TOKEN"] = $token
+$startInfo.Environment["GITCREST_CORS_ORIGIN"] = $CorsOrigin
 
 $process = [System.Diagnostics.Process]::new()
 $process.StartInfo = $startInfo
@@ -46,10 +49,34 @@ try {
     throw "Authenticated /api/version returned an unexpected response: $($authorized.Content)"
   }
 
+  if ($CorsOrigin) {
+    $preflight = Invoke-WebRequest "$baseUrl/api/version" -Method Options -Headers @{
+      Origin = $CorsOrigin
+      "Access-Control-Request-Method" = "GET"
+      "Access-Control-Request-Headers" = "authorization"
+    } -SkipHttpErrorCheck
+    if ($preflight.StatusCode -ne 200 -or $preflight.Headers["Access-Control-Allow-Origin"] -ne $CorsOrigin) {
+      throw "CORS preflight did not allow the configured renderer origin: $CorsOrigin"
+    }
+
+    $otherOrigin = "http://localhost:5175"
+    $rejectedPreflight = Invoke-WebRequest "$baseUrl/api/version" -Method Options -Headers @{
+      Origin = $otherOrigin
+      "Access-Control-Request-Method" = "GET"
+      "Access-Control-Request-Headers" = "authorization"
+    } -SkipHttpErrorCheck
+    if ($rejectedPreflight.Headers["Access-Control-Allow-Origin"] -eq $otherOrigin) {
+      throw "CORS unexpectedly allowed unconfigured origin: $otherOrigin"
+    }
+  }
+
   "PASS ready host is 127.0.0.1 on an ephemeral port"
   "PASS /health returned 204"
   "PASS unauthenticated /api/version returned 401"
   "PASS authenticated /api/version returned 200 ($($version.name) $($version.version))"
+  if ($CorsOrigin) {
+    "PASS CORS preflight allows only configured origin $CorsOrigin"
+  }
 } finally {
   if (-not $process.HasExited) {
     $process.Kill()

@@ -58,6 +58,8 @@ export async function startSidecar(): Promise<SidecarConnection> {
   }
 
   const token = randomBytes(32).toString("base64url");
+  const rendererUrl = process.env.ELECTRON_RENDERER_URL;
+  const corsOrigin = rendererUrl ? new URL(rendererUrl).origin : "";
 
   return await new Promise((resolvePromise, reject) => {
     let settled = false;
@@ -96,6 +98,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
         GITCREST_HOST: "127.0.0.1",
         GITCREST_PORT: "0",
         GITCREST_AUTH_TOKEN: token,
+        GITCREST_CORS_ORIGIN: corsOrigin,
       },
       windowsHide: true,
     });
