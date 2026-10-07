@@ -20,6 +20,20 @@ describe("GitCrestApiClient", () => {
     expect(new Headers(request?.headers).has("X-GitCrest-API-Version")).toBe(false);
   });
 
+  it("encodes file paths and requests the selected diff scope", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
+      repoId: "repo_fixture", path: "new file.txt", originalPath: null, scope: "workingTree",
+      changeKind: "untracked", status: "text", hunks: [],
+    }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await client.getFileDiff("repo_fixture", "new file.txt", "workingTree");
+    const [url] = fetcher.mock.calls[0];
+    expect(new URL(String(url)).pathname).toBe("/api/v1/repositories/repo_fixture/diff");
+    expect(new URL(String(url)).searchParams.get("path")).toBe("new file.txt");
+    expect(new URL(String(url)).searchParams.get("scope")).toBe("workingTree");
+  });
+
   it("versions repository requests and encodes repoId", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("[]", {
       status: 200,

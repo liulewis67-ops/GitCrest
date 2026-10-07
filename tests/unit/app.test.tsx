@@ -308,6 +308,49 @@ describe("App", () => {
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/new-project" });
   });
 
+  it("opens a structured split diff from Changes and preserves the selected file", async () => {
+    window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
+      openRepoIds: ["repo_diff"], activeRepoId: "repo_diff", tabs: { repo_diff: { mode: "graph", graphScrollTop: 0 } },
+    }));
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+      },
+    });
+    const repository = { repoId: "repo_diff", path: "C:/diff-fixture", head: "abc123", branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
+    const status = { repoId: "repo_diff", refreshedAtMs: 1, files: [{ path: "readme.txt", indexStatus: ".", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false }] };
+    const document = {
+      repoId: "repo_diff", path: "readme.txt", originalPath: null, scope: "workingTree", changeKind: "modified", status: "text",
+      hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change", oldLine: 1, newLine: 1, oldText: "old content", newText: "new content" }] }],
+    };
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
+      if (url.pathname === "/api/v1/repositories") return response([repository]);
+      if (url.pathname.endsWith("/status")) return response(status);
+      if (url.pathname.endsWith("/diff")) return response(document);
+      throw new Error(`Unexpected API request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(await screen.findByRole("button", { name: /readme\.txt/ }));
+    expect(await screen.findByText("old content")).toBeDefined();
+    expect(screen.getByText("new content")).toBeDefined();
+    expect(screen.getByText("WORKING TREE ↔ INDEX")).toBeDefined();
+    expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph" }));
+    expect(screen.getByRole("complementary", { name: "Commit details" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Diff" }));
+    expect(await screen.findByText("new content")).toBeDefined();
+    expect(fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith("/diff")).length).toBeGreaterThanOrEqual(2);
+  });
+
   it("restores repository tabs independently and closes tabs without deleting repositories", async () => {
     window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
       openRepoIds: ["repo_alpha", "repo_beta"],
@@ -346,6 +389,8 @@ describe("App", () => {
     expect(await screen.findByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(screen.getByRole("tab", { name: "alpha" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("button", { name: "Diff" }).className).toContain("active");
+    expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Graph" }));
     expect(screen.getByText("abc123", { selector: ".repositoryFact strong" })).toBeDefined();
     expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270");
 

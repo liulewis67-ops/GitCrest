@@ -12,8 +12,9 @@ use axum::{
     body::Body,
     extract::{
         rejection::JsonRejection,
+        rejection::QueryRejection,
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, State,
+        Path, Query, State,
     },
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE, SEC_WEBSOCKET_PROTOCOL},
@@ -29,6 +30,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 mod cloning;
+mod diff;
 mod git_command;
 mod repository;
 mod status;
@@ -36,6 +38,7 @@ mod storage;
 mod tasks;
 
 use cloning::{CloneError, CloneService};
+use diff::{DiffError, DiffScope};
 use git_command::{GitCommandService, GitOperation};
 use repository::{Repository, RepositoryError, RepositoryManager};
 use tasks::{TaskService, TaskSnapshot, TaskSubmitError};
@@ -92,6 +95,9 @@ enum ApiErrorCode {
     ResourceVersionStale,
     RequestInvalid,
     CloneDestinationExists,
+    RepositoryFileNotFound,
+    DiffTooLarge,
+    DiffUnavailable,
     InternalError,
 }
 
@@ -270,6 +276,46 @@ impl ApiError {
         }
     }
 
+    fn from_diff_error(error: DiffError) -> Self {
+        match error {
+            DiffError::InvalidPath => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "Choose a changed file inside this repository.",
+            ),
+            DiffError::PathNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RepositoryFileNotFound,
+                "The selected file is no longer available. Refresh the working tree and try again.",
+            ),
+            DiffError::PermissionDenied => Self::new(
+                StatusCode::FORBIDDEN,
+                ApiErrorCode::RepositoryAccessDenied,
+                "GitCrest does not have permission to read the selected file.",
+            ),
+            DiffError::TooLarge => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::DiffTooLarge,
+                "This diff exceeds the 10 MiB display limit.",
+            ),
+            DiffError::TimedOut => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                ApiErrorCode::DiffUnavailable,
+                "Git did not produce this diff within 10 seconds. Refresh and try again.",
+            ),
+            DiffError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+            DiffError::GitFailed => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::DiffUnavailable,
+                "Git could not produce this file diff. Refresh the working tree and try again.",
+            ),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -385,6 +431,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             put(set_repository_favorite),
         )
         .route("/v1/repositories/:repo_id/status", get(repository_status))
+        .route("/v1/repositories/:repo_id/diff", get(repository_diff))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
@@ -590,6 +637,52 @@ async fn repository_status(
         .await
         .map(Json)
         .map_err(ApiError::from_repository_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DiffQuery {
+    path: String,
+    scope: DiffScope,
+}
+
+async fn repository_diff(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<DiffQuery>, QueryRejection>,
+) -> Result<Json<diff::DiffDocument>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A changed file path and diff scope are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let file = snapshot
+        .files
+        .iter()
+        .find(|file| file.path == query.path)
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RepositoryFileNotFound,
+                "The selected path is not present in the latest change snapshot.",
+            )
+        })?;
+    diff::read(repo_id, &target.repository_path, file, query.scope)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_diff_error)
 }
 
 #[derive(Deserialize)]
@@ -1074,6 +1167,7 @@ mod tests {
         let repo_id = repository["repoId"].as_str().unwrap();
 
         let response = app
+            .clone()
             .oneshot(request(
                 &format!("/api/v1/repositories/{repo_id}/status"),
                 Some(WRITE_TOKEN),
@@ -1098,6 +1192,26 @@ mod tests {
             .iter()
             .any(|file| file["path"] == "new file.txt"
                 && file["categories"] == serde_json::json!(["untracked"])));
+
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=tracked.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(diff["path"], "tracked.txt");
+        assert_eq!(diff["scope"], "workingTree");
+        assert_eq!(diff["status"], "text");
+        assert!(diff["hunks"][0]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["newText"] == "modified"));
     }
 
     #[tokio::test]

@@ -122,6 +122,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/diff": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Read a changed file as a bounded structured split diff */
+        get: operations["getRepositoryFileDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories": {
         parameters: {
             query?: never;
@@ -318,6 +339,33 @@ export interface components {
             kind: "modified" | "added" | "deleted" | "renamed" | "copied" | "typeChanged" | "untracked" | "ignored" | "conflicted";
             categories: ("staged" | "unstaged" | "untracked" | "ignored" | "conflicted")[];
             modeChanged: boolean;
+        };
+        DiffDocument: {
+            repoId: components["schemas"]["RepoId"];
+            path: string;
+            originalPath: string | null;
+            /** @enum {string} */
+            scope: "workingTree" | "index";
+            /** @enum {string} */
+            changeKind: "modified" | "added" | "deleted" | "renamed" | "copied" | "typeChanged" | "untracked" | "ignored" | "conflicted";
+            /** @enum {string} */
+            status: "text" | "binary" | "empty" | "conflicted" | "ignored" | "symlink" | "submodule";
+            hunks: components["schemas"]["DiffHunk"][];
+        };
+        DiffHunk: {
+            oldStart: number;
+            oldLines: number;
+            newStart: number;
+            newLines: number;
+            rows: components["schemas"]["DiffRow"][];
+        };
+        DiffRow: {
+            /** @enum {string} */
+            kind: "context" | "change";
+            oldLine: number | null;
+            newLine: number | null;
+            oldText: string | null;
+            newText: string | null;
         };
         OpenRepositoryRequest: {
             /** @description Local folder explicitly selected by the user. */
@@ -765,6 +813,99 @@ export interface operations {
             };
             /** @description The Git executable could not be started. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getRepositoryFileDiff: {
+        parameters: {
+            query: {
+                path: string;
+                scope: "workingTree" | "index";
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Text hunks, binary state, or an explicit unsupported content state. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiffDocument"];
+                };
+            };
+            /** @description The path or scope is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description GitCrest cannot read the selected file. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The repository or changed path no longer exists. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The structured diff exceeds 10 MiB. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git returned an unexpected diff error. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The Git executable could not be started. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git did not produce the diff within the bounded query deadline. */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

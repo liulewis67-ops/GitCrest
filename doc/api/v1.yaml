@@ -245,6 +245,84 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/diff:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: getRepositoryFileDiff
+      summary: Read a changed file as a bounded structured split diff
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string, minLength: 1 }
+        - name: scope
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [workingTree, index]
+      responses:
+        "200":
+          description: Text hunks, binary state, or an explicit unsupported content state.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiffDocument"
+        "400":
+          description: The path or scope is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: GitCrest cannot read the selected file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          description: The repository or changed path no longer exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "413":
+          description: The structured diff exceeds 10 MiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "504":
+          description: Git did not produce the diff within the bounded query deadline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "500":
+          description: Git returned an unexpected diff error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The Git executable could not be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -689,6 +767,42 @@ components:
             enum: [staged, unstaged, untracked, ignored, conflicted]
         modeChanged:
           type: boolean
+    DiffDocument:
+      type: object
+      additionalProperties: false
+      required: [repoId, path, originalPath, scope, changeKind, status, hunks]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        path: { type: string }
+        originalPath: { type: [string, "null"] }
+        scope: { type: string, enum: [workingTree, index] }
+        changeKind: { type: string, enum: [modified, added, deleted, renamed, copied, typeChanged, untracked, ignored, conflicted] }
+        status: { type: string, enum: [text, binary, empty, conflicted, ignored, symlink, submodule] }
+        hunks:
+          type: array
+          items: { $ref: "#/components/schemas/DiffHunk" }
+    DiffHunk:
+      type: object
+      additionalProperties: false
+      required: [oldStart, oldLines, newStart, newLines, rows]
+      properties:
+        oldStart: { type: integer, minimum: 0 }
+        oldLines: { type: integer, minimum: 0 }
+        newStart: { type: integer, minimum: 0 }
+        newLines: { type: integer, minimum: 0 }
+        rows:
+          type: array
+          items: { $ref: "#/components/schemas/DiffRow" }
+    DiffRow:
+      type: object
+      additionalProperties: false
+      required: [kind, oldLine, newLine, oldText, newText]
+      properties:
+        kind: { type: string, enum: [context, change] }
+        oldLine: { type: [integer, "null"], minimum: 0 }
+        newLine: { type: [integer, "null"], minimum: 0 }
+        oldText: { type: [string, "null"] }
+        newText: { type: [string, "null"] }
     OpenRepositoryRequest:
       type: object
       additionalProperties: false

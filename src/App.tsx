@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type RepositoryResponse, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type DiffDocumentResponse, type RepositoryResponse, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
+import { SplitDiff } from "./features/diff/SplitDiff";
 import type { components } from "./api/schema";
 import "./App.css";
 
 type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
 type WorkspaceMode = "graph" | "diff";
-type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; graphScrollTop: number };
+type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; selectedFilePath?: string; selectedFileScope?: "workingTree" | "index"; graphScrollTop: number };
 type WorkspaceSession = { openRepoIds: string[]; activeRepoId?: string; tabs: Record<string, RepositoryTabState> };
 
 const WORKSPACE_SESSION_KEY = "gitcrest-workspace-session-v1";
@@ -29,6 +30,8 @@ function readWorkspaceSession(): WorkspaceSession {
         tabs[repoId] = {
           mode: candidate.mode === "diff" ? "diff" : "graph",
           ...(typeof candidate.selectedCommit === "string" ? { selectedCommit: candidate.selectedCommit } : {}),
+          ...(typeof candidate.selectedFilePath === "string" ? { selectedFilePath: candidate.selectedFilePath } : {}),
+          ...(candidate.selectedFileScope === "workingTree" || candidate.selectedFileScope === "index" ? { selectedFileScope: candidate.selectedFileScope } : {}),
           graphScrollTop: typeof candidate.graphScrollTop === "number" && Number.isFinite(candidate.graphScrollTop)
             ? Math.max(0, candidate.graphScrollTop)
             : 0,
@@ -160,6 +163,8 @@ function App() {
   const [cloneBusy, setCloneBusy] = useState(false);
   const [cloneError, setCloneError] = useState("");
   const [cloneDraft, setCloneDraft] = useState({ remoteUrl: "", parentPath: "", directoryName: "" });
+  const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
+  const [diffRetry, setDiffRetry] = useState(0);
   const openedCloneTasks = useRef(new Set<string>());
   const cloneTaskIds = useRef(new Set<string>());
   const [tasksError, setTasksError] = useState("");
@@ -196,6 +201,13 @@ function App() {
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
   const activeStatusError = selectedRepository ? statusErrors[selectedRepository.repoId] : undefined;
   const activeStatusLoading = selectedRepository ? statusLoadingByRepo[selectedRepository.repoId] === true : false;
+  const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
+  const selectedFilePath = activeTabState?.selectedFilePath;
+  const selectedFileScope = activeTabState?.selectedFileScope;
+  const selectedDiffFile = activeStatus?.files.find((file) => file.path === selectedFilePath);
+  const activeDiffKey = selectedRepository && selectedFilePath && selectedFileScope
+    ? `${selectedRepository.repoId}:${selectedFileScope}:${selectedFilePath}`
+    : "";
   const statusGroups = changeGroups.map((group) => ({
     ...group,
     files: (activeStatus?.files || []).filter((file) => file.categories.includes(group.category)),
@@ -347,6 +359,23 @@ function App() {
         [selectedRepository.repoId]: {
           ...(current.tabs[selectedRepository.repoId] || { graphScrollTop: 0 }),
           mode: nextMode,
+        },
+      },
+    }));
+  }
+
+  function openFileDiff(path: string, scope: "workingTree" | "index") {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId) return;
+    setWorkspaceSession((current) => ({
+      ...current,
+      tabs: {
+        ...current.tabs,
+        [repoId]: {
+          ...(current.tabs[repoId] || { graphScrollTop: 0 }),
+          mode: "diff",
+          selectedFilePath: path,
+          selectedFileScope: scope,
         },
       },
     }));
@@ -527,6 +556,25 @@ function App() {
   }, [tasksOpen]);
 
   useEffect(() => {
+    if (mode !== "diff" || !selectedRepository || !selectedFilePath || !selectedFileScope) {
+      setDiffState({ key: "", loading: false });
+      return;
+    }
+    const api = apiRef.current;
+    if (!api) return;
+    let active = true;
+    const key = `${selectedRepository.repoId}:${selectedFileScope}:${selectedFilePath}`;
+    setDiffState({ key, loading: true });
+    api.getFileDiff(selectedRepository.repoId, selectedFilePath, selectedFileScope)
+      .then((document) => { if (active) setDiffState({ key, loading: false, document }); })
+      .catch((error: unknown) => {
+        const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+        if (active) setDiffState({ key, loading: false, error: message || (error instanceof Error ? error.message : "Could not read this file diff.") });
+      });
+    return () => { active = false; };
+  }, [mode, selectedRepository?.repoId, selectedFilePath, selectedFileScope, diffRetry]);
+
+  useEffect(() => {
     for (const task of tasks) void openClonedRepository(task);
   }, [tasks]);
 
@@ -621,7 +669,7 @@ function App() {
     { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
     { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
     { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { setCloneError(""); setCloneOpen(true); } },
-    { id: "diff", label: "Open Diff view", detail: "Select a changed file after opening a repository", available: false, run: () => undefined },
+    { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
   const filteredCommands = commands.filter((command) => `${command.label} ${command.detail}`.toLowerCase().includes(paletteQuery.toLowerCase()));
 
@@ -734,13 +782,13 @@ function App() {
             <div className="workspaceCrumb"><span className="crumbMark" aria-hidden="true">G</span><span>Workspace</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || "No repository open"}</span></div>
             <div className="toolbarActions">
               <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => changeWorkspaceMode("graph")}>Graph</button>
-              <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled title="Select a changed file after opening a repository" onClick={() => changeWorkspaceMode("diff")}>Diff</button>
+              <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} title={!selectedFilePath ? "Select a changed file to open Diff" : "Open the selected file diff"} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
               <button className="quietButton compact" type="button" disabled title="Branch selection arrives with S4.2"><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
             </div>
           </div>
 
-          <div className="workArea">
+          <div className={`workArea${mode === "diff" ? " diffMode" : ""}`}>
             <aside className="navigationPanel" aria-label="Repository navigation">
               <div className="panelHeading"><span>REPOSITORY</span><button className="panelMenu" type="button" disabled aria-label="Repository options">···</button></div>
               <div className="navGroup changesNavigation">
@@ -754,11 +802,11 @@ function App() {
                   <section className="changeGroup" key={group.category} aria-label={`${group.label} changes`}>
                     <div className="changeGroupTitle"><span>{group.label}</span><span>{group.files.length}</span></div>
                     {group.files.map((file) => (
-                      <div className="statusFileItem" key={`${group.category}:${file.path}`} title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}>
+                      <button className={`statusFileItem statusFileButton${selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree") ? " selected" : ""}`} type="button" key={`${group.category}:${file.path}`} aria-pressed={selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree")} title={file.originalPath ? `${file.originalPath} → ${file.path}` : `Review ${file.path}`} onClick={() => openFileDiff(file.path, group.category === "staged" ? "index" : "workingTree")}>
                         <span className={`statusFileCode status-${file.kind}`} aria-label={file.kind}>{changeCode(file.kind)}</span>
                         <span className="statusFilePath">{file.path}</span>
                         {file.modeChanged && <span className="modeChangedTag" title="File mode changed">mode</span>}
-                      </div>
+                      </button>
                     ))}
                   </section>
                 ))}
@@ -772,7 +820,7 @@ function App() {
             </aside>
             <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />
 
-            <section className="mainPanel" aria-label="Commit graph">
+            <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
               <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId); }} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
               <div
                 className="graphViewport"
@@ -789,13 +837,17 @@ function App() {
                     <p>{selectedRepository ? `${selectedRepository.path}${selectedRepository.branch ? ` · ${selectedRepository.branch}` : selectedRepository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
                     {!selectedRepository && <button className="secondaryButton" type="button" onClick={() => void openLocalRepository()} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
                   </div>
-                ) : <div className="graphEmpty"><h2>Choose a changed file</h2><p>Diff review becomes available when a repository is open.</p></div>}
+                ) : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div>
+                  : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
+                  : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
+                  : diffState.document ? <SplitDiff document={diffState.document} />
+                  : <div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div>}
               </div>
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
             </section>
-            <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />
+            {mode === "graph" && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />}
 
-            <aside className="detailsPanel" aria-label="Commit details">
+            {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
               <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
               {selectedRepository ? (
                 <div className="repositoryDetails">
@@ -809,7 +861,7 @@ function App() {
               ) : (
                 <><div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div><div className="detailPlaceholder"><span>AUTHOR</span><strong>—</strong><span>COMMIT</span><strong className="monoText">—</strong></div></>
               )}
-            </aside>
+            </aside>}
           </div>
 
           <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label="Resize changes and commit area" onResize={setWorkbenchHeight} />
