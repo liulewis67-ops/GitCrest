@@ -17,19 +17,27 @@ interface ReadyMessage {
 
 let child: ChildProcessWithoutNullStreams | undefined;
 let connection: SidecarConnection | undefined;
+const STARTUP_TIMEOUT_MS = 10_000;
 
 function resolveSidecarPath(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, "bin", "gitcrest-core.exe");
   }
 
-  return resolve(process.cwd(), "crates", "gitcrest-core", "target", "debug", "gitcrest-core.exe");
+  return resolve(app.getAppPath(), "crates", "gitcrest-core", "target", "debug", "gitcrest-core.exe");
 }
 
 function parseReadyLine(line: string): ReadyMessage | undefined {
   try {
     const message = JSON.parse(line) as Partial<ReadyMessage>;
-    if (message.event === "ready" && typeof message.host === "string" && typeof message.port === "number") {
+    if (
+      message.event === "ready" &&
+      message.host === "127.0.0.1" &&
+      typeof message.port === "number" &&
+      Number.isInteger(message.port) &&
+      message.port > 0 &&
+      message.port <= 65_535
+    ) {
       return message as ReadyMessage;
     }
   } catch {
@@ -54,6 +62,33 @@ export async function startSidecar(): Promise<SidecarConnection> {
   return await new Promise((resolvePromise, reject) => {
     let settled = false;
     let stdoutBuffer = "";
+    const startupTimeout = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      child?.kill();
+      child = undefined;
+      reject(new Error(`Rust sidecar did not become ready within ${STARTUP_TIMEOUT_MS / 1000} seconds.`));
+    }, STARTUP_TIMEOUT_MS);
+
+    const finish = (error?: Error, ready?: ReadyMessage): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(startupTimeout);
+      if (error) {
+        reject(error);
+        return;
+      }
+      if (!ready) {
+        reject(new Error("Rust sidecar exited without a valid ready message."));
+        return;
+      }
+      connection = { baseUrl: `http://${ready.host}:${ready.port}`, token };
+      resolvePromise(connection);
+    };
 
     child = spawn(sidecarPath, [], {
       env: {
@@ -72,16 +107,10 @@ export async function startSidecar(): Promise<SidecarConnection> {
 
       for (const line of lines) {
         const ready = parseReadyLine(line.trim());
-        if (!ready || settled) {
-          continue;
+        if (ready) {
+          finish(undefined, ready);
+          break;
         }
-
-        settled = true;
-        connection = {
-          baseUrl: `http://${ready.host}:${ready.port}`,
-          token,
-        };
-        resolvePromise(connection);
       }
     });
 
@@ -90,19 +119,13 @@ export async function startSidecar(): Promise<SidecarConnection> {
     });
 
     child.on("error", (error) => {
-      if (!settled) {
-        settled = true;
-        reject(error);
-      }
+      finish(new Error(`Could not start Rust sidecar: ${error.message}`));
     });
 
     child.on("exit", (code, signal) => {
       child = undefined;
       connection = undefined;
-      if (!settled) {
-        settled = true;
-        reject(new Error(`Rust sidecar exited before ready: code=${code ?? "null"} signal=${signal ?? "null"}`));
-      }
+      finish(new Error(`Rust sidecar exited before ready: code=${code ?? "null"} signal=${signal ?? "null"}`));
     });
   });
 }

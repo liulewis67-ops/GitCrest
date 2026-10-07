@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { BrowserWindow, app, ipcMain, shell } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, shell } from "electron";
 import { startSidecar, stopSidecar } from "./sidecar";
 
 let mainWindow: BrowserWindow | undefined;
@@ -40,7 +40,11 @@ async function createWindow(): Promise<void> {
   }
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(createWindow).catch((error: unknown) => {
+  const message = error instanceof Error ? error.message : String(error);
+  dialog.showErrorBox("GitCrest could not start", message);
+  app.quit();
+});
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
