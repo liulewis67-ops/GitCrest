@@ -225,5 +225,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm api:types` 与 `pnpm check` 通过：前端构建/类型检查、16 个 Vitest 用例、Rust 格式检查/构建/31 个测试和 Electron E2E。Rust 测试验证同一 Git common directory（含不同 linked worktree RepoId）串行、不同仓库并行、取消与失败分类、受保护任务 API、SQLite 任务持久化与中断恢复、URL/字段/Authorization 脱敏，以及本机 Windows Git 子进程树终止。临时 bare remote 验证 `POST fetch → 202 task → succeeded`；前端用例验证命令面板发起任务、进度/日志显示和取消请求。
 - 手工验证：未单独手工点击桌面界面；任务提交流程通过临时本地 bare remote 的 Rust API 集成测试运行，任务面板通过 Vitest 交互测试覆盖，Electron E2E 验证桌面启动与欢迎页恢复。
 - 证据：`crates/gitcrest-core/src/tasks.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/storage.rs`、`crates/gitcrest-core/migrations/0002_tasks.sql`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/features/tasks/TaskCenter.tsx`、`src/api/client.ts`、`tests/unit/app.test.tsx`。
-- 完成 commit：待提交后填写
+- 完成 commit：`8adaead`
 - 限制/后续：fetch 任务只接入 Git remote-tracking 更新和任务结果；可视化 refs/log 刷新等待 S3。sidecar 重启时未完成任务以 `outcomeUnknown` 错误记录展示并要求核对，不自动重放。
