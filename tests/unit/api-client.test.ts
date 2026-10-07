@@ -358,6 +358,25 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.method).toBeUndefined();
   });
 
+  it("requests a one-off push preview for the selected remote branch", async () => {
+    const preview = {
+      repoId: "repo_fixture", localBranch: "main", remoteName: "backup", remoteBranch: "release/2026",
+      localOid: "a".repeat(40), expectedRemoteOid: "b".repeat(40), ahead: 1, behind: 0,
+      commitsToPush: [], overwrittenCommitCount: 0, changedPaths: [], changedPathCount: 0, omittedChangedPathCount: 0,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(preview), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.preflightRepositoryPush("repo/fixture", { remoteName: "backup", remoteBranch: "release/2026" })).resolves.toEqual(preview);
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.pathname).toBe("/api/v1/repositories/repo%2Ffixture/push-preflight");
+    expect(url.searchParams.get("remoteName")).toBe("backup");
+    expect(url.searchParams.get("remoteBranch")).toBe("release/2026");
+  });
+
   it("queues a push bound to both preflight OIDs", async () => {
     const task = { taskId: "task-push", repoId: "repo_fixture", operation: "push", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {
@@ -365,7 +384,7 @@ describe("GitCrestApiClient", () => {
       headers: { "X-GitCrest-API-Version": "1" },
     }));
     const client = new GitCrestApiClient(baseUrl, token, fetcher);
-    const request = { expectedLocalOid: "a".repeat(40), expectedRemoteOid: "b".repeat(40), forceWithLease: true };
+    const request = { expectedLocalOid: "a".repeat(40), expectedRemoteOid: "b".repeat(40), forceWithLease: true, remoteName: "backup", remoteBranch: "release" };
 
     await expect(client.pushRepository("repo/fixture", request)).resolves.toEqual(task);
     expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/push`);

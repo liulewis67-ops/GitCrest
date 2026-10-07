@@ -308,8 +308,15 @@ export class GitCrestApiClient {
     });
   }
 
-  preflightRepositoryPush(repoId: RepoId): Promise<components["schemas"]["PushPreflight"]> {
-    return this.request<components["schemas"]["PushPreflight"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/push-preflight`);
+  preflightRepositoryPush(
+    repoId: RepoId,
+    target?: Pick<components["schemas"]["PushRequest"], "remoteName" | "remoteBranch">,
+  ): Promise<components["schemas"]["PushPreflight"]> {
+    const query = new URLSearchParams();
+    if (target?.remoteName) query.set("remoteName", target.remoteName);
+    if (target?.remoteBranch) query.set("remoteBranch", target.remoteBranch);
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    return this.request<components["schemas"]["PushPreflight"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/push-preflight${suffix}`);
   }
 
   pushRepository(

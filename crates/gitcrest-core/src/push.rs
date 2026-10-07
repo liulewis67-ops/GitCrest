@@ -48,11 +48,22 @@ pub enum PushError {
     GitFailed,
 }
 
+#[cfg(test)]
 pub async fn read_push_preflight(
     repo_id: String,
     repository_path: &Path,
     current: Option<&str>,
     detached: bool,
+) -> Result<PushPreflight, PushError> {
+    read_push_preflight_for_target(repo_id, repository_path, current, detached, None).await
+}
+
+pub async fn read_push_preflight_for_target(
+    repo_id: String,
+    repository_path: &Path,
+    current: Option<&str>,
+    detached: bool,
+    target: Option<(&str, &str)>,
 ) -> Result<PushPreflight, PushError> {
     if detached || current.is_none() {
         return Err(PushError::NoCurrentBranch);
@@ -61,36 +72,74 @@ pub async fn read_push_preflight(
     crate::branches::validate_branch_name(repository_path, local_branch)
         .await
         .map_err(|_| PushError::NoCurrentBranch)?;
-    let upstream_config = run_git(
-        repository_path,
-        &[
-            "for-each-ref".into(),
-            "--format=%(objectname)%00%(upstream:remotename)%00%(upstream:remoteref)".into(),
-            format!("refs/heads/{local_branch}").into(),
-        ],
-    )
-    .await?;
-    let fields = upstream_config.split(|byte| *byte == 0).collect::<Vec<_>>();
-    if fields.len() < 3 {
-        return Err(PushError::GitFailed);
-    }
-    let local_oid = text(fields[0])?.to_owned();
-    let remote_name = text(fields[1])?.to_owned();
-    let remote_ref = text(fields[2])?.to_owned();
-    if remote_name.is_empty() || remote_ref.is_empty() {
-        return Err(PushError::NoUpstream);
-    }
-    if remote_name == "." || !remote_ref.starts_with("refs/heads/") {
-        return Err(PushError::InvalidUpstream);
-    }
+    let (local_oid, remote_name, remote_branch) = if let Some((remote_name, remote_branch)) = target
+    {
+        crate::remotes::validate_remote_name(repository_path, remote_name)
+            .await
+            .map_err(|_| PushError::InvalidUpstream)?;
+        let remotes = crate::remotes::read_remotes(repo_id.clone(), repository_path)
+            .await
+            .map_err(|_| PushError::InvalidUpstream)?;
+        if !remotes
+            .remotes
+            .iter()
+            .any(|remote| remote.name == remote_name)
+        {
+            return Err(PushError::InvalidUpstream);
+        }
+        crate::branches::validate_branch_name(repository_path, remote_branch)
+            .await
+            .map_err(|_| PushError::InvalidUpstream)?;
+        let local_oid = run_git(
+            repository_path,
+            &[
+                "rev-parse".into(),
+                "--verify".into(),
+                format!("refs/heads/{local_branch}^{{commit}}").into(),
+            ],
+        )
+        .await?;
+        let local_oid = text(
+            local_oid
+                .split(|byte| *byte == b'\n')
+                .next()
+                .unwrap_or_default(),
+        )?
+        .to_owned();
+        (local_oid, remote_name.to_owned(), remote_branch.to_owned())
+    } else {
+        let upstream_config = run_git(
+            repository_path,
+            &[
+                "for-each-ref".into(),
+                "--format=%(objectname)%00%(upstream:remotename)%00%(upstream:remoteref)".into(),
+                format!("refs/heads/{local_branch}").into(),
+            ],
+        )
+        .await?;
+        let fields = upstream_config.split(|byte| *byte == 0).collect::<Vec<_>>();
+        if fields.len() < 3 {
+            return Err(PushError::GitFailed);
+        }
+        let local_oid = text(fields[0])?.to_owned();
+        let remote_name = text(fields[1])?.to_owned();
+        let remote_ref = text(fields[2])?.to_owned();
+        if remote_name.is_empty() || remote_ref.is_empty() {
+            return Err(PushError::NoUpstream);
+        }
+        if remote_name == "." || !remote_ref.starts_with("refs/heads/") {
+            return Err(PushError::InvalidUpstream);
+        }
+        let remote_branch = remote_ref
+            .strip_prefix("refs/heads/")
+            .filter(|name| !name.is_empty())
+            .ok_or(PushError::InvalidUpstream)?;
+        (local_oid, remote_name, remote_branch.to_owned())
+    };
     crate::remotes::validate_remote_name(repository_path, &remote_name)
         .await
         .map_err(|_| PushError::InvalidUpstream)?;
-    let remote_branch = remote_ref
-        .strip_prefix("refs/heads/")
-        .filter(|name| !name.is_empty())
-        .ok_or(PushError::InvalidUpstream)?;
-    crate::branches::validate_branch_name(repository_path, remote_branch)
+    crate::branches::validate_branch_name(repository_path, &remote_branch)
         .await
         .map_err(|_| PushError::InvalidUpstream)?;
     let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
@@ -183,7 +232,7 @@ pub async fn read_push_preflight(
         repo_id,
         local_branch: local_branch.to_owned(),
         remote_name: remote_name.to_owned(),
-        remote_branch: remote_branch.to_owned(),
+        remote_branch,
         local_oid,
         expected_remote_oid,
         ahead,

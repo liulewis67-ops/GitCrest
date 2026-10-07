@@ -2857,7 +2857,26 @@ async fn pull_repository(
 async fn preflight_repository_push(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
+    query: Result<Query<PushTargetQuery>, QueryRejection>,
 ) -> Result<Json<push::PushPreflight>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A push target must include both remoteName and remoteBranch.",
+        )
+    })?;
+    let target_ref = match (query.remote_name.as_deref(), query.remote_branch.as_deref()) {
+        (None, None) => None,
+        (Some(remote_name), Some(remote_branch)) => Some((remote_name, remote_branch)),
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "A push target must include both remoteName and remoteBranch.",
+            ));
+        }
+    };
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -2868,15 +2887,25 @@ async fn preflight_repository_push(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    push::read_push_preflight(
+    push::read_push_preflight_for_target(
         repo_id,
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        target_ref,
     )
     .await
     .map(Json)
     .map_err(ApiError::from_push_error)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PushTargetQuery {
+    #[serde(rename = "remoteName")]
+    remote_name: Option<String>,
+    #[serde(rename = "remoteBranch")]
+    remote_branch: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -2885,6 +2914,8 @@ struct PushRequest {
     expected_local_oid: String,
     expected_remote_oid: String,
     force_with_lease: bool,
+    remote_name: String,
+    remote_branch: String,
 }
 
 async fn push_repository(
@@ -2899,6 +2930,7 @@ async fn push_repository(
             "Push preflight OIDs and force-with-lease choice are required.",
         )
     })?;
+    let target_ref = Some((request.remote_name.as_str(), request.remote_branch.as_str()));
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -2909,16 +2941,19 @@ async fn push_repository(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preflight = push::read_push_preflight(
+    let preflight = push::read_push_preflight_for_target(
         repo_id.clone(),
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        target_ref,
     )
     .await
     .map_err(ApiError::from_push_error)?;
     if preflight.local_oid != request.expected_local_oid
         || preflight.expected_remote_oid != request.expected_remote_oid
+        || preflight.remote_name != request.remote_name
+        || preflight.remote_branch != request.remote_branch
     {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -4248,6 +4283,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let repository_path = directory.path().join("repo");
         let bare_path = directory.path().join("remote.git");
+        let backup_path = directory.path().join("backup.git");
         std::fs::create_dir(&repository_path).unwrap();
         let git = |path: &std::path::Path, args: &[&str]| {
             let output = std::process::Command::new("git")
@@ -4287,6 +4323,23 @@ mod tests {
             &repository_path,
             &["push", "--quiet", "-u", "origin", "HEAD"],
         );
+        let backup = std::process::Command::new("git")
+            .arg("init")
+            .arg("--bare")
+            .arg("--quiet")
+            .arg(&backup_path)
+            .output()
+            .unwrap();
+        assert!(backup.status.success());
+        git(
+            &repository_path,
+            &["remote", "add", "backup", backup_path.to_str().unwrap()],
+        );
+        git(
+            &repository_path,
+            &["push", "--quiet", "backup", "HEAD:refs/heads/release"],
+        );
+        git(&repository_path, &["fetch", "--quiet", "backup"]);
         std::fs::write(repository_path.join("change.txt"), "change\n").unwrap();
         git(&repository_path, &["add", "change.txt"]);
         git(
@@ -4333,6 +4386,8 @@ mod tests {
                     "expectedLocalOid": preview["localOid"],
                     "expectedRemoteOid": preview["expectedRemoteOid"],
                     "forceWithLease": false,
+                    "remoteName": preview["remoteName"],
+                    "remoteBranch": preview["remoteBranch"],
                 })
                 .to_string(),
             ))
@@ -4360,6 +4415,7 @@ mod tests {
         );
 
         let branches = app
+            .clone()
             .oneshot(request(
                 &format!("/api/v1/repositories/{repo_id}/branches"),
                 Some(WRITE_TOKEN),
@@ -4377,6 +4433,53 @@ mod tests {
             .unwrap();
         assert_eq!(current["ahead"], 0);
         assert_eq!(current["behind"], 0);
+
+        let preview = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/push-preflight?remoteName=backup&remoteBranch=release"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview.status(), StatusCode::OK);
+        let body = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(preview["remoteName"], "backup");
+        assert_eq!(preview["remoteBranch"], "release");
+        assert_eq!(preview["ahead"], 1);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/push"),
+                &serde_json::json!({
+                    "expectedLocalOid": preview["localOid"],
+                    "expectedRemoteOid": preview["expectedRemoteOid"],
+                    "forceWithLease": false,
+                    "remoteName": "backup",
+                    "remoteBranch": "release",
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        let backup_head = std::process::Command::new("git")
+            .arg("--git-dir")
+            .arg(&backup_path)
+            .args(["rev-parse", "refs/heads/release"])
+            .output()
+            .unwrap();
+        assert!(backup_head.status.success());
+        assert_eq!(
+            String::from_utf8_lossy(&backup_head.stdout).trim(),
+            preview["localOid"].as_str().unwrap()
+        );
     }
 
     #[tokio::test]

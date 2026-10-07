@@ -1108,6 +1108,10 @@ export interface components {
             expectedRemoteOid: string;
             /** @description Explicitly select force-with-lease after reviewing the preview. */
             forceWithLease: boolean;
+            /** @description Explicit target matching the reviewed Push preview. */
+            remoteName: string;
+            /** @description Explicit branch matching the reviewed Push preview. */
+            remoteBranch: string;
         };
         RemoteSnapshot: {
             repoId: components["schemas"]["RepoId"];
@@ -3577,7 +3581,12 @@ export interface operations {
     };
     preflightRepositoryPush: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Optional explicit configured remote. Provide together with remoteBranch to review a one-off Push to target. */
+                remoteName?: string;
+                /** @description Optional explicit branch on remoteName. */
+                remoteBranch?: string;
+            };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
             };

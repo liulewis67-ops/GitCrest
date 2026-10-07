@@ -596,6 +596,8 @@ function App() {
         expectedLocalOid: preview.localOid,
         expectedRemoteOid: preview.expectedRemoteOid,
         forceWithLease,
+        remoteName: preview.remoteName,
+        remoteBranch: preview.remoteBranch,
       });
       setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
       setTasksError("");

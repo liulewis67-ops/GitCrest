@@ -348,11 +348,12 @@ impl GitCommandService {
         force_with_lease: bool,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let current = crate::push::read_push_preflight(
+        let current = crate::push::read_push_preflight_for_target(
             expected.repo_id.clone(),
             repository_path,
             Some(&expected.local_branch),
             false,
+            Some((&expected.remote_name, &expected.remote_branch)),
         )
         .await
         .map_err(|_| {

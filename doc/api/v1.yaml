@@ -1718,6 +1718,17 @@ paths:
     get:
       operationId: preflightRepositoryPush
       summary: Preview the current branch push target and changed scope
+      parameters:
+        - name: remoteName
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 255 }
+          description: Optional explicit configured remote. Provide together with remoteBranch to review a one-off Push to target.
+        - name: remoteBranch
+          in: query
+          required: false
+          schema: { type: string, minLength: 1, maxLength: 255 }
+          description: Optional explicit branch on remoteName.
       responses:
         "200":
           description: Current upstream, compare-and-swap OIDs, commits to push, and changed paths.
@@ -2325,11 +2336,13 @@ components:
     PushRequest:
       type: object
       additionalProperties: false
-      required: [expectedLocalOid, expectedRemoteOid, forceWithLease]
+      required: [expectedLocalOid, expectedRemoteOid, forceWithLease, remoteName, remoteBranch]
       properties:
         expectedLocalOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         forceWithLease: { type: boolean, description: Explicitly select force-with-lease after reviewing the preview. }
+        remoteName: { type: string, minLength: 1, maxLength: 255, description: Explicit target matching the reviewed Push preview. }
+        remoteBranch: { type: string, minLength: 1, maxLength: 255, description: Explicit branch matching the reviewed Push preview. }
     RemoteSnapshot:
       type: object
       additionalProperties: false
