@@ -117,6 +117,7 @@ enum ApiErrorCode {
     BranchNotFound,
     BranchCurrent,
     BranchUnmerged,
+    BranchWorktreeDirty,
     TagAlreadyExists,
     InternalError,
 }
@@ -646,6 +647,14 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/branches/favorite",
             put(set_branch_favorite),
+        )
+        .route(
+            "/v1/repositories/:repo_id/branches/switch-preflight",
+            get(preflight_branch_switch),
+        )
+        .route(
+            "/v1/repositories/:repo_id/branches/switch",
+            post(switch_repository_branch),
         )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
@@ -1414,6 +1423,137 @@ async fn set_branch_favorite(
     .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
     branch.is_favorite = favorite;
     Ok(Json(snapshot))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BranchSwitchPreflight {
+    repo_id: String,
+    current: Option<String>,
+    target: String,
+    is_clean: bool,
+    dirty_files: Vec<String>,
+    potentially_overwritten_paths: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BranchNameQuery {
+    name: String,
+}
+
+async fn preflight_branch_switch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<BranchNameQuery>, QueryRejection>,
+) -> Result<Json<BranchSwitchPreflight>, ApiError> {
+    let Query(request) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A target branch name is required.",
+        )
+    })?;
+    let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
+    let snapshot = state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let dirty_files = snapshot
+        .files
+        .iter()
+        .filter(|file| {
+            !file
+                .categories
+                .iter()
+                .all(|category| matches!(category, status::ChangeCategory::Ignored))
+        })
+        .map(|file| file.path.clone())
+        .collect::<Vec<_>>();
+    let changed_in_target = match metadata.head.as_deref() {
+        Some(head) => branches::paths_changed_between(&target.repository_path, head, &request.name)
+            .await
+            .map_err(ApiError::from_branch_error)?,
+        None => Vec::new(),
+    };
+    let potentially_overwritten_paths = dirty_files
+        .iter()
+        .filter(|path| changed_in_target.contains(path))
+        .cloned()
+        .collect();
+    Ok(Json(BranchSwitchPreflight {
+        repo_id,
+        current: metadata.branch,
+        target: request.name,
+        is_clean: dirty_files.is_empty(),
+        dirty_files,
+        potentially_overwritten_paths,
+    }))
+}
+
+async fn switch_repository_branch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<BranchNameRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A target branch name is required.",
+        )
+    })?;
+    let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
+    if metadata.branch.as_deref() == Some(request.name.as_str()) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::BranchCurrent,
+            "This branch is already checked out.",
+        ));
+    }
+    let status = state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let dirty_files = status
+        .files
+        .iter()
+        .filter(|file| {
+            !file
+                .categories
+                .iter()
+                .all(|category| matches!(category, status::ChangeCategory::Ignored))
+        })
+        .map(|file| file.path.clone())
+        .collect::<Vec<_>>();
+    if !dirty_files.is_empty() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::BranchWorktreeDirty,
+            "Commit or shelve local changes before switching branches.",
+        ));
+    }
+    let path = target.repository_path;
+    let target_name = request.name;
+    let repo_for_check = repo_id.clone();
+    let repositories = state.repositories.clone();
+    let command = state.git_commands.clone();
+    let task = state.tasks.submit(Some(repo_id), None, target.resource_key, "branchSwitch", move |context| async move {
+        let fresh_status = status::read(repo_for_check.clone(), &path).await
+            .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
+        if fresh_status.files.iter().any(|file| !file.categories.iter().all(|category| matches!(category, status::ChangeCategory::Ignored))) {
+            return Err(TaskFailure::Failed("The working tree changed. Commit or shelve local changes before switching.".into()));
+        }
+        command.execute_branch(&path, BranchCommand::Switch { name: target_name }, context).await?;
+        repositories
+            .refresh_metadata(&repo_for_check)
+            .await
+            .map_err(|_| TaskFailure::Failed("Branch switched but repository metadata could not be refreshed.".into()))?;
+        Ok(None)
+    }).await.map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
 #[derive(Deserialize)]
@@ -3364,6 +3504,46 @@ mod tests {
         git(&["add", "unmerged.txt"]);
         git(&["commit", "--quiet", "-m", "unmerged branch commit"]);
         git(&["checkout", "--quiet", &current_branch]);
+        std::fs::write(root.join("unmerged.txt"), "local untracked collision\n").unwrap();
+        let switch_preflight = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches/switch-preflight?name=feature%2Frenamed"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(switch_preflight.status(), StatusCode::OK);
+        let body = to_bytes(switch_preflight.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let switch_preflight: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(switch_preflight["isClean"], false);
+        assert_eq!(switch_preflight["dirtyFiles"][0], "unmerged.txt");
+        assert_eq!(
+            switch_preflight["potentiallyOverwrittenPaths"][0],
+            "unmerged.txt"
+        );
+        let dirty_switch = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches/switch"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/renamed" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, code) = error_code(dirty_switch).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(code, "BRANCH_WORKTREE_DIRTY");
+        std::fs::remove_file(root.join("unmerged.txt")).unwrap();
         let preview = app
             .clone()
             .oneshot(
@@ -3453,6 +3633,77 @@ mod tests {
             .unwrap()
             .iter()
             .any(|branch| branch["fullName"] == "refs/heads/feature/renamed"));
+
+        let switch_branch = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/switch" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(switch_branch.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let switch_branch: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, switch_branch["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let clean_preflight = app.clone().oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/branches/switch-preflight?name=feature%2Fswitch"),
+            Some(READ_ONLY_TOKEN),
+        )).await.unwrap();
+        assert_eq!(clean_preflight.status(), StatusCode::OK);
+        let body = to_bytes(clean_preflight.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let clean_preflight: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(clean_preflight["isClean"], true);
+        let switch = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches/switch"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/switch" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(switch.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(switch.into_body(), usize::MAX).await.unwrap();
+        let switch: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, switch["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let switched_repository = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(switched_repository.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let switched_repository: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(switched_repository["branch"], "feature/switch");
 
         let duplicate = app
             .clone()

@@ -93,7 +93,7 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S4.1 | BranchService：本地/远程分支列表、upstream、ahead/behind、创建/重命名/删除/收藏。 | 与 Git refs 一致；删除未合并分支前显示未合并提交数量并确认；收藏重启后保留；失败不让 UI 假装已切换；创建同名分支有明确错误。 | 已完成 |
-| S4.2 | 分支切换器和非干净工作区安全预检。 | `Cmd/Ctrl+B` 打开；干净仓库可切换；非干净仓库展示提交、Shelve、继续、取消，但 Shelve 未完成前其入口禁用并解释；可能覆盖的文件具体列出；取消后工作区不变；切换成功刷新状态、refs、图。 | 未开始 |
+| S4.2 | 分支切换器和非干净工作区安全预检。 | `Cmd/Ctrl+B` 打开；干净仓库可切换；非干净仓库展示提交、Shelve、继续、取消，但 Shelve 未完成前其入口禁用并解释；可能覆盖的文件具体列出；取消后工作区不变；切换成功刷新状态、refs、图。 | 已完成 |
 | S4.3 | Remote 管理与系统凭证集成。 | 多 remote 增删改查、默认目标和 upstream 正确；HTTPS token 只存系统 Keychain，SSH 使用受控代理/系统配置；设置和日志均不显示明文；认证失败能重新输入/修复且不丢当前任务。 | 未开始 |
 | S4.4 | Fetch 与 Push 任务、风险预检和 force-with-lease。 | 有进度、取消、脱敏日志和可读错误；non-fast-forward 被拒绝时引导 fetch；强推显示目标 remote/branch/覆盖范围并二次确认；lease 失效阻止覆盖；完成后 ahead/behind 和提交图 refs 更新。 | 未开始 |
 | S4.5 | Pull、Commit and Push / Push to… 的组合工作流。 | Pull 在 dirty/conflict 状态下先预检，合并或 rebase 策略有明示；Split Button 记住每仓上次选择并标示危险默认项；本地提交后 push 失败时提交保留，重试只重试 push、不重复 commit；`Cmd/Ctrl+Shift+Enter` 行为正确。 | 未开始 |
@@ -331,3 +331,9 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验收：`pnpm api:types`、`pnpm check` 与 Rust clippy 通过；全量门禁包含 43 个 Vitest 用例、52 个 Rust 测试和 1 个 Electron E2E。临时本地 bare remote 测试覆盖 local/remote refs、upstream、1 ahead/0 behind；API 集成使用只读 token 确认 current branch。证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。
 - 子阶段 B：创建/重命名/删除分支及未合并提交预览，已完成。B.1 创建分支任务 API：`POST /branches` 校验分支名、已存在分支和无初始提交仓库，再通过仓库任务队列执行创建；集成测试等待任务完成并确认 refs 更新及重复名称冲突。完成 commit：`3eb9af5`。B.2 增加重命名任务、删除预览和删除任务；预览统计目标分支上当前分支不可达的提交，拒绝删除当前分支，对未合并提交要求显式确认，执行仍使用 Git 安全删除选项。验收：`pnpm api:types`、`pnpm check`（45 Vitest、52 Rust、1 E2E）、`cargo clippy --all-targets -- -D warnings` 和 `git diff --check` 通过。API 集成验证重命名、零/一条未合并提交预览、未确认拒绝及确认删除。证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。完成 commit：`0a28547`。
 - 子阶段 C：分支收藏持久化和导航区 UI，已完成。新增 SQLite 迁移及按完整 ref 持久化收藏；重命名时迁移收藏，删除时清理收藏。Branches API 返回收藏状态，导航区展示当前分支、本地/远程分支并将收藏项置顶，用户可切换收藏；切换仓库时重新加载，分支任务结束后刷新 refs 和 repository metadata。验收：`pnpm api:types`、`pnpm check`（46 Vitest、52 Rust、1 Electron E2E）、`cargo clippy --all-targets -- -D warnings`、`git diff --check` 通过。测试覆盖跨数据库重启收藏、rename 保留收藏、delete 清理收藏及 UI 切换。证据：`crates/gitcrest-core/migrations/0003_branch_favorites.sql`、`crates/gitcrest-core/src/storage.rs`、`crates/gitcrest-core/src/main.rs`、`src/App.tsx`、`src/App.css`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/app.test.tsx`。完成 commit：`9272cf8`。
+
+### S4.2 — Branch switch preflight（已完成）
+- 新增只读 switch preflight，返回本地变更文件及与目标分支树差异相交的潜在覆盖路径；切换 API 只接受本地分支、拒绝当前分支和脏工作区，并在任务执行时再次检查工作区。Git switch 成功后刷新并持久化 repository metadata。
+- `Ctrl/Cmd+B` 打开切换器。干净时可提交切换任务；脏时列出文件和覆盖风险，提供提交、Shelve（S5.3 前禁用并说明）、继续（工作区清洁前禁用）及取消；提交后用户可重新检查继续。取消保持分支和工作区原样。
+- 验收：`pnpm api:types`、`pnpm check`（48 Vitest、52 Rust、1 Electron E2E）、`cargo clippy --all-targets -- -D warnings`、`git diff --check` 通过。API 集成覆盖清洁切换、脏工作区拒绝和 untracked 冲突路径；UI 用例覆盖脏工作区选项、取消与后续切换；Electron E2E 在实际 Git 仓库中验证冲突提醒/取消和清洁切换。
+- 证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`src/App.tsx`、`src/App.css`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。完成 commit SHA 待补记。

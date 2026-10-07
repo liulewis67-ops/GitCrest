@@ -457,6 +457,34 @@ button:disabled { cursor: not-allowed; }
 .unavailableTag { color: var(--amber); font-size: 8px; }
 .noCommands { padding: 15px 9px; color: var(--text-muted); font-size: 10px; }
 .paletteFooter { display: flex; gap: 15px; padding: 9px 12px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 8px; }
+.branchSwitcherBackdrop { align-items: center; padding: 20px; }
+.branchSwitcherDialog { display: grid; gap: 12px; width: min(470px, 100%); max-height: min(650px, 86vh); overflow: auto; padding: 17px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-raised); box-shadow: var(--shadow); }
+.dialogHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.dialogHeading h2 { margin: 3px 0 0; font-size: 16px; font-weight: 620; }
+.dialogClose { width: 27px; height: 27px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-secondary); cursor: pointer; font-size: 17px; line-height: 1; }
+.branchSwitcherCurrent { margin: 0; color: var(--text-muted); font-size: 10px; }
+.branchSwitcherCurrent strong { color: var(--text); font-weight: 600; }
+.branchSwitchChoices, .branchSwitchDetails { display: grid; gap: 7px; }
+.branchSwitchChoices h3, .branchSwitchDetails h3 { margin: 2px 0; font-size: 11px; font-weight: 650; }
+.branchChoice { display: flex; align-items: center; min-height: 35px; gap: 8px; padding: 0 9px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 10px; text-align: left; }
+.branchChoice:hover:not(:disabled), .branchChoice:focus-visible { border-color: var(--line-strong); background: var(--accent-soft); }
+.branchChoice > span:nth-child(2) { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.branchFavoriteMark { color: var(--amber); }
+.branchRemoteNote, .branchSwitcherHint { margin: 0; color: var(--text-muted); font-size: 9px; line-height: 1.5; }
+.branchSwitcherHint { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 9px; }
+.branchSwitcherHint span { margin-left: auto; }
+.branchSwitcherHint kbd { padding: 2px 4px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); font: inherit; }
+.branchCleanNotice, .branchDirtyNotice { margin: 0; font-size: 10px; line-height: 1.5; }
+.branchCleanNotice { color: var(--green); }
+.branchDirtyNotice, .dialogError { color: var(--danger); }
+.dialogError { margin: 0; font-size: 10px; }
+.branchDirtyFiles { display: grid; max-height: 180px; overflow: auto; gap: 3px; padding: 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.branchDirtyFile { display: flex; align-items: center; min-width: 0; gap: 6px; color: var(--text-secondary); font: 9px var(--font-mono); }
+.branchDirtyFile > span:nth-child(2) { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.branchDirtyFile strong { color: var(--amber); font: 8px var(--font-ui); }
+.branchSwitchOptions { display: flex; flex-wrap: wrap; gap: 6px; }
+.branchSwitchOptions .secondaryButton, .dialogActions .secondaryButton, .dialogActions .primaryButton { min-height: 29px; font-size: 9px; }
+.dialogActions { display: flex; justify-content: flex-end; gap: 7px; }
 
 .taskCenterButton { display: inline-flex; align-items: center; gap: 7px; }
 .taskBackdrop { align-items: center; padding: 20px; }

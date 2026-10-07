@@ -70,7 +70,12 @@ pub async fn unmerged_commit_count(
     current: &str,
     branch: &str,
 ) -> Result<u32, BranchError> {
-    let current_ref = format!("refs/heads/{current}");
+    let current_ref = if current.starts_with("refs/") || current.len() == 40 || current.len() == 64
+    {
+        current.to_owned()
+    } else {
+        format!("refs/heads/{current}")
+    };
     let branch_ref = format!("refs/heads/{branch}");
     let output = run_git(
         repository_path,
@@ -86,6 +91,36 @@ pub async fn unmerged_commit_count(
         .trim()
         .parse::<u32>()
         .map_err(|_| BranchError::GitFailed)
+}
+
+pub async fn paths_changed_between(
+    repository_path: &Path,
+    current: &str,
+    target: &str,
+) -> Result<Vec<String>, BranchError> {
+    let current_ref = if current.starts_with("refs/") || current.len() == 40 || current.len() == 64
+    {
+        current.to_owned()
+    } else {
+        format!("refs/heads/{current}")
+    };
+    let target_ref = format!("refs/heads/{target}");
+    let output = run_git(
+        repository_path,
+        &[
+            "diff".into(),
+            "--name-only".into(),
+            "-z".into(),
+            current_ref.into(),
+            target_ref.into(),
+        ],
+    )
+    .await?;
+    Ok(output
+        .split(|byte| *byte == 0)
+        .filter(|path| !path.is_empty())
+        .map(|path| String::from_utf8_lossy(path).into_owned())
+        .collect())
 }
 
 pub async fn read_branches(

@@ -15,6 +15,7 @@ export type CommitPageResponse = components["schemas"]["CommitPage"];
 export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
+export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
 export type CommitHistoryFilters = Pick<
   NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
@@ -170,6 +171,19 @@ export class GitCrestApiClient {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ fullName, favorite } satisfies components["schemas"]["BranchFavoriteRequest"]),
+    });
+  }
+
+  preflightRepositoryBranchSwitch(repoId: RepoId, name: string): Promise<BranchSwitchPreflightResponse> {
+    const query = new URLSearchParams({ name });
+    return this.request<BranchSwitchPreflightResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/switch-preflight?${query}`);
+  }
+
+  switchRepositoryBranch(repoId: RepoId, name: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/switch`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name } satisfies components["schemas"]["BranchNameRequest"]),
     });
   }
 

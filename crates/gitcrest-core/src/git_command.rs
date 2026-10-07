@@ -28,6 +28,7 @@ pub enum GitOperation {
 #[derive(Clone, Debug)]
 pub enum BranchCommand {
     Create { name: String },
+    Switch { name: String },
     Rename { old_name: String, new_name: String },
     Delete { name: String, allow_unmerged: bool },
 }
@@ -99,6 +100,15 @@ impl GitCommandService {
             BranchCommand::Create { name } => (
                 vec!["branch".into(), "--".into(), name.into()],
                 "Create branch",
+            ),
+            BranchCommand::Switch { name } => (
+                vec![
+                    "switch".into(),
+                    "--no-guess".into(),
+                    "--".into(),
+                    name.into(),
+                ],
+                "Switch branch",
             ),
             BranchCommand::Rename { old_name, new_name } => (
                 vec![

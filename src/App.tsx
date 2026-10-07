@@ -166,6 +166,11 @@ function App() {
   const [branchSnapshots, setBranchSnapshots] = useState<Record<string, BranchSnapshotResponse>>({});
   const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
   const [branchLoadingByRepo, setBranchLoadingByRepo] = useState<Record<string, boolean>>({});
+  const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
+  const [switchTargetName, setSwitchTargetName] = useState("");
+  const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
+  const [switchError, setSwitchError] = useState("");
+  const [switchBusy, setSwitchBusy] = useState(false);
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -298,6 +303,49 @@ function App() {
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setBranchErrors((current) => ({ ...current, [repository.repoId]: message || (error instanceof Error ? error.message : "Could not update branch favorite.") }));
+    }
+  }
+
+  function openBranchSwitcher() {
+    if (!selectedRepository || selectedRepository.availability !== "available") return;
+    setSwitchTargetName("");
+    setSwitchPreflight(undefined);
+    setSwitchError("");
+    setBranchSwitcherOpen(true);
+    void refreshRepositoryBranches(selectedRepository.repoId);
+  }
+
+  async function inspectBranchSwitch(name: string) {
+    const api = apiRef.current;
+    if (!api || !selectedRepository) return;
+    setSwitchTargetName(name);
+    setSwitchPreflight(undefined);
+    setSwitchError("");
+    try {
+      setSwitchPreflight(await api.preflightRepositoryBranchSwitch(selectedRepository.repoId, name));
+    } catch (error) {
+      setSwitchError(error instanceof Error ? error.message : "Could not check this branch switch.");
+    }
+  }
+
+  async function continueBranchSwitch() {
+    const api = apiRef.current;
+    const repository = selectedRepository;
+    if (!api || !repository || !switchTargetName) return;
+    setSwitchBusy(true);
+    setSwitchError("");
+    try {
+      const preflight = await api.preflightRepositoryBranchSwitch(repository.repoId, switchTargetName);
+      setSwitchPreflight(preflight);
+      if (!preflight.isClean) return;
+      const task = await api.switchRepositoryBranch(repository.repoId, switchTargetName);
+      setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+      setBranchSwitcherOpen(false);
+      setTasksOpen(true);
+    } catch (error) {
+      setSwitchError(error instanceof GitCrestApiError ? error.body.error.message : error instanceof Error ? error.message : "Could not switch branches.");
+    } finally {
+      setSwitchBusy(false);
     }
   }
 
@@ -907,7 +955,10 @@ function App() {
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+        event.preventDefault();
+        openBranchSwitcher();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setPaletteOpen((open) => !open);
         setPaletteQuery("");
@@ -917,7 +968,7 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+  }, [selectedRepository?.repoId, selectedRepository?.availability]);
 
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -1048,7 +1099,7 @@ function App() {
               <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => changeWorkspaceMode("graph")}>Graph</button>
               <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} title={!selectedFilePath ? "Select a changed file to open Diff" : "Open the selected file diff"} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
-              <button className="quietButton compact" type="button" disabled title="Branch selection arrives with S4.2"><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available"} title={selectedRepository ? "Switch branches (Ctrl/Cmd+B)" : "Open a repository to switch branches"} onClick={openBranchSwitcher}><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
             </div>
           </div>
 
@@ -1186,6 +1237,46 @@ function App() {
           </section>
           <footer className="statusbar"><span className="statusIcon" aria-hidden="true">●</span>{connected ? "Git engine ready" : connecting ? "Connecting to Git engine" : "Git engine unavailable"}<span className="statusbarDivider" /><span>{version || "API v1"}</span><span className="footerSpacer" /><span>Repository actions planned for S1</span></footer>
         </section>
+      )}
+
+      {branchSwitcherOpen && selectedRepository && (
+        <div className="paletteBackdrop branchSwitcherBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !switchBusy) setBranchSwitcherOpen(false); }}>
+          <section className="branchSwitcherDialog" role="dialog" aria-modal="true" aria-labelledby="branch-switcher-title">
+            <div className="dialogHeading"><div><span className="sectionEyebrow">BRANCHES · {repositoryName(selectedRepository.path)}</span><h2 id="branch-switcher-title">Switch branch</h2></div><button className="dialogClose" type="button" aria-label="Close branch switcher" disabled={switchBusy} onClick={() => setBranchSwitcherOpen(false)}>×</button></div>
+            <p className="branchSwitcherCurrent">Current branch: <strong>{selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch"}</strong></p>
+            {switchTargetName ? (
+              <div className="branchSwitchDetails">
+                <button className="textButton" type="button" disabled={switchBusy} onClick={() => { setSwitchTargetName(""); setSwitchPreflight(undefined); setSwitchError(""); }}>← Choose another branch</button>
+                <h3>{switchTargetName}</h3>
+                {switchBusy && !switchPreflight && <p role="status">Checking the working tree…</p>}
+                {switchError && <p className="dialogError" role="alert">{switchError}</p>}
+                {switchPreflight?.isClean && <p className="branchCleanNotice" role="status">The working tree is clean. GitCrest can switch to this branch.</p>}
+                {switchPreflight && !switchPreflight.isClean && <>
+                  <p className="branchDirtyNotice" role="alert">Commit or shelve these changes before switching.</p>
+                  <div className="branchDirtyFiles" aria-label="Uncommitted files">
+                    {switchPreflight.dirtyFiles.map((path) => <div className="branchDirtyFile" key={path}><span aria-hidden="true">•</span><span>{path}</span>{switchPreflight.potentiallyOverwrittenPaths.includes(path) && <strong>May be overwritten</strong>}</div>)}
+                  </div>
+                  <div className="branchSwitchOptions">
+                    <button className="secondaryButton" type="button" onClick={() => { setBranchSwitcherOpen(false); requestAnimationFrame(() => document.getElementById("commit-message")?.focus()); }}>Commit changes</button>
+                    <button className="secondaryButton" type="button" disabled title="Shelve is planned for S5.3 and will not change your files now">Shelve changes</button>
+                    <button className="secondaryButton" type="button" disabled title="Commit or shelve the listed changes, then run preflight again">Continue</button>
+                  </div>
+                </>}
+              </div>
+            ) : (
+              <div className="branchSwitchChoices">
+                <h3>Local branches</h3>
+                {!activeBranches && activeBranchesLoading && <p role="status">Loading branches…</p>}
+                {activeBranchError && <p className="dialogError" role="alert">{activeBranchError}</p>}
+                {activeBranches && orderedBranches.filter((branch) => branch.kind === "local" && !branch.isCurrent).length === 0 && <p className="navEmpty">There are no other local branches.</p>}
+                {orderedBranches.filter((branch) => branch.kind === "local" && !branch.isCurrent).map((branch) => <button className="branchChoice" type="button" key={branch.fullName} disabled={switchBusy} onClick={() => { setSwitchBusy(true); void inspectBranchSwitch(branch.name).finally(() => setSwitchBusy(false)); }}><span className="branchItemGlyph" aria-hidden="true">⑂</span><span>{branch.name}</span>{branch.isFavorite && <span className="branchFavoriteMark" aria-label="Favorite">★</span>}<span className="actionArrow" aria-hidden="true">→</span></button>)}
+                {orderedBranches.some((branch) => branch.kind === "remote") && <p className="branchRemoteNote">Remote branches are shown in navigation. Check out a local tracking branch before switching to a remote branch.</p>}
+              </div>
+            )}
+            <div className="dialogActions"><button className="secondaryButton" type="button" disabled={switchBusy} onClick={() => setBranchSwitcherOpen(false)}>Cancel</button>{switchTargetName && switchPreflight?.isClean && <button className="primaryButton" type="button" disabled={switchBusy} onClick={() => void continueBranchSwitch()}>{switchBusy ? "Switching…" : `Switch to ${switchTargetName}`}</button>}</div>
+            <div className="branchSwitcherHint"><kbd>{commandKey} B</kbd> opens this switcher <span>Esc closes</span></div>
+          </section>
+        </div>
       )}
 
       {paletteOpen && (

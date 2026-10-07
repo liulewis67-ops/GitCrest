@@ -257,6 +257,71 @@ describe("App", () => {
     expect(fetcher.mock.calls[7][1]?.method).toBe("POST");
   });
 
+  it("previews dirty work before a branch switch and queues the switch after a clean preflight", async () => {
+    const repository = { repoId: "repo_switch", path: "C:/switch", head: "a".repeat(40), branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
+    const branches = { repoId: repository.repoId, current: "main", detached: false, branches: [
+      { name: "main", fullName: "refs/heads/main", oid: "a".repeat(40), kind: "local", isCurrent: true, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null },
+      { name: "feature/test", fullName: "refs/heads/feature/test", oid: "b".repeat(40), kind: "local", isCurrent: false, isFavorite: true, upstream: null, upstreamGone: false, ahead: null, behind: null },
+    ] };
+    const task = { taskId: "task-switch", repoId: repository.repoId, operation: "branchSwitch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository: vi.fn().mockResolvedValue(repository.path),
+      },
+    });
+    const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "X-GitCrest-API-Version": "1" } });
+    let preflightCount = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
+      if (url.pathname === "/api/v1/repositories" && init?.method === "POST") return response(repository);
+      if (url.pathname === "/api/v1/repositories") return response([]);
+      if (url.pathname === "/api/v1/tasks") return response([task]);
+      if (url.pathname === `/api/v1/repositories/${repository.repoId}`) return response(repository);
+      if (url.pathname.endsWith("/status")) return response({ repoId: repository.repoId, refreshedAtMs: 1, files: [] });
+      if (url.pathname.endsWith("/branches") && !url.pathname.includes("/switch")) return response(branches);
+      if (url.pathname.endsWith("/branches/switch-preflight")) {
+        preflightCount += 1;
+        return response(preflightCount <= 2
+          ? { repoId: repository.repoId, current: "main", target: "feature/test", isClean: false, dirtyFiles: ["src/working.ts"], potentiallyOverwrittenPaths: ["src/working.ts"] }
+          : { repoId: repository.repoId, current: "main", target: "feature/test", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] });
+      }
+      if (url.pathname.endsWith("/branches/switch")) return response(task, 202);
+      throw new Error(`Unexpected API request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+    await screen.findByText("C:/switch", { selector: ".workspaceCrumb .mutedText" });
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+    const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    fireEvent.click(within(dialog).getByRole("button", { name: /feature\/test/ }));
+    expect(await within(dialog).findByText("src/working.ts")).toBeDefined();
+    expect(within(dialog).getByText("May be overwritten")).toBeDefined();
+    expect((within(dialog).getByRole("button", { name: "Shelve changes" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialog).getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/branches/switch"))).toBe(false);
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+    const commitDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    fireEvent.click(within(commitDialog).getByRole("button", { name: /feature\/test/ }));
+    expect(await within(commitDialog).findByText("src/working.ts")).toBeDefined();
+    fireEvent.click(within(commitDialog).getByRole("button", { name: "Commit changes" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
+    fireEvent.click(screen.getByTitle("Switch branches (Ctrl/Cmd+B)"));
+    const secondDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    fireEvent.click(within(secondDialog).getByRole("button", { name: /feature\/test/ }));
+    fireEvent.click(await within(secondDialog).findByRole("button", { name: "Switch to feature/test" }));
+    expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
+    expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true);
+  });
+
   it("shows persisted repositories in Welcome and lets the user favorite or forget them", async () => {
     const repository = {
       repoId: "repo_fixture", path: "C:/project", head: null, branch: "main", detached: false,

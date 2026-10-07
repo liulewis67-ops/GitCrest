@@ -546,6 +546,75 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/branches/switch-preflight:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: preflightRepositoryBranchSwitch
+      summary: Inspect working tree changes and target branch overwrite paths
+      parameters:
+        - name: name
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        "200":
+          description: Branch switch preflight details.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BranchSwitchPreflight" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or local branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/branches/switch:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: switchRepositoryBranch
+      summary: Queue a local branch switch when the worktree is clean
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchNameRequest" }
+      responses:
+        "202":
+          description: Switch task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or local branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: The target is current or the working tree has changes.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
   /api/v1/repositories/{repoId}/branches/delete-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1770,6 +1839,17 @@ components:
       properties:
         fullName: { type: string, minLength: 1 }
         favorite: { type: boolean }
+    BranchSwitchPreflight:
+      type: object
+      additionalProperties: false
+      required: [repoId, current, target, isClean, dirtyFiles, potentiallyOverwrittenPaths]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        current: { type: [string, "null"] }
+        target: { type: string }
+        isClean: { type: boolean }
+        dirtyFiles: { type: array, items: { type: string } }
+        potentiallyOverwrittenPaths: { type: array, items: { type: string } }
     DeleteBranchRequest:
       type: object
       additionalProperties: false

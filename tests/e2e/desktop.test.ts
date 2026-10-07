@@ -78,9 +78,24 @@ describe("desktop startup E2E", () => {
       await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'base';\n");
       await execFileAsync("git", ["-C", fixture.path, "add", "src/example.ts", "src/other.ts"]);
       await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add source fixture"]);
+      const originalBranch = (await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim();
+      await execFileAsync("git", ["-C", fixture.path, "checkout", "--quiet", "-b", "feature/e2e"]);
+      await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'feature branch';\n");
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-am", "change feature branch"]);
+      await execFileAsync("git", ["-C", fixture.path, "checkout", "--quiet", originalBranch]);
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'welcome';\n");
       await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'changed';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.keyboard.press("Control+b");
+      const dirtySwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
+      await dirtySwitchDialog.waitFor();
+      await dirtySwitchDialog.getByRole("button", { name: /feature\/e2e/ }).click();
+      await dirtySwitchDialog.getByText("src/example.ts").waitFor();
+      expect(await dirtySwitchDialog.getByText("May be overwritten").count()).toBe(1);
+      expect(await dirtySwitchDialog.getByRole("button", { name: "Shelve changes" }).isDisabled()).toBe(true);
+      await dirtySwitchDialog.getByRole("button", { name: "Cancel" }).click();
+      await dirtySwitchDialog.waitFor({ state: "detached" });
+      expect(await window.getByTitle("Switch branches (Ctrl/Cmd+B)").innerText()).toContain(originalBranch);
       await window.getByRole("button", { name: "modified src/example.ts" }).click();
       const rendererErrors: string[] = [];
       window.on("console", (message) => { if (message.type() === "error") rendererErrors.push(message.text()); });
@@ -125,6 +140,16 @@ describe("desktop startup E2E", () => {
       expect(readonlyResult).toEqual({ access: "readOnly", status: 403 });
       await diffWindow.close();
       expect(await window.locator(".monacoDiffHunk").count()).toBeGreaterThan(0);
+
+      await execFileAsync("git", ["-C", fixture.path, "checkout", "--", "src/example.ts", "src/other.ts"]);
+      await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.keyboard.press("Control+b");
+      const cleanSwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
+      await cleanSwitchDialog.waitFor();
+      await cleanSwitchDialog.getByRole("button", { name: /feature\/e2e/ }).click();
+      await cleanSwitchDialog.getByText("The working tree is clean.").waitFor();
+      await cleanSwitchDialog.getByRole("button", { name: "Switch to feature/e2e" }).click();
+      await window.waitForFunction(() => document.querySelector('[title="Switch branches (Ctrl/Cmd+B)"]')?.textContent?.includes("feature/e2e") === true, undefined, { timeout: 15_000 });
 
       await window.setViewportSize({ width: 900, height: 820 });
       expect(await window.locator(".navigationPanel").isVisible()).toBe(false);

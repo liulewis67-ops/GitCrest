@@ -179,6 +179,24 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ fullName: "refs/heads/main", favorite: true }));
   });
 
+  it("preflights a branch switch with a read request and queues a clean switch", async () => {
+    const preflight = { repoId: "repo_fixture", current: "main", target: "feature/ui", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] };
+    const task = { taskId: "task-switch", repoId: "repo_fixture", operation: "branchSwitch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(preflight), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.preflightRepositoryBranchSwitch("repo_fixture", "feature/ui")).resolves.toEqual(preflight);
+    await expect(client.switchRepositoryBranch("repo_fixture", "feature/ui")).resolves.toEqual(task);
+    const preflightUrl = new URL(String(fetcher.mock.calls[0][0]));
+    expect(preflightUrl.pathname).toBe("/api/v1/repositories/repo_fixture/branches/switch-preflight");
+    expect(preflightUrl.searchParams.get("name")).toBe("feature/ui");
+    expect(fetcher.mock.calls[0][1]?.method).toBeUndefined();
+    expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/branches/switch`);
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ name: "feature/ui" }));
+  });
+
   it("reads paginated commits, commit detail, and refs through versioned repository routes", async () => {
     const page = { repoId: "repo_fixture", offset: 50, limit: 50, commits: [], nextOffset: 100 };
     const detail = { repoId: "repo_fixture", oid: "a".repeat(40), parents: [], authorName: "Author", authorEmail: "author@example.invalid", committedAtMs: 1, message: "first", stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [] };
