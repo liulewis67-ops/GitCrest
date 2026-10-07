@@ -337,6 +337,13 @@ button:disabled { cursor: not-allowed; }
 .diffWindowViewToggle button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
 .diffWindowContent { min-height: 0; overflow: auto; }
 .diffWindowContent > .splitDiff { min-height: 100%; }
+.diffWindowTabs { display: flex; align-items: stretch; gap: 3px; min-width: 0; overflow-x: auto; padding: 4px 8px 0; border-bottom: 1px solid var(--line); background: var(--surface); }
+.diffWindowTab { display: flex; align-items: center; min-width: 140px; max-width: 280px; border: 1px solid transparent; border-bottom: 0; border-radius: 5px 5px 0 0; color: var(--text-muted); }
+.diffWindowTab.active { border-color: var(--line); background: var(--canvas); color: var(--text-primary); }
+.diffWindowTabSelect { display: grid; flex: 1; min-width: 0; gap: 2px; border: 0; padding: 6px 8px; background: transparent; color: inherit; text-align: left; font: 10px var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.diffWindowTabSelect span { color: var(--text-muted); font: 7px var(--font-sans); letter-spacing: .06em; }
+.diffWindowTabClose { border: 0; padding: 5px 7px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.diffWindowTabLimit { align-self: center; padding: 4px 9px; color: var(--text-muted); font-size: 9px; white-space: nowrap; }
 .unifiedDiff { padding-bottom: 28px; font: 10px/1.55 var(--font-mono); }
 .unifiedDiffHunk { margin: 0 0 12px; border-bottom: 1px solid var(--line); }
 .unifiedDiffHunk > header { position: sticky; top: 0; padding: 6px 12px; background: var(--accent-soft); color: var(--accent-strong); }
@@ -345,6 +352,12 @@ button:disabled { cursor: not-allowed; }
 .unifiedDiffRow code { min-width: 0; padding: 1px 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .unifiedDiffDeletion { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 .unifiedDiffAddition { background: color-mix(in srgb, var(--success) 10%, transparent); }
+.blameView { padding-bottom: 24px; font: 9px/1.5 var(--font-mono); }
+.blameLine { display: grid; grid-template-columns: 42px 80px minmax(90px, 150px) minmax(100px, 240px) minmax(0, 1fr); min-height: 22px; align-items: center; border-bottom: 1px solid var(--line); }
+.blameLine > span { overflow: hidden; padding: 2px 6px; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
+.blameLine .blameLineNumber { text-align: right; user-select: none; }
+.blameLine .blameCommit { color: var(--accent-strong); }
+.blameLine code { overflow: hidden; padding: 2px 8px; color: var(--text-primary); white-space: pre-wrap; overflow-wrap: anywhere; }
 .commitDetailFileRow { display: flex; align-items: stretch; gap: 3px; }
 .commitDetailFileRow .commitDetailFile { flex: 1; min-width: 0; }
 .commitDetailFileWindow { align-self: stretch; padding: 3px 8px; font-size: 12px; }

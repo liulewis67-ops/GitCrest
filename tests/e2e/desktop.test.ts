@@ -75,9 +75,11 @@ describe("desktop startup E2E", () => {
       await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'hello';\n");
-      await execFileAsync("git", ["-C", fixture.path, "add", "src/example.ts"]);
+      await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'base';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/example.ts", "src/other.ts"]);
       await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add source fixture"]);
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'welcome';\n");
+      await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'changed';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
       await window.getByRole("button", { name: "modified src/example.ts" }).click();
       const rendererErrors: string[] = [];
@@ -96,6 +98,17 @@ describe("desktop startup E2E", () => {
       await diffWindow.locator(".diffWindow").waitFor({ state: "visible" });
       await diffWindow.locator(".diffWindowHeader .sectionEyebrow").waitFor({ state: "visible" });
       await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });
+      expect(await diffWindow.locator(".diffWindowTabSelect").count()).toBe(2);
+      await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/other.ts" }).click();
+      await diffWindow.getByText("changed", { exact: false }).waitFor({ state: "visible" });
+      await diffWindow.getByRole("button", { name: "Blame" }).click();
+      await diffWindow.locator(".blameView").waitFor({ state: "visible" });
+      expect(await diffWindow.locator(".blameView").innerText()).toContain("sibling = 'changed'");
+      expect(await diffWindow.locator(".blameView").innerText()).toContain("Not Committed Yet");
+      await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/example.ts" }).click();
+      await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });
+      await diffWindow.getByRole("button", { name: "Close src/other.ts tab" }).click();
+      expect(await diffWindow.locator(".diffWindowTabSelect").count()).toBe(1);
       await diffWindow.getByRole("button", { name: "Unified" }).click();
       expect(await diffWindow.locator(".unifiedDiff").count()).toBe(1);
       const readonlyResult = await diffWindow.evaluate(async (repoId) => {

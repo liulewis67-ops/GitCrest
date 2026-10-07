@@ -39,8 +39,8 @@
 |---|---|---|---|
 | 0. 工程与契约基座 | 可启动、安全通信、统一契约、可执行测试和界面骨架 | 无 | 已完成 |
 | 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 已完成 |
-| 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 进行中 |
-| 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 进行中 |
+| 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 已完成 |
+| 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 已完成 |
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 未开始 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 未开始 |
 | 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 未开始 |
@@ -318,8 +318,10 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 完成日期：2026-10-08。完成 commits：`539bec1`、`1b3614d`、`7906421`、`32708cb`、`4c51b65`。
 - 限制/后续：Monaco 只读视图按 hunk 懒加载；默认 Split 仍是 Git 结构化行和可选暂存的权威视图。树解析器支持 JavaScript、TypeScript/TSX 与 Rust；未知类型、解析失败和超大 hunk 回退为纯文本，超过 50 个 hunk 或合计 1,000,000 字符时不启用 Monaco。构建工具报告 tree-sitter wasm runtime 的 `eval` 警告，后续在 S7.3 安全验收；资源体积和 1k 行性能在 S7.2 测量。
 
-### S3.5 — 独立只读 Diff 窗口、Blame 与多文件 Tab（进行中）
+### S3.5 — 独立只读 Diff 窗口、Blame 与多文件 Tab（已完成）
 - 子阶段 A：独立 Diff 窗口与 Split/Unified 只读审阅，已完成。窗口只允许 read-write 主窗口通过受校验 IPC 创建，使用后端 read-only token；支持 Changes 与提交详情入口、工作区/历史 Diff、Split/Unified。Electron E2E 验证 read-only 窗口的 commit 写请求返回 403，关闭窗口后主窗口 diff 仍保留。`pnpm check` 通过：41 个 Vitest 用例、49 个 Rust 测试、1 个 Electron E2E。
 - 子阶段 A 证据：`electron/main/index.ts`、`electron/preload/index.ts`、`src/features/diff/DiffWindow.tsx`、`src/features/diff/SplitDiff.tsx`、`src/main.tsx`、`src/App.tsx`、`src/features/history/CommitGraph.tsx`、`tests/e2e/desktop.test.ts`、`tests/unit/commit-graph.test.tsx`、`tests/unit/split-diff.test.tsx`。完成 commit：`21e9d48`。
-- 子阶段 B：Blame 和多文件 Tab，进行中。B.1 有界、只读、支持 commit revision 的 blame API 已完成，使用 `git blame --line-porcelain`，校验 full commit ID，限制输出为 8 MiB/单次 Git 读取最长 20 秒；HEAD 与历史版本的行号、SHA、作者、时间、summary 和原文均由临时仓库测试验证。B.2 多文件 tabs 与 blame 行视图进行中。
-- B.1 验收：`pnpm api:types`、`pnpm check` 与 `cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 通过；全量门禁包含 42 个 Vitest 用例、50 个 Rust 测试和 1 个 Electron E2E。HTTP 集成测试以只读 token 读取当前及历史 blame，错误 revision/path 校验有覆盖。证据：`crates/gitcrest-core/src/history.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。完成 commit SHA 待补记。
+- 子阶段 B：Blame 和多文件 Tab，已完成。B.1 有界、只读、支持 commit revision 的 blame API，使用 `git blame --line-porcelain`，校验 full commit ID，限制输出为 8 MiB/单次 Git 读取最长 20 秒；HEAD 与历史版本的行号、SHA、作者、时间、summary 和原文均由临时仓库及 HTTP 集成测试验证。B.2 在 Diff 窗口中展示同一仓库/提交的多个文件 tabs，支持选中和关闭；Blame 行视图显示行号、SHA、作者、summary 和源码，并识别 Git 的 `Not Committed Yet` 修改行。
+- 验收：`pnpm api:types`、`pnpm check` 与 `cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 通过；全量门禁包含 42 个 Vitest 用例、50 个 Rust 测试和 1 个 Electron E2E。E2E 从工作区打开两个修改文件，切换 tabs、查看未提交行 blame、关闭单个 tab 和整个窗口，并确认主窗口选择仍在；HTTP 集成测试以只读 token 读取 HEAD 与历史 blame，坏路径/revision 被拒绝。
+- 证据：`crates/gitcrest-core/src/history.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/DiffWindow.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/e2e/desktop.test.ts`。完成 commits：S3.5 A `21e9d48`，B.1 `27b734f`，B.2 本次提交。
+- 限制/后续：最多展示 100 个文件 tabs，超出时显示范围提示。Blame 对 working tree 调用 Git 当前工作树 blame，对历史 Diff 则按选中 commit 查询；binary 和没有已提交历史的新建/删除文件禁用 blame。主窗口继续只提供 Split，Monaco/Tree-sitter 的资源安全与性能分别在 S7.3/S7.2 验收。
