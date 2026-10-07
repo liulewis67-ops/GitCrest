@@ -82,8 +82,8 @@
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S3.1 | LogService 分页读取、refs 和提交详情 API。 | merge commit 父子关系、作者/时间/message/文件统计与 Git 一致；按页读取，不在首屏遍历全量历史或所有 tags；新提交/切分支后 refs 和详情更新；空历史有明确空状态。 | 进行中 |
-| S3.2 | Canvas 提交图、虚拟滚动、可访问列表替代结构。 | 分支/merge 连线与提交关系一致；长历史滚动不创建等量 DOM 节点；选中提交显示右侧详情；键盘和屏幕阅读器可通过列表访问提交；100k 提交性能留到 S7.2 正式验收。 | 未开始 |
+| S3.1 | LogService 分页读取、refs 和提交详情 API。 | merge commit 父子关系、作者/时间/message/文件统计与 Git 一致；按页读取，不在首屏遍历全量历史或所有 tags；新提交/切分支后 refs 和详情更新；空历史有明确空状态。 | 已完成 |
+| S3.2 | Canvas 提交图、虚拟滚动、可访问列表替代结构。 | 分支/merge 连线与提交关系一致；长历史滚动不创建等量 DOM 节点；选中提交显示右侧详情；键盘和屏幕阅读器可通过列表访问提交；100k 提交性能留到 S7.2 正式验收。 | 进行中 |
 | S3.3 | 历史搜索、筛选、提交详情动作。 | SHA、作者、日期、message、分支/路径筛选返回正确结果；无结果可清除过滤；复制 SHA、打开文件 Diff、tag 等动作有上下文；危险历史动作只在安全阶段实现并受预检，不提前暴露不可用按钮。 | 未开始 |
 | S3.4 | 高级 Diff：Monaco、词/token 高亮、语法解析、变更块导航与折叠。 | `F7`/`Shift+F7` 跳转；新增/删除/修改和上下文可辨；tree-sitter 不支持的语言降级为文本 diff；二进制和超大文件有降级提示；结构化结果与 Git 原始 diff 一致；1k 行性能留到 S7.2。 | 未开始 |
 | S3.5 | 独立只读 Diff 窗口、Split/Unified、Blame 和多文件 Tab。 | 从 Changes 与提交详情打开；主区仍仅 Split，独立窗口可切换两种视图；独立窗口对提交/删除/push 等写请求被后端拒绝；Blame 行号/SHA 与 Git 一致；关闭窗口不丢主窗口上下文。 | 未开始 |
@@ -281,3 +281,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/commits.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/SplitDiff.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
 - 完成 commit：`3a95527`
 - 限制/后续：选中范围按 staged Diff revision 绑定，Git 使用独立临时 index 运行 hook/commit，真实 index 不需要回滚；文本 hunk/行支持部分提交。成功签名依赖用户在 Git 配置的 OpenPGP/SSH 密钥，本阶段只验证了签名失败不会创建提交。提交历史及成功后的 log 刷新在 S3.1 接入。
+
+### S3.1 — 分页历史、refs 与提交详情 API
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：`pnpm check` 通过，包含 renderer/Electron 类型检查和构建、24 个 Vitest 用例、Rust 格式检查/构建/46 个测试及 Electron E2E。Rust 临时仓库覆盖多个 refs 下的 bounded page、merge commit 两个 parent、HEAD commit 详情与首父文件统计、local/remote ref 结构和默认排除 tag；HTTP API 验证 limit/offset 分页、详情字段、refs、无效页参数和未知 commit 错误。前端 API 客户端用例验证分页查询、OID 编码、refs 路由和版本头。
+- 手工验证：未单独操作桌面窗口；新端点通过受保护 Router 集成测试和 API 客户端测试验证，UI 提交图消费这些接口在 S3.2 实现。
+- 证据：`crates/gitcrest-core/src/history.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。
+- 完成 commit：`742adc9`
+- 限制/后续：首屏最多读取 100 条，默认 50；分页通过 offset 继续，offset 上限 1,000,000，后续页可能需要 Git 跳过前序记录，其大历史性能在 S7.2 验收。ref 快照只包含本地/远程分支，不扫描 tags；提交文件统计按首父比较，merge 父关系完整保留。成功提交后读取当前仓库 history/refs 可获得最新值；S3.2 接入图视图的精确失效与刷新。
