@@ -84,8 +84,8 @@
 |---|---|---|---|
 | S3.1 | LogService 分页读取、refs 和提交详情 API。 | merge commit 父子关系、作者/时间/message/文件统计与 Git 一致；按页读取，不在首屏遍历全量历史或所有 tags；新提交/切分支后 refs 和详情更新；空历史有明确空状态。 | 已完成 |
 | S3.2 | Canvas 提交图、虚拟滚动、可访问列表替代结构。 | 分支/merge 连线与提交关系一致；长历史滚动不创建等量 DOM 节点；选中提交显示右侧详情；键盘和屏幕阅读器可通过列表访问提交；100k 提交性能留到 S7.2 正式验收。 | 已完成 |
-| S3.3 | 历史搜索、筛选、提交详情动作。 | SHA、作者、日期、message、分支/路径筛选返回正确结果；无结果可清除过滤；复制 SHA、打开文件 Diff、tag 等动作有上下文；危险历史动作只在安全阶段实现并受预检，不提前暴露不可用按钮。 | 进行中 |
-| S3.4 | 高级 Diff：Monaco、词/token 高亮、语法解析、变更块导航与折叠。 | `F7`/`Shift+F7` 跳转；新增/删除/修改和上下文可辨；tree-sitter 不支持的语言降级为文本 diff；二进制和超大文件有降级提示；结构化结果与 Git 原始 diff 一致；1k 行性能留到 S7.2。 | 未开始 |
+| S3.3 | 历史搜索、筛选、提交详情动作。 | SHA、作者、日期、message、分支/路径筛选返回正确结果；无结果可清除过滤；复制 SHA、打开文件 Diff、tag 等动作有上下文；危险历史动作只在安全阶段实现并受预检，不提前暴露不可用按钮。 | 已完成 |
+| S3.4 | 高级 Diff：Monaco、词/token 高亮、语法解析、变更块导航与折叠。 | `F7`/`Shift+F7` 跳转；新增/删除/修改和上下文可辨；tree-sitter 不支持的语言降级为文本 diff；二进制和超大文件有降级提示；结构化结果与 Git 原始 diff 一致；1k 行性能留到 S7.2。 | 进行中 |
 | S3.5 | 独立只读 Diff 窗口、Split/Unified、Blame 和多文件 Tab。 | 从 Changes 与提交详情打开；主区仍仅 Split，独立窗口可切换两种视图；独立窗口对提交/删除/push 等写请求被后端拒绝；Blame 行号/SHA 与 Git 一致；关闭窗口不丢主窗口上下文。 | 未开始 |
 
 ## 8. 大阶段 4：分支与远程
@@ -299,3 +299,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：src/features/history/CommitGraph.tsx、src/App.tsx、src/App.css、tests/unit/commit-graph.test.tsx、crates/gitcrest-core/src/history.rs。
 - 完成 commit：3d1d931
 - 限制/后续：当前固定行高虚拟列表加载到用户浏览范围，节点 DOM 数量保持在可视行和 overscan 范围；100k 提交端到端性能仍按 S7.2 验收。refs 可用时显示本地/远程分支标签，refs 请求失败时历史仍可浏览。历史筛选和提交动作在 S3.3 实施。
+
+### S3.3 — 历史搜索、筛选与提交动作
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：pnpm check 通过，包含 TypeScript/Electron 构建、27 个 Vitest 用例、Rust 格式检查/构建/48 个测试及 Electron E2E。临时仓库 HTTP 测试覆盖 SHA 前缀、作者、message、分支、精确路径、日期范围、无效日期/越界路径、根与非根提交 Diff，以及新建/重名 annotated tag；组件测试覆盖筛选提交/清除、详情文件打开、复制 SHA 失败反馈、tag 表单和历史 Diff 只读边界。
+- 手工验证：未单独操作桌面窗口；通过组件测试和真实临时 Git 仓库 API 测试验证。
+- 证据：crates/gitcrest-core/src/history.rs、crates/gitcrest-core/src/diff.rs、crates/gitcrest-core/src/tags.rs、crates/gitcrest-core/src/main.rs、doc/api/v1.yaml、src/api/client.ts、src/api/schema.ts、src/features/history/CommitGraph.tsx、src/features/diff/SplitDiff.tsx、src/App.tsx、src/App.css、tests/unit/api-client.test.ts、tests/unit/commit-graph.test.tsx、tests/unit/split-diff.test.tsx。
+- 完成 commit：846e419、c0f7a28、29a661c
+- 限制/后续：SHA 搜索要求唯一可解析的 4–64 位十六进制前缀；日期按 UTC 日历日期解释；路径筛选为仓库内精确路径。提交 Diff 按首父比较，根提交与空树比较；历史 Diff 只读。annotated tag 必须使用新 ref 名，不支持覆盖或删除；ref 快照仍不包含 tags，创建成功后详情面板显示上下文确认。高级 Monaco/tree-sitter Diff、跳转和折叠在 S3.4 实施。
