@@ -35,6 +35,7 @@ mod commits;
 mod diff;
 mod git_command;
 mod history;
+mod remotes;
 mod repository;
 mod staging;
 mod status;
@@ -118,6 +119,8 @@ enum ApiErrorCode {
     BranchCurrent,
     BranchUnmerged,
     BranchWorktreeDirty,
+    RemotesUnavailable,
+    RemotesTooLarge,
     TagAlreadyExists,
     InternalError,
 }
@@ -476,6 +479,31 @@ impl ApiError {
         }
     }
 
+    fn from_remote_error(error: remotes::RemoteError) -> Self {
+        match error {
+            remotes::RemoteError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+            remotes::RemoteError::TimedOut => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                ApiErrorCode::RemotesUnavailable,
+                "Git did not read remote configuration within 20 seconds.",
+            ),
+            remotes::RemoteError::TooLarge => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::RemotesTooLarge,
+                "Remote configuration exceeds the response limit.",
+            ),
+            remotes::RemoteError::GitFailed => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::RemotesUnavailable,
+                "Git could not read remote configuration.",
+            ),
+        }
+    }
+
     fn from_tag_error(error: tags::TagError) -> Self {
         match error {
             tags::TagError::Invalid => Self::new(
@@ -656,6 +684,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/branches/switch",
             post(switch_repository_branch),
         )
+        .route("/v1/repositories/:repo_id/remotes", get(repository_remotes))
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
             "/v1/repositories/:repo_id/staging/patch",
@@ -1423,6 +1452,21 @@ async fn set_branch_favorite(
     .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
     branch.is_favorite = favorite;
     Ok(Json(snapshot))
+}
+
+async fn repository_remotes(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<remotes::RemoteSnapshot>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remotes::read_remotes(repo_id, &target.repository_path)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_remote_error)
 }
 
 #[derive(Serialize)]
@@ -3372,6 +3416,20 @@ mod tests {
             .unwrap()
             .iter()
             .any(|branch| branch["isCurrent"] == true && branch["name"] == current_branch));
+        let remotes = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/remotes"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(remotes.status(), StatusCode::OK);
+        let body = to_bytes(remotes.into_body(), usize::MAX).await.unwrap();
+        let remotes: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(remotes["repoId"], repo_id);
+        assert_eq!(remotes["defaultRemote"], serde_json::Value::Null);
+        assert_eq!(remotes["remotes"].as_array().unwrap().len(), 0);
 
         let creation = app
             .clone()

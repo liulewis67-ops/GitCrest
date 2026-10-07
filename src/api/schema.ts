@@ -274,6 +274,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/remotes": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Read remote names and sanitized fetch/push URLs */
+        get: operations["getRepositoryRemotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/branches/delete-preview": {
         parameters: {
             query?: never;
@@ -846,6 +867,17 @@ export interface components {
             isClean: boolean;
             dirtyFiles: string[];
             potentiallyOverwrittenPaths: string[];
+        };
+        RemoteSnapshot: {
+            repoId: components["schemas"]["RepoId"];
+            defaultRemote: string | null;
+            remotes: components["schemas"]["RemoteRef"][];
+        };
+        RemoteRef: {
+            name: string;
+            fetchUrls: string[];
+            pushUrls: string[];
+            isDefault: boolean;
         };
         DeleteBranchRequest: {
             name: string;
@@ -1812,6 +1844,61 @@ export interface operations {
             406: components["responses"]["UnsupportedVersion"];
             /** @description The target is current or the working tree has changes. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getRepositoryRemotes: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Remote configuration with the origin remote selected as the default when present. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Remote configuration exceeds the bounded response size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git did not read remote configuration within its deadline. */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };

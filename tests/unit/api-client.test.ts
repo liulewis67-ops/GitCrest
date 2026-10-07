@@ -197,6 +197,18 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ name: "feature/ui" }));
   });
 
+  it("reads sanitized remote configuration through a versioned repository request", async () => {
+    const snapshot = { repoId: "repo_fixture", defaultRemote: "origin", remotes: [
+      { name: "origin", fetchUrls: ["https://[REDACTED]@example.test/org/repo.git"], pushUrls: ["ssh://[REDACTED]@example.test/org/repo.git"], isDefault: true },
+    ] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(snapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryRemotes("repo_fixture")).resolves.toEqual(snapshot);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/remotes`);
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
+  });
+
   it("reads paginated commits, commit detail, and refs through versioned repository routes", async () => {
     const page = { repoId: "repo_fixture", offset: 50, limit: 50, commits: [], nextOffset: 100 };
     const detail = { repoId: "repo_fixture", oid: "a".repeat(40), parents: [], authorName: "Author", authorEmail: "author@example.invalid", committedAtMs: 1, message: "first", stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [] };

@@ -615,6 +615,42 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+  /api/v1/repositories/{repoId}/remotes:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositoryRemotes
+      summary: Read remote names and sanitized fetch/push URLs
+      responses:
+        "200":
+          description: Remote configuration with the origin remote selected as the default when present.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteSnapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "413":
+          description: Remote configuration exceeds the bounded response size.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "504":
+          description: Git did not read remote configuration within its deadline.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
   /api/v1/repositories/{repoId}/branches/delete-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1850,6 +1886,30 @@ components:
         isClean: { type: boolean }
         dirtyFiles: { type: array, items: { type: string } }
         potentiallyOverwrittenPaths: { type: array, items: { type: string } }
+    RemoteSnapshot:
+      type: object
+      additionalProperties: false
+      required: [repoId, defaultRemote, remotes]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        defaultRemote: { type: [string, "null"] }
+        remotes:
+          type: array
+          maxItems: 128
+          items: { $ref: "#/components/schemas/RemoteRef" }
+    RemoteRef:
+      type: object
+      additionalProperties: false
+      required: [name, fetchUrls, pushUrls, isDefault]
+      properties:
+        name: { type: string }
+        fetchUrls:
+          type: array
+          items: { type: string, description: Display-safe URL; embedded user-info is redacted and query strings are omitted. }
+        pushUrls:
+          type: array
+          items: { type: string, description: Display-safe URL; embedded user-info is redacted and query strings are omitted. }
+        isDefault: { type: boolean }
     DeleteBranchRequest:
       type: object
       additionalProperties: false

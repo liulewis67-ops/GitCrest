@@ -16,6 +16,7 @@ export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
+export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
 export type CommitHistoryFilters = Pick<
   NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
@@ -185,6 +186,10 @@ export class GitCrestApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name } satisfies components["schemas"]["BranchNameRequest"]),
     });
+  }
+
+  getRepositoryRemotes(repoId: RepoId): Promise<RemoteSnapshotResponse> {
+    return this.request<RemoteSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`);
   }
 
   stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {
