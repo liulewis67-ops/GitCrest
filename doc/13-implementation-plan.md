@@ -243,5 +243,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm api:types` 与 `pnpm check` 通过；门禁包含 renderer/Electron 类型检查与生产构建、19 个 Vitest 用例、Rust 格式检查/构建/37 个测试以及 Electron E2E。Rust 覆盖统一 diff hunk 到左右行映射、仓库相对路径校验，以及 staged、unstaged、untracked、binary、deleted、renamed 文件读取；API 测试通过 repoId 获取所选文件的 working-tree diff。前端测试覆盖 diff API 查询编码、Changes 文件选择、Diff 面板显示和 Graph/Diff 选择保持。
 - 手工验证：未单独操作桌面窗口；自动化验证确认 Diff 模式会收起提交详情面板，Graph/Diff 往返保留所选路径与 scope，diff API 为只读且没有暂存控件。
 - 证据：`crates/gitcrest-core/src/diff.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/SplitDiff.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
-- 完成 commit：待记录
+- 完成 commit：`b22f167`
 - 限制/后续：当前 scope 提供 working tree↔index 与 index↔HEAD；选择任意历史提交进行比较及 Diff 性能基准留待 S3/S7。大于 10 MiB 的 diff 拒绝展示，Git 子进程限时 10 秒；binary、conflicted、ignored、symlink 与 submodule 返回明确状态，不解析为文本行。
