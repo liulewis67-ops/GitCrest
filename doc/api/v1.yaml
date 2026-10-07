@@ -428,6 +428,55 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+    post:
+      operationId: createRepositoryBranch
+      summary: Queue creation of a local branch at the current HEAD
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBranchRequest"
+      responses:
+        "202":
+          description: Branch creation task accepted.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: Branch name is invalid or request body is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: Repository has no commits or the local branch name already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git or task storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1552,6 +1601,12 @@ components:
         upstreamGone: { type: boolean }
         ahead: { type: [integer, "null"], minimum: 0 }
         behind: { type: [integer, "null"], minimum: 0 }
+    CreateBranchRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
     CommitRequest:
       type: object
       additionalProperties: false
@@ -1739,6 +1794,9 @@ components:
         - HISTORY_TOO_LARGE
         - BRANCHES_UNAVAILABLE
         - BRANCHES_TOO_LARGE
+        - BRANCH_NAME_INVALID
+        - BRANCH_ALREADY_EXISTS
+        - BRANCH_REQUIRES_COMMIT
         - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:

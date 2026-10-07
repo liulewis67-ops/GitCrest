@@ -327,7 +327,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：最多展示 100 个文件 tabs，超出时显示范围提示。Blame 对 working tree 调用 Git 当前工作树 blame，对历史 Diff 则按选中 commit 查询；binary 和没有已提交历史的新建/删除文件禁用 blame。主窗口继续只提供 Split，Monaco/Tree-sitter 的资源安全与性能分别在 S7.3/S7.2 验收。
 
 ### S4.1 — BranchService（进行中）
-- 子阶段 A：本地/远程分支清单、upstream 和 ahead/behind 读取，已完成。新增只读 `/branches` API；Git refs 输出限 8 MiB、单次读取 20 秒。带 upstream 的分支返回 ahead/behind（无差异返回 0），已删除 upstream 以 `upstreamGone` 表示；detached HEAD 与当前分支单独标识。
-- 验收：`pnpm api:types`、`pnpm check` 与 Rust clippy 通过；全量门禁包含 43 个 Vitest 用例、52 个 Rust 测试和 1 个 Electron E2E。临时本地 bare remote 测试覆盖 local/remote refs、upstream、1 ahead/0 behind；API 集成使用只读 token 确认 current branch。证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。完成 commit SHA 待补记。
-- 子阶段 B：创建/重命名/删除分支及未合并提交预览，未开始。
+- 子阶段 A：本地/远程分支清单、upstream 和 ahead/behind 读取，已完成。新增只读 `/branches` API；Git refs 输出限 8 MiB、单次读取 20 秒。带 upstream 的分支返回 ahead/behind（无差异返回 0），已删除 upstream 以 `upstreamGone` 表示；detached HEAD 与当前分支单独标识。完成 commit：`ff0b686`。
+- 验收：`pnpm api:types`、`pnpm check` 与 Rust clippy 通过；全量门禁包含 43 个 Vitest 用例、52 个 Rust 测试和 1 个 Electron E2E。临时本地 bare remote 测试覆盖 local/remote refs、upstream、1 ahead/0 behind；API 集成使用只读 token 确认 current branch。证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。
+- 子阶段 B：创建/重命名/删除分支及未合并提交预览，进行中。B.1 创建分支任务 API 已完成：`POST /branches` 校验分支名、已存在分支和无初始提交仓库，再通过仓库任务队列执行创建；集成测试等待任务完成并确认 refs 更新及重复名称冲突。B.2 重命名、删除预览与未合并保护待实现。B.1 验收：`pnpm api:types`、`pnpm check`（44 Vitest、52 Rust、1 E2E）及 `cargo clippy --all-targets -- -D warnings` 通过。证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。完成 commit SHA 待补记。
 - 子阶段 C：分支收藏持久化和导航区 UI，未开始。

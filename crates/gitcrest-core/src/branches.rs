@@ -41,10 +41,27 @@ pub enum BranchKind {
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchError {
+    InvalidName,
     GitUnavailable,
     TimedOut,
     TooLarge,
     GitFailed,
+}
+
+pub async fn validate_branch_name(repository_path: &Path, name: &str) -> Result<(), BranchError> {
+    if name.is_empty() || name.len() > 255 || name.chars().any(char::is_control) {
+        return Err(BranchError::InvalidName);
+    }
+    match run_git(
+        repository_path,
+        &["check-ref-format".into(), "--branch".into(), name.into()],
+    )
+    .await
+    {
+        Ok(_) => Ok(()),
+        Err(BranchError::GitFailed) => Err(BranchError::InvalidName),
+        Err(error) => Err(error),
+    }
 }
 
 pub async fn read_branches(

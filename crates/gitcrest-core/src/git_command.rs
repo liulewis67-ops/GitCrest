@@ -25,6 +25,11 @@ pub enum GitOperation {
     FetchPrune,
 }
 
+#[derive(Clone, Debug)]
+pub enum BranchCommand {
+    Create { name: String },
+}
+
 impl GitOperation {
     fn arguments(self) -> &'static [&'static str] {
         match self {
@@ -77,6 +82,32 @@ impl GitCommandService {
             Vec::new(),
             Some(repository_path),
             operation.label(),
+            task,
+        )
+        .await
+    }
+
+    pub async fn execute_branch(
+        &self,
+        repository_path: &Path,
+        operation: BranchCommand,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let (arguments, label) = match operation {
+            BranchCommand::Create { name } => (
+                vec!["branch".into(), "--".into(), name.into()],
+                "Create branch",
+            ),
+        };
+        run_command(
+            &self.git_program,
+            arguments,
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            label,
             task,
         )
         .await

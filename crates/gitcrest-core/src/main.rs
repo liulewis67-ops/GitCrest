@@ -44,7 +44,7 @@ mod tasks;
 
 use cloning::{CloneError, CloneService};
 use diff::{DiffError, DiffScope};
-use git_command::{GitCommandService, GitOperation};
+use git_command::{BranchCommand, GitCommandService, GitOperation};
 use repository::{Repository, RepositoryError, RepositoryManager};
 use tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError};
 
@@ -111,6 +111,9 @@ enum ApiErrorCode {
     HistoryTooLarge,
     BranchesUnavailable,
     BranchesTooLarge,
+    BranchNameInvalid,
+    BranchAlreadyExists,
+    BranchRequiresCommit,
     TagAlreadyExists,
     InternalError,
 }
@@ -441,6 +444,11 @@ impl ApiError {
 
     fn from_branch_error(error: branches::BranchError) -> Self {
         match error {
+            branches::BranchError::InvalidName => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::BranchNameInvalid,
+                "The branch name is not valid according to Git ref rules.",
+            ),
             branches::BranchError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,
@@ -618,7 +626,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route("/v1/repositories/:repo_id/blame", get(repository_blame))
         .route(
             "/v1/repositories/:repo_id/branches",
-            get(repository_branches),
+            get(repository_branches).post(create_repository_branch),
         )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
@@ -1329,6 +1337,83 @@ async fn repository_branches(
     .await
     .map(Json)
     .map_err(ApiError::from_branch_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CreateBranchRequest {
+    name: String,
+}
+
+async fn create_repository_branch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<CreateBranchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A branch name is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    branches::validate_branch_name(&target.repository_path, &request.name)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    if metadata.head.is_none() {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::BranchRequiresCommit,
+            "Create an initial commit before creating a branch.",
+        ));
+    }
+    let existing = branches::read_branches(
+        repo_id.clone(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
+    if existing.branches.iter().any(|branch| {
+        matches!(branch.kind, branches::BranchKind::Local) && branch.name == request.name
+    }) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::BranchAlreadyExists,
+            "A local branch with this name already exists.",
+        ));
+    }
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let branch_name = request.name;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "branchCreate",
+            move |context| async move {
+                command
+                    .execute_branch(&path, BranchCommand::Create { name: branch_name }, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
 enum CommitPatchError {
@@ -2827,6 +2912,64 @@ mod tests {
             .unwrap()
             .iter()
             .any(|branch| branch["isCurrent"] == true && branch["name"] == current_branch));
+
+        let creation = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/api" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(creation.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(creation.into_body(), usize::MAX).await.unwrap();
+        let creation: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, creation["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        let branches_after_create = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(branches_after_create.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let branches_after_create: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(branches_after_create["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|branch| branch["name"] == "feature/api" && branch["kind"] == "local"));
+        let duplicate = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/api" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, code) = error_code(duplicate).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(code, "BRANCH_ALREADY_EXISTS");
 
         let invalid_page = app
             .clone()
