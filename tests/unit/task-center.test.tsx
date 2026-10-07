@@ -25,13 +25,21 @@ const failedFetch: TaskSnapshotResponse = {
 
 it("provides a recovery action for an authentication-failed fetch", () => {
   const onConfigureCredentials = vi.fn();
-  render(<TaskCenter tasks={[failedFetch]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={onConfigureCredentials} />);
+  render(<TaskCenter tasks={[failedFetch]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={onConfigureCredentials} onReviewPush={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "Configure credentials" }));
   expect(onConfigureCredentials).toHaveBeenCalledWith(failedFetch);
 });
 
 it("does not show credential recovery for unrelated task failures", () => {
   const unrelated = { ...failedFetch, operation: "commit", errorCategory: "commandFailed" as const, logs: ["hook rejected commit"] };
-  render(<TaskCenter tasks={[unrelated]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} />);
+  render(<TaskCenter tasks={[unrelated]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} />);
   expect(screen.queryByRole("button", { name: "Configure credentials" })).toBeNull();
+});
+
+it("offers a reviewed retry for a rejected push", () => {
+  const onReviewPush = vi.fn();
+  const rejected = { ...failedFetch, operation: "pushForceWithLease", errorCategory: "pushRejected" as const, logs: ["! [rejected] main -> main (stale info)"] };
+  render(<TaskCenter tasks={[rejected]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={onReviewPush} />);
+  fireEvent.click(screen.getByRole("button", { name: "Review push" }));
+  expect(onReviewPush).toHaveBeenCalledWith(rejected);
 });

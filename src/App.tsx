@@ -4,6 +4,7 @@ import { CommitDetails, CommitGraph } from "./features/history/CommitGraph";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
 import { RemoteManager } from "./features/remotes/RemoteManager";
+import { PushDialog } from "./features/remotes/PushDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
 import type { components } from "./api/schema";
 import "./App.css";
@@ -172,6 +173,12 @@ function App() {
   const [remoteLoadingByRepo, setRemoteLoadingByRepo] = useState<Record<string, boolean>>({});
   const [remoteActionBusy, setRemoteActionBusy] = useState(false);
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
+  const [pushOpen, setPushOpen] = useState(false);
+  const [pushPreflight, setPushPreflight] = useState<components["schemas"]["PushPreflight"]>();
+  const [pushLoading, setPushLoading] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushError, setPushError] = useState("");
+  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [switchTargetName, setSwitchTargetName] = useState("");
   const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
@@ -203,6 +210,8 @@ function App() {
   const refreshedCommitTasks = useRef(new Set<string>());
   const refreshedBranchTasks = useRef(new Set<string>());
   const refreshedRemoteTasks = useRef(new Set<string>());
+  const refreshedFetchTasks = useRef(new Set<string>());
+  const refreshedPushTasks = useRef(new Set<string>());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
@@ -274,6 +283,15 @@ function App() {
         ? "This repository is unavailable."
         : hasActiveRepositoryTask
           ? "Wait for the current repository task to finish before changing remotes."
+          : "";
+  const pushDisabledReason = !selectedRepository
+    ? "Open a repository to push its current branch."
+    : !connected
+      ? "Connect to the local Git engine to push."
+      : selectedRepository.availability !== "available"
+        ? "This repository is unavailable."
+        : hasActiveRepositoryTask
+          ? "Wait for the current repository task to finish before pushing."
           : "";
   const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
@@ -467,6 +485,70 @@ function App() {
       setTasksError(error instanceof Error ? error.message : "Could not start a fetch task.");
       setTasksOpen(true);
     }
+  }
+
+  async function refreshPushPreflight(repoId = selectedRepository?.repoId) {
+    const api = apiRef.current;
+    if (!api || !repoId) return;
+    setPushLoading(true);
+    setPushError("");
+    try {
+      setPushPreflight(await api.preflightRepositoryPush(repoId));
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setPushPreflight(undefined);
+      setPushError(message || (error instanceof Error ? error.message : "Could not preview the push."));
+    } finally {
+      setPushLoading(false);
+    }
+  }
+
+  function openPushDialog(repoId = selectedRepository?.repoId) {
+    if (!repoId) return;
+    if (repoId !== selectedRepository?.repoId) {
+      const repository = repositories.find((entry) => entry.repoId === repoId);
+      if (repository) activateRepository(repository);
+    }
+    setPushOpen(true);
+    void refreshPushPreflight(repoId);
+  }
+
+  async function submitPush(forceWithLease: boolean) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    const preview = pushPreflight;
+    if (!api || !repoId || !preview || preview.repoId !== repoId || pushBusy) return;
+    setPushBusy(true);
+    setPushError("");
+    try {
+      const task = await api.pushRepository(repoId, {
+        expectedLocalOid: preview.localOid,
+        expectedRemoteOid: preview.expectedRemoteOid,
+        forceWithLease,
+      });
+      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      setTasksError("");
+      setPushOpen(false);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setPushError(message || (error instanceof Error ? error.message : "Could not start the push task."));
+      if (error instanceof GitCrestApiError && error.body.error.code === "PUSH_PREFLIGHT_STALE") {
+        void refreshPushPreflight(repoId);
+      }
+    } finally {
+      setPushBusy(false);
+    }
+  }
+
+  function fetchFromPushDialog() {
+    setPushOpen(false);
+    void fetchRepository();
+  }
+
+  function reviewTaskPush(task: TaskSnapshotResponse) {
+    setTasksOpen(false);
+    openPushDialog(task.repoId || selectedRepository?.repoId);
   }
 
   async function stageChanges(action: StagingRequest["action"], path?: string) {
@@ -972,6 +1054,20 @@ function App() {
         void refreshRepositoryRemotes(task.repoId);
         if (task.operation === "remoteSetUpstream") void refreshRepositoryBranches(task.repoId);
       }
+      if (task.operation.startsWith("push") && !refreshedPushTasks.current.has(task.taskId)) {
+        refreshedPushTasks.current.add(task.taskId);
+        if (task.status === "succeeded" && task.repoId) {
+          void refreshRepositoryBranches(task.repoId);
+          setHistoryRefreshKey((current) => current + 1);
+        }
+      }
+      if (task.operation.startsWith("fetch") && !refreshedFetchTasks.current.has(task.taskId)) {
+        refreshedFetchTasks.current.add(task.taskId);
+        if (task.status === "succeeded" && task.repoId) {
+          void refreshRepositoryBranches(task.repoId);
+          setHistoryRefreshKey((current) => current + 1);
+        }
+      }
     }
   }, [tasks]);
 
@@ -1080,6 +1176,7 @@ function App() {
     { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${themeCycle[(themeCycle.indexOf(theme) + 1) % themeCycle.length]}`, available: true, run: nextTheme },
     { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
     { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
+    { id: "push", label: "Push current branch", detail: "Review commits, target, and overwrite scope before pushing", available: Boolean(selectedRepository), run: () => openPushDialog() },
     { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { setCloneError(""); setCloneOpen(true); } },
     { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
@@ -1196,6 +1293,9 @@ function App() {
               <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => changeWorkspaceMode("graph")}>Graph</button>
               <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} title={!selectedFilePath ? "Select a changed file to open Diff" : "Open the selected file diff"} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pushDisabledReason || "Preview the current branch push"} onClick={() => openPushDialog()}>Push</button>
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={selectedRepository ? "Fetch from configured remotes" : "Open a repository to fetch"} onClick={() => void fetchRepository()}>Fetch</button>
+              <span className="toolbarDivider" />
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available"} title={selectedRepository ? "Switch branches (Ctrl/Cmd+B)" : "Open a repository to switch branches"} onClick={openBranchSwitcher}><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
             </div>
           </div>
@@ -1287,6 +1387,7 @@ function App() {
                 repoId={selectedRepository.repoId}
                 selectedOid={selectedCommit}
                 initialScrollTop={workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0}
+                refreshKey={historyRefreshKey}
                 onScrollPosition={rememberGraphScroll}
                 onSelect={selectCommit}
               /> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)} role="region" aria-label="Commit graph view"><div className="graphEmpty">
@@ -1434,7 +1535,8 @@ function App() {
         </div>
       )}
 
-      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} />}
+      {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
+      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} />}
       {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
     </main>
   );

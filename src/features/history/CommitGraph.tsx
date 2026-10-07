@@ -37,6 +37,7 @@ type CommitGraphProps = {
   repoId: string;
   selectedOid?: string;
   initialScrollTop: number;
+  refreshKey?: number;
   onScrollPosition: (scrollTop: number) => void;
   onSelect: (oid: string) => void;
 };
@@ -49,7 +50,7 @@ function describeRefs(refs: RefSnapshotResponse["refs"], oid: string): string[] 
   return refs.filter((ref) => ref.oid === oid).map((ref) => ref.name);
 }
 
-export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScrollPosition, onSelect }: CommitGraphProps) {
+export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, onScrollPosition, onSelect }: CommitGraphProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [commits, setCommits] = useState<CommitSummary[]>([]);
   const [refs, setRefs] = useState<RefSnapshotResponse["refs"]>([]);
@@ -105,7 +106,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
     setRefsError("");
     void readPage(0, generation);
     return () => { requestGeneration.current += 1; };
-  }, [api, repoId, readPage]);
+  }, [api, repoId, readPage, refreshKey]);
 
   useEffect(() => {
     let active = true;
@@ -115,7 +116,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
       if (active) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
     });
     return () => { active = false; };
-  }, [api, repoId]);
+  }, [api, repoId, refreshKey]);
 
   useEffect(() => {
     const node = viewportRef.current;
