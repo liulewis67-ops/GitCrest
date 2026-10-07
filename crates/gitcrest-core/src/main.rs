@@ -114,6 +114,9 @@ enum ApiErrorCode {
     BranchNameInvalid,
     BranchAlreadyExists,
     BranchRequiresCommit,
+    BranchNotFound,
+    BranchCurrent,
+    BranchUnmerged,
     TagAlreadyExists,
     InternalError,
 }
@@ -627,6 +630,18 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/branches",
             get(repository_branches).post(create_repository_branch),
+        )
+        .route(
+            "/v1/repositories/:repo_id/branches/rename",
+            post(rename_repository_branch),
+        )
+        .route(
+            "/v1/repositories/:repo_id/branches/delete-preview",
+            post(preview_repository_branch_delete),
+        )
+        .route(
+            "/v1/repositories/:repo_id/branches/delete",
+            post(delete_repository_branch),
         )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
@@ -1407,6 +1422,226 @@ async fn create_repository_branch(
             move |context| async move {
                 command
                     .execute_branch(&path, BranchCommand::Create { name: branch_name }, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RenameBranchRequest {
+    name: String,
+    new_name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BranchNameRequest {
+    name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct DeleteBranchRequest {
+    name: String,
+    allow_unmerged: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BranchDeletePreview {
+    name: String,
+    is_current: bool,
+    unmerged_commit_count: u32,
+    requires_confirmation: bool,
+}
+
+async fn branch_for_mutation(
+    state: &AppState,
+    repo_id: &str,
+    name: &str,
+) -> Result<(repository::TaskTarget, Repository), ApiError> {
+    let target = state
+        .repositories
+        .task_target(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    branches::validate_branch_name(&target.repository_path, name)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    if !branches::read_branches(
+        repo_id.to_owned(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?
+    .branches
+    .iter()
+    .any(|branch| matches!(branch.kind, branches::BranchKind::Local) && branch.name == name)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::BranchNotFound,
+            "The local branch does not exist.",
+        ));
+    }
+    Ok((target, metadata))
+}
+
+async fn rename_repository_branch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RenameBranchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Both branch names are required.",
+        )
+    })?;
+    let (target, _) = branch_for_mutation(&state, &repo_id, &request.name).await?;
+    branches::validate_branch_name(&target.repository_path, &request.new_name)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    if request.name == request.new_name {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::BranchNameInvalid,
+            "Choose a different branch name.",
+        ));
+    }
+    let snapshot = branches::read_branches(repo_id.clone(), &target.repository_path, None, false)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    if snapshot.branches.iter().any(|branch| {
+        matches!(branch.kind, branches::BranchKind::Local) && branch.name == request.new_name
+    }) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::BranchAlreadyExists,
+            "A local branch with this name already exists.",
+        ));
+    }
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "branchRename",
+            move |context| async move {
+                command
+                    .execute_branch(
+                        &path,
+                        BranchCommand::Rename {
+                            old_name: request.name,
+                            new_name: request.new_name,
+                        },
+                        context,
+                    )
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn preview_repository_branch_delete(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<BranchNameRequest>, JsonRejection>,
+) -> Result<Json<BranchDeletePreview>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A branch name is required.",
+        )
+    })?;
+    let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
+    let is_current = metadata.branch.as_deref() == Some(request.name.as_str());
+    let unmerged_commit_count = match metadata.branch.as_deref() {
+        Some(current) if !metadata.detached => {
+            branches::unmerged_commit_count(&target.repository_path, current, &request.name)
+                .await
+                .map_err(ApiError::from_branch_error)?
+        }
+        _ => 0,
+    };
+    Ok(Json(BranchDeletePreview {
+        name: request.name,
+        is_current,
+        unmerged_commit_count,
+        requires_confirmation: unmerged_commit_count > 0,
+    }))
+}
+
+async fn delete_repository_branch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<DeleteBranchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A branch name and confirmation choice are required.",
+        )
+    })?;
+    let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
+    if metadata.branch.as_deref() == Some(request.name.as_str()) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::BranchCurrent,
+            "Switch to another branch before deleting the current branch.",
+        ));
+    }
+    let unmerged = match metadata.branch.as_deref() {
+        Some(current) if !metadata.detached => {
+            branches::unmerged_commit_count(&target.repository_path, current, &request.name)
+                .await
+                .map_err(ApiError::from_branch_error)?
+        }
+        _ => 0,
+    };
+    if unmerged > 0 && !request.allow_unmerged {
+        return Err(ApiError::new(StatusCode::CONFLICT, ApiErrorCode::BranchUnmerged, format!("The branch has {unmerged} commit(s) not reachable from the current branch; confirm deletion to continue.")));
+    }
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "branchDelete",
+            move |context| async move {
+                command
+                    .execute_branch(
+                        &path,
+                        BranchCommand::Delete {
+                            name: request.name,
+                            allow_unmerged: request.allow_unmerged,
+                        },
+                        context,
+                    )
                     .await
                     .map(|()| None)
             },
@@ -2951,6 +3186,135 @@ mod tests {
             .unwrap()
             .iter()
             .any(|branch| branch["name"] == "feature/api" && branch["kind"] == "local"));
+        let rename = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches/rename"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/api", "newName": "feature/renamed" })
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(rename.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(rename.into_body(), usize::MAX).await.unwrap();
+        let rename: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, rename["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+
+        let clean_preview = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!(
+                        "/api/v1/repositories/{repo_id}/branches/delete-preview"
+                    ))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/renamed" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(clean_preview.status(), StatusCode::OK);
+        let body = to_bytes(clean_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let clean_preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(clean_preview["unmergedCommitCount"], 0);
+        assert_eq!(clean_preview["requiresConfirmation"], false);
+
+        git(&["checkout", "--quiet", "feature/renamed"]);
+        std::fs::write(root.join("unmerged.txt"), "branch-only\n").unwrap();
+        git(&["add", "unmerged.txt"]);
+        git(&["commit", "--quiet", "-m", "unmerged branch commit"]);
+        git(&["checkout", "--quiet", &current_branch]);
+        let preview = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!(
+                        "/api/v1/repositories/{repo_id}/branches/delete-preview"
+                    ))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/renamed" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(preview.status(), StatusCode::OK);
+        let body = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(preview["unmergedCommitCount"], 1);
+        assert_eq!(preview["requiresConfirmation"], true);
+        let denied_delete = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches/delete"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/renamed", "allowUnmerged": false })
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            denied_delete.status(),
+            StatusCode::CONFLICT,
+            "unexpected denied-delete response"
+        );
+        let (status, code) = error_code(denied_delete).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(code, "BRANCH_UNMERGED");
+        let delete = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches/delete"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/renamed", "allowUnmerged": true })
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(delete.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(delete.into_body(), usize::MAX).await.unwrap();
+        let delete: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, delete["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+
         let duplicate = app
             .clone()
             .oneshot(
@@ -2961,7 +3325,7 @@ mod tests {
                     .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
                     .header(CONTENT_TYPE, "application/json")
                     .body(Body::from(
-                        serde_json::json!({ "name": "feature/api" }).to_string(),
+                        serde_json::json!({ "name": current_branch }).to_string(),
                     ))
                     .unwrap(),
             )

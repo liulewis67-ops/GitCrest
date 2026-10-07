@@ -28,6 +28,8 @@ pub enum GitOperation {
 #[derive(Clone, Debug)]
 pub enum BranchCommand {
     Create { name: String },
+    Rename { old_name: String, new_name: String },
+    Delete { name: String, allow_unmerged: bool },
 }
 
 impl GitOperation {
@@ -98,6 +100,30 @@ impl GitCommandService {
                 vec!["branch".into(), "--".into(), name.into()],
                 "Create branch",
             ),
+            BranchCommand::Rename { old_name, new_name } => (
+                vec![
+                    "branch".into(),
+                    "--move".into(),
+                    "--".into(),
+                    old_name.into(),
+                    new_name.into(),
+                ],
+                "Rename branch",
+            ),
+            BranchCommand::Delete {
+                name,
+                allow_unmerged,
+            } => {
+                let mut arguments = vec!["branch".into()];
+                if allow_unmerged {
+                    arguments.push("--delete".into());
+                    arguments.push("--force".into());
+                } else {
+                    arguments.push("--delete".into());
+                }
+                arguments.extend(["--".into(), name.into()]);
+                (arguments, "Delete branch")
+            }
         };
         run_command(
             &self.git_program,

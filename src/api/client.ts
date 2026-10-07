@@ -141,6 +141,30 @@ export class GitCrestApiClient {
     });
   }
 
+  renameRepositoryBranch(repoId: RepoId, name: string, newName: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/rename`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, newName } satisfies components["schemas"]["RenameBranchRequest"]),
+    });
+  }
+
+  previewRepositoryBranchDelete(repoId: RepoId, name: string): Promise<components["schemas"]["BranchDeletePreview"]> {
+    return this.request<components["schemas"]["BranchDeletePreview"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/delete-preview`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name } satisfies components["schemas"]["BranchNameRequest"]),
+    });
+  }
+
+  deleteRepositoryBranch(repoId: RepoId, name: string, allowUnmerged = false): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/delete`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, allowUnmerged } satisfies components["schemas"]["DeleteBranchRequest"]),
+    });
+  }
+
   stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/staging`, true, {
       method: "POST",

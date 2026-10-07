@@ -144,6 +144,25 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ name: "feature/new-ui" }));
   });
 
+  it("renames branches, reads delete impact, and sends the unmerged confirmation choice", async () => {
+    const task = { taskId: "task-branch", repoId: "repo_fixture", operation: "branchRename", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const preview = { name: "feature/old", isCurrent: false, unmergedCommitCount: 2, requiresConfirmation: true };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...task, operation: "branchDelete" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.renameRepositoryBranch("repo_fixture", "feature/old", "feature/new")).resolves.toEqual(task);
+    await expect(client.previewRepositoryBranchDelete("repo_fixture", "feature/old")).resolves.toEqual(preview);
+    await client.deleteRepositoryBranch("repo_fixture", "feature/old", true);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/branches/rename`);
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ name: "feature/old", newName: "feature/new" }));
+    expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/branches/delete-preview`);
+    expect(String(fetcher.mock.calls[2][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/branches/delete`);
+    expect(fetcher.mock.calls[2][1]?.body).toBe(JSON.stringify({ name: "feature/old", allowUnmerged: true }));
+  });
+
   it("reads paginated commits, commit detail, and refs through versioned repository routes", async () => {
     const page = { repoId: "repo_fixture", offset: 50, limit: 50, commits: [], nextOffset: 100 };
     const detail = { repoId: "repo_fixture", oid: "a".repeat(40), parents: [], authorName: "Author", authorEmail: "author@example.invalid", committedAtMs: 1, message: "first", stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [] };

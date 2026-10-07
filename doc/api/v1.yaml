@@ -477,6 +477,111 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/branches/rename:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: renameRepositoryBranch
+      summary: Queue a local branch rename
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RenameBranchRequest" }
+      responses:
+        "202":
+          description: Rename task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or source branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: A local branch already uses the requested name.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+  /api/v1/repositories/{repoId}/branches/delete-preview:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: previewRepositoryBranchDelete
+      summary: Count branch commits not reachable from the current branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchNameRequest" }
+      responses:
+        "200":
+          description: Delete impact preview.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BranchDeletePreview" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or local branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/branches/delete:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: deleteRepositoryBranch
+      summary: Queue guarded deletion of a local branch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeleteBranchRequest" }
+      responses:
+        "202":
+          description: Delete task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or local branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: The branch is current, or unmerged commits need explicit confirmation.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
   /api/v1/repositories:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1260,6 +1365,11 @@ components:
         type: string
         const: "1"
   responses:
+    BadRequest:
+      description: The request body or branch name is invalid.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiErrorResponse" }
     Unauthorized:
       description: Missing or invalid session token.
       content:
@@ -1607,6 +1717,35 @@ components:
       required: [name]
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
+    RenameBranchRequest:
+      type: object
+      additionalProperties: false
+      required: [name, newName]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        newName: { type: string, minLength: 1, maxLength: 255 }
+    BranchNameRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+    DeleteBranchRequest:
+      type: object
+      additionalProperties: false
+      required: [name, allowUnmerged]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        allowUnmerged: { type: boolean, description: Explicitly permit deletion when the preview reports commits not reachable from the current branch. }
+    BranchDeletePreview:
+      type: object
+      additionalProperties: false
+      required: [name, isCurrent, unmergedCommitCount, requiresConfirmation]
+      properties:
+        name: { type: string }
+        isCurrent: { type: boolean }
+        unmergedCommitCount: { type: integer, minimum: 0 }
+        requiresConfirmation: { type: boolean }
     CommitRequest:
       type: object
       additionalProperties: false

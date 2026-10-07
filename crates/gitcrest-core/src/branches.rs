@@ -64,6 +64,29 @@ pub async fn validate_branch_name(repository_path: &Path, name: &str) -> Result<
     }
 }
 
+pub async fn unmerged_commit_count(
+    repository_path: &Path,
+    current: &str,
+    branch: &str,
+) -> Result<u32, BranchError> {
+    let current_ref = format!("refs/heads/{current}");
+    let branch_ref = format!("refs/heads/{branch}");
+    let output = run_git(
+        repository_path,
+        &[
+            "rev-list".into(),
+            "--count".into(),
+            format!("{current_ref}..{branch_ref}").into(),
+        ],
+    )
+    .await?;
+    std::str::from_utf8(&output)
+        .map_err(|_| BranchError::GitFailed)?
+        .trim()
+        .parse::<u32>()
+        .map_err(|_| BranchError::GitFailed)
+}
+
 pub async fn read_branches(
     repo_id: String,
     repository_path: &Path,
