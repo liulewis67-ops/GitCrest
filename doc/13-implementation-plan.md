@@ -320,5 +320,6 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 
 ### S3.5 — 独立只读 Diff 窗口、Blame 与多文件 Tab（进行中）
 - 子阶段 A：独立 Diff 窗口与 Split/Unified 只读审阅，已完成。窗口只允许 read-write 主窗口通过受校验 IPC 创建，使用后端 read-only token；支持 Changes 与提交详情入口、工作区/历史 Diff、Split/Unified。Electron E2E 验证 read-only 窗口的 commit 写请求返回 403，关闭窗口后主窗口 diff 仍保留。`pnpm check` 通过：41 个 Vitest 用例、49 个 Rust 测试、1 个 Electron E2E。
-- 子阶段 A 证据：`electron/main/index.ts`、`electron/preload/index.ts`、`src/features/diff/DiffWindow.tsx`、`src/features/diff/SplitDiff.tsx`、`src/main.tsx`、`src/App.tsx`、`src/features/history/CommitGraph.tsx`、`tests/e2e/desktop.test.ts`、`tests/unit/commit-graph.test.tsx`、`tests/unit/split-diff.test.tsx`。完成 commit SHA 待补记。
-- 子阶段 B：Blame 和多文件 Tab，未开始。为历史文件行提供 Git blame 来源/行号/SHA；窗口内支持多个文件 tab，关闭后不改变主窗口仓库、文件和历史选择。
+- 子阶段 A 证据：`electron/main/index.ts`、`electron/preload/index.ts`、`src/features/diff/DiffWindow.tsx`、`src/features/diff/SplitDiff.tsx`、`src/main.tsx`、`src/App.tsx`、`src/features/history/CommitGraph.tsx`、`tests/e2e/desktop.test.ts`、`tests/unit/commit-graph.test.tsx`、`tests/unit/split-diff.test.tsx`。完成 commit：`21e9d48`。
+- 子阶段 B：Blame 和多文件 Tab，进行中。B.1 有界、只读、支持 commit revision 的 blame API 已完成，使用 `git blame --line-porcelain`，校验 full commit ID，限制输出为 8 MiB/单次 Git 读取最长 20 秒；HEAD 与历史版本的行号、SHA、作者、时间、summary 和原文均由临时仓库测试验证。B.2 多文件 tabs 与 blame 行视图进行中。
+- B.1 验收：`pnpm api:types`、`pnpm check` 与 `cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 通过；全量门禁包含 42 个 Vitest 用例、50 个 Rust 测试和 1 个 Electron E2E。HTTP 集成测试以只读 token 读取当前及历史 blame，错误 revision/path 校验有覆盖。证据：`crates/gitcrest-core/src/history.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。完成 commit SHA 待补记。

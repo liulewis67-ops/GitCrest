@@ -323,6 +323,66 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/blame:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: path
+        in: query
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 4096 }
+      - name: revision
+        in: query
+        required: false
+        description: Full commit object ID. When omitted, blame uses HEAD.
+        schema: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" }
+    get:
+      operationId: getRepositoryBlame
+      summary: Read line blame attribution for a tracked file
+      responses:
+        "200":
+          description: Per-line commit, author, source line, and text attribution.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BlameDocument"
+        "400":
+          description: The path or full commit ID is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository or requested revision is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "413":
+          description: Blame output exceeds the bounded response size.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "504":
+          description: Git blame exceeded its query deadline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1267,6 +1327,30 @@ components:
         hunks:
           type: array
           items: { $ref: "#/components/schemas/DiffHunk" }
+    BlameDocument:
+      type: object
+      additionalProperties: false
+      required: [repoId, path, revision, lines]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        path: { type: string }
+        revision: { type: [string, "null"] }
+        lines:
+          type: array
+          items: { $ref: "#/components/schemas/BlameLine" }
+    BlameLine:
+      type: object
+      additionalProperties: false
+      required: [lineNumber, originalLineNumber, commitOid, authorName, authorEmail, committedAtMs, summary, text]
+      properties:
+        lineNumber: { type: integer, minimum: 1 }
+        originalLineNumber: { type: integer, minimum: 1 }
+        commitOid: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" }
+        authorName: { type: string }
+        authorEmail: { type: string }
+        committedAtMs: { type: integer, format: int64 }
+        summary: { type: string }
+        text: { type: string }
     DiffHunk:
       type: object
       additionalProperties: false

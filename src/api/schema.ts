@@ -143,6 +143,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/blame": {
+        parameters: {
+            query: {
+                path: string;
+                /** @description Full commit object ID. When omitted, blame uses HEAD. */
+                revision?: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Read line blame attribution for a tracked file */
+        get: operations["getRepositoryBlame"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories": {
         parameters: {
             query?: never;
@@ -520,6 +545,23 @@ export interface components {
             /** @enum {string} */
             status: "text" | "binary" | "empty" | "conflicted" | "ignored" | "symlink" | "submodule";
             hunks: components["schemas"]["DiffHunk"][];
+        };
+        BlameDocument: {
+            repoId: components["schemas"]["RepoId"];
+            path: string;
+            revision: string | null;
+            lines: components["schemas"]["BlameLine"][];
+        };
+        BlameLine: {
+            lineNumber: number;
+            originalLineNumber: number;
+            commitOid: string;
+            authorName: string;
+            authorEmail: string;
+            /** Format: int64 */
+            committedAtMs: number;
+            summary: string;
+            text: string;
         };
         DiffHunk: {
             oldStart: number;
@@ -1185,6 +1227,74 @@ export interface operations {
                 };
             };
             /** @description Git did not produce the diff within the bounded query deadline. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getRepositoryBlame: {
+        parameters: {
+            query: {
+                path: string;
+                /** @description Full commit object ID. When omitted, blame uses HEAD. */
+                revision?: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-line commit, author, source line, and text attribution. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BlameDocument"];
+                };
+            };
+            /** @description The path or full commit ID is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository or requested revision is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Blame output exceeds the bounded response size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git blame exceeded its query deadline. */
             504: {
                 headers: {
                     [name: string]: unknown;

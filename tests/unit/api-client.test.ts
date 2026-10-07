@@ -34,6 +34,22 @@ describe("GitCrestApiClient", () => {
     expect(new URL(String(url)).searchParams.get("scope")).toBe("workingTree");
   });
 
+  it("encodes the path and optional historical revision for blame", async () => {
+    const response = { repoId: "repo_fixture", path: "folder/source file.ts", revision: "a".repeat(40), lines: [] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryBlame("repo_fixture", response.path, response.revision)).resolves.toEqual(response);
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.pathname).toBe("/api/v1/repositories/repo_fixture/blame");
+    expect(url.searchParams.get("path")).toBe(response.path);
+    expect(url.searchParams.get("revision")).toBe(response.revision);
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Authorization")).toBe(`Bearer ${token}`);
+  });
+
   it("versions repository requests and encodes repoId", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("[]", {
       status: 200,

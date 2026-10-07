@@ -587,6 +587,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route("/v1/repositories/:repo_id/status", get(repository_status))
         .route("/v1/repositories/:repo_id/diff", get(repository_diff))
+        .route("/v1/repositories/:repo_id/blame", get(repository_blame))
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
             "/v1/repositories/:repo_id/staging/patch",
@@ -1127,6 +1128,41 @@ async fn repository_commit_detail(
         .await
         .map(Json)
         .map_err(ApiError::from_history_error)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BlameQuery {
+    path: String,
+    revision: Option<String>,
+}
+
+async fn repository_blame(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<BlameQuery>, QueryRejection>,
+) -> Result<Json<history::BlameDocument>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Provide a repository-relative file path and optional full commit ID.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    history::read_blame(
+        repo_id,
+        &target.repository_path,
+        &query.path,
+        query.revision.as_deref(),
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_history_error)
 }
 
 #[derive(Deserialize)]
@@ -2585,6 +2621,41 @@ mod tests {
         assert_eq!(second_page["commits"][0]["subject"], "first history entry");
         assert!(second_page["nextOffset"].is_null());
         let root_oid = second_page["commits"][0]["oid"].as_str().unwrap();
+
+        let blame = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/blame?path=history.txt"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(blame.status(), StatusCode::OK);
+        let body = to_bytes(blame.into_body(), usize::MAX).await.unwrap();
+        let blame: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(blame["revision"], serde_json::Value::Null);
+        assert_eq!(blame["lines"][0]["lineNumber"], 1);
+        assert_eq!(blame["lines"][0]["text"], "second");
+        assert_eq!(blame["lines"][0]["commitOid"], oid);
+
+        let historical_blame = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/blame?path=history.txt&revision={root_oid}"
+                ),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(historical_blame.status(), StatusCode::OK);
+        let body = to_bytes(historical_blame.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let historical_blame: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(historical_blame["revision"], root_oid);
+        assert_eq!(historical_blame["lines"][0]["text"], "first");
+        assert_eq!(historical_blame["lines"][0]["commitOid"], root_oid);
 
         let detail = app
             .clone()

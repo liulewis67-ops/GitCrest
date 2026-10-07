@@ -7,6 +7,7 @@ export type RepositoryResponse = components["schemas"]["Repository"];
 export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
 export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
+export type BlameDocumentResponse = components["schemas"]["BlameDocument"];
 export type StagingRequest = components["schemas"]["StagingRequest"];
 export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
 export type CommitRequest = components["schemas"]["CommitRequest"];
@@ -90,6 +91,12 @@ export class GitCrestApiClient {
   getFileDiff(repoId: RepoId, path: string, scope: "workingTree" | "index"): Promise<DiffDocumentResponse> {
     const query = new URLSearchParams({ path, scope });
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/diff?${query}`);
+  }
+
+  getRepositoryBlame(repoId: RepoId, path: string, revision?: string): Promise<BlameDocumentResponse> {
+    const query = new URLSearchParams({ path });
+    if (revision) query.set("revision", revision);
+    return this.request<BlameDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/blame?${query}`);
   }
 
   getRepositoryCommits(repoId: RepoId, offset = 0, limit = 50, filters: CommitHistoryFilters = {}): Promise<CommitPageResponse> {
