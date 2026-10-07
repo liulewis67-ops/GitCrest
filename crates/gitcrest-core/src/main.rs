@@ -4130,14 +4130,14 @@ fn conflict_capability_allows(method: &Method, path: &str) -> bool {
     if !allowed_suffix {
         return false;
     }
-    match method {
-        &Method::GET => matches!(
+    match *method {
+        Method::GET => matches!(
             suffix,
             "workflows/recovery-preflight" | "workflows/conflicts/file"
         ),
-        &Method::PUT => suffix == "workflows/conflicts/file",
-        &Method::POST => suffix == "workflows/conflicts/resolved",
-        &Method::OPTIONS => true,
+        Method::PUT => suffix == "workflows/conflicts/file",
+        Method::POST => suffix == "workflows/conflicts/resolved",
+        Method::OPTIONS => true,
         _ => false,
     }
 }
