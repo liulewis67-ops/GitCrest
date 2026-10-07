@@ -616,10 +616,35 @@ struct EventEnvelope<'a> {
 
 #[tokio::main]
 async fn main() {
+    if env::var_os("GITCREST_GIT_ASKPASS").as_deref() == Some(std::ffi::OsStr::new("1")) {
+        if run_git_askpass().is_err() {
+            std::process::exit(1);
+        }
+        return;
+    }
     if let Err(error) = run().await {
         eprintln!("{error}");
         std::process::exit(1);
     }
+}
+
+fn run_git_askpass() -> Result<(), credentials::CredentialError> {
+    use std::io::Write;
+
+    if env::var_os("GITCREST_GIT_ASKPASS").as_deref() != Some(std::ffi::OsStr::new("1")) {
+        return Err(credentials::CredentialError::InvalidInput);
+    }
+    let prompt = env::args_os()
+        .nth(1)
+        .and_then(|argument| argument.into_string().ok())
+        .ok_or(credentials::CredentialError::InvalidInput)?;
+    let response = credentials::answer_askpass_prompt(&prompt)?;
+    let mut stdout = std::io::stdout().lock();
+    stdout
+        .write_all(response.as_bytes())
+        .and_then(|()| stdout.write_all(b"\n"))
+        .and_then(|()| stdout.flush())
+        .map_err(|_| credentials::CredentialError::Unavailable)
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {

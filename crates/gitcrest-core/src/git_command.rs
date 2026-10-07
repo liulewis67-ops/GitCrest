@@ -100,13 +100,14 @@ impl GitCommandService {
         operation: GitOperation,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        let environment = askpass_environment()?;
         run_command(
             &self.git_program,
             operation.arguments().iter().map(OsString::from).collect(),
             None,
             None,
             Vec::new(),
-            Vec::new(),
+            environment,
             Some(repository_path),
             operation.label(),
             task,
@@ -281,6 +282,7 @@ impl GitCommandService {
         parent: &Path,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        let environment = askpass_environment()?;
         run_command(
             &self.git_program,
             [
@@ -294,7 +296,7 @@ impl GitCommandService {
             None,
             None,
             Vec::new(),
-            Vec::new(),
+            environment,
             Some(parent),
             "Clone",
             task,
@@ -411,6 +413,20 @@ impl GitCommandService {
         )
         .await
     }
+}
+
+fn askpass_environment() -> Result<Vec<(OsString, OsString)>, TaskFailure> {
+    let executable = std::env::current_exe().map_err(|_| {
+        TaskFailure::Failed("The Git credential helper could not be located".into())
+    })?;
+    Ok(vec![
+        (OsString::from("GIT_ASKPASS"), executable.into_os_string()),
+        (
+            OsString::from("GIT_ASKPASS_REQUIRE"),
+            OsString::from("force"),
+        ),
+        (OsString::from("GITCREST_GIT_ASKPASS"), OsString::from("1")),
+    ])
 }
 
 struct TemporaryIndex {

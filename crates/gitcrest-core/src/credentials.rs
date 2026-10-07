@@ -29,6 +29,12 @@ pub enum CredentialError {
     Unavailable,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AskpassPromptKind {
+    Username,
+    Password,
+}
+
 pub trait CredentialStore: Send + Sync {
     fn get(&self, host: &str) -> Result<Option<GitCredential>, CredentialError>;
     fn set(&self, host: &str, credential: &GitCredential) -> Result<(), CredentialError>;
@@ -98,10 +104,42 @@ impl CredentialManager {
         self.store.delete(&normalize_host(host)?)
     }
 
-    #[allow(dead_code)]
     pub fn get_for_git(&self, host: &str) -> Result<Option<GitCredential>, CredentialError> {
         self.store.get(&normalize_host(host)?)
     }
+}
+
+pub fn parse_askpass_prompt(prompt: &str) -> Result<(AskpassPromptKind, String), CredentialError> {
+    let (kind, remainder) = if let Some(remainder) = prompt.strip_prefix("Username for '") {
+        (AskpassPromptKind::Username, remainder)
+    } else if let Some(remainder) = prompt.strip_prefix("Password for '") {
+        (AskpassPromptKind::Password, remainder)
+    } else {
+        return Err(CredentialError::InvalidInput);
+    };
+    let end = remainder.find('\'').ok_or(CredentialError::InvalidInput)?;
+    let url = &remainder[..end];
+    let authority = url
+        .strip_prefix("https://")
+        .ok_or(CredentialError::InvalidInput)?
+        .split('/')
+        .next()
+        .ok_or(CredentialError::InvalidInput)?;
+    let host = authority
+        .rsplit_once('@')
+        .map_or(authority, |(_, host)| host);
+    Ok((kind, normalize_host(host)?))
+}
+
+pub fn answer_askpass_prompt(prompt: &str) -> Result<Zeroizing<String>, CredentialError> {
+    let (kind, host) = parse_askpass_prompt(prompt)?;
+    let credential = CredentialManager::system()
+        .get_for_git(&host)?
+        .ok_or(CredentialError::Unavailable)?;
+    Ok(match kind {
+        AskpassPromptKind::Username => Zeroizing::new(credential.username),
+        AskpassPromptKind::Password => credential.token,
+    })
 }
 
 struct SystemCredentialStore;
