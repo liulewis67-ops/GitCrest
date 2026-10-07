@@ -150,16 +150,63 @@ impl RepositoryStore {
             .map(|changed| changed > 0)
             .map_err(|error| error.to_string())
     }
+
+    pub fn save_task_snapshot(
+        &self,
+        task_id: &str,
+        repo_id: &str,
+        status: &str,
+        snapshot: &str,
+        created_at_ms: i64,
+        updated_at_ms: i64,
+    ) -> Result<(), String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        connection
+            .execute(
+                "INSERT INTO tasks (task_id, repo_id, status, snapshot_json, created_at_ms, updated_at_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6) ON CONFLICT(task_id) DO UPDATE SET status=excluded.status, snapshot_json=excluded.snapshot_json, updated_at_ms=excluded.updated_at_ms",
+                params![task_id, repo_id, status, snapshot, created_at_ms, updated_at_ms],
+            )
+            .map_err(|error| error.to_string())?;
+        connection
+            .execute(
+                "DELETE FROM tasks WHERE task_id IN (SELECT task_id FROM tasks WHERE status IN ('succeeded', 'failed', 'cancelled') ORDER BY updated_at_ms DESC LIMIT -1 OFFSET 100)",
+                [],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn list_task_snapshots(&self) -> Result<Vec<(String, String, String)>, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let mut statement = connection
+            .prepare("SELECT task_id, status, snapshot_json FROM tasks ORDER BY created_at_ms ASC")
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
 }
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 1 {
+    if version > 2 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
         connection.execute_batch(include_str!("../migrations/0001_repositories.sql"))?;
         connection.pragma_update(None, "user_version", 1)?;
+    }
+    if version < 2 {
+        connection.execute_batch(include_str!("../migrations/0002_tasks.sql"))?;
+        connection.pragma_update(None, "user_version", 2)?;
     }
     Ok(())
 }
@@ -216,9 +263,34 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 2).unwrap();
+        connection.pragma_update(None, "user_version", 3).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
+    }
+
+    #[test]
+    fn persists_task_snapshots_for_recovery() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let store = RepositoryStore::open(&database).unwrap();
+        store
+            .save_task_snapshot(
+                "task-1",
+                "repo-1",
+                "running",
+                "{\"taskId\":\"task-1\"}",
+                1,
+                2,
+            )
+            .unwrap();
+        assert_eq!(
+            store.list_task_snapshots().unwrap(),
+            vec![(
+                "task-1".into(),
+                "running".into(),
+                "{\"taskId\":\"task-1\"}".into()
+            )]
+        );
     }
 }

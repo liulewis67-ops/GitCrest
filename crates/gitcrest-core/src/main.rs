@@ -28,11 +28,15 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+mod git_command;
 mod repository;
 mod status;
 mod storage;
+mod tasks;
 
+use git_command::{GitCommandService, GitOperation};
 use repository::{Repository, RepositoryError, RepositoryManager};
+use tasks::{TaskService, TaskSnapshot, TaskSubmitError};
 
 const API_VERSION: &str = "1";
 static NEXT_EVENT_ID: AtomicU64 = AtomicU64::new(1);
@@ -42,6 +46,8 @@ struct AppState {
     read_write_token: Arc<String>,
     read_only_token: Option<Arc<String>>,
     repositories: RepositoryManager,
+    tasks: TaskService,
+    git_commands: GitCommandService,
 }
 
 #[derive(Serialize)]
@@ -77,6 +83,8 @@ enum ApiErrorCode {
     DatabaseUnavailable,
     GitUnavailable,
     RepositoryStatusFailed,
+    TaskNotFound,
+    TaskQueueFull,
     RepositoryStateConflict,
     ResourceVersionStale,
     RequestInvalid,
@@ -200,6 +208,33 @@ impl ApiError {
         }
     }
 
+    fn task_not_found() -> Self {
+        Self::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::TaskNotFound,
+            "Task was not found in this session.",
+        )
+    }
+
+    fn task_storage_unavailable() -> Self {
+        Self::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            ApiErrorCode::DatabaseUnavailable,
+            "Task state could not be saved. Retry after checking the application data folder.",
+        )
+    }
+
+    fn task_submit(error: TaskSubmitError) -> Self {
+        match error {
+            TaskSubmitError::QueueFull => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::TaskQueueFull,
+                "The background task queue is full. Wait for current work to finish.",
+            ),
+            TaskSubmitError::StorageUnavailable => Self::task_storage_unavailable(),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -271,10 +306,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let repositories = RepositoryManager::open_database(database_path)
         .await
         .map_err(|_| "Could not initialize the repository database")?;
+    let tasks = TaskService::with_store(repositories.store())
+        .map_err(|_| "Could not recover background task history")?;
     let state = AppState {
         read_write_token: Arc::new(write_token),
         read_only_token: read_only_token.map(Arc::new),
         repositories,
+        tasks,
+        git_commands: GitCommandService::default(),
     };
     let cors_origin = env::var("GITCREST_CORS_ORIGIN")
         .ok()
@@ -308,6 +347,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             put(set_repository_favorite),
         )
         .route("/v1/repositories/:repo_id/status", get(repository_status))
+        .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
+        .route("/v1/tasks", get(list_tasks))
+        .route("/v1/tasks/:task_id", get(get_task))
+        .route("/v1/tasks/:task_id/cancel", post(cancel_task))
         .route("/v1/events", get(events))
         .fallback(api_not_found);
 
@@ -510,6 +553,78 @@ async fn repository_status(
         .map_err(ApiError::from_repository_error)
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FetchRequest {
+    prune: bool,
+}
+
+async fn fetch_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<FetchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A fetch options object is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let operation = if request.prune {
+        GitOperation::FetchPrune
+    } else {
+        GitOperation::Fetch
+    };
+    let command = state.git_commands.clone();
+    let path = target.repository_path;
+    let task = state
+        .tasks
+        .submit(
+            repo_id,
+            target.resource_key,
+            if request.prune { "fetchPrune" } else { "fetch" },
+            move |context| async move { command.execute(&path, operation, context).await },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn list_tasks(State(state): State<AppState>) -> Json<Vec<TaskSnapshot>> {
+    Json(state.tasks.list().await)
+}
+
+async fn get_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<TaskSnapshot>, ApiError> {
+    state
+        .tasks
+        .get(&task_id)
+        .await
+        .map(Json)
+        .ok_or_else(ApiError::task_not_found)
+}
+
+async fn cancel_task(
+    State(state): State<AppState>,
+    Path(task_id): Path<String>,
+) -> Result<Json<TaskSnapshot>, ApiError> {
+    state
+        .tasks
+        .cancel(&task_id)
+        .await
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .map(Json)
+        .ok_or_else(ApiError::task_not_found)
+}
+
 async fn api_not_found() -> ApiError {
     ApiError::route_not_found()
 }
@@ -657,6 +772,8 @@ mod tests {
             read_write_token: Arc::new(WRITE_TOKEN.to_string()),
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             repositories: RepositoryManager::default(),
+            tasks: TaskService::default(),
+            git_commands: GitCommandService::default(),
         };
         app_router(state, cors_origin.map(|origin| origin.parse().unwrap()))
     }
@@ -901,6 +1018,189 @@ mod tests {
             .iter()
             .any(|file| file["path"] == "new file.txt"
                 && file["categories"] == serde_json::json!(["untracked"])));
+    }
+
+    #[tokio::test]
+    async fn task_api_lists_progress_and_cancels_with_write_capability() {
+        let tasks = TaskService::default();
+        let task = tasks
+            .submit(
+                "repo-opaque",
+                "common-dir",
+                "test-operation",
+                |mut context| async move {
+                    context
+                        .progress("Waiting for a safe stop point", Some(35))
+                        .await;
+                    context.cancelled().await;
+                    Err(tasks::TaskFailure::Cancelled)
+                },
+            )
+            .await
+            .unwrap();
+        let app = app_router(
+            AppState {
+                read_write_token: Arc::new(WRITE_TOKEN.to_string()),
+                read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                repositories: RepositoryManager::default(),
+                tasks: tasks.clone(),
+                git_commands: GitCommandService::default(),
+            },
+            None,
+        );
+
+        let listed = app
+            .clone()
+            .oneshot(request("/api/v1/tasks", Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        assert_eq!(listed.status(), StatusCode::OK);
+        let bytes = to_bytes(listed.into_body(), usize::MAX).await.unwrap();
+        let tasks_body: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(tasks_body[0]["taskId"], task.task_id);
+
+        let readonly_cancel = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/tasks/{}/cancel", task.task_id))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {READ_ONLY_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(readonly_cancel.status(), StatusCode::FORBIDDEN);
+
+        let cancel = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/tasks/{}/cancel", task.task_id))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(cancel.status(), StatusCode::OK);
+        let bytes = to_bytes(cancel.into_body(), usize::MAX).await.unwrap();
+        let cancelled: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(cancelled["status"] == "queued" || cancelled["status"] == "running");
+        assert_eq!(cancelled["cancelRequested"], true);
+
+        tokio::time::timeout(std::time::Duration::from_secs(1), async {
+            loop {
+                if tasks.get(&task.task_id).await.unwrap().status == tasks::TaskStatus::Cancelled {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("repo");
+        let bare_path = directory.path().join("remote.git");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |path: &std::path::Path, args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&repository_path, &["init", "--quiet"]);
+        git(&repository_path, &["config", "user.name", "GitCrest Test"]);
+        git(
+            &repository_path,
+            &["config", "user.email", "gitcrest-test@example.invalid"],
+        );
+        std::fs::write(repository_path.join("seed.txt"), "seed\n").unwrap();
+        git(&repository_path, &["add", "."]);
+        git(&repository_path, &["commit", "--quiet", "-m", "seed"]);
+        let bare = std::process::Command::new("git")
+            .args(["init", "--bare", "--quiet"])
+            .arg(&bare_path)
+            .output()
+            .unwrap();
+        assert!(bare.status.success());
+        git(
+            &repository_path,
+            &["remote", "add", "origin", bare_path.to_str().unwrap()],
+        );
+        git(
+            &repository_path,
+            &["push", "--quiet", "-u", "origin", "HEAD"],
+        );
+
+        let repositories = RepositoryManager::default();
+        let repository = repositories
+            .open_path(repository_path.to_str().unwrap())
+            .await
+            .unwrap();
+        let tasks = TaskService::default();
+        let app = app_router(
+            AppState {
+                read_write_token: Arc::new(WRITE_TOKEN.to_string()),
+                read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                repositories,
+                tasks: tasks.clone(),
+                git_commands: GitCommandService::default(),
+            },
+            None,
+        );
+        let accepted = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{}/fetch", repository.repo_id))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(r#"{"prune":false}"#))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let task_id = task["taskId"].as_str().unwrap();
+
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                if tasks
+                    .get(task_id)
+                    .await
+                    .is_some_and(|task| task.status == tasks::TaskStatus::Succeeded)
+                {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let completed = tasks.get(task_id).await.unwrap();
+        assert_eq!(completed.status, tasks::TaskStatus::Succeeded);
+        assert!(completed
+            .logs
+            .iter()
+            .any(|line| line == "git fetch --progress"));
     }
 
     #[tokio::test]

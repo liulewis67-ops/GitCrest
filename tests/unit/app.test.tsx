@@ -94,6 +94,43 @@ describe("App", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull());
   });
 
+  it("shows task progress and sanitized logs, and requests cancellation", async () => {
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({
+          baseUrl: "http://127.0.0.1:43210",
+          token: "test-session-token",
+          windowAccess: "readWrite",
+        }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository: vi.fn(),
+      },
+    });
+    const task = { taskId: "task-1", repoId: "repo_fixture", operation: "fetch", status: "running", phase: "Receiving objects", progress: 35, message: null, errorCategory: null, logs: ["Receiving objects: 35%", "https://alice:[REDACTED]@example.test/repo"], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false };
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response([task]))
+      .mockResolvedValueOnce(response({ ...task, cancelRequested: true }))
+      .mockResolvedValue(response([{ ...task, cancelRequested: true }]));
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(screen.getByRole("button", { name: /Background tasks/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Tasks" });
+    expect(await within(dialog).findByText("Receiving objects")).toBeDefined();
+    expect(within(dialog).getByText("35%")).toBeDefined();
+    fireEvent.click(within(dialog).getByText(/Sanitized log/));
+    expect(dialog.querySelector(".taskLogs pre")?.textContent).toContain("https://alice:[REDACTED]@example.test/repo");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel task" }));
+    expect(await within(dialog).findByRole("button", { name: "Stopping safely…" })).toBeDefined();
+    expect(String(fetcher.mock.calls[3][0])).toContain("/api/v1/tasks/task-1/cancel");
+    expect(fetcher.mock.calls[3][1]?.method).toBe("POST");
+  });
+
   it("opens the selected local repository and shows its workspace context", async () => {
     const repository = {
       repoId: "repo_fixture",
@@ -131,7 +168,9 @@ describe("App", () => {
         { path: "conflict.txt", indexStatus: "U", worktreeStatus: "U", kind: "conflicted", categories: ["conflicted"], modeChanged: false },
         { path: "ignored.log", indexStatus: "!", worktreeStatus: "!", kind: "ignored", categories: ["ignored"], modeChanged: false },
       ] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }), { status: 500, headers: { "X-GitCrest-API-Version": "1" } }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }), { status: 500, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "running", phase: "Receiving objects", progress: 35, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false }]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -154,6 +193,12 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh working tree status" }));
     expect(await screen.findByText("Refresh failed. Showing the last snapshot.")).toBeDefined();
     expect(screen.getByText("new file.txt")).toBeDefined();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: /Fetch from remotes/ }));
+    const taskDialog = await screen.findByRole("dialog", { name: "Tasks" });
+    expect(await within(taskDialog).findByText("Receiving objects")).toBeDefined();
+    expect(String(fetcher.mock.calls[5][0])).toContain("/api/v1/repositories/repo_fixture/fetch");
+    expect(fetcher.mock.calls[5][1]?.method).toBe("POST");
   });
 
   it("shows persisted repositories in Welcome and lets the user favorite or forget them", async () => {

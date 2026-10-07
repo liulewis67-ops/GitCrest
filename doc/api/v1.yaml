@@ -336,6 +336,149 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "406":
           $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/tasks:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: listTasks
+      summary: List the bounded task history for this sidecar session
+      responses:
+        "200":
+          description: Current and recently completed background tasks.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/repositories/{repoId}/fetch:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: fetchRepository
+      summary: Queue a fetch task for a registered repository
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [prune]
+              properties:
+                prune:
+                  type: boolean
+      responses:
+        "202":
+          description: Fetch task accepted and durably recorded before execution.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: Fetch options are malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository is not registered or no longer exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "503":
+          description: The task queue is full or Git cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/tasks/{taskId}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getTask
+      summary: Read a task and its sanitized logs
+      responses:
+        "200":
+          description: Task state.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The task is not retained in this sidecar session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/tasks/{taskId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: cancelTask
+      summary: Request cooperative cancellation of a task
+      description: Cancellation is an intent. A running task becomes cancelled only after its operation reaches a safe stop point.
+      responses:
+        "200":
+          description: The latest task state after recording the cancellation request.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The task is not retained in this sidecar session.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
 components:
   securitySchemes:
     sessionBearer:
@@ -507,6 +650,44 @@ components:
     TaskStatus:
       type: string
       enum: [queued, running, waitingForInput, succeeded, failed, cancelled]
+    TaskSnapshot:
+      type: object
+      additionalProperties: false
+      required: [taskId, repoId, operation, status, phase, progress, message, errorCategory, logs, createdAtMs, updatedAtMs, cancelRequested]
+      properties:
+        taskId:
+          type: string
+        repoId:
+          $ref: "#/components/schemas/RepoId"
+        operation:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        phase:
+          type: string
+        progress:
+          type: [integer, "null"]
+          minimum: 0
+          maximum: 100
+        message:
+          type: [string, "null"]
+        errorCategory:
+          oneOf:
+            - type: string
+              enum: [authentication, network, gitUnavailable, commandFailed, outcomeUnknown]
+            - type: "null"
+        logs:
+          type: array
+          items:
+            type: string
+        createdAtMs:
+          type: integer
+          format: int64
+        updatedAtMs:
+          type: integer
+          format: int64
+        cancelRequested:
+          type: boolean
     EventEnvelope:
       type: object
       additionalProperties: false
@@ -553,6 +734,8 @@ components:
         - REPOSITORY_INITIALIZATION_FAILED
         - DATABASE_UNAVAILABLE
         - REPOSITORY_STATUS_FAILED
+        - TASK_NOT_FOUND
+        - TASK_QUEUE_FULL
         - GIT_UNAVAILABLE
         - REPOSITORY_STATE_CONFLICT
         - RESOURCE_VERSION_STALE

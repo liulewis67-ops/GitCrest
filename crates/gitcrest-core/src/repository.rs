@@ -30,6 +30,12 @@ pub struct RepositoryManager {
     store: RepositoryStore,
 }
 
+#[derive(Clone, Debug)]
+pub struct TaskTarget {
+    pub repository_path: PathBuf,
+    pub resource_key: String,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum RepositoryError {
     InvalidPath,
@@ -45,6 +51,49 @@ pub enum RepositoryError {
 }
 
 impl RepositoryManager {
+    pub fn store(&self) -> RepositoryStore {
+        self.store.clone()
+    }
+
+    pub async fn task_target(&self, repo_id: &str) -> Result<TaskTarget, RepositoryError> {
+        let store = self.store.clone();
+        let repo_id = repo_id.to_owned();
+        let repository = task::spawn_blocking(move || store.get(&repo_id))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .ok_or(RepositoryError::RepositoryNotFound)?;
+        let repository_path = PathBuf::from(repository.path);
+        fs::metadata(&repository_path)
+            .await
+            .map_err(map_path_error)?;
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&repository_path)
+            .args(["rev-parse", "--git-common-dir"])
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|_| RepositoryError::GitUnavailable)?;
+        if !output.status.success() {
+            return Err(RepositoryError::StatusFailed);
+        }
+        let common_dir = String::from_utf8_lossy(&output.stdout).trim().to_owned();
+        let common_dir = PathBuf::from(common_dir);
+        let common_dir = if common_dir.is_absolute() {
+            common_dir
+        } else {
+            repository_path.join(common_dir)
+        };
+        let canonical = fs::canonicalize(&common_dir)
+            .await
+            .map_err(|_| RepositoryError::StatusFailed)?;
+        Ok(TaskTarget {
+            repository_path,
+            resource_key: canonical.to_string_lossy().into_owned(),
+        })
+    }
+
     pub async fn open_database(path: PathBuf) -> Result<Self, RepositoryError> {
         let store = task::spawn_blocking(move || RepositoryStore::open(&path))
             .await
@@ -428,10 +477,12 @@ mod tests {
         );
         assert!(worktree.join(".git").is_file());
 
-        let repository = RepositoryManager::default()
-            .open_path(worktree.to_str().unwrap())
+        let manager = RepositoryManager::default();
+        let common_repository = manager
+            .open_path(fixture.root.to_str().unwrap())
             .await
             .unwrap();
+        let repository = manager.open_path(worktree.to_str().unwrap()).await.unwrap();
         assert_eq!(Path::new(&repository.path), worktree.as_path());
         assert_eq!(repository.branch.as_deref(), Some("feature"));
         assert_ne!(
@@ -440,6 +491,12 @@ mod tests {
                 fixture.root.canonicalize().unwrap()
             ))
         );
+        let common_target = manager
+            .task_target(&common_repository.repo_id)
+            .await
+            .unwrap();
+        let worktree_target = manager.task_target(&repository.repo_id).await.unwrap();
+        assert_eq!(common_target.resource_key, worktree_target.resource_key);
     }
 
     #[tokio::test]

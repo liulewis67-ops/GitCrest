@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type RepositoryResponse, type StatusSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type RepositoryResponse, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { TaskCenter } from "./features/tasks/TaskCenter";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -152,6 +153,10 @@ function App() {
   const [statusSnapshots, setStatusSnapshots] = useState<Record<string, StatusSnapshotResponse>>({});
   const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
   const [statusLoadingByRepo, setStatusLoadingByRepo] = useState<Record<string, boolean>>({});
+  const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
+  const [tasksOpen, setTasksOpen] = useState(false);
+  const [tasksError, setTasksError] = useState("");
+  const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
   const apiRef = useRef<GitCrestApiClient>();
@@ -204,6 +209,55 @@ function App() {
       setStatusErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
     } finally {
       setStatusLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+    }
+  }
+
+  async function refreshTasks() {
+    const api = apiRef.current;
+    if (!api) return;
+    try {
+      setTasks(await api.listTasks());
+      setTasksError("");
+    } catch (error) {
+      setTasksError(error instanceof Error ? error.message : "Could not read task history.");
+    }
+  }
+
+  async function cancelTask(taskId: string) {
+    const api = apiRef.current;
+    if (!api) return;
+    setTaskActionId(taskId);
+    try {
+      await api.cancelTask(taskId);
+      await refreshTasks();
+    } catch (error) {
+      setTasksError(error instanceof Error ? error.message : "Could not request task cancellation.");
+    } finally {
+      setTaskActionId("");
+    }
+  }
+
+  async function fetchRepository() {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (!api || !repoId) return;
+    try {
+      const task = await api.fetchRepository(repoId);
+      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      setTasksError("");
+      setTasksOpen(true);
+    } catch (error) {
+      setTasksError(error instanceof Error ? error.message : "Could not start a fetch task.");
+      setTasksOpen(true);
+    }
+  }
+
+  async function copyTaskLogs(task: TaskSnapshotResponse) {
+    try {
+      await navigator.clipboard.writeText(task.logs.join("\n"));
+      setTasksError("");
+    } catch {
+      setTasksError("Clipboard access is unavailable. Select and copy the task log text.");
     }
   }
 
@@ -409,6 +463,13 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!tasksOpen) return;
+    void refreshTasks();
+    const timer = window.setInterval(() => void refreshTasks(), 1000);
+    return () => window.clearInterval(timer);
+  }, [tasksOpen]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(workspaceSession));
     } catch {
@@ -497,6 +558,7 @@ function App() {
     { id: "workspace", label: "Go to Workspace", detail: "Open the Changes, Graph, and Commit workspace", available: true, run: () => setPage("workspace") },
     { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${themeCycle[(themeCycle.indexOf(theme) + 1) % themeCycle.length]}`, available: true, run: nextTheme },
     { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
+    { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
     { id: "clone", label: "Clone repository", detail: "Clone task flow arrives with S1.6", available: false, run: () => undefined },
     { id: "diff", label: "Open Diff view", detail: "Select a changed file after opening a repository", available: false, run: () => undefined },
   ];
@@ -534,6 +596,9 @@ function App() {
         </button>
         <button className="quietButton themeButton" type="button" onClick={nextTheme} aria-label={`Color theme: ${theme}. Activate to cycle theme`} title={`Theme: ${theme}`}>
           <span aria-hidden="true">◐</span><span>{theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light"}</span>
+        </button>
+        <button className="quietButton taskCenterButton" type="button" onClick={() => setTasksOpen(true)} aria-label={`Background tasks, ${tasks.filter((task) => task.status === "queued" || task.status === "running").length} active`}>
+          Tasks <span className="countBadge">{tasks.filter((task) => task.status === "queued" || task.status === "running").length}</span>
         </button>
         <div className={`connectionBadge ${connected ? "connected" : ""}`} role="status" aria-live="polite" aria-label={status} title={status}>
           <span className="connectionDot" aria-hidden="true" />
@@ -736,6 +801,8 @@ function App() {
           </section>
         </div>
       )}
+
+      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} />}
     </main>
   );
 }

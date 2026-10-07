@@ -84,6 +84,34 @@ describe("GitCrestApiClient", () => {
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
   });
 
+  it("lists tasks and requests cancellation through versioned task routes", async () => {
+    const task = { taskId: "task-1", repoId: "repo_fixture", operation: "fetch", status: "running", phase: "Receiving", progress: 35, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify([task]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...task, cancelRequested: true }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.listTasks()).resolves.toEqual([task]);
+    await expect(client.cancelTask("task/one")).resolves.toMatchObject({ cancelRequested: true });
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/tasks`);
+    expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/tasks/task%2Fone/cancel`);
+    expect(fetcher.mock.calls[1][1]?.method).toBe("POST");
+  });
+
+  it("queues a typed fetch operation against an opaque repository ID", async () => {
+    const task = { taskId: "task-1", repoId: "repo_fixture", operation: "fetch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {
+      status: 202,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.fetchRepository("repo/fixture")).resolves.toEqual(task);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/fetch`);
+    expect(fetcher.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prune: false }));
+  });
+
   it("preserves structured API errors and rejects missing version confirmation", async () => {
     const errorFetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       error: { code: "REPOSITORY_NOT_FOUND", message: "Repository was not found." },

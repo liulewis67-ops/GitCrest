@@ -5,6 +5,7 @@ export type ApiErrorResponse = components["schemas"]["ApiErrorResponse"];
 export type VersionResponse = components["schemas"]["VersionResponse"];
 export type RepositoryResponse = components["schemas"]["Repository"];
 export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
+export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
 
 export class GitCrestApiError extends Error {
   constructor(
@@ -72,6 +73,24 @@ export class GitCrestApiClient {
 
   getRepositoryStatus(repoId: RepoId): Promise<StatusSnapshotResponse> {
     return this.request<StatusSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/status`);
+  }
+
+  listTasks(): Promise<TaskSnapshotResponse[]> {
+    return this.request<TaskSnapshotResponse[]>("/api/v1/tasks");
+  }
+
+  cancelTask(taskId: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/tasks/${encodeURIComponent(taskId)}/cancel`, true, {
+      method: "POST",
+    });
+  }
+
+  fetchRepository(repoId: RepoId, prune = false): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/fetch`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prune }),
+    });
   }
 
   private async request<T>(path: string, versioned = true, init: RequestInit = {}): Promise<T> {
