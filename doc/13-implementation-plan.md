@@ -41,8 +41,8 @@
 | 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 已完成 |
 | 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 已完成 |
 | 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 已完成 |
-| 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 进行中 |
-| 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 未开始 |
+| 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 已完成 |
+| 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 进行中 |
 | 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 未开始 |
 | 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–6 | 未开始 |
 
@@ -103,7 +103,7 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S5.1 | Merge/Cherry-pick/Revert 工作流与冲突检测。 | 成功时 refs/status/log 更新；冲突时任务转入“等待解决”且逐文件展示；已存在 merge/rebase 状态时拒绝不兼容操作；取消/失败给出明确继续、跳过或中止路径，不清除用户修改。 | 已完成 |
-| S5.2 | 独立三路冲突解决窗口与 resolved 校验。 | ours/base/theirs、结果预览和逐块/手工编辑可用；只能写当前冲突文件，不能执行一般 Git 写操作；有未解决标记时禁止 resolved；关闭再开保留已保存的解决进度；resolved 后主窗口状态刷新。 | 进行中 |
+| S5.2 | 独立三路冲突解决窗口与 resolved 校验。 | ours/base/theirs、结果预览和逐块/手工编辑可用；只能写当前冲突文件，不能执行一般 Git 写操作；有未解决标记时禁止 resolved；关闭再开保留已保存的解决进度；resolved 后主窗口状态刷新。 | 已完成 |
 | S5.3 | Shelve：选中文件/hunk、命名、预览、应用、删除。 | 搁置前后及跨分支恢复时只影响选中内容；应用前必须预览；冲突进入 S5.2；应用失败保留条目与原 patch；删除显示范围并确认；条目重启后存在。 | 未开始 |
 | S5.4 | Rebase 与交互式 Rebase：todo 编辑、预览、备份、continue/abort/回滚。 | pick/reword/edit/squash/fixup/drop 均有测试；执行前创建并展示备份 ref；drop 和已发布分支改写明确确认；冲突可进入解决器并继续；abort 后恢复至操作前，备份 ref 可用于回滚。 | 未开始 |
 | S5.5 | Reset、丢弃工作区变更、删除远程分支等危险操作安全网。 | 后端返回影响文件/提交/目标 ref；UI 展示后果和恢复方式，破坏性操作要求强确认；取消不改变仓库；可恢复操作先创建备份；日志记录动作与结果但不记录凭证；无确认票据的直接 API 调用被拒绝。 | 未开始 |
@@ -365,9 +365,10 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 子阶段 D：提交详情提供 merge/cherry-pick/revert 入口，提交前展示目标、HEAD、工作区和操作状态的预检；Task Center 对 waiting task 逐项列出冲突路径，刷新预检后提供 continue/skip/abort，并对 abort 加二次确认。恢复调用前 App 再读一次预检，将最新 HEAD、操作和冲突路径绑定到请求；workflow 等待、完成及恢复任务结束后刷新 status、branch、repository 和 history。验收：`pnpm check`（build、77 Vitest、72 Rust、1 Electron E2E）、最终 `pnpm build` 与 `pnpm test` 复核、`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。组件用例覆盖冲突清单、abort 确认和仅 Cherry-pick/Revert 显示 Skip；WorkflowDialog 用例覆盖预检允许启动和 dirty 工作区阻止启动。证据：`src/features/workflows/WorkflowDialog.tsx`、`src/features/history/CommitGraph.tsx`、`src/features/tasks/TaskCenter.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/workflow-dialog.test.tsx`、`tests/unit/task-center.test.tsx`。完成 commit：`ebd6409`。
 - S5.1 状态：已完成。限制/后续：冲突文件在 Task Center 可查看并可执行安全恢复；独立三路冲突编辑器在 S5.2 实施。
 
-### S5.2 — 独立三路冲突解决窗口与 resolved 校验（进行中）
+### S5.2 — 独立三路冲突解决窗口与 resolved 校验（已完成）
 - 子阶段 A：新增只读冲突内容 API，要求当前等待中的 merge/cherry-pick/revert task 和仍处于冲突集中的精确路径；返回 Git index 的 base/ours/theirs、当前工作区结果、HEAD 与结果内容 SHA-256 revision。限制路径遍历和符号链接，单文件各侧限制为 1 MiB，binary 不开放文本编辑。验收：`pnpm api:types`、`pnpm check`（build、78 Vitest、74 Rust、1 Electron E2E）、`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。服务测试验证真实仓库的三方内容、冲突结果和 revision；HTTP 集成测试通过只读 token 读取 waiting task 的 add/add 冲突。证据：`crates/gitcrest-core/src/conflicts.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。完成 commit：`920f36e`。
 - 子阶段 B：从 Task Center 为 waiting workflow 打开独立冲突窗口；Electron IPC 校验 RepoId/taskId 并只由主窗口创建，窗口使用只读 token；窗口列出未解决文件、展示 base/ours/theirs 和工作结果，并在请求失败、文件非文本或任务冲突集合为空时给出状态。验收：`pnpm build`、`pnpm test`（79 Vitest）、Rust fmt check、`git diff --check` 通过。组件测试验证 Task Center 入口、只读桥接和三方内容渲染；IPC 输入格式经 renderer/main TypeScript 检查。证据：`electron/main/index.ts`、`electron/preload/index.ts`、`src/main.tsx`、`src/features/workflows/ConflictWindow.tsx`、`src/features/tasks/TaskCenter.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/conflict-window.test.tsx`、`tests/unit/task-center.test.tsx`。完成 commit：`a77ab18`。
-- 子阶段 C：增加只写当前冲突结果的 task API 和按精确路径暂存 resolved API。写入绑定 waiting task、operation、HEAD、当前冲突路径及结果 SHA-256 revision，并在排队和取得仓库写许可后复核；标记 resolved 前拒绝残留冲突标记，只暂存该文件。冲突窗口使用独立 capability，仅允许冲突预检、内容读取、结果保存和 resolved 请求；修正嵌套 `/api` router 的鉴权内部路径判断。验收：冲突 workflow HTTP 集成（merge/cherry-pick/revert、窄权限、只读 token 拒写、结果保存、marker 拒绝及单文件 resolved 暂存）通过；Rust fmt check 通过。证据：`crates/gitcrest-core/src/conflicts.rs`、`crates/gitcrest-core/src/main.rs`、`electron/main/index.ts`、`electron/main/sidecar.ts`、`electron/preload/index.ts`、`src/global.d.ts`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。实现 commit：待提交。
-- 子阶段 D：进行中。独立窗口显示三方内容与 working result 编辑器，支持选择 ours/theirs、手工编辑、保存后从工作树重读、窄权限下轮询保存/resolve task 的结果、未保存时阻止切换文件并在关闭窗口前提示；保存后可关闭重开续编。证据：`src/features/workflows/ConflictWindow.tsx`、`src/App.css`、`tests/unit/conflict-window.test.tsx`。
-- 子阶段 E：阶段级全量验收待完成。
+- 子阶段 C：增加只写当前冲突结果的 task API 和按精确路径暂存 resolved API。写入绑定 waiting task、operation、HEAD、当前冲突路径及结果 SHA-256 revision，并在排队和取得仓库写许可后复核；标记 resolved 前拒绝残留冲突标记，只暂存该文件。冲突窗口使用独立 capability，仅允许冲突预检、内容读取、结果保存和 resolved 请求；修正嵌套 `/api` router 的鉴权内部路径判断。验收：冲突 workflow HTTP 集成（merge/cherry-pick/revert、窄权限、只读 token 拒写、结果保存、marker 拒绝及单文件 resolved 暂存）、Rust fmt check 和 `cargo clippy --all-targets -- -D warnings` 通过。证据：`crates/gitcrest-core/src/conflicts.rs`、`crates/gitcrest-core/src/main.rs`、`electron/main/index.ts`、`electron/main/sidecar.ts`、`electron/preload/index.ts`、`src/global.d.ts`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。实现 commit：`3e0ea26`；计划记录 commit：`beef834`。
+- 子阶段 D：独立窗口显示三方内容与 working result 编辑器，支持逐块选择 ours/theirs、整侧选择、手工编辑和实时结果预览；保存后从工作树读取新 revision，窄权限下轮询保存/resolve task 结果；未保存时阻止切换文件并在关闭窗口前提示；保存后可关闭重开续编。返回主窗口时刷新任务、工作区状态、分支、历史，并重读 Task Center recovery preflight。定向前端用例覆盖两冲突块的独立选择、手工修改、预览、保存、关闭重开、resolved 及恢复预检刷新（6 tests）。验收：`pnpm build` 和定向 Vitest 通过。证据：`src/features/workflows/ConflictWindow.tsx`、`src/features/tasks/TaskCenter.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/conflict-window.test.tsx`、`tests/unit/task-center.test.tsx`。完成 commits：`459ed14`、`b510f98`。
+- 子阶段 E：阶段级验收完成。最终 `pnpm check` 通过（production build、80 Vitest、76 Rust、1 Electron E2E）；`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。Clippy 指出的 capability method pattern 风格问题已修复并重验。验收修复 commit：`0f664f0`；最终验收记录随本次计划状态更新提交。
+- S5.2 状态：已完成。冲突结果保存在工作树，用户可关闭窗口后重新打开继续编辑；已 resolved 的文件只暂存该路径，继续 merge/cherry-pick/revert 仍从 Task Center 执行。
