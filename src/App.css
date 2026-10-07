@@ -318,9 +318,11 @@ button:disabled { cursor: not-allowed; }
 .workbenchSection > small { display: block; color: var(--text-muted); font-size: 8px; line-height: 1.45; }
 .stagedEmpty { display: grid; min-height: 42px; place-items: center; margin: 8px 0 7px; border: 1px dashed var(--line-strong); border-radius: 5px; color: var(--text-muted); font-size: 9px; }
 .commitSection { display: flex; flex-direction: column; gap: 5px; }
-.commitSection textarea { flex: 1; min-height: 36px; resize: none; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: 9px; line-height: 1.4; }
+.commitSection select { align-self: flex-start; max-width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: 11px; }
+.commitSection textarea { flex: 1; min-height: 36px; resize: none; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: 12px; line-height: 1.4; }
 .commitSection textarea::placeholder { color: var(--text-muted); }
 .commitSection textarea:disabled { opacity: .65; }
+.commitAdvisory { margin: 0; color: var(--warning); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
 .commitControls { display: flex; align-items: center; justify-content: space-between; }
 .disabledCheck { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 9px; }
 .disabledCheck input { accent-color: var(--accent); }

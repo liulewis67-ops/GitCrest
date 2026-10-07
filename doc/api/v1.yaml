@@ -603,6 +603,70 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/commits:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: commitRepository
+      summary: Queue a commit from the staged changes
+      description: Commit writes the message through standard input, checks that staged changes remain after acquiring the repository task lock, and refreshes repository metadata after execution.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CommitRequest"
+      responses:
+        "202":
+          description: Commit task accepted and durably recorded.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: Commit message is empty, malformed, or contains NUL.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not registered or its path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: No staged changes remain or unresolved conflicts exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "413":
+          description: Commit message exceeds 64 KiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git, task capacity, or task storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/fetch:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -932,6 +996,15 @@ components:
           type: string
           minLength: 1
           description: Repository-relative path, required for file actions and forbidden for all-file actions.
+    CommitRequest:
+      type: object
+      additionalProperties: false
+      required: [message]
+      properties:
+        message:
+          type: string
+          minLength: 1
+          description: Commit message supplied to Git over standard input; its UTF-8 encoded size must not exceed 64 KiB.
     StagingPatchRequest:
       type: object
       additionalProperties: false
@@ -1073,6 +1146,8 @@ components:
         - REPOSITORY_STATE_CONFLICT
         - RESOURCE_VERSION_STALE
         - REQUEST_INVALID
+        - COMMIT_CONFLICT
+        - COMMIT_MESSAGE_TOO_LARGE
         - INTERNAL_ERROR
     ApiError:
       type: object

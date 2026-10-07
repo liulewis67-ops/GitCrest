@@ -71,6 +71,7 @@ impl GitCommandService {
             operation.arguments().iter().map(OsString::from).collect(),
             None,
             None,
+            Vec::new(),
             Some(repository_path),
             operation.label(),
             task,
@@ -97,6 +98,7 @@ impl GitCommandService {
             .into(),
             None,
             None,
+            Vec::new(),
             Some(parent),
             "Clone",
             task,
@@ -121,8 +123,33 @@ impl GitCommandService {
             arguments,
             Some(log_label.into()),
             input,
+            Vec::new(),
             Some(repository_path),
             label,
+            task,
+        )
+        .await
+    }
+
+    pub async fn execute_commit(
+        &self,
+        repository_path: &Path,
+        message: String,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let redactions = message
+            .lines()
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect();
+        run_command(
+            &self.git_program,
+            ["commit".into(), "--file=-".into()].into(),
+            Some("commit --file=-".into()),
+            Some(message.into_bytes()),
+            redactions,
+            Some(repository_path),
+            "Commit",
             task,
         )
         .await
@@ -134,6 +161,7 @@ async fn run_command(
     arguments: Vec<OsString>,
     log_label: Option<String>,
     input: Option<Vec<u8>>,
+    redactions: Vec<String>,
     working_directory: Option<&Path>,
     label: &str,
     mut task: TaskContext,
@@ -181,10 +209,16 @@ async fn run_command(
         None
     };
     let (activity_sender, mut activity) = watch::channel(Instant::now());
-    let stdout_reader =
-        stdout.map(|stream| read_task_output(stream, task.clone(), activity_sender.clone()));
-    let stderr_reader =
-        stderr.map(|stream| read_task_output(stream, task.clone(), activity_sender.clone()));
+    let stdout_reader = stdout.map(|stream| {
+        read_task_output(
+            stream,
+            task.clone(),
+            activity_sender.clone(),
+            redactions.clone(),
+        )
+    });
+    let stderr_reader = stderr
+        .map(|stream| read_task_output(stream, task.clone(), activity_sender.clone(), redactions));
     let execution_deadline = Instant::now() + GIT_EXECUTION_DEADLINE;
     let mut network_deadline = Instant::now() + GIT_NETWORK_NO_PROGRESS_DEADLINE;
     let status = loop {
@@ -259,6 +293,7 @@ fn read_task_output<R>(
     stream: R,
     task: TaskContext,
     activity: watch::Sender<Instant>,
+    redactions: Vec<String>,
 ) -> JoinHandle<()>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
@@ -272,6 +307,9 @@ where
                     if let Some(progress) = parse_progress(&line) {
                         task.progress("Receiving objects", Some(progress)).await;
                     }
+                    let line = redactions.iter().fold(line, |line, secret| {
+                        line.replace(secret, "[commit message]")
+                    });
                     task.log(line).await;
                 }
                 Ok(None) | Err(_) => break,

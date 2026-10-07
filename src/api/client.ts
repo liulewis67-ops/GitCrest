@@ -9,6 +9,7 @@ export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
 export type StagingRequest = components["schemas"]["StagingRequest"];
 export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
+export type CommitRequest = components["schemas"]["CommitRequest"];
 
 export class GitCrestApiError extends Error {
   constructor(
@@ -96,6 +97,14 @@ export class GitCrestApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
+    });
+  }
+
+  commitRepository(repoId: RepoId, message: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message } satisfies CommitRequest),
     });
   }
 

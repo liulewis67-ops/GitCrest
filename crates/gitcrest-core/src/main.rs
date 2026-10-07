@@ -30,6 +30,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 mod cloning;
+mod commits;
 mod diff;
 mod git_command;
 mod repository;
@@ -100,6 +101,8 @@ enum ApiErrorCode {
     DiffTooLarge,
     DiffUnavailable,
     StagingConflict,
+    CommitConflict,
+    CommitMessageTooLarge,
     InternalError,
 }
 
@@ -348,6 +351,33 @@ impl ApiError {
         }
     }
 
+    fn from_commit_error(error: commits::CommitError) -> Self {
+        match error {
+            commits::CommitError::EmptyMessage | commits::CommitError::MessageContainsNul => {
+                Self::new(
+                    StatusCode::BAD_REQUEST,
+                    ApiErrorCode::RequestInvalid,
+                    "Enter a non-empty commit message without NUL characters.",
+                )
+            }
+            commits::CommitError::MessageTooLarge => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::CommitMessageTooLarge,
+                "Commit messages must be 64 KiB or smaller.",
+            ),
+            commits::CommitError::NoStagedChanges => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::CommitConflict,
+                "Stage at least one change before committing.",
+            ),
+            commits::CommitError::ConflictsMustBeResolved => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::CommitConflict,
+                "Resolve repository conflicts before committing.",
+            ),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -469,6 +499,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/staging/patch",
             post(stage_repository_patch),
         )
+        .route("/v1/repositories/:repo_id/commits", post(commit_repository))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
@@ -915,6 +946,79 @@ async fn stage_repository_patch(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct FetchRequest {
     prune: bool,
+}
+
+async fn commit_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<commits::CommitRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A commit message is required.",
+        )
+    })?;
+    commits::validate_message(&request.message).map_err(ApiError::from_commit_error)?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    commits::validate_snapshot(&snapshot).map_err(ApiError::from_commit_error)?;
+
+    let repositories = state.repositories.clone();
+    let commands = state.git_commands.clone();
+    let task_repo_id = repo_id.clone();
+    let repository_path = target.repository_path;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "commit",
+            move |context| async move {
+                let before = repositories
+                    .refresh_metadata(&task_repo_id)
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed(
+                            "Could not read repository metadata before committing".into(),
+                        )
+                    })?;
+                let current = repositories
+                    .status_snapshot(&task_repo_id)
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed(
+                            "Could not refresh repository status before committing".into(),
+                        )
+                    })?;
+                commits::validate_snapshot(&current).map_err(|error| {
+                    TaskFailure::Failed(format!("Commit precondition changed: {error:?}"))
+                })?;
+                let result = commands
+                    .execute_commit(&repository_path, request.message, context)
+                    .await;
+                let after = repositories.refresh_metadata(&task_repo_id).await;
+                if let Ok(after) = after {
+                    if before.head != after.head && after.head.is_some() {
+                        return Ok(None);
+                    }
+                }
+                result.map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
 async fn fetch_repository(
@@ -1947,6 +2051,182 @@ mod tests {
         let (status, code) = error_code(response).await;
         assert_eq!(status, StatusCode::NOT_ACCEPTABLE);
         assert_eq!(code, "API_VERSION_UNSUPPORTED");
+    }
+
+    #[tokio::test]
+    async fn commit_api_creates_commit_refreshes_head_and_keeps_message_out_of_logs() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("commit-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "GitCrest Test"]);
+        git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+        std::fs::write(root.join("staged.txt"), "staged content\n").unwrap();
+        git(&["add", "staged.txt"]);
+        let hooks = directory.path().join("hooks");
+        std::fs::create_dir(&hooks).unwrap();
+        let pre_commit = hooks.join("pre-commit");
+        std::fs::write(&pre_commit, "#!/bin/sh\necho 'hook denied'\nexit 1\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&pre_commit, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        git(&["config", "core.hooksPath", hooks.to_str().unwrap()]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/repositories")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::json!({ "path": root }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        let message = "commit message private body";
+        let failed = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/commits"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "message": message }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(failed.into_body(), usize::MAX).await.unwrap();
+        let failed_task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let failed_task = wait_for_task(&app, failed_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(failed_task["status"], "failed");
+        assert!(failed_task["logs"].to_string().contains("hook denied"));
+        assert!(!failed_task["logs"].to_string().contains(message));
+        let staged = status::read("repo_test".into(), &root).await.unwrap();
+        assert!(staged.files.iter().any(|file| file.path == "staged.txt"
+            && file.categories.contains(&status::ChangeCategory::Staged)));
+        std::fs::remove_file(pre_commit).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/commits"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "message": message }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        assert!(!completed["logs"].to_string().contains(message));
+        assert_eq!(
+            git_output(&root, &["log", "-1", "--format=%B"]).trim(),
+            message
+        );
+
+        let repository_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(repository_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["head"]
+                .as_str()
+                .is_some()
+        );
+        let status_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/status"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(status_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert!(
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["files"]
+                .as_array()
+                .unwrap()
+                .is_empty()
+        );
+        let rejected = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/commits"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "message": "nothing staged" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, code) = error_code(rejected).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(code, "COMMIT_CONFLICT");
+    }
+
+    fn git_output(path: &std::path::Path, args: &[&str]) -> String {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).into_owned()
     }
 
     #[tokio::test]

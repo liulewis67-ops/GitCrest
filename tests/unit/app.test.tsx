@@ -435,6 +435,52 @@ describe("App", () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(9));
   });
 
+  it("submits a commit only after staged changes and a message are ready", async () => {
+    window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
+      openRepoIds: ["repo_commit"], activeRepoId: "repo_commit", tabs: { repo_commit: { mode: "graph", graphScrollTop: 0 } },
+    }));
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+      },
+    });
+    const repository = { repoId: "repo_commit", path: "C:/commit-fixture", head: "abc123", branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
+    const snapshot = { repoId: "repo_commit", refreshedAtMs: 1, files: [{ path: ".env.local", indexStatus: "A", worktreeStatus: ".", kind: "added", categories: ["staged"], modeChanged: false }] };
+    const task = { taskId: "task-commit", repoId: "repo_commit", operation: "commit", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
+      if (url.pathname === "/api/v1/repositories") return response([repository]);
+      if (url.pathname.endsWith("/status")) return response(snapshot);
+      if (url.pathname.endsWith("/tasks")) return response([]);
+      if (url.pathname.endsWith("/commits")) return new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
+      if (url.pathname.endsWith("/tasks/task-commit")) return response(task);
+      throw new Error(`Unexpected API request: ${url} ${init?.method || "GET"}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
+    const textarea = await screen.findByRole("textbox", { name: "Commit message" });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Commit" }).hasAttribute("disabled")).toBe(true));
+    expect(screen.getByText(/Review sensitive staged files/)).toBeDefined();
+    fireEvent.change(screen.getByRole("combobox", { name: "Message template" }), { target: { value: "conventional" } });
+    expect((textarea as HTMLTextAreaElement).value).toBe("feat: ");
+    fireEvent.change(textarea, { target: { value: "feat: add environment config" } });
+    const commitButton = screen.getByRole("button", { name: "Commit" });
+    await waitFor(() => expect(commitButton.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(commitButton);
+    await waitFor(() => expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/commits"))).toBe(true));
+    const request = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/commits"));
+    expect(request?.[1]?.method).toBe("POST");
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ message: "feat: add environment config" });
+    expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
+  });
+
   it("cycles themes and exposes keyboard-adjustable panel separators", async () => {
     Object.defineProperty(window, "gitcrest", {
       configurable: true,

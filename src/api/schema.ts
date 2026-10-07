@@ -277,6 +277,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/commits": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue a commit from the staged changes
+         * @description Commit writes the message through standard input, checks that staged changes remain after acquiring the repository task lock, and refreshes repository metadata after execution.
+         */
+        post: operations["commitRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/fetch": {
         parameters: {
             query?: never;
@@ -422,6 +446,10 @@ export interface components {
             /** @description Repository-relative path, required for file actions and forbidden for all-file actions. */
             path?: string;
         };
+        CommitRequest: {
+            /** @description Commit message supplied to Git over standard input; its UTF-8 encoded size must not exceed 64 KiB. */
+            message: string;
+        };
         StagingPatchRequest: {
             /** @enum {string} */
             action: "stage" | "unstage";
@@ -476,7 +504,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "TASK_QUEUE_FULL" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "TASK_QUEUE_FULL" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -1306,6 +1334,83 @@ export interface operations {
             406: components["responses"]["UnsupportedVersion"];
             /** @description The selected diff revision expired or the repository has a conflicting state. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git, task capacity, or task storage is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    commitRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitRequest"];
+            };
+        };
+        responses: {
+            /** @description Commit task accepted and durably recorded. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description Commit message is empty, malformed, or contains NUL. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is not registered or its path is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description No staged changes remain or unresolved conflicts exist. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Commit message exceeds 64 KiB. */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

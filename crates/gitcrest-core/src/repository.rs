@@ -221,6 +221,17 @@ impl RepositoryManager {
         Ok(Some(repository))
     }
 
+    pub async fn refresh_metadata(&self, repo_id: &str) -> Result<Repository, RepositoryError> {
+        let store = self.store.clone();
+        let repo_id = repo_id.to_owned();
+        let repository = task::spawn_blocking(move || store.get(&repo_id))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .ok_or(RepositoryError::RepositoryNotFound)?;
+        self.open_path(&repository.path).await
+    }
+
     pub async fn list(&self) -> Result<Vec<Repository>, RepositoryError> {
         let store = self.store.clone();
         let mut repositories = task::spawn_blocking(move || store.list())

@@ -169,7 +169,11 @@ function App() {
   const cloneTaskIds = useRef(new Set<string>());
   const [tasksError, setTasksError] = useState("");
   const [stagingBusy, setStagingBusy] = useState(false);
+  const [commitMessage, setCommitMessage] = useState("");
+  const [commitTemplate, setCommitTemplate] = useState("plain");
+  const [commitBusy, setCommitBusy] = useState(false);
   const refreshedStagingTasks = useRef(new Set<string>());
+  const refreshedCommitTasks = useRef(new Set<string>());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
@@ -215,8 +219,12 @@ function App() {
     files: (activeStatus?.files || []).filter((file) => file.categories.includes(group.category)),
   }));
   const stagedCount = activeStatus?.files.filter((file) => file.categories.includes("staged")).length || 0;
+  const hasConflicts = Boolean(activeStatus?.files.some((file) => file.categories.includes("conflicted")));
+  const sensitiveStagedPaths = (activeStatus?.files || []).filter((file) => file.categories.includes("staged") && /(^|\/)(\.env(?:\.|$)|id_(?:rsa|dsa|ed25519)(?:$|\.)|[^/]+\.(?:pem|key|p12|pfx)|credentials(?:\.|$)|secrets?\.)/i.test(file.path)).map((file) => file.path);
   const workingCount = activeStatus?.files.filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length || 0;
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
+  const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
+  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask);
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
   const hasActiveTasksRef = useRef(false);
   hasActiveTasksRef.current = hasActiveTasks;
@@ -322,6 +330,32 @@ function App() {
     } finally {
       setStagingBusy(false);
     }
+  }
+
+  async function commitChanges() {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (!api || !repoId || !canCommit) return;
+    setCommitBusy(true);
+    setTasksError("");
+    try {
+      const task = await api.commitRepository(repoId, commitMessage);
+      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setTasksError(message || (error instanceof Error ? error.message : "Could not start the commit task."));
+      setTasksOpen(true);
+    } finally {
+      setCommitBusy(false);
+    }
+  }
+
+  function chooseCommitTemplate(template: string) {
+    setCommitTemplate(template);
+    if (template === "conventional") setCommitMessage("feat: ");
+    else if (template === "fix") setCommitMessage("fix: ");
+    else setCommitMessage("");
   }
 
   async function startClone(remoteUrl: string, parentPath: string, directoryName: string) {
@@ -634,11 +668,27 @@ function App() {
 
   useEffect(() => {
     for (const task of tasks) {
-      if (!task.operation.startsWith("stage") && !task.operation.startsWith("unstage")) continue;
       if (!["succeeded", "failed", "cancelled"].includes(task.status)) continue;
-      if (refreshedStagingTasks.current.has(task.taskId)) continue;
-      refreshedStagingTasks.current.add(task.taskId);
-      if (task.repoId) void refreshRepositoryStatus(task.repoId);
+      if (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) {
+        if (refreshedStagingTasks.current.has(task.taskId)) continue;
+        refreshedStagingTasks.current.add(task.taskId);
+        if (task.repoId) void refreshRepositoryStatus(task.repoId);
+      }
+      if (task.operation === "commit") {
+        if (refreshedCommitTasks.current.has(task.taskId)) continue;
+        refreshedCommitTasks.current.add(task.taskId);
+        if (!task.repoId) continue;
+        const api = apiRef.current;
+        if (api) {
+          void api.getRepository(task.repoId).then((repository) => {
+            setRepositories((current) => current.map((entry) => entry.repoId === repository.repoId ? repository : entry));
+            setSelectedRepository((current) => current?.repoId === repository.repoId ? repository : current);
+          }).catch((error: unknown) => {
+            setTasksError(error instanceof Error ? error.message : "Could not refresh repository metadata after commit.");
+          });
+        }
+        void refreshRepositoryStatus(task.repoId);
+      }
     }
   }, [tasks]);
 
@@ -946,7 +996,19 @@ function App() {
           <section className="workbench" aria-label="Changes and commit">
             <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">{activeStatus ? workingCount : "—"}</span></div><p>{!selectedRepository ? "No changed files" : activeStatusLoading && !activeStatus ? "Reading working tree…" : activeStatusError && !activeStatus ? activeStatusError : workingCount === 0 ? "Working tree clean" : "Unstaged changes"}</p><small>{selectedRepository && activeStatusLoading ? "Refreshing repository status…" : selectedRepository && !activeStatus && !activeStatusError ? "Waiting for the first status snapshot." : "Working tree changes are read from Git."}</small></div>
             <div className="workbenchSection stagedSection"><div className="workbenchTitle">Staged changes <span className="countBadge">{activeStatus ? stagedCount : "—"}</span></div><div className="stagedEmpty">{!activeStatus ? activeStatusError || "Waiting for repository status…" : stagedCount === 0 ? "Nothing staged" : `${stagedCount} staged file${stagedCount === 1 ? "" : "s"}`}</div><small>Review staged files before the commit workflow becomes available.</small></div>
-            <div className="workbenchSection commitSection"><div className="workbenchTitle">Commit message</div><textarea aria-label="Commit message" placeholder="Describe the changes you want to commit…" disabled /><div className="commitControls"><label className="disabledCheck"><input type="checkbox" disabled /> Amend</label><button className="primaryButton commitButton" type="button" disabled title="Open a repository and stage changes to commit">Commit <span aria-hidden="true">⌄</span></button></div><small>Commit becomes available when staged changes and a message are ready.</small></div>
+            <div className="workbenchSection commitSection">
+              <label className="workbenchTitle" htmlFor="commit-message">Commit message</label>
+              <label className="srOnly" htmlFor="commit-template">Message template</label>
+              <select id="commit-template" aria-label="Message template" value={commitTemplate} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => chooseCommitTemplate(event.target.value)}>
+                <option value="plain">Plain message</option>
+                <option value="conventional">Conventional commit</option>
+                <option value="fix">Fix</option>
+              </select>
+              <textarea id="commit-message" aria-label="Commit message" placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void commitChanges(); } }} />
+              <div className="commitControls"><label className="disabledCheck"><input type="checkbox" disabled title="Amend is not available yet" /> Amend</label><button className="primaryButton commitButton" type="button" disabled={!canCommit} title={!connected ? "Connect to the Git engine to commit" : hasConflicts ? "Resolve conflicts before committing" : stagedCount === 0 ? "Stage changes before committing" : !commitMessage.trim() ? "Enter a commit message" : hasActiveRepositoryTask ? "Wait for the current repository task" : "Commit staged changes"} onClick={() => void commitChanges()}>{commitBusy ? "Submitting…" : "Commit"}</button></div>
+              {sensitiveStagedPaths.length > 0 && <p className="commitAdvisory" role="status">Review sensitive staged files before committing: {sensitiveStagedPaths.join(", ")}</p>}
+              <small>Use Ctrl+Enter to commit. Only staged changes are included.</small>
+            </div>
           </section>
           <footer className="statusbar"><span className="statusIcon" aria-hidden="true">●</span>{connected ? "Git engine ready" : connecting ? "Connecting to Git engine" : "Git engine unavailable"}<span className="statusbarDivider" /><span>{version || "API v1"}</span><span className="footerSpacer" /><span>Repository actions planned for S1</span></footer>
         </section>
