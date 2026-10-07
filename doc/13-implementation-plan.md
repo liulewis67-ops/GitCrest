@@ -207,5 +207,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm check` 通过，包含前端构建/类型检查、12 个 Vitest 用例、Rust 格式检查/构建/18 个测试和 Electron E2E。前端用例以两个仓库验证 Tab 切换各自恢复模式、选中提交 SHA、提交图滚动值与面板尺寸，模拟 renderer 重挂载后恢复活动仓库；关闭两个 Tab 后仓库仍留在最近列表且没有 DELETE 请求。
 - 手工验证：未手工操作桌面窗口；多仓切换、重载恢复与关闭行为由 jsdom 测试覆盖。滚动测试设置并触发滚动视口的 `scrollTop`，Electron E2E 检查应用启动及仓库欢迎列表恢复。
 - 证据：`src/App.tsx`、`src/App.css`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。
-- 完成 commit：待补记
+- 完成 commit：`4e37a2c`
 - 限制/后续：当前提交图与 Diff 内容尚未由本阶段实现；打开仓库时以 HEAD 作为初始选中提交，每仓保存选中的 SHA 和滚动位置，视图钩子可恢复这些值。选择非 HEAD 提交和真实历史滚动需等待 S2/S3 接入真实历史/Diff 视图。
