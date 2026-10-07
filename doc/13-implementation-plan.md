@@ -102,8 +102,8 @@
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S5.1 | Merge/Cherry-pick/Revert 工作流与冲突检测。 | 成功时 refs/status/log 更新；冲突时任务转入“等待解决”且逐文件展示；已存在 merge/rebase 状态时拒绝不兼容操作；取消/失败给出明确继续、跳过或中止路径，不清除用户修改。 | 进行中 |
-| S5.2 | 独立三路冲突解决窗口与 resolved 校验。 | ours/base/theirs、结果预览和逐块/手工编辑可用；只能写当前冲突文件，不能执行一般 Git 写操作；有未解决标记时禁止 resolved；关闭再开保留已保存的解决进度；resolved 后主窗口状态刷新。 | 未开始 |
+| S5.1 | Merge/Cherry-pick/Revert 工作流与冲突检测。 | 成功时 refs/status/log 更新；冲突时任务转入“等待解决”且逐文件展示；已存在 merge/rebase 状态时拒绝不兼容操作；取消/失败给出明确继续、跳过或中止路径，不清除用户修改。 | 已完成 |
+| S5.2 | 独立三路冲突解决窗口与 resolved 校验。 | ours/base/theirs、结果预览和逐块/手工编辑可用；只能写当前冲突文件，不能执行一般 Git 写操作；有未解决标记时禁止 resolved；关闭再开保留已保存的解决进度；resolved 后主窗口状态刷新。 | 进行中 |
 | S5.3 | Shelve：选中文件/hunk、命名、预览、应用、删除。 | 搁置前后及跨分支恢复时只影响选中内容；应用前必须预览；冲突进入 S5.2；应用失败保留条目与原 patch；删除显示范围并确认；条目重启后存在。 | 未开始 |
 | S5.4 | Rebase 与交互式 Rebase：todo 编辑、预览、备份、continue/abort/回滚。 | pick/reword/edit/squash/fixup/drop 均有测试；执行前创建并展示备份 ref；drop 和已发布分支改写明确确认；冲突可进入解决器并继续；abort 后恢复至操作前，备份 ref 可用于回滚。 | 未开始 |
 | S5.5 | Reset、丢弃工作区变更、删除远程分支等危险操作安全网。 | 后端返回影响文件/提交/目标 ref；UI 展示后果和恢复方式，破坏性操作要求强确认；取消不改变仓库；可恢复操作先创建备份；日志记录动作与结果但不记录凭证；无确认票据的直接 API 调用被拒绝。 | 未开始 |
@@ -364,3 +364,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 子阶段 C：增加 waiting workflow 的 recovery preflight 和 snapshot-bound continue/skip/abort task。恢复前与取得仓库写许可后都核对等待 task、operation、HEAD 和冲突路径；continue 仅在没有未解决冲突时允许；skip 只适用于 cherry-pick/revert；abort/skip 在发现冲突以外的 dirty path 时禁用，避免清掉无关工作区编辑。恢复成功后关闭原 waiting task，abort 将其标记为 cancelled。验收：`pnpm check`（build、74 Vitest、72 Rust、1 Electron E2E）、`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。临时仓库集成覆盖 merge continue/abort、cherry-pick skip、无关 dirty path 阻止 abort，以及原 task 状态收敛；客户端用例验证恢复预检和写请求。证据：`crates/gitcrest-core/src/workflows.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/tasks.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。完成 commit：`4158122`。
 - 子阶段 D：提交详情提供 merge/cherry-pick/revert 入口，提交前展示目标、HEAD、工作区和操作状态的预检；Task Center 对 waiting task 逐项列出冲突路径，刷新预检后提供 continue/skip/abort，并对 abort 加二次确认。恢复调用前 App 再读一次预检，将最新 HEAD、操作和冲突路径绑定到请求；workflow 等待、完成及恢复任务结束后刷新 status、branch、repository 和 history。验收：`pnpm check`（build、77 Vitest、72 Rust、1 Electron E2E）、最终 `pnpm build` 与 `pnpm test` 复核、`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。组件用例覆盖冲突清单、abort 确认和仅 Cherry-pick/Revert 显示 Skip；WorkflowDialog 用例覆盖预检允许启动和 dirty 工作区阻止启动。证据：`src/features/workflows/WorkflowDialog.tsx`、`src/features/history/CommitGraph.tsx`、`src/features/tasks/TaskCenter.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/workflow-dialog.test.tsx`、`tests/unit/task-center.test.tsx`。完成 commit：`ebd6409`。
 - S5.1 状态：已完成。限制/后续：冲突文件在 Task Center 可查看并可执行安全恢复；独立三路冲突编辑器在 S5.2 实施。
+
+### S5.2 — 独立三路冲突解决窗口与 resolved 校验（进行中）
+- 子阶段 A：新增只读冲突内容 API，要求当前等待中的 merge/cherry-pick/revert task 和仍处于冲突集中的精确路径；返回 Git index 的 base/ours/theirs、当前工作区结果、HEAD 与结果内容 SHA-256 revision。限制路径遍历和符号链接，单文件各侧限制为 1 MiB，binary 不开放文本编辑。验收：`pnpm api:types`、`pnpm check`（build、78 Vitest、74 Rust、1 Electron E2E）、`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。服务测试验证真实仓库的三方内容、冲突结果和 revision；HTTP 集成测试通过只读 token 读取 waiting task 的 add/add 冲突。证据：`crates/gitcrest-core/src/conflicts.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。完成 commit：`920f36e`。
+- 后续子阶段：B. 桌面端创建受限冲突窗口并连接入口；C. revision 绑定的结果保存与安全 resolved API；D. 三方预览、逐块选择/手工编辑、关闭重开恢复；E. 阶段级全量验收。
