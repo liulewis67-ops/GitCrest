@@ -36,6 +36,7 @@ mod credentials;
 mod diff;
 mod git_command;
 mod history;
+mod push;
 mod remotes;
 mod repository;
 mod staging;
@@ -129,6 +130,11 @@ enum ApiErrorCode {
     RemoteNotFound,
     CredentialInputInvalid,
     CredentialsUnavailable,
+    PushPreflightUnavailable,
+    PushTargetUnavailable,
+    PushPreflightStale,
+    PushRequiresFetch,
+    NothingToPush,
     TagAlreadyExists,
     InternalError,
 }
@@ -537,6 +543,38 @@ impl ApiError {
         }
     }
 
+    fn from_push_error(error: push::PushError) -> Self {
+        match error {
+            push::PushError::NoCurrentBranch => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::PushTargetUnavailable,
+                "Push requires a current local branch.",
+            ),
+            push::PushError::NoUpstream => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::PushTargetUnavailable,
+                "Set an upstream for the current branch before pushing.",
+            ),
+            push::PushError::InvalidUpstream | push::PushError::UpstreamGone => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::PushTargetUnavailable,
+                "The configured upstream remote or tracking branch is unavailable. Fetch remotes and review the branch upstream.",
+            ),
+            push::PushError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git is unavailable for push preflight.",
+            ),
+            push::PushError::TimedOut | push::PushError::TooLarge | push::PushError::GitFailed => {
+                Self::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    ApiErrorCode::PushPreflightUnavailable,
+                    "Push preflight could not be completed. Refresh repository state and retry.",
+                )
+            }
+        }
+    }
+
     fn from_tag_error(error: tags::TagError) -> Self {
         match error {
             tags::TagError::Invalid => Self::new(
@@ -792,6 +830,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route("/v1/repositories/:repo_id/refs", get(repository_refs))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
+        .route(
+            "/v1/repositories/:repo_id/push-preflight",
+            get(preflight_repository_push),
+        )
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
         .route("/v1/tasks/:task_id", get(get_task))
@@ -2668,6 +2710,31 @@ async fn fetch_repository(
         .await
         .map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn preflight_repository_push(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<push::PushPreflight>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    push::read_push_preflight(
+        repo_id,
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_push_error)
 }
 
 #[derive(Deserialize)]

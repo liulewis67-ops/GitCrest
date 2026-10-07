@@ -1605,6 +1605,51 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/push-preflight:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: preflightRepositoryPush
+      summary: Preview the current branch push target and changed scope
+      responses:
+        "200":
+          description: Current upstream, compare-and-swap OIDs, commits to push, and changed paths.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PushPreflight"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not registered or its path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The current branch has no usable upstream or its tracking ref is gone.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git could not complete the bounded push preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/tasks/{taskId}:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -2067,6 +2112,31 @@ components:
         isClean: { type: boolean }
         dirtyFiles: { type: array, items: { type: string } }
         potentiallyOverwrittenPaths: { type: array, items: { type: string } }
+    PushPreflight:
+      type: object
+      additionalProperties: false
+      required: [repoId, localBranch, remoteName, remoteBranch, localOid, expectedRemoteOid, ahead, behind, commitsToPush, overwrittenCommitCount, changedPaths, changedPathCount, omittedChangedPathCount]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        localBranch: { type: string }
+        remoteName: { type: string }
+        remoteBranch: { type: string }
+        localOid: { type: string, minLength: 40, maxLength: 64 }
+        expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, description: Local remote-tracking OID used as the force-with-lease expectation. }
+        ahead: { type: integer, minimum: 0 }
+        behind: { type: integer, minimum: 0 }
+        commitsToPush: { type: array, maxItems: 50, items: { $ref: "#/components/schemas/PushCommit" } }
+        overwrittenCommitCount: { type: integer, minimum: 0, description: Commits present on the tracked remote but absent from the local branch. }
+        changedPaths: { type: array, maxItems: 200, items: { type: string } }
+        changedPathCount: { type: integer, minimum: 0 }
+        omittedChangedPathCount: { type: integer, minimum: 0 }
+    PushCommit:
+      type: object
+      additionalProperties: false
+      required: [oid, subject]
+      properties:
+        oid: { type: string, minLength: 40, maxLength: 64 }
+        subject: { type: string, maxLength: 4096 }
     RemoteSnapshot:
       type: object
       additionalProperties: false
@@ -2346,6 +2416,11 @@ components:
         - REMOTE_NOT_FOUND
         - CREDENTIAL_INPUT_INVALID
         - CREDENTIALS_UNAVAILABLE
+        - PUSH_PREFLIGHT_UNAVAILABLE
+        - PUSH_TARGET_UNAVAILABLE
+        - PUSH_PREFLIGHT_STALE
+        - PUSH_REQUIRES_FETCH
+        - NOTHING_TO_PUSH
         - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:

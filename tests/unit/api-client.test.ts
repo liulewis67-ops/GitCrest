@@ -320,6 +320,24 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prune: false }));
   });
 
+  it("reads the push preview for an encoded repository ID", async () => {
+    const preview = {
+      repoId: "repo_fixture", localBranch: "main", remoteName: "origin", remoteBranch: "main",
+      localOid: "a".repeat(40), expectedRemoteOid: "b".repeat(40), ahead: 1, behind: 0,
+      commitsToPush: [{ oid: "a".repeat(40), subject: "feature change" }], overwrittenCommitCount: 0,
+      changedPaths: ["src/file.ts"], changedPathCount: 1, omittedChangedPathCount: 0,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(preview), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.preflightRepositoryPush("repo/fixture")).resolves.toEqual(preview);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/push-preflight`);
+    expect(fetcher.mock.calls[0][1]?.method).toBeUndefined();
+  });
+
   it("queues a commit using the encoded repository ID and exact message text", async () => {
     const task = { taskId: "task-commit", repoId: "repo_fixture", operation: "commit", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {

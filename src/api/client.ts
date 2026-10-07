@@ -293,6 +293,10 @@ export class GitCrestApiClient {
     });
   }
 
+  preflightRepositoryPush(repoId: RepoId): Promise<components["schemas"]["PushPreflight"]> {
+    return this.request<components["schemas"]["PushPreflight"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/push-preflight`);
+  }
+
   cloneRepository(remoteUrl: string, parentPath: string, directoryName: string): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>("/api/v1/clones", true, {
       method: "POST",
