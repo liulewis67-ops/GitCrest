@@ -91,6 +91,14 @@ button:disabled { cursor: not-allowed; }
 }
 
 .titlebar button, .titlebar nav, .titlebar .connectionBadge { -webkit-app-region: no-drag; }
+.repositoryTabs { display: flex; align-self: stretch; align-items: center; gap: 3px; min-width: 0; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
+.repositoryTabs::-webkit-scrollbar { display: none; }
+.repositoryTab { display: flex; align-items: center; min-width: 0; max-width: 150px; height: 28px; border: 1px solid transparent; border-radius: 5px; background: transparent; }
+.repositoryTab.active { border-color: var(--line); background: var(--surface-raised); }
+.repositoryTab > button:first-child { overflow: hidden; min-width: 0; padding: 0 6px; border: 0; background: transparent; color: var(--text-muted); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.repositoryTab.active > button:first-child { color: var(--text); }
+.repositoryTab .closeRepositoryTab { width: 21px; height: 22px; margin-right: 2px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.repositoryTab .closeRepositoryTab:hover { background: var(--line); color: var(--text); }
 .brandButton, .pageTab, .quietButton, .textButton, .panelMenu, .modeButton, .inlineAction, .actionRow { border: 0; }
 .brandButton { display: inline-flex; align-items: center; gap: 8px; padding: 0; background: transparent; font-weight: 650; letter-spacing: -.025em; cursor: pointer; }
 .brandMark, .crumbMark { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--accent-strong); font-size: 12px; font-weight: 800; }

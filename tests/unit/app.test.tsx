@@ -14,6 +14,7 @@ const resyncEvent: components["schemas"]["EventEnvelope"] = {
 
 afterEach(() => {
   cleanup();
+  window.localStorage.clear();
   vi.unstubAllGlobals();
 });
 
@@ -189,6 +190,67 @@ describe("App", () => {
     expect(chooseRepository).toHaveBeenCalledOnce();
     expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories/initialize");
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/new-project" });
+  });
+
+  it("restores repository tabs independently and closes tabs without deleting repositories", async () => {
+    window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
+      openRepoIds: ["repo_alpha", "repo_beta"],
+      activeRepoId: "repo_alpha",
+      tabs: {
+        repo_alpha: { mode: "diff", selectedCommit: "abc123", graphScrollTop: 147 },
+        repo_beta: { mode: "graph", selectedCommit: "def456", graphScrollTop: 23 },
+      },
+    }));
+    window.localStorage.setItem("gitcrest-layout-repo_alpha-sidebar-width", "270");
+    window.localStorage.setItem("gitcrest-layout-repo_beta-sidebar-width", "310");
+    const repositories = [
+      { repoId: "repo_alpha", path: "C:/alpha", head: "abc123", branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 2, availability: "available" },
+      { repoId: "repo_beta", path: "C:/beta", head: "def456", branch: "feature", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" },
+    ];
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+      },
+    });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(repositories), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(repositories[1]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(repositories), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    vi.stubGlobal("fetch", fetcher);
+
+    const firstRun = render(<App />);
+    expect(await screen.findByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(screen.getByRole("tab", { name: "alpha" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("button", { name: "Diff" }).className).toContain("active");
+    expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270");
+
+    fireEvent.click(screen.getByRole("tab", { name: "beta" }));
+    expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
+    expect(screen.getByRole("button", { name: "Graph" }).className).toContain("active");
+    const savedSession = JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}");
+    expect(savedSession.activeRepoId).toBe("repo_beta");
+    expect(savedSession.tabs.repo_alpha).toMatchObject({ selectedCommit: "abc123", graphScrollTop: 147 });
+    expect(savedSession.tabs.repo_beta).toMatchObject({ selectedCommit: "def456", graphScrollTop: 23 });
+
+    firstRun.unmount();
+    render(<App />);
+    expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected")).toBe("true");
+    await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close beta tab" }));
+    expect(screen.getByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270"));
+    fireEvent.click(screen.getByRole("button", { name: "Close alpha tab" }));
+    expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
+    expect(screen.getByText("C:/alpha")).toBeDefined();
+    expect(screen.getByText("C:/beta")).toBeDefined();
+    expect(fetcher).toHaveBeenCalledTimes(5);
   });
 
   it("cycles themes and exposes keyboard-adjustable panel separators", async () => {

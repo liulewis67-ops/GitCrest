@@ -6,6 +6,42 @@ import "./App.css";
 type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
 type WorkspaceMode = "graph" | "diff";
+type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; graphScrollTop: number };
+type WorkspaceSession = { openRepoIds: string[]; activeRepoId?: string; tabs: Record<string, RepositoryTabState> };
+
+const WORKSPACE_SESSION_KEY = "gitcrest-workspace-session-v1";
+
+function readWorkspaceSession(): WorkspaceSession {
+  try {
+    const value: unknown = JSON.parse(window.localStorage.getItem(WORKSPACE_SESSION_KEY) || "null");
+    if (!value || typeof value !== "object") return { openRepoIds: [], tabs: {} };
+    const session = value as Partial<WorkspaceSession>;
+    const openRepoIds = Array.isArray(session.openRepoIds)
+      ? [...new Set(session.openRepoIds.filter((id): id is string => typeof id === "string"))]
+      : [];
+    const tabs: WorkspaceSession["tabs"] = {};
+    if (session.tabs && typeof session.tabs === "object") {
+      for (const [repoId, state] of Object.entries(session.tabs)) {
+        if (!state || typeof state !== "object") continue;
+        const candidate = state as Partial<RepositoryTabState>;
+        tabs[repoId] = {
+          mode: candidate.mode === "diff" ? "diff" : "graph",
+          ...(typeof candidate.selectedCommit === "string" ? { selectedCommit: candidate.selectedCommit } : {}),
+          graphScrollTop: typeof candidate.graphScrollTop === "number" && Number.isFinite(candidate.graphScrollTop)
+            ? Math.max(0, candidate.graphScrollTop)
+            : 0,
+        };
+      }
+    }
+    return {
+      openRepoIds,
+      ...(typeof session.activeRepoId === "string" ? { activeRepoId: session.activeRepoId } : {}),
+      tabs,
+    };
+  } catch {
+    return { openRepoIds: [], tabs: {} };
+  }
+}
 
 const themeCycle: Theme[] = ["system", "light", "dark"];
 
@@ -106,7 +142,10 @@ function App() {
   const [openingRepository, setOpeningRepository] = useState(false);
   const apiRef = useRef<GitCrestApiClient>();
   const [page, setPage] = useState<Page>("welcome");
-  const [mode, setMode] = useState<WorkspaceMode>("graph");
+  const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession>(readWorkspaceSession);
+  const workspaceSessionRef = useRef(workspaceSession);
+  workspaceSessionRef.current = workspaceSession;
+  const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       const stored = window.localStorage.getItem("gitcrest-theme");
@@ -120,9 +159,55 @@ function App() {
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber("gitcrest-sidebar-width", 236, 190, 340));
   const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", 284, 220, 420));
   const [workbenchHeight, setWorkbenchHeight] = useState(() => readStoredNumber("gitcrest-workbench-height", 204, 144, 360));
+  const [layoutLoadedFor, setLayoutLoadedFor] = useState<string>();
   const connected = status === "Connected to local Rust core";
   const connecting = status.startsWith("Starting");
   const connectionLabel = connected ? "Core connected" : connecting ? "Starting core" : "Core unavailable";
+
+  function activateRepository(repository: RepositoryResponse) {
+    setOpenError("");
+    setWorkspaceSession((current) => ({
+      ...current,
+      openRepoIds: [...current.openRepoIds.filter((repoId) => repoId !== repository.repoId), repository.repoId],
+      activeRepoId: repository.repoId,
+      tabs: {
+        ...current.tabs,
+        [repository.repoId]: current.tabs[repository.repoId] || { mode: "graph", graphScrollTop: 0 },
+      },
+    }));
+    setSelectedRepository(repository);
+    setPage("workspace");
+  }
+
+  function changeWorkspaceMode(nextMode: WorkspaceMode) {
+    if (!selectedRepository) {
+      setPage("workspace");
+      return;
+    }
+    setWorkspaceSession((current) => ({
+      ...current,
+      tabs: {
+        ...current.tabs,
+        [selectedRepository.repoId]: {
+          ...(current.tabs[selectedRepository.repoId] || { graphScrollTop: 0 }),
+          mode: nextMode,
+        },
+      },
+    }));
+  }
+
+  function closeRepositoryTab(repoId: string) {
+    const current = workspaceSessionRef.current;
+    const openRepoIds = current.openRepoIds.filter((id) => id !== repoId);
+    const closingActive = current.activeRepoId === repoId;
+    const nextActiveRepoId = closingActive
+      ? openRepoIds[openRepoIds.length - 1]
+      : current.activeRepoId;
+    const nextRepository = repositories.find((repository) => repository.repoId === nextActiveRepoId);
+    setWorkspaceSession({ ...current, openRepoIds, activeRepoId: nextActiveRepoId });
+    if (closingActive) setSelectedRepository(nextRepository);
+    if (closingActive && page === "workspace") setPage(nextRepository ? "workspace" : "welcome");
+  }
 
   async function openLocalRepository() {
     setOpenError("");
@@ -134,8 +219,7 @@ function App() {
       setOpeningRepository(true);
       const repository = await api.openRepository(path);
       setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
-      setSelectedRepository(repository);
-      setPage("workspace");
+      activateRepository(repository);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setOpenError(message || (error instanceof Error ? error.message : "Could not open this repository."));
@@ -154,8 +238,7 @@ function App() {
       setOpeningRepository(true);
       const repository = await api.initializeRepository(path);
       setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
-      setSelectedRepository(repository);
-      setPage("workspace");
+      activateRepository(repository);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setOpenError(message || (error instanceof Error ? error.message : "Could not initialize this folder."));
@@ -199,8 +282,7 @@ function App() {
       const opened = await api.getRepository(repository.repoId);
       setRepositories((current) => [opened, ...current.filter((item) => item.repoId !== opened.repoId)]
         .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt));
-      setSelectedRepository(opened);
-      setPage("workspace");
+      activateRepository(opened);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setOpenError(message || (error instanceof Error ? error.message : "Could not reopen this repository."));
@@ -210,13 +292,23 @@ function App() {
     }
   }
 
-  async function refreshRepositories(api: GitCrestApiClient) {
+  async function refreshRepositories(api: GitCrestApiClient, restoreWorkspace = false) {
     const currentRepositories = await api.listRepositories();
     setRepositories(currentRepositories);
-    setSelectedRepository((current) => {
-      const active = currentRepositories.find((repository) => repository.repoId === current?.repoId);
-      return active ?? currentRepositories[0];
-    });
+    if (restoreWorkspace) {
+      const saved = workspaceSessionRef.current;
+      const availableIds = saved.openRepoIds.filter((repoId) =>
+        currentRepositories.some((repository) => repository.repoId === repoId && repository.availability === "available"));
+      const activeRepoId = saved.activeRepoId && availableIds.includes(saved.activeRepoId)
+        ? saved.activeRepoId
+        : availableIds[availableIds.length - 1];
+      const activeRepository = currentRepositories.find((repository) => repository.repoId === activeRepoId);
+      setWorkspaceSession({ ...saved, openRepoIds: availableIds, activeRepoId });
+      setSelectedRepository(activeRepository);
+      setPage(activeRepository ? "workspace" : "welcome");
+    } else {
+      setSelectedRepository((current) => currentRepositories.find((repository) => repository.repoId === current?.repoId));
+    }
   }
 
   useEffect(() => {
@@ -233,7 +325,7 @@ function App() {
           setVersion(`${body.name} ${body.version} (API v${body.apiVersion})`);
           setStatus("Connected to local Rust core");
         }
-        await refreshRepositories(api);
+        await refreshRepositories(api, true);
 
         const unsubscribe = await window.gitcrest.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
           if (event.type === "connection.resyncRequired") {
@@ -260,6 +352,14 @@ function App() {
   }, []);
 
   useEffect(() => {
+    try {
+      window.localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(workspaceSession));
+    } catch {
+      // Repository tabs remain available for this session if local storage is unavailable.
+    }
+  }, [workspaceSession]);
+
+  useEffect(() => {
     const systemTheme = typeof window.matchMedia === "function"
       ? window.matchMedia("(prefers-color-scheme: light)")
       : undefined;
@@ -277,14 +377,29 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem("gitcrest-sidebar-width", String(sidebarWidth));
-      window.localStorage.setItem("gitcrest-details-width", String(detailsWidth));
-      window.localStorage.setItem("gitcrest-workbench-height", String(workbenchHeight));
-    } catch {
-      // Resize behavior still works for this session when storage is unavailable.
+    const repoId = selectedRepository?.repoId;
+    if (!repoId) {
+      setLayoutLoadedFor(undefined);
+      return;
     }
-  }, [sidebarWidth, detailsWidth, workbenchHeight]);
+    setLayoutLoadedFor(undefined);
+    setSidebarWidth(readStoredNumber(`gitcrest-layout-${repoId}-sidebar-width`, readStoredNumber("gitcrest-sidebar-width", 236, 190, 340), 190, 340));
+    setDetailsWidth(readStoredNumber(`gitcrest-layout-${repoId}-details-width`, readStoredNumber("gitcrest-details-width", 284, 220, 420), 220, 420));
+    setWorkbenchHeight(readStoredNumber(`gitcrest-layout-${repoId}-workbench-height`, readStoredNumber("gitcrest-workbench-height", 204, 144, 360), 144, 360));
+    setLayoutLoadedFor(repoId);
+  }, [selectedRepository?.repoId]);
+
+  useEffect(() => {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId || layoutLoadedFor !== repoId) return;
+    try {
+      window.localStorage.setItem(`gitcrest-layout-${repoId}-sidebar-width`, String(sidebarWidth));
+      window.localStorage.setItem(`gitcrest-layout-${repoId}-details-width`, String(detailsWidth));
+      window.localStorage.setItem(`gitcrest-layout-${repoId}-workbench-height`, String(workbenchHeight));
+    } catch {
+      // Layout resizing remains available for this session if storage is unavailable.
+    }
+  }, [layoutLoadedFor, selectedRepository?.repoId, sidebarWidth, detailsWidth, workbenchHeight]);
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
@@ -328,6 +443,21 @@ function App() {
           <button type="button" className={page === "welcome" ? "pageTab active" : "pageTab"} onClick={() => setPage("welcome")}>Welcome</button>
           <button type="button" className={page === "workspace" ? "pageTab active" : "pageTab"} onClick={() => setPage("workspace")}>Workspace</button>
         </nav>
+        <div className="repositoryTabs" role="tablist" aria-label="Open repositories">
+          {workspaceSession.openRepoIds.map((repoId) => {
+            const repository = repositories.find((item) => item.repoId === repoId);
+            if (!repository) return null;
+            const active = selectedRepository?.repoId === repoId;
+            return (
+              <div className={active ? "repositoryTab active" : "repositoryTab"} key={repoId}>
+                <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (!active) void openRecentRepository(repository); }}>
+                  {repositoryName(repository.path)}
+                </button>
+                <button type="button" className="closeRepositoryTab" aria-label={`Close ${repositoryName(repository.path)} tab`} title="Close tab" onClick={() => closeRepositoryTab(repoId)}>×</button>
+              </div>
+            );
+          })}
+        </div>
         <div className="titlebarSpacer" />
         <button className="quietButton searchShortcut" type="button" onClick={() => setPaletteOpen(true)} aria-keyshortcuts="Control+K Meta+K">
           <span aria-hidden="true">⌕</span><span>Search commands</span><kbd>{commandKey} K</kbd>
@@ -407,8 +537,8 @@ function App() {
           <div className="workspaceToolbar">
             <div className="workspaceCrumb"><span className="crumbMark" aria-hidden="true">G</span><span>Workspace</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || "No repository open"}</span></div>
             <div className="toolbarActions">
-              <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => setMode("graph")}>Graph</button>
-              <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled title="Select a changed file after opening a repository" onClick={() => setMode("diff")}>Diff</button>
+              <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => changeWorkspaceMode("graph")}>Graph</button>
+              <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled title="Select a changed file after opening a repository" onClick={() => changeWorkspaceMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
               <button className="quietButton compact" type="button" disabled title="Branch selection arrives with S4.2"><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
             </div>
