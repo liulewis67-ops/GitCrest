@@ -60,15 +60,19 @@ it("lists workflow conflicts and offers safe recovery actions", async () => {
     dirtyPaths: ["src/conflict.ts"], omittedDirtyPathCount: 0, conflictedPaths: ["src/conflict.ts"], omittedConflictedPathCount: 0,
     canContinue: false, canSkip: false, canAbort: true,
   };
-  const api = { preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValue(preflight) } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const resolvedPreflight = { ...preflight, conflictedPaths: [], canContinue: true };
+  const api = { preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValueOnce(preflight).mockResolvedValue(resolvedPreflight) } as unknown as import("../../src/api/client").GitCrestApiClient;
   const onRecoverWorkflow = vi.fn();
   const onOpenConflictWindow = vi.fn();
   render(<TaskCenter api={api} tasks={[waiting]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={onRecoverWorkflow} onOpenConflictWindow={onOpenConflictWindow} />);
   expect(await screen.findByText("src/conflict.ts")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Open conflict resolver" }));
   expect(onOpenConflictWindow).toHaveBeenCalledWith(waiting);
+  fireEvent.focus(window);
+  expect(await screen.findByText("No unresolved conflicts remain.")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Abort…" }));
   fireEvent.click(screen.getByRole("button", { name: "Confirm abort" }));
-  await waitFor(() => expect(onRecoverWorkflow).toHaveBeenCalledWith(waiting, preflight, "abort"));
+  await waitFor(() => expect(onRecoverWorkflow).toHaveBeenCalledWith(waiting, resolvedPreflight, "abort"));
   expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
 });

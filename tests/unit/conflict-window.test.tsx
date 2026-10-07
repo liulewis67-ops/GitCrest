@@ -21,7 +21,9 @@ it("edits, saves, and marks a conflict resolved using conflict-scoped window acc
   };
   let conflict = {
     repoId, taskId: "task-123-1", path: "conflict.ts", operation: "merge", headOid: "a".repeat(40),
-    baseContent: "base value", oursContent: "ours value", theirsContent: "theirs value", resultContent: "<<<<<<< ours", resultRevision: "b".repeat(64), isText: true,
+    baseContent: "base value", oursContent: "ours value", theirsContent: "theirs value",
+    resultContent: "prefix\n<<<<<<< ours\nours first\n=======\ntheirs first\n>>>>>>> theirs\nmiddle\n<<<<<<< ours\nours second\n=======\ntheirs second\n>>>>>>> theirs\nsuffix\n",
+    resultRevision: "b".repeat(64), isText: true,
   };
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
     const url = String(input);
@@ -45,17 +47,24 @@ it("edits, saves, and marks a conflict resolved using conflict-scoped window acc
   expect(screen.getByText("ours value")).toBeTruthy();
   expect(screen.getByText("theirs value")).toBeTruthy();
   const editor = screen.getByRole("textbox", { name: "Working result" }) as HTMLTextAreaElement;
-  expect(editor.value).toBe("<<<<<<< ours");
-  fireEvent.click(screen.getByRole("button", { name: "Use theirs" }));
-  expect(editor.value).toBe("theirs value");
+  expect(editor.value).toContain("<<<<<<< ours");
+  fireEvent.click(screen.getByRole("button", { name: "Use theirs for conflict 1" }));
+  expect(editor.value).toContain("theirs first");
+  expect(editor.value).toContain("<<<<<<< ours\nours second");
+  expect(editor.value).not.toContain("<<<<<<< ours\nours first");
+  fireEvent.click(screen.getByRole("button", { name: "Use ours for conflict 1" }));
+  expect(editor.value).toContain("ours second");
+  fireEvent.change(editor, { target: { value: "resolved through editor\n" } });
+  fireEvent.click(screen.getByText("RESULT PREVIEW"));
+  expect(screen.getByText("RESULT PREVIEW").parentElement?.querySelector("pre")?.textContent).toBe("resolved through editor\n");
   expect((screen.getByRole("button", { name: "Mark resolved" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByRole("button", { name: "Save result" }));
   expect(await screen.findByText(/Saved to the working tree/)).toBeTruthy();
-  expect(editor.value).toBe("theirs value");
+  expect(editor.value).toBe("resolved through editor\n");
   view.unmount();
   render(<ConflictWindow />);
   const reopenedEditor = await screen.findByRole("textbox", { name: "Working result" }) as HTMLTextAreaElement;
-  expect(reopenedEditor.value).toBe("theirs value");
+  expect(reopenedEditor.value).toBe("resolved through editor\n");
   fireEvent.click(screen.getByRole("button", { name: "Mark resolved" }));
   await waitFor(() => expect(screen.getByText("0 unresolved")).toBeTruthy());
   expect(screen.getByText("No unresolved files remain. Return to Task Center to continue the Git operation.")).toBeTruthy();

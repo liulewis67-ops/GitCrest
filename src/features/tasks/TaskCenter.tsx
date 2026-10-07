@@ -45,15 +45,22 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
       return;
     }
     setRecovery((current) => Object.fromEntries(currentWaitingTasks.map((task) => [task.taskId, current[task.taskId] || { loading: true }])));
-    for (const task of currentWaitingTasks) {
-      if (queriedRecoveryTasks.current.has(task.taskId)) continue;
-      queriedRecoveryTasks.current.add(task.taskId);
+    const refreshPreview = (task: TaskSnapshotResponse) => {
+      setRecovery((current) => ({ ...current, [task.taskId]: { loading: true } }));
       void api.preflightRepositoryWorkflowRecovery(task.repoId!, task.taskId).then((snapshot) => {
         if (waitingTaskIds.current.has(task.taskId)) setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, snapshot } }));
       }).catch((reason: unknown) => {
         if (waitingTaskIds.current.has(task.taskId)) setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : "Could not inspect workflow recovery." } }));
       });
+    };
+    for (const task of currentWaitingTasks) {
+      if (queriedRecoveryTasks.current.has(task.taskId)) continue;
+      queriedRecoveryTasks.current.add(task.taskId);
+      refreshPreview(task);
     }
+    const refreshAfterWindowFocus = () => currentWaitingTasks.forEach(refreshPreview);
+    window.addEventListener("focus", refreshAfterWindowFocus);
+    return () => window.removeEventListener("focus", refreshAfterWindowFocus);
   }, [api, recoveryKey]);
   return (
     <div className="paletteBackdrop taskBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>

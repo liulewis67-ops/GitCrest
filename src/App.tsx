@@ -1184,6 +1184,19 @@ function App() {
   }, [tasksOpen]);
 
   useEffect(() => {
+    const refreshAfterChildWindow = () => {
+      void refreshTasks();
+      const repoId = selectedRepository?.repoId;
+      if (!repoId) return;
+      void refreshRepositoryStatus(repoId);
+      void refreshRepositoryBranches(repoId);
+      setHistoryRefreshKey((current) => current + 1);
+    };
+    window.addEventListener("focus", refreshAfterChildWindow);
+    return () => window.removeEventListener("focus", refreshAfterChildWindow);
+  }, [selectedRepository?.repoId]);
+
+  useEffect(() => {
     if (mode !== "diff" || !selectedRepository || !selectedFilePath || !selectedFileScope) {
       setDiffState({ key: "", loading: false });
       return;

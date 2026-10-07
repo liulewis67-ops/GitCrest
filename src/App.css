@@ -322,6 +322,18 @@ button:disabled { cursor: not-allowed; }
 .conflictStage > div button:hover { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
 .conflictStage pre, .conflictResultPreview pre { flex: 1; min-height: 100px; margin: 0; padding: 9px; overflow: auto; color: var(--text); font: 12px/1.5 var(--font-mono); white-space: pre; tab-size: 4; }
 .conflictResultPreview { display: flex; flex-direction: column; min-height: 190px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
+.conflictResultPreview summary { padding: 8px 9px; color: var(--text); font-size: 10px; font-weight: 650; cursor: pointer; }
+.conflictBlockList { display: flex; flex-direction: column; gap: 8px; }
+.conflictBlockList > h2 { margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.conflictBlockList article { border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.conflictBlockList article > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
+.conflictBlockList article > header span { color: var(--text-muted); }
+.conflictBlockChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px; }
+.conflictBlockChoices > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.conflictBlockChoices h3 { margin: 0; color: var(--text-muted); font-size: 10px; }
+.conflictBlockChoices pre { min-height: 48px; max-height: 140px; margin: 0; padding: 7px; overflow: auto; border: 1px solid var(--line); border-radius: 3px; color: var(--text); font: 11px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.conflictBlockChoices button { align-self: flex-start; min-height: 26px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface-raised); color: var(--text); font-size: 10px; cursor: pointer; }
+.conflictBlockChoices button:disabled { opacity: .55; cursor: not-allowed; }
 .conflictResultPreview > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
 .conflictResultPreview small { color: var(--text-muted); font-family: var(--font-mono); }
 .conflictResultEditor { display: flex; flex-direction: column; min-height: 280px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
