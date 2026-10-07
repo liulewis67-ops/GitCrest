@@ -37,7 +37,7 @@
 
 | 大阶段 | 目标与退出条件 | 前置 | 状态 |
 |---|---|---|---|
-| 0. 工程与契约基座 | 可启动、安全通信、统一契约、可执行测试和界面骨架 | 无 | 进行中 |
+| 0. 工程与契约基座 | 可启动、安全通信、统一契约、可执行测试和界面骨架 | 无 | 已完成 |
 | 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 未开始 |
 | 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 未开始 |
 | 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 未开始 |
@@ -55,7 +55,7 @@
 | S0.1 | 验收现有 Electron/React/Rust sidecar 骨架，修复启动、退出和打包路径问题。 | 开发模式启动后主窗口成功读取 `/api/version`；无 token 请求得到 401；sidecar 只绑定 `127.0.0.1` 随机端口；关闭应用会结束子进程；启动失败有可读错误且不会无限等待；`pnpm build`、`cargo test` 通过。 | 已完成 |
 | S0.2 | 固化 API/事件契约与权限边界：repoId、错误码、任务状态、WS 重连、窗口权限、版本策略。 | 前后端共享或由契约生成的请求/响应类型与示例可用；鉴权覆盖所有业务路由和 WS；健康检查无敏感信息；断线重连必须全量重新获取当前仓库状态；Diff 窗口无法调用写 API。契约测试覆盖成功、401、404、冲突/过期状态。 | 已完成 |
 | S0.3 | 建立测试与质量门禁：Rust 单元/集成、前端组件、API mock、桌面 E2E、临时 Git 仓库 fixture。 | 一条可重复执行的本地检查命令覆盖类型检查、构建和两端测试；CI 在提交时运行；E2E 能启动 sidecar、创建临时仓库并在结束后清理；失败退出码非零。 | 已完成 |
-| S0.4 | 建立设计系统与主窗口骨架：主题、三栏加底部区、欢迎页、命令面板入口、响应式拖拽面板。 | 对照 `05`/`09` 文档检查欢迎页和主窗口布局；深浅主题、状态色加文字/图标、焦点可见；窄于最小窗口尺寸时不遮挡主要操作；命令面板能显示上下文禁用原因。 | 未开始 |
+| S0.4 | 建立设计系统与主窗口骨架：主题、三栏加底部区、欢迎页、命令面板入口、响应式拖拽面板。 | 对照 `05`/`09` 文档检查欢迎页和主窗口布局；深浅主题、状态色加文字/图标、焦点可见；窄于最小窗口尺寸时不遮挡主要操作；命令面板能显示上下文禁用原因。 | 已完成 |
 
 ## 5. 大阶段 1：仓库与状态
 
@@ -171,5 +171,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm check` 全部通过：应用与测试 TypeScript 检查、Electron 生产构建、4 个 Vitest 前端/API 用例、`cargo fmt --check`、8 个 Rust 用例、Playwright Electron E2E。E2E 启动 Electron 和 Rust sidecar，验证连接与 API v1，并创建临时 Git 仓库；仓库通过 `finally` 清理，Electron 通过测试清理钩子关闭。开发中一次失败测试使 `pnpm check` 返回退出码 1，确认失败会阻断后续门禁。
 - 手工验证：Windows 本地执行 E2E，实际 Electron 窗口从启动状态变为 `Connected to local Rust core`，并显示 `gitcrest-core 0.1.0 (API v1)`；关闭 Electron 后测试进程正常结束。
 - 证据：`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`、`tests/fixtures/temp-repo.ts`、`vitest.config.ts`、`vitest.e2e.config.ts`、`tsconfig.test.json`、`.github/workflows/ci.yml`。
-- 完成 commit：待补记
+- 完成 commit：`e4d014b`
 - 限制/后续：GitHub Actions 工作流已配置为 push 和 pull request 运行，但尚未由远程 GitHub runner 实际执行；CI 的平台覆盖目前为 Windows，macOS/Linux 构建在 S7.4 验收。
+
+### S0.4 — 设计系统与主窗口骨架
+- 状态：已完成
+- 日期：2026-10-07
+- 测试：`pnpm check` 全部通过：应用和测试类型检查、Electron 构建、6 个 Vitest 用例、Rust 格式检查和 8 个 Rust 用例、Playwright Electron E2E。E2E 检查欢迎页与主工作区、连接状态、窄视口下导航/提交区折叠；组件测试覆盖 `Ctrl/Cmd+K`、禁用命令原因、主题切换和可键盘调整的面板分隔条。
+- 手工验证：Windows Electron 窗口确认 sidecar 已连接；Playwright 界面截图对照 `05`/`09` 检查欢迎页、三栏主区、底部工作区、深色/浅色主题和 900px 窄视口布局。
+- 证据：`doc/evidence/S0.4/welcome.png`、`doc/evidence/S0.4/welcome-dark.png`、`doc/evidence/S0.4/workspace-light.png`、`doc/evidence/S0.4/workspace-dark.png`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。
+- 完成 commit：待补记
+- 限制/后续：仓库打开、克隆和初始化入口在对应后续阶段到来前显示禁用原因，不伪装成已实现功能。面板尺寸当前保存在本地 UI 设置中，等 S1.3 仓库 Tab 状态落地后改为仓库级持久化。
