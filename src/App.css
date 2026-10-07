@@ -515,6 +515,14 @@ button:disabled { cursor: not-allowed; }
 .cloneFormBody { display: grid; gap: 10px; padding: 14px 16px; }
 .cloneField { display: grid; gap: 5px; color: var(--text-secondary); font-size: 10px; font-weight: 600; }
 .cloneField input { min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; outline-color: var(--accent); background: var(--canvas); color: var(--text); font: 10px var(--font-mono); }
+.credentialForm { display: grid; gap: 8px; }
+.credentialForm input { min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; outline-color: var(--accent); background: var(--canvas); color: var(--text); font: 10px var(--font-mono); }
+.credentialCard { display: grid; gap: 8px; margin: 7px 0; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.credentialStatus { color: var(--text-muted); font-size: 9px; }
+.credentialNotice { margin: 0; color: var(--green); font-size: 9px; }
+.credentialSection { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.credentialRecoveryAction, .taskCredentialRecovery { display: grid; justify-items: start; gap: 8px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
+.taskCredentialRecovery { margin-top: 8px; }
 .cloneHelp { margin: -5px 0 0; color: var(--text-muted); font-size: 9px; line-height: 1.5; }
 .cloneDestination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .cloneDestination div { display: grid; min-width: 0; gap: 4px; }

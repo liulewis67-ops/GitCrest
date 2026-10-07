@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from "react";
-import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../api/client";
+import { useEffect, useState, type FormEvent } from "react";
+import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse } from "../../api/client";
+import { CredentialEditor, httpsHostFromRemote } from "../credentials/CredentialEditor";
 
 interface RemoteManagerProps {
   snapshot?: RemoteSnapshotResponse;
@@ -9,6 +10,9 @@ interface RemoteManagerProps {
   disabled: boolean;
   disabledReason: string;
   error: string;
+  api?: GitCrestApiClient;
+  openRequest?: number;
+  onFetch?: () => void;
   onRefresh: () => void;
   onAdd: (name: string, url: string) => void;
   onSetUrl: (name: string, url: string) => void;
@@ -17,7 +21,7 @@ interface RemoteManagerProps {
   onSetUpstream: (localBranch: string, remoteName: string, remoteBranch: string) => void;
 }
 
-export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream }: RemoteManagerProps) {
+export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, api, openRequest, onFetch, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream }: RemoteManagerProps) {
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
@@ -27,6 +31,14 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
   const [localBranch, setLocalBranch] = useState("");
   const [upstreamRemote, setUpstreamRemote] = useState("");
   const [upstreamBranch, setUpstreamBranch] = useState("");
+  const [recoveryMode, setRecoveryMode] = useState(false);
+
+  useEffect(() => {
+    if (openRequest) {
+      setOpen(true);
+      setRecoveryMode(true);
+    }
+  }, [openRequest]);
 
   const remoteList = Array.isArray(snapshot?.remotes) ? snapshot.remotes : undefined;
   const branchList = Array.isArray(branches?.branches) ? branches.branches : [];
@@ -34,6 +46,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
   const currentRemoteBranches = branchList
     .filter((branch) => branch.kind === "remote" && branch.fullName.startsWith(`refs/remotes/${upstreamRemote}/`))
     .map((branch) => ({ branch, name: branch.fullName.slice(`refs/remotes/${upstreamRemote}/`.length) }));
+  const credentialHosts = [...new Set((remoteList || []).flatMap((remote) => remote.fetchUrls.map(httpsHostFromRemote).filter((host): host is string => Boolean(host))))];
 
   function submitAdd(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -102,6 +115,12 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
                 </div>}
               </article>)}
               {snapshot?.defaultRemote && <button className="textButton remoteClearDefault" type="button" disabled={busy || disabled} onClick={() => onSetDefault(null)}>Use automatic default (origin)</button>}
+            </section>
+
+            <section className="credentialSection" aria-labelledby="credential-section-title">
+              <div className="remoteDialogSectionTitle"><h3 id="credential-section-title">HTTPS credentials</h3><span>{credentialHosts.length}</span></div>
+              {credentialHosts.length === 0 ? <p className="cloneHelp">Add an HTTPS remote to configure credentials for its host.</p> : credentialHosts.map((host) => <CredentialEditor key={host} api={api} host={host} disabled={disabled || busy} />)}
+              {recoveryMode && <div className="credentialRecoveryAction"><p className="cloneHelp">After updating a credential, retry the fetch to check authentication.</p><button className="secondaryButton" type="button" disabled={disabled || busy || !onFetch} onClick={() => { setRecoveryMode(false); onFetch?.(); }}>Retry fetch</button></div>}
             </section>
 
             <form className="remoteAddForm" onSubmit={submitAdd}>

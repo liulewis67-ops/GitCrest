@@ -171,6 +171,7 @@ function App() {
   const [remoteErrors, setRemoteErrors] = useState<Record<string, string>>({});
   const [remoteLoadingByRepo, setRemoteLoadingByRepo] = useState<Record<string, boolean>>({});
   const [remoteActionBusy, setRemoteActionBusy] = useState(false);
+  const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [switchTargetName, setSwitchTargetName] = useState("");
   const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
@@ -604,6 +605,15 @@ function App() {
     setCloneError("");
     setTasksOpen(false);
     setCloneOpen(true);
+  }
+
+  function configureTaskCredentials(task: TaskSnapshotResponse) {
+    if (task.repoId) {
+      const repository = repositories.find((entry) => entry.repoId === task.repoId);
+      if (repository) activateRepository(repository);
+    }
+    setTasksOpen(false);
+    setCredentialManagerOpenRequest((current) => current + 1);
   }
 
   async function copyTaskLogs(task: TaskSnapshotResponse) {
@@ -1249,6 +1259,9 @@ function App() {
               <RemoteManager
                 snapshot={activeRemotes}
                 branches={activeBranches}
+                api={apiRef.current}
+                openRequest={credentialManagerOpenRequest}
+                onFetch={() => void fetchRepository()}
                 loading={activeRemotesLoading}
                 busy={remoteActionBusy}
                 disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
@@ -1421,8 +1434,8 @@ function App() {
         </div>
       )}
 
-      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} />}
-      {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
+      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} />}
+      {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
     </main>
   );
 }
