@@ -4,5 +4,5 @@
     "noEmit": true,
     "types": ["node", "vitest/globals", "@testing-library/jest-dom"]
   },
-  "include": ["tests/**/*.ts", "tests/**/*.tsx", "src/global.d.ts", "src/monaco-language.d.ts", "vitest.config.ts", "vitest.e2e.config.ts"]
+  "include": ["tests/**/*.ts", "tests/**/*.tsx", "src/global.d.ts", "src/vite-assets.d.ts", "vitest.config.ts", "vitest.e2e.config.ts"]
 }

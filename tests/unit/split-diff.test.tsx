@@ -6,7 +6,7 @@ import type { DiffDocumentResponse } from "../../src/api/client";
 import { SplitDiff } from "../../src/features/diff/SplitDiff";
 
 vi.mock("../../src/features/diff/MonacoDiffHunk", () => ({
-  MonacoDiffHunk: (props: { original: string; modified: string; language: string }) => createElement(
+  MonacoDiffHunk: (props: { original: string; modified: string; language: string; treeSitterGrammar: string | null }) => createElement(
     "pre",
     { "data-testid": "monaco-diff-hunk" },
     `${props.language}|${props.original}||${props.modified}`,

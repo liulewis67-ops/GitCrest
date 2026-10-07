@@ -80,10 +80,15 @@ describe("desktop startup E2E", () => {
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'welcome';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
       await window.getByRole("button", { name: "modified src/example.ts" }).click();
+      const rendererErrors: string[] = [];
+      window.on("console", (message) => { if (message.type() === "error") rendererErrors.push(message.text()); });
       await window.getByRole("button", { name: "Monaco view" }).click();
       const monacoLines = window.locator(".monacoDiffHunk .view-lines");
       await monacoLines.first().waitFor({ state: "visible", timeout: 15_000 });
       expect(await monacoLines.last().innerText()).toContain("welcome");
+      const parsedHunk = window.locator(".monacoDiffHunk").first();
+      await parsedHunk.waitFor({ state: "visible" });
+      expect(["parsed", "recovered"], rendererErrors.join("\n")).toContain(await parsedHunk.getAttribute("data-tree-sitter-state"));
 
       await window.setViewportSize({ width: 900, height: 820 });
       expect(await window.locator(".navigationPanel").isVisible()).toBe(false);

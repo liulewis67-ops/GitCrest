@@ -2,6 +2,7 @@ import type { DiffDocumentResponse } from "../../api/client";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { splitInlineDiff } from "./inline-diff";
 import { monacoLanguageForPath } from "./monaco-language";
+import { exceedsMonacoViewLimits } from "./monaco-view-limits";
 
 const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({ default: module.MonacoDiffHunk })));
 
@@ -20,6 +21,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
   const hunkRefs = useRef<Array<HTMLElement | null>>([]);
   const readOnly = document.scope === "commit";
   const language = monacoLanguageForPath(document.path);
+  const monacoDegraded = exceedsMonacoViewLimits(document.hunks);
   const navigableHunks = useMemo(() => document.status === "text"
     ? document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.some((row) => row.kind === "change") ? [hunkIndex] : [])
     : [], [document.hunks, document.status]);
@@ -80,12 +82,13 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
       <div className="splitDiffNavigation" aria-label="Diff navigation">
         <span>{navigableHunks.length ? `${activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1} / ${navigableHunks.length} changes` : "No changes"}</span>
         <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>Split view</button>
-        <button type="button" aria-pressed={view === "monaco"} onClick={() => setView("monaco")}>Monaco view</button>
+        <button type="button" aria-pressed={view === "monaco"} disabled={monacoDegraded} title={monacoDegraded ? "This diff is too large for Monaco view; use Split view." : undefined} onClick={() => setView("monaco")}>Monaco view</button>
         <button type="button" onClick={() => navigateHunk(-1)} disabled={navigableHunks.length === 0} title="Previous change (Shift+F7)">Previous change</button>
         <button type="button" onClick={() => navigateHunk(1)} disabled={navigableHunks.length === 0} title="Next change (F7)">Next change</button>
       </div>
+      {monacoDegraded && <div className="diffSyntaxFallback" role="status">This diff is too large for Monaco view. Split view remains available.</div>}
       <div className="splitDiffColumns" aria-hidden="true"><div /><div>OLD</div><div>NEW</div></div>
-      {view === "monaco" && !language.supported && <div className="diffSyntaxFallback" role="status">No syntax tokenizer is bundled for this file type. Monaco is showing plain text.</div>}
+      {view === "monaco" && !language.supported && <div className="diffSyntaxFallback" role="status">No Tree-sitter grammar is bundled for this file type. Monaco is showing plain text.</div>}
       {document.hunks.map((hunk, hunkIndex) => {
         const changeRowIndexes = hunk.rows.flatMap((row, rowIndex) => row.kind === "change" ? [rowIndex] : []);
         const hunkSelected = selection.some((item) => item.hunkIndex === hunkIndex && item.rowIndex === undefined);
@@ -128,6 +131,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
               original={hunk.rows.flatMap((row) => row.oldText === null || row.oldText === undefined ? [] : [row.oldText]).join("\n")}
               modified={hunk.rows.flatMap((row) => row.newText === null || row.newText === undefined ? [] : [row.newText]).join("\n")}
               language={language.id}
+              treeSitterGrammar={language.treeSitterGrammar}
               height={Math.min(480, Math.max(120, hunk.rows.length * 20 + 24))}
             />
           </Suspense>}
