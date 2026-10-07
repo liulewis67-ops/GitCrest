@@ -20,6 +20,7 @@ declare global {
         scope: "workingTree" | "index" | "commit";
         commitOid?: string;
       }) => Promise<void>;
+      openConflictWindow: (request: { repoId: string; taskId: string }) => Promise<void>;
       subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
     };
   };

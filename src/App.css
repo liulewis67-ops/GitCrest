@@ -300,6 +300,28 @@ button:disabled { cursor: not-allowed; }
 .workflowPathList li { overflow-wrap: anywhere; }
 .workflowRecovery { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .workflowRecovery .taskCenterActions { flex-wrap: wrap; align-items: center; }
+.conflictWindow { display: flex; flex-direction: column; min-width: 0; min-height: 100vh; background: var(--canvas); color: var(--text); }
+.conflictWindowHeader { display: flex; align-items: center; justify-content: space-between; min-height: 62px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.conflictWindowHeader h1 { margin: 2px 0 0; font-size: 16px; font-weight: 620; }
+.conflictWindowProgress { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.conflictWindowLayout { display: grid; grid-template-columns: minmax(200px, 25%) minmax(0, 1fr); flex: 1; min-height: 0; }
+.conflictFileList { display: flex; flex-direction: column; gap: 3px; min-height: 0; padding: 9px; overflow: auto; border-right: 1px solid var(--line); background: var(--surface); }
+.conflictFileList button { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 7px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text); text-align: left; font: 11px/1.4 var(--font-mono); overflow-wrap: anywhere; cursor: pointer; }
+.conflictFileList button span { color: var(--danger); font-weight: 700; }
+.conflictFileList button.selected { border-color: var(--line-strong); background: var(--surface-raised); }
+.conflictFileList p { padding: 7px; color: var(--text-muted); font-size: 11px; }
+.conflictFileReview { display: flex; flex-direction: column; gap: 10px; min-width: 0; min-height: 0; padding: 12px; overflow: auto; }
+.conflictFileHeading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.conflictFileHeading strong { min-width: 0; overflow-wrap: anywhere; }
+.conflictFileHeading span { color: var(--text-muted); font-size: 10px; }
+.conflictStages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 180px; }
+.conflictStage { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.conflictStage h2 { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--line); color: var(--text-muted); font-size: 10px; letter-spacing: .04em; }
+.conflictStage pre, .conflictResultPreview pre { flex: 1; min-height: 100px; margin: 0; padding: 9px; overflow: auto; color: var(--text); font: 12px/1.5 var(--font-mono); white-space: pre; tab-size: 4; }
+.conflictResultPreview { display: flex; flex-direction: column; min-height: 190px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
+.conflictResultPreview > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
+.conflictResultPreview small { color: var(--text-muted); font-family: var(--font-mono); }
+@media (max-width: 860px) { .conflictStages { grid-template-columns: 1fr; } .conflictWindowLayout { grid-template-columns: minmax(150px, 34%) minmax(0, 1fr); } }
 .commitDetails .repositoryFact { padding: 0; }
 .commitDetails .repositoryFact strong { max-width: 68%; overflow-wrap: anywhere; }
 .commitDetailMessage { padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 10px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }

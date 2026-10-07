@@ -13,6 +13,7 @@ interface DiffWindowRequest {
   scope: "workingTree" | "index" | "commit";
   commitOid?: string;
 }
+interface ConflictWindowRequest { repoId: string; taskId: string }
 const windowAccessByContentsId = new Map<number, WindowAccess>();
 
 interface EventStream {
@@ -191,6 +192,21 @@ ipcMain.handle("gitcrest:open-diff-window", async (event, value: unknown) => {
   await createWindow("readOnly", request);
 });
 
+ipcMain.handle("gitcrest:open-conflict-window", async (event, value: unknown) => {
+  if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
+    throw new Error("Only the main window can open a conflict window.");
+  }
+  await createWindow("readOnly", undefined, parseConflictWindowRequest(value));
+});
+
+function parseConflictWindowRequest(value: unknown): ConflictWindowRequest {
+  if (!value || typeof value !== "object") throw new Error("Invalid conflict window request.");
+  const request = value as Partial<ConflictWindowRequest>;
+  if (typeof request.repoId !== "string" || !/^repo_[a-f0-9]{64}$/.test(request.repoId)) throw new Error("Invalid repository ID for conflict window.");
+  if (typeof request.taskId !== "string" || !/^task-[0-9]{1,20}-[0-9]{1,20}$/.test(request.taskId)) throw new Error("Invalid workflow task ID for conflict window.");
+  return request as ConflictWindowRequest;
+}
+
 function parseDiffWindowRequest(value: unknown): DiffWindowRequest {
   if (!value || typeof value !== "object") throw new Error("Invalid Diff window request.");
   const request = value as Partial<DiffWindowRequest>;
@@ -212,15 +228,16 @@ function parseDiffWindowRequest(value: unknown): DiffWindowRequest {
   return request as DiffWindowRequest;
 }
 
-async function createWindow(windowAccess: WindowAccess = "readWrite", diffRequest?: DiffWindowRequest): Promise<void> {
+async function createWindow(windowAccess: WindowAccess = "readWrite", diffRequest?: DiffWindowRequest, conflictRequest?: ConflictWindowRequest): Promise<void> {
   sidecarConnection = await startSidecar();
+  const secondaryWindow = Boolean(diffRequest || conflictRequest);
 
   const window = new BrowserWindow({
-    width: diffRequest ? 1180 : 1280,
-    height: diffRequest ? 780 : 820,
-    minWidth: diffRequest ? 760 : 960,
-    minHeight: diffRequest ? 520 : 640,
-    title: diffRequest ? `Diff · ${diffRequest.path}` : "GitCrest",
+    width: secondaryWindow ? 1180 : 1280,
+    height: secondaryWindow ? 780 : 820,
+    minWidth: secondaryWindow ? 760 : 960,
+    minHeight: secondaryWindow ? 520 : 640,
+    title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? "Resolve conflicts · GitCrest" : "GitCrest",
     show: false,
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
@@ -264,13 +281,13 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     mainWindow = window;
   }
 
-  const query = diffRequest ? {
+  const query: Record<string, string> | undefined = diffRequest ? {
     view: "diff",
     repoId: diffRequest.repoId,
     path: diffRequest.path,
     scope: diffRequest.scope,
     ...(diffRequest.commitOid ? { commitOid: diffRequest.commitOid } : {}),
-  } : undefined;
+  } : conflictRequest ? { view: "conflicts", repoId: conflictRequest.repoId, taskId: conflictRequest.taskId } : undefined;
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     const rendererUrl = new URL(process.env.ELECTRON_RENDERER_URL);
     for (const [key, value] of Object.entries(query || {})) rendererUrl.searchParams.set(key, value);

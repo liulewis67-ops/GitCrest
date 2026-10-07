@@ -14,6 +14,7 @@ interface TaskCenterProps {
   onReviewPush: (task: TaskSnapshotResponse) => void;
   api?: GitCrestApiClient;
   onRecoverWorkflow: (task: TaskSnapshotResponse, preflight: WorkflowRecoveryPreflightResponse, action: "continue" | "skip" | "abort") => void;
+  onOpenConflictWindow: (task: TaskSnapshotResponse) => void;
 }
 
 function isAuthenticationFailure(task: TaskSnapshotResponse): boolean {
@@ -26,7 +27,7 @@ function isFailedPush(task: TaskSnapshotResponse): boolean {
   return task.status === "failed" && task.operation.startsWith("push");
 }
 
-export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onReviewPush, api, onRecoverWorkflow }: TaskCenterProps) {
+export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow }: TaskCenterProps) {
   const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: string }>>({});
   const [confirmAbortId, setConfirmAbortId] = useState("");
   const queriedRecoveryTasks = useRef(new Set<string>());
@@ -80,6 +81,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
                   {recovery[task.taskId]?.loading && <p role="status">Inspecting conflicts…</p>}
                   {recovery[task.taskId]?.error && <p className="taskCenterError" role="alert">{recovery[task.taskId]?.error}</p>}
                   {recovery[task.taskId]?.snapshot && <>
+                    {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 && <button className="secondaryButton" type="button" onClick={() => onOpenConflictWindow(task)}>Open conflict resolver</button>}
                     {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 ? <ul className="workflowPathList" aria-label="Conflicted files">{recovery[task.taskId]!.snapshot!.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul> : <p className="cloneHelp">No unresolved conflicts remain.</p>}
                     {recovery[task.taskId]!.snapshot!.omittedConflictedPathCount > 0 && <p className="cloneHelp">And {recovery[task.taskId]!.snapshot!.omittedConflictedPathCount} more conflicted file(s).</p>}
                     <div className="taskCenterActions"><button className="quietButton compact" type="button" onClick={() => { setRecovery((current) => ({ ...current, [task.taskId]: { loading: true } })); void api?.preflightRepositoryWorkflowRecovery(task.repoId!, task.taskId).then((snapshot) => setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, snapshot } }))).catch((reason: unknown) => setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : "Could not refresh recovery preview." } }))); }}>Refresh preview</button>

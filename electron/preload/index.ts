@@ -16,6 +16,11 @@ export interface DiffWindowRequest {
   commitOid?: string;
 }
 
+export interface ConflictWindowRequest {
+  repoId: string;
+  taskId: string;
+}
+
 const api = {
   getSidecarConnection: (): Promise<SidecarConnection> => {
     return ipcRenderer.invoke("gitcrest:get-sidecar-connection");
@@ -27,6 +32,7 @@ const api = {
     return ipcRenderer.invoke("gitcrest:choose-clone-parent");
   },
   openDiffWindow: (request: DiffWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-diff-window", request),
+  openConflictWindow: (request: ConflictWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-conflict-window", request),
   subscribeToEvents: async (listener: (event: EventEnvelope) => void): Promise<() => void> => {
     const handleEvent = (_event: Electron.IpcRendererEvent, payload: EventEnvelope): void => listener(payload);
     ipcRenderer.on("gitcrest:event", handleEvent);
