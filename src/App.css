@@ -316,11 +316,25 @@ button:disabled { cursor: not-allowed; }
 .conflictFileHeading span { color: var(--text-muted); font-size: 10px; }
 .conflictStages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; min-height: 180px; }
 .conflictStage { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
-.conflictStage h2 { margin: 0; padding: 7px 9px; border-bottom: 1px solid var(--line); color: var(--text-muted); font-size: 10px; letter-spacing: .04em; }
+.conflictStage > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border-bottom: 1px solid var(--line); }
+.conflictStage h2 { margin: 0; color: var(--text-muted); font-size: 10px; letter-spacing: .04em; }
+.conflictStage > div button { min-height: 24px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 10px; cursor: pointer; }
+.conflictStage > div button:hover { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
 .conflictStage pre, .conflictResultPreview pre { flex: 1; min-height: 100px; margin: 0; padding: 9px; overflow: auto; color: var(--text); font: 12px/1.5 var(--font-mono); white-space: pre; tab-size: 4; }
 .conflictResultPreview { display: flex; flex-direction: column; min-height: 190px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
 .conflictResultPreview > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
 .conflictResultPreview small { color: var(--text-muted); font-family: var(--font-mono); }
+.conflictResultEditor { display: flex; flex-direction: column; min-height: 280px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
+.conflictResultEditor > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
+.conflictResultEditor label { color: var(--text); font-weight: 650; letter-spacing: .035em; }
+.conflictResultEditor small { color: var(--text-muted); font-family: var(--font-mono); }
+.conflictResultEditor textarea { flex: 1; min-height: 220px; width: 100%; resize: vertical; padding: 10px; border: 0; background: transparent; color: var(--text); font: 12px/1.55 var(--font-mono); tab-size: 4; }
+.conflictResultEditor footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 6px 9px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 10px; }
+.conflictResultActions { display: flex; gap: 7px; }
+.conflictResultActions button { min-height: 28px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; cursor: pointer; }
+.conflictResultActions button:last-child:not(:disabled) { border-color: var(--accent); background: var(--accent); color: var(--canvas); font-weight: 650; }
+.conflictResultActions button:disabled { opacity: .55; cursor: not-allowed; }
+.conflictActionStatus { margin: 0; color: var(--green); font-size: 11px; }
 @media (max-width: 860px) { .conflictStages { grid-template-columns: 1fr; } .conflictWindowLayout { grid-template-columns: minmax(150px, 34%) minmax(0, 1fr); } }
 .commitDetails .repositoryFact { padding: 0; }
 .commitDetails .repositoryFact strong { max-width: 68%; overflow-wrap: anywhere; }
