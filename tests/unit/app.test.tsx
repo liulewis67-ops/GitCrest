@@ -220,6 +220,7 @@ describe("App", () => {
         { path: "ignored.log", indexStatus: "!", worktreeStatus: "!", kind: "ignored", categories: ["ignored"], modeChanged: false },
       ] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify(branchSnapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, defaultRemote: null, remotes: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify(favoriteBranchSnapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }), { status: 500, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }))
@@ -232,13 +233,13 @@ describe("App", () => {
 
     expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(5));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(6));
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/fixture" });
     expect(String(fetcher.mock.calls[3][0])).toContain("/api/v1/repositories/repo_fixture/status");
     expect(screen.getByText("main", { selector: ".branchItemName" })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Add refs/heads/main to favorites" }));
     expect(await screen.findByRole("button", { name: "Remove refs/heads/main from favorites" })).toBeDefined();
-    expect(fetcher.mock.calls[5][1]?.method).toBe("PUT");
+    expect(fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/branches/favorite"))?.[1]?.method).toBe("PUT");
     expect(screen.getByRole("region", { name: "Staged changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Unstaged changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Untracked changes" })).toBeDefined();
@@ -253,8 +254,9 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /Fetch from remotes/ }));
     const taskDialog = await screen.findByRole("dialog", { name: "Tasks" });
     expect(await within(taskDialog).findByText("Receiving objects")).toBeDefined();
-    expect(String(fetcher.mock.calls[7][0])).toContain("/api/v1/repositories/repo_fixture/fetch");
-    expect(fetcher.mock.calls[7][1]?.method).toBe("POST");
+    const fetchRequest = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/repositories/repo_fixture/fetch"));
+    expect(String(fetchRequest?.[0])).toContain("/api/v1/repositories/repo_fixture/fetch");
+    expect(fetchRequest?.[1]?.method).toBe("POST");
   });
 
   it("previews dirty work before a branch switch and queues the switch after a clean preflight", async () => {

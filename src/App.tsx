@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
 import { CommitDetails, CommitGraph } from "./features/history/CommitGraph";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
+import { RemoteManager } from "./features/remotes/RemoteManager";
 import { SplitDiff } from "./features/diff/SplitDiff";
 import type { components } from "./api/schema";
 import "./App.css";
@@ -166,6 +167,10 @@ function App() {
   const [branchSnapshots, setBranchSnapshots] = useState<Record<string, BranchSnapshotResponse>>({});
   const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
   const [branchLoadingByRepo, setBranchLoadingByRepo] = useState<Record<string, boolean>>({});
+  const [remoteSnapshots, setRemoteSnapshots] = useState<Record<string, RemoteSnapshotResponse>>({});
+  const [remoteErrors, setRemoteErrors] = useState<Record<string, string>>({});
+  const [remoteLoadingByRepo, setRemoteLoadingByRepo] = useState<Record<string, boolean>>({});
+  const [remoteActionBusy, setRemoteActionBusy] = useState(false);
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [switchTargetName, setSwitchTargetName] = useState("");
   const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
@@ -196,6 +201,7 @@ function App() {
   const refreshedStagingTasks = useRef(new Set<string>());
   const refreshedCommitTasks = useRef(new Set<string>());
   const refreshedBranchTasks = useRef(new Set<string>());
+  const refreshedRemoteTasks = useRef(new Set<string>());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
@@ -233,6 +239,9 @@ function App() {
   const hasBranchSnapshot = Boolean(activeBranches && Array.isArray(activeBranches.branches));
   const activeBranchError = selectedRepository ? branchErrors[selectedRepository.repoId] : undefined;
   const activeBranchesLoading = selectedRepository ? branchLoadingByRepo[selectedRepository.repoId] === true : false;
+  const activeRemotes = selectedRepository ? remoteSnapshots[selectedRepository.repoId] : undefined;
+  const activeRemoteError = selectedRepository ? remoteErrors[selectedRepository.repoId] : undefined;
+  const activeRemotesLoading = selectedRepository ? remoteLoadingByRepo[selectedRepository.repoId] === true : false;
   const orderedBranches = hasBranchSnapshot ? [...activeBranches!.branches].sort((left, right) =>
     Number(right.isFavorite) - Number(left.isFavorite)
     || Number(right.isCurrent) - Number(left.isCurrent)
@@ -256,6 +265,15 @@ function App() {
   const workingCount = (activeStatus?.files || []).filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length;
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
+  const remoteDisabledReason = !selectedRepository
+    ? "Open a repository to manage remotes."
+    : !connected
+      ? "Connect to the local Git engine to manage remotes."
+      : selectedRepository.availability !== "available"
+        ? "This repository is unavailable."
+        : hasActiveRepositoryTask
+          ? "Wait for the current repository task to finish before changing remotes."
+          : "";
   const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
   const hasActiveTasksRef = useRef(false);
@@ -291,6 +309,67 @@ function App() {
     } finally {
       setBranchLoadingByRepo((current) => ({ ...current, [repoId]: false }));
     }
+  }
+
+  async function refreshRepositoryRemotes(repoId: string) {
+    const api = apiRef.current;
+    if (!api) return;
+    setRemoteLoadingByRepo((current) => ({ ...current, [repoId]: true }));
+    setRemoteErrors((current) => ({ ...current, [repoId]: "" }));
+    try {
+      const snapshot = await api.getRepositoryRemotes(repoId);
+      setRemoteSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository remotes.") }));
+    } finally {
+      setRemoteLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+    }
+  }
+
+  async function submitRemoteTask(repoId: string, action: () => Promise<TaskSnapshotResponse>) {
+    setRemoteActionBusy(true);
+    setRemoteErrors((current) => ({ ...current, [repoId]: "" }));
+    try {
+      const task = await action();
+      setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not update repository remotes.") }));
+    } finally {
+      setRemoteActionBusy(false);
+    }
+  }
+
+  function addRepositoryRemote(name: string, url: string) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (api && repoId) void submitRemoteTask(repoId, () => api.addRepositoryRemote(repoId, name, url));
+  }
+
+  function setRepositoryRemoteUrl(name: string, url: string) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (api && repoId) void submitRemoteTask(repoId, () => api.setRepositoryRemoteUrl(repoId, name, url));
+  }
+
+  function deleteRepositoryRemote(name: string) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (api && repoId) void submitRemoteTask(repoId, () => api.deleteRepositoryRemote(repoId, name));
+  }
+
+  function setRepositoryDefaultRemote(name: string | null) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (api && repoId) void submitRemoteTask(repoId, () => api.setRepositoryDefaultRemote(repoId, name));
+  }
+
+  function setRepositoryBranchUpstream(localBranch: string, remoteName: string, remoteBranch: string) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (api && repoId) void submitRemoteTask(repoId, () => api.setRepositoryBranchUpstream(repoId, localBranch, remoteName, remoteBranch));
   }
 
   async function toggleBranchFavorite(fullName: string, favorite: boolean) {
@@ -876,6 +955,13 @@ function App() {
           }).catch(() => undefined);
         }
       }
+      if (task.operation.startsWith("remote")) {
+        if (refreshedRemoteTasks.current.has(task.taskId)) continue;
+        refreshedRemoteTasks.current.add(task.taskId);
+        if (!task.repoId) continue;
+        void refreshRepositoryRemotes(task.repoId);
+        if (task.operation === "remoteSetUpstream") void refreshRepositoryBranches(task.repoId);
+      }
     }
   }, [tasks]);
 
@@ -891,6 +977,7 @@ function App() {
     if (selectedRepository?.availability === "available") {
       void refreshRepositoryStatus(selectedRepository.repoId);
       void refreshRepositoryBranches(selectedRepository.repoId);
+      void refreshRepositoryRemotes(selectedRepository.repoId);
     }
   }, [selectedRepository?.repoId]);
 
@@ -1159,7 +1246,21 @@ function App() {
                 </ul>}
               </div>
               <div className="navDivider" />
-              <div className="navGroup"><div className="navGroupTitle">Remotes</div><button className="navEmpty navAction" type="button" disabled title="Open a repository to view remotes">No remotes</button></div>
+              <RemoteManager
+                snapshot={activeRemotes}
+                branches={activeBranches}
+                loading={activeRemotesLoading}
+                busy={remoteActionBusy}
+                disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
+                disabledReason={remoteDisabledReason}
+                error={activeRemoteError || ""}
+                onRefresh={() => { if (selectedRepository) void refreshRepositoryRemotes(selectedRepository.repoId); }}
+                onAdd={addRepositoryRemote}
+                onSetUrl={setRepositoryRemoteUrl}
+                onDelete={deleteRepositoryRemote}
+                onSetDefault={setRepositoryDefaultRemote}
+                onSetUpstream={setRepositoryBranchUpstream}
+              />
               <div className="navGroup"><div className="navGroupTitle">Shelves</div><button className="navEmpty navAction" type="button" disabled title="Shelves arrive with S5.3">No shelves</button></div>
               <div className="panelFooter"><span className="statusIcon" aria-hidden="true">●</span> {connected ? "Engine ready" : connecting ? "Connecting to engine" : "Engine unavailable"}</div>
             </aside>
