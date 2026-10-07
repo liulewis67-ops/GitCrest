@@ -252,5 +252,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm api:types` 与 `pnpm check` 通过；门禁包含 renderer/Electron 类型检查和生产构建、20 个 Vitest 用例、Rust 格式检查/构建/39 个测试以及 Electron E2E。Rust 临时仓库验证 modified、added、deleted 文件的暂存/取消暂存，文件名带空格时按字面 pathspec 处理；先暂存再继续编辑后取消暂存，index 回到 HEAD 且工作区修改仍在；stage-all/unstage-all 在已有 HEAD 与 unborn 仓库均可用。HTTP 测试通过受保护的 202 任务接口实际暂存及取消，并检查 index 与工作区分离；前端测试覆盖文件操作请求 payload。
 - 手工验证：未单独手工操作桌面窗口；Electron E2E 通过，文件操作的界面交互由 Vitest 覆盖。任务终态会触发 status 刷新，任务中心关闭时仍轮询已提交的活动任务。
 - 证据：`crates/gitcrest-core/src/staging.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
-- 完成 commit：待记录
+- 完成 commit：`d0f620d`
 - 限制/后续：冲突文件需要先解决再暂存；全部暂存/取消暂存在存在冲突时拒绝执行。S2.3 将增加 hunk/行级 patch 操作，并对编辑后过期 patch 做拒绝保护。
