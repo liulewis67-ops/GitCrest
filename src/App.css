@@ -431,6 +431,14 @@ button:disabled { cursor: not-allowed; }
 .amendAdvisory { margin: 0; color: var(--warning); font-size: 11px; line-height: 1.35; }
 .commitSelectionNotice button { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
 .commitControls { display: flex; align-items: center; justify-content: space-between; }
+.commitSplit { position: relative; display: inline-flex; align-items: stretch; }
+.commitSplit .commitButton { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.commitSplitMenuButton { min-width: 28px; border: 1px solid var(--line-strong); border-left: 0; border-radius: 0 4px 4px 0; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
+.commitSplit.danger .commitButton { background: color-mix(in srgb, var(--red) 84%, var(--surface-raised)); }
+.commitActionMenu { position: absolute; z-index: 20; right: 0; bottom: calc(100% + 5px); display: grid; min-width: 220px; padding: 4px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-raised); box-shadow: var(--shadow); }
+.commitActionMenu button { padding: 7px 9px; border: 0; border-radius: 3px; background: transparent; color: var(--text); text-align: left; font: 10px var(--font-sans); cursor: pointer; }
+.commitActionMenu button:hover, .commitActionMenu button[aria-checked="true"] { background: var(--surface); }
+.commitActionMenu .dangerMenuItem { color: var(--red); }
 .commitOptions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .disabledCheck { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 11px; }
 .disabledCheck input { accent-color: var(--accent); }
@@ -515,6 +523,7 @@ button:disabled { cursor: not-allowed; }
 .cloneFormBody { display: grid; gap: 10px; padding: 14px 16px; }
 .cloneField { display: grid; gap: 5px; color: var(--text-secondary); font-size: 10px; font-weight: 600; }
 .cloneField input { min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; outline-color: var(--accent); background: var(--canvas); color: var(--text); font: 10px var(--font-mono); }
+.cloneField select { min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; outline-color: var(--accent); background: var(--canvas); color: var(--text); font: 10px var(--font-mono); }
 .credentialForm { display: grid; gap: 8px; }
 .credentialForm input { min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; outline-color: var(--accent); background: var(--canvas); color: var(--text); font: 10px var(--font-mono); }
 .credentialCard { display: grid; gap: 8px; margin: 7px 0; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
@@ -524,6 +533,7 @@ button:disabled { cursor: not-allowed; }
 .credentialRecoveryAction, .taskCredentialRecovery { display: grid; justify-items: start; gap: 8px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
 .taskCredentialRecovery { margin-top: 8px; }
 .pushDialog { width: min(680px, 100%); max-height: min(88vh, 850px); display: flex; flex-direction: column; }
+.pushTargetDialog { width: min(440px, 100%); }
 .pullStrategy { display: grid; gap: 8px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .pullStrategy legend { padding: 0 4px; color: var(--text-secondary); font-size: 10px; }
 .pullStrategy label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }

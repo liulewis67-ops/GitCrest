@@ -43,3 +43,14 @@ it("offers normal push only when the remote has no unseen commits", () => {
   expect(onPush).toHaveBeenCalledWith(false);
   expect(screen.queryByRole("button", { name: /Force with lease/ })).toBeNull();
 });
+
+it("keeps a selected force action behind the lease confirmation even for a fast-forward", () => {
+  const onPush = vi.fn();
+  render(<PushDialog snapshot={{ ...preview, behind: 0, overwrittenCommitCount: 0 }} loading={false} busy={false} error="" disabled={false} disabledReason="" forceWithLeaseOnly onRefresh={vi.fn()} onFetch={vi.fn()} onPush={onPush} onClose={vi.fn()} />);
+  expect(screen.queryByRole("button", { name: "Push" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Force with lease…" }));
+  expect(screen.getByText("Confirm lease-protected push?")).toBeTruthy();
+  expect(onPush).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Confirm force-with-lease" }));
+  expect(onPush).toHaveBeenCalledWith(true);
+});

@@ -10,15 +10,16 @@ interface PushDialogProps {
   error: string;
   disabled: boolean;
   disabledReason: string;
+  forceWithLeaseOnly?: boolean;
   onRefresh: () => void;
   onFetch: () => void;
   onPush: (forceWithLease: boolean) => void;
   onClose: () => void;
 }
 
-export function PushDialog({ snapshot, loading, busy, error, disabled, disabledReason, onRefresh, onFetch, onPush, onClose }: PushDialogProps) {
+export function PushDialog({ snapshot, loading, busy, error, disabled, disabledReason, forceWithLeaseOnly = false, onRefresh, onFetch, onPush, onClose }: PushDialogProps) {
   const [confirmLease, setConfirmLease] = useState(false);
-  const forceAvailable = Boolean(snapshot && snapshot.behind > 0 && snapshot.ahead > 0);
+  const forceAvailable = Boolean(snapshot && snapshot.ahead > 0 && (snapshot.behind > 0 || forceWithLeaseOnly));
 
   return (
     <div className="paletteBackdrop pushBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
@@ -38,8 +39,10 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
             {snapshot.commitsToPush.length > 0 && <section className="pushPreviewSection" aria-label="Commits to push"><h3>Commits to push</h3><ul>{snapshot.commitsToPush.map((commit) => <li key={commit.oid}><code>{commit.oid.slice(0, 8)}</code><span>{commit.subject || "(no subject)"}</span></li>)}</ul>{snapshot.ahead > snapshot.commitsToPush.length && <p className="cloneHelp">Showing {snapshot.commitsToPush.length} of {snapshot.ahead} commits.</p>}</section>}
             {snapshot.changedPaths.length > 0 && <section className="pushPreviewSection" aria-label="Changed paths"><h3>Changed paths ({snapshot.changedPathCount})</h3><ul>{snapshot.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedChangedPathCount > 0 && <p className="cloneHelp">{snapshot.omittedChangedPathCount} additional paths are omitted from this preview.</p>}</section>}
             {confirmLease && forceAvailable && <div className="pushLeaseConfirmation" role="alertdialog" aria-label="Confirm force with lease">
-              <strong>Replace remote-only commits?</strong>
-              <p>This updates {snapshot.remoteName}/{snapshot.remoteBranch}, replacing {snapshot.overwrittenCommitCount} remote-only commit{snapshot.overwrittenCommitCount === 1 ? "" : "s"} across {snapshot.changedPathCount} changed path{snapshot.changedPathCount === 1 ? "" : "s"}. The lease blocks the push if the remote moves from {snapshot.expectedRemoteOid.slice(0, 8)}.</p>
+              <strong>{snapshot.behind > 0 ? "Replace remote-only commits?" : "Confirm lease-protected push?"}</strong>
+              <p>{snapshot.behind > 0
+                ? `This updates ${snapshot.remoteName}/${snapshot.remoteBranch}, replacing ${snapshot.overwrittenCommitCount} remote-only commit${snapshot.overwrittenCommitCount === 1 ? "" : "s"} across ${snapshot.changedPathCount} changed path${snapshot.changedPathCount === 1 ? "" : "s"}. The lease blocks the push if the remote moves from ${snapshot.expectedRemoteOid.slice(0, 8)}.`
+                : `This updates ${snapshot.remoteName}/${snapshot.remoteBranch} only if its current tip still matches ${snapshot.expectedRemoteOid.slice(0, 8)}.`}</p>
               <div className="remoteInlineActions"><button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => { setConfirmLease(false); onPush(true); }}>Confirm force-with-lease</button><button className="textButton" type="button" disabled={busy} onClick={() => setConfirmLease(false)}>Cancel</button></div>
             </div>}
           </>}
@@ -50,7 +53,7 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
           <button className="quietButton" type="button" disabled={busy} onClick={onClose}>Cancel</button>
           <button className="quietButton compact" type="button" disabled={busy || disabled || loading} onClick={onRefresh}>Refresh preview</button>
           {forceAvailable && !confirmLease && <button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => setConfirmLease(true)}>Force with lease…</button>}
-          {snapshot && snapshot.ahead > 0 && snapshot.behind === 0 && <button className="primaryButton" type="button" disabled={busy || disabled} onClick={() => onPush(false)}>{busy ? "Starting push…" : "Push"}</button>}
+          {snapshot && snapshot.ahead > 0 && snapshot.behind === 0 && !forceWithLeaseOnly && <button className="primaryButton" type="button" disabled={busy || disabled} onClick={() => onPush(false)}>{busy ? "Starting push…" : "Push"}</button>}
         </footer>
       </section>
     </div>

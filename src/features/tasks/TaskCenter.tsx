@@ -19,8 +19,8 @@ function isAuthenticationFailure(task: TaskSnapshotResponse): boolean {
   return /authentication failed|authentication required|could not read username|could not read password|access denied|terminal prompts disabled/i.test([task.message, ...task.logs].join("\n"));
 }
 
-function isPushRejection(task: TaskSnapshotResponse): boolean {
-  return task.status === "failed" && task.operation.startsWith("push") && task.errorCategory === "pushRejected";
+function isFailedPush(task: TaskSnapshotResponse): boolean {
+  return task.status === "failed" && task.operation.startsWith("push");
 }
 
 export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onReviewPush }: TaskCenterProps) {
@@ -45,7 +45,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
                 {task.message && <p className="taskMessage">{task.errorCategory && <strong>{task.errorCategory}: </strong>}{task.message}</p>}
                 {task.operation === "clone" && (task.status === "failed" || task.status === "cancelled") && <><p className="cloneHelp">For HTTPS authentication failures, save a credential for the host in the clone dialog before retrying.</p><button className="textButton taskCancelButton" type="button" onClick={() => onRetryClone(task)}>Retry clone</button></>}
                 {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">Update the saved HTTPS credential for one of this repository’s remotes, then retry the fetch.</p><button className="secondaryButton" type="button" onClick={() => onConfigureCredentials(task)}>Configure credentials</button></div>}
-                {isPushRejection(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">The push was rejected. Fetch and review remote changes before retrying. A force-with-lease action requires a fresh preview and explicit confirmation.</p><button className="secondaryButton" type="button" onClick={() => onReviewPush(task)}>Review push</button></div>}
+                {isFailedPush(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{task.errorCategory === "pushRejected" ? "The push was rejected. Fetch and review remote changes before retrying." : "The commit is still saved locally. Review the target and retry only the push when ready."} A force-with-lease action requires a fresh preview and explicit confirmation.</p><button className="secondaryButton" type="button" onClick={() => onReviewPush(task)}>Review and retry push</button></div>}
                 <details className="taskLogs"><summary>Sanitized log · {task.logs.length} lines</summary><pre>{task.logs.join("\n") || "No log output."}</pre><button className="textButton" type="button" disabled={task.logs.length === 0} onClick={() => onCopy(task)}>Copy log</button></details>
                 {(task.status === "queued" || task.status === "running") && <button className="textButton taskCancelButton" type="button" disabled={task.cancelRequested || actionId === task.taskId} onClick={() => onCancel(task.taskId)}>{task.cancelRequested ? "Stopping safely…" : actionId === task.taskId ? "Requesting cancellation…" : "Cancel task"}</button>}
               </article>

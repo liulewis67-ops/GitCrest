@@ -6,6 +6,7 @@ import { CloneDialog } from "./features/cloning/CloneDialog";
 import { RemoteManager } from "./features/remotes/RemoteManager";
 import { PushDialog } from "./features/remotes/PushDialog";
 import { PullDialog } from "./features/remotes/PullDialog";
+import { PushTargetDialog, type PushTarget } from "./features/remotes/PushTargetDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
 import type { components } from "./api/schema";
 import "./App.css";
@@ -13,7 +14,9 @@ import "./App.css";
 type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
 type WorkspaceMode = "graph" | "diff";
-type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; selectedFilePath?: string; selectedFileScope?: "workingTree" | "index" | "commit"; selectedDiffCommitOid?: string; graphScrollTop: number };
+type CommitAction = "commit" | "commitAndPush" | "commitAndPushTo" | "commitAndPushForce";
+type CommitIntent = { action: CommitAction; target?: PushTarget; forceWithLease: boolean };
+type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; selectedFilePath?: string; selectedFileScope?: "workingTree" | "index" | "commit"; selectedDiffCommitOid?: string; graphScrollTop: number; commitAction?: CommitAction };
 type WorkspaceSession = { openRepoIds: string[]; activeRepoId?: string; tabs: Record<string, RepositoryTabState> };
 
 const WORKSPACE_SESSION_KEY = "gitcrest-workspace-session-v1";
@@ -37,6 +40,7 @@ function readWorkspaceSession(): WorkspaceSession {
           ...(typeof candidate.selectedFilePath === "string" ? { selectedFilePath: candidate.selectedFilePath } : {}),
           ...(candidate.selectedFileScope === "workingTree" || candidate.selectedFileScope === "index" || candidate.selectedFileScope === "commit" ? { selectedFileScope: candidate.selectedFileScope } : {}),
           ...(typeof candidate.selectedDiffCommitOid === "string" ? { selectedDiffCommitOid: candidate.selectedDiffCommitOid } : {}),
+          ...(candidate.commitAction === "commit" || candidate.commitAction === "commitAndPush" || candidate.commitAction === "commitAndPushTo" || candidate.commitAction === "commitAndPushForce" ? { commitAction: candidate.commitAction } : {}),
           graphScrollTop: typeof candidate.graphScrollTop === "number" && Number.isFinite(candidate.graphScrollTop)
             ? Math.max(0, candidate.graphScrollTop)
             : 0,
@@ -179,6 +183,9 @@ function App() {
   const [pushLoading, setPushLoading] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
+  const [pushForceOnly, setPushForceOnly] = useState(false);
+  const [pushTarget, setPushTarget] = useState<PushTarget>();
+  const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const [pullOpen, setPullOpen] = useState(false);
   const [pullPreflight, setPullPreflight] = useState<components["schemas"]["PullPreflight"]>();
   const [pullLoading, setPullLoading] = useState(false);
@@ -211,7 +218,10 @@ function App() {
   const [commitSelectionRepoId, setCommitSelectionRepoId] = useState<string>();
   const commitSelectionsByTask = useRef(new Map<string, string>());
   const commitMessagesByTask = useRef(new Map<string, string>());
+  const commitIntentsByTask = useRef(new Map<string, CommitIntent>());
+  const pushTargetsByTask = useRef(new Map<string, PushTarget>());
   const [commitBusy, setCommitBusy] = useState(false);
+  const [commitActionMenuOpen, setCommitActionMenuOpen] = useState(false);
   const refreshedStagingTasks = useRef(new Set<string>());
   const refreshedCommitTasks = useRef(new Set<string>());
   const refreshedBranchTasks = useRef(new Set<string>());
@@ -265,6 +275,7 @@ function App() {
     || Number(left.kind === "remote") - Number(right.kind === "remote")
     || left.name.localeCompare(right.name)) : [];
   const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
+  const activeCommitAction: CommitAction = activeTabState?.commitAction || "commit";
   const selectedFilePath = activeTabState?.selectedFilePath;
   const selectedFileScope = activeTabState?.selectedFileScope;
   const selectedDiffCommitOid = activeTabState?.selectedDiffCommitOid;
@@ -310,6 +321,10 @@ function App() {
           ? "Wait for the current repository task to finish before pulling."
           : "";
   const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
+  const commitActionLabel = amendCommit
+    ? activeCommitAction === "commit" ? "Amend" : activeCommitAction === "commitAndPushTo" ? "Amend and Push to…" : "Amend and Push"
+    : activeCommitAction === "commit" ? "Commit" : activeCommitAction === "commitAndPushTo" ? "Commit and Push to…" : activeCommitAction === "commitAndPushForce" ? "Commit and Push (force-with-lease)" : "Commit and Push";
+  const commitActionIsDanger = activeCommitAction === "commitAndPushForce" || (amendCommit && activeCommitAction !== "commit");
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
   const hasActiveTasksRef = useRef(false);
   hasActiveTasksRef.current = hasActiveTasks;
@@ -558,13 +573,13 @@ function App() {
     }
   }
 
-  async function refreshPushPreflight(repoId = selectedRepository?.repoId) {
+  async function refreshPushPreflight(repoId = selectedRepository?.repoId, target: PushTarget | null = pushTarget || null) {
     const api = apiRef.current;
     if (!api || !repoId) return;
     setPushLoading(true);
     setPushError("");
     try {
-      setPushPreflight(await api.preflightRepositoryPush(repoId));
+      setPushPreflight(await api.preflightRepositoryPush(repoId, target || undefined));
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setPushPreflight(undefined);
@@ -574,14 +589,16 @@ function App() {
     }
   }
 
-  function openPushDialog(repoId = selectedRepository?.repoId) {
+  function openPushDialog(repoId = selectedRepository?.repoId, target?: PushTarget, forceOnly = false) {
     if (!repoId) return;
     if (repoId !== selectedRepository?.repoId) {
       const repository = repositories.find((entry) => entry.repoId === repoId);
       if (repository) activateRepository(repository);
     }
+    setPushTarget(target);
+    setPushForceOnly(forceOnly);
     setPushOpen(true);
-    void refreshPushPreflight(repoId);
+    void refreshPushPreflight(repoId, target || null);
   }
 
   async function submitPush(forceWithLease: boolean) {
@@ -599,6 +616,7 @@ function App() {
         remoteName: preview.remoteName,
         remoteBranch: preview.remoteBranch,
       });
+      pushTargetsByTask.current.set(task.taskId, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch });
       setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
       setTasksError("");
       setPushOpen(false);
@@ -607,7 +625,7 @@ function App() {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setPushError(message || (error instanceof Error ? error.message : "Could not start the push task."));
       if (error instanceof GitCrestApiError && error.body.error.code === "PUSH_PREFLIGHT_STALE") {
-        void refreshPushPreflight(repoId);
+        void refreshPushPreflight(repoId, pushTarget || null);
       }
     } finally {
       setPushBusy(false);
@@ -621,7 +639,41 @@ function App() {
 
   function reviewTaskPush(task: TaskSnapshotResponse) {
     setTasksOpen(false);
-    openPushDialog(task.repoId || selectedRepository?.repoId);
+    openPushDialog(task.repoId || selectedRepository?.repoId, pushTargetsByTask.current.get(task.taskId), task.operation.startsWith("pushForceWithLease"));
+  }
+
+  async function continueCommitPush(repoId: string, intent: CommitIntent) {
+    const api = apiRef.current;
+    if (!api) return;
+    setPushTarget(intent.target);
+    setPushForceOnly(intent.forceWithLease);
+    setPushPreflight(undefined);
+    setPushError("");
+    setPushOpen(true);
+    setPushLoading(true);
+    try {
+      const preview = await api.preflightRepositoryPush(repoId, intent.target);
+      setPushPreflight(preview);
+      if (intent.forceWithLease || preview.behind > 0 || preview.ahead === 0) return;
+      setPushBusy(true);
+      const task = await api.pushRepository(repoId, {
+        expectedLocalOid: preview.localOid,
+        expectedRemoteOid: preview.expectedRemoteOid,
+        forceWithLease: false,
+        remoteName: preview.remoteName,
+        remoteBranch: preview.remoteBranch,
+      });
+      pushTargetsByTask.current.set(task.taskId, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch });
+      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      setPushOpen(false);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setPushError(message || (error instanceof Error ? error.message : "The commit succeeded, but its push could not start."));
+    } finally {
+      setPushLoading(false);
+      setPushBusy(false);
+    }
   }
 
   async function stageChanges(action: StagingRequest["action"], path?: string) {
@@ -671,10 +723,43 @@ function App() {
     }
   }
 
-  async function commitChanges() {
+  function rememberCommitAction(action: CommitAction) {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId) return;
+    setWorkspaceSession((current) => ({
+      ...current,
+      tabs: {
+        ...current.tabs,
+        [repoId]: {
+          ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }),
+          commitAction: action,
+        },
+      },
+    }));
+  }
+
+  function runCommitAction(action: CommitAction) {
+    if (action === "commitAndPushTo") {
+      setPushTargetDialogOpen(true);
+      return;
+    }
+    void commitChanges(action);
+  }
+
+  function chooseCommitAction(action: CommitAction) {
+    rememberCommitAction(action);
+    setCommitActionMenuOpen(false);
+    runCommitAction(action);
+  }
+
+  async function commitChanges(action: CommitAction = activeCommitAction, target?: PushTarget) {
     const api = apiRef.current;
     const repoId = selectedRepository?.repoId;
     if (!api || !repoId || !canCommit) return;
+    if (action === "commitAndPushTo" && !target) {
+      setPushTargetDialogOpen(true);
+      return;
+    }
     setCommitBusy(true);
     setTasksError("");
     try {
@@ -682,6 +767,11 @@ function App() {
       setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
       commitSelectionsByTask.current.set(task.taskId, JSON.stringify(commitSelections));
       commitMessagesByTask.current.set(task.taskId, commitMessage);
+      commitIntentsByTask.current.set(task.taskId, {
+        action,
+        ...(target ? { target } : {}),
+        forceWithLease: action === "commitAndPushForce" || (action !== "commit" && amendCommit),
+      });
       setTasksOpen(true);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
@@ -1091,6 +1181,8 @@ function App() {
         commitSelectionsByTask.current.delete(task.taskId);
         const submittedMessage = commitMessagesByTask.current.get(task.taskId);
         commitMessagesByTask.current.delete(task.taskId);
+        const intent = commitIntentsByTask.current.get(task.taskId);
+        commitIntentsByTask.current.delete(task.taskId);
         if (task.status === "succeeded" && submittedMessage === commitMessage) setCommitMessage("");
         if (task.status === "succeeded" && submittedSelection === JSON.stringify(commitSelections)) {
           setCommitSelections([]);
@@ -1106,6 +1198,9 @@ function App() {
           });
         }
         void refreshRepositoryStatus(task.repoId);
+        if (task.status === "succeeded" && intent && intent.action !== "commit") {
+          void continueCommitPush(task.repoId, intent);
+        }
       }
       if (task.operation.startsWith("branch")) {
         if (refreshedBranchTasks.current.has(task.taskId)) continue;
@@ -1235,7 +1330,10 @@ function App() {
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "l") {
+      if (page === "workspace" && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
+        event.preventDefault();
+        void commitChanges(event.shiftKey ? "commitAndPush" : "commit");
+      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "l") {
         event.preventDefault();
         openPullDialog();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
@@ -1251,7 +1349,7 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [selectedRepository?.repoId, selectedRepository?.availability]);
+  }, [page, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability]);
 
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -1527,7 +1625,7 @@ function App() {
                 <option value="conventional">Conventional commit</option>
                 <option value="fix">Fix</option>
               </select>
-              <textarea id="commit-message" aria-label="Commit message" placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void commitChanges(); } }} />
+              <textarea id="commit-message" aria-label="Commit message" placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); event.stopPropagation(); void commitChanges(event.shiftKey ? "commitAndPush" : "commit"); } }} />
               {commitSelections.length > 0 && <div className="commitSelectionNotice" role="status">{commitSelections.length} staged file selection{commitSelections.length === 1 ? "" : "s"} will be committed. Other staged changes stay in the index. <button type="button" onClick={() => setCommitSelections([])}>Clear selection</button></div>}
               <div className="commitControls">
                 <div className="commitOptions">
@@ -1535,7 +1633,16 @@ function App() {
                   <label className="disabledCheck"><input type="checkbox" checked={signOffCommit} disabled={!selectedRepository || commitBusy} onChange={(event) => setSignOffCommit(event.target.checked)} /> Sign-off</label>
                   <label className="disabledCheck"><input type="checkbox" checked={signCommit} disabled={!selectedRepository || commitBusy} onChange={(event) => setSignCommit(event.target.checked)} /> Sign</label>
                 </div>
-                <button className="primaryButton commitButton" type="button" disabled={!canCommit} title={!connected ? "Connect to the Git engine to commit" : hasConflicts ? "Resolve conflicts before committing" : stagedCount === 0 ? "Stage changes before committing" : !commitMessage.trim() ? "Enter a commit message" : hasActiveRepositoryTask ? "Wait for the current repository task" : amendCommit ? "Amend the current commit" : "Commit staged changes"} onClick={() => void commitChanges()}>{commitBusy ? "Submitting…" : amendCommit ? "Amend" : "Commit"}</button>
+                <div className={`commitSplit${commitActionIsDanger ? " danger" : ""}`}>
+                  <button className="primaryButton commitButton" type="button" disabled={!canCommit} title={!connected ? "Connect to the Git engine to commit" : hasConflicts ? "Resolve conflicts before committing" : stagedCount === 0 ? "Stage changes before committing" : !commitMessage.trim() ? "Enter a commit message" : hasActiveRepositoryTask ? "Wait for the current repository task" : commitActionIsDanger ? "Commit, then review the force-with-lease target and overwrite scope" : "Run the selected commit action"} onClick={() => runCommitAction(activeCommitAction)}>{commitBusy ? "Submitting…" : commitActionLabel}</button>
+                  <button className="commitSplitMenuButton" type="button" disabled={!selectedRepository || commitBusy} aria-label="Choose commit action" aria-haspopup="menu" aria-expanded={commitActionMenuOpen} onClick={() => setCommitActionMenuOpen((open) => !open)}>▾</button>
+                  {commitActionMenuOpen && <div className="commitActionMenu" role="menu" aria-label="Commit actions">
+                    <button type="button" role="menuitemradio" aria-checked={activeCommitAction === "commit"} disabled={!canCommit} onClick={() => chooseCommitAction("commit")}>Commit</button>
+                    <button type="button" role="menuitemradio" aria-checked={activeCommitAction === "commitAndPush"} disabled={!canCommit} onClick={() => chooseCommitAction("commitAndPush")}>Commit and Push</button>
+                    <button type="button" role="menuitemradio" aria-checked={activeCommitAction === "commitAndPushTo"} disabled={!canCommit} onClick={() => chooseCommitAction("commitAndPushTo")}>Commit and Push to…</button>
+                    <button className="dangerMenuItem" type="button" role="menuitemradio" aria-checked={activeCommitAction === "commitAndPushForce"} disabled={!canCommit} onClick={() => chooseCommitAction("commitAndPushForce")}>Commit and Push (force-with-lease)…</button>
+                  </div>}
+                </div>
               </div>
               {amendCommit && <p className="amendAdvisory" role="status">Amend replaces the current HEAD commit and changes its ID.</p>}
               {sensitiveStagedPaths.length > 0 && <p className="commitAdvisory" role="status">Review sensitive staged files before committing: {sensitiveStagedPaths.join(", ")}</p>}
@@ -1627,7 +1734,8 @@ function App() {
         </div>
       )}
 
-      {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
+      {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} forceWithLeaseOnly={pushForceOnly} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
+      {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} />}
       {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}

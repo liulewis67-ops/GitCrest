@@ -576,6 +576,77 @@ describe("App", () => {
     expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
   });
 
+  it("runs commit and push from Ctrl+Shift+Enter without waiting for a second commit", async () => {
+    const repository = { repoId: "repo_combo", path: "C:/combo-fixture", head: "a".repeat(40), branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
+    const branches = { repoId: repository.repoId, current: "main", detached: false, branches: [
+      { name: "main", fullName: "refs/heads/main", oid: "a".repeat(40), kind: "local", isCurrent: true, upstream: "origin/main", upstreamGone: false, ahead: 0, behind: 0, isFavorite: false },
+      { name: "main", fullName: "refs/remotes/origin/main", oid: "a".repeat(40), kind: "remote", isCurrent: false, upstream: null, upstreamGone: false, ahead: null, behind: null, isFavorite: false },
+    ] };
+    const remotes = { repoId: repository.repoId, defaultRemote: "origin", remotes: [
+      { name: "origin", fetchUrls: ["https://example.test/repo.git"], pushUrls: ["https://example.test/repo.git"], isDefault: true },
+    ] };
+    const status = { repoId: repository.repoId, refreshedAtMs: 1, files: [
+      { path: "change.txt", indexStatus: "A", worktreeStatus: ".", kind: "added", categories: ["staged"], modeChanged: false },
+    ] };
+    const commitTask = { taskId: "task-commit-push", repoId: repository.repoId, operation: "commit", status: "succeeded", phase: "Complete", progress: 100, message: "Task completed", errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false };
+    const pushTask = { taskId: "task-push-after-commit", repoId: repository.repoId, operation: "push", status: "succeeded", phase: "Complete", progress: 100, message: "Task completed", errorCategory: null, logs: [], createdAtMs: 2, updatedAtMs: 3, cancelRequested: false };
+    const preview = {
+      repoId: repository.repoId, localBranch: "main", remoteName: "origin", remoteBranch: "main",
+      localOid: "b".repeat(40), expectedRemoteOid: "a".repeat(40), ahead: 1, behind: 0,
+      commitsToPush: [{ oid: "b".repeat(40), subject: "new change" }], overwrittenCommitCount: 0,
+      changedPaths: ["change.txt"], changedPathCount: 1, omittedChangedPathCount: 0,
+    };
+    window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
+      openRepoIds: [repository.repoId], activeRepoId: repository.repoId, tabs: { [repository.repoId]: { mode: "graph", graphScrollTop: 0 } },
+    }));
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+      },
+    });
+    const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
+      if (url.pathname === "/api/v1/repositories" && init?.method !== "POST") return response([repository]);
+      if (url.pathname === `/api/v1/repositories/${repository.repoId}`) return response(repository);
+      if (url.pathname.endsWith("/status")) return response(status);
+      if (url.pathname.endsWith("/branches")) return response(branches);
+      if (url.pathname.endsWith("/remotes")) return response(remotes);
+      if (url.pathname === "/api/v1/tasks") return response([]);
+      if (url.pathname.endsWith("/commits") && init?.method === "POST") return response(commitTask, 202);
+      if (url.pathname.endsWith("/push-preflight")) return response(preview);
+      if (url.pathname.endsWith("/push") && init?.method === "POST") return response(pushTask, 202);
+      throw new Error(`Unexpected API request: ${url} ${init?.method || "GET"}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    await screen.findByText("C:/combo-fixture", { selector: ".workspaceCrumb .mutedText" });
+    fireEvent.change(screen.getByRole("textbox", { name: "Commit message" }), { target: { value: "add change" } });
+    fireEvent.click(screen.getByRole("button", { name: "Choose commit action" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Commit and Push to…" }));
+    await screen.findByRole("dialog", { name: "Choose push target" });
+    await waitFor(() => {
+      const savedSession = JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}");
+      expect(savedSession.tabs[repository.repoId].commitAction).toBe("commitAndPushTo");
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Close push target selection" }));
+
+    fireEvent.keyDown(window, { key: "Enter", ctrlKey: true, shiftKey: true });
+
+    await screen.findByRole("dialog", { name: "Tasks" });
+    await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/push") && init?.method === "POST")).toBe(true));
+    const commitRequest = fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname.endsWith("/commits") && init?.method === "POST");
+    const pushRequest = fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname.endsWith("/push") && init?.method === "POST");
+    expect(JSON.parse(String(commitRequest?.[1]?.body)).message).toBe("add change");
+    expect(JSON.parse(String(pushRequest?.[1]?.body))).toMatchObject({ remoteName: "origin", remoteBranch: "main", forceWithLease: false });
+    expect(fetcher.mock.calls.filter(([input, init]) => new URL(String(input)).pathname.endsWith("/commits") && init?.method === "POST")).toHaveLength(1);
+  });
+
   it("cycles themes and exposes keyboard-adjustable panel separators", async () => {
     Object.defineProperty(window, "gitcrest", {
       configurable: true,

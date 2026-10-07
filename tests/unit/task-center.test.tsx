@@ -40,6 +40,15 @@ it("offers a reviewed retry for a rejected push", () => {
   const onReviewPush = vi.fn();
   const rejected = { ...failedFetch, operation: "pushForceWithLease", errorCategory: "pushRejected" as const, logs: ["! [rejected] main -> main (stale info)"] };
   render(<TaskCenter tasks={[rejected]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={onReviewPush} />);
-  fireEvent.click(screen.getByRole("button", { name: "Review push" }));
+  fireEvent.click(screen.getByRole("button", { name: "Review and retry push" }));
   expect(onReviewPush).toHaveBeenCalledWith(rejected);
+});
+
+it("keeps a failed commit-and-push retry scoped to push", () => {
+  const onReviewPush = vi.fn();
+  const failedPush = { ...failedFetch, taskId: "task-push", operation: "push", errorCategory: "network" as const, message: "Network unavailable" };
+  render(<TaskCenter tasks={[failedPush]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={onReviewPush} />);
+  expect(screen.getByText(/The commit is still saved locally/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Review and retry push" }));
+  expect(onReviewPush).toHaveBeenCalledWith(failedPush);
 });
