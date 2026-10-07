@@ -1,7 +1,7 @@
 use std::{ffi::OsString, path::Path, process::ExitStatus, time::Duration};
 
 use tokio::{
-    io::{AsyncBufReadExt, BufReader},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::Command,
     sync::watch,
     task::JoinHandle,
@@ -70,6 +70,7 @@ impl GitCommandService {
             &self.git_program,
             operation.arguments().iter().map(OsString::from).collect(),
             None,
+            None,
             Some(repository_path),
             operation.label(),
             task,
@@ -95,6 +96,7 @@ impl GitCommandService {
             ]
             .into(),
             None,
+            None,
             Some(parent),
             "Clone",
             task,
@@ -108,12 +110,19 @@ impl GitCommandService {
         command: StagingCommand,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        let StagingCommand {
+            arguments,
+            input,
+            label,
+            log_label,
+        } = command;
         run_command(
             &self.git_program,
-            command.arguments,
-            Some(command.log_label.into()),
+            arguments,
+            Some(log_label.into()),
+            input,
             Some(repository_path),
-            command.label,
+            label,
             task,
         )
         .await
@@ -124,6 +133,7 @@ async fn run_command(
     git_program: &str,
     arguments: Vec<OsString>,
     log_label: Option<String>,
+    input: Option<Vec<u8>>,
     working_directory: Option<&Path>,
     label: &str,
     mut task: TaskContext,
@@ -143,7 +153,11 @@ async fn run_command(
         .args(&arguments)
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GCM_INTERACTIVE", "never")
-        .stdin(std::process::Stdio::null())
+        .stdin(if input.is_some() {
+            std::process::Stdio::piped()
+        } else {
+            std::process::Stdio::null()
+        })
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .kill_on_drop(true);
@@ -158,6 +172,14 @@ async fn run_command(
 
     let stdout = child.stdout.take();
     let stderr = child.stderr.take();
+    let stdin_writer = if let Some(input) = input {
+        child
+            .stdin
+            .take()
+            .map(|mut stdin| tokio::spawn(async move { stdin.write_all(&input).await }))
+    } else {
+        None
+    };
     let (activity_sender, mut activity) = watch::channel(Instant::now());
     let stdout_reader =
         stdout.map(|stream| read_task_output(stream, task.clone(), activity_sender.clone()));
@@ -172,18 +194,21 @@ async fn run_command(
                 terminate_process_tree(&mut child).await;
                 abort_reader(stdout_reader).await;
                 abort_reader(stderr_reader).await;
+                abort_writer(stdin_writer).await;
                 return Err(TaskFailure::Cancelled);
             }
             _ = tokio::time::sleep_until(execution_deadline) => {
                 terminate_process_tree(&mut child).await;
                 abort_reader(stdout_reader).await;
                 abort_reader(stderr_reader).await;
+                abort_writer(stdin_writer).await;
                 return Err(TaskFailure::Failed("Git operation exceeded its two-hour execution deadline".into()));
             }
             _ = tokio::time::sleep_until(network_deadline) => {
                 terminate_process_tree(&mut child).await;
                 abort_reader(stdout_reader).await;
                 abort_reader(stderr_reader).await;
+                abort_writer(stdin_writer).await;
                 return Err(TaskFailure::Failed("Git operation made no progress before the five-minute network timeout".into()));
             }
             changed = activity.changed() => {
@@ -198,12 +223,20 @@ async fn run_command(
                         terminate_process_tree(&mut child).await;
                         abort_reader(stdout_reader).await;
                         abort_reader(stderr_reader).await;
+                        abort_writer(stdin_writer).await;
                         return Err(TaskFailure::Failed("Git process ended unexpectedly".into()));
                     }
                 }
             }
         }
     };
+    if let Some(writer) = stdin_writer {
+        if !matches!(writer.await, Ok(Ok(()))) {
+            return Err(TaskFailure::Failed(
+                "Git patch input could not be delivered".into(),
+            ));
+        }
+    }
     await_reader(stdout_reader).await;
     await_reader(stderr_reader).await;
     finish_status(status)
@@ -256,6 +289,13 @@ async fn await_reader(reader: Option<JoinHandle<()>>) {
             reader.abort();
             let _ = reader.await;
         }
+    }
+}
+
+async fn abort_writer(writer: Option<JoinHandle<std::io::Result<()>>>) {
+    if let Some(writer) = writer {
+        writer.abort();
+        let _ = writer.await;
     }
 }
 

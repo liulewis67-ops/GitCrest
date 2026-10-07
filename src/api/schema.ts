@@ -253,6 +253,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/staging/patch": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue a revision-checked hunk staging or unstaging task
+         * @description The request selects hunks or change rows from the current structured diff. The revision is checked again after the repository write lock is acquired.
+         */
+        post: operations["stageSelectedDiffHunks"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/fetch": {
         parameters: {
             query?: never;
@@ -367,6 +391,7 @@ export interface components {
         DiffDocument: {
             repoId: components["schemas"]["RepoId"];
             path: string;
+            revision: string;
             originalPath: string | null;
             /** @enum {string} */
             scope: "workingTree" | "index";
@@ -396,6 +421,18 @@ export interface components {
             action: "stageFile" | "unstageFile" | "stageAll" | "unstageAll";
             /** @description Repository-relative path, required for file actions and forbidden for all-file actions. */
             path?: string;
+        };
+        StagingPatchRequest: {
+            /** @enum {string} */
+            action: "stage" | "unstage";
+            path: string;
+            /** @enum {string} */
+            scope: "workingTree" | "index";
+            revision: string;
+            selections: {
+                hunkIndex: number;
+                rowIndex?: number;
+            }[];
         };
         OpenRepositoryRequest: {
             /** @description Local folder explicitly selected by the user. */
@@ -1200,6 +1237,74 @@ export interface operations {
             };
             406: components["responses"]["UnsupportedVersion"];
             /** @description The file state changed or a conflict must be resolved first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git, task capacity, or task storage is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    stageSelectedDiffHunks: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["StagingPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Partial staging task accepted and durably recorded. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The hunk selection is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository or selected file is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The selected diff revision expired or the repository has a conflicting state. */
             409: {
                 headers: {
                     [name: string]: unknown;

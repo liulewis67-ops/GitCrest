@@ -269,13 +269,20 @@ button:disabled { cursor: not-allowed; }
 .splitDiffFileMeta small { overflow: hidden; color: var(--text-muted); font: 8px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .diffScopeBadge, .diffStateBadge { flex: 0 0 auto; padding: 3px 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--text-muted); font-size: 7px; font-weight: 720; letter-spacing: .05em; }
 .diffState-binary { color: var(--amber); }.diffState-conflicted { color: var(--danger); }.diffState-symlink, .diffState-submodule { color: var(--accent-strong); }
-.splitDiffColumns { position: sticky; z-index: 1; top: 37px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line-strong); background: var(--surface); color: var(--text-muted); font-size: 8px; font-weight: 700; letter-spacing: .1em; }
-.splitDiffColumns > div { padding: 7px 10px; }.splitDiffColumns > div + div { border-left: 12px solid var(--canvas); }
+.splitDiffColumns { position: sticky; z-index: 1; top: 37px; display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr); border-bottom: 1px solid var(--line-strong); background: var(--surface); color: var(--text-muted); font-size: 8px; font-weight: 700; letter-spacing: .1em; }
+.splitDiffColumns > div { padding: 7px 10px; }.splitDiffColumns > div:nth-child(3) { border-left: 12px solid var(--canvas); }
 .splitDiffHunk { margin-bottom: 12px; border-bottom: 1px solid var(--line); }
-.splitDiffHunkHeader { padding: 5px 10px; background: var(--accent-soft); color: var(--accent-strong); font: 8px var(--font-mono); }
-.splitDiffRow { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 19px; font: 9px/1.55 var(--font-mono); }
+.splitDiffHunkHeader { display: flex; align-items: center; gap: 12px; padding: 5px 10px; background: var(--accent-soft); color: var(--accent-strong); font: 8px var(--font-mono); }
+.hunkSelection { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font: 9px var(--font-mono); }
+.hunkSelection input { accent-color: var(--accent); }
+.diffSelectionActions { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--surface-raised); color: var(--text-secondary); font-size: 10px; }
+.diffSelectionActions button { padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
+.diffSelectionActions button:disabled { cursor: not-allowed; opacity: .45; }
+.splitDiffRow { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr); min-height: 19px; font: 9px/1.55 var(--font-mono); }
+.diffRowSelect { display: grid; place-items: center; }
+.diffRowSelect input { width: 12px; height: 12px; margin: 0; accent-color: var(--accent); }
 .splitDiffCell { display: grid; grid-template-columns: 38px minmax(0, 1fr); min-width: 0; }
-.splitDiffCell + .splitDiffCell { border-left: 12px solid var(--canvas); }
+.splitDiffCell:nth-child(3) { border-left: 12px solid var(--canvas); }
 .splitDiffLineNumber { padding: 1px 5px 1px 2px; color: var(--text-muted); text-align: right; user-select: none; }
 .splitDiffCell code { min-width: 0; padding: 1px 7px; color: var(--text-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
 .splitDiffRow-change .splitDiffCell:first-child { background: color-mix(in srgb, var(--danger) 9%, transparent); }

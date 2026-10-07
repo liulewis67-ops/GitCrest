@@ -322,7 +322,7 @@ describe("App", () => {
     const repository = { repoId: "repo_diff", path: "C:/diff-fixture", head: "abc123", branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
     const status = { repoId: "repo_diff", refreshedAtMs: 1, files: [{ path: "readme.txt", indexStatus: ".", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false }] };
     const document = {
-      repoId: "repo_diff", path: "readme.txt", originalPath: null, scope: "workingTree", changeKind: "modified", status: "text",
+      repoId: "repo_diff", path: "readme.txt", revision: "sha256:fixture", originalPath: null, scope: "workingTree", changeKind: "modified", status: "text",
       hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change", oldLine: 1, newLine: 1, oldText: "old content", newText: "new content" }] }],
     };
     const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
@@ -333,6 +333,7 @@ describe("App", () => {
       if (url.pathname.endsWith("/status")) return response(status);
       if (url.pathname.endsWith("/diff")) return response(document);
       if (url.pathname.endsWith("/staging")) return new Response(JSON.stringify({ taskId: "task-stage", repoId: "repo_diff", operation: "stageFile", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
+      if (url.pathname.endsWith("/staging/patch")) return new Response(JSON.stringify({ taskId: "task-hunks", repoId: "repo_diff", operation: "stageHunks", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
       if (url.pathname.endsWith("/tasks")) return response([]);
       throw new Error(`Unexpected API request: ${url}`);
     });
@@ -351,10 +352,11 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Diff" }));
     expect(await screen.findByText("new content")).toBeDefined();
     expect(fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith("/diff")).length).toBeGreaterThanOrEqual(2);
-    fireEvent.click(screen.getByRole("button", { name: "Stage readme.txt" }));
-    await waitFor(() => expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/staging"))).toBe(true));
-    const stageRequest = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/staging"));
-    expect(JSON.parse(String(stageRequest?.[1]?.body))).toEqual({ action: "stageFile", path: "readme.txt" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stage selected changes" }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/staging/patch"))).toBe(true));
+    const stageRequest = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/staging/patch"));
+    expect(JSON.parse(String(stageRequest?.[1]?.body))).toEqual({ action: "stage", path: "readme.txt", scope: "workingTree", revision: "sha256:fixture", selections: [{ hunkIndex: 0 }] });
   });
 
   it("restores repository tabs independently and closes tabs without deleting repositories", async () => {

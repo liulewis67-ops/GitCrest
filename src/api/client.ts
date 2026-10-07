@@ -8,6 +8,7 @@ export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
 export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
 export type StagingRequest = components["schemas"]["StagingRequest"];
+export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
 
 export class GitCrestApiError extends Error {
   constructor(
@@ -84,6 +85,14 @@ export class GitCrestApiClient {
 
   stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/staging`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  }
+
+  stageSelectedDiffHunks(repoId: RepoId, request: StagingPatchRequest): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/staging/patch`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),

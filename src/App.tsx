@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type DiffDocumentResponse, type RepositoryResponse, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type DiffDocumentResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
@@ -291,6 +291,33 @@ function App() {
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setTasksError(message || (error instanceof Error ? error.message : "Could not start the staging task."));
+      setTasksOpen(true);
+    } finally {
+      setStagingBusy(false);
+    }
+  }
+
+  async function stageSelectedChanges(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
+    const api = apiRef.current;
+    const repository = selectedRepository;
+    const document = diffState.document;
+    if (!api || !repository || !document || stagingBusy || hasActiveStagingTask) return;
+    setStagingBusy(true);
+    setTasksError("");
+    try {
+      const request: StagingPatchRequest = {
+        action: document.scope === "index" ? "unstage" : "stage",
+        path: document.path,
+        scope: document.scope,
+        revision: document.revision,
+        selections,
+      };
+      const task = await api.stageSelectedDiffHunks(repository.repoId, request);
+      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setTasksError(message || (error instanceof Error ? error.message : "Could not start the partial staging task."));
       setTasksOpen(true);
     } finally {
       setStagingBusy(false);
@@ -891,7 +918,7 @@ function App() {
                 ) : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div>
                   : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
                   : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <SplitDiff document={diffState.document} />
+                  : diffState.document ? <SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} disabled={stagingBusy || hasActiveStagingTask} />
                   : <div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div>}
               </div>
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>

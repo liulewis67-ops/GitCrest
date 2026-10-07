@@ -5,6 +5,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
@@ -50,6 +51,12 @@ pub struct DiffRow {
     pub new_line: Option<u32>,
     pub old_text: Option<String>,
     pub new_text: Option<String>,
+    #[serde(skip)]
+    patch_change_lines: Vec<usize>,
+    #[serde(skip)]
+    old_position: Option<u32>,
+    #[serde(skip)]
+    new_position: Option<u32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -62,11 +69,20 @@ pub struct DiffHunk {
     pub rows: Vec<DiffRow>,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiffSelection {
+    pub hunk_index: usize,
+    #[serde(default)]
+    pub row_index: Option<usize>,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DiffDocument {
     pub repo_id: String,
     pub path: String,
+    pub revision: String,
     pub original_path: Option<String>,
     pub scope: DiffScope,
     pub change_kind: ChangeKind,
@@ -85,10 +101,27 @@ pub enum DiffError {
     GitFailed,
 }
 
+pub struct DiffRead {
+    pub document: DiffDocument,
+    pub patch: Vec<u8>,
+}
+
 #[derive(Debug)]
 enum RawLine {
-    Addition(String, u32),
-    Deletion(String, u32),
+    Addition {
+        text: String,
+        line: u32,
+        old_position: u32,
+        new_position: u32,
+        patch_line: usize,
+    },
+    Deletion {
+        text: String,
+        line: u32,
+        old_position: u32,
+        new_position: u32,
+        patch_line: usize,
+    },
 }
 
 pub async fn read(
@@ -97,10 +130,22 @@ pub async fn read(
     file: &StatusFile,
     scope: DiffScope,
 ) -> Result<DiffDocument, DiffError> {
+    read_with_patch(repo_id, repository_path, file, scope)
+        .await
+        .map(|result| result.document)
+}
+
+pub async fn read_with_patch(
+    repo_id: String,
+    repository_path: &Path,
+    file: &StatusFile,
+    scope: DiffScope,
+) -> Result<DiffRead, DiffError> {
     validate_repo_relative_path(&file.path)?;
     let mut document = DiffDocument {
         repo_id,
         path: file.path.clone(),
+        revision: revision_for(scope, &file.path, &[]),
         original_path: file.original_path.clone(),
         scope,
         change_kind: file.kind.clone(),
@@ -110,14 +155,23 @@ pub async fn read(
 
     if file.categories.contains(&ChangeCategory::Conflicted) {
         document.status = DiffContentStatus::Conflicted;
-        return Ok(document);
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
     }
     if file.categories.contains(&ChangeCategory::Ignored) {
         document.status = DiffContentStatus::Ignored;
-        return Ok(document);
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
     }
     if scope == DiffScope::Index && !file.categories.contains(&ChangeCategory::Staged) {
-        return Ok(document);
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
     }
     if scope == DiffScope::WorkingTree
         && !file.categories.iter().any(|category| {
@@ -127,18 +181,27 @@ pub async fn read(
             )
         })
     {
-        return Ok(document);
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
     }
 
     let file_path = inspect_path(repository_path, &file.path).await?;
     match file_path {
         FilePathState::Symlink => {
             document.status = DiffContentStatus::Symlink;
-            return Ok(document);
+            return Ok(DiffRead {
+                document,
+                patch: Vec::new(),
+            });
         }
         FilePathState::Submodule => {
             document.status = DiffContentStatus::Submodule;
-            return Ok(document);
+            return Ok(DiffRead {
+                document,
+                patch: Vec::new(),
+            });
         }
         FilePathState::Regular | FilePathState::Missing => {}
     }
@@ -208,6 +271,7 @@ pub async fn read(
         let error = String::from_utf8_lossy(&stderr.bytes).to_ascii_lowercase();
         return Err(classify_git_error(&error));
     }
+    document.revision = revision_for(scope, &file.path, &stdout.bytes);
     let parsed = parse_diff(&stdout.bytes);
     document.status = if parsed.binary {
         DiffContentStatus::Binary
@@ -217,7 +281,164 @@ pub async fn read(
         DiffContentStatus::Text
     };
     document.hunks = parsed.hunks;
-    Ok(document)
+    Ok(DiffRead {
+        document,
+        patch: stdout.bytes,
+    })
+}
+
+fn revision_for(scope: DiffScope, path: &str, patch: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(match scope {
+        DiffScope::WorkingTree => b"workingTree\0".as_slice(),
+        DiffScope::Index => b"index\0".as_slice(),
+    });
+    hash.update(path.as_bytes());
+    hash.update([0]);
+    hash.update(patch);
+    format!("sha256:{:x}", hash.finalize())
+}
+
+pub fn select_hunks(read: &DiffRead, selected: &[usize]) -> Result<Vec<u8>, DiffError> {
+    if selected.is_empty() || read.document.status != DiffContentStatus::Text {
+        return Err(DiffError::InvalidPath);
+    }
+    let requested_count = selected.len();
+    let selected = selected
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    if selected.len() != requested_count
+        || selected
+            .iter()
+            .any(|index| *index >= read.document.hunks.len())
+    {
+        return Err(DiffError::InvalidPath);
+    }
+    let text = String::from_utf8_lossy(&read.patch);
+    let mut prefix = Vec::new();
+    let mut hunks = Vec::<Vec<u8>>::new();
+    let mut current: Option<Vec<u8>> = None;
+    for line in text.split_inclusive('\n') {
+        if parse_hunk_header(line.trim_end_matches(['\r', '\n'])).is_some() {
+            if let Some(hunk) = current.take() {
+                hunks.push(hunk);
+            }
+            current = Some(line.as_bytes().to_vec());
+        } else if let Some(hunk) = current.as_mut() {
+            hunk.extend_from_slice(line.as_bytes());
+        } else {
+            prefix.extend_from_slice(line.as_bytes());
+        }
+    }
+    if let Some(hunk) = current {
+        hunks.push(hunk);
+    }
+    if hunks.len() != read.document.hunks.len() {
+        return Err(DiffError::GitFailed);
+    }
+    let mut patch = prefix;
+    for index in selected {
+        patch.extend_from_slice(&hunks[index]);
+    }
+    Ok(patch)
+}
+
+pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u8>, DiffError> {
+    if selected.is_empty() || read.document.status != DiffContentStatus::Text {
+        return Err(DiffError::InvalidPath);
+    }
+    let requested_count = selected.len();
+    let selected = selected
+        .iter()
+        .copied()
+        .collect::<std::collections::BTreeSet<_>>();
+    if selected.len() != requested_count {
+        return Err(DiffError::InvalidPath);
+    }
+    let patch_lines = read
+        .patch
+        .split_inclusive(|byte| *byte == b'\n')
+        .collect::<Vec<_>>();
+    let first_hunk = patch_lines
+        .iter()
+        .position(|line| {
+            parse_hunk_header(&String::from_utf8_lossy(line).trim_end().to_owned()).is_some()
+        })
+        .ok_or(DiffError::InvalidPath)?;
+    let mut patch = patch_lines[..first_hunk]
+        .iter()
+        .flat_map(|line| line.iter().copied())
+        .collect::<Vec<_>>();
+    for (hunk_index, row_index) in selected {
+        let row = read
+            .document
+            .hunks
+            .get(hunk_index)
+            .and_then(|hunk| hunk.rows.get(row_index))
+            .filter(|row| row.kind == DiffRowKind::Change && !row.patch_change_lines.is_empty())
+            .ok_or(DiffError::InvalidPath)?;
+        let old_count = u32::from(row.old_text.is_some());
+        let new_count = u32::from(row.new_text.is_some());
+        let old_start = row
+            .old_line
+            .or(row.old_position)
+            .ok_or(DiffError::InvalidPath)?;
+        let new_start = row
+            .new_line
+            .or(row.new_position)
+            .ok_or(DiffError::InvalidPath)?;
+        patch.extend_from_slice(
+            format!("@@ -{old_start},{old_count} +{new_start},{new_count} @@\n").as_bytes(),
+        );
+        let mut change_lines = row.patch_change_lines.clone();
+        change_lines.sort_unstable();
+        for patch_line in change_lines {
+            let line = patch_lines.get(patch_line).ok_or(DiffError::GitFailed)?;
+            patch.extend_from_slice(line);
+            if let Some(marker) = patch_lines.get(patch_line + 1) {
+                if marker.starts_with(b"\\ No newline at end of file") {
+                    patch.extend_from_slice(marker);
+                }
+            }
+        }
+    }
+    Ok(patch)
+}
+
+pub fn select_changes(read: &DiffRead, selection: &[DiffSelection]) -> Result<Vec<u8>, DiffError> {
+    if selection.is_empty() {
+        return Err(DiffError::InvalidPath);
+    }
+    if selection.iter().all(|item| item.row_index.is_none()) {
+        return select_hunks(
+            read,
+            &selection
+                .iter()
+                .map(|item| item.hunk_index)
+                .collect::<Vec<_>>(),
+        );
+    }
+    let mut rows = Vec::new();
+    for item in selection {
+        let hunk = read
+            .document
+            .hunks
+            .get(item.hunk_index)
+            .ok_or(DiffError::InvalidPath)?;
+        if let Some(row_index) = item.row_index {
+            rows.push((item.hunk_index, row_index));
+        } else {
+            rows.extend(
+                hunk.rows
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, row)| row.kind == DiffRowKind::Change)
+                    .map(|(row_index, _)| (item.hunk_index, row_index)),
+            );
+        }
+    }
+    select_rows(read, &rows)
 }
 
 fn classify_git_error(error: &str) -> DiffError {
@@ -324,7 +545,7 @@ fn parse_diff(output: &[u8]) -> ParsedDiff {
     let mut new_line = 0_u32;
     let mut changes = Vec::new();
 
-    for line in text.lines() {
+    for (patch_line, line) in text.lines().enumerate() {
         if line.starts_with("Binary files ") || line == "GIT binary patch" {
             binary = true;
             continue;
@@ -356,14 +577,29 @@ fn parse_diff(output: &[u8]) -> ParsedDiff {
                 new_line: Some(new_line),
                 old_text: Some(line[1..].to_owned()),
                 new_text: Some(line[1..].to_owned()),
+                patch_change_lines: Vec::new(),
+                old_position: Some(old_line),
+                new_position: Some(new_line),
             });
             old_line += 1;
             new_line += 1;
         } else if let Some(text) = line.strip_prefix('-') {
-            changes.push(RawLine::Deletion(text.to_owned(), old_line));
+            changes.push(RawLine::Deletion {
+                text: text.to_owned(),
+                line: old_line,
+                old_position: old_line,
+                new_position: new_line,
+                patch_line,
+            });
             old_line += 1;
         } else if let Some(text) = line.strip_prefix('+') {
-            changes.push(RawLine::Addition(text.to_owned(), new_line));
+            changes.push(RawLine::Addition {
+                text: text.to_owned(),
+                line: new_line,
+                old_position: old_line,
+                new_position: new_line,
+                patch_line,
+            });
             new_line += 1;
         }
     }
@@ -398,19 +634,45 @@ fn flush_changes(rows: &mut Vec<DiffRow>, changes: &mut Vec<RawLine>) {
     let mut new = Vec::new();
     for change in changes.drain(..) {
         match change {
-            RawLine::Deletion(text, line) => old.push((text, line)),
-            RawLine::Addition(text, line) => new.push((text, line)),
+            RawLine::Deletion {
+                text,
+                line,
+                old_position,
+                new_position,
+                patch_line,
+            } => old.push((text, line, old_position, new_position, patch_line)),
+            RawLine::Addition {
+                text,
+                line,
+                old_position,
+                new_position,
+                patch_line,
+            } => new.push((text, line, old_position, new_position, patch_line)),
         }
     }
     for index in 0..old.len().max(new.len()) {
         let old_entry = old.get(index);
         let new_entry = new.get(index);
+        let mut patch_change_lines = Vec::new();
+        if let Some(entry) = old_entry {
+            patch_change_lines.push(entry.4);
+        }
+        if let Some(entry) = new_entry {
+            patch_change_lines.push(entry.4);
+        }
         rows.push(DiffRow {
             kind: DiffRowKind::Change,
-            old_line: old_entry.map(|(_, line)| *line),
-            new_line: new_entry.map(|(_, line)| *line),
-            old_text: old_entry.map(|(text, _)| text.clone()),
-            new_text: new_entry.map(|(text, _)| text.clone()),
+            old_line: old_entry.map(|(_, line, _, _, _)| *line),
+            new_line: new_entry.map(|(_, line, _, _, _)| *line),
+            old_text: old_entry.map(|(text, _, _, _, _)| text.clone()),
+            new_text: new_entry.map(|(text, _, _, _, _)| text.clone()),
+            patch_change_lines,
+            old_position: old_entry
+                .map(|(_, _, position, _, _)| *position)
+                .or_else(|| new_entry.map(|(_, _, position, _, _)| *position)),
+            new_position: new_entry
+                .map(|(_, _, _, position, _)| *position)
+                .or_else(|| old_entry.map(|(_, _, _, position, _)| *position)),
         });
     }
 }

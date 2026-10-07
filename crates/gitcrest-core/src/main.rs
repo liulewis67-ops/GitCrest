@@ -340,6 +340,11 @@ impl ApiError {
                 ApiErrorCode::StagingConflict,
                 "Resolve the selected conflict before staging or unstaging this file.",
             ),
+            staging::StagingError::StaleSelection => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::ResourceVersionStale,
+                "The diff changed after it was displayed. Refresh it and select the desired changes again.",
+            ),
         }
     }
 
@@ -460,6 +465,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route("/v1/repositories/:repo_id/status", get(repository_status))
         .route("/v1/repositories/:repo_id/diff", get(repository_diff))
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
+        .route(
+            "/v1/repositories/:repo_id/staging/patch",
+            post(stage_repository_patch),
+        )
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
@@ -769,6 +778,130 @@ async fn stage_repository(
                 })?;
                 commands
                     .execute_staging(&repository_path, command, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn stage_repository_patch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<staging::StagingPatchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A partial staging selection is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let file = snapshot
+        .files
+        .iter()
+        .find(|file| file.path == request.path)
+        .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
+    let current_diff = diff::read_with_patch(
+        repo_id.clone(),
+        &target.repository_path,
+        file,
+        request.scope,
+    )
+    .await
+    .map_err(ApiError::from_diff_error)?;
+    if current_diff.document.revision != request.revision {
+        return Err(ApiError::from_staging_error(
+            staging::StagingError::StaleSelection,
+        ));
+    }
+    staging::validate_patch_request(&request, file).map_err(ApiError::from_staging_error)?;
+    let _ = diff::select_changes(&current_diff, &request.selections).map_err(|error| {
+        if error == DiffError::InvalidPath {
+            ApiError::from_staging_error(staging::StagingError::InvalidRequest)
+        } else {
+            ApiError::from_diff_error(error)
+        }
+    })?;
+
+    let action = request.action;
+    let operation = match action {
+        staging::StagingPatchAction::Stage => "stageHunks",
+        staging::StagingPatchAction::Unstage => "unstageHunks",
+    };
+    let repositories = state.repositories.clone();
+    let commands = state.git_commands.clone();
+    let task_repo_id = repo_id.clone();
+    let repository_path = target.repository_path;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation,
+            move |context| async move {
+                let current = repositories
+                    .status_snapshot(&task_repo_id)
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed(
+                            "Could not refresh repository status before partial staging".into(),
+                        )
+                    })?;
+                let file = current
+                    .files
+                    .iter()
+                    .find(|file| file.path == request.path)
+                    .ok_or_else(|| {
+                        TaskFailure::Failed(
+                            "The selected file changed before partial staging".into(),
+                        )
+                    })?;
+                staging::validate_patch_request(&request, file).map_err(|_| {
+                    TaskFailure::Failed(
+                        "The selected file state changed before partial staging".into(),
+                    )
+                })?;
+                let current_diff = diff::read_with_patch(
+                    task_repo_id.clone(),
+                    &repository_path,
+                    file,
+                    request.scope,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "Could not refresh the selected diff before partial staging".into(),
+                    )
+                })?;
+                if current_diff.document.revision != request.revision {
+                    return Err(TaskFailure::Failed(
+                        "The selected diff became stale; refresh and select changes again".into(),
+                    ));
+                }
+                let selected_patch = diff::select_changes(&current_diff, &request.selections)
+                    .map_err(|_| {
+                        TaskFailure::Failed("The selected diff hunk is no longer available".into())
+                    })?;
+                commands
+                    .execute_staging(
+                        &repository_path,
+                        staging::patch_command(action, selected_patch),
+                        context,
+                    )
                     .await
                     .map(|()| None)
             },
@@ -1392,6 +1525,95 @@ mod tests {
             .categories
             .contains(&status::ChangeCategory::Unstaged));
         assert!(!tracked.categories.contains(&status::ChangeCategory::Staged));
+
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=tracked.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let revision = diff["revision"].as_str().unwrap().to_owned();
+        let partial_request = serde_json::json!({
+            "action":"stage",
+            "path":"tracked.txt",
+            "scope":"workingTree",
+            "revision":revision,
+            "selections":[{"hunkIndex":0,"rowIndex":0}]
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/staging/patch"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(partial_request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=tracked.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let stale_diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        std::fs::write(root.join("tracked.txt"), "new external edit\n").unwrap();
+        let cached_before_stale = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["diff", "--cached", "--", "tracked.txt"])
+            .output()
+            .unwrap();
+        assert!(cached_before_stale.status.success());
+        let stale_request = serde_json::json!({
+            "action":"stage",
+            "path":"tracked.txt",
+            "scope":"workingTree",
+            "revision":stale_diff["revision"],
+            "selections":[{"hunkIndex":0}]
+        });
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/staging/patch"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(stale_request.to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status_code, code) = error_code(response).await;
+        assert_eq!(status_code, StatusCode::CONFLICT);
+        assert_eq!(code, "RESOURCE_VERSION_STALE");
+        let cached_after_stale = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["diff", "--cached", "--", "tracked.txt"])
+            .output()
+            .unwrap();
+        assert!(cached_after_stale.status.success());
+        assert_eq!(cached_after_stale.stdout, cached_before_stale.stdout);
     }
 
     #[tokio::test]
