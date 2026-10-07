@@ -261,5 +261,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm api:types` 与 `pnpm check` 通过；门禁包含 renderer/Electron 类型检查和构建、21 个 Vitest 用例、Rust 格式检查/构建/42 个测试及 Electron E2E。Rust 临时仓库对照 `git diff` 与 `git diff --cached` 验证多 hunk 只暂存选中范围、相邻行和 CRLF 文件只选择指定变更行、untracked 新文件可部分暂存；先暂存一个 hunk 后将另一个也暂存，再取消前一 hunk，剩余已暂存内容不变。HTTP 测试从结构化 Diff 获取 revision，通过 202 任务完成行级暂存，并确认外部修改使旧 revision 返回 409 且 index 未变化。前端组件测试覆盖 hunk 选择与 revision-bound API 请求。
 - 手工验证：未单独手工操作桌面窗口；Diff 选择交互由 Vitest 覆盖，端到端 Electron 质量门禁通过。
 - 证据：`crates/gitcrest-core/src/diff.rs`、`crates/gitcrest-core/src/staging.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/SplitDiff.tsx`、`src/App.tsx`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
-- 完成 commit：待记录
+- 完成 commit：`09243d2`
 - 限制/后续：hunk/行选择使用本次 Diff 的 SHA-256 revision；若文件状态在 UI 显示后变化，提交前和获得仓库写锁后都会重新核验 revision。二进制、冲突、忽略文件和无文本 hunk 不提供部分暂存；复杂选择 patch 经 Git cached apply 执行，错误通过任务状态反馈。
