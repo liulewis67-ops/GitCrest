@@ -1707,6 +1707,60 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/preflight:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: preflightRepositoryWorkflow
+      summary: Inspect repository state and a commit target before merge, cherry-pick, or revert
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema: { type: string, enum: [merge, cherryPick, revert] }
+        - name: targetOid
+          in: query
+          required: true
+          schema: { type: string, minLength: 4, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+      responses:
+        "200":
+          description: Resolved commit, bounded worktree paths, conflicts and active operation state.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowPreflight"
+        "400":
+          description: The action or commit ID is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository or commit is not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "503":
+          description: Git could not complete the bounded workflow preflight.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/push-preflight:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -2308,6 +2362,23 @@ components:
         expectedLocalOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         expectedTrackingOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         strategy: { type: string, enum: [merge, rebase], description: Explicit integration strategy selected by the user. }
+    WorkflowPreflight:
+      type: object
+      additionalProperties: false
+      required: [repoId, action, headOid, targetOid, targetSubject, operationInProgress, isClean, dirtyPaths, omittedDirtyPathCount, conflictedPaths, omittedConflictedPathCount, canStart]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        action: { type: string, enum: [merge, cherryPick, revert] }
+        headOid: { type: [string, "null"], minLength: 40, maxLength: 64 }
+        targetOid: { type: string, minLength: 40, maxLength: 64 }
+        targetSubject: { type: string, maxLength: 4096 }
+        operationInProgress: { type: [string, "null"], enum: [merge, cherryPick, revert, rebase, null] }
+        isClean: { type: boolean }
+        dirtyPaths: { type: array, maxItems: 200, items: { type: string } }
+        omittedDirtyPathCount: { type: integer, minimum: 0 }
+        conflictedPaths: { type: array, maxItems: 200, items: { type: string } }
+        omittedConflictedPathCount: { type: integer, minimum: 0 }
+        canStart: { type: boolean }
     PushPreflight:
       type: object
       additionalProperties: false
@@ -2631,6 +2702,7 @@ components:
         - PUSH_PREFLIGHT_STALE
         - PUSH_REQUIRES_FETCH
         - NOTHING_TO_PUSH
+        - WORKFLOW_PREFLIGHT_UNAVAILABLE
         - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:

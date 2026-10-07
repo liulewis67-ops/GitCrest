@@ -760,6 +760,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/workflows/preflight": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Inspect repository state and a commit target before merge, cherry-pick, or revert */
+        get: operations["preflightRepositoryWorkflow"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/push-preflight": {
         parameters: {
             query?: never;
@@ -1082,6 +1103,22 @@ export interface components {
              */
             strategy: "merge" | "rebase";
         };
+        WorkflowPreflight: {
+            repoId: components["schemas"]["RepoId"];
+            /** @enum {string} */
+            action: "merge" | "cherryPick" | "revert";
+            headOid: string | null;
+            targetOid: string;
+            targetSubject: string;
+            /** @enum {string|null} */
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | null;
+            isClean: boolean;
+            dirtyPaths: string[];
+            omittedDirtyPathCount: number;
+            conflictedPaths: string[];
+            omittedConflictedPathCount: number;
+            canStart: boolean;
+        };
         PushPreflight: {
             repoId: components["schemas"]["RepoId"];
             localBranch: string;
@@ -1233,7 +1270,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "TASK_QUEUE_FULL" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "TASK_QUEUE_FULL" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -3569,6 +3606,64 @@ export interface operations {
                 };
             };
             /** @description The task queue is full or Git cannot be started. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    preflightRepositoryWorkflow: {
+        parameters: {
+            query: {
+                action: "merge" | "cherryPick" | "revert";
+                targetOid: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Resolved commit, bounded worktree paths, conflicts and active operation state. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowPreflight"];
+                };
+            };
+            /** @description The action or commit ID is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository or commit is not available. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Git could not complete the bounded workflow preflight. */
             503: {
                 headers: {
                     [name: string]: unknown;

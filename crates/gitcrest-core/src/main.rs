@@ -45,6 +45,7 @@ mod status;
 mod storage;
 mod tags;
 mod tasks;
+mod workflows;
 
 use cloning::{CloneError, CloneService};
 use diff::{DiffError, DiffScope};
@@ -140,6 +141,7 @@ enum ApiErrorCode {
     PushPreflightStale,
     PushRequiresFetch,
     NothingToPush,
+    WorkflowPreflightUnavailable,
     TagAlreadyExists,
     InternalError,
 }
@@ -605,6 +607,33 @@ impl ApiError {
         }
     }
 
+    fn from_workflow_error(error: workflows::WorkflowError) -> Self {
+        match error {
+            workflows::WorkflowError::InvalidTarget => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "A merge, cherry-pick, or revert target must be a hexadecimal commit ID.",
+            ),
+            workflows::WorkflowError::CommitNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::HistoryCommitNotFound,
+                "The requested commit does not exist in this repository.",
+            ),
+            workflows::WorkflowError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git is unavailable for workflow preflight.",
+            ),
+            workflows::WorkflowError::TimedOut
+            | workflows::WorkflowError::TooLarge
+            | workflows::WorkflowError::GitFailed => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::WorkflowPreflightUnavailable,
+                "Workflow preflight could not be completed. Refresh repository state and retry.",
+            ),
+        }
+    }
+
     fn from_tag_error(error: tags::TagError) -> Self {
         match error {
             tags::TagError::Invalid => Self::new(
@@ -865,6 +894,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             get(preflight_repository_pull),
         )
         .route("/v1/repositories/:repo_id/pull", post(pull_repository))
+        .route(
+            "/v1/repositories/:repo_id/workflows/preflight",
+            get(preflight_repository_workflow),
+        )
         .route(
             "/v1/repositories/:repo_id/push-preflight",
             get(preflight_repository_push),
@@ -2854,6 +2887,41 @@ async fn pull_repository(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowPreflightQuery {
+    action: workflows::WorkflowAction,
+    target_oid: String,
+}
+
+async fn preflight_repository_workflow(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<WorkflowPreflightQuery>, QueryRejection>,
+) -> Result<Json<workflows::WorkflowPreflight>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Workflow preflight requires an action and targetOid.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    workflows::read_preflight(
+        repo_id,
+        &target.repository_path,
+        query.action,
+        &query.target_oid,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_workflow_error)
+}
+
 async fn preflight_repository_push(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
@@ -4276,6 +4344,118 @@ mod tests {
             std::fs::read_to_string(repository_path.join("local.txt")).unwrap(),
             "local edit\n"
         );
+    }
+
+    #[tokio::test]
+    async fn workflow_preflight_resolves_commit_targets_and_lists_conflicts() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("workflow-repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output.stdout
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["config", "user.name", "Workflow API Test"]);
+        git(&["config", "user.email", "workflow-api@example.invalid"]);
+        std::fs::write(repository_path.join("base.txt"), "base\n").unwrap();
+        git(&["add", "base.txt"]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        git(&["checkout", "--quiet", "-b", "side"]);
+        std::fs::write(repository_path.join("base.txt"), "side\n").unwrap();
+        git(&["commit", "--quiet", "-am", "side change"]);
+        let side_oid = String::from_utf8(git(&["rev-parse", "HEAD"]))
+            .unwrap()
+            .trim()
+            .to_owned();
+        git(&["checkout", "--quiet", "main"]);
+        std::fs::write(repository_path.join("base.txt"), "main\n").unwrap();
+        git(&["commit", "--quiet", "-am", "main change"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let uri = format!(
+            "/api/v1/repositories/{repo_id}/workflows/preflight?action=merge&targetOid={side_oid}"
+        );
+        let clean = app
+            .clone()
+            .oneshot(request(&uri, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        assert_eq!(clean.status(), StatusCode::OK);
+        let bytes = to_bytes(clean.into_body(), usize::MAX).await.unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let head_oid = String::from_utf8(git(&["rev-parse", "main"]))
+            .unwrap()
+            .trim()
+            .to_owned();
+        assert_eq!(preview["headOid"], head_oid);
+        assert_eq!(preview["targetOid"], side_oid);
+        assert_eq!(preview["targetSubject"], "side change");
+        assert_eq!(preview["isClean"], true);
+        assert_eq!(preview["canStart"], true);
+
+        std::fs::write(repository_path.join("local.txt"), "local edit\n").unwrap();
+        let dirty = app
+            .clone()
+            .oneshot(request(&uri, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(dirty.into_body(), usize::MAX).await.unwrap();
+        let dirty: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(dirty["canStart"], false);
+        assert_eq!(dirty["dirtyPaths"][0], "local.txt");
+
+        std::fs::remove_file(repository_path.join("local.txt")).unwrap();
+        let conflict = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repository_path)
+            .args(["merge", "side"])
+            .output()
+            .unwrap();
+        assert!(!conflict.status.success());
+        let active = app
+            .clone()
+            .oneshot(request(&uri, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(active.into_body(), usize::MAX).await.unwrap();
+        let active: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(active["operationInProgress"], "merge");
+        assert_eq!(active["conflictedPaths"][0], "base.txt");
+        assert_eq!(active["canStart"], false);
+        let invalid = app
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/workflows/preflight?action=revert&targetOid={}",
+                    "f".repeat(40)
+                ),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::NOT_FOUND);
     }
 
     #[tokio::test]

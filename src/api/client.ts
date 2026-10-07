@@ -16,6 +16,7 @@ export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
+export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
@@ -306,6 +307,15 @@ export class GitCrestApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
+  }
+
+  preflightRepositoryWorkflow(
+    repoId: RepoId,
+    action: components["schemas"]["WorkflowPreflight"]["action"],
+    targetOid: string,
+  ): Promise<WorkflowPreflightResponse> {
+    const query = new URLSearchParams({ action, targetOid });
+    return this.request<WorkflowPreflightResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/preflight?${query}`);
   }
 
   preflightRepositoryPush(

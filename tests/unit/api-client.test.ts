@@ -358,6 +358,25 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.method).toBeUndefined();
   });
 
+  it("requests a typed merge safety preview for an encoded commit target", async () => {
+    const preview = {
+      repoId: "repo_fixture", action: "cherryPick", headOid: "a".repeat(40), targetOid: "b".repeat(40),
+      targetSubject: "selected change", operationInProgress: null, isClean: true, dirtyPaths: [],
+      omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(preview), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.preflightRepositoryWorkflow("repo/fixture", "cherryPick", "b".repeat(40))).resolves.toEqual(preview);
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.pathname).toBe("/api/v1/repositories/repo%2Ffixture/workflows/preflight");
+    expect(url.searchParams.get("action")).toBe("cherryPick");
+    expect(url.searchParams.get("targetOid")).toBe("b".repeat(40));
+  });
+
   it("requests a one-off push preview for the selected remote branch", async () => {
     const preview = {
       repoId: "repo_fixture", localBranch: "main", remoteName: "backup", remoteBranch: "release/2026",
