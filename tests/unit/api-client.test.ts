@@ -415,6 +415,22 @@ describe("GitCrestApiClient", () => {
     expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual(request);
   });
 
+  it("reads a conflict file from a waiting workflow with encoded task and path values", async () => {
+    const conflict = {
+      repoId: "repo_fixture", taskId: "task/merge", path: "src/file name.ts", operation: "merge", headOid: "a".repeat(40),
+      baseContent: "base", oursContent: "ours", theirsContent: "theirs", resultContent: "result", resultRevision: "b".repeat(64), isText: true,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(conflict), {
+      status: 200, headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    await expect(client.getRepositoryWorkflowConflictFile("repo/fixture", "task/merge", "src/file name.ts")).resolves.toEqual(conflict);
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.pathname).toBe("/api/v1/repositories/repo%2Ffixture/workflows/conflicts/file");
+    expect(url.searchParams.get("taskId")).toBe("task/merge");
+    expect(url.searchParams.get("path")).toBe("src/file name.ts");
+  });
+
   it("requests a one-off push preview for the selected remote branch", async () => {
     const preview = {
       repoId: "repo_fixture", localBranch: "main", remoteName: "backup", remoteBranch: "release/2026",

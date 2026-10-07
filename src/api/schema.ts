@@ -844,6 +844,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/workflows/conflicts/file": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Read the three conflict stages and current working result for one waiting workflow file */
+        get: operations["readWorkflowConflictFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/push-preflight": {
         parameters: {
             query?: never;
@@ -1210,6 +1231,20 @@ export interface components {
             expectedOperation: "merge" | "cherryPick" | "revert";
             expectedHeadOid: string;
             expectedConflictedPaths: string[];
+        };
+        WorkflowConflictFile: {
+            repoId: components["schemas"]["RepoId"];
+            taskId: string;
+            path: string;
+            /** @enum {string} */
+            operation: "merge" | "cherryPick" | "revert";
+            headOid: string | null;
+            baseContent: string | null;
+            oursContent: string | null;
+            theirsContent: string | null;
+            resultContent: string | null;
+            resultRevision: string;
+            isText: boolean;
         };
         PushPreflight: {
             repoId: components["schemas"]["RepoId"];
@@ -3976,6 +4011,82 @@ export interface operations {
                 };
             };
             /** @description The task queue is full or Git is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    readWorkflowConflictFile: {
+        parameters: {
+            query: {
+                taskId: string;
+                path: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Base, ours, theirs, persisted result and result revision for a text conflict. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkflowConflictFile"];
+                };
+            };
+            /** @description The task ID or repository-relative path is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository, waiting task or working result file is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The task no longer matches the active conflict operation or file. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The conflict file exceeds the bounded text review size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git could not read the conflict stages. */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -32,6 +32,7 @@ use tower_http::cors::CorsLayer;
 mod branches;
 mod cloning;
 mod commits;
+mod conflicts;
 mod credentials;
 mod diff;
 mod git_command;
@@ -919,6 +920,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/workflows/recovery",
             post(recover_repository_workflow),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/conflicts/file",
+            get(read_workflow_conflict_file),
         )
         .route(
             "/v1/repositories/:repo_id/push-preflight",
@@ -3107,6 +3112,111 @@ async fn preflight_repository_workflow_recovery(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowConflictFileQuery {
+    task_id: String,
+    path: String,
+}
+
+async fn read_workflow_conflict_file(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<WorkflowConflictFileQuery>, QueryRejection>,
+) -> Result<Json<conflicts::ConflictFile>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Conflict file reads require a waiting taskId and repository-relative path.",
+        )
+    })?;
+    conflicts::validate_relative_path(&query.path).map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The conflict file path is invalid.",
+        )
+    })?;
+    let task = state.tasks.get(&query.task_id).await.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::TaskNotFound,
+            "The workflow task is no longer available.",
+        )
+    })?;
+    let Some(task_operation) = workflow_operation_for_task(&task.operation) else {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Conflict review requires a merge, cherry-pick, or revert task.",
+        ));
+    };
+    if task.repo_id.as_deref() != Some(repo_id.as_str())
+        || task.status != tasks::TaskStatus::WaitingForInput
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Conflict review requires a waiting workflow task for this repository.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = workflows::read_recovery_preflight(
+        repo_id.clone(),
+        query.task_id.clone(),
+        &target.repository_path,
+    )
+    .await
+    .map_err(ApiError::from_workflow_error)?;
+    if preview.operation != task_operation || !preview.conflicted_paths.contains(&query.path) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowRecoveryStale,
+            "The file is no longer part of this task's current conflict set. Refresh task state.",
+        ));
+    }
+    conflicts::read_file(
+        repo_id,
+        query.task_id,
+        preview.operation,
+        preview.head_oid,
+        &target.repository_path,
+        &query.path,
+    )
+    .await
+    .map(Json)
+    .map_err(|error| match error {
+        conflicts::ConflictError::InvalidPath => ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The conflict file path is invalid.",
+        ),
+        conflicts::ConflictError::TooLarge => ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            ApiErrorCode::DiffTooLarge,
+            "This conflict file exceeds the 1 MiB text review limit.",
+        ),
+        conflicts::ConflictError::FileNotFound => ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RepositoryFileNotFound,
+            "The conflict file is no longer present in the working tree.",
+        ),
+        conflicts::ConflictError::NotConflicted
+        | conflicts::ConflictError::Binary
+        | conflicts::ConflictError::GitUnavailable
+        | conflicts::ConflictError::GitFailed
+        | conflicts::ConflictError::TimedOut
+        | conflicts::ConflictError::Io => ApiError::state_conflict(
+            "GitCrest could not safely read the current text conflict. Refresh the repository state.",
+        ),
+    })
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct WorkflowRecoveryRequest {
     task_id: String,
     action: workflows::WorkflowRecoveryAction,
@@ -5085,6 +5195,31 @@ mod tests {
         let conflict_status: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(conflict_status["operationInProgress"], "merge");
         assert_eq!(conflict_status["conflictedPaths"][0], "shared.txt");
+        let conflict_file = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/workflows/conflicts/file?taskId={}&path=shared.txt",
+                    conflict_task["taskId"].as_str().unwrap()
+                ),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(conflict_file.status(), StatusCode::OK);
+        let bytes = to_bytes(conflict_file.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let conflict_file: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(conflict_file["path"], "shared.txt");
+        assert!(conflict_file["baseContent"].is_null());
+        assert_eq!(conflict_file["oursContent"], "main\n");
+        assert_eq!(conflict_file["theirsContent"], "source\n");
+        assert!(conflict_file["resultContent"]
+            .as_str()
+            .unwrap()
+            .contains("<<<<<<<"));
+        assert_eq!(conflict_file["isText"], true);
         assert!(std::fs::read_to_string(repository_path.join("shared.txt"))
             .unwrap()
             .contains("<<<<<<<"));

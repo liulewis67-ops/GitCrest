@@ -18,6 +18,7 @@ export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
 export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
+export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
@@ -352,6 +353,17 @@ export class GitCrestApiClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
       },
+    );
+  }
+
+  getRepositoryWorkflowConflictFile(
+    repoId: RepoId,
+    taskId: string,
+    path: string,
+  ): Promise<WorkflowConflictFileResponse> {
+    const query = new URLSearchParams({ taskId, path });
+    return this.request<WorkflowConflictFileResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/file?${query}`,
     );
   }
 
