@@ -38,6 +38,7 @@ mod repository;
 mod staging;
 mod status;
 mod storage;
+mod tags;
 mod tasks;
 
 use cloning::{CloneError, CloneService};
@@ -107,6 +108,7 @@ enum ApiErrorCode {
     HistoryCommitNotFound,
     HistoryUnavailable,
     HistoryTooLarge,
+    TagAlreadyExists,
     InternalError,
 }
 
@@ -434,6 +436,41 @@ impl ApiError {
         }
     }
 
+    fn from_tag_error(error: tags::TagError) -> Self {
+        match error {
+            tags::TagError::Invalid => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "The tag name, commit ID, or annotation is invalid.",
+            ),
+            tags::TagError::AlreadyExists => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::TagAlreadyExists,
+                "A tag with this name already exists. Choose a new name.",
+            ),
+            tags::TagError::CommitNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::HistoryCommitNotFound,
+                "The requested commit does not exist in this repository.",
+            ),
+            tags::TagError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+            tags::TagError::TimedOut => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                ApiErrorCode::HistoryUnavailable,
+                "Git did not create the tag within 10 seconds.",
+            ),
+            tags::TagError::GitFailed => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::HistoryUnavailable,
+                "Git could not create the requested tag.",
+            ),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -566,6 +603,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/commits/:oid/diff",
             get(repository_commit_file_diff),
+        )
+        .route(
+            "/v1/repositories/:repo_id/commits/:oid/tags",
+            post(repository_commit_create_tag),
         )
         .route("/v1/repositories/:repo_id/refs", get(repository_refs))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
@@ -1131,6 +1172,44 @@ async fn repository_commit_file_diff(
     .await
     .map(Json)
     .map_err(ApiError::from_diff_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CreateTagBody {
+    name: String,
+    message: String,
+}
+
+async fn repository_commit_create_tag(
+    State(state): State<AppState>,
+    Path((repo_id, oid)): Path<(String, String)>,
+    request: Result<Json<CreateTagBody>, JsonRejection>,
+) -> Result<(StatusCode, Json<tags::CreatedTag>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A tag name and optional annotation message are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let created = tags::create(
+        repo_id,
+        &target.repository_path,
+        tags::CreateTagRequest {
+            name: request.name,
+            oid,
+            message: request.message,
+        },
+    )
+    .await
+    .map_err(ApiError::from_tag_error)?;
+    Ok((StatusCode::CREATED, Json(created)))
 }
 
 async fn repository_refs(
@@ -2555,6 +2634,29 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row["oldText"].is_null() && row["newText"] == "first"));
+
+        let tag_request = || {
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/repositories/{repo_id}/commits/{oid}/tags"))
+                .header("X-GitCrest-API-Version", API_VERSION)
+                .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "name": "history-v1", "message": "Tagged from commit details" }).to_string(),
+                ))
+                .unwrap()
+        };
+        let created_tag = app.clone().oneshot(tag_request()).await.unwrap();
+        assert_eq!(created_tag.status(), StatusCode::CREATED);
+        let body = to_bytes(created_tag.into_body(), usize::MAX).await.unwrap();
+        let created_tag: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(created_tag["name"], "history-v1");
+        assert_eq!(created_tag["oid"], oid);
+        let duplicate_tag = app.clone().oneshot(tag_request()).await.unwrap();
+        let (status, code) = error_code(duplicate_tag).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(code, "TAG_ALREADY_EXISTS");
 
         let refs = app
             .clone()

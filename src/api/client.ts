@@ -13,6 +13,7 @@ export type CommitRequest = components["schemas"]["CommitRequest"];
 export type CommitPageResponse = components["schemas"]["CommitPage"];
 export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
+export type CreatedTagResponse = components["schemas"]["CreatedTag"];
 export type CommitHistoryFilters = Pick<
   NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
   "sha" | "author" | "message" | "branch" | "path" | "since" | "until"
@@ -106,6 +107,14 @@ export class GitCrestApiClient {
   getRepositoryCommitDiff(repoId: RepoId, oid: string, path: string): Promise<DiffDocumentResponse> {
     const query = new URLSearchParams({ path });
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(oid)}/diff?${query}`);
+  }
+
+  createRepositoryCommitTag(repoId: RepoId, oid: string, name: string, message: string): Promise<CreatedTagResponse> {
+    return this.request<CreatedTagResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(oid)}/tags`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, message } satisfies components["schemas"]["CreateTagRequest"]),
+    });
   }
 
   getRepositoryRefs(repoId: RepoId): Promise<RefSnapshotResponse> {

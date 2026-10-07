@@ -63,6 +63,7 @@ describe("CommitGraph", () => {
         stats: { filesChanged: 1, insertions: 2, deletions: 1 },
         files: [{ path: "src/file.ts", additions: 2, deletions: 1 }],
       })),
+      createRepositoryCommitTag: vi.fn(async () => ({ repoId: "repo_fixture", name: "v1.0.0", fullName: "refs/tags/v1.0.0", oid })),
     } as unknown as GitCrestApiClient;
     const onOpenFile = vi.fn();
     render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} onOpenFile={onOpenFile} />);
@@ -72,5 +73,11 @@ describe("CommitGraph", () => {
     expect((await screen.findByRole("status")).textContent).toContain("Clipboard access is unavailable");
     fireEvent.click(screen.getByRole("button", { name: "Open commit diff for src/file.ts" }));
     expect(onOpenFile).toHaveBeenCalledWith("src/file.ts", oid);
+    fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Tag name" }), { target: { value: "v1.0.0" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Tag annotation" }), { target: { value: "Release context" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create annotated tag" }));
+    expect(await screen.findByText(/Annotated tag v1.0.0 created/)).toBeDefined();
+    expect(api.createRepositoryCommitTag).toHaveBeenCalledWith("repo_fixture", oid, "v1.0.0", "Release context");
   });
 });

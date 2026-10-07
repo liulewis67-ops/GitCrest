@@ -296,6 +296,12 @@ button:disabled { cursor: not-allowed; }
 .commitDetailFile small { flex: 0 0 auto; color: var(--text-muted); font: 8px var(--font-mono); }
 .commitCopyButton { align-self: flex-start; min-height: 20px; padding: 0; font-size: 9px; }
 .commitCopyStatus { margin: 0; color: var(--text-muted); font-size: 9px; line-height: 1.4; }
+.commitTagForm { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-raised); }
+.commitTagForm label { display: flex; flex-direction: column; gap: 4px; color: var(--text-muted); font-size: 8px; font-weight: 650; }
+.commitTagForm input, .commitTagForm textarea { width: 100%; min-width: 0; padding: 5px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text-secondary); font: 9px var(--font-sans); }
+.commitTagForm textarea { min-height: 48px; resize: vertical; }
+.commitTagForm .secondaryButton { align-self: flex-start; min-height: 24px; padding: 0 8px; font-size: 9px; }
+.commitTagError { margin: 0; color: var(--danger); font-size: 9px; line-height: 1.4; }
 .historyWorkspace { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .historyFilters { display: grid; grid-template-columns: repeat(4, minmax(110px, 1fr)); gap: 7px 9px; padding: 9px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .historyFilters label { display: flex; min-width: 0; flex-direction: column; gap: 4px; color: var(--text-muted); font-size: 8px; font-weight: 650; letter-spacing: .04em; }

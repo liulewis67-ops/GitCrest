@@ -277,6 +277,12 @@ export function CommitDetails({
 }) {
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
   const [copyMessage, setCopyMessage] = useState("");
+  const [tagEditorOpen, setTagEditorOpen] = useState(false);
+  const [tagName, setTagName] = useState("");
+  const [tagMessage, setTagMessage] = useState("");
+  const [tagBusy, setTagBusy] = useState(false);
+  const [tagStatus, setTagStatus] = useState("");
+  const [tagError, setTagError] = useState("");
   useEffect(() => {
     let active = true;
     if (!oid) {
@@ -293,6 +299,15 @@ export function CommitDetails({
     return () => { active = false; };
   }, [api, oid, repoId]);
 
+  useEffect(() => {
+    setTagEditorOpen(false);
+    setTagName("");
+    setTagMessage("");
+    setTagStatus("");
+    setTagError("");
+    setCopyMessage("");
+  }, [oid]);
+
   if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div>;
   if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">Loading commit details…</div>;
   if (state.error) return <div className="commitDetailsState" role="alert"><p>{state.error}</p></div>;
@@ -308,10 +323,35 @@ export function CommitDetails({
       setCopyMessage("Clipboard access is unavailable. Select the commit ID to copy it.");
     }
   }
+  async function createAnnotatedTag(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setTagBusy(true);
+    setTagError("");
+    setTagStatus("");
+    try {
+      const tag = await api.createRepositoryCommitTag(repoId, commitOid, tagName.trim(), tagMessage);
+      setTagEditorOpen(false);
+      setTagName("");
+      setTagMessage("");
+      setTagStatus(`Annotated tag ${tag.name} created at ${commitOid.slice(0, 12)}.`);
+    } catch (reason) {
+      setTagError(reason instanceof Error ? reason.message : "Could not create this tag.");
+    } finally {
+      setTagBusy(false);
+    }
+  }
   return <div className="commitDetails">
     <div className="repositoryFact"><span>COMMIT</span><strong className="monoText" title={detail.oid}>{detail.oid.slice(0, 12)}</strong></div>
     <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>Copy SHA</button>
     {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
+    <button className="textButton commitCopyButton" type="button" onClick={() => { setTagError(""); setTagEditorOpen((current) => !current); }}>{tagEditorOpen ? "Cancel tag" : "Create tag"}</button>
+    {tagEditorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
+      <label>Tag name<input aria-label="Tag name" value={tagName} maxLength={255} required onChange={(event) => setTagName(event.target.value)} placeholder="v1.0.0" /></label>
+      <label>Annotation message<textarea aria-label="Tag annotation" value={tagMessage} maxLength={8192} onChange={(event) => setTagMessage(event.target.value)} placeholder="Describe this release" /></label>
+      {tagError && <p className="commitTagError" role="alert">{tagError}</p>}
+      <button className="secondaryButton" type="submit" disabled={tagBusy || !tagName.trim()}>{tagBusy ? "Creating tag…" : "Create annotated tag"}</button>
+    </form>}
+    {tagStatus && <p className="commitCopyStatus" role="status">{tagStatus}</p>}
     <div className="repositoryFact"><span>AUTHOR</span><strong>{detail.authorName}</strong></div>
     <div className="repositoryFact"><span>DATE</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
     <div className="commitDetailMessage">{detail.message}</div>

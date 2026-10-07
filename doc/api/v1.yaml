@@ -864,6 +864,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/commits/{oid}/tags:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: oid
+        in: path
+        required: true
+        schema: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" }
+    post:
+      operationId: createRepositoryCommitTag
+      summary: Create a new annotated tag for a commit
+      description: Existing tag refs are never replaced. The tag name must pass Git ref validation.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTagRequest"
+      responses:
+        "201":
+          description: Annotated tag created for the selected commit.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatedTag"
+        "400":
+          description: Tag name, commit ID, or annotation is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository or commit is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: A tag with the same name already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git could not be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "504":
+          description: Git tag creation exceeded its deadline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/refs:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1292,6 +1360,22 @@ components:
         path: { type: string }
         additions: { type: [integer, "null"], format: int64, minimum: 0, description: Null for binary content. }
         deletions: { type: [integer, "null"], format: int64, minimum: 0, description: Null for binary content. }
+    CreateTagRequest:
+      type: object
+      additionalProperties: false
+      required: [name, message]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        message: { type: string, maxLength: 8192, description: Optional annotation body; an empty message is permitted. }
+    CreatedTag:
+      type: object
+      additionalProperties: false
+      required: [repoId, name, fullName, oid]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        name: { type: string }
+        fullName: { type: string }
+        oid: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" }
     RefSnapshot:
       type: object
       additionalProperties: false
@@ -1499,6 +1583,7 @@ components:
         - HISTORY_COMMIT_NOT_FOUND
         - HISTORY_UNAVAILABLE
         - HISTORY_TOO_LARGE
+        - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:
       type: object
