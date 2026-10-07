@@ -83,8 +83,8 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S3.1 | LogService 分页读取、refs 和提交详情 API。 | merge commit 父子关系、作者/时间/message/文件统计与 Git 一致；按页读取，不在首屏遍历全量历史或所有 tags；新提交/切分支后 refs 和详情更新；空历史有明确空状态。 | 已完成 |
-| S3.2 | Canvas 提交图、虚拟滚动、可访问列表替代结构。 | 分支/merge 连线与提交关系一致；长历史滚动不创建等量 DOM 节点；选中提交显示右侧详情；键盘和屏幕阅读器可通过列表访问提交；100k 提交性能留到 S7.2 正式验收。 | 进行中 |
-| S3.3 | 历史搜索、筛选、提交详情动作。 | SHA、作者、日期、message、分支/路径筛选返回正确结果；无结果可清除过滤；复制 SHA、打开文件 Diff、tag 等动作有上下文；危险历史动作只在安全阶段实现并受预检，不提前暴露不可用按钮。 | 未开始 |
+| S3.2 | Canvas 提交图、虚拟滚动、可访问列表替代结构。 | 分支/merge 连线与提交关系一致；长历史滚动不创建等量 DOM 节点；选中提交显示右侧详情；键盘和屏幕阅读器可通过列表访问提交；100k 提交性能留到 S7.2 正式验收。 | 已完成 |
+| S3.3 | 历史搜索、筛选、提交详情动作。 | SHA、作者、日期、message、分支/路径筛选返回正确结果；无结果可清除过滤；复制 SHA、打开文件 Diff、tag 等动作有上下文；危险历史动作只在安全阶段实现并受预检，不提前暴露不可用按钮。 | 进行中 |
 | S3.4 | 高级 Diff：Monaco、词/token 高亮、语法解析、变更块导航与折叠。 | `F7`/`Shift+F7` 跳转；新增/删除/修改和上下文可辨；tree-sitter 不支持的语言降级为文本 diff；二进制和超大文件有降级提示；结构化结果与 Git 原始 diff 一致；1k 行性能留到 S7.2。 | 未开始 |
 | S3.5 | 独立只读 Diff 窗口、Split/Unified、Blame 和多文件 Tab。 | 从 Changes 与提交详情打开；主区仍仅 Split，独立窗口可切换两种视图；独立窗口对提交/删除/push 等写请求被后端拒绝；Blame 行号/SHA 与 Git 一致；关闭窗口不丢主窗口上下文。 | 未开始 |
 
@@ -290,3 +290,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/history.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。
 - 完成 commit：`742adc9`
 - 限制/后续：首屏最多读取 100 条，默认 50；分页通过 offset 继续，offset 上限 1,000,000，后续页可能需要 Git 跳过前序记录，其大历史性能在 S7.2 验收。ref 快照只包含本地/远程分支，不扫描 tags；提交文件统计按首父比较，merge 父关系完整保留。成功提交后读取当前仓库 history/refs 可获得最新值；S3.2 接入图视图的精确失效与刷新。
+
+### S3.2 — 虚拟化提交图与提交详情
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：pnpm check 通过，包含 TypeScript/Electron 构建、25 个 Vitest 用例、Rust 格式检查/构建/46 个测试及 Electron E2E。提交图组件验证初始页、refs 标签、键盘选择、接近底部加载下一页，并验证 50 条已加载提交只创建视口加 overscan 的 26 个列表项。
+- 手工验证：未单独操作桌面窗口；组件行为由 jsdom 组件测试覆盖，真实 Git 历史、refs、merge parent 与文件统计由 S3.1 API 集成测试覆盖。
+- 证据：src/features/history/CommitGraph.tsx、src/App.tsx、src/App.css、tests/unit/commit-graph.test.tsx、crates/gitcrest-core/src/history.rs。
+- 完成 commit：3d1d931
+- 限制/后续：当前固定行高虚拟列表加载到用户浏览范围，节点 DOM 数量保持在可视行和 overscan 范围；100k 提交端到端性能仍按 S7.2 验收。refs 可用时显示本地/远程分支标签，refs 请求失败时历史仍可浏览。历史筛选和提交动作在 S3.3 实施。
