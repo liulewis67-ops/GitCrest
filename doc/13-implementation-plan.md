@@ -41,7 +41,7 @@
 | 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 已完成 |
 | 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 已完成 |
 | 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 已完成 |
-| 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 未开始 |
+| 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 进行中 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 未开始 |
 | 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 未开始 |
 | 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–6 | 未开始 |
@@ -325,3 +325,9 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验收：`pnpm api:types`、`pnpm check` 与 `cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 通过；全量门禁包含 42 个 Vitest 用例、50 个 Rust 测试和 1 个 Electron E2E。E2E 从工作区打开两个修改文件，切换 tabs、查看未提交行 blame、关闭单个 tab 和整个窗口，并确认主窗口选择仍在；HTTP 集成测试以只读 token 读取 HEAD 与历史 blame，坏路径/revision 被拒绝。
 - 证据：`crates/gitcrest-core/src/history.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/DiffWindow.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/e2e/desktop.test.ts`。完成 commits：S3.5 A `21e9d48`，B.1 `27b734f`，B.2 `fafe0a6`。
 - 限制/后续：最多展示 100 个文件 tabs，超出时显示范围提示。Blame 对 working tree 调用 Git 当前工作树 blame，对历史 Diff 则按选中 commit 查询；binary 和没有已提交历史的新建/删除文件禁用 blame。主窗口继续只提供 Split，Monaco/Tree-sitter 的资源安全与性能分别在 S7.3/S7.2 验收。
+
+### S4.1 — BranchService（进行中）
+- 子阶段 A：本地/远程分支清单、upstream 和 ahead/behind 读取，已完成。新增只读 `/branches` API；Git refs 输出限 8 MiB、单次读取 20 秒。带 upstream 的分支返回 ahead/behind（无差异返回 0），已删除 upstream 以 `upstreamGone` 表示；detached HEAD 与当前分支单独标识。
+- 验收：`pnpm api:types`、`pnpm check` 与 Rust clippy 通过；全量门禁包含 43 个 Vitest 用例、52 个 Rust 测试和 1 个 Electron E2E。临时本地 bare remote 测试覆盖 local/remote refs、upstream、1 ahead/0 behind；API 集成使用只读 token 确认 current branch。证据：`crates/gitcrest-core/src/branches.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`tests/unit/api-client.test.ts`。完成 commit SHA 待补记。
+- 子阶段 B：创建/重命名/删除分支及未合并提交预览，未开始。
+- 子阶段 C：分支收藏持久化和导航区 UI，未开始。

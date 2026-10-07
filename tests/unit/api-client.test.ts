@@ -114,6 +114,22 @@ describe("GitCrestApiClient", () => {
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
   });
 
+  it("reads local and remote branch tracking state through the versioned API", async () => {
+    const response = {
+      repoId: "repo_fixture", current: "feature/one", detached: false,
+      branches: [{ name: "feature/one", fullName: "refs/heads/feature/one", oid: "a".repeat(40), kind: "local", isCurrent: true, upstream: "origin/feature/one", upstreamGone: false, ahead: 2, behind: 1 }],
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryBranches("repo_fixture")).resolves.toEqual(response);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/branches`);
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("Authorization")).toBe(`Bearer ${token}`);
+  });
+
   it("reads paginated commits, commit detail, and refs through versioned repository routes", async () => {
     const page = { repoId: "repo_fixture", offset: 50, limit: 50, commits: [], nextOffset: 100 };
     const detail = { repoId: "repo_fixture", oid: "a".repeat(40), parents: [], authorName: "Author", authorEmail: "author@example.invalid", committedAtMs: 1, message: "first", stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [] };

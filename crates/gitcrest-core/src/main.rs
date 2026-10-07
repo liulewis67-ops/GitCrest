@@ -29,6 +29,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+mod branches;
 mod cloning;
 mod commits;
 mod diff;
@@ -108,6 +109,8 @@ enum ApiErrorCode {
     HistoryCommitNotFound,
     HistoryUnavailable,
     HistoryTooLarge,
+    BranchesUnavailable,
+    BranchesTooLarge,
     TagAlreadyExists,
     InternalError,
 }
@@ -436,6 +439,31 @@ impl ApiError {
         }
     }
 
+    fn from_branch_error(error: branches::BranchError) -> Self {
+        match error {
+            branches::BranchError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+            branches::BranchError::TimedOut => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                ApiErrorCode::BranchesUnavailable,
+                "Git did not read branch data within 20 seconds.",
+            ),
+            branches::BranchError::TooLarge => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::BranchesTooLarge,
+                "Branch data exceeds the 8 MiB response limit.",
+            ),
+            branches::BranchError::GitFailed => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::BranchesUnavailable,
+                "Git could not read the repository branches.",
+            ),
+        }
+    }
+
     fn from_tag_error(error: tags::TagError) -> Self {
         match error {
             tags::TagError::Invalid => Self::new(
@@ -588,6 +616,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route("/v1/repositories/:repo_id/status", get(repository_status))
         .route("/v1/repositories/:repo_id/diff", get(repository_diff))
         .route("/v1/repositories/:repo_id/blame", get(repository_blame))
+        .route(
+            "/v1/repositories/:repo_id/branches",
+            get(repository_branches),
+        )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
             "/v1/repositories/:repo_id/staging/patch",
@@ -1272,6 +1304,31 @@ async fn repository_refs(
     .await
     .map(Json)
     .map_err(ApiError::from_history_error)
+}
+
+async fn repository_branches(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<branches::BranchSnapshot>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    branches::read_branches(
+        repo_id,
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_branch_error)
 }
 
 enum CommitPatchError {
@@ -2752,6 +2809,24 @@ mod tests {
                 .as_str()
                 .unwrap()
                 .starts_with("refs/tags/")));
+
+        let branches = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(branches.status(), StatusCode::OK);
+        let body = to_bytes(branches.into_body(), usize::MAX).await.unwrap();
+        let branches: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(branches["current"], current_branch);
+        assert!(branches["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|branch| branch["isCurrent"] == true && branch["name"] == current_branch));
 
         let invalid_page = app
             .clone()

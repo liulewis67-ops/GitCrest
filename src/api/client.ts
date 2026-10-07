@@ -14,6 +14,7 @@ export type CommitRequest = components["schemas"]["CommitRequest"];
 export type CommitPageResponse = components["schemas"]["CommitPage"];
 export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
+export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
 export type CommitHistoryFilters = Pick<
   NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
@@ -126,6 +127,10 @@ export class GitCrestApiClient {
 
   getRepositoryRefs(repoId: RepoId): Promise<RefSnapshotResponse> {
     return this.request<RefSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/refs`);
+  }
+
+  getRepositoryBranches(repoId: RepoId): Promise<BranchSnapshotResponse> {
+    return this.request<BranchSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`);
   }
 
   stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {
