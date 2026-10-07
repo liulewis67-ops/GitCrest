@@ -75,8 +75,8 @@
 | S2.1 | 结构化基础 Diff API 与主区 Split Diff。 | 可展示 working tree↔index、index↔HEAD 的文本 diff，新增/删除/改名/二进制有明确状态；点 Changes 文件进入主区 Split 模式且右侧提交详情收起；Graph/Diff 往返保留选择；只读历史 Diff 不出现暂存操作。 | 已完成 |
 | S2.2 | 文件级暂存、取消暂存及全部操作。 | modified、added、deleted、untracked 文件均可正确暂存/取消；操作后 status 和 Diff 同步刷新；失败时 index 与 UI 一致；已暂存内容与工作区剩余修改不会互相覆盖。 | 已完成 |
 | S2.3 | hunk/行级精确暂存与取消暂存。 | 同文件多 hunk、相邻编辑、行尾差异和工作区继续变化时只修改所选范围；过期 patch 拒绝并提示刷新；原有已暂存但未选内容原样保留；测试比对 `git diff`、`git diff --cached`。 | 已完成 |
-| S2.4 | CommitService、提交表单、模板/正文、提交前校验和基础快捷键。 | 空消息/无暂存禁用提交；`Cmd/Ctrl+Enter` 提交所选内容，Git hook 失败展示输出并保留工作区；敏感文件给出提醒；成功后 HEAD、status、log 刷新；未选 staged 内容不被误提交；AI 不可用也能手写提交。 | 进行中 |
-| S2.5 | 提交前选中范围隔离、amend/sign-off/签名选项及恢复策略。 | 选择部分已暂存内容提交时，不相关 index 内容在成功、hook 失败、取消后均保留；amend 显示将改写的 commit；签名失败不产生错误提交；提供临时仓库自动测试覆盖恢复路径。 | 未开始 |
+| S2.4 | CommitService、提交表单、模板/正文、提交前校验和基础快捷键。 | 空消息/无暂存禁用提交；`Cmd/Ctrl+Enter` 提交所选内容，Git hook 失败展示输出并保留工作区；敏感文件给出提醒；成功后 HEAD、status 刷新；未选 staged 内容不被误提交；AI 不可用也能手写提交。 | 已完成 |
+| S2.5 | 提交前选中范围隔离、amend/sign-off/签名选项及恢复策略。 | 选择部分已暂存内容提交时，不相关 index 内容在成功、hook 失败、取消后均保留；amend 显示将改写的 commit；签名失败不产生错误提交；提供临时仓库自动测试覆盖恢复路径。 | 进行中 |
 
 ## 7. 大阶段 3：历史、提交图与高级 Diff
 
@@ -263,3 +263,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/diff.rs`、`crates/gitcrest-core/src/staging.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/SplitDiff.tsx`、`src/App.tsx`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
 - 完成 commit：`09243d2`
 - 限制/后续：hunk/行选择使用本次 Diff 的 SHA-256 revision；若文件状态在 UI 显示后变化，提交前和获得仓库写锁后都会重新核验 revision。二进制、冲突、忽略文件和无文本 hunk 不提供部分暂存；复杂选择 patch 经 Git cached apply 执行，错误通过任务状态反馈。
+
+### S2.4 — 提交服务与提交表单
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：`pnpm check` 通过，包含 renderer/Electron 类型检查和生产构建、23 个 Vitest 用例、Rust 格式检查/构建/44 个测试及 Electron E2E。Rust 临时仓库经 API 验证 unborn HEAD 提交成功后刷新 HEAD/status、空暂存区收到 409；失败的 pre-commit hook 保持 index 内容并在任务日志中展示 hook 输出；提交消息通过 Git stdin 传递且提交正文和 subject 不进入任务日志。前端覆盖无消息时禁用、模板填充、敏感文件提醒、提交请求 payload 与任务面板入口。
+- 手工验证：未单独手工点击桌面界面；提交表单和任务中心交互由 Vitest 覆盖，Git commit 成功/失败由真实临时仓库 API 集成测试覆盖。
+- 证据：`crates/gitcrest-core/src/commits.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
+- 完成 commit：`a36b1ae`
+- 限制/后续：提交表单提供 plain、Conventional Commit 与 fix 起始模板；Git 提交历史/log 读取和成功后 log 刷新随 S3.1 接入。提交当前只包含整个 index；选择范围隔离、amend 与签名选项属于 S2.5。
