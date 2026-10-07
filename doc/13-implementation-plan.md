@@ -76,13 +76,13 @@
 | S2.2 | 文件级暂存、取消暂存及全部操作。 | modified、added、deleted、untracked 文件均可正确暂存/取消；操作后 status 和 Diff 同步刷新；失败时 index 与 UI 一致；已暂存内容与工作区剩余修改不会互相覆盖。 | 已完成 |
 | S2.3 | hunk/行级精确暂存与取消暂存。 | 同文件多 hunk、相邻编辑、行尾差异和工作区继续变化时只修改所选范围；过期 patch 拒绝并提示刷新；原有已暂存但未选内容原样保留；测试比对 `git diff`、`git diff --cached`。 | 已完成 |
 | S2.4 | CommitService、提交表单、模板/正文、提交前校验和基础快捷键。 | 空消息/无暂存禁用提交；`Cmd/Ctrl+Enter` 提交所选内容，Git hook 失败展示输出并保留工作区；敏感文件给出提醒；成功后 HEAD、status 刷新；未选 staged 内容不被误提交；AI 不可用也能手写提交。 | 已完成 |
-| S2.5 | 提交前选中范围隔离、amend/sign-off/签名选项及恢复策略。 | 选择部分已暂存内容提交时，不相关 index 内容在成功、hook 失败、取消后均保留；amend 显示将改写的 commit；签名失败不产生错误提交；提供临时仓库自动测试覆盖恢复路径。 | 进行中 |
+| S2.5 | 提交前选中范围隔离、amend/sign-off/签名选项及恢复策略。 | 选择部分已暂存内容提交时，不相关 index 内容在成功、hook 失败、取消后均保留；amend 显示将改写的 commit；签名失败不产生错误提交；提供临时仓库自动测试覆盖恢复路径。 | 已完成 |
 
 ## 7. 大阶段 3：历史、提交图与高级 Diff
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S3.1 | LogService 分页读取、refs 和提交详情 API。 | merge commit 父子关系、作者/时间/message/文件统计与 Git 一致；按页读取，不在首屏遍历全量历史或所有 tags；新提交/切分支后 refs 和详情更新；空历史有明确空状态。 | 未开始 |
+| S3.1 | LogService 分页读取、refs 和提交详情 API。 | merge commit 父子关系、作者/时间/message/文件统计与 Git 一致；按页读取，不在首屏遍历全量历史或所有 tags；新提交/切分支后 refs 和详情更新；空历史有明确空状态。 | 进行中 |
 | S3.2 | Canvas 提交图、虚拟滚动、可访问列表替代结构。 | 分支/merge 连线与提交关系一致；长历史滚动不创建等量 DOM 节点；选中提交显示右侧详情；键盘和屏幕阅读器可通过列表访问提交；100k 提交性能留到 S7.2 正式验收。 | 未开始 |
 | S3.3 | 历史搜索、筛选、提交详情动作。 | SHA、作者、日期、message、分支/路径筛选返回正确结果；无结果可清除过滤；复制 SHA、打开文件 Diff、tag 等动作有上下文；危险历史动作只在安全阶段实现并受预检，不提前暴露不可用按钮。 | 未开始 |
 | S3.4 | 高级 Diff：Monaco、词/token 高亮、语法解析、变更块导航与折叠。 | `F7`/`Shift+F7` 跳转；新增/删除/修改和上下文可辨；tree-sitter 不支持的语言降级为文本 diff；二进制和超大文件有降级提示；结构化结果与 Git 原始 diff 一致；1k 行性能留到 S7.2。 | 未开始 |
@@ -272,3 +272,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/commits.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
 - 完成 commit：`a36b1ae`
 - 限制/后续：提交表单提供 plain、Conventional Commit 与 fix 起始模板；Git 提交历史/log 读取和成功后 log 刷新随 S3.1 接入。提交当前只包含整个 index；选择范围隔离、amend 与签名选项属于 S2.5。
+
+### S2.5 — 选中范围提交、提交选项与恢复策略
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：`pnpm check` 通过，包含 renderer/Electron 类型检查和构建、23 个 Vitest 用例、Rust 格式检查/构建/44 个测试及 Electron E2E。Rust 临时仓库通过 revision 绑定的 index hunk/行选择，在 unborn HEAD 上只提交选中行并保留另一行 staged；再提交剩余行后树内容与预期一致。失败 hook 和故意配置的无效签名程序均未改变主 index，取消运行中的 hook 后 HEAD/index 不变且临时 index 目录清理；另覆盖 amend + sign-off trailer 和无 staged changes 的 409。前端覆盖 staged diff 加入提交范围、其他暂存内容保留提示、amend 风险说明与选项 payload。
+- 手工验证：未单独手工操作桌面界面；hook/签名失败、取消和部分提交均由临时 Git 仓库 API 集成测试覆盖。
+- 证据：`crates/gitcrest-core/src/commits.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/SplitDiff.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
+- 完成 commit：`3a95527`
+- 限制/后续：选中范围按 staged Diff revision 绑定，Git 使用独立临时 index 运行 hook/commit，真实 index 不需要回滚；文本 hunk/行支持部分提交。成功签名依赖用户在 Git 配置的 OpenPGP/SSH 密钥，本阶段只验证了签名失败不会创建提交。提交历史及成功后的 log 刷新在 S3.1 接入。
