@@ -29,6 +29,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 mod repository;
+mod status;
 mod storage;
 
 use repository::{Repository, RepositoryError, RepositoryManager};
@@ -75,6 +76,7 @@ enum ApiErrorCode {
     RepositoryInitializationFailed,
     DatabaseUnavailable,
     GitUnavailable,
+    RepositoryStatusFailed,
     RepositoryStateConflict,
     ResourceVersionStale,
     RequestInvalid,
@@ -189,6 +191,12 @@ impl ApiError {
                 ApiErrorCode::DatabaseUnavailable,
                 "Repository history could not be saved. Check the application data folder.",
             ),
+            RepositoryError::RepositoryNotFound => Self::repository_not_found(),
+            RepositoryError::StatusFailed => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::RepositoryStatusFailed,
+                "Git could not read this repository's working tree status.",
+            ),
         }
     }
 
@@ -299,6 +307,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/favorite",
             put(set_repository_favorite),
         )
+        .route("/v1/repositories/:repo_id/status", get(repository_status))
         .route("/v1/events", get(events))
         .fallback(api_not_found);
 
@@ -487,6 +496,18 @@ async fn forget_repository(
     } else {
         Err(ApiError::repository_not_found())
     }
+}
+
+async fn repository_status(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<status::StatusSnapshot>, ApiError> {
+    state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_repository_error)
 }
 
 async fn api_not_found() -> ApiError {
@@ -806,6 +827,80 @@ mod tests {
         let (status, code) = error_code(response).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(code, "REPOSITORY_PATH_NOT_FOUND");
+    }
+
+    #[tokio::test]
+    async fn status_api_refreshes_a_repository_by_opaque_id() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("status-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "GitCrest Test"]);
+        git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+        std::fs::write(root.join("tracked.txt"), "initial\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "-m", "initial"]);
+        std::fs::write(root.join("tracked.txt"), "modified\n").unwrap();
+        std::fs::write(root.join("new file.txt"), "untracked\n").unwrap();
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/repositories")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::json!({ "path": root }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+
+        let response = app
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/status"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["X-GitCrest-API-Version"], "1");
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let snapshot: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(snapshot["repoId"], repo_id);
+        assert_eq!(snapshot["files"].as_array().unwrap().len(), 2);
+        assert!(snapshot["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file["path"] == "tracked.txt"
+                && file["categories"] == serde_json::json!(["unstaged"])));
+        assert!(snapshot["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| file["path"] == "new file.txt"
+                && file["categories"] == serde_json::json!(["untracked"])));
     }
 
     #[tokio::test]

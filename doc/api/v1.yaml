@@ -202,6 +202,49 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "406":
           $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/repositories/{repoId}/status:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: getRepositoryStatus
+      summary: Refresh and read the complete working tree status snapshot
+      responses:
+        "200":
+          description: Current staged, unstaged, untracked, ignored, and conflicted file status.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          description: The repository is not registered or its path is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "500":
+          description: Git could not read repository status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The Git executable could not be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -410,6 +453,48 @@ components:
         availability:
           type: string
           enum: [available, missing]
+    StatusSnapshot:
+      type: object
+      additionalProperties: false
+      required: [repoId, refreshedAtMs, files]
+      properties:
+        repoId:
+          $ref: "#/components/schemas/RepoId"
+        refreshedAtMs:
+          type: integer
+          format: int64
+          minimum: 0
+        files:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusFile"
+    StatusFile:
+      type: object
+      additionalProperties: false
+      required: [path, indexStatus, worktreeStatus, kind, categories, modeChanged]
+      properties:
+        path:
+          type: string
+        originalPath:
+          type: string
+        indexStatus:
+          type: string
+          minLength: 1
+          maxLength: 1
+        worktreeStatus:
+          type: string
+          minLength: 1
+          maxLength: 1
+        kind:
+          type: string
+          enum: [modified, added, deleted, renamed, copied, typeChanged, untracked, ignored, conflicted]
+        categories:
+          type: array
+          items:
+            type: string
+            enum: [staged, unstaged, untracked, ignored, conflicted]
+        modeChanged:
+          type: boolean
     OpenRepositoryRequest:
       type: object
       additionalProperties: false
@@ -467,6 +552,7 @@ components:
         - REPOSITORY_ALREADY_INITIALIZED
         - REPOSITORY_INITIALIZATION_FAILED
         - DATABASE_UNAVAILABLE
+        - REPOSITORY_STATUS_FAILED
         - GIT_UNAVAILABLE
         - REPOSITORY_STATE_CONFLICT
         - RESOURCE_VERSION_STALE

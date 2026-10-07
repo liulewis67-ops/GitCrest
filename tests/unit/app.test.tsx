@@ -102,6 +102,9 @@ describe("App", () => {
       branch: "main",
       detached: false,
       state: "normal",
+      isFavorite: false,
+      lastAccessedAt: 10,
+      availability: "available",
     };
     const chooseRepository = vi.fn().mockResolvedValue("C:/fixture");
     Object.defineProperty(window, "gitcrest", {
@@ -119,7 +122,16 @@ describe("App", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
       .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, refreshedAtMs: 1, files: [
+        { path: "README.md", indexStatus: "M", worktreeStatus: "M", kind: "modified", categories: ["staged", "unstaged"], modeChanged: false },
+        { path: "src/new-name.ts", originalPath: "src/old-name.ts", indexStatus: "R", worktreeStatus: ".", kind: "renamed", categories: ["staged"], modeChanged: false },
+        { path: "scripts/tool.sh", indexStatus: ".", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: true },
+        { path: "new file.txt", indexStatus: "?", worktreeStatus: "?", kind: "untracked", categories: ["untracked"], modeChanged: false },
+        { path: "conflict.txt", indexStatus: "U", worktreeStatus: "U", kind: "conflicted", categories: ["conflicted"], modeChanged: false },
+        { path: "ignored.log", indexStatus: "!", worktreeStatus: "!", kind: "ignored", categories: ["ignored"], modeChanged: false },
+      ] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }), { status: 500, headers: { "X-GitCrest-API-Version": "1" } }));
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -128,9 +140,20 @@ describe("App", () => {
 
     expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
-    expect(fetcher).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/fixture" });
+    expect(String(fetcher.mock.calls[3][0])).toContain("/api/v1/repositories/repo_fixture/status");
     expect(screen.getByText("main", { selector: ".navEmpty" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Staged changes" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Unstaged changes" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Untracked changes" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Conflicted changes" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Ignored changes" })).toBeDefined();
+    expect(screen.getByText("scripts/tool.sh")).toBeDefined();
+    expect(screen.getByText("mode", { exact: true })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh working tree status" }));
+    expect(await screen.findByText("Refresh failed. Showing the last snapshot.")).toBeDefined();
+    expect(screen.getByText("new file.txt")).toBeDefined();
   });
 
   it("shows persisted repositories in Welcome and lets the user favorite or forget them", async () => {
@@ -180,7 +203,8 @@ describe("App", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
       .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, refreshedAtMs: 1, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -217,9 +241,13 @@ describe("App", () => {
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
       .mockResolvedValueOnce(new Response(JSON.stringify(repositories), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_alpha", refreshedAtMs: 1, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify(repositories[1]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_beta", refreshedAtMs: 2, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repositories), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+      .mockResolvedValueOnce(new Response(JSON.stringify(repositories), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_beta", refreshedAtMs: 3, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_alpha", refreshedAtMs: 4, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
     vi.stubGlobal("fetch", fetcher);
 
     const firstRun = render(<App />);
@@ -259,7 +287,7 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
     expect(screen.getByText("C:/alpha")).toBeDefined();
     expect(screen.getByText("C:/beta")).toBeDefined();
-    expect(fetcher).toHaveBeenCalledTimes(5);
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(9));
   });
 
   it("cycles themes and exposes keyboard-adjustable panel separators", async () => {

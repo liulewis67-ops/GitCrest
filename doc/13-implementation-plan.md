@@ -64,7 +64,7 @@
 | S1.1 | RepositoryManager/Reader/Model 和本地仓库打开 API，含稳定 repoId。 | 普通仓库、空仓库、`.git` 文件型 worktree 可打开并显示路径、HEAD、当前分支/游离状态；路径不存在、非仓库、权限不足返回不同可读错误；业务 API 只接收 repoId，不接受任意文件路径执行 Git 操作。 | 已完成 |
 | S1.2 | SQLite 保存最近仓库、收藏、最后访问时间；欢迎页接入打开与初始化入口。 | 重启后列表、收藏仍在；最近仓库两步内打开；仓库迁移/删除后出现可恢复的失效提示；初始化仅对用户选定目录生效，不覆盖已有仓库。 | 已完成 |
 | S1.3 | 多仓库 Tab 与每仓 UI 状态持久化。 | 两个仓库之间切换不串用状态；各 Tab 的模式、选中提交、提交图滚动位置恢复；关闭 Tab 不关闭实际仓库；重新打开应用恢复符合 `03` 的持久化项。 | 已完成 |
-| S1.4 | 全量 StatusSnapshot、工作区/Changes 列表和显式刷新。 | staged、unstaged、untracked、ignored、conflicted、renamed/deleted、文件 mode 变化正确分组；状态同时有文本/图标；外部 Git 修改后手动刷新与 `git status` 一致；大仓库刷新期间显示加载和错误状态，不显示伪空结果。 | 未开始 |
+| S1.4 | 全量 StatusSnapshot、工作区/Changes 列表和显式刷新。 | staged、unstaged、untracked、ignored、conflicted、renamed/deleted、文件 mode 变化正确分组；状态同时有文本/图标；外部 Git 修改后手动刷新与 `git status` 一致；大仓库刷新期间显示加载和错误状态，不显示伪空结果。 | 进行中 |
 | S1.5 | TaskService 与统一 GitCommandService：仓库级写锁、进度、取消、错误分类、脱敏日志。 | 同仓两个写任务不能并发；不同仓库任务可并行；取消与失败状态可区分；任务完成后按需刷新 repository/status/log；日志不含 token、凭证或 URL 密码；UI 可查看任务进度和可复制的脱敏日志。 | 未开始 |
 | S1.6 | 克隆仓库任务与欢迎页入口。 | HTTPS/SSH 至少用受控测试 remote 跑通；clone 进度、取消、认证/网络失败和重试有明确结果；取消或失败不把不完整目录注册为最近仓库；成功后自动打开且状态可读。 | 未开始 |
 
@@ -209,3 +209,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/App.tsx`、`src/App.css`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。
 - 完成 commit：`4e37a2c`
 - 限制/后续：当前提交图与 Diff 内容尚未由本阶段实现；打开仓库时以 HEAD 作为初始选中提交，每仓保存选中的 SHA 和滚动位置，视图钩子可恢复这些值。选择非 HEAD 提交和真实历史滚动需等待 S2/S3 接入真实历史/Diff 视图。
+
+### S1.4 — 全量 StatusSnapshot 与显式刷新
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：`pnpm check` 通过，包含前端构建/类型检查、13 个 Vitest 用例、Rust 格式检查/构建/22 个测试和 Electron E2E。临时 Git 仓库覆盖 staged 与 unstaged 双重状态、rename 原路径、删除、untracked、ignored、冲突、外部编辑后的重新扫描；porcelain v2 解析单测另覆盖文件 mode 变化。前端用例覆盖分组可见性、mode 标签、显式刷新失败时保留旧快照并提示过期状态。
+- 手工验证：未单独手工操作桌面窗口；API 刷新和状态展示由 Rust 集成测试、API 客户端测试及 Vitest 验证。
+- 证据：`crates/gitcrest-core/src/status.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/App.tsx`、`tests/unit/app.test.tsx`。
+- 完成 commit：待提交后填写
+- 限制/后续：每次显式刷新执行一次完整 `git status` 扫描；Git 文件系统事件驱动的增量刷新与大仓库性能基准属于 S7.1。刷新超时为 30 秒，错误时保留最后一次成功快照并标记过期。

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type RepositoryResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type RepositoryResponse, type StatusSnapshotResponse } from "./api/client";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -44,6 +44,17 @@ function readWorkspaceSession(): WorkspaceSession {
 }
 
 const themeCycle: Theme[] = ["system", "light", "dark"];
+const changeGroups = [
+  { category: "staged", label: "Staged" },
+  { category: "unstaged", label: "Unstaged" },
+  { category: "untracked", label: "Untracked" },
+  { category: "conflicted", label: "Conflicted" },
+  { category: "ignored", label: "Ignored" },
+] as const;
+
+function changeCode(kind: StatusSnapshotResponse["files"][number]["kind"]): string {
+  return ({ modified: "M", added: "A", deleted: "D", renamed: "R", copied: "C", typeChanged: "T", untracked: "?", ignored: "!", conflicted: "U" })[kind];
+}
 
 function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
   try {
@@ -138,6 +149,9 @@ function App() {
   const [version, setVersion] = useState("");
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
+  const [statusSnapshots, setStatusSnapshots] = useState<Record<string, StatusSnapshotResponse>>({});
+  const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
+  const [statusLoadingByRepo, setStatusLoadingByRepo] = useState<Record<string, boolean>>({});
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
   const apiRef = useRef<GitCrestApiClient>();
@@ -167,6 +181,31 @@ function App() {
   const connected = status === "Connected to local Rust core";
   const connecting = status.startsWith("Starting");
   const connectionLabel = connected ? "Core connected" : connecting ? "Starting core" : "Core unavailable";
+  const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
+  const activeStatusError = selectedRepository ? statusErrors[selectedRepository.repoId] : undefined;
+  const activeStatusLoading = selectedRepository ? statusLoadingByRepo[selectedRepository.repoId] === true : false;
+  const statusGroups = changeGroups.map((group) => ({
+    ...group,
+    files: (activeStatus?.files || []).filter((file) => file.categories.includes(group.category)),
+  }));
+  const stagedCount = activeStatus?.files.filter((file) => file.categories.includes("staged")).length || 0;
+  const workingCount = activeStatus?.files.filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length || 0;
+
+  async function refreshRepositoryStatus(repoId: string) {
+    const api = apiRef.current;
+    if (!api) return;
+    setStatusLoadingByRepo((current) => ({ ...current, [repoId]: true }));
+    setStatusErrors((current) => ({ ...current, [repoId]: "" }));
+    try {
+      const snapshot = await api.getRepositoryStatus(repoId);
+      setStatusSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setStatusErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
+    } finally {
+      setStatusLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+    }
+  }
 
   function activateRepository(repository: RepositoryResponse) {
     setOpenError("");
@@ -378,6 +417,12 @@ function App() {
   }, [workspaceSession]);
 
   useEffect(() => {
+    if (selectedRepository?.availability === "available") {
+      void refreshRepositoryStatus(selectedRepository.repoId);
+    }
+  }, [selectedRepository?.repoId]);
+
+  useEffect(() => {
     const viewport = graphViewportRef.current;
     if (viewport && mode === "graph" && selectedRepository) {
       viewport.scrollTop = workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0;
@@ -572,7 +617,26 @@ function App() {
           <div className="workArea">
             <aside className="navigationPanel" aria-label="Repository navigation">
               <div className="panelHeading"><span>REPOSITORY</span><button className="panelMenu" type="button" disabled aria-label="Repository options">···</button></div>
-              <div className="navGroup"><div className="navGroupTitle"><span>Changes</span><span className="countBadge">0</span></div><div className="navEmpty">{selectedRepository ? "Status snapshot arrives in S1.4" : "No repository open"}</div></div>
+              <div className="navGroup changesNavigation">
+                <div className="navGroupTitle"><span>Changes</span><span className="countBadge">{activeStatus ? activeStatus.files.length : "—"}</span></div>
+                {!selectedRepository && <div className="navEmpty">No repository open</div>}
+                {selectedRepository && !activeStatus && activeStatusLoading && <div className="navEmpty" role="status">Loading working tree status…</div>}
+                {selectedRepository && !activeStatus && activeStatusError && <div className="statusLoadError" role="alert"><span>{activeStatusError}</span><button type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId)}>Retry</button></div>}
+                {activeStatus && activeStatus.files.length === 0 && <div className="navEmpty">Working tree clean</div>}
+                {activeStatus && activeStatusError && <div className="statusStaleNotice" role="status">Refresh failed. Showing the last snapshot.</div>}
+                {statusGroups.filter((group) => group.files.length > 0).map((group) => (
+                  <section className="changeGroup" key={group.category} aria-label={`${group.label} changes`}>
+                    <div className="changeGroupTitle"><span>{group.label}</span><span>{group.files.length}</span></div>
+                    {group.files.map((file) => (
+                      <div className="statusFileItem" key={`${group.category}:${file.path}`} title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}>
+                        <span className={`statusFileCode status-${file.kind}`} aria-label={file.kind}>{changeCode(file.kind)}</span>
+                        <span className="statusFilePath">{file.path}</span>
+                        {file.modeChanged && <span className="modeChangedTag" title="File mode changed">mode</span>}
+                      </div>
+                    ))}
+                  </section>
+                ))}
+              </div>
               <div className="navDivider" />
               <div className="navGroup"><div className="navGroupTitle">Branches</div><div className="navEmpty">{selectedRepository ? selectedRepository.branch || (selectedRepository.detached ? "Detached HEAD" : "Unborn branch") : "Open a repository to view branches"}</div></div>
               <div className="navDivider" />
@@ -583,7 +647,7 @@ function App() {
             <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />
 
             <section className="mainPanel" aria-label="Commit graph">
-              <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled title="Open a repository to refresh its history">Refresh <span aria-hidden="true">↻</span></button></div>
+              <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId); }} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
               <div
                 className="graphViewport"
                 ref={graphViewportRef}
@@ -624,8 +688,8 @@ function App() {
 
           <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label="Resize changes and commit area" onResize={setWorkbenchHeight} />
           <section className="workbench" aria-label="Changes and commit">
-            <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">0</span></div><p>{selectedRepository ? "Status snapshot is coming next" : "No changed files"}</p><small>{selectedRepository ? "Full status and file grouping arrive with S1.4." : "Changes will appear here when a repository is open."}</small></div>
-            <div className="workbenchSection stagedSection"><div className="workbenchTitle">Staged changes <span className="countBadge">0</span></div><div className="stagedEmpty">Nothing staged</div><small>Review a file and stage the parts you want to commit.</small></div>
+            <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">{activeStatus ? workingCount : "—"}</span></div><p>{!selectedRepository ? "No changed files" : activeStatusLoading && !activeStatus ? "Reading working tree…" : activeStatusError && !activeStatus ? activeStatusError : workingCount === 0 ? "Working tree clean" : "Unstaged changes"}</p><small>{selectedRepository && activeStatusLoading ? "Refreshing repository status…" : selectedRepository && !activeStatus && !activeStatusError ? "Waiting for the first status snapshot." : "Working tree changes are read from Git."}</small></div>
+            <div className="workbenchSection stagedSection"><div className="workbenchTitle">Staged changes <span className="countBadge">{activeStatus ? stagedCount : "—"}</span></div><div className="stagedEmpty">{!activeStatus ? activeStatusError || "Waiting for repository status…" : stagedCount === 0 ? "Nothing staged" : `${stagedCount} staged file${stagedCount === 1 ? "" : "s"}`}</div><small>Review staged files before the commit workflow becomes available.</small></div>
             <div className="workbenchSection commitSection"><div className="workbenchTitle">Commit message</div><textarea aria-label="Commit message" placeholder="Describe the changes you want to commit…" disabled /><div className="commitControls"><label className="disabledCheck"><input type="checkbox" disabled /> Amend</label><button className="primaryButton commitButton" type="button" disabled title="Open a repository and stage changes to commit">Commit <span aria-hidden="true">⌄</span></button></div><small>Commit becomes available when staged changes and a message are ready.</small></div>
           </section>
           <footer className="statusbar"><span className="statusIcon" aria-hidden="true">●</span>{connected ? "Git engine ready" : connecting ? "Connecting to Git engine" : "Git engine unavailable"}<span className="statusbarDivider" /><span>{version || "API v1"}</span><span className="footerSpacer" /><span>Repository actions planned for S1</span></footer>

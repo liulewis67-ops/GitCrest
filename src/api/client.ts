@@ -4,6 +4,7 @@ export type RepoId = components["schemas"]["RepoId"];
 export type ApiErrorResponse = components["schemas"]["ApiErrorResponse"];
 export type VersionResponse = components["schemas"]["VersionResponse"];
 export type RepositoryResponse = components["schemas"]["Repository"];
+export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
 
 export class GitCrestApiError extends Error {
   constructor(
@@ -67,6 +68,10 @@ export class GitCrestApiClient {
 
   forgetRepository(repoId: RepoId): Promise<void> {
     return this.request<void>(`/api/v1/repositories/${encodeURIComponent(repoId)}`, true, { method: "DELETE" });
+  }
+
+  getRepositoryStatus(repoId: RepoId): Promise<StatusSnapshotResponse> {
+    return this.request<StatusSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/status`);
   }
 
   private async request<T>(path: string, versioned = true, init: RequestInit = {}): Promise<T> {

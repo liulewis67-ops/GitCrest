@@ -8,6 +8,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
+use crate::status::StatusSnapshot;
 use crate::storage::RepositoryStore;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -39,6 +40,8 @@ pub enum RepositoryError {
     InitializationFailed,
     GitUnavailable,
     StorageUnavailable,
+    RepositoryNotFound,
+    StatusFailed,
 }
 
 impl RepositoryManager {
@@ -204,6 +207,25 @@ impl RepositoryManager {
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)
+    }
+
+    pub async fn status_snapshot(&self, repo_id: &str) -> Result<StatusSnapshot, RepositoryError> {
+        let store = self.store.clone();
+        let repo_id = repo_id.to_owned();
+        let repository = task::spawn_blocking(move || store.get(&repo_id))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .ok_or(RepositoryError::RepositoryNotFound)?;
+        let path = PathBuf::from(&repository.path);
+        fs::metadata(&path).await.map_err(map_path_error)?;
+        crate::status::read(repository.repo_id, &path)
+            .await
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
+                std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
+                _ => RepositoryError::StatusFailed,
+            })
     }
 }
 
@@ -498,5 +520,127 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].availability, "missing");
         assert!(listed[0].is_favorite);
+    }
+
+    #[tokio::test]
+    async fn full_status_snapshot_groups_changes_and_refreshes_external_git_edits() {
+        let fixture = GitFixture::new();
+        fixture.commit();
+        fs::write(fixture.root.join("rename source.txt"), "rename me\n").unwrap();
+        fs::write(fixture.root.join("deleted.txt"), "remove me\n").unwrap();
+        git(&fixture.root, &["add", "."]);
+        git(
+            &fixture.root,
+            &["commit", "--quiet", "-m", "add tracked fixtures"],
+        );
+        fs::write(fixture.root.join(".gitignore"), "ignored.log\n").unwrap();
+        git(&fixture.root, &["add", ".gitignore"]);
+        git(
+            &fixture.root,
+            &["commit", "--quiet", "-m", "ignore fixture"],
+        );
+
+        fs::write(fixture.root.join("README.md"), "staged version\n").unwrap();
+        git(&fixture.root, &["add", "README.md"]);
+        fs::write(
+            fixture.root.join("README.md"),
+            "staged version\nunstaged version\n",
+        )
+        .unwrap();
+        git(
+            &fixture.root,
+            &["mv", "rename source.txt", "renamed file.txt"],
+        );
+        fs::remove_file(fixture.root.join("deleted.txt")).unwrap();
+        fs::write(fixture.root.join("untracked file.txt"), "new\n").unwrap();
+        fs::write(fixture.root.join("ignored.log"), "ignored\n").unwrap();
+
+        let manager = RepositoryManager::default();
+        let repository = manager
+            .open_path(fixture.root.to_str().unwrap())
+            .await
+            .unwrap();
+        let snapshot = manager.status_snapshot(&repository.repo_id).await.unwrap();
+        let staged_and_unstaged = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "README.md")
+            .unwrap();
+        assert!(staged_and_unstaged
+            .categories
+            .contains(&crate::status::ChangeCategory::Staged));
+        assert!(staged_and_unstaged
+            .categories
+            .contains(&crate::status::ChangeCategory::Unstaged));
+        assert!(snapshot
+            .files
+            .iter()
+            .any(|file| file.kind == crate::status::ChangeKind::Renamed
+                && file.original_path.as_deref() == Some("rename source.txt")));
+        assert!(snapshot
+            .files
+            .iter()
+            .any(|file| file.kind == crate::status::ChangeKind::Deleted
+                && file.path == "deleted.txt"));
+        assert!(snapshot
+            .files
+            .iter()
+            .any(|file| file.kind == crate::status::ChangeKind::Untracked
+                && file.path == "untracked file.txt"));
+        assert!(snapshot
+            .files
+            .iter()
+            .any(|file| file.kind == crate::status::ChangeKind::Ignored
+                && file.path == "ignored.log"));
+
+        fs::write(fixture.root.join("later.txt"), "external edit\n").unwrap();
+        let refreshed = manager.status_snapshot(&repository.repo_id).await.unwrap();
+        assert!(refreshed.refreshed_at_ms >= snapshot.refreshed_at_ms);
+        assert!(refreshed.files.iter().any(|file| file.path == "later.txt"));
+    }
+
+    #[tokio::test]
+    async fn full_status_snapshot_reports_merge_conflicts() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("conflict-repo");
+        fs::create_dir(&root).unwrap();
+        git(&root, &["init", "--quiet"]);
+        git(&root, &["config", "user.name", "GitCrest Test"]);
+        git(
+            &root,
+            &["config", "user.email", "gitcrest-test@example.invalid"],
+        );
+        fs::write(root.join("conflict.txt"), "base\n").unwrap();
+        git(&root, &["add", "."]);
+        git(&root, &["commit", "--quiet", "-m", "base"]);
+        let base = git(&root, &["rev-parse", "HEAD"]);
+        git(&root, &["checkout", "--quiet", "-b", "ours"]);
+        fs::write(root.join("conflict.txt"), "ours\n").unwrap();
+        git(&root, &["commit", "--quiet", "-am", "ours"]);
+        git(&root, &["checkout", "--quiet", "-b", "theirs", &base]);
+        fs::write(root.join("conflict.txt"), "theirs\n").unwrap();
+        git(&root, &["commit", "--quiet", "-am", "theirs"]);
+        git(&root, &["checkout", "--quiet", "ours"]);
+        let conflict = Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["merge", "theirs"])
+            .output()
+            .unwrap();
+        assert!(!conflict.status.success());
+
+        let manager = RepositoryManager::default();
+        let repository = manager.open_path(root.to_str().unwrap()).await.unwrap();
+        let snapshot = manager.status_snapshot(&repository.repo_id).await.unwrap();
+        let conflicted = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "conflict.txt")
+            .unwrap();
+        assert_eq!(conflicted.kind, crate::status::ChangeKind::Conflicted);
+        assert_eq!(
+            conflicted.categories,
+            [crate::status::ChangeCategory::Conflicted]
+        );
     }
 }

@@ -71,6 +71,19 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[2][1]?.method).toBe("DELETE");
   });
 
+  it("reads a refreshed status snapshot through the repository ID", async () => {
+    const snapshot = { repoId: "repo_fixture", refreshedAtMs: 1, files: [] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(snapshot), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryStatus("repo/fixture")).resolves.toEqual(snapshot);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/status`);
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
+  });
+
   it("preserves structured API errors and rejects missing version confirmation", async () => {
     const errorFetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       error: { code: "REPOSITORY_NOT_FOUND", message: "Repository was not found." },
