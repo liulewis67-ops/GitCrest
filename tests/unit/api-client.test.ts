@@ -126,6 +126,20 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prune: false }));
   });
 
+  it("queues file-level stage operations with a literal selected path payload", async () => {
+    const task = { taskId: "task-stage", repoId: "repo_fixture", operation: "stageFile", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {
+      status: 202,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.stageRepositoryChanges("repo/fixture", { action: "stageFile", path: "folder/file [1].txt" })).resolves.toEqual(task);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/staging`);
+    expect(fetcher.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ action: "stageFile", path: "folder/file [1].txt" }));
+  });
+
   it("preserves structured API errors and rejects missing version confirmation", async () => {
     const errorFetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       error: { code: "REPOSITORY_NOT_FOUND", message: "Repository was not found." },

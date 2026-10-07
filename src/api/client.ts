@@ -7,6 +7,7 @@ export type RepositoryResponse = components["schemas"]["Repository"];
 export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
 export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
+export type StagingRequest = components["schemas"]["StagingRequest"];
 
 export class GitCrestApiError extends Error {
   constructor(
@@ -79,6 +80,14 @@ export class GitCrestApiClient {
   getFileDiff(repoId: RepoId, path: string, scope: "workingTree" | "index"): Promise<DiffDocumentResponse> {
     const query = new URLSearchParams({ path, scope });
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/diff?${query}`);
+  }
+
+  stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/staging`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
   }
 
   listTasks(): Promise<TaskSnapshotResponse[]> {

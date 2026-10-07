@@ -33,6 +33,7 @@ mod cloning;
 mod diff;
 mod git_command;
 mod repository;
+mod staging;
 mod status;
 mod storage;
 mod tasks;
@@ -41,7 +42,7 @@ use cloning::{CloneError, CloneService};
 use diff::{DiffError, DiffScope};
 use git_command::{GitCommandService, GitOperation};
 use repository::{Repository, RepositoryError, RepositoryManager};
-use tasks::{TaskService, TaskSnapshot, TaskSubmitError};
+use tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError};
 
 const API_VERSION: &str = "1";
 static NEXT_EVENT_ID: AtomicU64 = AtomicU64::new(1);
@@ -98,6 +99,7 @@ enum ApiErrorCode {
     RepositoryFileNotFound,
     DiffTooLarge,
     DiffUnavailable,
+    StagingConflict,
     InternalError,
 }
 
@@ -316,6 +318,31 @@ impl ApiError {
         }
     }
 
+    fn from_staging_error(error: staging::StagingError) -> Self {
+        match error {
+            staging::StagingError::InvalidRequest => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "A valid staging action and repository-relative path are required.",
+            ),
+            staging::StagingError::FileNotChanged => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RepositoryFileNotFound,
+                "The selected path is no longer changed. Refresh the working tree and try again.",
+            ),
+            staging::StagingError::FileNotStaged => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::StagingConflict,
+                "The selected file has no staged changes. Refresh the working tree and try again.",
+            ),
+            staging::StagingError::ConflictMustBeResolvedFirst => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::StagingConflict,
+                "Resolve the selected conflict before staging or unstaging this file.",
+            ),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -432,6 +459,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route("/v1/repositories/:repo_id/status", get(repository_status))
         .route("/v1/repositories/:repo_id/diff", get(repository_diff))
+        .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
@@ -683,6 +711,71 @@ async fn repository_diff(
         .await
         .map(Json)
         .map_err(ApiError::from_diff_error)
+}
+
+async fn stage_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<staging::StagingRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A staging action request is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    staging::command(&snapshot, &request).map_err(ApiError::from_staging_error)?;
+
+    let action = request.action;
+    let operation = match action {
+        staging::StagingAction::StageFile => "stageFile",
+        staging::StagingAction::UnstageFile => "unstageFile",
+        staging::StagingAction::StageAll => "stageAll",
+        staging::StagingAction::UnstageAll => "unstageAll",
+    };
+    let repositories = state.repositories.clone();
+    let commands = state.git_commands.clone();
+    let task_repo_id = repo_id.clone();
+    let repository_path = target.repository_path;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation,
+            move |context| async move {
+                let current = repositories
+                    .status_snapshot(&task_repo_id)
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed(
+                            "Could not refresh repository status before staging".into(),
+                        )
+                    })?;
+                let command = staging::command(&current, &request).map_err(|error| {
+                    TaskFailure::Failed(format!("Staging precondition changed: {error:?}"))
+                })?;
+                commands
+                    .execute_staging(&repository_path, command, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
 #[derive(Deserialize)]
@@ -968,6 +1061,36 @@ mod tests {
         (status, value["error"]["code"].as_str().unwrap().to_string())
     }
 
+    async fn wait_for_task(router: &Router, task_id: &str) -> serde_json::Value {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let response = router
+                    .clone()
+                    .oneshot(request("/api/v1/tasks", Some(WRITE_TOKEN)))
+                    .await
+                    .unwrap();
+                let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let tasks: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                if let Some(task) = tasks
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|task| task["taskId"] == task_id)
+                {
+                    if matches!(
+                        task["status"].as_str(),
+                        Some("succeeded" | "failed" | "cancelled")
+                    ) {
+                        return task.clone();
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("staging task should reach a terminal state")
+    }
+
     #[tokio::test]
     async fn version_requires_auth_and_returns_version_header() {
         let unauthenticated = Request::builder()
@@ -1212,6 +1335,63 @@ mod tests {
             .unwrap()
             .iter()
             .any(|row| row["newText"] == "modified"));
+
+        let accepted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(&format!("/api/v1/repositories/{repo_id}/staging"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"action":"stageFile", "path":"tracked.txt"}).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let task_id = task["taskId"].as_str().unwrap();
+        let completed = wait_for_task(&app, task_id).await;
+        assert_eq!(completed["status"], "succeeded");
+        std::fs::write(root.join("tracked.txt"), "working after stage\n").unwrap();
+
+        let accepted = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(&format!("/api/v1/repositories/{repo_id}/staging"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({"action":"unstageFile", "path":"tracked.txt"})
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        let snapshot = status::read(repo_id.into(), &root).await.unwrap();
+        let tracked = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "tracked.txt")
+            .unwrap();
+        assert!(tracked
+            .categories
+            .contains(&status::ChangeCategory::Unstaged));
+        assert!(!tracked.categories.contains(&status::ChangeCategory::Staged));
     }
 
     #[tokio::test]

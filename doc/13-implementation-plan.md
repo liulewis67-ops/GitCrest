@@ -73,8 +73,8 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S2.1 | 结构化基础 Diff API 与主区 Split Diff。 | 可展示 working tree↔index、index↔HEAD 的文本 diff，新增/删除/改名/二进制有明确状态；点 Changes 文件进入主区 Split 模式且右侧提交详情收起；Graph/Diff 往返保留选择；只读历史 Diff 不出现暂存操作。 | 已完成 |
-| S2.2 | 文件级暂存、取消暂存及全部操作。 | modified、added、deleted、untracked 文件均可正确暂存/取消；操作后 status 和 Diff 同步刷新；失败时 index 与 UI 一致；已暂存内容与工作区剩余修改不会互相覆盖。 | 进行中 |
-| S2.3 | hunk/行级精确暂存与取消暂存。 | 同文件多 hunk、相邻编辑、行尾差异和工作区继续变化时只修改所选范围；过期 patch 拒绝并提示刷新；原有已暂存但未选内容原样保留；测试比对 `git diff`、`git diff --cached`。 | 未开始 |
+| S2.2 | 文件级暂存、取消暂存及全部操作。 | modified、added、deleted、untracked 文件均可正确暂存/取消；操作后 status 和 Diff 同步刷新；失败时 index 与 UI 一致；已暂存内容与工作区剩余修改不会互相覆盖。 | 已完成 |
+| S2.3 | hunk/行级精确暂存与取消暂存。 | 同文件多 hunk、相邻编辑、行尾差异和工作区继续变化时只修改所选范围；过期 patch 拒绝并提示刷新；原有已暂存但未选内容原样保留；测试比对 `git diff`、`git diff --cached`。 | 进行中 |
 | S2.4 | CommitService、提交表单、模板/正文、提交前校验和基础快捷键。 | 空消息/无暂存禁用提交；`Cmd/Ctrl+Enter` 提交所选内容，Git hook 失败展示输出并保留工作区；敏感文件给出提醒；成功后 HEAD、status、log 刷新；未选 staged 内容不被误提交；AI 不可用也能手写提交。 | 未开始 |
 | S2.5 | 提交前选中范围隔离、amend/sign-off/签名选项及恢复策略。 | 选择部分已暂存内容提交时，不相关 index 内容在成功、hook 失败、取消后均保留；amend 显示将改写的 commit；签名失败不产生错误提交；提供临时仓库自动测试覆盖恢复路径。 | 未开始 |
 
@@ -245,3 +245,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/diff.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/features/diff/SplitDiff.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
 - 完成 commit：`b22f167`
 - 限制/后续：当前 scope 提供 working tree↔index 与 index↔HEAD；选择任意历史提交进行比较及 Diff 性能基准留待 S3/S7。大于 10 MiB 的 diff 拒绝展示，Git 子进程限时 10 秒；binary、conflicted、ignored、symlink 与 submodule 返回明确状态，不解析为文本行。
+
+### S2.2 — 文件级暂存、取消暂存及全部操作
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：`pnpm api:types` 与 `pnpm check` 通过；门禁包含 renderer/Electron 类型检查和生产构建、20 个 Vitest 用例、Rust 格式检查/构建/39 个测试以及 Electron E2E。Rust 临时仓库验证 modified、added、deleted 文件的暂存/取消暂存，文件名带空格时按字面 pathspec 处理；先暂存再继续编辑后取消暂存，index 回到 HEAD 且工作区修改仍在；stage-all/unstage-all 在已有 HEAD 与 unborn 仓库均可用。HTTP 测试通过受保护的 202 任务接口实际暂存及取消，并检查 index 与工作区分离；前端测试覆盖文件操作请求 payload。
+- 手工验证：未单独手工操作桌面窗口；Electron E2E 通过，文件操作的界面交互由 Vitest 覆盖。任务终态会触发 status 刷新，任务中心关闭时仍轮询已提交的活动任务。
+- 证据：`crates/gitcrest-core/src/staging.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/api/client.ts`、`src/App.tsx`、`src/App.css`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`。
+- 完成 commit：待记录
+- 限制/后续：冲突文件需要先解决再暂存；全部暂存/取消暂存在存在冲突时拒绝执行。S2.3 将增加 hunk/行级 patch 操作，并对编辑后过期 patch 做拒绝保护。

@@ -223,6 +223,14 @@ button:disabled { cursor: not-allowed; }
 .changeGroupTitle { display: flex; justify-content: space-between; padding: 0 1px 4px; color: var(--text-muted); font-size: 8px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .statusFileItem { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 23px; padding: 2px 1px; color: var(--text-secondary); font-size: 9px; }
 .statusFileButton { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.statusFileRow { display: flex; align-items: center; min-width: 0; gap: 3px; }
+.statusFileRow .statusFileButton { flex: 1; min-width: 0; }
+.statusFileStageAction { width: 25px; height: 25px; flex: 0 0 25px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 17px; line-height: 1; }
+.statusFileStageAction:hover:not(:disabled), .changeGroupActions button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
+.statusFileStageAction:disabled { cursor: not-allowed; opacity: .42; }
+.changeGroupActions { display: flex; gap: 6px; margin: 4px 8px 9px; }
+.changeGroupActions button { flex: 1; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 10px; }
+.changeGroupActions button:disabled { cursor: not-allowed; opacity: .45; }
 .statusFileButton:hover, .statusFileButton.selected { background: var(--accent-soft); }
 .statusFileCode { display: inline-grid; flex: 0 0 15px; height: 15px; place-items: center; border: 1px solid currentColor; border-radius: 3px; font-size: 8px; font-weight: 750; }
 .status-modified, .status-typeChanged { color: var(--accent-strong); }

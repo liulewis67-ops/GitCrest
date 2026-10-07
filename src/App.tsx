@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type DiffDocumentResponse, type RepositoryResponse, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type DiffDocumentResponse, type RepositoryResponse, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
@@ -168,6 +168,8 @@ function App() {
   const openedCloneTasks = useRef(new Set<string>());
   const cloneTaskIds = useRef(new Set<string>());
   const [tasksError, setTasksError] = useState("");
+  const [stagingBusy, setStagingBusy] = useState(false);
+  const refreshedStagingTasks = useRef(new Set<string>());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
@@ -214,6 +216,10 @@ function App() {
   }));
   const stagedCount = activeStatus?.files.filter((file) => file.categories.includes("staged")).length || 0;
   const workingCount = activeStatus?.files.filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length || 0;
+  const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
+  const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
+  const hasActiveTasksRef = useRef(false);
+  hasActiveTasksRef.current = hasActiveTasks;
 
   async function refreshRepositoryStatus(repoId: string) {
     const api = apiRef.current;
@@ -268,6 +274,26 @@ function App() {
     } catch (error) {
       setTasksError(error instanceof Error ? error.message : "Could not start a fetch task.");
       setTasksOpen(true);
+    }
+  }
+
+  async function stageChanges(action: StagingRequest["action"], path?: string) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    if (!api || !repoId || stagingBusy || hasActiveStagingTask) return;
+    setStagingBusy(true);
+    setTasksError("");
+    try {
+      const request: StagingRequest = { action, ...(path ? { path } : {}) };
+      const task = await api.stageRepositoryChanges(repoId, request);
+      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setTasksError(message || (error instanceof Error ? error.message : "Could not start the staging task."));
+      setTasksOpen(true);
+    } finally {
+      setStagingBusy(false);
     }
   }
 
@@ -549,9 +575,10 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (!tasksOpen) return;
-    void refreshTasks();
-    const timer = window.setInterval(() => void refreshTasks(), 1000);
+    if (tasksOpen) void refreshTasks();
+    const timer = window.setInterval(() => {
+      if (tasksOpen || hasActiveTasksRef.current) void refreshTasks();
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [tasksOpen]);
 
@@ -576,6 +603,16 @@ function App() {
 
   useEffect(() => {
     for (const task of tasks) void openClonedRepository(task);
+  }, [tasks]);
+
+  useEffect(() => {
+    for (const task of tasks) {
+      if (!task.operation.startsWith("stage") && !task.operation.startsWith("unstage")) continue;
+      if (!["succeeded", "failed", "cancelled"].includes(task.status)) continue;
+      if (refreshedStagingTasks.current.has(task.taskId)) continue;
+      refreshedStagingTasks.current.add(task.taskId);
+      if (task.repoId) void refreshRepositoryStatus(task.repoId);
+    }
   }, [tasks]);
 
   useEffect(() => {
@@ -792,7 +829,11 @@ function App() {
             <aside className="navigationPanel" aria-label="Repository navigation">
               <div className="panelHeading"><span>REPOSITORY</span><button className="panelMenu" type="button" disabled aria-label="Repository options">···</button></div>
               <div className="navGroup changesNavigation">
-                <div className="navGroupTitle"><span>Changes</span><span className="countBadge">{activeStatus ? activeStatus.files.length : "—"}</span></div>
+                <div className="navGroupTitle changesHeading"><span>Changes</span><span className="countBadge">{activeStatus ? activeStatus.files.length : "—"}</span></div>
+                <div className="changeGroupActions">
+                  <button type="button" disabled={!activeStatus || workingCount === 0 || activeStatus.files.some((file) => file.kind === "conflicted") || stagingBusy || hasActiveStagingTask} onClick={() => void stageChanges("stageAll")}>Stage all</button>
+                  <button type="button" disabled={!activeStatus || stagedCount === 0 || activeStatus.files.some((file) => file.kind === "conflicted") || stagingBusy || hasActiveStagingTask} onClick={() => void stageChanges("unstageAll")}>Unstage all</button>
+                </div>
                 {!selectedRepository && <div className="navEmpty">No repository open</div>}
                 {selectedRepository && !activeStatus && activeStatusLoading && <div className="navEmpty" role="status">Loading working tree status…</div>}
                 {selectedRepository && !activeStatus && activeStatusError && <div className="statusLoadError" role="alert"><span>{activeStatusError}</span><button type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId)}>Retry</button></div>}
@@ -802,11 +843,21 @@ function App() {
                   <section className="changeGroup" key={group.category} aria-label={`${group.label} changes`}>
                     <div className="changeGroupTitle"><span>{group.label}</span><span>{group.files.length}</span></div>
                     {group.files.map((file) => (
-                      <button className={`statusFileItem statusFileButton${selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree") ? " selected" : ""}`} type="button" key={`${group.category}:${file.path}`} aria-pressed={selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree")} title={file.originalPath ? `${file.originalPath} → ${file.path}` : `Review ${file.path}`} onClick={() => openFileDiff(file.path, group.category === "staged" ? "index" : "workingTree")}>
-                        <span className={`statusFileCode status-${file.kind}`} aria-label={file.kind}>{changeCode(file.kind)}</span>
-                        <span className="statusFilePath">{file.path}</span>
-                        {file.modeChanged && <span className="modeChangedTag" title="File mode changed">mode</span>}
-                      </button>
+                      <div className="statusFileRow" key={`${group.category}:${file.path}`}>
+                        <button className={`statusFileItem statusFileButton${selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree") ? " selected" : ""}`} type="button" aria-pressed={selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree")} title={file.originalPath ? `${file.originalPath} → ${file.path}` : `Review ${file.path}`} onClick={() => openFileDiff(file.path, group.category === "staged" ? "index" : "workingTree")}>
+                          <span className={`statusFileCode status-${file.kind}`} aria-label={file.kind}>{changeCode(file.kind)}</span>
+                          <span className="statusFilePath">{file.path}</span>
+                          {file.modeChanged && <span className="modeChangedTag" title="File mode changed">mode</span>}
+                        </button>
+                        <button
+                          className="statusFileStageAction"
+                          type="button"
+                          disabled={stagingBusy || hasActiveStagingTask || file.kind === "conflicted" || group.category === "ignored" || group.category === "conflicted"}
+                          aria-label={`${group.category === "staged" ? "Unstage" : "Stage"} ${file.path}`}
+                          title={file.kind === "conflicted" ? "Resolve conflicts before staging" : `${group.category === "staged" ? "Unstage" : "Stage"} this file`}
+                          onClick={() => void stageChanges(group.category === "staged" ? "unstageFile" : "stageFile", file.path)}
+                        >{group.category === "staged" ? "−" : "+"}</button>
+                      </div>
                     ))}
                   </section>
                 ))}

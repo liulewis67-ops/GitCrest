@@ -487,6 +487,64 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "406":
           $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/repositories/{repoId}/staging:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: stageRepositoryChanges
+      summary: Queue file-level or all-file stage and unstage work
+      description: File operations require a path from the latest repository status snapshot. Conflicted and ignored files cannot be staged through this endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StagingRequest"
+      responses:
+        "202":
+          description: Staging task accepted and durably recorded before execution.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The action or path is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or selected changed path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The file state changed or a conflict must be resolved first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git, task capacity, or task storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/fetch:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -803,6 +861,18 @@ components:
         newLine: { type: [integer, "null"], minimum: 0 }
         oldText: { type: [string, "null"] }
         newText: { type: [string, "null"] }
+    StagingRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action:
+          type: string
+          enum: [stageFile, unstageFile, stageAll, unstageAll]
+        path:
+          type: string
+          minLength: 1
+          description: Repository-relative path, required for file actions and forbidden for all-file actions.
     OpenRepositoryRequest:
       type: object
       additionalProperties: false

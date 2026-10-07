@@ -332,13 +332,15 @@ describe("App", () => {
       if (url.pathname === "/api/v1/repositories") return response([repository]);
       if (url.pathname.endsWith("/status")) return response(status);
       if (url.pathname.endsWith("/diff")) return response(document);
+      if (url.pathname.endsWith("/staging")) return new Response(JSON.stringify({ taskId: "task-stage", repoId: "repo_diff", operation: "stageFile", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
+      if (url.pathname.endsWith("/tasks")) return response([]);
       throw new Error(`Unexpected API request: ${url}`);
     });
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
     await screen.findByText("Core connected");
-    fireEvent.click(await screen.findByRole("button", { name: /readme\.txt/ }));
+    fireEvent.click((await screen.findAllByRole("button", { name: /readme\.txt/ }))[0]);
     expect(await screen.findByText("old content")).toBeDefined();
     expect(screen.getByText("new content")).toBeDefined();
     expect(screen.getByText("WORKING TREE ↔ INDEX")).toBeDefined();
@@ -349,6 +351,10 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Diff" }));
     expect(await screen.findByText("new content")).toBeDefined();
     expect(fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith("/diff")).length).toBeGreaterThanOrEqual(2);
+    fireEvent.click(screen.getByRole("button", { name: "Stage readme.txt" }));
+    await waitFor(() => expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/staging"))).toBe(true));
+    const stageRequest = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/staging"));
+    expect(JSON.parse(String(stageRequest?.[1]?.body))).toEqual({ action: "stageFile", path: "readme.txt" });
   });
 
   it("restores repository tabs independently and closes tabs without deleting repositories", async () => {

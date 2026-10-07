@@ -11,6 +11,7 @@ use tokio::{
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
+use crate::staging::StagingCommand;
 use crate::tasks::{TaskContext, TaskFailure};
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
@@ -68,6 +69,7 @@ impl GitCommandService {
         run_command(
             &self.git_program,
             operation.arguments().iter().map(OsString::from).collect(),
+            None,
             Some(repository_path),
             operation.label(),
             task,
@@ -92,8 +94,26 @@ impl GitCommandService {
                 destination.as_os_str().to_owned(),
             ]
             .into(),
+            None,
             Some(parent),
             "Clone",
+            task,
+        )
+        .await
+    }
+
+    pub async fn execute_staging(
+        &self,
+        repository_path: &Path,
+        command: StagingCommand,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        run_command(
+            &self.git_program,
+            command.arguments,
+            Some(command.log_label.into()),
+            Some(repository_path),
+            command.label,
             task,
         )
         .await
@@ -103,16 +123,19 @@ impl GitCommandService {
 async fn run_command(
     git_program: &str,
     arguments: Vec<OsString>,
+    log_label: Option<String>,
     working_directory: Option<&Path>,
     label: &str,
     mut task: TaskContext,
 ) -> Result<(), TaskFailure> {
     task.progress(label, None).await;
-    let rendered_args = arguments
-        .iter()
-        .map(|argument| argument.to_string_lossy())
-        .collect::<Vec<_>>()
-        .join(" ");
+    let rendered_args = log_label.unwrap_or_else(|| {
+        arguments
+            .iter()
+            .map(|argument| argument.to_string_lossy())
+            .collect::<Vec<_>>()
+            .join(" ")
+    });
     task.log(format!("git {rendered_args}")).await;
 
     let mut command = Command::new(git_program);
