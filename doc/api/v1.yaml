@@ -613,7 +613,7 @@ paths:
           $ref: "#/components/schemas/RepoId"
     get:
       operationId: listRepositoryCommits
-      summary: Read a bounded page of commits from HEAD and branch refs
+      summary: Read a bounded page of commits from HEAD and branch refs with optional filters
       parameters:
         - name: offset
           in: query
@@ -623,6 +623,41 @@ paths:
           in: query
           required: false
           schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+        - name: sha
+          in: query
+          required: false
+          description: Full or unambiguous hexadecimal commit ID or prefix.
+          schema: { type: string, minLength: 4, maxLength: 64, pattern: "^[a-fA-F0-9]+$" }
+        - name: author
+          in: query
+          required: false
+          description: Literal, case-insensitive author name or email substring.
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: message
+          in: query
+          required: false
+          description: Literal, case-insensitive substring of the commit message.
+          schema: { type: string, minLength: 1, maxLength: 512 }
+        - name: branch
+          in: query
+          required: false
+          description: Exact short name of a local or remote branch.
+          schema: { type: string, minLength: 1, maxLength: 256 }
+        - name: path
+          in: query
+          required: false
+          description: Exact repository-relative path changed by the commit.
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+        - name: since
+          in: query
+          required: false
+          description: Include commits on or after this calendar date (UTC).
+          schema: { type: string, format: date }
+        - name: until
+          in: query
+          required: false
+          description: Include commits on or before this calendar date (UTC).
+          schema: { type: string, format: date }
       responses:
         "200":
           description: Bounded commit page in topological order. Tags are excluded from the initial walk.
@@ -634,7 +669,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CommitPage"
         "400":
-          description: Offset or page size is out of range.
+          description: Offset, page size, or one of the filters is invalid.
           content:
             application/json:
               schema:

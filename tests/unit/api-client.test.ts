@@ -108,10 +108,18 @@ describe("GitCrestApiClient", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify(refs), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
     const client = new GitCrestApiClient(baseUrl, token, fetcher);
 
-    await expect(client.getRepositoryCommits("repo/fixture", 50, 50)).resolves.toEqual(page);
+    await expect(client.getRepositoryCommits("repo/fixture", 50, 50, {
+      sha: "a1b2c3d4", author: "Author One", message: "fix & ship", branch: "main",
+      path: "src/App.tsx", since: "2026-01-01", until: "2026-12-31",
+    })).resolves.toEqual(page);
     await expect(client.getRepositoryCommit("repo/fixture", "a".repeat(40))).resolves.toEqual(detail);
     await expect(client.getRepositoryRefs("repo/fixture")).resolves.toEqual(refs);
-    expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.toString()).toBe("offset=50&limit=50");
+    const historyQuery = new URL(String(fetcher.mock.calls[0][0])).searchParams;
+    expect(historyQuery.get("offset")).toBe("50");
+    expect(historyQuery.get("limit")).toBe("50");
+    expect(historyQuery.get("sha")).toBe("a1b2c3d4");
+    expect(historyQuery.get("message")).toBe("fix & ship");
+    expect(historyQuery.get("path")).toBe("src/App.tsx");
     expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/commits/${"a".repeat(40)}`);
     expect(String(fetcher.mock.calls[2][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/refs`);
     for (const [, request] of fetcher.mock.calls) {

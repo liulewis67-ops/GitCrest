@@ -288,7 +288,7 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Read a bounded page of commits from HEAD and branch refs */
+        /** Read a bounded page of commits from HEAD and branch refs with optional filters */
         get: operations["listRepositoryCommits"];
         put?: never;
         /**
@@ -1482,6 +1482,20 @@ export interface operations {
             query?: {
                 offset?: number;
                 limit?: number;
+                /** @description Full or unambiguous hexadecimal commit ID or prefix. */
+                sha?: string;
+                /** @description Literal, case-insensitive author name or email substring. */
+                author?: string;
+                /** @description Literal, case-insensitive substring of the commit message. */
+                message?: string;
+                /** @description Exact short name of a local or remote branch. */
+                branch?: string;
+                /** @description Exact repository-relative path changed by the commit. */
+                path?: string;
+                /** @description Include commits on or after this calendar date (UTC). */
+                since?: string;
+                /** @description Include commits on or before this calendar date (UTC). */
+                until?: string;
             };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
@@ -1503,7 +1517,7 @@ export interface operations {
                     "application/json": components["schemas"]["CommitPage"];
                 };
             };
-            /** @description Offset or page size is out of range. */
+            /** @description Offset, page size, or one of the filters is invalid. */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -13,6 +13,10 @@ export type CommitRequest = components["schemas"]["CommitRequest"];
 export type CommitPageResponse = components["schemas"]["CommitPage"];
 export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
+export type CommitHistoryFilters = Pick<
+  NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
+  "sha" | "author" | "message" | "branch" | "path" | "since" | "until"
+>;
 
 export class GitCrestApiError extends Error {
   constructor(
@@ -87,8 +91,11 @@ export class GitCrestApiClient {
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/diff?${query}`);
   }
 
-  getRepositoryCommits(repoId: RepoId, offset = 0, limit = 50): Promise<CommitPageResponse> {
+  getRepositoryCommits(repoId: RepoId, offset = 0, limit = 50, filters: CommitHistoryFilters = {}): Promise<CommitPageResponse> {
     const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    for (const [name, value] of Object.entries(filters)) {
+      if (typeof value === "string" && value.length > 0) query.set(name, value);
+    }
     return this.request<CommitPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits?${query}`);
   }
 

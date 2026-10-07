@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { KeyboardEvent, UIEvent } from "react";
-import type { CommitDetailResponse, CommitPageResponse, GitCrestApiClient, RefSnapshotResponse } from "../../api/client";
+import type { FormEvent, KeyboardEvent, UIEvent } from "react";
+import type { CommitDetailResponse, CommitHistoryFilters, CommitPageResponse, GitCrestApiClient, RefSnapshotResponse } from "../../api/client";
 import type { components } from "../../api/schema";
 
 const PAGE_SIZE = 50;
@@ -58,6 +58,8 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   const [refsError, setRefsError] = useState("");
+  const [draftFilters, setDraftFilters] = useState<CommitHistoryFilters>({});
+  const [filters, setFilters] = useState<CommitHistoryFilters>({});
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
   const requestGeneration = useRef(0);
   const offsetsInFlight = useRef(new Set<number>());
@@ -70,7 +72,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
     else setLoadingMore(true);
     setError("");
     try {
-      const response: unknown = await api.getRepositoryCommits(repoId, offset, PAGE_SIZE);
+      const response: unknown = await api.getRepositoryCommits(repoId, offset, PAGE_SIZE, filters);
       if (requestGeneration.current !== generation) return;
       if (!response || typeof response !== "object" || !Array.isArray((response as Partial<CommitPageResponse>).commits)) {
         throw new Error("History response did not contain a commit list.");
@@ -89,7 +91,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
         else setLoadingMore(false);
       }
     }
-  }, [api, repoId]);
+  }, [api, filters, repoId]);
 
   useEffect(() => {
     const generation = ++requestGeneration.current;
@@ -101,15 +103,19 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
     setLoadingMore(false);
     setError("");
     setRefsError("");
-    restoredRepo.current = undefined;
     void readPage(0, generation);
-    void api.getRepositoryRefs(repoId).then((snapshot) => {
-      if (requestGeneration.current === generation) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
-    }).catch((reason: unknown) => {
-      if (requestGeneration.current === generation) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
-    });
     return () => { requestGeneration.current += 1; };
   }, [api, repoId, readPage]);
+
+  useEffect(() => {
+    let active = true;
+    void api.getRepositoryRefs(repoId).then((snapshot) => {
+      if (active) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
+    }).catch((reason: unknown) => {
+      if (active) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
+    });
+    return () => { active = false; };
+  }, [api, repoId]);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -181,11 +187,48 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
     return laneLayout.edgesByFrom[from].filter((edge) => edge.to * ROW_HEIGHT >= visibleStart && edge.to * ROW_HEIGHT <= visibleEnd)
       .map((edge) => ({ from, ...edge }));
   });
+  const hasFilters = Object.values(filters).some((value) => typeof value === "string" && value.length > 0);
 
-  return <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label="Commit graph view">
+  function setFilter<K extends keyof CommitHistoryFilters>(key: K, value: string) {
+    setDraftFilters((current) => ({ ...current, [key]: value || undefined }));
+  }
+
+  function submitFilters(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const next = Object.fromEntries(
+      Object.entries(draftFilters).filter(([, value]) => typeof value === "string" && value.trim().length > 0),
+    ) as CommitHistoryFilters;
+    setFilters(next);
+    const node = viewportRef.current;
+    if (node) node.scrollTop = 0;
+    setViewport((current) => ({ ...current, top: 0 }));
+    onScrollPosition(0);
+  }
+
+  function clearFilters() {
+    setDraftFilters({});
+    setFilters({});
+    const node = viewportRef.current;
+    if (node) node.scrollTop = 0;
+    setViewport((current) => ({ ...current, top: 0 }));
+    onScrollPosition(0);
+  }
+
+  return <div className="historyWorkspace">
+    <form className="historyFilters" aria-label="Commit history filters" onSubmit={submitFilters}>
+      <label>SHA<input aria-label="Filter by SHA" value={draftFilters.sha || ""} onChange={(event) => setFilter("sha", event.target.value)} placeholder="Prefix or full object ID" /></label>
+      <label>Author<input aria-label="Filter by author" value={draftFilters.author || ""} onChange={(event) => setFilter("author", event.target.value)} placeholder="Name or email" /></label>
+      <label>Message<input aria-label="Filter by message" value={draftFilters.message || ""} onChange={(event) => setFilter("message", event.target.value)} placeholder="Contains text" /></label>
+      <label>Branch<select aria-label="Filter by branch" value={draftFilters.branch || ""} onChange={(event) => setFilter("branch", event.target.value)}><option value="">All branches</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
+      <label>Path<input aria-label="Filter by path" value={draftFilters.path || ""} onChange={(event) => setFilter("path", event.target.value)} placeholder="Exact repository path" /></label>
+      <label>Since<input aria-label="Filter since date" type="date" value={draftFilters.since || ""} onChange={(event) => setFilter("since", event.target.value)} /></label>
+      <label>Until<input aria-label="Filter until date" type="date" value={draftFilters.until || ""} onChange={(event) => setFilter("until", event.target.value)} /></label>
+      <div className="historyFilterActions"><button className="secondaryButton" type="submit">Search</button>{hasFilters && <button className="textButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
+    </form>
+    <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label="Commit graph view">
     {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />Loading commit history…</div>
       : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={() => void readPage(commits.length, requestGeneration.current)}>Retry history</button></div>
-        : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p><h2>No commits yet</h2><p>This repository has no commit history on HEAD or its branches.</p></div>
+        : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p><h2>{hasFilters ? "No matching commits" : "No commits yet"}</h2><p>{hasFilters ? "Adjust or clear the current filters to see more history." : "This repository has no commit history on HEAD or its branches."}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
           : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>
             <svg className="commitGraphEdges" aria-hidden="true" width={graphWidth} height={visibleEnd - visibleStart} viewBox={`0 ${visibleStart} ${graphWidth} ${visibleEnd - visibleStart}`} style={{ top: visibleStart }}>
               {visibleEdges.map((edge) => {
@@ -217,11 +260,13 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
       </div>}
     {loadingMore && <div className="historyLoadingMore" role="status">Loading older commits…</div>}
     {refsError && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status">Branch labels unavailable: {refsError}</div>}
+    </div>
   </div>;
 }
 
 export function CommitDetails({ api, repoId, oid }: { api: GitCrestApiClient; repoId: string; oid?: string }) {
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
+  const [copyMessage, setCopyMessage] = useState("");
   useEffect(() => {
     let active = true;
     if (!oid) {
@@ -243,8 +288,20 @@ export function CommitDetails({ api, repoId, oid }: { api: GitCrestApiClient; re
   if (state.error) return <div className="commitDetailsState" role="alert"><p>{state.error}</p></div>;
   const detail = state.detail;
   if (!detail) return null;
+  const commitOid = detail.oid;
+  async function copyCommitId() {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
+      await navigator.clipboard.writeText(commitOid);
+      setCopyMessage("Full commit SHA copied.");
+    } catch {
+      setCopyMessage("Clipboard access is unavailable. Select the commit ID to copy it.");
+    }
+  }
   return <div className="commitDetails">
-    <div className="repositoryFact"><span>COMMIT</span><strong className="monoText">{detail.oid.slice(0, 12)}</strong></div>
+    <div className="repositoryFact"><span>COMMIT</span><strong className="monoText" title={detail.oid}>{detail.oid.slice(0, 12)}</strong></div>
+    <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>Copy SHA</button>
+    {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
     <div className="repositoryFact"><span>AUTHOR</span><strong>{detail.authorName}</strong></div>
     <div className="repositoryFact"><span>DATE</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
     <div className="commitDetailMessage">{detail.message}</div>

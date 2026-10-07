@@ -1017,6 +1017,13 @@ struct FetchRequest {
 struct HistoryQuery {
     offset: Option<usize>,
     limit: Option<usize>,
+    sha: Option<String>,
+    author: Option<String>,
+    message: Option<String>,
+    branch: Option<String>,
+    path: Option<String>,
+    since: Option<String>,
+    until: Option<String>,
 }
 
 async fn repository_commits(
@@ -1047,6 +1054,15 @@ async fn repository_commits(
         query.offset.unwrap_or(0),
         query.limit.unwrap_or(50),
         metadata.head.as_deref(),
+        &history::HistoryFilters {
+            sha: query.sha,
+            author: query.author,
+            message: query.message,
+            branch: query.branch,
+            path: query.path,
+            since: query.since,
+            until: query.until,
+        },
     )
     .await
     .map(Json)
@@ -2336,6 +2352,16 @@ mod tests {
         std::fs::write(root.join("history.txt"), "second\n").unwrap();
         git(&["commit", "--quiet", "-am", "second history entry"]);
         git(&["tag", "history-tag"]);
+        let current_branch = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["branch", "--show-current"])
+            .output()
+            .unwrap();
+        assert!(current_branch.status.success());
+        let current_branch = String::from_utf8_lossy(&current_branch.stdout)
+            .trim()
+            .to_owned();
 
         let app = test_app(None);
         let opened = app
@@ -2373,6 +2399,48 @@ mod tests {
         assert_eq!(first_page["nextOffset"], 1);
         assert_eq!(first_page["commits"][0]["subject"], "second history entry");
         let oid = first_page["commits"][0]["oid"].as_str().unwrap();
+
+        let filtered = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/commits?author=GitCrest%20Test&message=second%20history&branch={current_branch}&path=history.txt&since=2000-01-01&until=2099-12-31"
+                ),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(filtered.status(), StatusCode::OK);
+        let body = to_bytes(filtered.into_body(), usize::MAX).await.unwrap();
+        let filtered: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(filtered["commits"].as_array().unwrap().len(), 1);
+        assert_eq!(filtered["commits"][0]["subject"], "second history entry");
+
+        let sha_match = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits?sha={}", &oid[..8]),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(sha_match.status(), StatusCode::OK);
+        let body = to_bytes(sha_match.into_body(), usize::MAX).await.unwrap();
+        let sha_match: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(sha_match["commits"].as_array().unwrap().len(), 1);
+        assert_eq!(sha_match["commits"][0]["oid"], oid);
+
+        let invalid_filter = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits?path=../outside&since=2026-02-31"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let (status, code) = error_code(invalid_filter).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(code, "REQUEST_INVALID");
 
         let second_page = app
             .clone()
