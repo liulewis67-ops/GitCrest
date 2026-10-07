@@ -524,6 +524,13 @@ button:disabled { cursor: not-allowed; }
 .credentialRecoveryAction, .taskCredentialRecovery { display: grid; justify-items: start; gap: 8px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
 .taskCredentialRecovery { margin-top: 8px; }
 .pushDialog { width: min(680px, 100%); max-height: min(88vh, 850px); display: flex; flex-direction: column; }
+.pullStrategy { display: grid; gap: 8px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.pullStrategy legend { padding: 0 4px; color: var(--text-secondary); font-size: 10px; }
+.pullStrategy label { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.pullStrategy input { margin: 2px 0 0; accent-color: var(--accent); }
+.pullStrategy span { display: grid; gap: 3px; }
+.pullStrategy strong { color: var(--text); font-size: 10px; }
+.pullStrategy small { color: var(--text-muted); font-size: 9px; line-height: 1.4; }
 .pushDialogBody { min-height: 0; overflow-y: auto; }
 .pushTarget { display: grid; gap: 4px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .pushTarget span, .pushCounts span { color: var(--text-muted); font-size: 9px; }

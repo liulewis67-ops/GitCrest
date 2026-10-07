@@ -5,6 +5,7 @@ import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
 import { RemoteManager } from "./features/remotes/RemoteManager";
 import { PushDialog } from "./features/remotes/PushDialog";
+import { PullDialog } from "./features/remotes/PullDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
 import type { components } from "./api/schema";
 import "./App.css";
@@ -178,6 +179,11 @@ function App() {
   const [pushLoading, setPushLoading] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
   const [pushError, setPushError] = useState("");
+  const [pullOpen, setPullOpen] = useState(false);
+  const [pullPreflight, setPullPreflight] = useState<components["schemas"]["PullPreflight"]>();
+  const [pullLoading, setPullLoading] = useState(false);
+  const [pullBusy, setPullBusy] = useState(false);
+  const [pullError, setPullError] = useState("");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [switchTargetName, setSwitchTargetName] = useState("");
@@ -212,6 +218,7 @@ function App() {
   const refreshedRemoteTasks = useRef(new Set<string>());
   const refreshedFetchTasks = useRef(new Set<string>());
   const refreshedPushTasks = useRef(new Set<string>());
+  const refreshedPullTasks = useRef(new Set<string>());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
@@ -292,6 +299,15 @@ function App() {
         ? "This repository is unavailable."
         : hasActiveRepositoryTask
           ? "Wait for the current repository task to finish before pushing."
+          : "";
+  const pullDisabledReason = !selectedRepository
+    ? "Open a repository to pull its current branch."
+    : !connected
+      ? "Connect to the local Git engine to pull."
+      : selectedRepository.availability !== "available"
+        ? "This repository is unavailable."
+        : hasActiveRepositoryTask
+          ? "Wait for the current repository task to finish before pulling."
           : "";
   const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
@@ -484,6 +500,61 @@ function App() {
     } catch (error) {
       setTasksError(error instanceof Error ? error.message : "Could not start a fetch task.");
       setTasksOpen(true);
+    }
+  }
+
+  async function refreshPullPreflight(repoId = selectedRepository?.repoId) {
+    const api = apiRef.current;
+    if (!api || !repoId) return;
+    setPullLoading(true);
+    setPullError("");
+    try {
+      setPullPreflight(await api.preflightRepositoryPull(repoId));
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setPullPreflight(undefined);
+      setPullError(message || (error instanceof Error ? error.message : "Could not preview the pull."));
+    } finally {
+      setPullLoading(false);
+    }
+  }
+
+  function openPullDialog(repoId = selectedRepository?.repoId) {
+    if (!repoId) return;
+    if (repoId !== selectedRepository?.repoId) {
+      const repository = repositories.find((entry) => entry.repoId === repoId);
+      if (repository) activateRepository(repository);
+    }
+    setPullOpen(true);
+    void refreshPullPreflight(repoId);
+  }
+
+  async function submitPull(strategy: components["schemas"]["PullRequest"]["strategy"]) {
+    const api = apiRef.current;
+    const repoId = selectedRepository?.repoId;
+    const preview = pullPreflight;
+    if (!api || !repoId || !preview || preview.repoId !== repoId || !preview.isClean || pullBusy) return;
+    setPullBusy(true);
+    setPullError("");
+    try {
+      const task = await api.pullRepository(repoId, {
+        expectedLocalOid: preview.localOid,
+        expectedTrackingOid: preview.trackingOid,
+        strategy,
+      });
+      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      setTasksError("");
+      setPullOpen(false);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setPullError(message || (error instanceof Error ? error.message : "Could not start the pull task."));
+      if (error instanceof GitCrestApiError && ["PULL_PREFLIGHT_STALE", "PULL_REQUIRES_CLEAN"].includes(error.body.error.code)) {
+        void refreshPullPreflight(repoId);
+        void refreshRepositoryStatus(repoId);
+      }
+    } finally {
+      setPullBusy(false);
     }
   }
 
@@ -1061,6 +1132,20 @@ function App() {
           setHistoryRefreshKey((current) => current + 1);
         }
       }
+      if (task.operation.startsWith("pull") && !refreshedPullTasks.current.has(task.taskId)) {
+        refreshedPullTasks.current.add(task.taskId);
+        if (!task.repoId) continue;
+        void refreshRepositoryStatus(task.repoId);
+        void refreshRepositoryBranches(task.repoId);
+        setHistoryRefreshKey((current) => current + 1);
+        const api = apiRef.current;
+        if (api) {
+          void api.getRepository(task.repoId).then((repository) => {
+            setRepositories((current) => current.map((entry) => entry.repoId === repository.repoId ? repository : entry));
+            setSelectedRepository((current) => current?.repoId === repository.repoId ? repository : current);
+          }).catch(() => undefined);
+        }
+      }
       if (task.operation.startsWith("fetch") && !refreshedFetchTasks.current.has(task.taskId)) {
         refreshedFetchTasks.current.add(task.taskId);
         if (task.status === "succeeded" && task.repoId) {
@@ -1148,7 +1233,10 @@ function App() {
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        openPullDialog();
+      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
         event.preventDefault();
         openBranchSwitcher();
       } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
@@ -1176,6 +1264,7 @@ function App() {
     { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${themeCycle[(themeCycle.indexOf(theme) + 1) % themeCycle.length]}`, available: true, run: nextTheme },
     { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
     { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
+    { id: "pull", label: "Pull current branch", detail: "Review worktree state and choose merge or rebase", available: Boolean(selectedRepository), run: () => openPullDialog() },
     { id: "push", label: "Push current branch", detail: "Review commits, target, and overwrite scope before pushing", available: Boolean(selectedRepository), run: () => openPushDialog() },
     { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { setCloneError(""); setCloneOpen(true); } },
     { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
@@ -1294,6 +1383,7 @@ function App() {
               <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} title={!selectedFilePath ? "Select a changed file to open Diff" : "Open the selected file diff"} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pushDisabledReason || "Preview the current branch push"} onClick={() => openPushDialog()}>Push</button>
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pullDisabledReason || "Review worktree state, then pull with merge or rebase (Ctrl/Cmd+Shift+L)"} onClick={() => openPullDialog()}>Pull</button>
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={selectedRepository ? "Fetch from configured remotes" : "Open a repository to fetch"} onClick={() => void fetchRepository()}>Fetch</button>
               <span className="toolbarDivider" />
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available"} title={selectedRepository ? "Switch branches (Ctrl/Cmd+B)" : "Open a repository to switch branches"} onClick={openBranchSwitcher}><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
@@ -1536,6 +1626,7 @@ function App() {
       )}
 
       {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
+      {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} />}
       {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
     </main>
