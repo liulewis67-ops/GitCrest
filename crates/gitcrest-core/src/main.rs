@@ -643,6 +643,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/branches/delete",
             post(delete_repository_branch),
         )
+        .route(
+            "/v1/repositories/:repo_id/branches/favorite",
+            put(set_branch_favorite),
+        )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
             "/v1/repositories/:repo_id/staging/patch",
@@ -1343,15 +1347,73 @@ async fn repository_branches(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    branches::read_branches(
+    let mut snapshot = branches::read_branches(
         repo_id,
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
     )
     .await
-    .map(Json)
-    .map_err(ApiError::from_branch_error)
+    .map_err(ApiError::from_branch_error)?;
+    let store = state.repositories.store();
+    let favorite_repo_id = snapshot.repo_id.clone();
+    let favorites = tokio::task::spawn_blocking(move || store.branch_favorites(&favorite_repo_id))
+        .await
+        .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?
+        .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
+    for branch in &mut snapshot.branches {
+        branch.is_favorite = favorites
+            .iter()
+            .any(|full_name| full_name == &branch.full_name);
+    }
+    Ok(Json(snapshot))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct BranchFavoriteRequest {
+    full_name: String,
+    favorite: bool,
+}
+
+async fn set_branch_favorite(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<BranchFavoriteRequest>, JsonRejection>,
+) -> Result<Json<branches::BranchSnapshot>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A branch ref and favorite state are required.",
+        )
+    })?;
+    let mut snapshot = repository_branches(State(state.clone()), Path(repo_id.clone()))
+        .await?
+        .0;
+    let Some(branch) = snapshot
+        .branches
+        .iter_mut()
+        .find(|branch| branch.full_name == request.full_name)
+    else {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::BranchNotFound,
+            "The branch ref does not exist.",
+        ));
+    };
+    let store = state.repositories.store();
+    let full_name = request.full_name;
+    let favorite = request.favorite;
+    let storage_repo_id = repo_id;
+    tokio::task::spawn_blocking(move || {
+        store.set_branch_favorite(&storage_repo_id, &full_name, favorite)
+    })
+    .await
+    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?
+    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
+    branch.is_favorite = favorite;
+    Ok(Json(snapshot))
 }
 
 #[derive(Deserialize)]
@@ -1536,6 +1598,10 @@ async fn rename_repository_branch(
     }
     let path = target.repository_path;
     let command = state.git_commands.clone();
+    let store = state.repositories.store();
+    let repo_for_favorite = repo_id.clone();
+    let old_full_name = format!("refs/heads/{}", request.name);
+    let new_full_name = format!("refs/heads/{}", request.new_name);
     let task = state
         .tasks
         .submit(
@@ -1553,8 +1619,16 @@ async fn rename_repository_branch(
                         },
                         context,
                     )
-                    .await
-                    .map(|()| None)
+                    .await?;
+                tokio::task::spawn_blocking(move || {
+                    store.rename_branch_favorite(&repo_for_favorite, &old_full_name, &new_full_name)
+                })
+                .await
+                .map_err(|_| TaskFailure::Failed("Branch favorite storage is unavailable.".into()))?
+                .map_err(|_| {
+                    TaskFailure::Failed("Branch favorite storage is unavailable.".into())
+                })?;
+                Ok(None)
             },
         )
         .await
@@ -1625,6 +1699,9 @@ async fn delete_repository_branch(
     }
     let path = target.repository_path;
     let command = state.git_commands.clone();
+    let store = state.repositories.store();
+    let repo_for_favorite = repo_id.clone();
+    let full_name = format!("refs/heads/{}", request.name);
     let task = state
         .tasks
         .submit(
@@ -1642,8 +1719,16 @@ async fn delete_repository_branch(
                         },
                         context,
                     )
-                    .await
-                    .map(|()| None)
+                    .await?;
+                tokio::task::spawn_blocking(move || {
+                    store.remove_branch_favorite(&repo_for_favorite, &full_name)
+                })
+                .await
+                .map_err(|_| TaskFailure::Failed("Branch favorite storage is unavailable.".into()))?
+                .map_err(|_| {
+                    TaskFailure::Failed("Branch favorite storage is unavailable.".into())
+                })?;
+                Ok(None)
             },
         )
         .await
@@ -3186,6 +3271,25 @@ mod tests {
             .unwrap()
             .iter()
             .any(|branch| branch["name"] == "feature/api" && branch["kind"] == "local"));
+        let favorite = app.clone().oneshot(
+            Request::builder()
+                .method(Method::PUT)
+                .uri(format!("/api/v1/repositories/{repo_id}/branches/favorite"))
+                .header("X-GitCrest-API-Version", API_VERSION)
+                .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(serde_json::json!({ "fullName": "refs/heads/feature/api", "favorite": true }).to_string()))
+                .unwrap(),
+        ).await.unwrap();
+        assert_eq!(favorite.status(), StatusCode::OK);
+        let body = to_bytes(favorite.into_body(), usize::MAX).await.unwrap();
+        let favorite: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(favorite["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|branch| branch["fullName"] == "refs/heads/feature/api"
+                && branch["isFavorite"] == true));
         let rename = app
             .clone()
             .oneshot(
@@ -3236,6 +3340,24 @@ mod tests {
         let clean_preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(clean_preview["unmergedCommitCount"], 0);
         assert_eq!(clean_preview["requiresConfirmation"], false);
+        let renamed_favorites = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(renamed_favorites.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let renamed_favorites: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(renamed_favorites["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|branch| branch["fullName"] == "refs/heads/feature/renamed"
+                && branch["isFavorite"] == true));
 
         git(&["checkout", "--quiet", "feature/renamed"]);
         std::fs::write(root.join("unmerged.txt"), "branch-only\n").unwrap();
@@ -3314,6 +3436,23 @@ mod tests {
             wait_for_task(&app, delete["taskId"].as_str().unwrap()).await["status"],
             "succeeded"
         );
+        let after_delete = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(after_delete.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let after_delete: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(!after_delete["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|branch| branch["fullName"] == "refs/heads/feature/renamed"));
 
         let duplicate = app
             .clone()

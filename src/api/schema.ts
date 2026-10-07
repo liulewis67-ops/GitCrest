@@ -211,6 +211,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/branches/favorite": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Persist a branch ref favorite */
+        put: operations["setRepositoryBranchFavorite"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/branches/delete-preview": {
         parameters: {
             query?: never;
@@ -756,6 +777,7 @@ export interface components {
             /** @enum {string} */
             kind: "local" | "remote";
             isCurrent: boolean;
+            isFavorite: boolean;
             upstream: string | null;
             upstreamGone: boolean;
             ahead: number | null;
@@ -770,6 +792,10 @@ export interface components {
         };
         BranchNameRequest: {
             name: string;
+        };
+        BranchFavoriteRequest: {
+            fullName: string;
+            favorite: boolean;
         };
         DeleteBranchRequest: {
             name: string;
@@ -1610,6 +1636,48 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    setRepositoryBranchFavorite: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BranchFavoriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Current branch snapshot with the updated favorite state. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BranchSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository or branch ref is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     previewRepositoryBranchDelete: {

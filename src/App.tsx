@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
 import { CommitDetails, CommitGraph } from "./features/history/CommitGraph";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
@@ -163,6 +163,9 @@ function App() {
   const [statusSnapshots, setStatusSnapshots] = useState<Record<string, StatusSnapshotResponse>>({});
   const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
   const [statusLoadingByRepo, setStatusLoadingByRepo] = useState<Record<string, boolean>>({});
+  const [branchSnapshots, setBranchSnapshots] = useState<Record<string, BranchSnapshotResponse>>({});
+  const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
+  const [branchLoadingByRepo, setBranchLoadingByRepo] = useState<Record<string, boolean>>({});
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [cloneOpen, setCloneOpen] = useState(false);
@@ -187,6 +190,7 @@ function App() {
   const [commitBusy, setCommitBusy] = useState(false);
   const refreshedStagingTasks = useRef(new Set<string>());
   const refreshedCommitTasks = useRef(new Set<string>());
+  const refreshedBranchTasks = useRef(new Set<string>());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
@@ -220,6 +224,15 @@ function App() {
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
   const activeStatusError = selectedRepository ? statusErrors[selectedRepository.repoId] : undefined;
   const activeStatusLoading = selectedRepository ? statusLoadingByRepo[selectedRepository.repoId] === true : false;
+  const activeBranches = selectedRepository ? branchSnapshots[selectedRepository.repoId] : undefined;
+  const hasBranchSnapshot = Boolean(activeBranches && Array.isArray(activeBranches.branches));
+  const activeBranchError = selectedRepository ? branchErrors[selectedRepository.repoId] : undefined;
+  const activeBranchesLoading = selectedRepository ? branchLoadingByRepo[selectedRepository.repoId] === true : false;
+  const orderedBranches = hasBranchSnapshot ? [...activeBranches!.branches].sort((left, right) =>
+    Number(right.isFavorite) - Number(left.isFavorite)
+    || Number(right.isCurrent) - Number(left.isCurrent)
+    || Number(left.kind === "remote") - Number(right.kind === "remote")
+    || left.name.localeCompare(right.name)) : [];
   const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
   const selectedFilePath = activeTabState?.selectedFilePath;
   const selectedFileScope = activeTabState?.selectedFileScope;
@@ -256,6 +269,35 @@ function App() {
       setStatusErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
     } finally {
       setStatusLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+    }
+  }
+
+  async function refreshRepositoryBranches(repoId: string) {
+    const api = apiRef.current;
+    if (!api) return;
+    setBranchLoadingByRepo((current) => ({ ...current, [repoId]: true }));
+    setBranchErrors((current) => ({ ...current, [repoId]: "" }));
+    try {
+      const snapshot = await api.getRepositoryBranches(repoId);
+      setBranchSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setBranchErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository branches.") }));
+    } finally {
+      setBranchLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+    }
+  }
+
+  async function toggleBranchFavorite(fullName: string, favorite: boolean) {
+    const api = apiRef.current;
+    const repository = selectedRepository;
+    if (!api || !repository) return;
+    try {
+      const snapshot = await api.setRepositoryBranchFavorite(repository.repoId, fullName, !favorite);
+      setBranchSnapshots((current) => ({ ...current, [repository.repoId]: snapshot }));
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setBranchErrors((current) => ({ ...current, [repository.repoId]: message || (error instanceof Error ? error.message : "Could not update branch favorite.") }));
     }
   }
 
@@ -773,6 +815,19 @@ function App() {
         }
         void refreshRepositoryStatus(task.repoId);
       }
+      if (task.operation.startsWith("branch")) {
+        if (refreshedBranchTasks.current.has(task.taskId)) continue;
+        refreshedBranchTasks.current.add(task.taskId);
+        if (!task.repoId) continue;
+        void refreshRepositoryBranches(task.repoId);
+        const api = apiRef.current;
+        if (api) {
+          void api.getRepository(task.repoId).then((repository) => {
+            setRepositories((current) => current.map((entry) => entry.repoId === repository.repoId ? repository : entry));
+            setSelectedRepository((current) => current?.repoId === repository.repoId ? repository : current);
+          }).catch(() => undefined);
+        }
+      }
     }
   }, [tasks]);
 
@@ -787,6 +842,7 @@ function App() {
   useEffect(() => {
     if (selectedRepository?.availability === "available") {
       void refreshRepositoryStatus(selectedRepository.repoId);
+      void refreshRepositoryBranches(selectedRepository.repoId);
     }
   }, [selectedRepository?.repoId]);
 
@@ -1034,7 +1090,23 @@ function App() {
                 ))}
               </div>
               <div className="navDivider" />
-              <div className="navGroup"><div className="navGroupTitle">Branches</div><div className="navEmpty">{selectedRepository ? selectedRepository.branch || (selectedRepository.detached ? "Detached HEAD" : "Unborn branch") : "Open a repository to view branches"}</div></div>
+              <div className="navGroup branchesNavigation">
+                <div className="navGroupTitle"><span>Branches</span>{hasBranchSnapshot && <span className="countBadge">{orderedBranches.length}</span>}</div>
+                {!selectedRepository && <div className="navEmpty">Open a repository to view branches</div>}
+                {selectedRepository && activeBranchesLoading && !activeBranches && <div className="navEmpty" role="status">Loading branches…</div>}
+                {selectedRepository && activeBranchError && <div className="statusLoadError" role="alert"><span>{activeBranchError}</span><button type="button" onClick={() => void refreshRepositoryBranches(selectedRepository.repoId)}>Retry</button></div>}
+                {selectedRepository && hasBranchSnapshot && orderedBranches.length === 0 && <div className="navEmpty">No branches yet</div>}
+                {selectedRepository && hasBranchSnapshot && orderedBranches.length > 0 && <ul className="branchList" aria-label="Repository branches">
+                  {orderedBranches.map((branch) => (
+                    <li className={`branchItem${branch.isCurrent ? " current" : ""}`} key={branch.fullName}>
+                      <span className="branchItemGlyph" aria-hidden="true">{branch.kind === "remote" ? "⇢" : "⑂"}</span>
+                      <span className="branchItemName" title={branch.fullName} aria-current={branch.isCurrent ? "page" : undefined}>{branch.name}</span>
+                      {branch.isCurrent && <span className="branchCurrentLabel">HEAD</span>}
+                      <button className={`branchFavorite${branch.isFavorite ? " active" : ""}`} type="button" aria-label={`${branch.isFavorite ? "Remove" : "Add"} ${branch.fullName} ${branch.isFavorite ? "from" : "to"} favorites`} aria-pressed={branch.isFavorite} onClick={() => void toggleBranchFavorite(branch.fullName, branch.isFavorite)}>{branch.isFavorite ? "★" : "☆"}</button>
+                    </li>
+                  ))}
+                </ul>}
+              </div>
               <div className="navDivider" />
               <div className="navGroup"><div className="navGroupTitle">Remotes</div><button className="navEmpty navAction" type="button" disabled title="Open a repository to view remotes">No remotes</button></div>
               <div className="navGroup"><div className="navGroupTitle">Shelves</div><button className="navEmpty navAction" type="button" disabled title="Shelves arrive with S5.3">No shelves</button></div>

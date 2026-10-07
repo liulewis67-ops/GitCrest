@@ -514,6 +514,38 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+  /api/v1/repositories/{repoId}/branches/favorite:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    put:
+      operationId: setRepositoryBranchFavorite
+      summary: Persist a branch ref favorite
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BranchFavoriteRequest" }
+      responses:
+        "200":
+          description: Current branch snapshot with the updated favorite state.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BranchSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or branch ref is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/branches/delete-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1700,13 +1732,14 @@ components:
     BranchRef:
       type: object
       additionalProperties: false
-      required: [name, fullName, oid, kind, isCurrent, upstream, upstreamGone, ahead, behind]
+      required: [name, fullName, oid, kind, isCurrent, isFavorite, upstream, upstreamGone, ahead, behind]
       properties:
         name: { type: string }
         fullName: { type: string }
         oid: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" }
         kind: { type: string, enum: [local, remote] }
         isCurrent: { type: boolean }
+        isFavorite: { type: boolean }
         upstream: { type: [string, "null"] }
         upstreamGone: { type: boolean }
         ahead: { type: [integer, "null"], minimum: 0 }
@@ -1730,6 +1763,13 @@ components:
       required: [name]
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
+    BranchFavoriteRequest:
+      type: object
+      additionalProperties: false
+      required: [fullName, favorite]
+      properties:
+        fullName: { type: string, minLength: 1 }
+        favorite: { type: boolean }
     DeleteBranchRequest:
       type: object
       additionalProperties: false

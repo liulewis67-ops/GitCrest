@@ -231,6 +231,15 @@ button:disabled { cursor: not-allowed; }
 .changeGroupActions { display: flex; gap: 6px; margin: 4px 8px 9px; }
 .changeGroupActions button { flex: 1; padding: 4px 6px; border: 1px solid var(--line); border-radius: 5px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 10px; }
 .changeGroupActions button:disabled { cursor: not-allowed; opacity: .45; }
+.branchList { display: grid; gap: 2px; max-height: 168px; overflow: auto; margin: 7px -5px 0; padding: 0 2px; list-style: none; }
+.branchItem { display: flex; align-items: center; min-width: 0; min-height: 25px; gap: 5px; padding: 0 4px; border-radius: 5px; color: var(--text-secondary); }
+.branchItem.current { background: var(--accent-soft); color: var(--text); }
+.branchItemGlyph { flex: 0 0 12px; color: var(--text-muted); font-size: 11px; text-align: center; }
+.branchItemName { overflow: hidden; flex: 1; min-width: 0; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
+.branchCurrentLabel { color: var(--accent-strong); font-size: 7px; font-weight: 750; letter-spacing: .05em; }
+.branchFavorite { width: 22px; height: 22px; flex: 0 0 22px; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 12px; }
+.branchFavorite:hover, .branchFavorite.active { background: var(--surface-raised); color: var(--amber); }
+.branchFavorite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .statusFileButton:hover, .statusFileButton.selected { background: var(--accent-soft); }
 .statusFileCode { display: inline-grid; flex: 0 0 15px; height: 15px; place-items: center; border: 1px solid currentColor; border-radius: 3px; font-size: 8px; font-weight: 750; }
 .status-modified, .status-typeChanged { color: var(--accent-strong); }

@@ -15,6 +15,9 @@ pub struct RepositoryStore {
 impl Default for RepositoryStore {
     fn default() -> Self {
         let connection = Connection::open_in_memory().expect("in-memory SQLite opens");
+        connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .expect("in-memory foreign keys enabled");
         migrate(&connection).expect("in-memory repository schema migrates");
         Self {
             connection: Arc::new(Mutex::new(connection)),
@@ -140,6 +143,72 @@ impl RepositoryStore {
         }
     }
 
+    pub fn branch_favorites(&self, repo_id: &str) -> Result<Vec<String>, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let mut statement = connection
+            .prepare("SELECT full_name FROM branch_favorites WHERE repo_id=?1 ORDER BY full_name")
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map([repo_id], |row| row.get(0))
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn set_branch_favorite(
+        &self,
+        repo_id: &str,
+        full_name: &str,
+        favorite: bool,
+    ) -> Result<(), String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        if favorite {
+            connection.execute("INSERT INTO branch_favorites (repo_id, full_name) VALUES (?1, ?2) ON CONFLICT(repo_id, full_name) DO NOTHING", params![repo_id, full_name])
+        } else {
+            connection.execute("DELETE FROM branch_favorites WHERE repo_id=?1 AND full_name=?2", params![repo_id, full_name])
+        }.map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn rename_branch_favorite(
+        &self,
+        repo_id: &str,
+        old_full_name: &str,
+        new_full_name: &str,
+    ) -> Result<(), String> {
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO branch_favorites (repo_id, full_name) SELECT repo_id, ?3 FROM branch_favorites WHERE repo_id=?1 AND full_name=?2 ON CONFLICT(repo_id, full_name) DO NOTHING",
+                params![repo_id, old_full_name, new_full_name],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "DELETE FROM branch_favorites WHERE repo_id=?1 AND full_name=?2",
+                params![repo_id, old_full_name],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn remove_branch_favorite(&self, repo_id: &str, full_name: &str) -> Result<(), String> {
+        self.set_branch_favorite(repo_id, full_name, false)
+    }
+
     pub fn forget(&self, repo_id: &str) -> Result<bool, String> {
         let connection = self
             .connection
@@ -197,7 +266,7 @@ impl RepositoryStore {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 2 {
+    if version > 3 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -207,6 +276,10 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     if version < 2 {
         connection.execute_batch(include_str!("../migrations/0002_tasks.sql"))?;
         connection.pragma_update(None, "user_version", 2)?;
+    }
+    if version < 3 {
+        connection.execute_batch(include_str!("../migrations/0003_branch_favorites.sql"))?;
+        connection.pragma_update(None, "user_version", 3)?;
     }
     Ok(())
 }
@@ -242,6 +315,9 @@ mod tests {
                 .save_opened(repository("newer", "/repo/newer", 2))
                 .unwrap();
             store.set_favorite("older", true).unwrap();
+            store
+                .set_branch_favorite("older", "refs/heads/main", true)
+                .unwrap();
         }
 
         let reopened = RepositoryStore::open(&database).unwrap();
@@ -254,8 +330,20 @@ mod tests {
             ["older", "newer"]
         );
         assert!(repositories[0].is_favorite);
+        assert_eq!(
+            reopened.branch_favorites("older").unwrap(),
+            ["refs/heads/main"]
+        );
         assert_eq!(reopened.set_favorite("missing", true).unwrap(), None);
+        reopened
+            .rename_branch_favorite("older", "refs/heads/main", "refs/heads/trunk")
+            .unwrap();
+        assert_eq!(
+            reopened.branch_favorites("older").unwrap(),
+            ["refs/heads/trunk"]
+        );
         assert!(reopened.forget("older").unwrap());
+        assert!(reopened.branch_favorites("older").unwrap().is_empty());
     }
 
     #[test]
@@ -263,7 +351,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 3).unwrap();
+        connection.pragma_update(None, "user_version", 4).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());

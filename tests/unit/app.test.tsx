@@ -191,6 +191,10 @@ describe("App", () => {
       availability: "available",
     };
     const chooseRepository = vi.fn().mockResolvedValue("C:/fixture");
+    const branchSnapshot = { repoId: repository.repoId, current: "main", detached: false, branches: [
+      { name: "main", fullName: "refs/heads/main", oid: "a".repeat(40), kind: "local", isCurrent: true, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null },
+    ] };
+    const favoriteBranchSnapshot = { ...branchSnapshot, branches: [{ ...branchSnapshot.branches[0], isFavorite: true }] };
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
       value: {
@@ -215,6 +219,8 @@ describe("App", () => {
         { path: "conflict.txt", indexStatus: "U", worktreeStatus: "U", kind: "conflicted", categories: ["conflicted"], modeChanged: false },
         { path: "ignored.log", indexStatus: "!", worktreeStatus: "!", kind: "ignored", categories: ["ignored"], modeChanged: false },
       ] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(branchSnapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(favoriteBranchSnapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }), { status: 500, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify([{ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "running", phase: "Receiving objects", progress: 35, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false }]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
@@ -226,10 +232,13 @@ describe("App", () => {
 
     expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(4));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(5));
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/fixture" });
     expect(String(fetcher.mock.calls[3][0])).toContain("/api/v1/repositories/repo_fixture/status");
-    expect(screen.getByText("main", { selector: ".navEmpty" })).toBeDefined();
+    expect(screen.getByText("main", { selector: ".branchItemName" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Add refs/heads/main to favorites" }));
+    expect(await screen.findByRole("button", { name: "Remove refs/heads/main from favorites" })).toBeDefined();
+    expect(fetcher.mock.calls[5][1]?.method).toBe("PUT");
     expect(screen.getByRole("region", { name: "Staged changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Unstaged changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Untracked changes" })).toBeDefined();
@@ -244,8 +253,8 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /Fetch from remotes/ }));
     const taskDialog = await screen.findByRole("dialog", { name: "Tasks" });
     expect(await within(taskDialog).findByText("Receiving objects")).toBeDefined();
-    expect(String(fetcher.mock.calls[5][0])).toContain("/api/v1/repositories/repo_fixture/fetch");
-    expect(fetcher.mock.calls[5][1]?.method).toBe("POST");
+    expect(String(fetcher.mock.calls[7][0])).toContain("/api/v1/repositories/repo_fixture/fetch");
+    expect(fetcher.mock.calls[7][1]?.method).toBe("POST");
   });
 
   it("shows persisted repositories in Welcome and lets the user favorite or forget them", async () => {
@@ -381,16 +390,23 @@ describe("App", () => {
         subscribeToEvents: vi.fn(async () => vi.fn()),
       },
     });
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repositories), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_alpha", refreshedAtMs: 1, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repositories[1]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_beta", refreshedAtMs: 2, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repositories), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_beta", refreshedAtMs: 3, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: "repo_alpha", refreshedAtMs: 4, files: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>(async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
+      if (url.pathname === "/api/v1/repositories") return response(repositories);
+      if (url.pathname === "/api/v1/repositories/repo_alpha") return response(repositories[0]);
+      if (url.pathname === "/api/v1/repositories/repo_beta") return response(repositories[1]);
+      if (url.pathname.endsWith("/status")) return response({ repoId: url.pathname.includes("repo_alpha") ? "repo_alpha" : "repo_beta", refreshedAtMs: 1, files: [] });
+      if (url.pathname.endsWith("/branches")) {
+        const repoId = url.pathname.includes("repo_alpha") ? "repo_alpha" : "repo_beta";
+        const branchName = repoId === "repo_alpha" ? "main" : "feature";
+        return response({ repoId, current: branchName, detached: false, branches: [
+          { name: branchName, fullName: `refs/heads/${branchName}`, oid: "a".repeat(40), kind: "local", isCurrent: true, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null },
+        ] });
+      }
+      throw new Error(`Unexpected API request: ${url}`);
+    });
     vi.stubGlobal("fetch", fetcher);
 
     const firstRun = render(<App />);
@@ -432,7 +448,7 @@ describe("App", () => {
     expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
     expect(screen.getByText("C:/alpha")).toBeDefined();
     expect(screen.getByText("C:/beta")).toBeDefined();
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(9));
+    expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/branches"))).toBe(true);
   });
 
   it("submits a commit only after staged changes and a message are ready", async () => {

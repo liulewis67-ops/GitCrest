@@ -165,6 +165,14 @@ export class GitCrestApiClient {
     });
   }
 
+  setRepositoryBranchFavorite(repoId: RepoId, fullName: string, favorite: boolean): Promise<BranchSnapshotResponse> {
+    return this.request<BranchSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/favorite`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ fullName, favorite } satisfies components["schemas"]["BranchFavoriteRequest"]),
+    });
+  }
+
   stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/staging`, true, {
       method: "POST",

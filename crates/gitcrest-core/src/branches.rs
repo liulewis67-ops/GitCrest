@@ -30,6 +30,7 @@ pub struct BranchRef {
     pub upstream_gone: bool,
     pub ahead: Option<u32>,
     pub behind: Option<u32>,
+    pub is_favorite: bool,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -140,6 +141,7 @@ pub async fn read_branches(
             upstream_gone,
             ahead,
             behind,
+            is_favorite: false,
         });
     }
     Ok(BranchSnapshot {

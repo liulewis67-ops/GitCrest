@@ -163,6 +163,22 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[2][1]?.body).toBe(JSON.stringify({ name: "feature/old", allowUnmerged: true }));
   });
 
+  it("persists a branch favorite by its full ref name", async () => {
+    const snapshot = { repoId: "repo_fixture", current: "main", detached: false, branches: [
+      { name: "main", fullName: "refs/heads/main", oid: "a".repeat(40), kind: "local", isCurrent: true, isFavorite: true, upstream: null, upstreamGone: false, ahead: null, behind: null },
+    ] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(snapshot), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.setRepositoryBranchFavorite("repo_fixture", "refs/heads/main", true)).resolves.toEqual(snapshot);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/branches/favorite`);
+    expect(fetcher.mock.calls[0][1]?.method).toBe("PUT");
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ fullName: "refs/heads/main", favorite: true }));
+  });
+
   it("reads paginated commits, commit detail, and refs through versioned repository routes", async () => {
     const page = { repoId: "repo_fixture", offset: 50, limit: 50, commits: [], nextOffset: 100 };
     const detail = { repoId: "repo_fixture", oid: "a".repeat(40), parents: [], authorName: "Author", authorEmail: "author@example.invalid", committedAtMs: 1, message: "first", stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [] };
