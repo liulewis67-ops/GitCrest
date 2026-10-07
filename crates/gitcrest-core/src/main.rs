@@ -563,6 +563,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/commits/:oid",
             get(repository_commit_detail),
         )
+        .route(
+            "/v1/repositories/:repo_id/commits/:oid/diff",
+            get(repository_commit_file_diff),
+        )
         .route("/v1/repositories/:repo_id/refs", get(repository_refs))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
         .route("/v1/clones", post(clone_repository))
@@ -1082,6 +1086,51 @@ async fn repository_commit_detail(
         .await
         .map(Json)
         .map_err(ApiError::from_history_error)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CommitDiffQuery {
+    path: String,
+}
+
+async fn repository_commit_file_diff(
+    State(state): State<AppState>,
+    Path((repo_id, oid)): Path<(String, String)>,
+    query: Result<Query<CommitDiffQuery>, QueryRejection>,
+) -> Result<Json<diff::DiffDocument>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A repository-relative file path is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let commit = history::read_commit(repo_id.clone(), &target.repository_path, &oid)
+        .await
+        .map_err(ApiError::from_history_error)?;
+    if !commit.files.iter().any(|file| file.path == query.path) {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RepositoryFileNotFound,
+            "The selected path is not changed by this commit.",
+        ));
+    }
+    diff::read_commit_file(
+        repo_id,
+        &target.repository_path,
+        &oid,
+        commit.parents.first().map(String::as_str),
+        &query.path,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_diff_error)
 }
 
 async fn repository_refs(
@@ -2454,6 +2503,7 @@ mod tests {
         let second_page: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(second_page["commits"][0]["subject"], "first history entry");
         assert!(second_page["nextOffset"].is_null());
+        let root_oid = second_page["commits"][0]["oid"].as_str().unwrap();
 
         let detail = app
             .clone()
@@ -2469,6 +2519,42 @@ mod tests {
         assert_eq!(detail["message"], "second history entry");
         assert_eq!(detail["stats"]["filesChanged"], 1);
         assert_eq!(detail["stats"]["insertions"], 1);
+
+        let commit_diff = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits/{oid}/diff?path=history.txt"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(commit_diff.status(), StatusCode::OK);
+        let body = to_bytes(commit_diff.into_body(), usize::MAX).await.unwrap();
+        let commit_diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(commit_diff["scope"], "commit");
+        assert_eq!(commit_diff["path"], "history.txt");
+        assert!(commit_diff["hunks"][0]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["oldText"] == "first" && row["newText"] == "second"));
+        let root_diff = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits/{root_oid}/diff?path=history.txt"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(root_diff.status(), StatusCode::OK);
+        let body = to_bytes(root_diff.into_body(), usize::MAX).await.unwrap();
+        let root_diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(root_diff["scope"], "commit");
+        assert!(root_diff["hunks"][0]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["oldText"].is_null() && row["newText"] == "first"));
 
         let refs = app
             .clone()

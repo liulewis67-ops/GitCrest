@@ -10,6 +10,7 @@ interface SplitDiffProps {
 
 export function SplitDiff({ document, onStageSelection, onCommitSelection, disabled }: SplitDiffProps) {
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
+  const readOnly = document.scope === "commit";
   useEffect(() => setSelection([]), [document.revision]);
   if (document.status !== "text") {
     const descriptions: Record<DiffDocumentResponse["status"], string> = {
@@ -26,7 +27,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
 
   return (
     <div className="splitDiff" aria-label={`${document.scope} diff for ${document.path}`}>
-      <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "index" ? "INDEX ↔ HEAD" : "WORKING TREE ↔ INDEX"}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
+      <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? "COMMIT ↔ FIRST PARENT" : document.scope === "index" ? "INDEX ↔ HEAD" : "WORKING TREE ↔ INDEX"}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
       <div className="splitDiffColumns" aria-hidden="true"><div /><div>OLD</div><div>NEW</div></div>
       {document.hunks.map((hunk, hunkIndex) => {
         const changeRowIndexes = hunk.rows.flatMap((row, rowIndex) => row.kind === "change" ? [rowIndex] : []);
@@ -35,7 +36,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
         return (
         <section className="splitDiffHunk" key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`} aria-label={`Change hunk ${hunkIndex + 1}`}>
           <div className="splitDiffHunkHeader">
-            <label className="hunkSelection"><input
+            {!readOnly ? <label className="hunkSelection"><input
               type="checkbox"
               aria-label={`Select hunk ${hunkIndex + 1}`}
               checked={hunkSelected || allRowsSelected}
@@ -44,12 +45,12 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
                 const rest = current.filter((item) => item.hunkIndex !== hunkIndex);
                 return event.target.checked ? [...rest, { hunkIndex }] : rest;
               })}
-            />Select hunk</label>
+            />Select hunk</label> : <span className="hunkSelection">Hunk {hunkIndex + 1}</span>}
             <code>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</code>
           </div>
           {hunk.rows.map((row, rowIndex) => (
             <div className={`splitDiffRow splitDiffRow-${row.kind}`} key={`${hunkIndex}:${rowIndex}`}>
-              {row.kind === "change" ? <label className="diffRowSelect"><input
+              {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"
                 aria-label={`Select hunk ${hunkIndex + 1} change row ${rowIndex + 1}`}
                 checked={selection.some((item) => item.hunkIndex === hunkIndex && (item.rowIndex === undefined || item.rowIndex === rowIndex))}
@@ -73,13 +74,13 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
         </section>
         );
       })}
-      <div className="diffSelectionActions">
+      {!readOnly && <div className="diffSelectionActions">
         <span>{selection.length} selection{selection.length === 1 ? "" : "s"}</span>
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
           {document.scope === "index" ? "Unstage selected changes" : "Stage selected changes"}
         </button>
         {document.scope === "index" && onCommitSelection && <button type="button" disabled={disabled || selection.length === 0} onClick={() => onCommitSelection(selection)}>Add to commit selection</button>}
-      </div>
+      </div>}
     </div>
   );
 }

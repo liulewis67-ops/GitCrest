@@ -264,7 +264,17 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScro
   </div>;
 }
 
-export function CommitDetails({ api, repoId, oid }: { api: GitCrestApiClient; repoId: string; oid?: string }) {
+export function CommitDetails({
+  api,
+  repoId,
+  oid,
+  onOpenFile,
+}: {
+  api: GitCrestApiClient;
+  repoId: string;
+  oid?: string;
+  onOpenFile?: (path: string, oid: string) => void;
+}) {
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
   const [copyMessage, setCopyMessage] = useState("");
   useEffect(() => {
@@ -306,6 +316,6 @@ export function CommitDetails({ api, repoId, oid }: { api: GitCrestApiClient; re
     <div className="repositoryFact"><span>DATE</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
     <div className="commitDetailMessage">{detail.message}</div>
     <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> files <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
-    <div className="commitDetailFiles" aria-label="Changed files">{detail.files.map((file) => <div className="commitDetailFile" key={file.path}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? "binary" : `+${file.additions} −${file.deletions}`}</small></div>)}</div>
+    <div className="commitDetailFiles" aria-label="Changed files">{detail.files.map((file) => <button className="commitDetailFile" type="button" key={file.path} aria-label={`Open commit diff for ${file.path}`} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? "binary" : `+${file.additions} −${file.deletions}`}</small></button>)}</div>
   </div>;
 }

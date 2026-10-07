@@ -805,6 +805,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/commits/{oid}/diff:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: oid
+        in: path
+        required: true
+        schema: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" }
+      - name: path
+        in: query
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 4096 }
+    get:
+      operationId: getRepositoryCommitDiff
+      summary: Read a commit file diff against its first parent
+      responses:
+        "200":
+          description: Read-only file diff for the selected commit.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DiffDocument"
+        "400":
+          description: Commit ID or repository-relative path is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository, commit, or changed path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "413":
+          description: Diff exceeds the bounded response size.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "504":
+          description: Git diff exceeded its deadline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/refs:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -1134,7 +1193,7 @@ components:
         path: { type: string }
         revision: { type: string, minLength: 1 }
         originalPath: { type: [string, "null"] }
-        scope: { type: string, enum: [workingTree, index] }
+        scope: { type: string, enum: [workingTree, index, commit] }
         changeKind: { type: string, enum: [modified, added, deleted, renamed, copied, typeChanged, untracked, ignored, conflicted] }
         status: { type: string, enum: [text, binary, empty, conflicted, ignored, symlink, submodule] }
         hunks:

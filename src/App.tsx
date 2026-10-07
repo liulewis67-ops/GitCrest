@@ -10,7 +10,7 @@ import "./App.css";
 type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
 type WorkspaceMode = "graph" | "diff";
-type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; selectedFilePath?: string; selectedFileScope?: "workingTree" | "index"; graphScrollTop: number };
+type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; selectedFilePath?: string; selectedFileScope?: "workingTree" | "index" | "commit"; selectedDiffCommitOid?: string; graphScrollTop: number };
 type WorkspaceSession = { openRepoIds: string[]; activeRepoId?: string; tabs: Record<string, RepositoryTabState> };
 
 const WORKSPACE_SESSION_KEY = "gitcrest-workspace-session-v1";
@@ -32,7 +32,8 @@ function readWorkspaceSession(): WorkspaceSession {
           mode: candidate.mode === "diff" ? "diff" : "graph",
           ...(typeof candidate.selectedCommit === "string" ? { selectedCommit: candidate.selectedCommit } : {}),
           ...(typeof candidate.selectedFilePath === "string" ? { selectedFilePath: candidate.selectedFilePath } : {}),
-          ...(candidate.selectedFileScope === "workingTree" || candidate.selectedFileScope === "index" ? { selectedFileScope: candidate.selectedFileScope } : {}),
+          ...(candidate.selectedFileScope === "workingTree" || candidate.selectedFileScope === "index" || candidate.selectedFileScope === "commit" ? { selectedFileScope: candidate.selectedFileScope } : {}),
+          ...(typeof candidate.selectedDiffCommitOid === "string" ? { selectedDiffCommitOid: candidate.selectedDiffCommitOid } : {}),
           graphScrollTop: typeof candidate.graphScrollTop === "number" && Number.isFinite(candidate.graphScrollTop)
             ? Math.max(0, candidate.graphScrollTop)
             : 0,
@@ -222,9 +223,10 @@ function App() {
   const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
   const selectedFilePath = activeTabState?.selectedFilePath;
   const selectedFileScope = activeTabState?.selectedFileScope;
+  const selectedDiffCommitOid = activeTabState?.selectedDiffCommitOid;
   const selectedDiffFile = (activeStatus?.files || []).find((file) => file.path === selectedFilePath);
   const activeDiffKey = selectedRepository && selectedFilePath && selectedFileScope
-    ? `${selectedRepository.repoId}:${selectedFileScope}:${selectedFilePath}`
+    ? `${selectedRepository.repoId}:${selectedFileScope}:${selectedDiffCommitOid || ""}:${selectedFilePath}`
     : "";
   const statusGroups = changeGroups.map((group) => ({
     ...group,
@@ -321,7 +323,7 @@ function App() {
     const api = apiRef.current;
     const repository = selectedRepository;
     const document = diffState.document;
-    if (!api || !repository || !document || stagingBusy || hasActiveStagingTask) return;
+    if (!api || !repository || !document || document.scope === "commit" || stagingBusy || hasActiveStagingTask) return;
     setStagingBusy(true);
     setTasksError("");
     try {
@@ -490,6 +492,26 @@ function App() {
           mode: "diff",
           selectedFilePath: path,
           selectedFileScope: scope,
+          selectedDiffCommitOid: undefined,
+        },
+      },
+    }));
+  }
+
+  function openCommitFileDiff(path: string, oid: string) {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId || !isFullObjectId(oid)) return;
+    setWorkspaceSession((current) => ({
+      ...current,
+      tabs: {
+        ...current.tabs,
+        [repoId]: {
+          ...(current.tabs[repoId] || { graphScrollTop: 0 }),
+          mode: "diff",
+          selectedCommit: oid,
+          selectedFilePath: path,
+          selectedFileScope: "commit",
+          selectedDiffCommitOid: oid,
         },
       },
     }));
@@ -690,16 +712,21 @@ function App() {
     const api = apiRef.current;
     if (!api) return;
     let active = true;
-    const key = `${selectedRepository.repoId}:${selectedFileScope}:${selectedFilePath}`;
+    const key = `${selectedRepository.repoId}:${selectedFileScope}:${selectedDiffCommitOid || ""}:${selectedFilePath}`;
     setDiffState({ key, loading: true });
-    api.getFileDiff(selectedRepository.repoId, selectedFilePath, selectedFileScope)
+    const request = selectedFileScope === "commit" && selectedDiffCommitOid
+      ? api.getRepositoryCommitDiff(selectedRepository.repoId, selectedDiffCommitOid, selectedFilePath)
+      : selectedFileScope === "workingTree" || selectedFileScope === "index"
+        ? api.getFileDiff(selectedRepository.repoId, selectedFilePath, selectedFileScope)
+        : Promise.reject(new Error("The selected commit diff is unavailable."));
+    request
       .then((document) => { if (active) setDiffState({ key, loading: false, document }); })
       .catch((error: unknown) => {
         const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
         if (active) setDiffState({ key, loading: false, error: message || (error instanceof Error ? error.message : "Could not read this file diff.") });
       });
     return () => { active = false; };
-  }, [mode, selectedRepository?.repoId, selectedFilePath, selectedFileScope, diffRetry]);
+  }, [mode, selectedRepository?.repoId, selectedFilePath, selectedFileScope, selectedDiffCommitOid, diffRetry]);
 
   useEffect(() => {
     for (const task of tasks) void openClonedRepository(task);
@@ -1025,7 +1052,7 @@ function App() {
                 : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div></div>
                   : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
                   : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} disabled={stagingBusy || hasActiveStagingTask || commitBusy} /></div>
+                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></div>
                   : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div></div>}
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
             </section>
@@ -1033,7 +1060,7 @@ function App() {
 
             {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
               <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} /> : selectedRepository ? (
+              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} /> : selectedRepository ? (
                 <div className="repositoryDetails">
                   <span className="detailsGlyph" aria-hidden="true">G</span>
                   <h2>{repositoryName(selectedRepository.path)}</h2>

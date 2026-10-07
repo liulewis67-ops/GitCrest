@@ -103,6 +103,11 @@ export class GitCrestApiClient {
     return this.request<CommitDetailResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(oid)}`);
   }
 
+  getRepositoryCommitDiff(repoId: RepoId, oid: string, path: string): Promise<DiffDocumentResponse> {
+    const query = new URLSearchParams({ path });
+    return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(oid)}/diff?${query}`);
+  }
+
   getRepositoryRefs(repoId: RepoId): Promise<RefSnapshotResponse> {
     return this.request<RefSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/refs`);
   }

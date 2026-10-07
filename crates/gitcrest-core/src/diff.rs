@@ -22,6 +22,7 @@ const DIFF_DEADLINE: Duration = Duration::from_secs(10);
 pub enum DiffScope {
     WorkingTree,
     Index,
+    Commit,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -133,6 +134,98 @@ pub async fn read(
     read_with_patch(repo_id, repository_path, file, scope)
         .await
         .map(|result| result.document)
+}
+
+pub async fn read_commit_file(
+    repo_id: String,
+    repository_path: &Path,
+    oid: &str,
+    parent_oid: Option<&str>,
+    relative_path: &str,
+) -> Result<DiffDocument, DiffError> {
+    validate_repo_relative_path(relative_path)?;
+    if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(DiffError::InvalidPath);
+    }
+    let mut command = Command::new("git");
+    command.arg("-C").arg(repository_path).args([
+        "--literal-pathspecs",
+        if parent_oid.is_some() {
+            "diff"
+        } else {
+            "diff-tree"
+        },
+        "--no-ext-diff",
+        "--no-color",
+        "--unified=3",
+    ]);
+    if let Some(parent_oid) = parent_oid {
+        command.arg(parent_oid).arg(oid);
+    } else {
+        command.args(["--root", "--no-commit-id", "-p", "-r", oid]);
+    }
+    command
+        .arg("--")
+        .arg(relative_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("GIT_PAGER", "cat")
+        .kill_on_drop(true);
+    let mut child = command.spawn().map_err(|_| DiffError::GitUnavailable)?;
+    let stdout = child.stdout.take().ok_or(DiffError::GitFailed)?;
+    let stderr = child.stderr.take().ok_or(DiffError::GitFailed)?;
+    let stdout_reader = tokio::spawn(read_capped(stdout, MAX_DIFF_BYTES));
+    let stderr_reader = tokio::spawn(read_capped(stderr, MAX_ERROR_BYTES));
+    let result = tokio::time::timeout(DIFF_DEADLINE, async {
+        let status = child.wait().await.map_err(|_| DiffError::GitFailed)?;
+        let stdout = stdout_reader
+            .await
+            .map_err(|_| DiffError::GitFailed)?
+            .map_err(|_| DiffError::GitFailed)?;
+        let stderr = stderr_reader
+            .await
+            .map_err(|_| DiffError::GitFailed)?
+            .map_err(|_| DiffError::GitFailed)?;
+        Ok::<_, DiffError>((status, stdout, stderr))
+    })
+    .await;
+    let (status, stdout, stderr) = match result {
+        Ok(result) => result?,
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err(DiffError::TimedOut);
+        }
+    };
+    if stdout.overflowed {
+        return Err(DiffError::TooLarge);
+    }
+    if !status.success() {
+        return Err(classify_git_error(
+            &String::from_utf8_lossy(&stderr.bytes).to_ascii_lowercase(),
+        ));
+    }
+    let parsed = parse_diff(&stdout.bytes);
+    let mut document = DiffDocument {
+        repo_id,
+        path: relative_path.to_owned(),
+        revision: revision_for(DiffScope::Commit, relative_path, &stdout.bytes),
+        original_path: None,
+        scope: DiffScope::Commit,
+        change_kind: ChangeKind::Modified,
+        status: if parsed.binary {
+            DiffContentStatus::Binary
+        } else if parsed.hunks.is_empty() {
+            DiffContentStatus::Empty
+        } else {
+            DiffContentStatus::Text
+        },
+        hunks: parsed.hunks,
+    };
+    if document.status == DiffContentStatus::Empty {
+        document.hunks.clear();
+    }
+    Ok(document)
 }
 
 pub async fn read_with_patch(
@@ -292,6 +385,7 @@ fn revision_for(scope: DiffScope, path: &str, patch: &[u8]) -> String {
     hash.update(match scope {
         DiffScope::WorkingTree => b"workingTree\0".as_slice(),
         DiffScope::Index => b"index\0".as_slice(),
+        DiffScope::Commit => b"commit\0".as_slice(),
     });
     hash.update(path.as_bytes());
     hash.update([0]);

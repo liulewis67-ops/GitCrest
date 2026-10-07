@@ -64,10 +64,13 @@ describe("CommitGraph", () => {
         files: [{ path: "src/file.ts", additions: 2, deletions: 1 }],
       })),
     } as unknown as GitCrestApiClient;
-    render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} />);
+    const onOpenFile = vi.fn();
+    render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} onOpenFile={onOpenFile} />);
     expect(await screen.findByText(/A commit message/)).toBeDefined();
     expect(screen.getByText("src/file.ts")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Copy SHA" }));
     expect((await screen.findByRole("status")).textContent).toContain("Clipboard access is unavailable");
+    fireEvent.click(screen.getByRole("button", { name: "Open commit diff for src/file.ts" }));
+    expect(onOpenFile).toHaveBeenCalledWith("src/file.ts", oid);
   });
 });

@@ -324,6 +324,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/commits/{oid}/diff": {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+                oid: string;
+            };
+            cookie?: never;
+        };
+        /** Read a commit file diff against its first parent */
+        get: operations["getRepositoryCommitDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/refs": {
         parameters: {
             query?: never;
@@ -465,7 +489,7 @@ export interface components {
             revision: string;
             originalPath: string | null;
             /** @enum {string} */
-            scope: "workingTree" | "index";
+            scope: "workingTree" | "index" | "commit";
             /** @enum {string} */
             changeKind: "modified" | "added" | "deleted" | "renamed" | "copied" | "typeChanged" | "untracked" | "ignored" | "conflicted";
             /** @enum {string} */
@@ -1682,6 +1706,73 @@ export interface operations {
             406: components["responses"]["UnsupportedVersion"];
             /** @description Commit details exceed the bounded response size. */
             413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getRepositoryCommitDiff: {
+        parameters: {
+            query: {
+                path: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+                oid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only file diff for the selected commit. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiffDocument"];
+                };
+            };
+            /** @description Commit ID or repository-relative path is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository, commit, or changed path is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Diff exceeds the bounded response size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git diff exceeded its deadline. */
+            504: {
                 headers: {
                     [name: string]: unknown;
                 };
