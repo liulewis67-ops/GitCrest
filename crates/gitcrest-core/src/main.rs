@@ -4068,6 +4068,25 @@ mod tests {
                 .unwrap(),
             preview["localOid"].as_str().unwrap()
         );
+
+        let branches = app
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(branches.status(), StatusCode::OK);
+        let body = to_bytes(branches.into_body(), usize::MAX).await.unwrap();
+        let branches: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let current = branches["branches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|branch| branch["isCurrent"] == true)
+            .unwrap();
+        assert_eq!(current["ahead"], 0);
+        assert_eq!(current["behind"], 0);
     }
 
     #[tokio::test]
