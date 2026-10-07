@@ -739,6 +739,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/push": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a push using a reviewed preflight snapshot */
+        post: operations["pushRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/tasks/{taskId}": {
         parameters: {
             query?: never;
@@ -1016,6 +1037,12 @@ export interface components {
             oid: string;
             subject: string;
         };
+        PushRequest: {
+            expectedLocalOid: string;
+            expectedRemoteOid: string;
+            /** @description Explicitly select force-with-lease after reviewing the preview. */
+            forceWithLease: boolean;
+        };
         RemoteSnapshot: {
             repoId: components["schemas"]["RepoId"];
             defaultRemote: string | null;
@@ -1110,7 +1137,7 @@ export interface components {
             phase: string;
             progress: number | null;
             message: string | null;
-            errorCategory: ("authentication" | "network" | "gitUnavailable" | "commandFailed" | "outcomeUnknown") | null;
+            errorCategory: ("authentication" | "network" | "gitUnavailable" | "commandFailed" | "pushRejected" | "outcomeUnknown") | null;
             logs: string[];
             /** Format: int64 */
             createdAtMs: number;
@@ -3404,6 +3431,74 @@ export interface operations {
                 };
             };
             /** @description Git could not complete the bounded push preview. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    pushRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PushRequest"];
+            };
+        };
+        responses: {
+            /** @description Push task accepted and durably recorded before execution. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description Push request is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is not registered or its path is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The preview is stale, there is nothing to push, or normal push requires fetching first. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git cannot be started. */
             503: {
                 headers: {
                     [name: string]: unknown;

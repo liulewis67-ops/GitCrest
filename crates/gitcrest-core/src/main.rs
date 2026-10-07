@@ -834,6 +834,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/push-preflight",
             get(preflight_repository_push),
         )
+        .route("/v1/repositories/:repo_id/push", post(push_repository))
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
         .route("/v1/tasks/:task_id", get(get_task))
@@ -2739,6 +2740,99 @@ async fn preflight_repository_push(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PushRequest {
+    expected_local_oid: String,
+    expected_remote_oid: String,
+    force_with_lease: bool,
+}
+
+async fn push_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<PushRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Push preflight OIDs and force-with-lease choice are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preflight = push::read_push_preflight(
+        repo_id.clone(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map_err(ApiError::from_push_error)?;
+    if preflight.local_oid != request.expected_local_oid
+        || preflight.expected_remote_oid != request.expected_remote_oid
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PushPreflightStale,
+            "The local branch or tracked remote changed after preflight. Refresh the preview before pushing.",
+        ));
+    }
+    if preflight.ahead == 0 {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::NothingToPush,
+            "The current branch has no commits to push.",
+        ));
+    }
+    if preflight.behind > 0 && !request.force_with_lease {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PushRequiresFetch,
+            "The remote contains commits missing locally. Fetch and review before a normal push.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let path = target.repository_path;
+    let preflight_for_task = preflight.clone();
+    let operation = if request.force_with_lease {
+        "pushForceWithLease"
+    } else {
+        "push"
+    };
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation,
+            move |context| async move {
+                command
+                    .execute_push(
+                        &path,
+                        &preflight_for_task,
+                        request.force_with_lease,
+                        context,
+                    )
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CloneRequest {
     remote_url: String,
     parent_path: String,
@@ -3857,6 +3951,123 @@ mod tests {
             .logs
             .iter()
             .any(|line| line == "git fetch --progress"));
+    }
+
+    #[tokio::test]
+    async fn push_api_requires_reviewed_oids_and_updates_the_configured_upstream() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("repo");
+        let bare_path = directory.path().join("remote.git");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |path: &std::path::Path, args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&repository_path, &["init", "--quiet"]);
+        git(&repository_path, &["config", "user.name", "Push API Test"]);
+        git(
+            &repository_path,
+            &["config", "user.email", "push-api@example.invalid"],
+        );
+        std::fs::write(repository_path.join("seed.txt"), "seed\n").unwrap();
+        git(&repository_path, &["add", "seed.txt"]);
+        git(&repository_path, &["commit", "--quiet", "-m", "seed"]);
+        let bare = std::process::Command::new("git")
+            .arg("init")
+            .arg("--bare")
+            .arg("--quiet")
+            .arg(&bare_path)
+            .output()
+            .unwrap();
+        assert!(bare.status.success());
+        git(
+            &repository_path,
+            &["remote", "add", "origin", bare_path.to_str().unwrap()],
+        );
+        git(
+            &repository_path,
+            &["push", "--quiet", "-u", "origin", "HEAD"],
+        );
+        std::fs::write(repository_path.join("change.txt"), "change\n").unwrap();
+        git(&repository_path, &["add", "change.txt"]);
+        git(
+            &repository_path,
+            &["commit", "--quiet", "-m", "reviewed change"],
+        );
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+
+        let preview = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/push-preflight"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview.status(), StatusCode::OK);
+        let body = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(preview["ahead"], 1);
+        assert_eq!(preview["behind"], 0);
+        assert_eq!(preview["changedPaths"][0], "change.txt");
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/push"),
+                &serde_json::json!({
+                    "expectedLocalOid": preview["localOid"],
+                    "expectedRemoteOid": preview["expectedRemoteOid"],
+                    "forceWithLease": false,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        assert!(completed["logs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|line| line == "git push origin"));
+        assert_eq!(
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&bare_path)
+                .args(["rev-parse", "HEAD"])
+                .output()
+                .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+                .unwrap(),
+            preview["localOid"].as_str().unwrap()
+        );
     }
 
     #[tokio::test]

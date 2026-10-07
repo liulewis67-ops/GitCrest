@@ -43,6 +43,7 @@ pub enum TaskErrorCategory {
     Network,
     GitUnavailable,
     CommandFailed,
+    PushRejected,
     OutcomeUnknown,
 }
 
@@ -504,6 +505,14 @@ fn classify_error(task: &TaskSnapshot) -> TaskErrorCategory {
         || details.contains("access denied")
     {
         TaskErrorCategory::Authentication
+    } else if task.operation.starts_with("push")
+        && (details.contains("non-fast-forward")
+            || details.contains("fetch first")
+            || details.contains("stale info")
+            || details.contains("remote contains commits missing locally")
+            || details.contains("remote rejected"))
+    {
+        TaskErrorCategory::PushRejected
     } else if details.contains("could not resolve host")
         || details.contains("failed to connect")
         || details.contains("connection timed out")

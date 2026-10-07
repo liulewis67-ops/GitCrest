@@ -1650,6 +1650,63 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/push:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: pushRepository
+      summary: Queue a push using a reviewed preflight snapshot
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PushRequest"
+      responses:
+        "202":
+          description: Push task accepted and durably recorded before execution.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: Push request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not registered or its path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The preview is stale, there is nothing to push, or normal push requires fetching first.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/tasks/{taskId}:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -2137,6 +2194,14 @@ components:
       properties:
         oid: { type: string, minLength: 40, maxLength: 64 }
         subject: { type: string, maxLength: 4096 }
+    PushRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedLocalOid, expectedRemoteOid, forceWithLease]
+      properties:
+        expectedLocalOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        forceWithLease: { type: boolean, description: Explicitly select force-with-lease after reviewing the preview. }
     RemoteSnapshot:
       type: object
       additionalProperties: false
@@ -2328,7 +2393,7 @@ components:
         errorCategory:
           oneOf:
             - type: string
-              enum: [authentication, network, gitUnavailable, commandFailed, outcomeUnknown]
+              enum: [authentication, network, gitUnavailable, commandFailed, pushRejected, outcomeUnknown]
             - type: "null"
         logs:
           type: array

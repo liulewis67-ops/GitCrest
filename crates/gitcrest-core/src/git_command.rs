@@ -275,6 +275,85 @@ impl GitCommandService {
         Ok(())
     }
 
+    pub async fn execute_push(
+        &self,
+        repository_path: &Path,
+        expected: &crate::push::PushPreflight,
+        force_with_lease: bool,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let current = crate::push::read_push_preflight(
+            expected.repo_id.clone(),
+            repository_path,
+            Some(&expected.local_branch),
+            false,
+        )
+        .await
+        .map_err(|_| {
+            TaskFailure::Failed(
+                "Push preflight could not be revalidated. Refresh and retry.".into(),
+            )
+        })?;
+        if current.local_oid != expected.local_oid
+            || current.expected_remote_oid != expected.expected_remote_oid
+            || current.remote_name != expected.remote_name
+            || current.remote_branch != expected.remote_branch
+        {
+            return Err(TaskFailure::Failed(
+                "Push preflight became stale before execution. Refresh and review the target again.".into(),
+            ));
+        }
+        if current.ahead == 0 {
+            return Err(TaskFailure::Failed(
+                "There are no local commits to push.".into(),
+            ));
+        }
+        if current.behind > 0 && !force_with_lease {
+            return Err(TaskFailure::Failed(
+                "The remote has commits missing locally. Fetch and review before pushing.".into(),
+            ));
+        }
+        let mut arguments = vec!["push".into(), "--progress".into(), "--porcelain".into()];
+        if force_with_lease {
+            arguments.push(
+                format!(
+                    "--force-with-lease=refs/heads/{}:{}",
+                    expected.remote_branch, expected.expected_remote_oid
+                )
+                .into(),
+            );
+        }
+        arguments.extend([
+            "--".into(),
+            expected.remote_name.clone().into(),
+            format!(
+                "refs/heads/{}:refs/heads/{}",
+                expected.local_branch, expected.remote_branch
+            )
+            .into(),
+        ]);
+        run_command(
+            &self.git_program,
+            arguments,
+            Some(if force_with_lease {
+                format!("push --force-with-lease {}", expected.remote_name)
+            } else {
+                format!("push {}", expected.remote_name)
+            }),
+            None,
+            Vec::new(),
+            askpass_environment()?,
+            Some(repository_path),
+            if force_with_lease {
+                "Push with lease"
+            } else {
+                "Push"
+            },
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_clone(
         &self,
         remote_url: &str,
@@ -625,7 +704,7 @@ where
         while let Ok(Some(line)) = lines.next_line().await {
             activity.send_replace(Instant::now());
             if let Some(progress) = parse_progress(&line) {
-                task.progress("Receiving objects", Some(progress)).await;
+                task.progress(progress_phase(&line), Some(progress)).await;
             }
             let line = redactions.iter().fold(line, |line, secret| {
                 line.replace(secret, "[commit message]")
@@ -714,6 +793,20 @@ fn parse_progress(line: &str) -> Option<u8> {
     percent.parse::<u8>().ok().filter(|value| *value <= 100)
 }
 
+fn progress_phase(line: &str) -> &'static str {
+    if line.contains("Writing objects") {
+        "Writing objects"
+    } else if line.contains("Compressing objects") {
+        "Compressing objects"
+    } else if line.contains("Enumerating objects") {
+        "Enumerating objects"
+    } else if line.contains("Resolving deltas") {
+        "Resolving deltas"
+    } else {
+        "Receiving objects"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{process::Command as StdCommand, time::Duration};
@@ -735,6 +828,21 @@ mod tests {
         );
     }
 
+    fn git_output(path: &Path, args: &[&str]) -> String {
+        let output = StdCommand::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    }
+
     fn init_repo(path: &Path) {
         std::fs::create_dir_all(path).unwrap();
         git(path, &["init", "--quiet"]);
@@ -751,6 +859,10 @@ mod tests {
     #[test]
     fn parses_progress_and_keeps_command_set_typed() {
         assert_eq!(parse_progress("Receiving objects: 42% (42/100)"), Some(42));
+        assert_eq!(
+            progress_phase("Writing objects: 100% (2/2)"),
+            "Writing objects"
+        );
         assert_eq!(parse_progress("remote: Counting objects"), None);
         assert_eq!(GitOperation::Fetch.arguments(), ["fetch", "--progress"]);
         assert_eq!(
@@ -820,6 +932,188 @@ mod tests {
         let completed = tasks.get(&task.task_id).await.unwrap();
         assert_eq!(completed.status, TaskStatus::Succeeded);
         assert!(completed.logs.iter().any(|line| line.contains("From ")));
+    }
+
+    #[tokio::test]
+    async fn push_succeeds_and_force_with_lease_rejects_a_remote_that_moved_after_preview() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source");
+        let bare = directory.path().join("remote.git");
+        let other = directory.path().join("other");
+        init_repo(&source);
+        git(
+            directory.path(),
+            &["init", "--bare", "--quiet", bare.to_str().unwrap()],
+        );
+        git(
+            &source,
+            &["remote", "add", "origin", bare.to_str().unwrap()],
+        );
+        let branch_output = StdCommand::new("git")
+            .arg("-C")
+            .arg(&source)
+            .args(["branch", "--show-current"])
+            .output()
+            .unwrap();
+        assert!(branch_output.status.success());
+        let branch = String::from_utf8_lossy(&branch_output.stdout)
+            .trim()
+            .to_owned();
+        git(&source, &["push", "--quiet", "-u", "origin", &branch]);
+        std::fs::write(source.join("local.txt"), "local\n").unwrap();
+        git(&source, &["add", "local.txt"]);
+        git(&source, &["commit", "--quiet", "-m", "local push"]);
+
+        let tasks = TaskService::default();
+        let command = GitCommandService::default();
+        let preview =
+            crate::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
+                .await
+                .unwrap();
+        let path = source.clone();
+        let task = tasks
+            .submit(
+                Some("repo".into()),
+                None,
+                "push-common-dir",
+                "push",
+                move |context| async move {
+                    command
+                        .execute_push(&path, &preview, false, context)
+                        .await
+                        .map(|()| None)
+                },
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let current = tasks.get(&task.task_id).await.unwrap();
+                if matches!(current.status, TaskStatus::Succeeded | TaskStatus::Failed) {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            tasks.get(&task.task_id).await.unwrap().status,
+            TaskStatus::Succeeded
+        );
+        assert_eq!(
+            git_output(&bare, &["rev-parse", &format!("refs/heads/{branch}")]),
+            git_output(&source, &["rev-parse", "HEAD"])
+        );
+
+        std::fs::write(source.join("next.txt"), "next\n").unwrap();
+        git(&source, &["add", "next.txt"]);
+        git(&source, &["commit", "--quiet", "-m", "next local push"]);
+        let stale_preview =
+            crate::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
+                .await
+                .unwrap();
+        git(
+            directory.path(),
+            &[
+                "clone",
+                "--quiet",
+                bare.to_str().unwrap(),
+                other.to_str().unwrap(),
+            ],
+        );
+        git(&other, &["config", "user.name", "Other Push Test"]);
+        git(
+            &other,
+            &["config", "user.email", "other-push@example.invalid"],
+        );
+        std::fs::write(other.join("remote.txt"), "remote\n").unwrap();
+        git(&other, &["add", "remote.txt"]);
+        git(&other, &["commit", "--quiet", "-m", "remote moved"]);
+        git(&other, &["push", "--quiet", "origin", &branch]);
+        let remote_head = git_output(&bare, &["rev-parse", &format!("refs/heads/{branch}")]);
+
+        let command = GitCommandService::default();
+        let path = source.clone();
+        let task = tasks
+            .submit(
+                Some("repo".into()),
+                None,
+                "push-common-dir",
+                "pushForceWithLease",
+                move |context| async move {
+                    command
+                        .execute_push(&path, &stale_preview, true, context)
+                        .await
+                        .map(|()| None)
+                },
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let current = tasks.get(&task.task_id).await.unwrap();
+                if matches!(current.status, TaskStatus::Succeeded | TaskStatus::Failed) {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        let failed = tasks.get(&task.task_id).await.unwrap();
+        assert_eq!(failed.status, TaskStatus::Failed);
+        assert_eq!(
+            failed.error_category,
+            Some(crate::tasks::TaskErrorCategory::PushRejected)
+        );
+        assert_eq!(
+            git_output(&bare, &["rev-parse", &format!("refs/heads/{branch}")]),
+            remote_head
+        );
+
+        git(&source, &["fetch", "--quiet", "origin"]);
+        let force_preview =
+            crate::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
+                .await
+                .unwrap();
+        assert_eq!((force_preview.ahead, force_preview.behind), (1, 1));
+        let command = GitCommandService::default();
+        let path = source.clone();
+        let task = tasks
+            .submit(
+                Some("repo".into()),
+                None,
+                "push-common-dir",
+                "pushForceWithLease",
+                move |context| async move {
+                    command
+                        .execute_push(&path, &force_preview, true, context)
+                        .await
+                        .map(|()| None)
+                },
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                let current = tasks.get(&task.task_id).await.unwrap();
+                if matches!(current.status, TaskStatus::Succeeded | TaskStatus::Failed) {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(
+            tasks.get(&task.task_id).await.unwrap().status,
+            TaskStatus::Succeeded
+        );
+        assert_eq!(
+            git_output(&bare, &["rev-parse", &format!("refs/heads/{branch}")]),
+            git_output(&source, &["rev-parse", "HEAD"])
+        );
     }
 
     #[cfg(unix)]
