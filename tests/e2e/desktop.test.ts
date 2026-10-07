@@ -90,6 +90,29 @@ describe("desktop startup E2E", () => {
       await parsedHunk.waitFor({ state: "visible" });
       expect(["parsed", "recovered"], rendererErrors.join("\n")).toContain(await parsedHunk.getAttribute("data-tree-sitter-state"));
 
+      const diffWindowPromise = app.waitForEvent("window");
+      await window.getByRole("button", { name: "Open in Diff window" }).click();
+      const diffWindow = await diffWindowPromise;
+      await diffWindow.locator(".diffWindow").waitFor({ state: "visible" });
+      await diffWindow.locator(".diffWindowHeader .sectionEyebrow").waitFor({ state: "visible" });
+      await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });
+      await diffWindow.getByRole("button", { name: "Unified" }).click();
+      expect(await diffWindow.locator(".unifiedDiff").count()).toBe(1);
+      const readonlyResult = await diffWindow.evaluate(async (repoId) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string; windowAccess: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits`, connection.baseUrl), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+          body: JSON.stringify({ message: "must not commit from diff window" }),
+        });
+        return { access: connection.windowAccess, status: response.status };
+      }, opened.body.repoId as string);
+      expect(readonlyResult).toEqual({ access: "readOnly", status: 403 });
+      await diffWindow.close();
+      expect(await window.locator(".monacoDiffHunk").count()).toBeGreaterThan(0);
+
       await window.setViewportSize({ width: 900, height: 820 });
       expect(await window.locator(".navigationPanel").isVisible()).toBe(false);
       expect(await window.locator(".mainPanel").isVisible()).toBe(true);

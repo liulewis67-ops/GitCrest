@@ -7,6 +7,12 @@ import WebSocket from "ws";
 let mainWindow: BrowserWindow | undefined;
 let sidecarConnection: SidecarConnection | undefined;
 type WindowAccess = "readWrite" | "readOnly";
+interface DiffWindowRequest {
+  repoId: string;
+  path: string;
+  scope: "workingTree" | "index" | "commit";
+  commitOid?: string;
+}
 const windowAccessByContentsId = new Map<number, WindowAccess>();
 
 interface EventStream {
@@ -177,15 +183,44 @@ ipcMain.handle("gitcrest:disconnect-events", (event) => {
   stopEventStream(event.sender.id);
 });
 
-async function createWindow(windowAccess: WindowAccess = "readWrite"): Promise<void> {
+ipcMain.handle("gitcrest:open-diff-window", async (event, value: unknown) => {
+  if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
+    throw new Error("Only the main window can open a Diff window.");
+  }
+  const request = parseDiffWindowRequest(value);
+  await createWindow("readOnly", request);
+});
+
+function parseDiffWindowRequest(value: unknown): DiffWindowRequest {
+  if (!value || typeof value !== "object") throw new Error("Invalid Diff window request.");
+  const request = value as Partial<DiffWindowRequest>;
+  if (typeof request.repoId !== "string" || !/^repo_[a-f0-9]{64}$/.test(request.repoId)) {
+    throw new Error("Invalid repository ID for Diff window.");
+  }
+  if (typeof request.path !== "string" || request.path.trim().length === 0 || request.path.length > 4096) {
+    throw new Error("Invalid file path for Diff window.");
+  }
+  if (!["workingTree", "index", "commit"].includes(request.scope || "")) {
+    throw new Error("Invalid Diff scope.");
+  }
+  if (request.scope === "commit" && (typeof request.commitOid !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(request.commitOid))) {
+    throw new Error("A full commit ID is required for a historical Diff window.");
+  }
+  if (request.scope !== "commit" && request.commitOid !== undefined) {
+    throw new Error("A commit ID is only valid for a historical Diff window.");
+  }
+  return request as DiffWindowRequest;
+}
+
+async function createWindow(windowAccess: WindowAccess = "readWrite", diffRequest?: DiffWindowRequest): Promise<void> {
   sidecarConnection = await startSidecar();
 
   const window = new BrowserWindow({
-    width: 1280,
-    height: 820,
-    minWidth: 960,
-    minHeight: 640,
-    title: "GitCrest",
+    width: diffRequest ? 1180 : 1280,
+    height: diffRequest ? 780 : 820,
+    minWidth: diffRequest ? 760 : 960,
+    minHeight: diffRequest ? 520 : 640,
+    title: diffRequest ? `Diff · ${diffRequest.path}` : "GitCrest",
     show: false,
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
@@ -229,10 +264,19 @@ async function createWindow(windowAccess: WindowAccess = "readWrite"): Promise<v
     mainWindow = window;
   }
 
+  const query = diffRequest ? {
+    view: "diff",
+    repoId: diffRequest.repoId,
+    path: diffRequest.path,
+    scope: diffRequest.scope,
+    ...(diffRequest.commitOid ? { commitOid: diffRequest.commitOid } : {}),
+  } : undefined;
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
-    await window.loadURL(process.env.ELECTRON_RENDERER_URL);
+    const rendererUrl = new URL(process.env.ELECTRON_RENDERER_URL);
+    for (const [key, value] of Object.entries(query || {})) rendererUrl.searchParams.set(key, value);
+    await window.loadURL(rendererUrl.toString());
   } else {
-    await window.loadFile(join(__dirname, "../renderer/index.html"));
+    await window.loadFile(join(__dirname, "../renderer/index.html"), query ? { query } : undefined);
   }
 }
 

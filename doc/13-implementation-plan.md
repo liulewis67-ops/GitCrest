@@ -86,7 +86,7 @@
 | S3.2 | Canvas 提交图、虚拟滚动、可访问列表替代结构。 | 分支/merge 连线与提交关系一致；长历史滚动不创建等量 DOM 节点；选中提交显示右侧详情；键盘和屏幕阅读器可通过列表访问提交；100k 提交性能留到 S7.2 正式验收。 | 已完成 |
 | S3.3 | 历史搜索、筛选、提交详情动作。 | SHA、作者、日期、message、分支/路径筛选返回正确结果；无结果可清除过滤；复制 SHA、打开文件 Diff、tag 等动作有上下文；危险历史动作只在安全阶段实现并受预检，不提前暴露不可用按钮。 | 已完成 |
 | S3.4 | 高级 Diff：Monaco、词/token 高亮、语法解析、变更块导航与折叠。 | `F7`/`Shift+F7` 跳转；新增/删除/修改和上下文可辨；tree-sitter 不支持的语言降级为文本 diff；二进制和超大文件有降级提示；结构化结果与 Git 原始 diff 一致；1k 行性能留到 S7.2。 | 进行中 |
-| S3.5 | 独立只读 Diff 窗口、Split/Unified、Blame 和多文件 Tab。 | 从 Changes 与提交详情打开；主区仍仅 Split，独立窗口可切换两种视图；独立窗口对提交/删除/push 等写请求被后端拒绝；Blame 行号/SHA 与 Git 一致；关闭窗口不丢主窗口上下文。 | 未开始 |
+| S3.5 | 独立只读 Diff 窗口、Split/Unified、Blame 和多文件 Tab。 | 从 Changes 与提交详情打开；主区仍仅 Split，独立窗口可切换两种视图；独立窗口对提交/删除/push 等写请求被后端拒绝；Blame 行号/SHA 与 Git 一致；关闭窗口不丢主窗口上下文。 | 进行中 |
 
 ## 8. 大阶段 4：分支与远程
 
@@ -317,3 +317,8 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/diff/MonacoDiffHunk.tsx`、`src/features/diff/monaco-language.ts`、`src/features/diff/monaco-view-limits.ts`、`src/features/diff/tree-sitter.ts`、`src/vite-assets.d.ts`、`src/features/diff/SplitDiff.tsx`、`crates/gitcrest-core/src/diff.rs`、`tests/unit/monaco-language.test.ts`、`tests/unit/monaco-view-limits.test.ts`、`tests/unit/split-diff.test.tsx`、`tests/unit/tree-sitter.test.ts`、`tests/e2e/desktop.test.ts`、`package.json`、`pnpm-lock.yaml`、`tsconfig.test.json`。
 - 完成日期：2026-10-08。完成 commits：`539bec1`、`1b3614d`、`7906421`、`32708cb`、`4c51b65`。
 - 限制/后续：Monaco 只读视图按 hunk 懒加载；默认 Split 仍是 Git 结构化行和可选暂存的权威视图。树解析器支持 JavaScript、TypeScript/TSX 与 Rust；未知类型、解析失败和超大 hunk 回退为纯文本，超过 50 个 hunk 或合计 1,000,000 字符时不启用 Monaco。构建工具报告 tree-sitter wasm runtime 的 `eval` 警告，后续在 S7.3 安全验收；资源体积和 1k 行性能在 S7.2 测量。
+
+### S3.5 — 独立只读 Diff 窗口、Blame 与多文件 Tab（进行中）
+- 子阶段 A：独立 Diff 窗口与 Split/Unified 只读审阅，已完成。窗口只允许 read-write 主窗口通过受校验 IPC 创建，使用后端 read-only token；支持 Changes 与提交详情入口、工作区/历史 Diff、Split/Unified。Electron E2E 验证 read-only 窗口的 commit 写请求返回 403，关闭窗口后主窗口 diff 仍保留。`pnpm check` 通过：41 个 Vitest 用例、49 个 Rust 测试、1 个 Electron E2E。
+- 子阶段 A 证据：`electron/main/index.ts`、`electron/preload/index.ts`、`src/features/diff/DiffWindow.tsx`、`src/features/diff/SplitDiff.tsx`、`src/main.tsx`、`src/App.tsx`、`src/features/history/CommitGraph.tsx`、`tests/e2e/desktop.test.ts`、`tests/unit/commit-graph.test.tsx`、`tests/unit/split-diff.test.tsx`。完成 commit SHA 待补记。
+- 子阶段 B：Blame 和多文件 Tab，未开始。为历史文件行提供 Git blame 来源/行号/SHA；窗口内支持多个文件 tab，关闭后不改变主窗口仓库、文件和历史选择。

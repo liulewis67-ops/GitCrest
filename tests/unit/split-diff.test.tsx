@@ -61,6 +61,24 @@ describe("SplitDiff", () => {
     expect(screen.queryByRole("button", { name: "Monaco view" })).toBeNull();
   });
 
+  it("keeps a working tree diff read-only when rendered in a separate window", () => {
+    const document: DiffDocumentResponse = {
+      repoId: "repo_fixture",
+      path: "src/file.ts",
+      revision: "sha256:readonly-window-fixture",
+      originalPath: null,
+      scope: "workingTree",
+      changeKind: "modified",
+      status: "text",
+      hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change", oldLine: 1, newLine: 1, oldText: "before", newText: "after" }] }],
+    };
+    render(<SplitDiff document={document} onStageSelection={vi.fn()} disabled={false} readOnly />);
+
+    expect(screen.getByText("before")).toBeDefined();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+    expect(screen.queryByRole("button", { name: /stage|unstage/i })).toBeNull();
+  });
+
   it("navigates changed hunks with F7 and collapses or expands hunk rows", () => {
     const document: DiffDocumentResponse = {
       repoId: "repo_fixture",

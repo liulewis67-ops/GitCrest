@@ -11,15 +11,17 @@ interface SplitDiffProps {
   onStageSelection: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   onCommitSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   disabled: boolean;
+  readOnly?: boolean;
+  onOpenWindow?: () => void;
 }
 
-export function SplitDiff({ document, onStageSelection, onCommitSelection, disabled }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow }: SplitDiffProps) {
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
   const [activeHunk, setActiveHunk] = useState<number | null>(null);
   const [view, setView] = useState<"split" | "monaco">("split");
   const hunkRefs = useRef<Array<HTMLElement | null>>([]);
-  const readOnly = document.scope === "commit";
+  const readOnly = readOnlyOverride || document.scope === "commit";
   const language = monacoLanguageForPath(document.path);
   const monacoDegraded = exceedsMonacoViewLimits(document.hunks);
   const navigableHunks = useMemo(() => document.status === "text"
@@ -83,6 +85,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
         <span>{navigableHunks.length ? `${activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1} / ${navigableHunks.length} changes` : "No changes"}</span>
         <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>Split view</button>
         <button type="button" aria-pressed={view === "monaco"} disabled={monacoDegraded} title={monacoDegraded ? "This diff is too large for Monaco view; use Split view." : undefined} onClick={() => setView("monaco")}>Monaco view</button>
+        {onOpenWindow && <button type="button" onClick={onOpenWindow}>Open in Diff window</button>}
         <button type="button" onClick={() => navigateHunk(-1)} disabled={navigableHunks.length === 0} title="Previous change (Shift+F7)">Previous change</button>
         <button type="button" onClick={() => navigateHunk(1)} disabled={navigableHunks.length === 0} title="Next change (F7)">Next change</button>
       </div>

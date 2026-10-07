@@ -269,11 +269,13 @@ export function CommitDetails({
   repoId,
   oid,
   onOpenFile,
+  onOpenDiffWindow,
 }: {
   api: GitCrestApiClient;
   repoId: string;
   oid?: string;
   onOpenFile?: (path: string, oid: string) => void;
+  onOpenDiffWindow?: (path: string, oid: string) => void;
 }) {
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
   const [copyMessage, setCopyMessage] = useState("");
@@ -356,6 +358,6 @@ export function CommitDetails({
     <div className="repositoryFact"><span>DATE</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
     <div className="commitDetailMessage">{detail.message}</div>
     <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> files <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
-    <div className="commitDetailFiles" aria-label="Changed files">{detail.files.map((file) => <button className="commitDetailFile" type="button" key={file.path} aria-label={`Open commit diff for ${file.path}`} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? "binary" : `+${file.additions} −${file.deletions}`}</small></button>)}</div>
+    <div className="commitDetailFiles" aria-label="Changed files">{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className="commitDetailFile" type="button" aria-label={`Open commit diff for ${file.path}`} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? "binary" : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={`Open commit diff window for ${file.path}`} title="Open in a read-only Diff window" onClick={() => onOpenDiffWindow(file.path, detail.oid)}>↗</button>}</div>)}</div>
   </div>;
 }

@@ -517,6 +517,16 @@ function App() {
     }));
   }
 
+  async function openDiffWindow(path: string, scope: "workingTree" | "index" | "commit", commitOid?: string) {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId) return;
+    try {
+      await window.gitcrest.openDiffWindow({ repoId, path, scope, ...(commitOid ? { commitOid } : {}) });
+    } catch (error) {
+      setDiffState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Could not open the Diff window." }));
+    }
+  }
+
   function rememberGraphScroll(scrollTop: number) {
     const repoId = selectedRepository?.repoId;
     if (!repoId || mode !== "graph" || !Number.isFinite(scrollTop)) return;
@@ -1052,7 +1062,7 @@ function App() {
                 : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div></div>
                   : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
                   : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></div>
+                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} onOpenWindow={() => void openDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></div>
                   : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div></div>}
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
             </section>
@@ -1060,7 +1070,7 @@ function App() {
 
             {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
               <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} /> : selectedRepository ? (
+              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} /> : selectedRepository ? (
                 <div className="repositoryDetails">
                   <span className="detailsGlyph" aria-hidden="true">G</span>
                   <h2>{repositoryName(selectedRepository.path)}</h2>

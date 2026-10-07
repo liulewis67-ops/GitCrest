@@ -14,6 +14,12 @@ declare global {
       getSidecarConnection: () => Promise<GitCrestSidecarConnection>;
       chooseRepository: () => Promise<string | undefined>;
       chooseCloneParent: () => Promise<string | undefined>;
+      openDiffWindow: (request: {
+        repoId: string;
+        path: string;
+        scope: "workingTree" | "index" | "commit";
+        commitOid?: string;
+      }) => Promise<void>;
       subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
     };
   };

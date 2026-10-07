@@ -66,13 +66,16 @@ describe("CommitGraph", () => {
       createRepositoryCommitTag: vi.fn(async () => ({ repoId: "repo_fixture", name: "v1.0.0", fullName: "refs/tags/v1.0.0", oid })),
     } as unknown as GitCrestApiClient;
     const onOpenFile = vi.fn();
-    render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} onOpenFile={onOpenFile} />);
+    const onOpenDiffWindow = vi.fn();
+    render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} />);
     expect(await screen.findByText(/A commit message/)).toBeDefined();
     expect(screen.getByText("src/file.ts")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Copy SHA" }));
     expect((await screen.findByRole("status")).textContent).toContain("Clipboard access is unavailable");
     fireEvent.click(screen.getByRole("button", { name: "Open commit diff for src/file.ts" }));
     expect(onOpenFile).toHaveBeenCalledWith("src/file.ts", oid);
+    fireEvent.click(screen.getByRole("button", { name: "Open commit diff window for src/file.ts" }));
+    expect(onOpenDiffWindow).toHaveBeenCalledWith("src/file.ts", oid);
     fireEvent.click(screen.getByRole("button", { name: "Create tag" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Tag name" }), { target: { value: "v1.0.0" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Tag annotation" }), { target: { value: "Release context" } });
