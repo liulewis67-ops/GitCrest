@@ -39,7 +39,7 @@
 |---|---|---|---|
 | 0. 工程与契约基座 | 可启动、安全通信、统一契约、可执行测试和界面骨架 | 无 | 已完成 |
 | 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 已完成 |
-| 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 未开始 |
+| 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 进行中 |
 | 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 未开始 |
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 未开始 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 未开始 |
@@ -72,7 +72,7 @@
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S2.1 | 结构化基础 Diff API 与主区 Split Diff。 | 可展示 working tree↔index、index↔HEAD 的文本 diff，新增/删除/改名/二进制有明确状态；点 Changes 文件进入主区 Split 模式且右侧提交详情收起；Graph/Diff 往返保留选择；只读历史 Diff 不出现暂存操作。 | 未开始 |
+| S2.1 | 结构化基础 Diff API 与主区 Split Diff。 | 可展示 working tree↔index、index↔HEAD 的文本 diff，新增/删除/改名/二进制有明确状态；点 Changes 文件进入主区 Split 模式且右侧提交详情收起；Graph/Diff 往返保留选择；只读历史 Diff 不出现暂存操作。 | 进行中 |
 | S2.2 | 文件级暂存、取消暂存及全部操作。 | modified、added、deleted、untracked 文件均可正确暂存/取消；操作后 status 和 Diff 同步刷新；失败时 index 与 UI 一致；已暂存内容与工作区剩余修改不会互相覆盖。 | 未开始 |
 | S2.3 | hunk/行级精确暂存与取消暂存。 | 同文件多 hunk、相邻编辑、行尾差异和工作区继续变化时只修改所选范围；过期 patch 拒绝并提示刷新；原有已暂存但未选内容原样保留；测试比对 `git diff`、`git diff --cached`。 | 未开始 |
 | S2.4 | CommitService、提交表单、模板/正文、提交前校验和基础快捷键。 | 空消息/无暂存禁用提交；`Cmd/Ctrl+Enter` 提交所选内容，Git hook 失败展示输出并保留工作区；敏感文件给出提醒；成功后 HEAD、status、log 刷新；未选 staged 内容不被误提交；AI 不可用也能手写提交。 | 未开始 |
@@ -234,5 +234,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm api:types` 与 `pnpm check` 通过；门禁包含 renderer/Electron 类型检查和构建、17 个 Vitest 用例、34 个 Rust 测试及 Electron E2E。Rust 临时仓库测试覆盖无效 remote 清理、不可达 HTTPS 的 Network 分类、相同目标修复后重试成功并注册、空 status、排队取消后目标/暂存目录均不存在，以及安全 URL/目录名验证。前端测试填写 remote/选择目标目录/提交 clone，并验证任务成功后自动打开仓库且刷新 status。另以本地自签名 HTTPS smart-HTTP 测试 remote 通过真实 sidecar API 完成 `POST clone → 202 → succeeded`，随后确认仓库列表已注册且 status 为空；同一受控 TLS fixture 的 401 响应产生 `authentication` 错误分类，失败目标未创建。
 - 手工验证：Windows 本机启动 sidecar；临时 Git bare remote 由 `git update-server-info` 提供只读 HTTPS clone。分别验证成功、认证拒绝和网络拒绝，并确认 clone staging 目录不残留。fixture、临时证书、证书库条目、sidecar 与 HTTPS 服务均已清理。
 - 证据：`crates/gitcrest-core/src/cloning.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/tasks.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/features/cloning/CloneDialog.tsx`、`src/features/tasks/TaskCenter.tsx`、`src/App.tsx`、`electron/main/index.ts`、`electron/preload/index.ts`、`tests/unit/app.test.tsx`。
-- 完成 commit：待补记
+- 完成 commit：`05c54d0`
 - 限制/后续：系统 Git Credential Manager/SSH agent 使用机器现有配置；本机端到端覆盖 HTTPS，SSH agent 在 S7.4 跨平台验收。认证失败后可在任务面板用 `Retry clone` 重新提交同一目标与 remote；remote URL 仅留在 renderer 当前会话内，不持久化到任务记录。Git 任务有 5 分钟无输出网络期限和 2 小时执行期限；大仓库若超过期限会安全终止并可重新发起。
