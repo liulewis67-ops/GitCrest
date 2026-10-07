@@ -224,6 +224,7 @@ button:disabled { cursor: not-allowed; }
 .panelFooter { display: flex; align-items: center; gap: 6px; min-height: 28px; margin-top: auto; padding: 0 11px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 9px; }
 .statusIcon { color: var(--green); font-size: 8px; }
 .mainPanelHeading { min-height: 36px; border-bottom: 1px solid var(--line); }
+.graphViewport { display: flex; flex: 1; flex-direction: column; min-height: 0; overflow: auto; overscroll-behavior: contain; }
 .viewTitle { color: var(--text-secondary); font-size: 10px; font-weight: 620; letter-spacing: 0; }
 .viewGlyph { color: var(--accent); font-size: 14px; }
 .subtleTag { padding: 2px 4px; border: 1px solid var(--line); border-radius: 3px; color: var(--text-muted); font-size: 7px; letter-spacing: .08em; }

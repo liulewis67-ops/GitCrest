@@ -146,6 +146,10 @@ function App() {
   const workspaceSessionRef = useRef(workspaceSession);
   workspaceSessionRef.current = workspaceSession;
   const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
+  const selectedCommit = selectedRepository
+    ? workspaceSession.tabs[selectedRepository.repoId]?.selectedCommit || selectedRepository.head || undefined
+    : undefined;
+  const graphViewportRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>(() => {
     try {
       const stored = window.localStorage.getItem("gitcrest-theme");
@@ -172,7 +176,9 @@ function App() {
       activeRepoId: repository.repoId,
       tabs: {
         ...current.tabs,
-        [repository.repoId]: current.tabs[repository.repoId] || { mode: "graph", graphScrollTop: 0 },
+        [repository.repoId]: current.tabs[repository.repoId]
+          ? { ...current.tabs[repository.repoId], selectedCommit: current.tabs[repository.repoId].selectedCommit || repository.head || undefined }
+          : { mode: "graph", selectedCommit: repository.head || undefined, graphScrollTop: 0 },
       },
     }));
     setSelectedRepository(repository);
@@ -192,6 +198,18 @@ function App() {
           ...(current.tabs[selectedRepository.repoId] || { graphScrollTop: 0 }),
           mode: nextMode,
         },
+      },
+    }));
+  }
+
+  function rememberGraphScroll(scrollTop: number) {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId || mode !== "graph" || !Number.isFinite(scrollTop)) return;
+    setWorkspaceSession((current) => ({
+      ...current,
+      tabs: {
+        ...current.tabs,
+        [repoId]: { ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }), graphScrollTop: Math.max(0, scrollTop) },
       },
     }));
   }
@@ -358,6 +376,13 @@ function App() {
       // Repository tabs remain available for this session if local storage is unavailable.
     }
   }, [workspaceSession]);
+
+  useEffect(() => {
+    const viewport = graphViewportRef.current;
+    if (viewport && mode === "graph" && selectedRepository) {
+      viewport.scrollTop = workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0;
+    }
+  }, [selectedRepository?.repoId, mode, workspaceSession.tabs]);
 
   useEffect(() => {
     const systemTheme = typeof window.matchMedia === "function"
@@ -559,15 +584,23 @@ function App() {
 
             <section className="mainPanel" aria-label="Commit graph">
               <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled title="Open a repository to refresh its history">Refresh <span aria-hidden="true">↻</span></button></div>
-              {mode === "graph" ? (
-                <div className="graphEmpty">
-                  <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
-                  <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
-                  <h2>{selectedRepository ? selectedRepository.head ? "Repository ready" : "No commits yet" : "Your commit graph starts here"}</h2>
-                  <p>{selectedRepository ? `${selectedRepository.path}${selectedRepository.branch ? ` · ${selectedRepository.branch}` : selectedRepository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
-                  {!selectedRepository && <button className="secondaryButton" type="button" onClick={() => void openLocalRepository()} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
-                </div>
-              ) : <div className="graphEmpty"><h2>Choose a changed file</h2><p>Diff review becomes available when a repository is open.</p></div>}
+              <div
+                className="graphViewport"
+                ref={graphViewportRef}
+                onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)}
+                role="region"
+                aria-label={mode === "graph" ? "Commit graph view" : "Diff view"}
+              >
+                {mode === "graph" ? (
+                  <div className="graphEmpty">
+                    <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
+                    <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
+                    <h2>{selectedRepository ? selectedRepository.head ? "Repository ready" : "No commits yet" : "Your commit graph starts here"}</h2>
+                    <p>{selectedRepository ? `${selectedRepository.path}${selectedRepository.branch ? ` · ${selectedRepository.branch}` : selectedRepository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
+                    {!selectedRepository && <button className="secondaryButton" type="button" onClick={() => void openLocalRepository()} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
+                  </div>
+                ) : <div className="graphEmpty"><h2>Choose a changed file</h2><p>Diff review becomes available when a repository is open.</p></div>}
+              </div>
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
             </section>
             <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />
@@ -580,7 +613,7 @@ function App() {
                   <h2>{repositoryName(selectedRepository.path)}</h2>
                   <p>{selectedRepository.path}</p>
                   <div className="repositoryFact"><span>BRANCH</span><strong>{selectedRepository.detached ? "Detached HEAD" : selectedRepository.branch || "Unborn"}</strong></div>
-                  <div className="repositoryFact"><span>HEAD</span><strong className="monoText">{selectedRepository.head?.slice(0, 12) || "No commits"}</strong></div>
+                  <div className="repositoryFact"><span>{selectedCommit && selectedCommit !== selectedRepository.head ? "SELECTED COMMIT" : "HEAD"}</span><strong className="monoText">{selectedCommit?.slice(0, 12) || "No commits"}</strong></div>
                   <div className="repositoryFact"><span>REPO ID</span><strong className="monoText">{selectedRepository.repoId.slice(0, 17)}…</strong></div>
                 </div>
               ) : (

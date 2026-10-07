@@ -226,7 +226,14 @@ describe("App", () => {
     expect(await screen.findByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(screen.getByRole("tab", { name: "alpha" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("button", { name: "Diff" }).className).toContain("active");
+    expect(screen.getByText("abc123", { selector: ".repositoryFact strong" })).toBeDefined();
     expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270");
+
+    fireEvent.click(screen.getByRole("button", { name: "Graph" }));
+    const graphViewport = screen.getByRole("region", { name: "Commit graph view" });
+    Object.defineProperty(graphViewport, "scrollTop", { configurable: true, writable: true, value: 193 });
+    fireEvent.scroll(graphViewport);
+    expect(JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}").tabs.repo_alpha.graphScrollTop).toBe(193);
 
     fireEvent.click(screen.getByRole("tab", { name: "beta" }));
     expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
@@ -234,7 +241,7 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Graph" }).className).toContain("active");
     const savedSession = JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}");
     expect(savedSession.activeRepoId).toBe("repo_beta");
-    expect(savedSession.tabs.repo_alpha).toMatchObject({ selectedCommit: "abc123", graphScrollTop: 147 });
+    expect(savedSession.tabs.repo_alpha).toMatchObject({ selectedCommit: "abc123", graphScrollTop: 193 });
     expect(savedSession.tabs.repo_beta).toMatchObject({ selectedCommit: "def456", graphScrollTop: 23 });
 
     firstRun.unmount();
@@ -242,10 +249,12 @@ describe("App", () => {
     expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected")).toBe("true");
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
+    expect((screen.getByRole("region", { name: "Commit graph view" }) as HTMLDivElement).scrollTop).toBe(23);
 
     fireEvent.click(screen.getByRole("button", { name: "Close beta tab" }));
     expect(screen.getByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270"));
+    expect((screen.getByRole("region", { name: "Commit graph view" }) as HTMLDivElement).scrollTop).toBe(193);
     fireEvent.click(screen.getByRole("button", { name: "Close alpha tab" }));
     expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
     expect(screen.getByText("C:/alpha")).toBeDefined();
