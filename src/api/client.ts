@@ -318,6 +318,17 @@ export class GitCrestApiClient {
     return this.request<WorkflowPreflightResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/preflight?${query}`);
   }
 
+  startRepositoryWorkflow(
+    repoId: RepoId,
+    request: components["schemas"]["WorkflowRequest"],
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/workflows`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  }
+
   preflightRepositoryPush(
     repoId: RepoId,
     target?: Pick<components["schemas"]["PushRequest"], "remoteName" | "remoteBranch">,

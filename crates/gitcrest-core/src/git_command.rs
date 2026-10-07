@@ -181,6 +181,65 @@ impl GitCommandService {
         .await
     }
 
+    pub async fn execute_workflow(
+        &self,
+        repository_path: &Path,
+        action: crate::workflows::WorkflowAction,
+        target_oid: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let (arguments, label) = match action {
+            crate::workflows::WorkflowAction::Merge => (
+                vec![
+                    "merge".into(),
+                    "--no-edit".into(),
+                    "--".into(),
+                    target_oid.into(),
+                ],
+                "Merge commit",
+            ),
+            crate::workflows::WorkflowAction::CherryPick => (
+                vec!["cherry-pick".into(), "--no-edit".into(), target_oid.into()],
+                "Cherry-pick commit",
+            ),
+            crate::workflows::WorkflowAction::Revert => (
+                vec!["revert".into(), "--no-edit".into(), target_oid.into()],
+                "Revert commit",
+            ),
+        };
+        let result = run_command(
+            &self.git_program,
+            arguments,
+            Some(format!(
+                "{} {}",
+                label.to_lowercase(),
+                &target_oid[..7.min(target_oid.len())]
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            label,
+            task,
+        )
+        .await;
+        if result.is_ok() {
+            return result;
+        }
+        match crate::workflows::read_operation(repository_path).await {
+            Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
+                "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
+                match operation {
+                    crate::workflows::WorkflowOperation::Merge => "Merge",
+                    crate::workflows::WorkflowOperation::CherryPick => "Cherry-pick",
+                    crate::workflows::WorkflowOperation::Revert => "Revert",
+                    crate::workflows::WorkflowOperation::Rebase => "Rebase",
+                }
+            ))),
+            Ok(None) | Err(_) => result,
+        }
+    }
+
     pub async fn execute_branch(
         &self,
         repository_path: &Path,

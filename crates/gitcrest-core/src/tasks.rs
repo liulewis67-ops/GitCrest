@@ -107,6 +107,7 @@ pub enum TaskSubmitError {
 pub enum TaskFailure {
     Failed(String),
     Cancelled,
+    WaitingForInput(String),
 }
 
 #[derive(Clone)]
@@ -162,7 +163,8 @@ impl TaskService {
             let Some(task) = data.tasks.get_mut(task_id) else {
                 return Ok(None);
             };
-            let sender = if !task.status.is_terminal() {
+            let sender = if !task.status.is_terminal() && task.status != TaskStatus::WaitingForInput
+            {
                 task.cancel_requested = true;
                 task.updated_at_ms = now_ms();
                 data.cancellations.get(task_id).cloned()
@@ -370,6 +372,9 @@ async fn run_task<F, Fut>(
             None,
         ),
         Err(TaskFailure::Failed(message)) => (TaskStatus::Failed, redact_log_line(&message), None),
+        Err(TaskFailure::WaitingForInput(message)) => {
+            (TaskStatus::WaitingForInput, redact_log_line(&message), None)
+        }
     };
     drop(worker_permit);
     drop(repo_guard);
@@ -415,7 +420,8 @@ async fn finish_task(
             TaskStatus::Succeeded => "Complete",
             TaskStatus::Failed => "Failed",
             TaskStatus::Cancelled => "Cancelled",
-            TaskStatus::Queued | TaskStatus::Running | TaskStatus::WaitingForInput => "Stopped",
+            TaskStatus::WaitingForInput => "Waiting for input",
+            TaskStatus::Queued | TaskStatus::Running => "Stopped",
         }
         .into();
         task.progress = match status {
@@ -793,6 +799,45 @@ mod tests {
             failed.error_category,
             Some(TaskErrorCategory::Authentication)
         );
+    }
+
+    #[tokio::test]
+    async fn waiting_for_input_releases_execution_and_cannot_be_cancelled_as_a_running_task() {
+        let service = TaskService::default();
+        let waiting = service
+            .submit(
+                Some("repo".into()),
+                None,
+                "common-dir",
+                "merge",
+                |_context| async move {
+                    Err(TaskFailure::WaitingForInput(
+                        "Resolve conflicts before continuing.".into(),
+                    ))
+                },
+            )
+            .await
+            .unwrap();
+        let waiting = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                let current = service.get(&waiting.task_id).await.unwrap();
+                if current.status == TaskStatus::WaitingForInput {
+                    break current;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        assert_eq!(waiting.phase, "Waiting for input");
+        assert_eq!(
+            waiting.message.as_deref(),
+            Some("Resolve conflicts before continuing.")
+        );
+
+        let unchanged = service.cancel(&waiting.task_id).await.unwrap().unwrap();
+        assert_eq!(unchanged.status, TaskStatus::WaitingForInput);
+        assert!(!unchanged.cancel_requested);
     }
 
     #[tokio::test]

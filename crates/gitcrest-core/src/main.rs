@@ -142,6 +142,8 @@ enum ApiErrorCode {
     PushRequiresFetch,
     NothingToPush,
     WorkflowPreflightUnavailable,
+    WorkflowPreflightStale,
+    WorkflowRequiresClean,
     TagAlreadyExists,
     InternalError,
 }
@@ -897,6 +899,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/workflows/preflight",
             get(preflight_repository_workflow),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows",
+            post(start_repository_workflow),
         )
         .route(
             "/v1/repositories/:repo_id/push-preflight",
@@ -2922,6 +2928,113 @@ async fn preflight_repository_workflow(
     .map_err(ApiError::from_workflow_error)
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowRequest {
+    action: workflows::WorkflowAction,
+    target_oid: String,
+    expected_head_oid: String,
+}
+
+async fn start_repository_workflow(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<WorkflowRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A workflow action, targetOid, and expectedHeadOid are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = workflows::read_preflight(
+        repo_id.clone(),
+        &target.repository_path,
+        request.action,
+        &request.target_oid,
+    )
+    .await
+    .map_err(ApiError::from_workflow_error)?;
+    if preview.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
+        || preview.target_oid != request.target_oid
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowPreflightStale,
+            "HEAD or the selected commit changed after preflight. Refresh the workflow preview.",
+        ));
+    }
+    if !preview.can_start {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowRequiresClean,
+            "Merge, cherry-pick, or revert requires a clean worktree and no Git operation in progress.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let repositories = state.repositories.clone();
+    let task_repo_id = repo_id.clone();
+    let path = target.repository_path;
+    let resource_key = target.resource_key;
+    let action = request.action;
+    let target_oid = request.target_oid;
+    let expected_head_oid = request.expected_head_oid;
+    let operation = match action {
+        workflows::WorkflowAction::Merge => "merge",
+        workflows::WorkflowAction::CherryPick => "cherryPick",
+        workflows::WorkflowAction::Revert => "revert",
+    };
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            operation,
+            move |context| async move {
+                let current = workflows::read_preflight(
+                    task_repo_id.clone(),
+                    &path,
+                    action,
+                    &target_oid,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "Workflow preconditions could not be rechecked. Refresh repository state.".into(),
+                    )
+                })?;
+                if current.head_oid.as_deref() != Some(expected_head_oid.as_str())
+                    || current.target_oid != target_oid
+                    || !current.can_start
+                {
+                    return Err(TaskFailure::Failed(
+                        "Workflow preconditions changed before Git could start. Review the current repository state.".into(),
+                    ));
+                }
+                let task_context = context.clone();
+                let result = command
+                    .execute_workflow(&path, action, &target_oid, context)
+                    .await;
+                if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                    task_context
+                        .log("Repository metadata refresh failed after the Git operation; refresh the repository before the next write.")
+                        .await;
+                }
+                result.map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
 async fn preflight_repository_push(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
@@ -3357,6 +3470,37 @@ mod tests {
         })
         .await
         .expect("staging task should reach a terminal state")
+    }
+
+    async fn wait_for_task_status(
+        router: &Router,
+        task_id: &str,
+        expected_status: &str,
+    ) -> serde_json::Value {
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let response = router
+                    .clone()
+                    .oneshot(request("/api/v1/tasks", Some(WRITE_TOKEN)))
+                    .await
+                    .unwrap();
+                let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let tasks: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                if let Some(task) = tasks
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .find(|task| task["taskId"] == task_id)
+                {
+                    if task["status"] == expected_status {
+                        return task.clone();
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("task should reach its expected status")
     }
 
     #[tokio::test]
@@ -4456,6 +4600,231 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(invalid.status(), StatusCode::NOT_FOUND);
+    }
+
+    #[tokio::test]
+    async fn workflow_tasks_complete_merge_cherry_pick_revert_and_wait_on_conflicts() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("workflow-task-repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["config", "user.name", "Workflow Task Test"]);
+        git(&["config", "user.email", "workflow-task@example.invalid"]);
+        std::fs::write(repository_path.join("base.txt"), "base\n").unwrap();
+        git(&["add", "base.txt"]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        git(&["checkout", "--quiet", "-b", "feature"]);
+        std::fs::write(repository_path.join("feature.txt"), "feature\n").unwrap();
+        git(&["add", "feature.txt"]);
+        git(&["commit", "--quiet", "-m", "feature"]);
+        let feature_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let start = |action: &str, target_oid: &str, expected_head_oid: &str| {
+            json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows"),
+                &serde_json::json!({
+                    "action": action,
+                    "targetOid": target_oid,
+                    "expectedHeadOid": expected_head_oid,
+                })
+                .to_string(),
+            )
+        };
+        let preview = |action: &str, target_oid: &str| {
+            request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/workflows/preflight?action={action}&targetOid={target_oid}"
+                ),
+                Some(WRITE_TOKEN),
+            )
+        };
+
+        let merge_preview = app
+            .clone()
+            .oneshot(preview("merge", &feature_oid))
+            .await
+            .unwrap();
+        let bytes = to_bytes(merge_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let merge_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(start(
+                "merge",
+                merge_preview["targetOid"].as_str().unwrap(),
+                merge_preview["headOid"].as_str().unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let merge_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let merge_task = wait_for_task(&app, merge_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(merge_task["status"], "succeeded");
+        assert_eq!(git(&["rev-parse", "HEAD"]), feature_oid);
+
+        git(&["checkout", "--quiet", "-b", "cherry-source"]);
+        std::fs::write(repository_path.join("cherry.txt"), "cherry\n").unwrap();
+        git(&["add", "cherry.txt"]);
+        git(&["commit", "--quiet", "-m", "cherry source"]);
+        let cherry_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+        let cherry_preview = app
+            .clone()
+            .oneshot(preview("cherryPick", &cherry_oid))
+            .await
+            .unwrap();
+        let bytes = to_bytes(cherry_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let cherry_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(start(
+                "cherryPick",
+                cherry_preview["targetOid"].as_str().unwrap(),
+                cherry_preview["headOid"].as_str().unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let cherry_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let cherry_task = wait_for_task(&app, cherry_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(cherry_task["status"], "succeeded");
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("cherry.txt"))
+                .unwrap()
+                .trim_end(),
+            "cherry"
+        );
+        let cherry_commit = git(&["rev-parse", "HEAD"]);
+
+        let revert_preview = app
+            .clone()
+            .oneshot(preview("revert", &cherry_commit))
+            .await
+            .unwrap();
+        let bytes = to_bytes(revert_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let revert_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(start(
+                "revert",
+                revert_preview["targetOid"].as_str().unwrap(),
+                revert_preview["headOid"].as_str().unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let revert_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let revert_task = wait_for_task(&app, revert_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(revert_task["status"], "succeeded");
+        assert!(!repository_path.join("cherry.txt").exists());
+
+        git(&["checkout", "--quiet", "-b", "conflict-source"]);
+        std::fs::write(repository_path.join("shared.txt"), "source\n").unwrap();
+        git(&["add", "shared.txt"]);
+        git(&["commit", "--quiet", "-m", "conflict source"]);
+        let conflict_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+        std::fs::write(repository_path.join("shared.txt"), "main\n").unwrap();
+        git(&["add", "shared.txt"]);
+        git(&["commit", "--quiet", "-m", "conflict main"]);
+        let conflict_preview = app
+            .clone()
+            .oneshot(preview("merge", &conflict_oid))
+            .await
+            .unwrap();
+        let bytes = to_bytes(conflict_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let conflict_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(start(
+                "merge",
+                conflict_preview["targetOid"].as_str().unwrap(),
+                conflict_preview["headOid"].as_str().unwrap(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let conflict_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let waiting = wait_for_task_status(
+            &app,
+            conflict_task["taskId"].as_str().unwrap(),
+            "waitingForInput",
+        )
+        .await;
+        assert_eq!(waiting["phase"], "Waiting for input");
+        assert!(waiting["message"]
+            .as_str()
+            .unwrap()
+            .contains("unresolved Git operation"));
+        let conflict_status = app
+            .clone()
+            .oneshot(preview("revert", &conflict_oid))
+            .await
+            .unwrap();
+        let bytes = to_bytes(conflict_status.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let conflict_status: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(conflict_status["operationInProgress"], "merge");
+        assert_eq!(conflict_status["conflictedPaths"][0], "shared.txt");
+        assert!(std::fs::read_to_string(repository_path.join("shared.txt"))
+            .unwrap()
+            .contains("<<<<<<<"));
+        let cancel = app
+            .oneshot(json_request(
+                Method::POST,
+                &format!(
+                    "/api/v1/tasks/{}/cancel",
+                    conflict_task["taskId"].as_str().unwrap()
+                ),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(cancel.into_body(), usize::MAX).await.unwrap();
+        let unchanged: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(unchanged["status"], "waitingForInput");
+        assert_eq!(unchanged["cancelRequested"], false);
     }
 
     #[tokio::test]

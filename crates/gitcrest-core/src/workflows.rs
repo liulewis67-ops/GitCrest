@@ -132,7 +132,7 @@ pub async fn read_preflight(
     })
 }
 
-async fn read_operation(
+pub(crate) async fn read_operation(
     repository_path: &Path,
 ) -> Result<Option<WorkflowOperation>, WorkflowError> {
     let git_dir = run_git(repository_path, &["rev-parse".into(), "--git-dir".into()]).await?;

@@ -1761,6 +1761,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: startRepositoryWorkflow
+      summary: Queue a snapshot-bound merge, cherry-pick, or revert operation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowRequest"
+      responses:
+        "202":
+          description: Workflow task accepted and durably recorded before execution.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The workflow request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository or commit is not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The worktree is dirty or a Git operation is already in progress.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "412":
+          description: HEAD or the target commit changed after preflight.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/push-preflight:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -2379,6 +2442,14 @@ components:
         conflictedPaths: { type: array, maxItems: 200, items: { type: string } }
         omittedConflictedPathCount: { type: integer, minimum: 0 }
         canStart: { type: boolean }
+    WorkflowRequest:
+      type: object
+      additionalProperties: false
+      required: [action, targetOid, expectedHeadOid]
+      properties:
+        action: { type: string, enum: [merge, cherryPick, revert] }
+        targetOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
     PushPreflight:
       type: object
       additionalProperties: false
@@ -2703,6 +2774,8 @@ components:
         - PUSH_REQUIRES_FETCH
         - NOTHING_TO_PUSH
         - WORKFLOW_PREFLIGHT_UNAVAILABLE
+        - WORKFLOW_PREFLIGHT_STALE
+        - WORKFLOW_REQUIRES_CLEAN
         - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:
