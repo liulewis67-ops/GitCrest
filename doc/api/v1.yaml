@@ -2009,6 +2009,128 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+    put:
+      operationId: saveWorkflowConflictFile
+      summary: Save text to the current working result for one reviewed conflict file
+      description: Requires the conflict-scoped window capability; writes only the exact unmerged path after rechecking task, operation, HEAD and result revision under repository serialization.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowConflictSaveRequest"
+      responses:
+        "202":
+          description: Conflict save task accepted.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The conflict mutation is malformed or exceeds the text limit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The waiting workflow task or repository is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: The file is no longer conflicted or cannot be safely written.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "412":
+          description: HEAD, operation or result changed after review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "413":
+          description: Conflict result exceeds 1 MiB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/conflicts/resolved:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: markWorkflowConflictResolved
+      summary: Stage one marker-free reviewed conflict file as resolved
+      description: Requires the conflict-scoped window capability; refuses unresolved marker lines and rechecks task, operation, HEAD, conflict set and result revision before staging only this path.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowConflictMutationRequest"
+      responses:
+        "202":
+          description: Conflict resolution task accepted.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The conflict mutation is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The waiting workflow task or repository is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: Conflict markers remain or the file cannot safely be resolved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "412":
+          description: HEAD, operation or result changed after review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/push-preflight:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -2677,6 +2799,27 @@ components:
         resultContent: { type: [string, "null"], maxLength: 1048576 }
         resultRevision: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-f]+$" }
         isText: { type: boolean }
+    WorkflowConflictMutationRequest:
+      type: object
+      additionalProperties: false
+      required: [taskId, path, expectedOperation, expectedHeadOid, expectedResultRevision]
+      properties:
+        taskId: { type: string, minLength: 1, maxLength: 128 }
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedOperation: { type: string, enum: [merge, cherryPick, revert] }
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        expectedResultRevision: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+    WorkflowConflictSaveRequest:
+      type: object
+      additionalProperties: false
+      required: [taskId, path, expectedOperation, expectedHeadOid, expectedResultRevision, content]
+      properties:
+        taskId: { type: string, minLength: 1, maxLength: 128 }
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedOperation: { type: string, enum: [merge, cherryPick, revert] }
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        expectedResultRevision: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        content: { type: string, maxLength: 1048576 }
     PushPreflight:
       type: object
       additionalProperties: false

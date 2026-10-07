@@ -8,6 +8,7 @@ export interface SidecarConnection {
   baseUrl: string;
   token: string;
   readOnlyToken: string;
+  conflictToken: string;
 }
 
 interface ReadyMessage {
@@ -60,6 +61,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
 
   const token = randomBytes(32).toString("base64url");
   const readOnlyToken = randomBytes(32).toString("base64url");
+  const conflictToken = randomBytes(32).toString("base64url");
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
   const corsOrigin = rendererUrl ? new URL(rendererUrl).origin : "";
 
@@ -90,7 +92,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
         reject(new Error("Rust sidecar exited without a valid ready message."));
         return;
       }
-      connection = { baseUrl: `http://${ready.host}:${ready.port}`, token, readOnlyToken };
+      connection = { baseUrl: `http://${ready.host}:${ready.port}`, token, readOnlyToken, conflictToken };
       resolvePromise(connection);
     };
 
@@ -102,6 +104,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
           GITCREST_DATABASE_PATH: process.env.GITCREST_DATABASE_PATH || join(app.getPath("userData"), "gitcrest.sqlite"),
         GITCREST_AUTH_TOKEN: token,
         GITCREST_READONLY_TOKEN: readOnlyToken,
+        GITCREST_CONFLICT_TOKEN: conflictToken,
         GITCREST_CORS_ORIGIN: corsOrigin,
       },
       windowsHide: true,

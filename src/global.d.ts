@@ -5,7 +5,7 @@ type GitCrestEventEnvelope = components["schemas"]["EventEnvelope"];
 interface GitCrestSidecarConnection {
   baseUrl: string;
   token: string;
-  windowAccess: "readWrite" | "readOnly";
+  windowAccess: "readWrite" | "readOnly" | "conflictResolution";
 }
 
 declare global {

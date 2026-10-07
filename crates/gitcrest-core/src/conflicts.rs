@@ -8,7 +8,7 @@ use std::{
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokio::{fs, process::Command};
+use tokio::{fs, io::AsyncWriteExt, process::Command};
 
 use crate::workflows::WorkflowOperation;
 
@@ -43,6 +43,8 @@ pub enum ConflictError {
     GitFailed,
     TimedOut,
     Io,
+    StaleRevision,
+    UnresolvedMarkers,
 }
 
 pub async fn read_file(
@@ -81,6 +83,97 @@ pub async fn read_file(
         result_revision,
         is_text,
     })
+}
+
+pub async fn save_result(
+    repository_path: &Path,
+    relative_path: &str,
+    expected_revision: &str,
+    content: &str,
+) -> Result<String, ConflictError> {
+    validate_relative_path(relative_path)?;
+    validate_content(content)?;
+    if read_index_stages(repository_path, relative_path)
+        .await?
+        .is_empty()
+    {
+        return Err(ConflictError::NotConflicted);
+    }
+    let current = read_worktree_file(repository_path, relative_path).await?;
+    if revision(&current) != expected_revision {
+        return Err(ConflictError::StaleRevision);
+    }
+    let target = safe_worktree_target(repository_path, relative_path).await?;
+    let mut file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open(target)
+        .await
+        .map_err(|_| ConflictError::Io)?;
+    file.write_all(content.as_bytes())
+        .await
+        .map_err(|_| ConflictError::Io)?;
+    file.flush().await.map_err(|_| ConflictError::Io)?;
+    Ok(revision(&Some(content.as_bytes().to_vec())))
+}
+
+pub async fn mark_resolved(
+    repository_path: &Path,
+    relative_path: &str,
+    expected_revision: &str,
+) -> Result<(), ConflictError> {
+    validate_relative_path(relative_path)?;
+    if read_index_stages(repository_path, relative_path)
+        .await?
+        .is_empty()
+    {
+        return Err(ConflictError::NotConflicted);
+    }
+    let current = read_worktree_file(repository_path, relative_path).await?;
+    let Some(content) = current.as_deref() else {
+        return Err(ConflictError::FileNotFound);
+    };
+    if revision(&current) != expected_revision {
+        return Err(ConflictError::StaleRevision);
+    }
+    let text = std::str::from_utf8(content).map_err(|_| ConflictError::Binary)?;
+    if !is_text_without_conflict_markers(text) {
+        return Err(ConflictError::UnresolvedMarkers);
+    }
+    safe_worktree_target(repository_path, relative_path).await?;
+    git_output(
+        repository_path,
+        ["--literal-pathspecs", "add", "--"],
+        Some(OsString::from(relative_path)),
+    )
+    .await?;
+    if !read_index_stages(repository_path, relative_path)
+        .await?
+        .is_empty()
+    {
+        return Err(ConflictError::GitFailed);
+    }
+    Ok(())
+}
+
+pub fn is_text_without_conflict_markers(value: &str) -> bool {
+    !value.lines().any(|line| {
+        let line = line.trim_start();
+        ["<<<<<<<", "|||||||", "=======", ">>>>>>>"]
+            .iter()
+            .any(|marker| line.starts_with(marker))
+    })
+}
+
+fn validate_content(content: &str) -> Result<(), ConflictError> {
+    if content.len() > MAX_CONFLICT_FILE_BYTES {
+        return Err(ConflictError::TooLarge);
+    }
+    if content.contains('\0') {
+        return Err(ConflictError::Binary);
+    }
+    Ok(())
 }
 
 pub fn validate_relative_path(value: &str) -> Result<(), ConflictError> {
@@ -173,24 +266,7 @@ async fn read_worktree_file(
     repository_path: &Path,
     relative_path: &str,
 ) -> Result<Option<Vec<u8>>, ConflictError> {
-    let root = fs::canonicalize(repository_path)
-        .await
-        .map_err(|_| ConflictError::Io)?;
-    let path = PathBuf::from(relative_path);
-    let joined = root.join(path);
-    let parent = joined.parent().ok_or(ConflictError::InvalidPath)?;
-    let canonical_parent = fs::canonicalize(parent).await.map_err(|error| {
-        if error.kind() == io::ErrorKind::NotFound {
-            ConflictError::FileNotFound
-        } else {
-            ConflictError::Io
-        }
-    })?;
-    if !canonical_parent.starts_with(&root) {
-        return Err(ConflictError::InvalidPath);
-    }
-    let file_name = joined.file_name().ok_or(ConflictError::InvalidPath)?;
-    let path = canonical_parent.join(file_name);
+    let path = safe_worktree_target(repository_path, relative_path).await?;
     let metadata = match fs::symlink_metadata(&path).await {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
@@ -207,6 +283,37 @@ async fn read_worktree_file(
         return Err(ConflictError::TooLarge);
     }
     Ok(Some(bytes))
+}
+
+async fn safe_worktree_target(
+    repository_path: &Path,
+    relative_path: &str,
+) -> Result<PathBuf, ConflictError> {
+    validate_relative_path(relative_path)?;
+    let root = fs::canonicalize(repository_path)
+        .await
+        .map_err(|_| ConflictError::Io)?;
+    let joined = root.join(PathBuf::from(relative_path));
+    let parent = joined.parent().ok_or(ConflictError::InvalidPath)?;
+    let canonical_parent = fs::canonicalize(parent).await.map_err(|error| {
+        if error.kind() == io::ErrorKind::NotFound {
+            ConflictError::FileNotFound
+        } else {
+            ConflictError::Io
+        }
+    })?;
+    if !canonical_parent.starts_with(&root) {
+        return Err(ConflictError::InvalidPath);
+    }
+    let file_name = joined.file_name().ok_or(ConflictError::InvalidPath)?;
+    let path = canonical_parent.join(file_name);
+    match fs::symlink_metadata(&path).await {
+        Ok(metadata) if metadata.file_type().is_file() => {}
+        Ok(_) => return Err(ConflictError::Binary),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+        Err(_) => return Err(ConflictError::Io),
+    }
+    Ok(path)
 }
 
 async fn git_output<const N: usize>(
@@ -315,6 +422,68 @@ mod tests {
             .contains("<<<<<<<"));
         assert!(result.is_text);
         assert_eq!(result.result_revision.len(), 64);
+    }
+
+    #[tokio::test]
+    async fn saves_only_the_current_conflict_and_refuses_stale_or_unresolved_results() {
+        let repository = conflicting_repo();
+        let snapshot = read_file(
+            "repo_fixture".into(),
+            "task_fixture".into(),
+            WorkflowOperation::Merge,
+            Some(git(repository.path(), &["rev-parse", "HEAD"])),
+            repository.path(),
+            "file.txt",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            save_result(repository.path(), "file.txt", "stale", "resolved\n").await,
+            Err(ConflictError::StaleRevision)
+        );
+        let content = "resolved safely\n";
+        let revision = save_result(
+            repository.path(),
+            "file.txt",
+            &snapshot.result_revision,
+            content,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("file.txt")).unwrap(),
+            content
+        );
+        assert_eq!(
+            mark_resolved(repository.path(), "file.txt", "stale").await,
+            Err(ConflictError::StaleRevision)
+        );
+        let marked = save_result(
+            repository.path(),
+            "file.txt",
+            &revision,
+            "<<<<<<< ours\nnot resolved\n=======\n",
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            mark_resolved(repository.path(), "file.txt", &marked).await,
+            Err(ConflictError::UnresolvedMarkers)
+        );
+        let current = save_result(repository.path(), "file.txt", &marked, content)
+            .await
+            .unwrap();
+        mark_resolved(repository.path(), "file.txt", &current)
+            .await
+            .unwrap();
+        assert!(read_index_stages(repository.path(), "file.txt")
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(
+            git(repository.path(), &["show", ":file.txt"]),
+            "resolved safely"
+        );
     }
 
     #[test]

@@ -857,8 +857,36 @@ export interface paths {
         };
         /** Read the three conflict stages and current working result for one waiting workflow file */
         get: operations["readWorkflowConflictFile"];
-        put?: never;
+        /**
+         * Save text to the current working result for one reviewed conflict file
+         * @description Requires the conflict-scoped window capability; writes only the exact unmerged path after rechecking task, operation, HEAD and result revision under repository serialization.
+         */
+        put: operations["saveWorkflowConflictFile"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/workflows/conflicts/resolved": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Stage one marker-free reviewed conflict file as resolved
+         * @description Requires the conflict-scoped window capability; refuses unresolved marker lines and rechecks task, operation, HEAD, conflict set and result revision before staging only this path.
+         */
+        post: operations["markWorkflowConflictResolved"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1245,6 +1273,23 @@ export interface components {
             resultContent: string | null;
             resultRevision: string;
             isText: boolean;
+        };
+        WorkflowConflictMutationRequest: {
+            taskId: string;
+            path: string;
+            /** @enum {string} */
+            expectedOperation: "merge" | "cherryPick" | "revert";
+            expectedHeadOid: string;
+            expectedResultRevision: string;
+        };
+        WorkflowConflictSaveRequest: {
+            taskId: string;
+            path: string;
+            /** @enum {string} */
+            expectedOperation: "merge" | "cherryPick" | "revert";
+            expectedHeadOid: string;
+            expectedResultRevision: string;
+            content: string;
         };
         PushPreflight: {
             repoId: components["schemas"]["RepoId"];
@@ -4087,6 +4132,167 @@ export interface operations {
                 };
             };
             /** @description Git could not read the conflict stages. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    saveWorkflowConflictFile: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowConflictSaveRequest"];
+            };
+        };
+        responses: {
+            /** @description Conflict save task accepted. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The conflict mutation is malformed or exceeds the text limit. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The waiting workflow task or repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The file is no longer conflicted or cannot be safely written. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description HEAD, operation or result changed after review. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict result exceeds 1 MiB. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    markWorkflowConflictResolved: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowConflictMutationRequest"];
+            };
+        };
+        responses: {
+            /** @description Conflict resolution task accepted. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The conflict mutation is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The waiting workflow task or repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Conflict markers remain or the file cannot safely be resolved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description HEAD, operation or result changed after review. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git is unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

@@ -61,6 +61,7 @@ static NEXT_EVENT_ID: AtomicU64 = AtomicU64::new(1);
 struct AppState {
     read_write_token: Arc<String>,
     read_only_token: Option<Arc<String>>,
+    conflict_token: Option<Arc<String>>,
     repositories: RepositoryManager,
     tasks: TaskService,
     git_commands: GitCommandService,
@@ -363,6 +364,56 @@ impl ApiError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 ApiErrorCode::DiffUnavailable,
                 "Git could not produce this file diff. Refresh the working tree and try again.",
+            ),
+        }
+    }
+
+    fn from_conflict_error(error: conflicts::ConflictError) -> Self {
+        match error {
+            conflicts::ConflictError::InvalidPath => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "The conflict path is invalid.",
+            ),
+            conflicts::ConflictError::FileNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RepositoryFileNotFound,
+                "The conflict file is no longer present in the working tree.",
+            ),
+            conflicts::ConflictError::TooLarge => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::DiffTooLarge,
+                "Conflict text is limited to 1 MiB.",
+            ),
+            conflicts::ConflictError::StaleRevision => Self::new(
+                StatusCode::PRECONDITION_FAILED,
+                ApiErrorCode::WorkflowRecoveryStale,
+                "The conflict result changed after review. Refresh before writing.",
+            ),
+            conflicts::ConflictError::UnresolvedMarkers => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::WorkflowRecoveryNotAllowed,
+                "Remove all conflict markers before marking this file resolved.",
+            ),
+            conflicts::ConflictError::NotConflicted
+            | conflicts::ConflictError::Binary
+            | conflicts::ConflictError::Io => Self::state_conflict(
+                "The conflict file changed or cannot be safely accessed. Refresh conflict state.",
+            ),
+            conflicts::ConflictError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git is unavailable for conflict resolution.",
+            ),
+            conflicts::ConflictError::GitFailed => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::WorkflowPreflightUnavailable,
+                "Git could not read or stage this conflict file.",
+            ),
+            conflicts::ConflictError::TimedOut => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                ApiErrorCode::WorkflowPreflightUnavailable,
+                "Git did not finish conflict review within 10 seconds.",
             ),
         }
     }
@@ -769,6 +820,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if read_only_token.as_deref() == Some(write_token.as_str()) {
         return Err("GITCREST_READONLY_TOKEN must differ from GITCREST_AUTH_TOKEN".into());
     }
+    let conflict_token = env::var("GITCREST_CONFLICT_TOKEN")
+        .ok()
+        .filter(|token| !token.is_empty());
+    if conflict_token.as_deref() == Some(write_token.as_str())
+        || conflict_token.as_deref() == read_only_token.as_deref()
+    {
+        return Err("GITCREST_CONFLICT_TOKEN must be distinct from other API tokens".into());
+    }
 
     let database_path = env::var_os("GITCREST_DATABASE_PATH")
         .map(std::path::PathBuf::from)
@@ -783,6 +842,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         read_write_token: Arc::new(write_token),
         read_only_token: read_only_token.map(Arc::new),
+        conflict_token: conflict_token.map(Arc::new),
         repositories,
         tasks,
         git_commands,
@@ -923,7 +983,11 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route(
             "/v1/repositories/:repo_id/workflows/conflicts/file",
-            get(read_workflow_conflict_file),
+            get(read_workflow_conflict_file).put(save_workflow_conflict_file),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/conflicts/resolved",
+            post(mark_workflow_conflict_resolved),
         )
         .route(
             "/v1/repositories/:repo_id/push-preflight",
@@ -3188,31 +3252,329 @@ async fn read_workflow_conflict_file(
     )
     .await
     .map(Json)
-    .map_err(|error| match error {
-        conflicts::ConflictError::InvalidPath => ApiError::new(
+    .map_err(ApiError::from_conflict_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowConflictMutationRequest {
+    task_id: String,
+    path: String,
+    expected_operation: workflows::WorkflowOperation,
+    expected_head_oid: String,
+    expected_result_revision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowConflictSaveRequest {
+    #[serde(flatten)]
+    mutation: WorkflowConflictMutationRequest,
+    content: String,
+}
+
+async fn save_workflow_conflict_file(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<WorkflowConflictSaveRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
             StatusCode::BAD_REQUEST,
             ApiErrorCode::RequestInvalid,
-            "The conflict file path is invalid.",
-        ),
-        conflicts::ConflictError::TooLarge => ApiError::new(
+            "Saving a conflict result requires its task, file, HEAD, operation, revision and text.",
+        )
+    })?;
+    validate_conflict_mutation(&request.mutation)?;
+    if request.content.len() > 1024 * 1024 || request.content.contains('\0') {
+        return Err(ApiError::new(
             StatusCode::PAYLOAD_TOO_LARGE,
             ApiErrorCode::DiffTooLarge,
-            "This conflict file exceeds the 1 MiB text review limit.",
-        ),
-        conflicts::ConflictError::FileNotFound => ApiError::new(
+            "Conflict result text is limited to 1 MiB and cannot contain binary NUL bytes.",
+        ));
+    }
+    let (target, preview) = inspect_waiting_conflict(
+        &state.tasks,
+        &state.repositories,
+        &repo_id,
+        &request.mutation.task_id,
+        &request.mutation.path,
+    )
+    .await?;
+    ensure_conflict_revision(&preview, &request.mutation)?;
+    let snapshot = conflicts::read_file(
+        repo_id.clone(),
+        request.mutation.task_id.clone(),
+        preview.operation,
+        preview.head_oid.clone(),
+        &target.repository_path,
+        &request.mutation.path,
+    )
+    .await
+    .map_err(ApiError::from_conflict_error)?;
+    if !snapshot.is_text || snapshot.result_revision != request.mutation.expected_result_revision {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowRecoveryStale,
+            "The conflict result changed after review. Refresh it before saving.",
+        ));
+    }
+
+    let repo_path = target.repository_path;
+    let resource_key = target.resource_key;
+    let tasks = state.tasks.clone();
+    let repositories = state.repositories.clone();
+    let task_id = request.mutation.task_id;
+    let path = request.mutation.path;
+    let operation = request.mutation.expected_operation;
+    let head_oid = request.mutation.expected_head_oid;
+    let expected_revision = request.mutation.expected_result_revision;
+    let content = request.content;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id.clone()),
+            None,
+            resource_key,
+            "workflowConflictSave",
+            move |_context| async move {
+                let (_target, preview) =
+                    inspect_waiting_conflict(&tasks, &repositories, &repo_id, &task_id, &path)
+                        .await
+                        .map_err(|error| TaskFailure::Failed(error.message))?;
+                if preview.operation != operation || preview.head_oid.as_deref() != Some(&head_oid)
+                {
+                    return Err(TaskFailure::Failed(
+                        "Repository state changed. Refresh the conflict before saving.".into(),
+                    ));
+                }
+                let current = conflicts::read_file(
+                    repo_id.clone(),
+                    task_id.clone(),
+                    operation,
+                    preview.head_oid.clone(),
+                    &repo_path,
+                    &path,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed("Could not re-read this conflict before saving.".into())
+                })?;
+                if !current.is_text || current.result_revision != expected_revision {
+                    return Err(TaskFailure::Failed(
+                        "The working result changed after review. Refresh before saving.".into(),
+                    ));
+                }
+                conflicts::save_result(&repo_path, &path, &expected_revision, &content)
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed("Could not safely save this conflict result.".into())
+                    })?;
+                Ok(Some("Conflict result saved to the working tree.".into()))
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn mark_workflow_conflict_resolved(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<WorkflowConflictMutationRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Marking a conflict resolved requires its task, file, HEAD, operation and result revision.",
+        )
+    })?;
+    validate_conflict_mutation(&request)?;
+    let (target, preview) = inspect_waiting_conflict(
+        &state.tasks,
+        &state.repositories,
+        &repo_id,
+        &request.task_id,
+        &request.path,
+    )
+    .await?;
+    ensure_conflict_revision(&preview, &request)?;
+    let snapshot = conflicts::read_file(
+        repo_id.clone(),
+        request.task_id.clone(),
+        preview.operation,
+        preview.head_oid.clone(),
+        &target.repository_path,
+        &request.path,
+    )
+    .await
+    .map_err(ApiError::from_conflict_error)?;
+    if !snapshot.is_text || snapshot.result_revision != request.expected_result_revision {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowRecoveryStale,
+            "The conflict result changed after review. Refresh it before marking resolved.",
+        ));
+    }
+    if !snapshot
+        .result_content
+        .as_deref()
+        .is_some_and(conflicts::is_text_without_conflict_markers)
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowRecoveryNotAllowed,
+            "Remove all conflict markers before marking this file resolved.",
+        ));
+    }
+
+    let repo_path = target.repository_path;
+    let resource_key = target.resource_key;
+    let tasks = state.tasks.clone();
+    let repositories = state.repositories.clone();
+    let task_id = request.task_id;
+    let path = request.path;
+    let operation = request.expected_operation;
+    let head_oid = request.expected_head_oid;
+    let expected_revision = request.expected_result_revision;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id.clone()),
+            None,
+            resource_key,
+            "workflowConflictResolved",
+            move |_context| async move {
+                let (_target, preview) =
+                    inspect_waiting_conflict(&tasks, &repositories, &repo_id, &task_id, &path)
+                        .await
+                        .map_err(|error| TaskFailure::Failed(error.message))?;
+                if preview.operation != operation || preview.head_oid.as_deref() != Some(&head_oid)
+                {
+                    return Err(TaskFailure::Failed(
+                        "Repository state changed. Refresh the conflict before resolving it."
+                            .into(),
+                    ));
+                }
+                conflicts::mark_resolved(&repo_path, &path, &expected_revision)
+                    .await
+                    .map_err(|error| {
+                        TaskFailure::Failed(match error {
+                            conflicts::ConflictError::UnresolvedMarkers => {
+                                "Remove all conflict markers before marking resolved.".into()
+                            }
+                            conflicts::ConflictError::StaleRevision => {
+                                "The result changed after review. Refresh before marking resolved."
+                                    .into()
+                            }
+                            _ => "Could not safely mark this conflict resolved.".into(),
+                        })
+                    })?;
+                Ok(Some("Conflict file staged as resolved.".into()))
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+fn validate_conflict_mutation(request: &WorkflowConflictMutationRequest) -> Result<(), ApiError> {
+    conflicts::validate_relative_path(&request.path).map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The conflict path is invalid.",
+        )
+    })?;
+    if request.task_id.is_empty()
+        || request.task_id.len() > 128
+        || request.expected_head_oid.len() != 40 && request.expected_head_oid.len() != 64
+        || !request
+            .expected_head_oid
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+        || request.expected_result_revision.len() != 64
+        || !request
+            .expected_result_revision
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The conflict task, HEAD or result revision is invalid.",
+        ));
+    }
+    Ok(())
+}
+
+async fn inspect_waiting_conflict(
+    tasks: &TaskService,
+    repositories: &RepositoryManager,
+    repo_id: &str,
+    task_id: &str,
+    path: &str,
+) -> Result<(repository::TaskTarget, workflows::WorkflowRecoveryPreflight), ApiError> {
+    let task = tasks.get(task_id).await.ok_or_else(|| {
+        ApiError::new(
             StatusCode::NOT_FOUND,
-            ApiErrorCode::RepositoryFileNotFound,
-            "The conflict file is no longer present in the working tree.",
-        ),
-        conflicts::ConflictError::NotConflicted
-        | conflicts::ConflictError::Binary
-        | conflicts::ConflictError::GitUnavailable
-        | conflicts::ConflictError::GitFailed
-        | conflicts::ConflictError::TimedOut
-        | conflicts::ConflictError::Io => ApiError::state_conflict(
-            "GitCrest could not safely read the current text conflict. Refresh the repository state.",
-        ),
-    })
+            ApiErrorCode::TaskNotFound,
+            "The waiting workflow task is unavailable.",
+        )
+    })?;
+    let task_operation = workflow_operation_for_task(&task.operation).ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Conflict review requires a merge, cherry-pick, or revert task.",
+        )
+    })?;
+    if task.repo_id.as_deref() != Some(repo_id) || task.status != tasks::TaskStatus::WaitingForInput
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Conflict review requires a waiting task for this repository.",
+        ));
+    }
+    let target = repositories
+        .task_target(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = workflows::read_recovery_preflight(
+        repo_id.to_owned(),
+        task_id.to_owned(),
+        &target.repository_path,
+    )
+    .await
+    .map_err(ApiError::from_workflow_error)?;
+    if preview.operation != task_operation
+        || !preview.conflicted_paths.iter().any(|entry| entry == path)
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowRecoveryStale,
+            "This file is no longer conflicted in the waiting workflow.",
+        ));
+    }
+    Ok((target, preview))
+}
+
+fn ensure_conflict_revision(
+    preview: &workflows::WorkflowRecoveryPreflight,
+    request: &WorkflowConflictMutationRequest,
+) -> Result<(), ApiError> {
+    if preview.operation != request.expected_operation
+        || preview.head_oid.as_deref() != Some(&request.expected_head_oid)
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowRecoveryStale,
+            "The workflow HEAD or operation changed. Refresh the conflict before writing.",
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -3723,6 +4085,16 @@ async fn require_auth(
         Some(token) if token == state.read_write_token.as_str() => {}
         Some(token)
             if state
+                .conflict_token
+                .as_deref()
+                .is_some_and(|capability| token == capability.as_str()) =>
+        {
+            if !conflict_capability_allows(request.method(), request.uri().path()) {
+                return ApiError::forbidden().into_response();
+            }
+        }
+        Some(token)
+            if state
                 .read_only_token
                 .as_deref()
                 .is_some_and(|readonly| token == readonly.as_str()) =>
@@ -3734,6 +4106,40 @@ async fn require_auth(
         _ => return ApiError::unauthorized().into_response(),
     }
     next.run(request).await
+}
+
+fn conflict_capability_allows(method: &Method, path: &str) -> bool {
+    let path = path.strip_prefix("/api").unwrap_or(path);
+    let Some((repo_id, suffix)) = path
+        .strip_prefix("/v1/repositories/")
+        .and_then(|value| value.split_once('/'))
+    else {
+        return false;
+    };
+    if !repo_id.strip_prefix("repo_").is_some_and(|value| {
+        value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    }) {
+        return false;
+    }
+    let allowed_suffix = matches!(
+        suffix,
+        "workflows/recovery-preflight"
+            | "workflows/conflicts/file"
+            | "workflows/conflicts/resolved"
+    );
+    if !allowed_suffix {
+        return false;
+    }
+    match method {
+        &Method::GET => matches!(
+            suffix,
+            "workflows/recovery-preflight" | "workflows/conflicts/file"
+        ),
+        &Method::PUT => suffix == "workflows/conflicts/file",
+        &Method::POST => suffix == "workflows/conflicts/resolved",
+        &Method::OPTIONS => true,
+        _ => false,
+    }
 }
 
 #[cfg(test)]
@@ -3764,6 +4170,7 @@ mod tests {
 
     const WRITE_TOKEN: &str = "test-write-token";
     const READ_ONLY_TOKEN: &str = "test-read-only-token";
+    const CONFLICT_TOKEN: &str = "test-conflict-token";
 
     fn test_credentials() -> credentials::CredentialManager {
         credentials::CredentialManager::with_store(Arc::new(
@@ -3778,6 +4185,7 @@ mod tests {
         let state = AppState {
             read_write_token: Arc::new(WRITE_TOKEN.to_string()),
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+            conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
             credentials: test_credentials(),
             clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
             repositories,
@@ -3798,11 +4206,20 @@ mod tests {
     }
 
     fn json_request(method: Method, uri: &str, body: &str) -> Request<Body> {
+        json_request_with_token(method, uri, body, WRITE_TOKEN)
+    }
+
+    fn json_request_with_token(
+        method: Method,
+        uri: &str,
+        body: &str,
+        token: &str,
+    ) -> Request<Body> {
         Request::builder()
             .method(method)
             .uri(uri)
             .header("X-GitCrest-API-Version", API_VERSION)
-            .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+            .header(AUTHORIZATION, format!("Bearer {token}"))
             .header(CONTENT_TYPE, "application/json")
             .body(Body::from(body.to_owned()))
             .unwrap()
@@ -3914,6 +4331,7 @@ mod tests {
             AppState {
                 read_write_token: Arc::new(WRITE_TOKEN.to_string()),
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                conflict_token: None,
                 credentials: test_credentials(),
                 repositories,
                 tasks: tasks.clone(),
@@ -4541,6 +4959,7 @@ mod tests {
             AppState {
                 read_write_token: Arc::new(WRITE_TOKEN.to_string()),
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                conflict_token: None,
                 credentials: test_credentials(),
                 repositories: RepositoryManager::default(),
                 tasks: tasks.clone(),
@@ -4662,6 +5081,7 @@ mod tests {
             AppState {
                 read_write_token: Arc::new(WRITE_TOKEN.to_string()),
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                conflict_token: None,
                 credentials: test_credentials(),
                 repositories,
                 tasks: tasks.clone(),
@@ -5220,9 +5640,103 @@ mod tests {
             .unwrap()
             .contains("<<<<<<<"));
         assert_eq!(conflict_file["isText"], true);
-        assert!(std::fs::read_to_string(repository_path.join("shared.txt"))
-            .unwrap()
-            .contains("<<<<<<<"));
+        let conflict_file_uri = format!(
+            "/api/v1/repositories/{repo_id}/workflows/conflicts/file?taskId={}&path=shared.txt",
+            conflict_task["taskId"].as_str().unwrap()
+        );
+        let save_body = serde_json::json!({
+            "taskId": conflict_task["taskId"],
+            "path": "shared.txt",
+            "expectedOperation": "merge",
+            "expectedHeadOid": conflict_file["headOid"],
+            "expectedResultRevision": conflict_file["resultRevision"],
+            "content": "resolved through API\n",
+        })
+        .to_string();
+        let unresolved_request = serde_json::json!({
+            "taskId": conflict_task["taskId"],
+            "path": "shared.txt",
+            "expectedOperation": "merge",
+            "expectedHeadOid": conflict_file["headOid"],
+            "expectedResultRevision": conflict_file["resultRevision"],
+        })
+        .to_string();
+        assert!(
+            conflict_capability_allows(
+                &Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/resolved")
+            ),
+            "unexpected repository ID: {repo_id}"
+        );
+        let unresolved = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/resolved"),
+                &unresolved_request,
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        let (unresolved_status, unresolved_code) = error_code(unresolved).await;
+        assert_eq!(unresolved_status, StatusCode::CONFLICT, "{unresolved_code}");
+        assert_eq!(unresolved_code, "WORKFLOW_RECOVERY_NOT_ALLOWED");
+        let denied_save = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::PUT,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/file"),
+                &save_body,
+                READ_ONLY_TOKEN,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(denied_save.status(), StatusCode::FORBIDDEN);
+        let accepted_save = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::PUT,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/file"),
+                &save_body,
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted_save.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted_save.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let save_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, save_task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let resolved_preview = app
+            .clone()
+            .oneshot(request(&conflict_file_uri, Some(CONFLICT_TOKEN)))
+            .await
+            .unwrap();
+        assert_eq!(resolved_preview.status(), StatusCode::OK);
+        let bytes = to_bytes(resolved_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let resolved_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(resolved_preview["resultContent"], "resolved through API\n");
+        let forbidden_general_write = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                "/api/v1/test/write-probe",
+                "{}",
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(forbidden_general_write.status(), StatusCode::FORBIDDEN);
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("shared.txt")).unwrap(),
+            "resolved through API\n"
+        );
         std::fs::write(repository_path.join("unrelated.txt"), "keep me\n").unwrap();
         let unsafe_abort = app
             .clone()
@@ -5263,8 +5777,33 @@ mod tests {
         assert_eq!(recovery["canSkip"], false);
         assert_eq!(recovery["canAbort"], true);
 
-        std::fs::write(repository_path.join("shared.txt"), "resolved\n").unwrap();
-        git(&["add", "shared.txt"]);
+        let resolved_request = serde_json::json!({
+            "taskId": conflict_task["taskId"],
+            "path": "shared.txt",
+            "expectedOperation": "merge",
+            "expectedHeadOid": resolved_preview["headOid"],
+            "expectedResultRevision": resolved_preview["resultRevision"],
+        })
+        .to_string();
+        let marked_resolved = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/resolved"),
+                &resolved_request,
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(marked_resolved.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(marked_resolved.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let resolve_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, resolve_task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
         let recovery = app
             .clone()
             .oneshot(recovery_preview(conflict_task["taskId"].as_str().unwrap()))
@@ -5299,7 +5838,7 @@ mod tests {
             std::fs::read_to_string(repository_path.join("shared.txt"))
                 .unwrap()
                 .trim_end(),
-            "resolved"
+            "resolved through API"
         );
 
         git(&["checkout", "--quiet", "-b", "abort-source"]);
@@ -5760,6 +6299,46 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(response.status(), StatusCode::NO_CONTENT);
+    }
+
+    #[test]
+    fn conflict_window_capability_is_limited_to_conflict_review_and_resolution_routes() {
+        let repo = format!("/api/v1/repositories/repo_{}/", "a".repeat(64));
+        assert!(conflict_capability_allows(
+            &Method::GET,
+            &format!("{repo}workflows/recovery-preflight")
+        ));
+        assert!(conflict_capability_allows(
+            &Method::GET,
+            &format!("{repo}workflows/conflicts/file")
+        ));
+        assert!(conflict_capability_allows(
+            &Method::PUT,
+            &format!("{repo}workflows/conflicts/file")
+        ));
+        assert!(conflict_capability_allows(
+            &Method::POST,
+            &format!("{repo}workflows/conflicts/resolved")
+        ));
+        assert!(conflict_capability_allows(
+            &Method::POST,
+            &format!(
+                "/v1/repositories/repo_{}/workflows/conflicts/resolved",
+                "a".repeat(64)
+            )
+        ));
+        assert!(!conflict_capability_allows(
+            &Method::POST,
+            &format!("{repo}commits")
+        ));
+        assert!(!conflict_capability_allows(
+            &Method::GET,
+            &format!("{repo}status")
+        ));
+        assert!(!conflict_capability_allows(
+            &Method::POST,
+            "/api/v1/tasks/task-1-1/cancel"
+        ));
     }
 
     #[tokio::test]

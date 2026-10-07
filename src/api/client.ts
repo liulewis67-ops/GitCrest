@@ -19,6 +19,8 @@ export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchP
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
 export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
 export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
+export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowConflictMutationRequest"];
+export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflictSaveRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
@@ -364,6 +366,28 @@ export class GitCrestApiClient {
     const query = new URLSearchParams({ taskId, path });
     return this.request<WorkflowConflictFileResponse>(
       `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/file?${query}`,
+    );
+  }
+
+  saveRepositoryWorkflowConflictFile(
+    repoId: RepoId,
+    request: WorkflowConflictSaveRequest,
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/file`,
+      true,
+      { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) },
+    );
+  }
+
+  markRepositoryWorkflowConflictResolved(
+    repoId: RepoId,
+    request: WorkflowConflictMutationRequest,
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/resolved`,
+      true,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) },
     );
   }
 

@@ -6,7 +6,7 @@ import WebSocket from "ws";
 
 let mainWindow: BrowserWindow | undefined;
 let sidecarConnection: SidecarConnection | undefined;
-type WindowAccess = "readWrite" | "readOnly";
+type WindowAccess = "readWrite" | "readOnly" | "conflictResolution";
 interface DiffWindowRequest {
   repoId: string;
   path: string;
@@ -59,7 +59,7 @@ ipcMain.handle("gitcrest:get-sidecar-connection", (event) => {
 
   return {
     baseUrl: sidecarConnection.baseUrl,
-    token: windowAccess === "readOnly" ? sidecarConnection.readOnlyToken : sidecarConnection.token,
+    token: windowAccess === "readOnly" ? sidecarConnection.readOnlyToken : windowAccess === "conflictResolution" ? sidecarConnection.conflictToken : sidecarConnection.token,
     windowAccess,
   };
 });
@@ -100,7 +100,9 @@ function connectEventStream(contentsId: number, stream: EventStream): void {
 
   const token = stream.windowAccess === "readOnly"
     ? sidecarConnection.readOnlyToken
-    : sidecarConnection.token;
+    : stream.windowAccess === "conflictResolution"
+      ? sidecarConnection.conflictToken
+      : sidecarConnection.token;
   const socketUrl = new URL("/api/v1/events", sidecarConnection.baseUrl);
   socketUrl.protocol = socketUrl.protocol === "https:" ? "wss:" : "ws:";
 
@@ -196,7 +198,7 @@ ipcMain.handle("gitcrest:open-conflict-window", async (event, value: unknown) =>
   if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
     throw new Error("Only the main window can open a conflict window.");
   }
-  await createWindow("readOnly", undefined, parseConflictWindowRequest(value));
+  await createWindow("conflictResolution", undefined, parseConflictWindowRequest(value));
 });
 
 function parseConflictWindowRequest(value: unknown): ConflictWindowRequest {

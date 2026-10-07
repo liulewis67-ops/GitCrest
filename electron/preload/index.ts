@@ -6,7 +6,7 @@ type EventEnvelope = components["schemas"]["EventEnvelope"];
 export interface SidecarConnection {
   baseUrl: string;
   token: string;
-  windowAccess: "readWrite" | "readOnly";
+  windowAccess: "readWrite" | "readOnly" | "conflictResolution";
 }
 
 export interface DiffWindowRequest {
