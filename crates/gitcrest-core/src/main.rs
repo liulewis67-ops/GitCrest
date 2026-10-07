@@ -11,6 +11,7 @@ use std::{
 use axum::{
     body::Body,
     extract::{
+        rejection::JsonRejection,
         ws::{Message, WebSocket, WebSocketUpgrade},
         Path, State,
     },
@@ -23,9 +24,13 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
+
+mod repository;
+
+use repository::{Repository, RepositoryError, RepositoryManager};
 
 const API_VERSION: &str = "1";
 static NEXT_EVENT_ID: AtomicU64 = AtomicU64::new(1);
@@ -34,6 +39,7 @@ static NEXT_EVENT_ID: AtomicU64 = AtomicU64::new(1);
 struct AppState {
     read_write_token: Arc<String>,
     read_only_token: Option<Arc<String>>,
+    repositories: RepositoryManager,
 }
 
 #[derive(Serialize)]
@@ -61,6 +67,10 @@ enum ApiErrorCode {
     ApiVersionUnsupported,
     ApiRouteNotFound,
     RepositoryNotFound,
+    RepositoryPathNotFound,
+    RepositoryAccessDenied,
+    NotARepository,
+    GitUnavailable,
     RepositoryStateConflict,
     ResourceVersionStale,
     RequestInvalid,
@@ -133,6 +143,36 @@ impl ApiError {
         )
     }
 
+    fn from_repository_error(error: RepositoryError) -> Self {
+        match error {
+            RepositoryError::InvalidPath => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "Choose a folder to open as a Git repository.",
+            ),
+            RepositoryError::PathNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RepositoryPathNotFound,
+                "The selected repository path no longer exists.",
+            ),
+            RepositoryError::PathPermissionDenied => Self::new(
+                StatusCode::FORBIDDEN,
+                ApiErrorCode::RepositoryAccessDenied,
+                "GitCrest does not have permission to read the selected repository.",
+            ),
+            RepositoryError::NotRepository => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ApiErrorCode::NotARepository,
+                "The selected folder is not a Git working tree.",
+            ),
+            RepositoryError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -201,6 +241,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState {
         read_write_token: Arc::new(write_token),
         read_only_token: read_only_token.map(Arc::new),
+        repositories: RepositoryManager::default(),
     };
     let cors_origin = env::var("GITCREST_CORS_ORIGIN")
         .ok()
@@ -220,7 +261,10 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
     let api = Router::new()
         .route("/version", get(version))
-        .route("/v1/repositories", get(list_repositories))
+        .route(
+            "/v1/repositories",
+            get(list_repositories).post(open_repository),
+        )
         .route("/v1/repositories/:repo_id", get(get_repository))
         .route("/v1/events", get(events))
         .fallback(api_not_found);
@@ -285,21 +329,45 @@ async fn version() -> impl IntoResponse {
     })
 }
 
-async fn get_repository(Path(_repo_id): Path<String>) -> ApiError {
-    ApiError::repository_not_found()
+async fn get_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<Repository>, ApiError> {
+    state
+        .repositories
+        .get(&repo_id)
+        .await
+        .map(Json)
+        .ok_or_else(ApiError::repository_not_found)
 }
 
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct RepositorySummary {
-    repo_id: String,
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct OpenRepositoryRequest {
     path: String,
-    head: Option<String>,
-    state: &'static str,
 }
 
-async fn list_repositories() -> Json<Vec<RepositorySummary>> {
-    Json(Vec::new())
+async fn open_repository(
+    State(state): State<AppState>,
+    request: Result<Json<OpenRepositoryRequest>, JsonRejection>,
+) -> Result<Json<Repository>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A JSON repository path is required.",
+        )
+    })?;
+    state
+        .repositories
+        .open_path(&request.path)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_repository_error)
+}
+
+async fn list_repositories(State(state): State<AppState>) -> Json<Vec<Repository>> {
+    Json(state.repositories.list().await)
 }
 
 async fn api_not_found() -> ApiError {
@@ -448,6 +516,7 @@ mod tests {
         let state = AppState {
             read_write_token: Arc::new(WRITE_TOKEN.to_string()),
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+            repositories: RepositoryManager::default(),
         };
         app_router(state, cors_origin.map(|origin| origin.parse().unwrap()))
     }
@@ -541,6 +610,101 @@ mod tests {
         let (status, code) = error_code(response).await;
         assert_eq!(status, StatusCode::UNAUTHORIZED);
         assert_eq!(code, "AUTH_UNAUTHORIZED");
+    }
+
+    #[tokio::test]
+    async fn opens_a_selected_repository_and_subsequent_reads_use_repo_id() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("project");
+        std::fs::create_dir(&repository_path).unwrap();
+        let init = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repository_path)
+            .args(["init", "--quiet"])
+            .output()
+            .unwrap();
+        assert!(init.status.success());
+
+        let app = test_app(None);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/repositories")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "path": repository_path }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        assert!(repo_id.starts_with("repo_"));
+        assert_eq!(
+            std::path::PathBuf::from(repository["path"].as_str().unwrap()),
+            repository_path
+        );
+        assert!(repository["head"].is_null());
+        assert!(repository["branch"].is_string());
+        assert_eq!(repository["detached"], false);
+
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let fetched: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(fetched["repoId"], repo_id);
+
+        let missing_path = directory.path().join("missing");
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/repositories")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "path": missing_path }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(code, "REPOSITORY_PATH_NOT_FOUND");
+    }
+
+    #[tokio::test]
+    async fn repository_path_failures_have_distinct_api_errors() {
+        let missing = ApiError::from_repository_error(RepositoryError::PathNotFound);
+        let (status, code) = error_code(missing.into_response()).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(code, "REPOSITORY_PATH_NOT_FOUND");
+
+        let permission = ApiError::from_repository_error(RepositoryError::PathPermissionDenied);
+        let (status, code) = error_code(permission.into_response()).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(code, "REPOSITORY_ACCESS_DENIED");
+
+        let invalid = ApiError::from_repository_error(RepositoryError::NotRepository);
+        let (status, code) = error_code(invalid.into_response()).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(code, "NOT_A_REPOSITORY");
     }
 
     #[tokio::test]

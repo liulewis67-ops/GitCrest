@@ -12,6 +12,7 @@ declare global {
   interface Window {
     gitcrest: {
       getSidecarConnection: () => Promise<GitCrestSidecarConnection>;
+      chooseRepository: () => Promise<string | undefined>;
       subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
     };
   };

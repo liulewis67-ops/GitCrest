@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type RepositoryResponse } from "./api/client";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -16,6 +16,10 @@ function readStoredNumber(key: string, fallback: number, min: number, max: numbe
   } catch {
     return fallback;
   }
+}
+
+function repositoryName(path: string): string {
+  return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
 }
 
 function ResizeSeparator({
@@ -96,6 +100,11 @@ function App() {
   const commandKey = navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl";
   const [status, setStatus] = useState("Starting local GitCrest core...");
   const [version, setVersion] = useState("");
+  const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
+  const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
+  const [openError, setOpenError] = useState("");
+  const [openingRepository, setOpeningRepository] = useState(false);
+  const apiRef = useRef<GitCrestApiClient>();
   const [page, setPage] = useState<Page>("welcome");
   const [mode, setMode] = useState<WorkspaceMode>("graph");
   const [theme, setTheme] = useState<Theme>(() => {
@@ -115,6 +124,36 @@ function App() {
   const connecting = status.startsWith("Starting");
   const connectionLabel = connected ? "Core connected" : connecting ? "Starting core" : "Core unavailable";
 
+  async function openLocalRepository() {
+    setOpenError("");
+    try {
+      const path = await window.gitcrest.chooseRepository();
+      if (!path) return;
+      const api = apiRef.current;
+      if (!api) throw new Error("The Git engine is still starting. Try again in a moment.");
+      setOpeningRepository(true);
+      const repository = await api.openRepository(path);
+      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
+      setSelectedRepository(repository);
+      setPage("workspace");
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setOpenError(message || (error instanceof Error ? error.message : "Could not open this repository."));
+    } finally {
+      setOpeningRepository(false);
+    }
+  }
+
+  async function refreshRepositories(api: GitCrestApiClient) {
+    const currentRepositories = await api.listRepositories();
+    setRepositories(currentRepositories);
+    setSelectedRepository((current) => {
+      const active = currentRepositories.find((repository) => repository.repoId === current?.repoId);
+      return active ?? currentRepositories[0];
+    });
+    if (currentRepositories.length > 0) setPage("workspace");
+  }
+
   useEffect(() => {
     let cancelled = false;
     let unsubscribeFromEvents: (() => void) | undefined;
@@ -123,15 +162,17 @@ function App() {
       try {
         const connection = await window.gitcrest.getSidecarConnection();
         const api = new GitCrestApiClient(connection.baseUrl, connection.token);
+        apiRef.current = api;
         const body = await api.getVersion();
         if (!cancelled) {
           setVersion(`${body.name} ${body.version} (API v${body.apiVersion})`);
           setStatus("Connected to local Rust core");
         }
+        await refreshRepositories(api);
 
         const unsubscribe = await window.gitcrest.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
           if (event.type === "connection.resyncRequired") {
-            void api.listRepositories().catch((syncError: unknown) => {
+            void refreshRepositories(api).catch((syncError: unknown) => {
               if (!cancelled) {
                 setStatus(syncError instanceof Error ? syncError.message : "Failed to refresh repository state");
               }
@@ -148,6 +189,7 @@ function App() {
     void connect();
     return () => {
       cancelled = true;
+      apiRef.current = undefined;
       unsubscribeFromEvents?.();
     };
   }, []);
@@ -204,7 +246,7 @@ function App() {
     { id: "welcome", label: "Go to Welcome", detail: "Return to recent repositories and quick actions", available: true, run: () => setPage("welcome") },
     { id: "workspace", label: "Go to Workspace", detail: "Open the Changes, Graph, and Commit workspace", available: true, run: () => setPage("workspace") },
     { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${themeCycle[(themeCycle.indexOf(theme) + 1) % themeCycle.length]}`, available: true, run: nextTheme },
-    { id: "open", label: "Open local repository", detail: "Repository picker arrives with S1.1", available: false, run: () => undefined },
+    { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
     { id: "clone", label: "Clone repository", detail: "Clone task flow arrives with S1.6", available: false, run: () => undefined },
     { id: "diff", label: "Open Diff view", detail: "Select a changed file after opening a repository", available: false, run: () => undefined },
   ];
@@ -241,29 +283,42 @@ function App() {
             <h1 id="welcome-title">Your repositories,<br /><span>in good order.</span></h1>
             <p className="welcomeSummary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
             <div className="welcomeActions">
-              <button className="primaryButton" type="button" disabled title="Repository picker arrives with S1.1">
-                <span aria-hidden="true">＋</span> Open a repository <small>Planned · S1.1</small>
+              <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()}>
+                <span aria-hidden="true">＋</span> {openingRepository ? "Opening repository…" : "Open a repository"}
               </button>
               <button className="secondaryButton" type="button" disabled title="Clone task flow arrives with S1.6">Clone repository</button>
               <button className="textButton" type="button" onClick={() => setPage("workspace")}>Preview workspace</button>
             </div>
           </div>
+          {openError && <div className="openRepositoryError" role="alert">{openError}</div>}
           <div className="welcomeColumns">
             <section className="recentSection" aria-labelledby="recent-heading">
               <div className="sectionHeading">
                 <div><p className="sectionEyebrow">YOUR LIBRARY</p><h2 id="recent-heading">Recent repositories</h2></div>
                 <button className="quietButton compact" type="button" disabled title="Repository history arrives with S1.2">Sort <span aria-hidden="true">⌄</span></button>
               </div>
-              <div className="emptyRepositories">
-                <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
-                <h3>No repositories yet</h3>
-                <p>Open a local Git repository to see its changes, branches, and history here.</p>
-                <button className="inlineAction" type="button" disabled title="Repository picker arrives with S1.1">Choose a folder <span aria-hidden="true">→</span></button>
-              </div>
+              {repositories.length === 0 ? (
+                <div className="emptyRepositories">
+                  <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
+                  <h3>No repositories yet</h3>
+                  <p>Open a local Git repository to see its changes, branches, and history here.</p>
+                  <button className="inlineAction" type="button" onClick={() => void openLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
+                </div>
+              ) : (
+                <div className="repositoryList">
+                  {repositories.map((repository) => (
+                    <button key={repository.repoId} className="repositoryRow" type="button" onClick={() => { setSelectedRepository(repository); setPage("workspace"); }}>
+                      <span className="repoStatusGlyph" aria-hidden="true">●</span>
+                      <span className="repositoryRowText"><strong>{repositoryName(repository.path)}</strong><small>{repository.path}</small></span>
+                      <span className="repositoryBranch">{repository.detached ? "Detached" : repository.branch || "Unborn"}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </section>
             <aside className="quickActions" aria-labelledby="quick-heading">
               <div className="sectionHeading"><div><p className="sectionEyebrow">GET STARTED</p><h2 id="quick-heading">Quick actions</h2></div></div>
-              <button className="actionRow" type="button" disabled title="Repository picker arrives with S1.1">
+              <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()}>
                 <span className="actionIcon" aria-hidden="true">↗</span><span><strong>Open local repository</strong><small>Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
               <button className="actionRow" type="button" disabled title="Clone task flow arrives with S1.6">
@@ -272,7 +327,7 @@ function App() {
               <button className="actionRow" type="button" disabled title="Repository initialization arrives with S1.2">
                 <span className="actionIcon" aria-hidden="true">＋</span><span><strong>Initialize a repository</strong><small>Start tracking a new project</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
-              <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Repository actions are coming in the next implementation stages.</div>
+              <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Open a local repository now. Clone and initialize workflows arrive in later stages.</div>
             </aside>
           </div>
           <footer className="welcomeFooter"><span>Private by default</span><span className="footerDivider" /><span>Your repositories stay on this device</span><span className="footerSpacer" /><span>{version || "Local engine"}</span><button type="button" className="textButton" onClick={() => setPage("workspace")}>Explore the workspace <span aria-hidden="true">→</span></button></footer>
@@ -280,21 +335,21 @@ function App() {
       ) : (
         <section className="workspacePage" aria-label="Git workspace">
           <div className="workspaceToolbar">
-            <div className="workspaceCrumb"><span className="crumbMark" aria-hidden="true">G</span><span>Workspace</span><span className="crumbSlash">/</span><span className="mutedText">No repository open</span></div>
+            <div className="workspaceCrumb"><span className="crumbMark" aria-hidden="true">G</span><span>Workspace</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || "No repository open"}</span></div>
             <div className="toolbarActions">
               <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => setMode("graph")}>Graph</button>
               <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled title="Select a changed file after opening a repository" onClick={() => setMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
-              <button className="quietButton compact" type="button" disabled title="Branch selection arrives with S4.2"><span className="branchGlyph" aria-hidden="true">⑂</span> No branch</button>
+              <button className="quietButton compact" type="button" disabled title="Branch selection arrives with S4.2"><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
             </div>
           </div>
 
           <div className="workArea">
             <aside className="navigationPanel" aria-label="Repository navigation">
               <div className="panelHeading"><span>REPOSITORY</span><button className="panelMenu" type="button" disabled aria-label="Repository options">···</button></div>
-              <div className="navGroup"><div className="navGroupTitle"><span>Changes</span><span className="countBadge">0</span></div><div className="navEmpty">No repository open</div></div>
+              <div className="navGroup"><div className="navGroupTitle"><span>Changes</span><span className="countBadge">0</span></div><div className="navEmpty">{selectedRepository ? "Status snapshot arrives in S1.4" : "No repository open"}</div></div>
               <div className="navDivider" />
-              <div className="navGroup"><div className="navGroupTitle">Branches</div><button className="navEmpty navAction" type="button" disabled title="Open a repository to view branches">Open a repository to view branches</button></div>
+              <div className="navGroup"><div className="navGroupTitle">Branches</div><div className="navEmpty">{selectedRepository ? selectedRepository.branch || (selectedRepository.detached ? "Detached HEAD" : "Unborn branch") : "Open a repository to view branches"}</div></div>
               <div className="navDivider" />
               <div className="navGroup"><div className="navGroupTitle">Remotes</div><button className="navEmpty navAction" type="button" disabled title="Open a repository to view remotes">No remotes</button></div>
               <div className="navGroup"><div className="navGroupTitle">Shelves</div><button className="navEmpty navAction" type="button" disabled title="Shelves arrive with S5.3">No shelves</button></div>
@@ -308,9 +363,9 @@ function App() {
                 <div className="graphEmpty">
                   <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
                   <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
-                  <h2>Your commit graph starts here</h2>
-                  <p>Open a repository to explore commits, branches, and the changes that connect them.</p>
-                  <button className="secondaryButton" type="button" disabled title="Repository picker arrives with S1.1">Open repository <span aria-hidden="true">→</span></button>
+                  <h2>{selectedRepository ? selectedRepository.head ? "Repository ready" : "No commits yet" : "Your commit graph starts here"}</h2>
+                  <p>{selectedRepository ? `${selectedRepository.path}${selectedRepository.branch ? ` · ${selectedRepository.branch}` : selectedRepository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
+                  {!selectedRepository && <button className="secondaryButton" type="button" onClick={() => void openLocalRepository()} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
                 </div>
               ) : <div className="graphEmpty"><h2>Choose a changed file</h2><p>Diff review becomes available when a repository is open.</p></div>}
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
@@ -318,15 +373,25 @@ function App() {
             <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />
 
             <aside className="detailsPanel" aria-label="Commit details">
-              <div className="panelHeading">COMMIT DETAILS</div>
-              <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div>
-              <div className="detailPlaceholder"><span>AUTHOR</span><strong>—</strong><span>COMMIT</span><strong className="monoText">—</strong></div>
+              <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
+              {selectedRepository ? (
+                <div className="repositoryDetails">
+                  <span className="detailsGlyph" aria-hidden="true">G</span>
+                  <h2>{repositoryName(selectedRepository.path)}</h2>
+                  <p>{selectedRepository.path}</p>
+                  <div className="repositoryFact"><span>BRANCH</span><strong>{selectedRepository.detached ? "Detached HEAD" : selectedRepository.branch || "Unborn"}</strong></div>
+                  <div className="repositoryFact"><span>HEAD</span><strong className="monoText">{selectedRepository.head?.slice(0, 12) || "No commits"}</strong></div>
+                  <div className="repositoryFact"><span>REPO ID</span><strong className="monoText">{selectedRepository.repoId.slice(0, 17)}…</strong></div>
+                </div>
+              ) : (
+                <><div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div><div className="detailPlaceholder"><span>AUTHOR</span><strong>—</strong><span>COMMIT</span><strong className="monoText">—</strong></div></>
+              )}
             </aside>
           </div>
 
           <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label="Resize changes and commit area" onResize={setWorkbenchHeight} />
           <section className="workbench" aria-label="Changes and commit">
-            <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">0</span></div><p>No changed files</p><small>Changes will appear here when a repository is open.</small></div>
+            <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">0</span></div><p>{selectedRepository ? "Status snapshot is coming next" : "No changed files"}</p><small>{selectedRepository ? "Full status and file grouping arrive with S1.4." : "Changes will appear here when a repository is open."}</small></div>
             <div className="workbenchSection stagedSection"><div className="workbenchTitle">Staged changes <span className="countBadge">0</span></div><div className="stagedEmpty">Nothing staged</div><small>Review a file and stage the parts you want to commit.</small></div>
             <div className="workbenchSection commitSection"><div className="workbenchTitle">Commit message</div><textarea aria-label="Commit message" placeholder="Describe the changes you want to commit…" disabled /><div className="commitControls"><label className="disabledCheck"><input type="checkbox" disabled /> Amend</label><button className="primaryButton commitButton" type="button" disabled title="Open a repository and stage changes to commit">Commit <span aria-hidden="true">⌄</span></button></div><small>Commit becomes available when staged changes and a message are ready.</small></div>
           </section>
@@ -360,7 +425,7 @@ function App() {
           >
             <h2 id="palette-title" className="srOnly">Command palette</h2>
             <div className="paletteSearch"><span aria-hidden="true">⌕</span><input autoFocus aria-label="Search commands" placeholder="Search commands…" value={paletteQuery} onChange={(event) => setPaletteQuery(event.target.value)} /><kbd>ESC</kbd></div>
-            <div className="paletteContext">{page === "welcome" ? "WELCOME" : "WORKSPACE · NO REPOSITORY"}</div>
+          <div className="paletteContext">{page === "welcome" ? "WELCOME" : selectedRepository ? `WORKSPACE · ${repositoryName(selectedRepository.path).toUpperCase()}` : "WORKSPACE · NO REPOSITORY"}</div>
             <div className="commandList">
               {filteredCommands.map((command) => (
                 <button key={command.id} className="commandItem" type="button" disabled={!command.available} onClick={() => { command.run(); setPaletteOpen(false); }}>

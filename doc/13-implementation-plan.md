@@ -61,7 +61,7 @@
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S1.1 | RepositoryManager/Reader/Model 和本地仓库打开 API，含稳定 repoId。 | 普通仓库、空仓库、`.git` 文件型 worktree 可打开并显示路径、HEAD、当前分支/游离状态；路径不存在、非仓库、权限不足返回不同可读错误；业务 API 只接收 repoId，不接受任意文件路径执行 Git 操作。 | 未开始 |
+| S1.1 | RepositoryManager/Reader/Model 和本地仓库打开 API，含稳定 repoId。 | 普通仓库、空仓库、`.git` 文件型 worktree 可打开并显示路径、HEAD、当前分支/游离状态；路径不存在、非仓库、权限不足返回不同可读错误；业务 API 只接收 repoId，不接受任意文件路径执行 Git 操作。 | 已完成 |
 | S1.2 | SQLite 保存最近仓库、收藏、最后访问时间；欢迎页接入打开与初始化入口。 | 重启后列表、收藏仍在；最近仓库两步内打开；仓库迁移/删除后出现可恢复的失效提示；初始化仅对用户选定目录生效，不覆盖已有仓库。 | 未开始 |
 | S1.3 | 多仓库 Tab 与每仓 UI 状态持久化。 | 两个仓库之间切换不串用状态；各 Tab 的模式、选中提交、提交图滚动位置恢复；关闭 Tab 不关闭实际仓库；重新打开应用恢复符合 `03` 的持久化项。 | 未开始 |
 | S1.4 | 全量 StatusSnapshot、工作区/Changes 列表和显式刷新。 | staged、unstaged、untracked、ignored、conflicted、renamed/deleted、文件 mode 变化正确分组；状态同时有文本/图标；外部 Git 修改后手动刷新与 `git status` 一致；大仓库刷新期间显示加载和错误状态，不显示伪空结果。 | 未开始 |
@@ -180,5 +180,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm check` 全部通过：应用和测试类型检查、Electron 构建、6 个 Vitest 用例、Rust 格式检查和 8 个 Rust 用例、Playwright Electron E2E。E2E 检查欢迎页与主工作区、连接状态、窄视口下导航/提交区折叠；组件测试覆盖 `Ctrl/Cmd+K`、禁用命令原因、主题切换和可键盘调整的面板分隔条。
 - 手工验证：Windows Electron 窗口确认 sidecar 已连接；Playwright 界面截图对照 `05`/`09` 检查欢迎页、三栏主区、底部工作区、深色/浅色主题和 900px 窄视口布局。
 - 证据：`doc/evidence/S0.4/welcome.png`、`doc/evidence/S0.4/welcome-dark.png`、`doc/evidence/S0.4/workspace-light.png`、`doc/evidence/S0.4/workspace-dark.png`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。
-- 完成 commit：待补记
+- 完成 commit：`2692f9a`
 - 限制/后续：仓库打开、克隆和初始化入口在对应后续阶段到来前显示禁用原因，不伪装成已实现功能。面板尺寸当前保存在本地 UI 设置中，等 S1.3 仓库 Tab 状态落地后改为仓库级持久化。
+
+### S1.1 — 仓库打开与稳定身份
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：`pnpm api:types` 与 `pnpm check` 通过；质量门禁包括前端类型检查/Electron 构建、8 个 Vitest 用例、Rust 格式检查/构建/14 个测试，以及 Electron E2E。覆盖普通/空仓库、detached HEAD、`.git` 文件型 worktree、稳定 repoId、路径错误分类、API 通过 repoId 读取和 Electron 实际打开 API。
+- 手工验证：Windows E2E 创建临时 Git 仓库，通过本地 sidecar POST 打开，检查 repoId、unborn branch 和路径，然后刷新 renderer 并从注册列表恢复到工作区；临时仓库由 finally 清理。
+- 证据：`crates/gitcrest-core/src/repository.rs`、`tests/unit/api-client.test.ts`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`、`doc/api/v1.yaml`。
+- 完成 commit：待补记
+- 限制/后续：权限拒绝有独立 API 错误映射，但本机未执行 Windows ACL 拒绝目录的端到端验证；仓库注册目前仅在 sidecar 当前会话内存中，持久化由 S1.2 完成。UI 的目录选择调用已接通，原生系统对话框未通过自动化控制直接操作。

@@ -69,7 +69,11 @@ export interface paths {
         /** List repositories registered in this desktop session */
         get: operations["listRepositories"];
         put?: never;
-        post?: never;
+        /**
+         * Validate and register a user-selected local Git working tree
+         * @description The path is accepted only for this open operation. Subsequent repository operations use repoId.
+         */
+        post: operations["openRepository"];
         delete?: never;
         options?: never;
         head?: never;
@@ -117,8 +121,14 @@ export interface components {
             repoId: components["schemas"]["RepoId"];
             path: string;
             head: string | null;
+            branch: string | null;
+            detached: boolean;
             /** @enum {string} */
             state: "normal" | "merging" | "rebasing" | "cherryPicking" | "bisecting";
+        };
+        OpenRepositoryRequest: {
+            /** @description Local folder explicitly selected by the user. */
+            path: string;
         };
         /** @enum {string} */
         TaskStatus: "queued" | "running" | "waitingForInput" | "succeeded" | "failed" | "cancelled";
@@ -140,7 +150,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -366,6 +376,80 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    openRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenRepositoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Repository opened or already registered in this session. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Repository"];
+                };
+            };
+            /** @description Missing or malformed repository path. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The selected path cannot be read by GitCrest. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The selected path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The selected folder is not a Git working tree. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The Git executable could not be started. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     subscribeToEvents: {

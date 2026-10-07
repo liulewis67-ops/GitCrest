@@ -57,6 +57,21 @@ ipcMain.handle("gitcrest:get-sidecar-connection", (event) => {
   };
 });
 
+ipcMain.handle("gitcrest:choose-repository", async (event) => {
+  const windowAccess = windowAccessByContentsId.get(event.sender.id);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (windowAccess !== "readWrite" || !window) {
+    throw new Error("This window is not authorized to choose a repository.");
+  }
+
+  const selection = await dialog.showOpenDialog(window, {
+    title: "Open Git Repository",
+    buttonLabel: "Open repository",
+    properties: ["openDirectory"],
+  });
+  return selection.canceled ? undefined : selection.filePaths[0];
+});
+
 function connectEventStream(contentsId: number, stream: EventStream): void {
   if (stream.stopped || stream.webContents.isDestroyed() || !sidecarConnection) {
     return;

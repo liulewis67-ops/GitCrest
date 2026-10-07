@@ -103,6 +103,60 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "406":
           $ref: "#/components/responses/UnsupportedVersion"
+    post:
+      operationId: openRepository
+      summary: Validate and register a user-selected local Git working tree
+      description: The path is accepted only for this open operation. Subsequent repository operations use repoId.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OpenRepositoryRequest"
+      responses:
+        "200":
+          description: Repository opened or already registered in this session.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Repository"
+        "400":
+          description: Missing or malformed repository path.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: The selected path cannot be read by GitCrest.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "404":
+          description: The selected path does not exist.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "422":
+          description: The selected folder is not a Git working tree.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The Git executable could not be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/events:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -211,7 +265,7 @@ components:
     Repository:
       type: object
       additionalProperties: false
-      required: [repoId, path, head, state]
+      required: [repoId, path, head, branch, detached, state]
       properties:
         repoId:
           $ref: "#/components/schemas/RepoId"
@@ -219,9 +273,22 @@ components:
           type: string
         head:
           type: [string, "null"]
+        branch:
+          type: [string, "null"]
+        detached:
+          type: boolean
         state:
           type: string
           enum: [normal, merging, rebasing, cherryPicking, bisecting]
+    OpenRepositoryRequest:
+      type: object
+      additionalProperties: false
+      required: [path]
+      properties:
+        path:
+          type: string
+          minLength: 1
+          description: Local folder explicitly selected by the user.
     TaskStatus:
       type: string
       enum: [queued, running, waitingForInput, succeeded, failed, cancelled]
@@ -264,6 +331,10 @@ components:
         - API_VERSION_UNSUPPORTED
         - API_ROUTE_NOT_FOUND
         - REPOSITORY_NOT_FOUND
+        - REPOSITORY_PATH_NOT_FOUND
+        - REPOSITORY_ACCESS_DENIED
+        - NOT_A_REPOSITORY
+        - GIT_UNAVAILABLE
         - REPOSITORY_STATE_CONFLICT
         - RESOURCE_VERSION_STALE
         - REQUEST_INVALID

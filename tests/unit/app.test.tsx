@@ -33,6 +33,7 @@ describe("App", () => {
           windowAccess: "readWrite",
         }),
         subscribeToEvents,
+        chooseRepository: vi.fn(),
       },
     });
     const fetcher = vi.fn<typeof fetch>()
@@ -41,6 +42,10 @@ describe("App", () => {
         version: "0.1.0",
         apiVersion: 1,
       }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("[]", {
+        status: 200,
+        headers: { "X-GitCrest-API-Version": "1" },
+      }))
       .mockResolvedValueOnce(new Response("[]", {
         status: 200,
         headers: { "X-GitCrest-API-Version": "1" },
@@ -53,8 +58,8 @@ describe("App", () => {
     await waitFor(() => expect(subscribeToEvents).toHaveBeenCalledOnce());
 
     onEvent?.(resyncEvent);
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2));
-    expect(String(fetcher.mock.calls[1][0])).toBe("http://127.0.0.1:43210/api/v1/repositories");
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(3));
+    expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories");
   });
 
   it("opens a keyboard-accessible command palette with reasons for unavailable actions", async () => {
@@ -67,22 +72,64 @@ describe("App", () => {
           windowAccess: "readWrite",
         }),
         subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository: vi.fn().mockResolvedValue(undefined),
       },
     });
-    vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
-      name: "gitcrest-core", version: "0.1.0", apiVersion: 1,
-    }), { status: 200 })));
+    vi.stubGlobal("fetch", vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        name: "gitcrest-core", version: "0.1.0", apiVersion: 1,
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
 
     render(<App />);
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     const dialog = screen.getByRole("dialog", { name: "Command palette" });
     expect(dialog).toBeDefined();
-    const unavailableCommand = within(dialog).getByRole("button", { name: /Open local repository/ }) as HTMLButtonElement;
-    expect(unavailableCommand.disabled).toBe(true);
-    expect(screen.getByText("Repository picker arrives with S1.1")).toBeDefined();
+    const openCommand = within(dialog).getByRole("button", { name: /Open local repository/ }) as HTMLButtonElement;
+    expect(openCommand.disabled).toBe(false);
+    expect(within(dialog).getByRole("button", { name: /Clone repository/ })).toBeDefined();
 
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull());
+  });
+
+  it("opens the selected local repository and shows its workspace context", async () => {
+    const repository = {
+      repoId: "repo_fixture",
+      path: "C:/fixture",
+      head: null,
+      branch: "main",
+      detached: false,
+      state: "normal",
+    };
+    const chooseRepository = vi.fn().mockResolvedValue("C:/fixture");
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({
+          baseUrl: "http://127.0.0.1:43210",
+          token: "test-session-token",
+          windowAccess: "readWrite",
+        }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository,
+      },
+    });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+
+    expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(chooseRepository).toHaveBeenCalledOnce();
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/fixture" });
+    expect(screen.getByText("main", { selector: ".navEmpty" })).toBeDefined();
   });
 
   it("cycles themes and exposes keyboard-adjustable panel separators", async () => {

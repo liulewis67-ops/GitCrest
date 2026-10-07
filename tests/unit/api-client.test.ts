@@ -35,6 +35,24 @@ describe("GitCrestApiClient", () => {
     expect(headers.get("X-GitCrest-API-Version")).toBe("1");
   });
 
+  it("opens a repository with the selected path and versioned write request", async () => {
+    const repository = { repoId: "repo_fixture", path: "C:/fixture", head: null, branch: "main", detached: false, state: "normal" };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(repository), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.openRepository("C:/fixture")).resolves.toEqual(repository);
+    const [url, request] = fetcher.mock.calls[0];
+    expect(String(url)).toBe(`${baseUrl}/api/v1/repositories`);
+    expect(request?.method).toBe("POST");
+    expect(new Headers(request?.headers).get("Authorization")).toBe(`Bearer ${token}`);
+    expect(new Headers(request?.headers).get("X-GitCrest-API-Version")).toBe("1");
+    expect(new Headers(request?.headers).get("Content-Type")).toBe("application/json");
+    expect(request?.body).toBe(JSON.stringify({ path: "C:/fixture" }));
+  });
+
   it("preserves structured API errors and rejects missing version confirmation", async () => {
     const errorFetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       error: { code: "REPOSITORY_NOT_FOUND", message: "Repository was not found." },

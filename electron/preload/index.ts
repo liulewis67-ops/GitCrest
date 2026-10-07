@@ -13,6 +13,9 @@ const api = {
   getSidecarConnection: (): Promise<SidecarConnection> => {
     return ipcRenderer.invoke("gitcrest:get-sidecar-connection");
   },
+  chooseRepository: (): Promise<string | undefined> => {
+    return ipcRenderer.invoke("gitcrest:choose-repository");
+  },
   subscribeToEvents: async (listener: (event: EventEnvelope) => void): Promise<() => void> => {
     const handleEvent = (_event: Electron.IpcRendererEvent, payload: EventEnvelope): void => listener(payload);
     ipcRenderer.on("gitcrest:event", handleEvent);

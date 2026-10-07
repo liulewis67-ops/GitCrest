@@ -33,6 +33,34 @@ describe("desktop startup E2E", () => {
       expect(body).toContain("gitcrest-core 0.1.0 (API v1)");
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${connection.token}`,
+            "X-GitCrest-API-Version": "1",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return { status: response.status, body: await response.json() };
+      }, fixture.path);
+      expect(opened.status).toBe(200);
+      expect(opened.body).toMatchObject({
+        path: fixture.path,
+        head: null,
+        detached: false,
+        state: "normal",
+      });
+      expect(opened.body.repoId).toMatch(/^repo_[0-9a-f]{64}$/);
+
+      await window.reload();
+      await window.locator(".workspaceCrumb").waitFor();
+      expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
+
       await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.setViewportSize({ width: 900, height: 820 });
       expect(await window.locator(".navigationPanel").isVisible()).toBe(false);
