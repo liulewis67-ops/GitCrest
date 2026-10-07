@@ -1,5 +1,6 @@
 import type { DiffDocumentResponse } from "../../api/client";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { splitInlineDiff } from "./inline-diff";
 
 interface SplitDiffProps {
   document: DiffDocumentResponse;
@@ -14,16 +15,16 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
   const [activeHunk, setActiveHunk] = useState<number | null>(null);
   const hunkRefs = useRef<Array<HTMLElement | null>>([]);
   const readOnly = document.scope === "commit";
+  const navigableHunks = useMemo(() => document.status === "text"
+    ? document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.some((row) => row.kind === "change") ? [hunkIndex] : [])
+    : [], [document.hunks, document.status]);
   useEffect(() => {
     setSelection([]);
     setCollapsedHunks(new Set());
     setActiveHunk(null);
     hunkRefs.current = [];
   }, [document.revision]);
-  const navigableHunks = document.status === "text"
-    ? document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.some((row) => row.kind === "change") ? [hunkIndex] : [])
-    : [];
-  const navigateHunk = (direction: -1 | 1) => {
+  const navigateHunk = useCallback((direction: -1 | 1) => {
     if (navigableHunks.length === 0) return;
     const activeIndex = activeHunk === null ? -1 : navigableHunks.indexOf(activeHunk);
     const nextIndex = activeIndex === -1
@@ -39,7 +40,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
     });
     setActiveHunk(nextHunk);
     requestAnimationFrame(() => hunkRefs.current[nextHunk]?.scrollIntoView?.({ block: "nearest" }));
-  };
+  }, [activeHunk, navigableHunks]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "F7" || event.altKey || event.ctrlKey || event.metaKey || navigableHunks.length === 0) return;
@@ -49,7 +50,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [document.revision, navigableHunks.length, activeHunk]);
+  }, [document.revision, navigateHunk, navigableHunks.length]);
   if (document.status !== "text") {
     const descriptions: Record<DiffDocumentResponse["status"], string> = {
       text: "Text diff",
@@ -131,8 +132,8 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
                   return [...next.filter((item) => item.hunkIndex !== hunkIndex), ...next.filter((item) => item.hunkIndex === hunkIndex)];
                 })}
               /></label> : <span className="diffRowSelect" aria-hidden="true" />}
-              <div className="splitDiffCell"><span className="splitDiffLineNumber">{row.oldLine ?? ""}</span><code>{row.oldText ?? ""}</code></div>
-              <div className="splitDiffCell"><span className="splitDiffLineNumber">{row.newLine ?? ""}</span><code>{row.newText ?? ""}</code></div>
+              <div className="splitDiffCell"><span className="splitDiffLineNumber">{row.oldLine ?? ""}</span><code>{row.oldText !== null && row.oldText !== undefined && row.kind === "change" ? <InlineDiffText text={row.oldText} counterpart={row.newText ?? null} /> : row.oldText ?? ""}</code></div>
+              <div className="splitDiffCell"><span className="splitDiffLineNumber">{row.newLine ?? ""}</span><code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code></div>
             </div>
           ))}
         </section>
@@ -147,4 +148,11 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
       </div>}
     </div>
   );
+}
+
+function InlineDiffText({ text, counterpart }: { text: string; counterpart: string | null }) {
+  const segments = splitInlineDiff(text, counterpart);
+  return <>{segments.map((segment, index) => segment.changed
+    ? <mark className="diffInlineChange" key={index}>{segment.text}</mark>
+    : <span key={index}>{segment.text}</span>)}</>;
 }

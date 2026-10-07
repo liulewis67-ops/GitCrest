@@ -342,15 +342,15 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("Core connected");
     fireEvent.click((await screen.findAllByRole("button", { name: /readme\.txt/ }))[0]);
-    expect(await screen.findByText("old content")).toBeDefined();
-    expect(screen.getByText("new content")).toBeDefined();
+    expect(await screen.findByText((_, element) => element?.tagName === "CODE" && element.textContent === "old content")).toBeDefined();
+    expect(screen.getByText((_, element) => element?.tagName === "CODE" && element.textContent === "new content")).toBeDefined();
     expect(screen.getByText("WORKING TREE ↔ INDEX")).toBeDefined();
     expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Graph" }));
     expect(screen.getByRole("complementary", { name: "Commit details" })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Diff" }));
-    expect(await screen.findByText("new content")).toBeDefined();
+    expect(await screen.findByText((_, element) => element?.tagName === "CODE" && element.textContent === "new content")).toBeDefined();
     expect(fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith("/diff")).length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Stage selected changes" }));

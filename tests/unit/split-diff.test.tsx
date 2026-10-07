@@ -57,15 +57,15 @@ describe("SplitDiff", () => {
     expect(screen.getByRole("region", { name: "Change hunk 1" }).className).toContain("splitDiffHunk-active");
 
     fireEvent.click(screen.getByRole("button", { name: "Collapse hunk 1" }));
-    expect(screen.queryByText("after one")).toBeNull();
+    expect(screen.getByRole("region", { name: "Change hunk 1" }).textContent).not.toContain("after one");
     fireEvent.keyDown(window, { key: "F7" });
     expect(screen.getByText("2 / 2 changes")).toBeDefined();
-    expect(screen.getByText("after two")).toBeDefined();
+    expect(screen.getByRole("region", { name: "Change hunk 2" }).textContent).toContain("after two");
     fireEvent.keyDown(window, { key: "F7", shiftKey: true });
     expect(screen.getByText("1 / 2 changes")).toBeDefined();
-    expect(screen.getByText("after one")).toBeDefined();
+    expect(screen.getByRole("region", { name: "Change hunk 1" }).textContent).toContain("after one");
     fireEvent.click(screen.getByRole("button", { name: "Collapse hunk 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Expand hunk 1" }));
-    expect(screen.getByText("after one")).toBeDefined();
+    expect(screen.getByRole("region", { name: "Change hunk 1" }).textContent).toContain("after one");
   });
 });
