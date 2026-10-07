@@ -342,4 +342,27 @@ mod tests {
         );
         assert!(!manager.status("example.com").unwrap().is_configured);
     }
+
+    #[test]
+    fn parses_git_askpass_https_username_and_password_prompts() {
+        assert_eq!(
+            parse_askpass_prompt("Username for 'https://github.com/org/repo.git': ").unwrap(),
+            (AskpassPromptKind::Username, "github.com".into())
+        );
+        assert_eq!(
+            parse_askpass_prompt("Password for 'https://lewis@GitHub.com:8443/org/repo.git': ")
+                .unwrap(),
+            (AskpassPromptKind::Password, "github.com:8443".into())
+        );
+        for prompt in [
+            "Password for 'ssh://github.com/org/repo.git': ",
+            "Token for 'https://github.com/org/repo.git': ",
+            "Password for 'https://github.com:bad/repo': ",
+        ] {
+            assert_eq!(
+                parse_askpass_prompt(prompt),
+                Err(CredentialError::InvalidInput)
+            );
+        }
+    }
 }
