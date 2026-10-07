@@ -1550,6 +1550,8 @@ async fn events(headers: HeaderMap, ws: WebSocketUpgrade) -> Result<Response, Ap
         .into_response())
 }
 
+// Sending the owned ping payload in the guard avoids cloning it before the async send.
+#[allow(clippy::collapsible_match)]
 async fn event_socket(mut socket: WebSocket) {
     let event_id = NEXT_EVENT_ID.fetch_add(1, Ordering::Relaxed);
     let occurred_at_ms = SystemTime::now()
@@ -1978,7 +1980,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(&format!("/api/v1/repositories/{repo_id}/staging"))
+                    .uri(format!("/api/v1/repositories/{repo_id}/staging"))
                     .header("X-GitCrest-API-Version", API_VERSION)
                     .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
                     .header(CONTENT_TYPE, "application/json")
@@ -2002,7 +2004,7 @@ mod tests {
             .oneshot(
                 Request::builder()
                     .method(Method::POST)
-                    .uri(&format!("/api/v1/repositories/{repo_id}/staging"))
+                    .uri(format!("/api/v1/repositories/{repo_id}/staging"))
                     .header("X-GitCrest-API-Version", API_VERSION)
                     .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
                     .header(CONTENT_TYPE, "application/json")

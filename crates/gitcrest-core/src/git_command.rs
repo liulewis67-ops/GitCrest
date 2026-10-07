@@ -136,6 +136,8 @@ impl GitCommandService {
         .await
     }
 
+    // Commit execution keeps the isolation options beside the repository and task context.
+    #[allow(clippy::too_many_arguments)]
     pub async fn execute_commit(
         &self,
         repository_path: &Path,
@@ -264,6 +266,8 @@ impl Drop for TemporaryIndex {
     }
 }
 
+// Git command execution carries process, logging, cancellation, and repository context together.
+#[allow(clippy::too_many_arguments)]
 async fn run_command(
     git_program: &str,
     arguments: Vec<OsString>,
@@ -410,20 +414,15 @@ where
 {
     tokio::spawn(async move {
         let mut lines = BufReader::new(stream).lines();
-        loop {
-            match lines.next_line().await {
-                Ok(Some(line)) => {
-                    activity.send_replace(Instant::now());
-                    if let Some(progress) = parse_progress(&line) {
-                        task.progress("Receiving objects", Some(progress)).await;
-                    }
-                    let line = redactions.iter().fold(line, |line, secret| {
-                        line.replace(secret, "[commit message]")
-                    });
-                    task.log(line).await;
-                }
-                Ok(None) | Err(_) => break,
+        while let Ok(Some(line)) = lines.next_line().await {
+            activity.send_replace(Instant::now());
+            if let Some(progress) = parse_progress(&line) {
+                task.progress("Receiving objects", Some(progress)).await;
             }
+            let line = redactions.iter().fold(line, |line, secret| {
+                line.replace(secret, "[commit message]")
+            });
+            task.log(line).await;
         }
     })
 }
@@ -509,7 +508,7 @@ fn parse_progress(line: &str) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use std::{path::PathBuf, process::Command as StdCommand, time::Duration};
+    use std::{process::Command as StdCommand, time::Duration};
 
     use super::*;
     use crate::tasks::{TaskService, TaskStatus};
@@ -580,7 +579,7 @@ mod tests {
 
         let tasks = TaskService::default();
         let command = GitCommandService::default();
-        let path = PathBuf::from(target);
+        let path = target;
         let task = tasks
             .submit(
                 Some("repo".into()),

@@ -76,7 +76,7 @@ pub fn patch_command(action: StagingPatchAction, patch: Vec<u8>) -> StagingComma
         ),
     };
     StagingCommand {
-        arguments: arguments.into(),
+        arguments,
         input: Some(patch),
         label,
         log_label,

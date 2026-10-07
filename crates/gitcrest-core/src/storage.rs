@@ -62,7 +62,7 @@ impl RepositoryStore {
                     head: row.get(2)?,
                     branch: row.get(3)?,
                     detached: row.get::<_, i64>(4)? != 0,
-                    state: row.get::<_, String>(5)?.into(),
+                    state: row.get::<_, String>(5)?,
                     is_favorite: row.get::<_, i64>(6)? != 0,
                     last_accessed_at: row.get::<_, i64>(7)?,
                     availability: row.get(8)?,

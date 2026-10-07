@@ -577,7 +577,7 @@ pub fn redact_log_line(line: &str) -> String {
         redacted.push_str(&safe_token);
         if redacted.len() >= MAX_LOG_LINE_CHARS {
             redacted.truncate(MAX_LOG_LINE_CHARS);
-            redacted.push_str("…");
+            redacted.push('…');
             break;
         }
     }

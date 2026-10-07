@@ -456,9 +456,7 @@ pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u
         .collect::<Vec<_>>();
     let first_hunk = patch_lines
         .iter()
-        .position(|line| {
-            parse_hunk_header(&String::from_utf8_lossy(line).trim_end().to_owned()).is_some()
-        })
+        .position(|line| parse_hunk_header(String::from_utf8_lossy(line).trim_end()).is_some())
         .ok_or(DiffError::InvalidPath)?;
     let mut patch = patch_lines[..first_hunk]
         .iter()
@@ -663,14 +661,14 @@ fn parse_diff(output: &[u8]) -> ParsedDiff {
         let Some(hunk) = current.as_mut() else {
             continue;
         };
-        if line.starts_with(' ') {
+        if let Some(text) = line.strip_prefix(' ') {
             flush_changes(&mut hunk.rows, &mut changes);
             hunk.rows.push(DiffRow {
                 kind: DiffRowKind::Context,
                 old_line: Some(old_line),
                 new_line: Some(new_line),
-                old_text: Some(line[1..].to_owned()),
-                new_text: Some(line[1..].to_owned()),
+                old_text: Some(text.to_owned()),
+                new_text: Some(text.to_owned()),
                 patch_change_lines: Vec::new(),
                 old_position: Some(old_line),
                 new_position: Some(new_line),
