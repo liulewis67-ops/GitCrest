@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "./api/client";
 import { CommitDetails, CommitGraph } from "./features/history/CommitGraph";
 import { TaskCenter } from "./features/tasks/TaskCenter";
+import { WorkflowDialog, type WorkflowAction } from "./features/workflows/WorkflowDialog";
 import { CloneDialog } from "./features/cloning/CloneDialog";
 import { RemoteManager } from "./features/remotes/RemoteManager";
 import { PushDialog } from "./features/remotes/PushDialog";
@@ -199,6 +200,7 @@ function App() {
   const [switchBusy, setSwitchBusy] = useState(false);
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [workflowDialog, setWorkflowDialog] = useState<{ repoId: string; targetOid: string; action: WorkflowAction }>();
   const [cloneOpen, setCloneOpen] = useState(false);
   const [cloneBusy, setCloneBusy] = useState(false);
   const [cloneError, setCloneError] = useState("");
@@ -229,6 +231,8 @@ function App() {
   const refreshedFetchTasks = useRef(new Set<string>());
   const refreshedPushTasks = useRef(new Set<string>());
   const refreshedPullTasks = useRef(new Set<string>());
+  const refreshedWorkflowTasks = useRef(new Set<string>());
+  const refreshedWaitingWorkflowTasks = useRef(new Set<string>());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
@@ -486,6 +490,37 @@ function App() {
       setTasksError("");
     } catch (error) {
       setTasksError(error instanceof Error ? error.message : "Could not read task history.");
+    }
+  }
+
+  async function startWorkflowTask(task: TaskSnapshotResponse) {
+    setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+    setWorkflowDialog(undefined);
+    setTasksError("");
+    setTasksOpen(true);
+  }
+
+  async function recoverWorkflowTask(task: TaskSnapshotResponse, _preview: WorkflowRecoveryPreflightResponse, action: "continue" | "skip" | "abort") {
+    const api = apiRef.current;
+    if (!api || !task.repoId || task.status !== "waitingForInput") return;
+    setTaskActionId(task.taskId);
+    setTasksError("");
+    try {
+      const current = await api.preflightRepositoryWorkflowRecovery(task.repoId, task.taskId);
+      const allowed = action === "continue" ? current.canContinue : action === "skip" ? current.canSkip : current.canAbort;
+      if (!allowed || !current.headOid) throw new Error("Repository state changed. Review the refreshed recovery preview before continuing.");
+      await api.recoverRepositoryWorkflow(task.repoId, {
+        taskId: task.taskId,
+        action,
+        expectedOperation: current.operation,
+        expectedHeadOid: current.headOid,
+        expectedConflictedPaths: current.conflictedPaths,
+      });
+      await refreshTasks();
+    } catch (reason) {
+      setTasksError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not queue workflow recovery.");
+    } finally {
+      setTaskActionId("");
     }
   }
 
@@ -1168,6 +1203,10 @@ function App() {
 
   useEffect(() => {
     for (const task of tasks) {
+      if (task.status === "waitingForInput" && ["merge", "cherryPick", "revert"].includes(task.operation) && task.repoId && !refreshedWaitingWorkflowTasks.current.has(task.taskId)) {
+        refreshedWaitingWorkflowTasks.current.add(task.taskId);
+        void refreshRepositoryStatus(task.repoId);
+      }
       if (!["succeeded", "failed", "cancelled"].includes(task.status)) continue;
       if (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) {
         if (refreshedStagingTasks.current.has(task.taskId)) continue;
@@ -1249,6 +1288,18 @@ function App() {
           void refreshRepositoryBranches(task.repoId);
           setHistoryRefreshKey((current) => current + 1);
         }
+      }
+      if ((task.operation.startsWith("workflow") || ["merge", "cherryPick", "revert"].includes(task.operation)) && !refreshedWorkflowTasks.current.has(task.taskId)) {
+        refreshedWorkflowTasks.current.add(task.taskId);
+        if (!task.repoId) continue;
+        void refreshRepositoryStatus(task.repoId);
+        void refreshRepositoryBranches(task.repoId);
+        setHistoryRefreshKey((current) => current + 1);
+        const api = apiRef.current;
+        if (api) void api.getRepository(task.repoId).then((repository) => {
+          setRepositories((current) => current.map((entry) => entry.repoId === repository.repoId ? repository : entry));
+          setSelectedRepository((current) => current?.repoId === repository.repoId ? repository : current);
+        }).catch(() => undefined);
       }
     }
   }, [tasks]);
@@ -1598,7 +1649,7 @@ function App() {
 
             {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
               <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} /> : selectedRepository ? (
+              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} workflowDisabledReason={!connected ? "Connect to the Git engine to start this operation." : selectedRepository.availability !== "available" ? "This repository is unavailable." : hasActiveRepositoryTask ? "Wait for the current repository task." : undefined} onWorkflow={(action, oid) => setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action })} /> : selectedRepository ? (
                 <div className="repositoryDetails">
                   <span className="detailsGlyph" aria-hidden="true">G</span>
                   <h2>{repositoryName(selectedRepository.path)}</h2>
@@ -1737,7 +1788,8 @@ function App() {
       {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} forceWithLeaseOnly={pushForceOnly} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
-      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} />}
+      {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, preview, action) => void recoverWorkflowTask(task, preview, action)} />}
+      {workflowDialog && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.repoId} targetOid={workflowDialog.targetOid} action={workflowDialog.action} onClose={() => setWorkflowDialog(undefined)} onStarted={(task) => void startWorkflowTask(task)} />}
       {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
     </main>
   );

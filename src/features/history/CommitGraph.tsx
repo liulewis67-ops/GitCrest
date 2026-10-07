@@ -271,12 +271,16 @@ export function CommitDetails({
   oid,
   onOpenFile,
   onOpenDiffWindow,
+  onWorkflow,
+  workflowDisabledReason,
 }: {
   api: GitCrestApiClient;
   repoId: string;
   oid?: string;
   onOpenFile?: (path: string, oid: string) => void;
   onOpenDiffWindow?: (path: string, oid: string) => void;
+  onWorkflow?: (action: "merge" | "cherryPick" | "revert", oid: string) => void;
+  workflowDisabledReason?: string;
 }) {
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
   const [copyMessage, setCopyMessage] = useState("");
@@ -348,6 +352,7 @@ export function CommitDetails({
     <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>Copy SHA</button>
     {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
     <button className="textButton commitCopyButton" type="button" onClick={() => { setTagError(""); setTagEditorOpen((current) => !current); }}>{tagEditorOpen ? "Cancel tag" : "Create tag"}</button>
+    {onWorkflow && <div className="commitWorkflowActions" aria-label="Commit actions"><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>Merge</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>Cherry-pick</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>Revert</button></div>}
     {tagEditorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
       <label>Tag name<input aria-label="Tag name" value={tagName} maxLength={255} required onChange={(event) => setTagName(event.target.value)} placeholder="v1.0.0" /></label>
       <label>Annotation message<textarea aria-label="Tag annotation" value={tagMessage} maxLength={8192} onChange={(event) => setTagMessage(event.target.value)} placeholder="Describe this release" /></label>

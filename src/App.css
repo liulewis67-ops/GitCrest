@@ -291,6 +291,15 @@ button:disabled { cursor: not-allowed; }
 .historyLoadingMore { position: sticky; bottom: 0; padding: 8px; border-top: 1px solid var(--line); background: var(--surface-raised); color: var(--text-muted); font-size: 9px; text-align: center; }
 .commitDetailsState { padding: 18px 13px; color: var(--text-muted); font-size: 10px; }
 .commitDetails { display: flex; flex-direction: column; gap: 9px; min-height: 0; padding: 14px 13px; overflow: auto; }
+.commitWorkflowActions { display: flex; flex-wrap: wrap; gap: 5px; }
+.workflowDialog { width: min(520px, 100%); }
+.workflowDialogBody { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 16px; overflow: auto; }
+.workflowDialogBody .repositoryFact { padding: 0; }
+.workflowDialogBody .repositoryFact strong { max-width: 70%; overflow-wrap: anywhere; }
+.workflowPathList { max-height: 160px; overflow: auto; margin: 0; padding: 7px 9px 7px 26px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font: 11px/1.55 var(--font-mono); }
+.workflowPathList li { overflow-wrap: anywhere; }
+.workflowRecovery { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
+.workflowRecovery .taskCenterActions { flex-wrap: wrap; align-items: center; }
 .commitDetails .repositoryFact { padding: 0; }
 .commitDetails .repositoryFact strong { max-width: 68%; overflow-wrap: anywhere; }
 .commitDetailMessage { padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 10px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
