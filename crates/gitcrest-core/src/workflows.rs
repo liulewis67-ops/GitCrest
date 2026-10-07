@@ -18,13 +18,21 @@ pub enum WorkflowAction {
     Revert,
 }
 
-#[derive(Clone, Copy, Debug, Serialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum WorkflowOperation {
     Merge,
     CherryPick,
     Revert,
     Rebase,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub enum WorkflowRecoveryAction {
+    Continue,
+    Skip,
+    Abort,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -44,10 +52,27 @@ pub struct WorkflowPreflight {
     pub can_start: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkflowRecoveryPreflight {
+    pub repo_id: String,
+    pub task_id: String,
+    pub operation: WorkflowOperation,
+    pub head_oid: Option<String>,
+    pub dirty_paths: Vec<String>,
+    pub omitted_dirty_path_count: u32,
+    pub conflicted_paths: Vec<String>,
+    pub omitted_conflicted_path_count: u32,
+    pub can_continue: bool,
+    pub can_skip: bool,
+    pub can_abort: bool,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub enum WorkflowError {
     InvalidTarget,
     CommitNotFound,
+    NoActiveOperation,
     GitUnavailable,
     TimedOut,
     TooLarge,
@@ -101,19 +126,13 @@ pub async fn read_preflight(
     )
     .await?;
     let head_oid = head.as_deref().map(text).transpose()?.map(str::to_owned);
-    let status = run_git(
-        repository_path,
-        &[
-            "status".into(),
-            "--porcelain=v2".into(),
-            "-z".into(),
-            "--untracked-files=all".into(),
-        ],
-    )
-    .await?;
-    let (dirty_paths, omitted_dirty_path_count, conflicted_paths, omitted_conflicted_path_count) =
-        parse_status(&status)?;
-    let operation_in_progress = read_operation(repository_path).await?;
+    let (
+        dirty_paths,
+        omitted_dirty_path_count,
+        conflicted_paths,
+        omitted_conflicted_path_count,
+        operation_in_progress,
+    ) = read_worktree_state(repository_path).await?;
     let is_clean = dirty_paths.is_empty() && operation_in_progress.is_none();
     let can_start = head_oid.is_some() && is_clean;
     Ok(WorkflowPreflight {
@@ -130,6 +149,89 @@ pub async fn read_preflight(
         omitted_conflicted_path_count,
         can_start,
     })
+}
+
+pub async fn read_recovery_preflight(
+    repo_id: String,
+    task_id: String,
+    repository_path: &Path,
+) -> Result<WorkflowRecoveryPreflight, WorkflowError> {
+    let head = run_git_optional(
+        repository_path,
+        &[
+            "rev-parse".into(),
+            "--verify".into(),
+            "HEAD^{commit}".into(),
+        ],
+    )
+    .await?;
+    let head_oid = head.as_deref().map(text).transpose()?.map(str::to_owned);
+    let (
+        dirty_paths,
+        omitted_dirty_path_count,
+        conflicted_paths,
+        omitted_conflicted_path_count,
+        operation,
+    ) = read_worktree_state(repository_path).await?;
+    let operation = operation.ok_or(WorkflowError::NoActiveOperation)?;
+    if operation == WorkflowOperation::Rebase {
+        return Err(WorkflowError::NoActiveOperation);
+    }
+    let only_conflicts_are_dirty = dirty_paths
+        .iter()
+        .all(|path| conflicted_paths.iter().any(|conflicted| conflicted == path))
+        && omitted_dirty_path_count == 0;
+    let can_continue = conflicted_paths.is_empty();
+    Ok(WorkflowRecoveryPreflight {
+        repo_id,
+        task_id,
+        operation,
+        head_oid,
+        dirty_paths,
+        omitted_dirty_path_count,
+        conflicted_paths,
+        omitted_conflicted_path_count,
+        can_continue,
+        can_skip: matches!(
+            operation,
+            WorkflowOperation::CherryPick | WorkflowOperation::Revert
+        ) && only_conflicts_are_dirty,
+        can_abort: only_conflicts_are_dirty,
+    })
+}
+
+async fn read_worktree_state(
+    repository_path: &Path,
+) -> Result<
+    (
+        Vec<String>,
+        u32,
+        Vec<String>,
+        u32,
+        Option<WorkflowOperation>,
+    ),
+    WorkflowError,
+> {
+    let status = run_git(
+        repository_path,
+        &[
+            "status".into(),
+            "--porcelain=v2".into(),
+            "-z".into(),
+            "--untracked-files=all".into(),
+        ],
+    )
+    .await?;
+    let (dirty_paths, omitted_dirty_path_count, conflicted_paths, omitted_conflicted_path_count) =
+        parse_status(&status)?;
+    let operation = read_operation(repository_path).await?;
+    Ok((
+        dirty_paths,
+        omitted_dirty_path_count,
+        conflicted_paths,
+        omitted_conflicted_path_count,
+        operation,
+    ))
 }
 
 pub(crate) async fn read_operation(

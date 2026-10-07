@@ -157,6 +157,45 @@ impl TaskService {
         self.inner.data.lock().await.tasks.get(task_id).cloned()
     }
 
+    pub async fn resolve_waiting_for_input(
+        &self,
+        task_id: &str,
+        status: TaskStatus,
+        message: impl Into<String>,
+    ) -> Result<bool, String> {
+        if !matches!(status, TaskStatus::Succeeded | TaskStatus::Cancelled) {
+            return Err("A waiting task can only be resolved as succeeded or cancelled.".into());
+        }
+        let message = message.into();
+        let snapshot = {
+            let mut data = self.inner.data.lock().await;
+            let Some(task) = data.tasks.get_mut(task_id) else {
+                return Ok(false);
+            };
+            if task.status != TaskStatus::WaitingForInput {
+                return Ok(false);
+            }
+            task.status = status;
+            task.phase = match status {
+                TaskStatus::Succeeded => "Complete",
+                TaskStatus::Cancelled => "Cancelled",
+                _ => unreachable!(),
+            }
+            .into();
+            task.message = Some(message);
+            task.error_category = None;
+            task.cancel_requested = false;
+            task.updated_at_ms = now_ms();
+            data.tasks.get(task_id).cloned()
+        };
+        if let Some(snapshot) = snapshot {
+            persist_service_snapshot(&self.inner, snapshot).await?;
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
     pub async fn cancel(&self, task_id: &str) -> Result<Option<TaskSnapshot>, String> {
         let (snapshot, sender) = {
             let mut data = self.inner.data.lock().await;
@@ -838,6 +877,18 @@ mod tests {
         let unchanged = service.cancel(&waiting.task_id).await.unwrap().unwrap();
         assert_eq!(unchanged.status, TaskStatus::WaitingForInput);
         assert!(!unchanged.cancel_requested);
+        assert!(service
+            .resolve_waiting_for_input(
+                &waiting.task_id,
+                TaskStatus::Succeeded,
+                "The merge was continued.",
+            )
+            .await
+            .unwrap());
+        assert_eq!(
+            service.get(&waiting.task_id).await.unwrap().status,
+            TaskStatus::Succeeded
+        );
     }
 
     #[tokio::test]

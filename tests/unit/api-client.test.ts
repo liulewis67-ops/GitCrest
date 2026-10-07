@@ -392,6 +392,29 @@ describe("GitCrestApiClient", () => {
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(request);
   });
 
+  it("preflights and queues a reviewed workflow recovery action", async () => {
+    const preview = {
+      repoId: "repo_fixture", taskId: "task/merge", operation: "merge", headOid: "a".repeat(40),
+      dirtyPaths: ["conflict.txt"], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0,
+      canContinue: true, canSkip: false, canAbort: false,
+    };
+    const task = { taskId: "task-continue", repoId: "repo_fixture", operation: "workflowContinue", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    await expect(client.preflightRepositoryWorkflowRecovery("repo/fixture", "task/merge")).resolves.toEqual(preview);
+    const request = {
+      taskId: preview.taskId, action: "continue" as const, expectedOperation: "merge" as const,
+      expectedHeadOid: preview.headOid, expectedConflictedPaths: preview.conflictedPaths,
+    };
+    await expect(client.recoverRepositoryWorkflow("repo/fixture", request)).resolves.toEqual(task);
+    expect(String(fetcher.mock.calls[0][0])).toBe(baseUrl + "/api/v1/repositories/repo%2Ffixture/workflows/recovery-preflight?taskId=task%2Fmerge");
+    expect(String(fetcher.mock.calls[1][0])).toBe(baseUrl + "/api/v1/repositories/repo%2Ffixture/workflows/recovery");
+    expect(fetcher.mock.calls[1][1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetcher.mock.calls[1][1]?.body))).toEqual(request);
+  });
+
   it("requests a one-off push preview for the selected remote branch", async () => {
     const preview = {
       repoId: "repo_fixture", localBranch: "main", remoteName: "backup", remoteBranch: "release/2026",

@@ -1824,6 +1824,125 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/recovery-preflight:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: preflightRepositoryWorkflowRecovery
+      summary: Inspect a waiting workflow's conflicts and safe recovery actions
+      parameters:
+        - name: taskId
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        "200":
+          description: Active operation, bounded path state, and continue/skip/abort availability.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRecoveryPreflight"
+        "400":
+          description: The waiting task ID is missing or malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or waiting task is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The task no longer matches an active supported operation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git could not read the bounded recovery preview.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/recovery:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: recoverRepositoryWorkflow
+      summary: Queue a reviewed continue, skip, or abort action for a waiting workflow
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowRecoveryRequest"
+      responses:
+        "202":
+          description: Recovery task accepted before execution.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The recovery request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or waiting task is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The selected recovery action is unsafe or conflicts remain unresolved.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "412":
+          description: The operation, HEAD, or conflict paths changed after preflight.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/push-preflight:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -2450,6 +2569,32 @@ components:
         action: { type: string, enum: [merge, cherryPick, revert] }
         targetOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+    WorkflowRecoveryPreflight:
+      type: object
+      additionalProperties: false
+      required: [repoId, taskId, operation, headOid, dirtyPaths, omittedDirtyPathCount, conflictedPaths, omittedConflictedPathCount, canContinue, canSkip, canAbort]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        taskId: { type: string }
+        operation: { type: string, enum: [merge, cherryPick, revert] }
+        headOid: { type: [string, "null"], minLength: 40, maxLength: 64 }
+        dirtyPaths: { type: array, maxItems: 200, items: { type: string } }
+        omittedDirtyPathCount: { type: integer, minimum: 0 }
+        conflictedPaths: { type: array, maxItems: 200, items: { type: string } }
+        omittedConflictedPathCount: { type: integer, minimum: 0 }
+        canContinue: { type: boolean }
+        canSkip: { type: boolean }
+        canAbort: { type: boolean }
+    WorkflowRecoveryRequest:
+      type: object
+      additionalProperties: false
+      required: [taskId, action, expectedOperation, expectedHeadOid, expectedConflictedPaths]
+      properties:
+        taskId: { type: string, minLength: 1, maxLength: 128 }
+        action: { type: string, enum: [continue, skip, abort] }
+        expectedOperation: { type: string, enum: [merge, cherryPick, revert] }
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        expectedConflictedPaths: { type: array, maxItems: 200, items: { type: string } }
     PushPreflight:
       type: object
       additionalProperties: false
@@ -2776,6 +2921,9 @@ components:
         - WORKFLOW_PREFLIGHT_UNAVAILABLE
         - WORKFLOW_PREFLIGHT_STALE
         - WORKFLOW_REQUIRES_CLEAN
+        - WORKFLOW_RECOVERY_STALE
+        - WORKFLOW_RECOVERY_NOT_ALLOWED
+        - WORKFLOW_NO_ACTIVE_OPERATION
         - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:

@@ -223,21 +223,74 @@ impl GitCommandService {
             task,
         )
         .await;
-        if result.is_ok() {
-            return result;
-        }
-        match crate::workflows::read_operation(repository_path).await {
-            Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
-                "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
-                match operation {
-                    crate::workflows::WorkflowOperation::Merge => "Merge",
-                    crate::workflows::WorkflowOperation::CherryPick => "Cherry-pick",
-                    crate::workflows::WorkflowOperation::Revert => "Revert",
-                    crate::workflows::WorkflowOperation::Rebase => "Rebase",
-                }
-            ))),
-            Ok(None) | Err(_) => result,
-        }
+        workflow_command_result(repository_path, result).await
+    }
+
+    pub async fn execute_workflow_recovery(
+        &self,
+        repository_path: &Path,
+        operation: crate::workflows::WorkflowOperation,
+        action: crate::workflows::WorkflowRecoveryAction,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let (arguments, label) = match (operation, action) {
+            (crate::workflows::WorkflowOperation::Rebase, _) => {
+                return Err(TaskFailure::Failed(
+                    "Rebase recovery is handled by the rebase workflow.".into(),
+                ));
+            }
+            (_, crate::workflows::WorkflowRecoveryAction::Continue) => (
+                vec!["commit".into(), "--no-edit".into()],
+                "Continue Git operation",
+            ),
+            (
+                crate::workflows::WorkflowOperation::CherryPick,
+                crate::workflows::WorkflowRecoveryAction::Skip,
+            ) => (
+                vec!["cherry-pick".into(), "--skip".into()],
+                "Skip cherry-pick commit",
+            ),
+            (
+                crate::workflows::WorkflowOperation::Revert,
+                crate::workflows::WorkflowRecoveryAction::Skip,
+            ) => (vec!["revert".into(), "--skip".into()], "Skip revert commit"),
+            (
+                crate::workflows::WorkflowOperation::Merge,
+                crate::workflows::WorkflowRecoveryAction::Abort,
+            ) => (vec!["merge".into(), "--abort".into()], "Abort merge"),
+            (
+                crate::workflows::WorkflowOperation::CherryPick,
+                crate::workflows::WorkflowRecoveryAction::Abort,
+            ) => (
+                vec!["cherry-pick".into(), "--abort".into()],
+                "Abort cherry-pick",
+            ),
+            (
+                crate::workflows::WorkflowOperation::Revert,
+                crate::workflows::WorkflowRecoveryAction::Abort,
+            ) => (vec!["revert".into(), "--abort".into()], "Abort revert"),
+            (
+                crate::workflows::WorkflowOperation::Merge,
+                crate::workflows::WorkflowRecoveryAction::Skip,
+            ) => {
+                return Err(TaskFailure::Failed(
+                    "A merge operation cannot be skipped.".into(),
+                ));
+            }
+        };
+        let result = run_command(
+            &self.git_program,
+            arguments,
+            Some(label.to_lowercase()),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            label,
+            task,
+        )
+        .await;
+        workflow_command_result(repository_path, result).await
     }
 
     pub async fn execute_branch(
@@ -617,6 +670,27 @@ impl GitCommandService {
             task,
         )
         .await
+    }
+}
+
+async fn workflow_command_result(
+    repository_path: &Path,
+    result: Result<(), TaskFailure>,
+) -> Result<(), TaskFailure> {
+    if result.is_ok() {
+        return result;
+    }
+    match crate::workflows::read_operation(repository_path).await {
+        Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
+            "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
+            match operation {
+                crate::workflows::WorkflowOperation::Merge => "Merge",
+                crate::workflows::WorkflowOperation::CherryPick => "Cherry-pick",
+                crate::workflows::WorkflowOperation::Revert => "Revert",
+                crate::workflows::WorkflowOperation::Rebase => "Rebase",
+            }
+        ))),
+        Ok(None) | Err(_) => result,
     }
 }
 

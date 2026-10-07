@@ -17,6 +17,7 @@ export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
+export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
@@ -327,6 +328,31 @@ export class GitCrestApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
     });
+  }
+
+  preflightRepositoryWorkflowRecovery(
+    repoId: RepoId,
+    taskId: string,
+  ): Promise<WorkflowRecoveryPreflightResponse> {
+    const query = new URLSearchParams({ taskId });
+    return this.request<WorkflowRecoveryPreflightResponse>(
+      "/api/v1/repositories/" + encodeURIComponent(repoId) + "/workflows/recovery-preflight?" + query,
+    );
+  }
+
+  recoverRepositoryWorkflow(
+    repoId: RepoId,
+    request: components["schemas"]["WorkflowRecoveryRequest"],
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      "/api/v1/repositories/" + encodeURIComponent(repoId) + "/workflows/recovery",
+      true,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
   }
 
   preflightRepositoryPush(

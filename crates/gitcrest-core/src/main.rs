@@ -144,6 +144,9 @@ enum ApiErrorCode {
     WorkflowPreflightUnavailable,
     WorkflowPreflightStale,
     WorkflowRequiresClean,
+    WorkflowRecoveryStale,
+    WorkflowRecoveryNotAllowed,
+    WorkflowNoActiveOperation,
     TagAlreadyExists,
     InternalError,
 }
@@ -621,6 +624,11 @@ impl ApiError {
                 ApiErrorCode::HistoryCommitNotFound,
                 "The requested commit does not exist in this repository.",
             ),
+            workflows::WorkflowError::NoActiveOperation => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::WorkflowNoActiveOperation,
+                "The waiting task no longer has a merge, cherry-pick, or revert operation to recover.",
+            ),
             workflows::WorkflowError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,
@@ -903,6 +911,14 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/workflows",
             post(start_repository_workflow),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/recovery-preflight",
+            get(preflight_repository_workflow_recovery),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/recovery",
+            post(recover_repository_workflow),
         )
         .route(
             "/v1/repositories/:repo_id/push-preflight",
@@ -3035,6 +3051,253 @@ async fn start_repository_workflow(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowRecoveryQuery {
+    task_id: String,
+}
+
+async fn preflight_repository_workflow_recovery(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<WorkflowRecoveryQuery>, QueryRejection>,
+) -> Result<Json<workflows::WorkflowRecoveryPreflight>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Workflow recovery preflight requires a waiting workflow taskId.",
+        )
+    })?;
+    let task = state.tasks.get(&query.task_id).await.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::TaskNotFound,
+            "The workflow task is no longer available.",
+        )
+    })?;
+    if task.repo_id.as_deref() != Some(repo_id.as_str())
+        || task.status != tasks::TaskStatus::WaitingForInput
+        || workflow_operation_for_task(&task.operation).is_none()
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Recovery requires a waiting merge, cherry-pick, or revert task for this repository.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview =
+        workflows::read_recovery_preflight(repo_id, query.task_id, &target.repository_path)
+            .await
+            .map_err(ApiError::from_workflow_error)?;
+    if workflow_operation_for_task(&task.operation) != Some(preview.operation) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "The repository operation no longer matches the waiting task. Refresh task state.",
+        ));
+    }
+    Ok(Json(preview))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct WorkflowRecoveryRequest {
+    task_id: String,
+    action: workflows::WorkflowRecoveryAction,
+    expected_operation: workflows::WorkflowOperation,
+    expected_head_oid: String,
+    expected_conflicted_paths: Vec<String>,
+}
+
+async fn recover_repository_workflow(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<WorkflowRecoveryRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Workflow recovery requires a waiting task, action, operation, HEAD, and conflict snapshot.",
+        )
+    })?;
+    if request.expected_conflicted_paths.len() > 200 {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Workflow recovery accepts at most 200 reviewed conflict paths.",
+        ));
+    }
+    let waiting_task = state.tasks.get(&request.task_id).await.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::TaskNotFound,
+            "The workflow task is no longer available.",
+        )
+    })?;
+    if waiting_task.repo_id.as_deref() != Some(repo_id.as_str())
+        || waiting_task.status != tasks::TaskStatus::WaitingForInput
+        || workflow_operation_for_task(&waiting_task.operation) != Some(request.expected_operation)
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Recovery requires the matching waiting workflow task.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = workflows::read_recovery_preflight(
+        repo_id.clone(),
+        request.task_id.clone(),
+        &target.repository_path,
+    )
+    .await
+    .map_err(ApiError::from_workflow_error)?;
+    if preview.operation != request.expected_operation
+        || preview.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
+        || preview.conflicted_paths != request.expected_conflicted_paths
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowRecoveryStale,
+            "The Git operation or conflict set changed after recovery review. Refresh the preview.",
+        ));
+    }
+    if !workflow_recovery_action_allowed(&preview, request.action) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowRecoveryNotAllowed,
+            "Resolve conflicts before continuing. Skip and abort are available only when the operation can preserve other worktree edits.",
+        ));
+    }
+
+    let command = state.git_commands.clone();
+    let repositories = state.repositories.clone();
+    let tasks = state.tasks.clone();
+    let task_repo_id = repo_id.clone();
+    let waiting_task_id = request.task_id.clone();
+    let path = target.repository_path;
+    let resource_key = target.resource_key;
+    let action = request.action;
+    let expected_operation = request.expected_operation;
+    let expected_head_oid = request.expected_head_oid;
+    let expected_conflicted_paths = request.expected_conflicted_paths;
+    let operation = match action {
+        workflows::WorkflowRecoveryAction::Continue => "workflowContinue",
+        workflows::WorkflowRecoveryAction::Skip => "workflowSkip",
+        workflows::WorkflowRecoveryAction::Abort => "workflowAbort",
+    };
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            operation,
+            move |context| async move {
+                let current = workflows::read_recovery_preflight(
+                    task_repo_id.clone(),
+                    waiting_task_id.clone(),
+                    &path,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "The Git operation could not be rechecked. Refresh repository state before recovery.".into(),
+                    )
+                })?;
+                if current.operation != expected_operation
+                    || current.head_oid.as_deref() != Some(expected_head_oid.as_str())
+                    || current.conflicted_paths != expected_conflicted_paths
+                    || !workflow_recovery_action_allowed(&current, action)
+                {
+                    return Err(TaskFailure::Failed(
+                        "The Git operation changed before recovery could start. Review its current state.".into(),
+                    ));
+                }
+                let task_context = context.clone();
+                let result = command
+                    .execute_workflow_recovery(&path, expected_operation, action, context)
+                    .await;
+                if result.is_ok() {
+                    if !matches!(workflows::read_operation(&path).await, Ok(None)) {
+                        return Err(TaskFailure::WaitingForInput(
+                            "The Git operation is still active. Review repository state and choose a recovery action.".into(),
+                        ));
+                    }
+                    let waiting_status = if action == workflows::WorkflowRecoveryAction::Abort {
+                        tasks::TaskStatus::Cancelled
+                    } else {
+                        tasks::TaskStatus::Succeeded
+                    };
+                    let waiting_message = match action {
+                        workflows::WorkflowRecoveryAction::Continue => {
+                            "The Git operation was continued successfully."
+                        }
+                        workflows::WorkflowRecoveryAction::Skip => {
+                            "The conflicted Git change was skipped successfully."
+                        }
+                        workflows::WorkflowRecoveryAction::Abort => {
+                            "The Git operation was aborted safely."
+                        }
+                    };
+                    if tasks
+                        .resolve_waiting_for_input(
+                            &waiting_task_id,
+                            waiting_status,
+                            waiting_message,
+                        )
+                        .await
+                        .is_err()
+                    {
+                        task_context
+                            .log("The Git operation recovered, but its waiting task status could not be saved. Refresh task state.")
+                            .await;
+                    }
+                    if repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                        task_context
+                            .log("Repository metadata refresh failed after workflow recovery; refresh the repository before the next write.")
+                            .await;
+                    }
+                }
+                result.map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOperation> {
+    match operation {
+        "merge" => Some(workflows::WorkflowOperation::Merge),
+        "cherryPick" => Some(workflows::WorkflowOperation::CherryPick),
+        "revert" => Some(workflows::WorkflowOperation::Revert),
+        _ => None,
+    }
+}
+
+fn workflow_recovery_action_allowed(
+    preview: &workflows::WorkflowRecoveryPreflight,
+    action: workflows::WorkflowRecoveryAction,
+) -> bool {
+    match action {
+        workflows::WorkflowRecoveryAction::Continue => preview.can_continue,
+        workflows::WorkflowRecoveryAction::Skip => preview.can_skip,
+        workflows::WorkflowRecoveryAction::Abort => preview.can_abort,
+    }
+}
+
 async fn preflight_repository_push(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
@@ -4667,6 +4930,21 @@ mod tests {
                 Some(WRITE_TOKEN),
             )
         };
+        let recovery_preview = |task_id: &str| {
+            request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={task_id}"
+                ),
+                Some(WRITE_TOKEN),
+            )
+        };
+        let recover = |request_body: serde_json::Value| {
+            json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+                &request_body.to_string(),
+            )
+        };
 
         let merge_preview = app
             .clone()
@@ -4810,7 +5088,20 @@ mod tests {
         assert!(std::fs::read_to_string(repository_path.join("shared.txt"))
             .unwrap()
             .contains("<<<<<<<"));
+        std::fs::write(repository_path.join("unrelated.txt"), "keep me\n").unwrap();
+        let unsafe_abort = app
+            .clone()
+            .oneshot(recovery_preview(conflict_task["taskId"].as_str().unwrap()))
+            .await
+            .unwrap();
+        let bytes = to_bytes(unsafe_abort.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let unsafe_abort: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(unsafe_abort["canAbort"], false);
+        std::fs::remove_file(repository_path.join("unrelated.txt")).unwrap();
         let cancel = app
+            .clone()
             .oneshot(json_request(
                 Method::POST,
                 &format!(
@@ -4825,6 +5116,260 @@ mod tests {
         let unchanged: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(unchanged["status"], "waitingForInput");
         assert_eq!(unchanged["cancelRequested"], false);
+
+        let recovery = app
+            .clone()
+            .oneshot(recovery_preview(conflict_task["taskId"].as_str().unwrap()))
+            .await
+            .unwrap();
+        let bytes = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
+        let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recovery["canContinue"], false);
+        assert_eq!(recovery["canSkip"], false);
+        assert_eq!(recovery["canAbort"], true);
+
+        std::fs::write(repository_path.join("shared.txt"), "resolved\n").unwrap();
+        git(&["add", "shared.txt"]);
+        let recovery = app
+            .clone()
+            .oneshot(recovery_preview(conflict_task["taskId"].as_str().unwrap()))
+            .await
+            .unwrap();
+        let bytes = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
+        let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recovery["conflictedPaths"].as_array().unwrap().len(), 0);
+        assert_eq!(recovery["canContinue"], true);
+        let continued = app
+            .clone()
+            .oneshot(recover(serde_json::json!({
+                "taskId": conflict_task["taskId"],
+                "action": "continue",
+                "expectedOperation": "merge",
+                "expectedHeadOid": recovery["headOid"],
+                "expectedConflictedPaths": recovery["conflictedPaths"],
+            })))
+            .await
+            .unwrap();
+        assert_eq!(continued.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(continued.into_body(), usize::MAX).await.unwrap();
+        let continue_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let continue_task = wait_for_task(&app, continue_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(continue_task["status"], "succeeded");
+        assert_eq!(
+            wait_for_task_status(&app, conflict_task["taskId"].as_str().unwrap(), "succeeded",)
+                .await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("shared.txt"))
+                .unwrap()
+                .trim_end(),
+            "resolved"
+        );
+
+        git(&["checkout", "--quiet", "-b", "abort-source"]);
+        std::fs::write(repository_path.join("shared.txt"), "abort source\n").unwrap();
+        git(&["add", "shared.txt"]);
+        git(&["commit", "--quiet", "-m", "abort source"]);
+        let abort_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+        std::fs::write(repository_path.join("shared.txt"), "abort main\n").unwrap();
+        git(&["add", "shared.txt"]);
+        git(&["commit", "--quiet", "-m", "abort main"]);
+        let abort_head = git(&["rev-parse", "HEAD"]);
+        let abort_preview = app
+            .clone()
+            .oneshot(preview("merge", &abort_oid))
+            .await
+            .unwrap();
+        let bytes = to_bytes(abort_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let abort_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(start(
+                "merge",
+                abort_preview["targetOid"].as_str().unwrap(),
+                abort_preview["headOid"].as_str().unwrap(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let abort_workflow: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let _waiting = wait_for_task_status(
+            &app,
+            abort_workflow["taskId"].as_str().unwrap(),
+            "waitingForInput",
+        )
+        .await;
+        let abort_recovery = app
+            .clone()
+            .oneshot(recovery_preview(abort_workflow["taskId"].as_str().unwrap()))
+            .await
+            .unwrap();
+        let bytes = to_bytes(abort_recovery.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let abort_recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(abort_recovery["canAbort"], true);
+        let aborted = app
+            .clone()
+            .oneshot(recover(serde_json::json!({
+                "taskId": abort_workflow["taskId"],
+                "action": "abort",
+                "expectedOperation": "merge",
+                "expectedHeadOid": abort_recovery["headOid"],
+                "expectedConflictedPaths": abort_recovery["conflictedPaths"],
+            })))
+            .await
+            .unwrap();
+        assert_eq!(aborted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(aborted.into_body(), usize::MAX).await.unwrap();
+        let abort_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let abort_task = wait_for_task(&app, abort_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(abort_task["status"], "succeeded");
+        assert_eq!(
+            wait_for_task_status(
+                &app,
+                abort_workflow["taskId"].as_str().unwrap(),
+                "cancelled",
+            )
+            .await["status"],
+            "cancelled"
+        );
+        assert_eq!(git(&["rev-parse", "HEAD"]), abort_head);
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("shared.txt"))
+                .unwrap()
+                .trim_end(),
+            "abort main"
+        );
+    }
+
+    #[tokio::test]
+    async fn cherry_pick_conflict_can_be_skipped_after_a_fresh_recovery_preview() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("skip-repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["config", "user.name", "Workflow Skip Test"]);
+        git(&["config", "user.email", "workflow-skip@example.invalid"]);
+        std::fs::write(repository_path.join("shared.txt"), "base\n").unwrap();
+        git(&["add", "shared.txt"]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        git(&["checkout", "--quiet", "-b", "topic"]);
+        std::fs::write(repository_path.join("shared.txt"), "topic\n").unwrap();
+        git(&["commit", "--quiet", "-am", "topic change"]);
+        let topic_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+        std::fs::write(repository_path.join("shared.txt"), "main\n").unwrap();
+        git(&["commit", "--quiet", "-am", "main change"]);
+        let main_oid = git(&["rev-parse", "HEAD"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let preview_uri = format!(
+            "/api/v1/repositories/{repo_id}/workflows/preflight?action=cherryPick&targetOid={topic_oid}"
+        );
+        let preview = app
+            .clone()
+            .oneshot(request(&preview_uri, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let started = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows"),
+                &serde_json::json!({
+                    "action": "cherryPick",
+                    "targetOid": preview["targetOid"],
+                    "expectedHeadOid": preview["headOid"],
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(started.into_body(), usize::MAX).await.unwrap();
+        let waiting: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let waiting =
+            wait_for_task_status(&app, waiting["taskId"].as_str().unwrap(), "waitingForInput")
+                .await;
+        let recovery_uri = format!(
+            "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={}",
+            waiting["taskId"].as_str().unwrap()
+        );
+        let recovery = app
+            .clone()
+            .oneshot(request(&recovery_uri, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
+        let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recovery["operation"], "cherryPick");
+        assert_eq!(recovery["canSkip"], true);
+        assert_eq!(recovery["canAbort"], true);
+        let skipped = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+                &serde_json::json!({
+                    "taskId": waiting["taskId"],
+                    "action": "skip",
+                    "expectedOperation": "cherryPick",
+                    "expectedHeadOid": recovery["headOid"],
+                    "expectedConflictedPaths": recovery["conflictedPaths"],
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(skipped.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(skipped.into_body(), usize::MAX).await.unwrap();
+        let skip_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let skip_task = wait_for_task(&app, skip_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(skip_task["status"], "succeeded");
+        assert_eq!(
+            wait_for_task_status(&app, waiting["taskId"].as_str().unwrap(), "succeeded",).await
+                ["status"],
+            "succeeded"
+        );
+        assert_eq!(git(&["rev-parse", "HEAD"]), main_oid);
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("shared.txt"))
+                .unwrap()
+                .trim_end(),
+            "main"
+        );
     }
 
     #[tokio::test]
