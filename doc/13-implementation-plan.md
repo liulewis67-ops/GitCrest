@@ -216,5 +216,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm check` 通过，包含前端构建/类型检查、13 个 Vitest 用例、Rust 格式检查/构建/22 个测试和 Electron E2E。临时 Git 仓库覆盖 staged 与 unstaged 双重状态、rename 原路径、删除、untracked、ignored、冲突、外部编辑后的重新扫描；porcelain v2 解析单测另覆盖文件 mode 变化。前端用例覆盖分组可见性、mode 标签、显式刷新失败时保留旧快照并提示过期状态。
 - 手工验证：未单独手工操作桌面窗口；API 刷新和状态展示由 Rust 集成测试、API 客户端测试及 Vitest 验证。
 - 证据：`crates/gitcrest-core/src/status.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/App.tsx`、`tests/unit/app.test.tsx`。
-- 完成 commit：待提交后填写
+- 完成 commit：`af5207a`
 - 限制/后续：每次显式刷新执行一次完整 `git status` 扫描；Git 文件系统事件驱动的增量刷新与大仓库性能基准属于 S7.1。刷新超时为 30 秒，错误时保留最后一次成功快照并标记过期。
