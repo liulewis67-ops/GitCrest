@@ -1,14 +1,14 @@
 use std::{
-    collections::BTreeMap,
     fmt::Write as _,
     path::{Path, PathBuf},
     process::Stdio,
-    sync::Arc,
 };
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokio::{fs, process::Command, sync::RwLock};
+use tokio::{fs, process::Command, task};
+
+use crate::storage::RepositoryStore;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,12 +18,15 @@ pub struct Repository {
     pub head: Option<String>,
     pub branch: Option<String>,
     pub detached: bool,
-    pub state: &'static str,
+    pub state: String,
+    pub is_favorite: bool,
+    pub last_accessed_at: i64,
+    pub availability: String,
 }
 
 #[derive(Clone, Default)]
 pub struct RepositoryManager {
-    repositories: Arc<RwLock<BTreeMap<String, Repository>>>,
+    store: RepositoryStore,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -32,10 +35,21 @@ pub enum RepositoryError {
     PathNotFound,
     PathPermissionDenied,
     NotRepository,
+    AlreadyRepository,
+    InitializationFailed,
     GitUnavailable,
+    StorageUnavailable,
 }
 
 impl RepositoryManager {
+    pub async fn open_database(path: PathBuf) -> Result<Self, RepositoryError> {
+        let store = task::spawn_blocking(move || RepositoryStore::open(&path))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?;
+        Ok(Self { store })
+    }
+
     pub async fn open_path(&self, path: &str) -> Result<Repository, RepositoryError> {
         let path = path.trim();
         if path.is_empty() {
@@ -72,23 +86,133 @@ impl RepositoryManager {
             head,
             branch,
             detached,
-            state: "normal",
+            state: "normal".into(),
+            is_favorite: false,
+            last_accessed_at: now_ms(),
+            availability: "available".into(),
         };
 
-        self.repositories
-            .write()
+        let store = self.store.clone();
+        task::spawn_blocking(move || store.save_opened(repository))
             .await
-            .insert(repository.repo_id.clone(), repository.clone());
-        Ok(repository)
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)
     }
 
-    pub async fn get(&self, repo_id: &str) -> Option<Repository> {
-        self.repositories.read().await.get(repo_id).cloned()
+    pub async fn initialize_path(&self, path: &str) -> Result<Repository, RepositoryError> {
+        let path = path.trim();
+        if path.is_empty() {
+            return Err(RepositoryError::InvalidPath);
+        }
+        let path = PathBuf::from(path);
+        let metadata = fs::metadata(&path).await.map_err(map_path_error)?;
+        if !metadata.is_dir() {
+            return Err(RepositoryError::NotRepository);
+        }
+        if fs::symlink_metadata(path.join(".git")).await.is_ok() {
+            return Err(RepositoryError::AlreadyRepository);
+        }
+        let path = fs::canonicalize(path).await.map_err(map_path_error)?;
+        if git_output(&path, ["rev-parse", "--show-toplevel"])
+            .await
+            .is_ok()
+        {
+            return Err(RepositoryError::AlreadyRepository);
+        }
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .args(["init", "--quiet"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .kill_on_drop(true)
+            .output()
+            .await
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
+                std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
+                _ => RepositoryError::GitUnavailable,
+            })?;
+        if !output.status.success() {
+            return Err(
+                if String::from_utf8_lossy(&output.stderr)
+                    .to_lowercase()
+                    .contains("permission")
+                {
+                    RepositoryError::PathPermissionDenied
+                } else {
+                    RepositoryError::InitializationFailed
+                },
+            );
+        }
+        self.open_path(&path.to_string_lossy()).await
     }
 
-    pub async fn list(&self) -> Vec<Repository> {
-        self.repositories.read().await.values().cloned().collect()
+    pub async fn get(&self, repo_id: &str) -> Result<Option<Repository>, RepositoryError> {
+        let store = self.store.clone();
+        let repo_id = repo_id.to_owned();
+        let Some(mut repository) =
+            task::spawn_blocking(move || store.mark_opened(&repo_id, now_ms()))
+                .await
+                .map_err(|_| RepositoryError::StorageUnavailable)?
+                .map_err(|_| RepositoryError::StorageUnavailable)?
+        else {
+            return Ok(None);
+        };
+        repository.availability = if fs::metadata(&repository.path).await.is_ok() {
+            "available"
+        } else {
+            "missing"
+        }
+        .into();
+        Ok(Some(repository))
     }
+
+    pub async fn list(&self) -> Result<Vec<Repository>, RepositoryError> {
+        let store = self.store.clone();
+        let mut repositories = task::spawn_blocking(move || store.list())
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?;
+        for repository in &mut repositories {
+            repository.availability = if fs::metadata(&repository.path).await.is_ok() {
+                "available"
+            } else {
+                "missing"
+            }
+            .into();
+        }
+        Ok(repositories)
+    }
+
+    pub async fn set_favorite(
+        &self,
+        repo_id: String,
+        favorite: bool,
+    ) -> Result<Option<Repository>, RepositoryError> {
+        let store = self.store.clone();
+        task::spawn_blocking(move || store.set_favorite(&repo_id, favorite))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)
+    }
+
+    pub async fn forget(&self, repo_id: String) -> Result<bool, RepositoryError> {
+        let store = self.store.clone();
+        task::spawn_blocking(move || store.forget(&repo_id))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)
+    }
+}
+
+fn now_ms() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
 }
 
 fn stable_repo_id(root: &Path) -> String {
@@ -229,6 +353,8 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(opened.repo_id, reopened.repo_id);
+        let accessed = manager.get(&opened.repo_id).await.unwrap().unwrap();
+        assert!(accessed.last_accessed_at >= reopened.last_accessed_at);
         assert!(opened.repo_id.starts_with("repo_"));
         assert_eq!(Path::new(&opened.path), fixture.root.as_path());
         assert!(opened.head.as_deref().is_some_and(|head| head.len() >= 40));
@@ -314,5 +440,63 @@ mod tests {
             manager.open_path("   ").await,
             Err(RepositoryError::InvalidPath)
         );
+    }
+
+    #[tokio::test]
+    async fn initializes_only_an_uninitialized_selected_folder() {
+        let directory = tempfile::tempdir().unwrap();
+        let new_folder = directory.path().join("new-project");
+        fs::create_dir(&new_folder).unwrap();
+        fs::write(new_folder.join("notes.txt"), "keep this file\n").unwrap();
+        let manager = RepositoryManager::default();
+
+        let repository = manager
+            .initialize_path(new_folder.to_str().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(Path::new(&repository.path), new_folder.as_path());
+        assert_eq!(
+            fs::read_to_string(new_folder.join("notes.txt")).unwrap(),
+            "keep this file\n"
+        );
+        assert!(new_folder.join(".git").is_dir());
+        assert_eq!(
+            manager.initialize_path(new_folder.to_str().unwrap()).await,
+            Err(RepositoryError::AlreadyRepository)
+        );
+
+        let nested_folder = new_folder.join("nested");
+        fs::create_dir(&nested_folder).unwrap();
+        assert_eq!(
+            manager
+                .initialize_path(nested_folder.to_str().unwrap())
+                .await,
+            Err(RepositoryError::AlreadyRepository)
+        );
+        assert!(!nested_folder.join(".git").exists());
+    }
+
+    #[tokio::test]
+    async fn repository_list_marks_moved_paths_as_recoverable_missing_entries() {
+        let directory = tempfile::tempdir().unwrap();
+        let repo_path = directory.path().join("repo");
+        fs::create_dir(&repo_path).unwrap();
+        git(&repo_path, &["init", "--quiet"]);
+        let database = directory.path().join("app-data").join("gitcrest.sqlite");
+        let manager = RepositoryManager::open_database(database).await.unwrap();
+        let opened = manager
+            .open_path(repo_path.to_str().unwrap())
+            .await
+            .unwrap();
+        manager
+            .set_favorite(opened.repo_id.clone(), true)
+            .await
+            .unwrap();
+        fs::rename(&repo_path, directory.path().join("moved")).unwrap();
+
+        let listed = manager.list().await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].availability, "missing");
+        assert!(listed[0].is_favorite);
     }
 }

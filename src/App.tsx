@@ -144,6 +144,72 @@ function App() {
     }
   }
 
+  async function initializeLocalRepository() {
+    setOpenError("");
+    try {
+      const path = await window.gitcrest.chooseRepository();
+      if (!path) return;
+      const api = apiRef.current;
+      if (!api) throw new Error("The Git engine is still starting. Try again in a moment.");
+      setOpeningRepository(true);
+      const repository = await api.initializeRepository(path);
+      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
+      setSelectedRepository(repository);
+      setPage("workspace");
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setOpenError(message || (error instanceof Error ? error.message : "Could not initialize this folder."));
+    } finally {
+      setOpeningRepository(false);
+    }
+  }
+
+  async function toggleFavorite(repository: RepositoryResponse) {
+    const api = apiRef.current;
+    if (!api) return;
+    setOpenError("");
+    try {
+      const updated = await api.setRepositoryFavorite(repository.repoId, !repository.isFavorite);
+      setRepositories((current) => current.map((item) => item.repoId === updated.repoId ? updated : item)
+        .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt));
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : "Could not update this favorite.");
+    }
+  }
+
+  async function forgetRepository(repository: RepositoryResponse) {
+    const api = apiRef.current;
+    if (!api) return;
+    setOpenError("");
+    try {
+      await api.forgetRepository(repository.repoId);
+      setRepositories((current) => current.filter((item) => item.repoId !== repository.repoId));
+      setSelectedRepository((current) => current?.repoId === repository.repoId ? undefined : current);
+    } catch (error) {
+      setOpenError(error instanceof Error ? error.message : "Could not remove this recent repository.");
+    }
+  }
+
+  async function openRecentRepository(repository: RepositoryResponse) {
+    const api = apiRef.current;
+    if (!api || repository.availability !== "available") return;
+    setOpenError("");
+    setOpeningRepository(true);
+    try {
+      const opened = await api.getRepository(repository.repoId);
+      setRepositories((current) => [opened, ...current.filter((item) => item.repoId !== opened.repoId)]
+        .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt));
+      setSelectedRepository(opened);
+      setPage("workspace");
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setOpenError(message || (error instanceof Error ? error.message : "Could not reopen this repository."));
+      void refreshRepositories(api).catch(() => undefined);
+    } finally {
+      setOpeningRepository(false);
+    }
+  }
+
   async function refreshRepositories(api: GitCrestApiClient) {
     const currentRepositories = await api.listRepositories();
     setRepositories(currentRepositories);
@@ -151,7 +217,6 @@ function App() {
       const active = currentRepositories.find((repository) => repository.repoId === current?.repoId);
       return active ?? currentRepositories[0];
     });
-    if (currentRepositories.length > 0) setPage("workspace");
   }
 
   useEffect(() => {
@@ -295,7 +360,7 @@ function App() {
             <section className="recentSection" aria-labelledby="recent-heading">
               <div className="sectionHeading">
                 <div><p className="sectionEyebrow">YOUR LIBRARY</p><h2 id="recent-heading">Recent repositories</h2></div>
-                <button className="quietButton compact" type="button" disabled title="Repository history arrives with S1.2">Sort <span aria-hidden="true">⌄</span></button>
+                <span className="quietButton compact" aria-label="Favorites first, then most recently opened">Favorites first</span>
               </div>
               {repositories.length === 0 ? (
                 <div className="emptyRepositories">
@@ -307,11 +372,16 @@ function App() {
               ) : (
                 <div className="repositoryList">
                   {repositories.map((repository) => (
-                    <button key={repository.repoId} className="repositoryRow" type="button" onClick={() => { setSelectedRepository(repository); setPage("workspace"); }}>
-                      <span className="repoStatusGlyph" aria-hidden="true">●</span>
-                      <span className="repositoryRowText"><strong>{repositoryName(repository.path)}</strong><small>{repository.path}</small></span>
-                      <span className="repositoryBranch">{repository.detached ? "Detached" : repository.branch || "Unborn"}</span>
-                    </button>
+                    <div key={repository.repoId} className={`repositoryRow ${repository.availability === "missing" ? "repositoryMissing" : ""}`}>
+                      <span className="repoStatusGlyph" aria-hidden="true">{repository.availability === "missing" ? "!" : "●"}</span>
+                      <button className="repositoryRowOpen" type="button" disabled={openingRepository || repository.availability === "missing"} onClick={() => void openRecentRepository(repository)}>
+                        <span className="repositoryRowText"><strong>{repositoryName(repository.path)}{repository.isFavorite ? " · Favorite" : ""}</strong><small>{repository.availability === "missing" ? `Unavailable · ${repository.path}` : repository.path}</small></span>
+                        <span className="repositoryBranch">{repository.availability === "missing" ? "Missing" : repository.detached ? "Detached" : repository.branch || "Unborn"}</span>
+                      </button>
+                      <button className="repositoryRowAction" type="button" aria-label={repository.isFavorite ? `Remove ${repositoryName(repository.path)} from favorites` : `Favorite ${repositoryName(repository.path)}`} onClick={() => void toggleFavorite(repository)}>{repository.isFavorite ? "★" : "☆"}</button>
+                      {repository.availability === "missing" && <button className="repositoryRowAction" type="button" onClick={() => void openLocalRepository()}>Locate</button>}
+                      <button className="repositoryRowAction" type="button" aria-label={`Remove ${repositoryName(repository.path)} from recent repositories`} onClick={() => void forgetRepository(repository)}>Remove</button>
+                    </div>
                   ))}
                 </div>
               )}
@@ -324,10 +394,10 @@ function App() {
               <button className="actionRow" type="button" disabled title="Clone task flow arrives with S1.6">
                 <span className="actionIcon" aria-hidden="true">⇣</span><span><strong>Clone a repository</strong><small>Bring a remote project here</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
-              <button className="actionRow" type="button" disabled title="Repository initialization arrives with S1.2">
+              <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void initializeLocalRepository()}>
                 <span className="actionIcon" aria-hidden="true">＋</span><span><strong>Initialize a repository</strong><small>Start tracking a new project</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
-              <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Open a local repository now. Clone and initialize workflows arrive in later stages.</div>
+              <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Initialize creates Git metadata only in the folder you select and keeps its files.</div>
             </aside>
           </div>
           <footer className="welcomeFooter"><span>Private by default</span><span className="footerDivider" /><span>Your repositories stay on this device</span><span className="footerSpacer" /><span>{version || "Local engine"}</span><button type="button" className="textButton" onClick={() => setPage("workspace")}>Explore the workspace <span aria-hidden="true">→</span></button></footer>

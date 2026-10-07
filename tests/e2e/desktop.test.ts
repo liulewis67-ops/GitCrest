@@ -1,4 +1,5 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,12 +15,13 @@ describe("desktop startup E2E", () => {
 
   it("starts Electron and the authenticated sidecar with a disposable Git fixture", async () => {
     const fixture = await createTempGitRepository();
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-app-data-"));
     try {
       expect(fixture.path).toContain("gitcrest-e2e-");
 
       app = await electron.launch({
         args: ["."],
-        env: { ...process.env, ELECTRON_RENDERER_URL: "" },
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
       await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
@@ -54,10 +56,15 @@ describe("desktop startup E2E", () => {
         head: null,
         detached: false,
         state: "normal",
+        isFavorite: false,
+        availability: "available",
       });
       expect(opened.body.repoId).toMatch(/^repo_[0-9a-f]{64}$/);
 
       await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      expect(await window.locator(".repositoryList").innerText()).toContain(fixture.path);
+      await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
       expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
 
@@ -67,6 +74,18 @@ describe("desktop startup E2E", () => {
       expect(await window.locator(".mainPanel").isVisible()).toBe(true);
       expect(await window.locator(".commitSection").isVisible()).toBe(false);
       await window.setViewportSize({ width: 1280, height: 820 });
+
+      const forgotten = await window.evaluate(async (repoId) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL(`/api/v1/repositories/${encodeURIComponent(repoId)}`, connection.baseUrl), {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+        });
+        return response.status;
+      }, opened.body.repoId as string);
+      expect(forgotten).toBe(204);
 
       if (process.env.GITCREST_CAPTURE_E2E === "1") {
         const evidencePath = resolve("doc/evidence/S0.4");
@@ -88,6 +107,7 @@ describe("desktop startup E2E", () => {
       await app?.close();
       app = undefined;
       await fixture.cleanup();
+      await rm(appDataPath, { recursive: true, force: true });
     }
   });
 });

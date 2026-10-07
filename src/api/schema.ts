@@ -38,6 +38,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/initialize": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Initialize a user-selected folder as a new Git repository
+         * @description Refuses folders already inside a Git working tree and preserves existing files.
+         */
+        post: operations["initializeRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}": {
         parameters: {
             query?: never;
@@ -47,9 +69,31 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get a registered repository by opaque ID */
+        /** Open a registered repository by opaque ID and update its last accessed time */
         get: operations["getRepository"];
         put?: never;
+        post?: never;
+        /** Remove an entry from the recent repository list */
+        delete: operations["forgetRepository"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/favorite": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** Set the favorite state for a recent repository */
+        put: operations["setRepositoryFavorite"];
         post?: never;
         delete?: never;
         options?: never;
@@ -66,7 +110,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List repositories registered in this desktop session */
+        /** List recent repositories saved on this device */
         get: operations["listRepositories"];
         put?: never;
         /**
@@ -125,6 +169,11 @@ export interface components {
             detached: boolean;
             /** @enum {string} */
             state: "normal" | "merging" | "rebasing" | "cherryPicking" | "bisecting";
+            isFavorite: boolean;
+            /** Format: int64 */
+            lastAccessedAt: number;
+            /** @enum {string} */
+            availability: "available" | "missing";
         };
         OpenRepositoryRequest: {
             /** @description Local folder explicitly selected by the user. */
@@ -150,7 +199,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -309,6 +358,89 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    initializeRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenRepositoryRequest"];
+            };
+        };
+        responses: {
+            /** @description The selected folder was initialized and registered. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Repository"];
+                };
+            };
+            /** @description Missing or malformed repository path. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The selected path cannot be written by GitCrest. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The selected path does not exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The selected folder is already part of a Git working tree. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git could not initialize the selected folder. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The Git executable could not be started. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     getRepository: {
         parameters: {
             query?: never;
@@ -353,6 +485,79 @@ export interface operations {
             406: components["responses"]["UnsupportedVersion"];
         };
     };
+    forgetRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The repository entry was removed. Git files are untouched. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description No matching repository entry exists. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    setRepositoryFavorite: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    favorite: boolean;
+                };
+            };
+        };
+        responses: {
+            /** @description Updated repository entry. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Repository"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description No matching repository entry exists. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
     listRepositories: {
         parameters: {
             query?: never;
@@ -364,7 +569,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description The complete repository list for the current sidecar session. */
+            /** @description The complete repository list, ordered favorites first and then by last accessed time. */
             200: {
                 headers: {
                     "X-GitCrest-API-Version": components["headers"]["ApiVersion"];

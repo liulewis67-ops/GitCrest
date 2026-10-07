@@ -132,6 +132,65 @@ describe("App", () => {
     expect(screen.getByText("main", { selector: ".navEmpty" })).toBeDefined();
   });
 
+  it("shows persisted repositories in Welcome and lets the user favorite or forget them", async () => {
+    const repository = {
+      repoId: "repo_fixture", path: "C:/project", head: null, branch: "main", detached: false,
+      state: "normal", isFavorite: false, lastAccessedAt: 10, availability: "available",
+    };
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+      },
+    });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([repository]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...repository, isFavorite: true }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } }));
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
+    expect(await screen.findByText("C:/project")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Favorite project" }));
+    expect(await screen.findByRole("button", { name: "Remove project from favorites" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Remove project from recent repositories" }));
+    await waitFor(() => expect(screen.queryByText("C:/project")).toBeNull());
+    expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories/repo_fixture/favorite");
+    expect(fetcher.mock.calls[3][1]?.method).toBe("DELETE");
+  });
+
+  it("initializes only the folder explicitly returned by the folder picker", async () => {
+    const repository = {
+      repoId: "repo_new", path: "C:/new-project", head: null, branch: "main", detached: false,
+      state: "normal", isFavorite: false, lastAccessedAt: 10, availability: "available",
+    };
+    const chooseRepository = vi.fn().mockResolvedValue("C:/new-project");
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository,
+      },
+    });
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: /Initialize a repository/ }));
+    expect(await screen.findByText("C:/new-project", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    expect(chooseRepository).toHaveBeenCalledOnce();
+    expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories/initialize");
+    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/new-project" });
+  });
+
   it("cycles themes and exposes keyboard-adjustable panel separators", async () => {
     Object.defineProperty(window, "gitcrest", {
       configurable: true,

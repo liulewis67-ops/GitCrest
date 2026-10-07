@@ -21,7 +21,7 @@ use axum::{
     },
     middleware::{self, Next},
     response::{IntoResponse, Response},
-    routing::get,
+    routing::{get, post, put},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -29,6 +29,7 @@ use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
 mod repository;
+mod storage;
 
 use repository::{Repository, RepositoryError, RepositoryManager};
 
@@ -70,6 +71,9 @@ enum ApiErrorCode {
     RepositoryPathNotFound,
     RepositoryAccessDenied,
     NotARepository,
+    RepositoryAlreadyInitialized,
+    RepositoryInitializationFailed,
+    DatabaseUnavailable,
     GitUnavailable,
     RepositoryStateConflict,
     ResourceVersionStale,
@@ -165,10 +169,25 @@ impl ApiError {
                 ApiErrorCode::NotARepository,
                 "The selected folder is not a Git working tree.",
             ),
+            RepositoryError::AlreadyRepository => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::RepositoryAlreadyInitialized,
+                "This folder already contains a Git repository.",
+            ),
+            RepositoryError::InitializationFailed => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ApiErrorCode::RepositoryInitializationFailed,
+                "Git could not initialize this folder.",
+            ),
             RepositoryError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,
                 "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+            RepositoryError::StorageUnavailable => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::DatabaseUnavailable,
+                "Repository history could not be saved. Check the application data folder.",
             ),
         }
     }
@@ -238,10 +257,16 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         return Err("GITCREST_READONLY_TOKEN must differ from GITCREST_AUTH_TOKEN".into());
     }
 
+    let database_path = env::var_os("GITCREST_DATABASE_PATH")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(default_database_path);
+    let repositories = RepositoryManager::open_database(database_path)
+        .await
+        .map_err(|_| "Could not initialize the repository database")?;
     let state = AppState {
         read_write_token: Arc::new(write_token),
         read_only_token: read_only_token.map(Arc::new),
-        repositories: RepositoryManager::default(),
+        repositories,
     };
     let cors_origin = env::var("GITCREST_CORS_ORIGIN")
         .ok()
@@ -265,7 +290,15 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories",
             get(list_repositories).post(open_repository),
         )
-        .route("/v1/repositories/:repo_id", get(get_repository))
+        .route("/v1/repositories/initialize", post(initialize_repository))
+        .route(
+            "/v1/repositories/:repo_id",
+            get(get_repository).delete(forget_repository),
+        )
+        .route(
+            "/v1/repositories/:repo_id/favorite",
+            put(set_repository_favorite),
+        )
         .route("/v1/events", get(events))
         .fallback(api_not_found);
 
@@ -317,6 +350,22 @@ fn announce_ready(host: &str, address: SocketAddr) {
     );
 }
 
+fn default_database_path() -> std::path::PathBuf {
+    if let Some(local_app_data) = env::var_os("LOCALAPPDATA") {
+        return std::path::PathBuf::from(local_app_data)
+            .join("GitCrest")
+            .join("gitcrest.sqlite");
+    }
+    if let Some(home) = env::var_os("HOME") {
+        return std::path::PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("gitcrest")
+            .join("gitcrest.sqlite");
+    }
+    env::temp_dir().join("gitcrest").join("gitcrest.sqlite")
+}
+
 async fn health() -> impl IntoResponse {
     (StatusCode::NO_CONTENT, [("Cache-Control", "no-store")])
 }
@@ -337,6 +386,7 @@ async fn get_repository(
         .repositories
         .get(&repo_id)
         .await
+        .map_err(ApiError::from_repository_error)?
         .map(Json)
         .ok_or_else(ApiError::repository_not_found)
 }
@@ -366,8 +416,77 @@ async fn open_repository(
         .map_err(ApiError::from_repository_error)
 }
 
-async fn list_repositories(State(state): State<AppState>) -> Json<Vec<Repository>> {
-    Json(state.repositories.list().await)
+async fn initialize_repository(
+    State(state): State<AppState>,
+    request: Result<Json<OpenRepositoryRequest>, JsonRejection>,
+) -> Result<Json<Repository>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A JSON repository path is required.",
+        )
+    })?;
+    state
+        .repositories
+        .initialize_path(&request.path)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_repository_error)
+}
+
+async fn list_repositories(
+    State(state): State<AppState>,
+) -> Result<Json<Vec<Repository>>, ApiError> {
+    state
+        .repositories
+        .list()
+        .await
+        .map(Json)
+        .map_err(ApiError::from_repository_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct FavoriteRequest {
+    favorite: bool,
+}
+
+async fn set_repository_favorite(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<FavoriteRequest>, JsonRejection>,
+) -> Result<Json<Repository>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A favorite boolean is required.",
+        )
+    })?;
+    state
+        .repositories
+        .set_favorite(repo_id, request.favorite)
+        .await
+        .map_err(ApiError::from_repository_error)?
+        .map(Json)
+        .ok_or_else(ApiError::repository_not_found)
+}
+
+async fn forget_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<StatusCode, ApiError> {
+    if state
+        .repositories
+        .forget(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?
+    {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(ApiError::repository_not_found())
+    }
 }
 
 async fn api_not_found() -> ApiError {

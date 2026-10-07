@@ -98,7 +98,8 @@ export async function startSidecar(): Promise<SidecarConnection> {
       env: {
         ...process.env,
         GITCREST_HOST: "127.0.0.1",
-        GITCREST_PORT: "0",
+          GITCREST_PORT: "0",
+          GITCREST_DATABASE_PATH: process.env.GITCREST_DATABASE_PATH || join(app.getPath("userData"), "gitcrest.sqlite"),
         GITCREST_AUTH_TOKEN: token,
         GITCREST_READONLY_TOKEN: readOnlyToken,
         GITCREST_CORS_ORIGIN: corsOrigin,

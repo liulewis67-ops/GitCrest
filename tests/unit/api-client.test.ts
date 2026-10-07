@@ -36,7 +36,7 @@ describe("GitCrestApiClient", () => {
   });
 
   it("opens a repository with the selected path and versioned write request", async () => {
-    const repository = { repoId: "repo_fixture", path: "C:/fixture", head: null, branch: "main", detached: false, state: "normal" };
+    const repository = { repoId: "repo_fixture", path: "C:/fixture", head: null, branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(repository), {
       status: 200,
       headers: { "X-GitCrest-API-Version": "1" },
@@ -51,6 +51,24 @@ describe("GitCrestApiClient", () => {
     expect(new Headers(request?.headers).get("X-GitCrest-API-Version")).toBe("1");
     expect(new Headers(request?.headers).get("Content-Type")).toBe("application/json");
     expect(request?.body).toBe(JSON.stringify({ path: "C:/fixture" }));
+  });
+
+  it("initializes selected folders and persists favorite and forget actions", async () => {
+    const repository = { repoId: "repo_fixture", path: "C:/fixture", head: null, branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...repository, isFavorite: true }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await client.initializeRepository("C:/fixture");
+    await expect(client.setRepositoryFavorite("repo_fixture", true)).resolves.toMatchObject({ isFavorite: true });
+    await expect(client.forgetRepository("repo_fixture")).resolves.toBeUndefined();
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/initialize`);
+    expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/favorite`);
+    expect(fetcher.mock.calls[1][1]?.method).toBe("PUT");
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ favorite: true }));
+    expect(fetcher.mock.calls[2][1]?.method).toBe("DELETE");
   });
 
   it("preserves structured API errors and rejects missing version confirmation", async () => {

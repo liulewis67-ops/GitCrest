@@ -157,8 +157,14 @@ button:disabled { cursor: not-allowed; }
 .emptyRepositories h3 { margin: 0; font-size: 12px; font-weight: 620; }
 .emptyRepositories p { max-width: 310px; margin: 7px 0 9px; color: var(--text-muted); font-size: 11px; line-height: 1.6; }
 .repositoryList { display: grid; padding-top: 5px; }
-.repositoryRow { display: grid; grid-template-columns: 15px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 54px; padding: 8px 4px; border: 0; border-bottom: 1px solid var(--line); background: transparent; text-align: left; cursor: pointer; }
+.repositoryRow { display: grid; grid-template-columns: 15px minmax(0, 1fr) auto auto auto; align-items: center; gap: 7px; min-height: 54px; padding: 5px 4px; border-bottom: 1px solid var(--line); }
 .repositoryRow:hover { background: var(--surface-soft); }
+.repositoryRowOpen { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; min-width: 0; min-height: 42px; padding: 4px 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
+.repositoryRowOpen:disabled { cursor: default; }
+.repositoryRowAction { min-height: 28px; padding: 0 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 9px; cursor: pointer; }
+.repositoryRowAction:hover { border-color: var(--line-strong); color: var(--text); }
+.repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
+.repositoryMissing .repoStatusGlyph, .repositoryMissing .repositoryRowText small { color: var(--warning); }
 .repoStatusGlyph { color: var(--green); font-size: 8px; }
 .repositoryRowText { min-width: 0; }
 .repositoryRowText strong, .repositoryRowText small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

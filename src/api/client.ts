@@ -45,8 +45,28 @@ export class GitCrestApiClient {
     });
   }
 
+  initializeRepository(path: string): Promise<RepositoryResponse> {
+    return this.request<RepositoryResponse>("/api/v1/repositories/initialize", true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path }),
+    });
+  }
+
   listRepositories(): Promise<RepositoryResponse[]> {
     return this.request<RepositoryResponse[]>("/api/v1/repositories");
+  }
+
+  setRepositoryFavorite(repoId: RepoId, favorite: boolean): Promise<RepositoryResponse> {
+    return this.request<RepositoryResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/favorite`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ favorite }),
+    });
+  }
+
+  forgetRepository(repoId: RepoId): Promise<void> {
+    return this.request<void>(`/api/v1/repositories/${encodeURIComponent(repoId)}`, true, { method: "DELETE" });
   }
 
   private async request<T>(path: string, versioned = true, init: RequestInit = {}): Promise<T> {
@@ -66,6 +86,7 @@ export class GitCrestApiClient {
       throw new Error("The GitCrest engine did not confirm API version 1.");
     }
 
+    if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
   }
 }
