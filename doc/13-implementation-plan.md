@@ -104,7 +104,7 @@
 |---|---|---|---|
 | S5.1 | Merge/Cherry-pick/Revert 工作流与冲突检测。 | 成功时 refs/status/log 更新；冲突时任务转入“等待解决”且逐文件展示；已存在 merge/rebase 状态时拒绝不兼容操作；取消/失败给出明确继续、跳过或中止路径，不清除用户修改。 | 已完成 |
 | S5.2 | 独立三路冲突解决窗口与 resolved 校验。 | ours/base/theirs、结果预览和逐块/手工编辑可用；只能写当前冲突文件，不能执行一般 Git 写操作；有未解决标记时禁止 resolved；关闭再开保留已保存的解决进度；resolved 后主窗口状态刷新。 | 已完成 |
-| S5.3 | Shelve：选中文件/hunk、命名、预览、应用、删除。 | 搁置前后及跨分支恢复时只影响选中内容；应用前必须预览；冲突进入 S5.2；应用失败保留条目与原 patch；删除显示范围并确认；条目重启后存在。 | 未开始 |
+| S5.3 | Shelve：选中文件/hunk、命名、预览、应用、删除。 | 搁置前后及跨分支恢复时只影响选中内容；应用前必须预览；冲突进入 S5.2；应用失败保留条目与原 patch；删除显示范围并确认；条目重启后存在。 | 进行中 |
 | S5.4 | Rebase 与交互式 Rebase：todo 编辑、预览、备份、continue/abort/回滚。 | pick/reword/edit/squash/fixup/drop 均有测试；执行前创建并展示备份 ref；drop 和已发布分支改写明确确认；冲突可进入解决器并继续；abort 后恢复至操作前，备份 ref 可用于回滚。 | 未开始 |
 | S5.5 | Reset、丢弃工作区变更、删除远程分支等危险操作安全网。 | 后端返回影响文件/提交/目标 ref；UI 展示后果和恢复方式，破坏性操作要求强确认；取消不改变仓库；可恢复操作先创建备份；日志记录动作与结果但不记录凭证；无确认票据的直接 API 调用被拒绝。 | 未开始 |
 
@@ -372,3 +372,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 子阶段 D：独立窗口显示三方内容与 working result 编辑器，支持逐块选择 ours/theirs、整侧选择、手工编辑和实时结果预览；保存后从工作树读取新 revision，窄权限下轮询保存/resolve task 结果；未保存时阻止切换文件并在关闭窗口前提示；保存后可关闭重开续编。返回主窗口时刷新任务、工作区状态、分支、历史，并重读 Task Center recovery preflight。定向前端用例覆盖两冲突块的独立选择、手工修改、预览、保存、关闭重开、resolved 及恢复预检刷新（6 tests）。验收：`pnpm build` 和定向 Vitest 通过。证据：`src/features/workflows/ConflictWindow.tsx`、`src/features/tasks/TaskCenter.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/conflict-window.test.tsx`、`tests/unit/task-center.test.tsx`。完成 commits：`459ed14`、`b510f98`。
 - 子阶段 E：阶段级验收完成。最终 `pnpm check` 通过（production build、80 Vitest、76 Rust、1 Electron E2E）；`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。Clippy 指出的 capability method pattern 风格问题已修复并重验。验收修复 commit：`0f664f0`；最终验收记录随本次计划状态更新提交。
 - S5.2 状态：已完成。冲突结果保存在工作树，用户可关闭窗口后重新打开继续编辑；已 resolved 的文件只暂存该路径，继续 merge/cherry-pick/revert 仍从 Task Center 执行。
+
+### S5.3 — Shelve（进行中）
+- 子阶段 A：新增 SQLite 持久化 shelf catalog 和 create/list/detail/delete API。Create 请求绑定 HEAD 与每个文件的 diff revision，只接受当前仍变更的文本文件及明确的 Index/WorkingTree 范围；可以选择具体 hunk，空选择代表所选范围的整个文件。后台任务取得仓库写许可后再次刷新并核对 HEAD/revision，先保存 patch，再仅逆向应用用户选择的内容；阶段外的 hunk、同文件未暂存编辑及 stale 请求均保留/拒绝。数据库重开保留 shelf 元数据与 patch。API 契约与客户端类型同步。验收：shelf API 集成用例覆盖选定 working-tree hunk、stale revision 拒绝及保留其他编辑，另覆盖撤销 index hunk 同时保留 unstaged edit；storage 重开和 API client 定向用例通过；`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 通过。证据：`crates/gitcrest-core/migrations/0004_shelves.sql`、`crates/gitcrest-core/src/shelves.rs`、`crates/gitcrest-core/src/storage.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。完成 commit：`a4ceff6`。
+- 后续：实现必须先预览的应用 API/任务及冲突路由；应用失败保留 shelf 原 patch；然后增加前端选择、命名、列表/预览/确认删除和跨分支应用交互，并接入分支切换安全预检。S5.3 在这些路径完成并阶段验收前保持进行中。
