@@ -1,0 +1,254 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, UIEvent } from "react";
+import type { CommitDetailResponse, CommitPageResponse, GitCrestApiClient, RefSnapshotResponse } from "../../api/client";
+import type { components } from "../../api/schema";
+
+const PAGE_SIZE = 50;
+const ROW_HEIGHT = 52;
+const OVERSCAN = 8;
+type CommitSummary = components["schemas"]["CommitSummary"];
+
+function isCommitSummary(value: unknown): value is CommitSummary {
+  if (!value || typeof value !== "object") return false;
+  const commit = value as Partial<CommitSummary>;
+  return typeof commit.oid === "string"
+    && Array.isArray(commit.parents) && commit.parents.every((parent) => typeof parent === "string")
+    && typeof commit.authorName === "string"
+    && typeof commit.authorEmail === "string"
+    && typeof commit.committedAtMs === "number"
+    && typeof commit.subject === "string";
+}
+
+function isCommitDetail(value: unknown): value is CommitDetailResponse {
+  if (!value || typeof value !== "object") return false;
+  const detail = value as Partial<CommitDetailResponse>;
+  return typeof detail.oid === "string"
+    && Array.isArray(detail.parents)
+    && typeof detail.authorName === "string"
+    && typeof detail.authorEmail === "string"
+    && typeof detail.committedAtMs === "number"
+    && typeof detail.message === "string"
+    && Boolean(detail.stats && typeof detail.stats.filesChanged === "number" && typeof detail.stats.insertions === "number" && typeof detail.stats.deletions === "number")
+    && Array.isArray(detail.files);
+}
+
+type CommitGraphProps = {
+  api: GitCrestApiClient;
+  repoId: string;
+  selectedOid?: string;
+  initialScrollTop: number;
+  onScrollPosition: (scrollTop: number) => void;
+  onSelect: (oid: string) => void;
+};
+
+function formatCommitDate(timestamp: number): string {
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(timestamp));
+}
+
+function describeRefs(refs: RefSnapshotResponse["refs"], oid: string): string[] {
+  return refs.filter((ref) => ref.oid === oid).map((ref) => ref.name);
+}
+
+export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, onScrollPosition, onSelect }: CommitGraphProps) {
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [commits, setCommits] = useState<CommitSummary[]>([]);
+  const [refs, setRefs] = useState<RefSnapshotResponse["refs"]>([]);
+  const [nextOffset, setNextOffset] = useState<number | null>(0);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState("");
+  const [refsError, setRefsError] = useState("");
+  const [viewport, setViewport] = useState({ top: 0, height: 520 });
+  const requestGeneration = useRef(0);
+  const offsetsInFlight = useRef(new Set<number>());
+  const restoredRepo = useRef<string>();
+
+  const readPage = useCallback(async (offset: number, generation: number) => {
+    if (offsetsInFlight.current.has(offset)) return;
+    offsetsInFlight.current.add(offset);
+    if (offset === 0) setLoading(true);
+    else setLoadingMore(true);
+    setError("");
+    try {
+      const response: unknown = await api.getRepositoryCommits(repoId, offset, PAGE_SIZE);
+      if (requestGeneration.current !== generation) return;
+      if (!response || typeof response !== "object" || !Array.isArray((response as Partial<CommitPageResponse>).commits)) {
+        throw new Error("History response did not contain a commit list.");
+      }
+      const page = response as CommitPageResponse;
+      if (!page.commits.every(isCommitSummary)) throw new Error("History response contained an invalid commit.");
+      setCommits((current) => offset === 0 ? page.commits : [...current, ...page.commits]);
+      setNextOffset(typeof page.nextOffset === "number" && Number.isSafeInteger(page.nextOffset) ? page.nextOffset : null);
+    } catch (reason) {
+      if (requestGeneration.current !== generation) return;
+      setError(reason instanceof Error ? reason.message : "Could not read commit history.");
+    } finally {
+      offsetsInFlight.current.delete(offset);
+      if (requestGeneration.current === generation) {
+        if (offset === 0) setLoading(false);
+        else setLoadingMore(false);
+      }
+    }
+  }, [api, repoId]);
+
+  useEffect(() => {
+    const generation = ++requestGeneration.current;
+    offsetsInFlight.current.clear();
+    setCommits([]);
+    setRefs([]);
+    setNextOffset(0);
+    setLoading(true);
+    setLoadingMore(false);
+    setError("");
+    setRefsError("");
+    restoredRepo.current = undefined;
+    void readPage(0, generation);
+    void api.getRepositoryRefs(repoId).then((snapshot) => {
+      if (requestGeneration.current === generation) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
+    }).catch((reason: unknown) => {
+      if (requestGeneration.current === generation) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
+    });
+    return () => { requestGeneration.current += 1; };
+  }, [api, repoId, readPage]);
+
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node || loading || restoredRepo.current === repoId) return;
+    node.scrollTop = initialScrollTop;
+    restoredRepo.current = repoId;
+    setViewport({ top: node.scrollTop, height: node.clientHeight || 520 });
+  }, [initialScrollTop, loading, repoId]);
+
+  const laneLayout = useMemo(() => {
+    const laneByOid = new Map<string, number>();
+    const indexByOid = new Map(commits.map((commit, index) => [commit.oid, index]));
+    const edgesByFrom: { to: number; fromLane: number; toLane: number }[][] = Array.from({ length: commits.length }, () => []);
+    let nextLane = 0;
+    commits.forEach((commit, index) => {
+      let lane = laneByOid.get(commit.oid);
+      if (lane === undefined) lane = nextLane++;
+      laneByOid.set(commit.oid, lane);
+      commit.parents.forEach((parent, parentIndex) => {
+        let parentLane = laneByOid.get(parent);
+        if (parentLane === undefined) {
+          parentLane = parentIndex === 0 ? lane : nextLane++;
+          laneByOid.set(parent, parentLane);
+        }
+        const targetIndex = indexByOid.get(parent);
+        edgesByFrom[index].push({ to: targetIndex ?? index + 1, fromLane: lane, toLane: parentLane });
+      });
+    });
+    return { laneByOid, edgesByFrom, maxLane: Math.max(0, nextLane - 1) };
+  }, [commits]);
+
+  const firstVisible = Math.max(0, Math.floor(viewport.top / ROW_HEIGHT) - OVERSCAN);
+  const visibleCount = Math.ceil(viewport.height / ROW_HEIGHT) + OVERSCAN * 2;
+  const lastVisible = Math.min(commits.length, firstVisible + visibleCount);
+  const visibleCommits = commits.slice(firstVisible, lastVisible);
+  const graphHeight = commits.length * ROW_HEIGHT;
+  const graphWidth = Math.max(112, laneLayout.maxLane * 20 + 44);
+
+  async function onScroll(event: UIEvent<HTMLDivElement>) {
+    const node = event.currentTarget;
+    const top = node.scrollTop;
+    setViewport({ top, height: node.clientHeight || 520 });
+    onScrollPosition(top);
+    if (nextOffset !== null && !loadingMore && node.scrollHeight - node.scrollTop - node.clientHeight < ROW_HEIGHT * 10) {
+      await readPage(nextOffset, requestGeneration.current);
+    }
+  }
+
+  function moveFocus(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+    const targetIndex = event.key === "ArrowDown" ? index + 1
+      : event.key === "ArrowUp" ? index - 1
+        : event.key === "Home" ? 0
+          : event.key === "End" ? commits.length - 1 : -1;
+    if (targetIndex < 0 || targetIndex >= commits.length) return;
+    event.preventDefault();
+    onSelect(commits[targetIndex].oid);
+    const node = viewportRef.current;
+    if (node && (targetIndex * ROW_HEIGHT < node.scrollTop || (targetIndex + 1) * ROW_HEIGHT > node.scrollTop + node.clientHeight)) {
+      node.scrollTop = Math.max(0, targetIndex * ROW_HEIGHT - node.clientHeight / 2);
+      setViewport({ top: node.scrollTop, height: node.clientHeight || 520 });
+    }
+    requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-commit-index="${targetIndex}"]`)?.focus());
+  }
+
+  const visibleStart = firstVisible * ROW_HEIGHT;
+  const visibleEnd = lastVisible * ROW_HEIGHT;
+  const visibleEdges = visibleCommits.flatMap((_, relativeIndex) => {
+    const from = firstVisible + relativeIndex;
+    return laneLayout.edgesByFrom[from].filter((edge) => edge.to * ROW_HEIGHT >= visibleStart && edge.to * ROW_HEIGHT <= visibleEnd)
+      .map((edge) => ({ from, ...edge }));
+  });
+
+  return <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label="Commit graph view">
+    {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />Loading commit history…</div>
+      : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={() => void readPage(commits.length, requestGeneration.current)}>Retry history</button></div>
+        : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p><h2>No commits yet</h2><p>This repository has no commit history on HEAD or its branches.</p></div>
+          : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>
+            <svg className="commitGraphEdges" aria-hidden="true" width={graphWidth} height={visibleEnd - visibleStart} viewBox={`0 ${visibleStart} ${graphWidth} ${visibleEnd - visibleStart}`} style={{ top: visibleStart }}>
+              {visibleEdges.map((edge) => {
+                const x1 = edge.fromLane * 20 + 22;
+                const x2 = edge.toLane * 20 + 22;
+                const y1 = edge.from * ROW_HEIGHT + ROW_HEIGHT / 2;
+                const y2 = edge.to * ROW_HEIGHT + ROW_HEIGHT / 2;
+                return <path key={`${edge.from}-${edge.to}-${edge.fromLane}-${edge.toLane}`} d={`M ${x1} ${y1} C ${x1} ${y1 + ROW_HEIGHT / 2}, ${x2} ${y2 - ROW_HEIGHT / 2}, ${x2} ${y2}`} />;
+              })}
+            </svg>
+            <div className="commitGraphList" role="list" aria-label="Commit history">
+              <div className="commitGraphSpacer" aria-hidden="true" style={{ height: visibleStart }} />
+              {visibleCommits.map((commit, visibleIndex) => {
+                const index = firstVisible + visibleIndex;
+                const lane = laneLayout.laneByOid.get(commit.oid) || 0;
+                const refNames = describeRefs(refs, commit.oid);
+                const selected = selectedOid === commit.oid;
+                return <div className="commitGraphRow" role="listitem" key={commit.oid} style={{ height: ROW_HEIGHT }}>
+                  <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${refNames.length ? `, ${refNames.join(", ")}` : ""}`} tabIndex={selected || (!selectedOid && index === 0) ? 0 : -1} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => moveFocus(event, index)}>
+                    <span className={`commitGraphNode${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
+                    <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || "(no subject)"}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
+                    <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
+                    {refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}
+                  </button>
+                </div>;
+              })}
+              <div className="commitGraphSpacer" aria-hidden="true" style={{ height: Math.max(0, graphHeight - visibleEnd) }} />
+            </div>
+      </div>}
+    {loadingMore && <div className="historyLoadingMore" role="status">Loading older commits…</div>}
+    {refsError && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status">Branch labels unavailable: {refsError}</div>}
+  </div>;
+}
+
+export function CommitDetails({ api, repoId, oid }: { api: GitCrestApiClient; repoId: string; oid?: string }) {
+  const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
+  useEffect(() => {
+    let active = true;
+    if (!oid) {
+      setState({ loading: false });
+      return () => { active = false; };
+    }
+    setState({ oid, loading: true });
+    void api.getRepositoryCommit(repoId, oid).then((response) => {
+      if (!isCommitDetail(response)) throw new Error("Commit detail response was invalid.");
+      if (active) setState({ oid, detail: response, loading: false });
+    }).catch((reason: unknown) => {
+      if (active) setState({ oid, error: reason instanceof Error ? reason.message : "Could not read commit details.", loading: false });
+    });
+    return () => { active = false; };
+  }, [api, oid, repoId]);
+
+  if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div>;
+  if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">Loading commit details…</div>;
+  if (state.error) return <div className="commitDetailsState" role="alert"><p>{state.error}</p></div>;
+  const detail = state.detail;
+  if (!detail) return null;
+  return <div className="commitDetails">
+    <div className="repositoryFact"><span>COMMIT</span><strong className="monoText">{detail.oid.slice(0, 12)}</strong></div>
+    <div className="repositoryFact"><span>AUTHOR</span><strong>{detail.authorName}</strong></div>
+    <div className="repositoryFact"><span>DATE</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
+    <div className="commitDetailMessage">{detail.message}</div>
+    <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> files <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
+    <div className="commitDetailFiles" aria-label="Changed files">{detail.files.map((file) => <div className="commitDetailFile" key={file.path}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? "binary" : `+${file.additions} −${file.deletions}`}</small></div>)}</div>
+  </div>;
+}

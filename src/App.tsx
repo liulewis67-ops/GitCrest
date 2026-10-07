@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { GitCrestApiClient, GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { CommitDetails, CommitGraph } from "./features/history/CommitGraph";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
@@ -72,6 +73,10 @@ function readStoredNumber(key: string, fallback: number, min: number, max: numbe
 
 function repositoryName(path: string): string {
   return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
+}
+
+function isFullObjectId(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 }
 
 function ResizeSeparator({
@@ -217,7 +222,7 @@ function App() {
   const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
   const selectedFilePath = activeTabState?.selectedFilePath;
   const selectedFileScope = activeTabState?.selectedFileScope;
-  const selectedDiffFile = activeStatus?.files.find((file) => file.path === selectedFilePath);
+  const selectedDiffFile = (activeStatus?.files || []).find((file) => file.path === selectedFilePath);
   const activeDiffKey = selectedRepository && selectedFilePath && selectedFileScope
     ? `${selectedRepository.repoId}:${selectedFileScope}:${selectedFilePath}`
     : "";
@@ -225,10 +230,10 @@ function App() {
     ...group,
     files: (activeStatus?.files || []).filter((file) => file.categories.includes(group.category)),
   }));
-  const stagedCount = activeStatus?.files.filter((file) => file.categories.includes("staged")).length || 0;
-  const hasConflicts = Boolean(activeStatus?.files.some((file) => file.categories.includes("conflicted")));
+  const stagedCount = (activeStatus?.files || []).filter((file) => file.categories.includes("staged")).length;
+  const hasConflicts = (activeStatus?.files || []).some((file) => file.categories.includes("conflicted"));
   const sensitiveStagedPaths = (activeStatus?.files || []).filter((file) => file.categories.includes("staged") && /(^|\/)(\.env(?:\.|$)|id_(?:rsa|dsa|ed25519)(?:$|\.)|[^/]+\.(?:pem|key|p12|pfx)|credentials(?:\.|$)|secrets?\.)/i.test(file.path)).map((file) => file.path);
-  const workingCount = activeStatus?.files.filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length || 0;
+  const workingCount = (activeStatus?.files || []).filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length;
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
   const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
@@ -498,6 +503,18 @@ function App() {
       tabs: {
         ...current.tabs,
         [repoId]: { ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }), graphScrollTop: Math.max(0, scrollTop) },
+      },
+    }));
+  }
+
+  function selectCommit(oid: string) {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId) return;
+    setWorkspaceSession((current) => ({
+      ...current,
+      tabs: {
+        ...current.tabs,
+        [repoId]: { ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }), selectedCommit: oid },
       },
     }));
   }
@@ -990,34 +1007,33 @@ function App() {
 
             <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
               <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId); }} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
-              <div
-                className="graphViewport"
-                ref={graphViewportRef}
-                onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)}
-                role="region"
-                aria-label={mode === "graph" ? "Commit graph view" : "Diff view"}
-              >
-                {mode === "graph" ? (
-                  <div className="graphEmpty">
-                    <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
-                    <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
-                    <h2>{selectedRepository ? selectedRepository.head ? "Repository ready" : "No commits yet" : "Your commit graph starts here"}</h2>
-                    <p>{selectedRepository ? `${selectedRepository.path}${selectedRepository.branch ? ` · ${selectedRepository.branch}` : selectedRepository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
-                    {!selectedRepository && <button className="secondaryButton" type="button" onClick={() => void openLocalRepository()} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
-                  </div>
-                ) : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div>
+              {mode === "graph" ? selectedRepository && apiRef.current && isFullObjectId(selectedRepository.head) ? <CommitGraph
+                key={selectedRepository.repoId}
+                api={apiRef.current}
+                repoId={selectedRepository.repoId}
+                selectedOid={selectedCommit}
+                initialScrollTop={workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0}
+                onScrollPosition={rememberGraphScroll}
+                onSelect={selectCommit}
+              /> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)} role="region" aria-label="Commit graph view"><div className="graphEmpty">
+                <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
+                <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
+                <h2>{selectedRepository ? selectedRepository.head ? "Connecting to history…" : "No commits yet" : "Your commit graph starts here"}</h2>
+                <p>{selectedRepository ? `${selectedRepository.path}${selectedRepository.branch ? ` · ${selectedRepository.branch}` : selectedRepository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
+                {!selectedRepository && <button className="secondaryButton" type="button" onClick={() => void openLocalRepository()} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
+              </div></div>
+                : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div></div>
                   : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
                   : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} disabled={stagingBusy || hasActiveStagingTask || commitBusy} />
-                  : <div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div>}
-              </div>
+                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} disabled={stagingBusy || hasActiveStagingTask || commitBusy} /></div>
+                  : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div></div>}
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
             </section>
             {mode === "graph" && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />}
 
             {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
               <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-              {selectedRepository ? (
+              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} /> : selectedRepository ? (
                 <div className="repositoryDetails">
                   <span className="detailsGlyph" aria-hidden="true">G</span>
                   <h2>{repositoryName(selectedRepository.path)}</h2>

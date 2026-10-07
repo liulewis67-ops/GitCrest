@@ -261,6 +261,38 @@ button:disabled { cursor: not-allowed; }
 .graphEmpty h2 { margin: 0; font-size: 14px; font-weight: 620; letter-spacing: -.025em; }
 .graphEmpty p { max-width: 325px; margin: 7px 0 14px; color: var(--text-muted); font-size: 10px; line-height: 1.6; }
 .graphEmpty .secondaryButton { min-height: 29px; font-size: 10px; }
+.graphState { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 10px; min-height: 150px; padding: 20px; color: var(--text-secondary); font-size: 11px; text-align: center; }
+.graphState p { margin: 0; color: var(--danger); }
+.commitGraphCanvas { position: relative; flex: 0 0 auto; min-width: 100%; }
+.commitGraphEdges { position: absolute; z-index: 0; top: 0; left: 0; overflow: visible; pointer-events: none; }
+.commitGraphEdges path { fill: none; stroke: var(--line-strong); stroke-width: 1.5; }
+.commitGraphList { position: relative; z-index: 1; min-width: 100%; }
+.commitGraphRow { min-width: 100%; }
+.commitGraphEntry { position: relative; display: flex; width: 100%; height: 100%; align-items: center; gap: 9px; padding-top: 0; padding-right: 12px; padding-bottom: 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.commitGraphEntry:hover { background: color-mix(in srgb, var(--surface-raised) 72%, transparent); }
+.commitGraphEntry.selected { background: var(--accent-soft); }
+.commitGraphEntry:focus-visible { z-index: 2; outline: 2px solid var(--accent); outline-offset: -2px; }
+.commitGraphNode { position: absolute; top: calc(50% - 5px); width: 10px; height: 10px; border: 2px solid var(--accent); border-radius: 50%; background: var(--canvas); }
+.commitGraphNode.merge { border-color: var(--amber); background: var(--amber); box-shadow: 0 0 0 2px var(--canvas); }
+.commitGraphText { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.commitGraphSubject { overflow: hidden; color: var(--text); font-size: 11px; font-weight: 560; text-overflow: ellipsis; white-space: nowrap; }
+.commitGraphMeta { overflow: hidden; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.commitGraphOid { flex: 0 0 auto; color: var(--text-muted); font: 9px var(--font-mono); }
+.commitRefBadge { flex: 0 0 auto; max-width: 135px; overflow: hidden; padding: 3px 5px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--accent-strong); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.historyLoadingMore { position: sticky; bottom: 0; padding: 8px; border-top: 1px solid var(--line); background: var(--surface-raised); color: var(--text-muted); font-size: 9px; text-align: center; }
+.commitDetailsState { padding: 18px 13px; color: var(--text-muted); font-size: 10px; }
+.commitDetails { display: flex; flex-direction: column; gap: 9px; min-height: 0; padding: 14px 13px; overflow: auto; }
+.commitDetails .repositoryFact { padding: 0; }
+.commitDetails .repositoryFact strong { max-width: 68%; overflow-wrap: anywhere; }
+.commitDetailMessage { padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 10px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.commitDetailStats { color: var(--text-muted); font-size: 9px; }
+.commitDetailStats strong { color: var(--text-secondary); }
+.commitDetailStats span:first-of-type { margin-left: 8px; color: var(--green); }
+.commitDetailStats span:last-of-type { margin-left: 5px; color: var(--danger); }
+.commitDetailFiles { display: flex; flex-direction: column; gap: 6px; min-height: 0; }
+.commitDetailFile { display: flex; justify-content: space-between; gap: 8px; color: var(--text-secondary); font-size: 9px; }
+.commitDetailFile span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commitDetailFile small { flex: 0 0 auto; color: var(--text-muted); font: 8px var(--font-mono); }
 .workArea.diffMode { grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr); }
 .workArea.diffMode .mainPanelHeading { gap: 12px; }
 .splitDiff { min-width: 0; padding-bottom: 20px; }
