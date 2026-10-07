@@ -10,6 +10,9 @@ export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
 export type StagingRequest = components["schemas"]["StagingRequest"];
 export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
 export type CommitRequest = components["schemas"]["CommitRequest"];
+export type CommitPageResponse = components["schemas"]["CommitPage"];
+export type CommitDetailResponse = components["schemas"]["CommitDetail"];
+export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 
 export class GitCrestApiError extends Error {
   constructor(
@@ -82,6 +85,19 @@ export class GitCrestApiClient {
   getFileDiff(repoId: RepoId, path: string, scope: "workingTree" | "index"): Promise<DiffDocumentResponse> {
     const query = new URLSearchParams({ path, scope });
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/diff?${query}`);
+  }
+
+  getRepositoryCommits(repoId: RepoId, offset = 0, limit = 50): Promise<CommitPageResponse> {
+    const query = new URLSearchParams({ offset: String(offset), limit: String(limit) });
+    return this.request<CommitPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits?${query}`);
+  }
+
+  getRepositoryCommit(repoId: RepoId, oid: string): Promise<CommitDetailResponse> {
+    return this.request<CommitDetailResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(oid)}`);
+  }
+
+  getRepositoryRefs(repoId: RepoId): Promise<RefSnapshotResponse> {
+    return this.request<RefSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/refs`);
   }
 
   stageRepositoryChanges(repoId: RepoId, request: StagingRequest): Promise<TaskSnapshotResponse> {

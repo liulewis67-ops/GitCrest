@@ -288,13 +288,60 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /** Read a bounded page of commits from HEAD and branch refs */
+        get: operations["listRepositoryCommits"];
         put?: never;
         /**
          * Queue a commit from the staged changes
          * @description Commit writes the message through standard input, checks staged changes after acquiring the repository task lock, and refreshes repository metadata after execution. Optional row selections are applied to a temporary index based on HEAD; the repository index is left intact so unselected staged changes remain staged on success, hook failure, and cancellation.
          */
         post: operations["commitRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/commits/{oid}": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+                oid: string;
+            };
+            cookie?: never;
+        };
+        /** Read one commit and its file statistics */
+        get: operations["getRepositoryCommit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/refs": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read HEAD and local or remote branch refs
+         * @description Tags are excluded to keep the initial ref snapshot bounded for repositories with many tags.
+         */
+        get: operations["listRepositoryRefs"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -446,6 +493,69 @@ export interface components {
             /** @description Repository-relative path, required for file actions and forbidden for all-file actions. */
             path?: string;
         };
+        CommitPage: {
+            repoId: components["schemas"]["RepoId"];
+            offset: number;
+            limit: number;
+            commits: components["schemas"]["CommitSummary"][];
+            nextOffset: number | null;
+        };
+        CommitSummary: {
+            oid: string;
+            parents: string[];
+            authorName: string;
+            authorEmail: string;
+            /** Format: int64 */
+            committedAtMs: number;
+            subject: string;
+        };
+        CommitDetail: {
+            repoId: components["schemas"]["RepoId"];
+            oid: string;
+            parents: string[];
+            authorName: string;
+            authorEmail: string;
+            /** Format: int64 */
+            committedAtMs: number;
+            message: string;
+            stats: components["schemas"]["CommitStats"];
+            files: components["schemas"]["CommitFileStat"][];
+        };
+        CommitStats: {
+            filesChanged: number;
+            /** Format: int64 */
+            insertions: number;
+            /** Format: int64 */
+            deletions: number;
+        };
+        CommitFileStat: {
+            path: string;
+            /**
+             * Format: int64
+             * @description Null for binary content.
+             */
+            additions: number | null;
+            /**
+             * Format: int64
+             * @description Null for binary content.
+             */
+            deletions: number | null;
+        };
+        RefSnapshot: {
+            repoId: components["schemas"]["RepoId"];
+            head: string | null;
+            branch: string | null;
+            detached: boolean;
+            refs: components["schemas"]["RepositoryRef"][];
+        };
+        RepositoryRef: {
+            name: string;
+            fullName: string;
+            oid: string;
+            /** @enum {string} */
+            kind: "local" | "remote";
+            upstream: string | null;
+        };
         CommitRequest: {
             /** @description Commit message supplied to Git over standard input; its UTF-8 encoded size must not exceed 64 KiB. */
             message: string;
@@ -519,7 +629,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "TASK_QUEUE_FULL" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "TASK_QUEUE_FULL" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -1367,6 +1477,73 @@ export interface operations {
             };
         };
     };
+    listRepositoryCommits: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded commit page in topological order. Tags are excluded from the initial walk. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitPage"];
+                };
+            };
+            /** @description Offset or page size is out of range. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is not registered or its path is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description History output exceeds the bounded response size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git history read exceeded its deadline. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
     commitRepository: {
         parameters: {
             query?: never;
@@ -1435,6 +1612,108 @@ export interface operations {
             };
             /** @description Git, task capacity, or task storage is unavailable. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getRepositoryCommit: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+                oid: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Commit details relative to the first parent, or the empty tree for a root commit. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitDetail"];
+                };
+            };
+            /** @description Commit object ID is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository or commit object is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Commit details exceed the bounded response size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    listRepositoryRefs: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current HEAD and branch refs. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RefSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is not registered or its path is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Ref output exceeds the bounded response size. */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

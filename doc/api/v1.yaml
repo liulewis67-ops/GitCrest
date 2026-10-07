@@ -611,6 +611,58 @@ paths:
         required: true
         schema:
           $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: listRepositoryCommits
+      summary: Read a bounded page of commits from HEAD and branch refs
+      parameters:
+        - name: offset
+          in: query
+          required: false
+          schema: { type: integer, minimum: 0, maximum: 1000000, default: 0 }
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: Bounded commit page in topological order. Tags are excluded from the initial walk.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitPage"
+        "400":
+          description: Offset or page size is out of range.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not registered or its path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "413":
+          description: History output exceeds the bounded response size.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "504":
+          description: Git history read exceeded its deadline.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
     post:
       operationId: commitRepository
       summary: Queue a commit from the staged changes
@@ -663,6 +715,97 @@ paths:
                 $ref: "#/components/schemas/ApiErrorResponse"
         "503":
           description: Git, task capacity, or task storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/commits/{oid}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: oid
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$"
+    get:
+      operationId: getRepositoryCommit
+      summary: Read one commit and its file statistics
+      responses:
+        "200":
+          description: Commit details relative to the first parent, or the empty tree for a root commit.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CommitDetail"
+        "400":
+          description: Commit object ID is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository or commit object is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "413":
+          description: Commit details exceed the bounded response size.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/refs:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: listRepositoryRefs
+      summary: Read HEAD and local or remote branch refs
+      description: Tags are excluded to keep the initial ref snapshot bounded for repositories with many tags.
+      responses:
+        "200":
+          description: Current HEAD and branch refs.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RefSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not registered or its path is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "413":
+          description: Ref output exceeds the bounded response size.
           content:
             application/json:
               schema:
@@ -996,6 +1139,87 @@ components:
           type: string
           minLength: 1
           description: Repository-relative path, required for file actions and forbidden for all-file actions.
+    CommitPage:
+      type: object
+      additionalProperties: false
+      required: [repoId, offset, limit, commits, nextOffset]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1, maximum: 100 }
+        commits:
+          type: array
+          items: { $ref: "#/components/schemas/CommitSummary" }
+        nextOffset: { type: [integer, "null"], minimum: 0 }
+    CommitSummary:
+      type: object
+      additionalProperties: false
+      required: [oid, parents, authorName, authorEmail, committedAtMs, subject]
+      properties:
+        oid: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" }
+        parents:
+          type: array
+          items: { type: string }
+        authorName: { type: string }
+        authorEmail: { type: string }
+        committedAtMs: { type: integer, format: int64 }
+        subject: { type: string }
+    CommitDetail:
+      type: object
+      additionalProperties: false
+      required: [repoId, oid, parents, authorName, authorEmail, committedAtMs, message, stats, files]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        oid: { type: string }
+        parents:
+          type: array
+          items: { type: string }
+        authorName: { type: string }
+        authorEmail: { type: string }
+        committedAtMs: { type: integer, format: int64 }
+        message: { type: string }
+        stats: { $ref: "#/components/schemas/CommitStats" }
+        files:
+          type: array
+          items: { $ref: "#/components/schemas/CommitFileStat" }
+    CommitStats:
+      type: object
+      additionalProperties: false
+      required: [filesChanged, insertions, deletions]
+      properties:
+        filesChanged: { type: integer, minimum: 0 }
+        insertions: { type: integer, format: int64, minimum: 0 }
+        deletions: { type: integer, format: int64, minimum: 0 }
+    CommitFileStat:
+      type: object
+      additionalProperties: false
+      required: [path, additions, deletions]
+      properties:
+        path: { type: string }
+        additions: { type: [integer, "null"], format: int64, minimum: 0, description: Null for binary content. }
+        deletions: { type: [integer, "null"], format: int64, minimum: 0, description: Null for binary content. }
+    RefSnapshot:
+      type: object
+      additionalProperties: false
+      required: [repoId, head, branch, detached, refs]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        head: { type: [string, "null"] }
+        branch: { type: [string, "null"] }
+        detached: { type: boolean }
+        refs:
+          type: array
+          items: { $ref: "#/components/schemas/RepositoryRef" }
+    RepositoryRef:
+      type: object
+      additionalProperties: false
+      required: [name, fullName, oid, kind, upstream]
+      properties:
+        name: { type: string }
+        fullName: { type: string }
+        oid: { type: string }
+        kind: { type: string, enum: [local, remote] }
+        upstream: { type: [string, "null"] }
     CommitRequest:
       type: object
       additionalProperties: false
@@ -1178,6 +1402,9 @@ components:
         - REQUEST_INVALID
         - COMMIT_CONFLICT
         - COMMIT_MESSAGE_TOO_LARGE
+        - HISTORY_COMMIT_NOT_FOUND
+        - HISTORY_UNAVAILABLE
+        - HISTORY_TOO_LARGE
         - INTERNAL_ERROR
     ApiError:
       type: object

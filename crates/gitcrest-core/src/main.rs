@@ -33,6 +33,7 @@ mod cloning;
 mod commits;
 mod diff;
 mod git_command;
+mod history;
 mod repository;
 mod staging;
 mod status;
@@ -103,6 +104,9 @@ enum ApiErrorCode {
     StagingConflict,
     CommitConflict,
     CommitMessageTooLarge,
+    HistoryCommitNotFound,
+    HistoryUnavailable,
+    HistoryTooLarge,
     InternalError,
 }
 
@@ -393,6 +397,43 @@ impl ApiError {
         }
     }
 
+    fn from_history_error(error: history::HistoryError) -> Self {
+        match error {
+            history::HistoryError::InvalidQuery | history::HistoryError::InvalidCommit => {
+                Self::new(
+                    StatusCode::BAD_REQUEST,
+                    ApiErrorCode::RequestInvalid,
+                    "The requested commit history query is invalid.",
+                )
+            }
+            history::HistoryError::CommitNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::HistoryCommitNotFound,
+                "The requested commit does not exist in this repository.",
+            ),
+            history::HistoryError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+            history::HistoryError::TimedOut => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                ApiErrorCode::HistoryUnavailable,
+                "Git did not read repository history within 20 seconds.",
+            ),
+            history::HistoryError::TooLarge => Self::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::HistoryTooLarge,
+                "The requested history data exceeds the 8 MiB response limit.",
+            ),
+            history::HistoryError::GitFailed => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::HistoryUnavailable,
+                "Git could not read the requested repository history.",
+            ),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -514,7 +555,15 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             "/v1/repositories/:repo_id/staging/patch",
             post(stage_repository_patch),
         )
-        .route("/v1/repositories/:repo_id/commits", post(commit_repository))
+        .route(
+            "/v1/repositories/:repo_id/commits",
+            get(repository_commits).post(commit_repository),
+        )
+        .route(
+            "/v1/repositories/:repo_id/commits/:oid",
+            get(repository_commit_detail),
+        )
+        .route("/v1/repositories/:repo_id/refs", get(repository_refs))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
@@ -961,6 +1010,88 @@ async fn stage_repository_patch(
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct FetchRequest {
     prune: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct HistoryQuery {
+    offset: Option<usize>,
+    limit: Option<usize>,
+}
+
+async fn repository_commits(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<HistoryQuery>, QueryRejection>,
+) -> Result<Json<history::CommitPage>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Use a non-negative history offset and a page size from 1 to 100.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    history::read_page(
+        repo_id,
+        &target.repository_path,
+        query.offset.unwrap_or(0),
+        query.limit.unwrap_or(50),
+        metadata.head.as_deref(),
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_history_error)
+}
+
+async fn repository_commit_detail(
+    State(state): State<AppState>,
+    Path((repo_id, oid)): Path<(String, String)>,
+) -> Result<Json<history::CommitDetail>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    history::read_commit(repo_id, &target.repository_path, &oid)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_history_error)
+}
+
+async fn repository_refs(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<history::RefSnapshot>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    history::read_refs(
+        repo_id,
+        &target.repository_path,
+        metadata.head,
+        metadata.branch,
+        metadata.detached,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_history_error)
 }
 
 enum CommitPatchError {
@@ -2176,6 +2307,156 @@ mod tests {
         let (status, code) = error_code(response).await;
         assert_eq!(status, StatusCode::NOT_ACCEPTABLE);
         assert_eq!(code, "API_VERSION_UNSUPPORTED");
+    }
+
+    #[tokio::test]
+    async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("history-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "GitCrest Test"]);
+        git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+        std::fs::write(root.join("history.txt"), "first\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "-m", "first history entry"]);
+        std::fs::write(root.join("history.txt"), "second\n").unwrap();
+        git(&["commit", "--quiet", "-am", "second history entry"]);
+        git(&["tag", "history-tag"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/repositories")
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::json!({ "path": root }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+
+        let first_page = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits?limit=1"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(first_page.status(), StatusCode::OK);
+        let body = to_bytes(first_page.into_body(), usize::MAX).await.unwrap();
+        let first_page: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(first_page["commits"].as_array().unwrap().len(), 1);
+        assert_eq!(first_page["nextOffset"], 1);
+        assert_eq!(first_page["commits"][0]["subject"], "second history entry");
+        let oid = first_page["commits"][0]["oid"].as_str().unwrap();
+
+        let second_page = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits?offset=1&limit=1"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(second_page.into_body(), usize::MAX).await.unwrap();
+        let second_page: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(second_page["commits"][0]["subject"], "first history entry");
+        assert!(second_page["nextOffset"].is_null());
+
+        let detail = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits/{oid}"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(detail.status(), StatusCode::OK);
+        let body = to_bytes(detail.into_body(), usize::MAX).await.unwrap();
+        let detail: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(detail["message"], "second history entry");
+        assert_eq!(detail["stats"]["filesChanged"], 1);
+        assert_eq!(detail["stats"]["insertions"], 1);
+
+        let refs = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/refs"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(refs.status(), StatusCode::OK);
+        let body = to_bytes(refs.into_body(), usize::MAX).await.unwrap();
+        let refs: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(refs["refs"].as_array().unwrap().len(), 1);
+        assert_eq!(refs["refs"][0]["kind"], "local");
+        assert!(refs["refs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|reference| !reference["fullName"]
+                .as_str()
+                .unwrap()
+                .starts_with("refs/tags/")));
+
+        let invalid_page = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits?limit=101"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let (status, code) = error_code(invalid_page).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(code, "REQUEST_INVALID");
+        let invalid_oid = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits/not-a-sha"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let (status, code) = error_code(invalid_oid).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(code, "REQUEST_INVALID");
+
+        let missing = app
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/commits/{}", "0".repeat(40)),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let (status, code) = error_code(missing).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(code, "HISTORY_COMMIT_NOT_FOUND");
     }
 
     #[tokio::test]

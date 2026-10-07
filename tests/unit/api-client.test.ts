@@ -98,6 +98,27 @@ describe("GitCrestApiClient", () => {
     expect(new Headers(fetcher.mock.calls[0][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
   });
 
+  it("reads paginated commits, commit detail, and refs through versioned repository routes", async () => {
+    const page = { repoId: "repo_fixture", offset: 50, limit: 50, commits: [], nextOffset: 100 };
+    const detail = { repoId: "repo_fixture", oid: "a".repeat(40), parents: [], authorName: "Author", authorEmail: "author@example.invalid", committedAtMs: 1, message: "first", stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [] };
+    const refs = { repoId: "repo_fixture", head: "a".repeat(40), branch: "main", detached: false, refs: [] };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(page), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(detail), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(refs), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryCommits("repo/fixture", 50, 50)).resolves.toEqual(page);
+    await expect(client.getRepositoryCommit("repo/fixture", "a".repeat(40))).resolves.toEqual(detail);
+    await expect(client.getRepositoryRefs("repo/fixture")).resolves.toEqual(refs);
+    expect(new URL(String(fetcher.mock.calls[0][0])).searchParams.toString()).toBe("offset=50&limit=50");
+    expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/commits/${"a".repeat(40)}`);
+    expect(String(fetcher.mock.calls[2][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/refs`);
+    for (const [, request] of fetcher.mock.calls) {
+      expect(new Headers(request?.headers).get("X-GitCrest-API-Version")).toBe("1");
+    }
+  });
+
   it("lists tasks and requests cancellation through versioned task routes", async () => {
     const task = { taskId: "task-1", repoId: "repo_fixture", operation: "fetch", status: "running", phase: "Receiving", progress: 35, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false };
     const fetcher = vi.fn<typeof fetch>()
