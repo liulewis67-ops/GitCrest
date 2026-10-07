@@ -44,6 +44,23 @@ describe("SplitDiff", () => {
     expect(onStageSelection).not.toHaveBeenCalled();
   });
 
+  it("shows an explicit binary state instead of trying to render text", () => {
+    const document: DiffDocumentResponse = {
+      repoId: "repo_fixture",
+      path: "assets/image.bin",
+      revision: "sha256:binary-fixture",
+      originalPath: null,
+      scope: "workingTree",
+      changeKind: "modified",
+      status: "binary",
+      hunks: [],
+    };
+    render(<SplitDiff document={document} onStageSelection={vi.fn()} disabled={false} />);
+
+    expect(screen.getByRole("status").textContent).toContain("file is binary");
+    expect(screen.queryByRole("button", { name: "Monaco view" })).toBeNull();
+  });
+
   it("navigates changed hunks with F7 and collapses or expands hunk rows", () => {
     const document: DiffDocumentResponse = {
       repoId: "repo_fixture",

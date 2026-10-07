@@ -937,4 +937,56 @@ mod tests {
         assert_eq!(renamed_diff.change_kind, ChangeKind::Renamed);
         assert_eq!(renamed_diff.original_path.as_deref(), Some("rename-me.txt"));
     }
+
+    #[tokio::test]
+    async fn preserves_raw_git_patch_and_rejects_diffs_over_the_display_limit() {
+        let (_directory, root) = fixture().await;
+        tokio::fs::write(
+            root.join("readme.txt"),
+            "base line\nkept line\nchanged one\nchanged two\n",
+        )
+        .await
+        .unwrap();
+        let snapshot = status::read("repo-test".into(), &root).await.unwrap();
+        let file = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "readme.txt")
+            .unwrap();
+        let result = read_with_patch("repo-test".into(), &root, file, DiffScope::WorkingTree)
+            .await
+            .unwrap();
+        let git_patch = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args([
+                "--literal-pathspecs",
+                "diff",
+                "--no-ext-diff",
+                "--no-color",
+                "--unified=3",
+                "--",
+                "readme.txt",
+            ])
+            .output()
+            .unwrap();
+        assert!(git_patch.status.success());
+        assert_eq!(result.patch, git_patch.stdout);
+        assert_eq!(result.document.hunks, parse_diff(&git_patch.stdout).hunks);
+
+        let large = "x".repeat(MAX_DIFF_BYTES + 1);
+        tokio::fs::write(root.join("readme.txt"), large)
+            .await
+            .unwrap();
+        let snapshot = status::read("repo-test".into(), &root).await.unwrap();
+        let file = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "readme.txt")
+            .unwrap();
+        assert_eq!(
+            read("repo-test".into(), &root, file, DiffScope::WorkingTree).await,
+            Err(DiffError::TooLarge)
+        );
+    }
 }

@@ -40,7 +40,7 @@
 | 0. 工程与契约基座 | 可启动、安全通信、统一契约、可执行测试和界面骨架 | 无 | 已完成 |
 | 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 已完成 |
 | 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 进行中 |
-| 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 未开始 |
+| 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 进行中 |
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 未开始 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 未开始 |
 | 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 未开始 |
@@ -309,10 +309,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 完成 commit：846e419、c0f7a28、29a661c
 - 限制/后续：SHA 搜索要求唯一可解析的 4–64 位十六进制前缀；日期按 UTC 日历日期解释；路径筛选为仓库内精确路径。提交 Diff 按首父比较，根提交与空树比较；历史 Diff 只读。annotated tag 必须使用新 ref 名，不支持覆盖或删除；ref 快照仍不包含 tags，创建成功后详情面板显示上下文确认。高级 Monaco/tree-sitter Diff、跳转和折叠在 S3.4 实施。
 
-### S3.4 — 高级 Diff（进行中）
+### S3.4 — 高级 Diff（已完成）
 - 子阶段 A：变更块导航与折叠，基础交付 commit：`539bec1`。测试：`pnpm exec vitest run --config vitest.config.ts tests/unit/split-diff.test.tsx` 通过，2 个测试；`pnpm build` 通过；`git diff --check` 通过。用例覆盖未聚焦 Diff 时 F7/Shift+F7 循环定位、折叠/展开及导航到折叠块时自动展开。
-- 子阶段 B：行内词/token 差异着色，状态：进行中（基础交付已实现，S3.4 整体仍未验收）。测试：`pnpm test` 通过，32 个测试；`pnpm build` 通过；`git diff --check` 通过。覆盖插入/删除 token、Unicode 标识符、原样保留空白和超过 300,000 个 LCS 单元格时的线性降级。
+- 子阶段 B：行内词/token 差异着色，完成 commit：`1b3614d`。测试：`pnpm test` 通过，32 个测试；`pnpm build` 通过；`git diff --check` 通过。覆盖插入/删除 token、Unicode 标识符、原样保留空白和超过 300,000 个 LCS 单元格时的线性降级。
 - 子阶段 C：Monaco 只读 hunk 语法视图，基础交付 commit：`7906421`。测试：`pnpm test` 通过，35 个测试；`pnpm build` 通过；`pnpm test:e2e` 通过，1 个桌面 E2E。E2E 在 Electron 中创建临时 TypeScript 修改并确认 Monaco 旧/新两侧都显示；组件用例验证未知扩展名回退提示，语言映射用例覆盖 Rust、TypeScript 和纯文本。
-- 子阶段 D：tree-sitter 增强解析与大 diff 回退，基础交付已实现，S3.4 整体仍未验收。测试：`pnpm test` 通过，39 个测试；`pnpm build` 通过；`pnpm test:e2e` 通过，1 个桌面 E2E。E2E 验证 TypeScript hunk 进入 parsed/recovered 状态；单元测试覆盖语法加载/解析和 Monaco 视图规模限制。
-- 证据：`src/features/diff/MonacoDiffHunk.tsx`、`src/features/diff/monaco-language.ts`、`src/features/diff/monaco-view-limits.ts`、`src/features/diff/tree-sitter.ts`、`src/vite-assets.d.ts`、`src/features/diff/SplitDiff.tsx`、`tests/unit/monaco-language.test.ts`、`tests/unit/monaco-view-limits.test.ts`、`tests/unit/split-diff.test.tsx`、`tests/unit/tree-sitter.test.ts`、`tests/e2e/desktop.test.ts`、`package.json`、`pnpm-lock.yaml`、`tsconfig.test.json`。
-- 限制/后续：Monaco 只读视图按 hunk 懒加载；默认 Split 仍是 Git 结构化行和可选暂存的权威视图。树解析器支持 JavaScript、TypeScript/TSX 与 Rust；未知类型、解析失败和超大 hunk 回退为纯文本，超过 50 个 hunk 或合计 1,000,000 字符时不启用 Monaco。构建工具报告 tree-sitter wasm runtime 的 `eval` 警告，后续在 S7.3 安全验收；资源体积在 S7.2 测量。binary 提示、结构化结果与 Git 原始 diff 的最终对照、过大 diff 的 API/UI 验证，以及完整 `pnpm check` 尚待 S3.4 总体验收。
+- 子阶段 D：tree-sitter 增强解析与大 diff 回退，基础实现 commit：`32708cb`；S3.4 验收补充 commit：本次提交。最终 `pnpm check` 通过：renderer/Electron 类型检查与构建、40 个 Vitest 用例、Rust 格式检查/构建/49 个测试及 1 个 Electron E2E。E2E 验证 TypeScript hunk 进入 parsed/recovered 状态；新增 Rust 用例确认 API 保留的 patch bytes 与 Git 原始 diff 完全一致、结构化 hunks 来自同一原始结果，并通过 >10 MiB 实际 diff 验证拒绝；Split Diff 用例验证 binary 明确提示。
+- 证据：`src/features/diff/MonacoDiffHunk.tsx`、`src/features/diff/monaco-language.ts`、`src/features/diff/monaco-view-limits.ts`、`src/features/diff/tree-sitter.ts`、`src/vite-assets.d.ts`、`src/features/diff/SplitDiff.tsx`、`crates/gitcrest-core/src/diff.rs`、`tests/unit/monaco-language.test.ts`、`tests/unit/monaco-view-limits.test.ts`、`tests/unit/split-diff.test.tsx`、`tests/unit/tree-sitter.test.ts`、`tests/e2e/desktop.test.ts`、`package.json`、`pnpm-lock.yaml`、`tsconfig.test.json`。
+- 完成日期：2026-10-08。完成 commits：`539bec1`、`1b3614d`、`7906421`、`32708cb`、本次提交。
+- 限制/后续：Monaco 只读视图按 hunk 懒加载；默认 Split 仍是 Git 结构化行和可选暂存的权威视图。树解析器支持 JavaScript、TypeScript/TSX 与 Rust；未知类型、解析失败和超大 hunk 回退为纯文本，超过 50 个 hunk 或合计 1,000,000 字符时不启用 Monaco。构建工具报告 tree-sitter wasm runtime 的 `eval` 警告，后续在 S7.3 安全验收；资源体积和 1k 行性能在 S7.2 测量。
