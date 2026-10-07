@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type DiffDocumentResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
+import { GitCrestApiClient, GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { CloneDialog } from "./features/cloning/CloneDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
@@ -171,6 +171,13 @@ function App() {
   const [stagingBusy, setStagingBusy] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [commitTemplate, setCommitTemplate] = useState("plain");
+  const [amendCommit, setAmendCommit] = useState(false);
+  const [signOffCommit, setSignOffCommit] = useState(false);
+  const [signCommit, setSignCommit] = useState(false);
+  const [commitSelections, setCommitSelections] = useState<NonNullable<CommitRequest["selections"]>>([]);
+  const [commitSelectionRepoId, setCommitSelectionRepoId] = useState<string>();
+  const commitSelectionsByTask = useRef(new Map<string, string>());
+  const commitMessagesByTask = useRef(new Map<string, string>());
   const [commitBusy, setCommitBusy] = useState(false);
   const refreshedStagingTasks = useRef(new Set<string>());
   const refreshedCommitTasks = useRef(new Set<string>());
@@ -224,7 +231,7 @@ function App() {
   const workingCount = activeStatus?.files.filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length || 0;
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
-  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask);
+  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
   const hasActiveTasksRef = useRef(false);
   hasActiveTasksRef.current = hasActiveTasks;
@@ -339,16 +346,31 @@ function App() {
     setCommitBusy(true);
     setTasksError("");
     try {
-      const task = await api.commitRepository(repoId, commitMessage);
+      const task = await api.commitRepository(repoId, commitMessage, { amend: amendCommit, signOff: signOffCommit, sign: signCommit, ...(commitSelections.length > 0 ? { selections: commitSelections } : {}) });
       setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      commitSelectionsByTask.current.set(task.taskId, JSON.stringify(commitSelections));
+      commitMessagesByTask.current.set(task.taskId, commitMessage);
       setTasksOpen(true);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      if (error instanceof GitCrestApiError && error.body.error.code === "RESOURCE_VERSION_STALE") {
+        setCommitSelections([]);
+        setDiffRetry((current) => current + 1);
+        if (repoId) void refreshRepositoryStatus(repoId);
+      }
       setTasksError(message || (error instanceof Error ? error.message : "Could not start the commit task."));
       setTasksOpen(true);
     } finally {
       setCommitBusy(false);
     }
+  }
+
+  function addDiffSelectionToCommit(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
+    const document = diffState.document;
+    if (!selectedRepository || !document || document.scope !== "index") return;
+    const next = { path: document.path, revision: document.revision, selections };
+    setCommitSelectionRepoId(selectedRepository.repoId);
+    setCommitSelections((current) => [...current.filter((item) => item.path !== document.path), next]);
   }
 
   function chooseCommitTemplate(template: string) {
@@ -677,6 +699,14 @@ function App() {
       if (task.operation === "commit") {
         if (refreshedCommitTasks.current.has(task.taskId)) continue;
         refreshedCommitTasks.current.add(task.taskId);
+        const submittedSelection = commitSelectionsByTask.current.get(task.taskId);
+        commitSelectionsByTask.current.delete(task.taskId);
+        const submittedMessage = commitMessagesByTask.current.get(task.taskId);
+        commitMessagesByTask.current.delete(task.taskId);
+        if (task.status === "succeeded" && submittedMessage === commitMessage) setCommitMessage("");
+        if (task.status === "succeeded" && submittedSelection === JSON.stringify(commitSelections)) {
+          setCommitSelections([]);
+        }
         if (!task.repoId) continue;
         const api = apiRef.current;
         if (api) {
@@ -704,6 +734,16 @@ function App() {
     if (selectedRepository?.availability === "available") {
       void refreshRepositoryStatus(selectedRepository.repoId);
     }
+  }, [selectedRepository?.repoId]);
+
+  useEffect(() => {
+    setCommitSelections([]);
+    setCommitSelectionRepoId(selectedRepository?.repoId);
+    setCommitMessage("");
+    setCommitTemplate("plain");
+    setAmendCommit(false);
+    setSignOffCommit(false);
+    setSignCommit(false);
   }, [selectedRepository?.repoId]);
 
   useEffect(() => {
@@ -968,7 +1008,7 @@ function App() {
                 ) : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div>
                   : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
                   : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} disabled={stagingBusy || hasActiveStagingTask} />
+                  : diffState.document ? <SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} disabled={stagingBusy || hasActiveStagingTask || commitBusy} />
                   : <div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div>}
               </div>
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
@@ -1005,7 +1045,16 @@ function App() {
                 <option value="fix">Fix</option>
               </select>
               <textarea id="commit-message" aria-label="Commit message" placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); void commitChanges(); } }} />
-              <div className="commitControls"><label className="disabledCheck"><input type="checkbox" disabled title="Amend is not available yet" /> Amend</label><button className="primaryButton commitButton" type="button" disabled={!canCommit} title={!connected ? "Connect to the Git engine to commit" : hasConflicts ? "Resolve conflicts before committing" : stagedCount === 0 ? "Stage changes before committing" : !commitMessage.trim() ? "Enter a commit message" : hasActiveRepositoryTask ? "Wait for the current repository task" : "Commit staged changes"} onClick={() => void commitChanges()}>{commitBusy ? "Submitting…" : "Commit"}</button></div>
+              {commitSelections.length > 0 && <div className="commitSelectionNotice" role="status">{commitSelections.length} staged file selection{commitSelections.length === 1 ? "" : "s"} will be committed. Other staged changes stay in the index. <button type="button" onClick={() => setCommitSelections([])}>Clear selection</button></div>}
+              <div className="commitControls">
+                <div className="commitOptions">
+                  <label className="disabledCheck"><input type="checkbox" checked={amendCommit} disabled={!selectedRepository?.head || commitBusy} onChange={(event) => setAmendCommit(event.target.checked)} /> Amend</label>
+                  <label className="disabledCheck"><input type="checkbox" checked={signOffCommit} disabled={!selectedRepository || commitBusy} onChange={(event) => setSignOffCommit(event.target.checked)} /> Sign-off</label>
+                  <label className="disabledCheck"><input type="checkbox" checked={signCommit} disabled={!selectedRepository || commitBusy} onChange={(event) => setSignCommit(event.target.checked)} /> Sign</label>
+                </div>
+                <button className="primaryButton commitButton" type="button" disabled={!canCommit} title={!connected ? "Connect to the Git engine to commit" : hasConflicts ? "Resolve conflicts before committing" : stagedCount === 0 ? "Stage changes before committing" : !commitMessage.trim() ? "Enter a commit message" : hasActiveRepositoryTask ? "Wait for the current repository task" : amendCommit ? "Amend the current commit" : "Commit staged changes"} onClick={() => void commitChanges()}>{commitBusy ? "Submitting…" : amendCommit ? "Amend" : "Commit"}</button>
+              </div>
+              {amendCommit && <p className="amendAdvisory" role="status">Amend replaces the current HEAD commit and changes its ID.</p>}
               {sensitiveStagedPaths.length > 0 && <p className="commitAdvisory" role="status">Review sensitive staged files before committing: {sensitiveStagedPaths.join(", ")}</p>}
               <small>Use Ctrl+Enter to commit. Only staged changes are included.</small>
             </div>

@@ -292,7 +292,7 @@ export interface paths {
         put?: never;
         /**
          * Queue a commit from the staged changes
-         * @description Commit writes the message through standard input, checks that staged changes remain after acquiring the repository task lock, and refreshes repository metadata after execution.
+         * @description Commit writes the message through standard input, checks staged changes after acquiring the repository task lock, and refreshes repository metadata after execution. Optional row selections are applied to a temporary index based on HEAD; the repository index is left intact so unselected staged changes remain staged on success, hook failure, and cancellation.
          */
         post: operations["commitRepository"];
         delete?: never;
@@ -449,6 +449,21 @@ export interface components {
         CommitRequest: {
             /** @description Commit message supplied to Git over standard input; its UTF-8 encoded size must not exceed 64 KiB. */
             message: string;
+            /** @description Replace the current HEAD commit while retaining its staged tree. */
+            amend?: boolean;
+            /** @description Add a Signed-off-by trailer for the configured Git identity. */
+            signOff?: boolean;
+            /** @description Sign the commit using the signing key configured in Git. */
+            sign?: boolean;
+            /** @description Optional staged diff selections; when present, only these staged rows are included in the commit. */
+            selections?: {
+                path: string;
+                revision: string;
+                selections: {
+                    hunkIndex: number;
+                    rowIndex?: number;
+                }[];
+            }[];
         };
         StagingPatchRequest: {
             /** @enum {string} */
@@ -1400,7 +1415,7 @@ export interface operations {
                 };
             };
             406: components["responses"]["UnsupportedVersion"];
-            /** @description No staged changes remain or unresolved conflicts exist. */
+            /** @description No staged changes remain, unresolved conflicts exist, amend has no HEAD, or the selected diff revision is stale. */
             409: {
                 headers: {
                     [name: string]: unknown;

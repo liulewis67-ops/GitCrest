@@ -4,10 +4,11 @@ import { useEffect, useState } from "react";
 interface SplitDiffProps {
   document: DiffDocumentResponse;
   onStageSelection: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
+  onCommitSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   disabled: boolean;
 }
 
-export function SplitDiff({ document, onStageSelection, disabled }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onCommitSelection, disabled }: SplitDiffProps) {
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   useEffect(() => setSelection([]), [document.revision]);
   if (document.status !== "text") {
@@ -77,6 +78,7 @@ export function SplitDiff({ document, onStageSelection, disabled }: SplitDiffPro
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
           {document.scope === "index" ? "Unstage selected changes" : "Stage selected changes"}
         </button>
+        {document.scope === "index" && onCommitSelection && <button type="button" disabled={disabled || selection.length === 0} onClick={() => onCommitSelection(selection)}>Add to commit selection</button>}
       </div>
     </div>
   );

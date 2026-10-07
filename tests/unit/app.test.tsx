@@ -448,6 +448,7 @@ describe("App", () => {
     });
     const repository = { repoId: "repo_commit", path: "C:/commit-fixture", head: "abc123", branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
     const snapshot = { repoId: "repo_commit", refreshedAtMs: 1, files: [{ path: ".env.local", indexStatus: "A", worktreeStatus: ".", kind: "added", categories: ["staged"], modeChanged: false }] };
+    const stagedDiff = { repoId: "repo_commit", path: ".env.local", originalPath: null, scope: "index", revision: "sha256:staged-fixture", changeKind: "added", status: "text", hunks: [{ oldStart: 0, oldLines: 0, newStart: 1, newLines: 1, rows: [{ kind: "change", oldLine: null, newLine: 1, oldText: null, newText: "SECRET=value" }] }] };
     const task = { taskId: "task-commit", repoId: "repo_commit", operation: "commit", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
     const fetcher = vi.fn<typeof fetch>(async (input, init) => {
@@ -455,6 +456,7 @@ describe("App", () => {
       if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
       if (url.pathname === "/api/v1/repositories") return response([repository]);
       if (url.pathname.endsWith("/status")) return response(snapshot);
+      if (url.pathname.endsWith("/diff")) return response(stagedDiff);
       if (url.pathname.endsWith("/tasks")) return response([]);
       if (url.pathname.endsWith("/commits")) return new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
       if (url.pathname.endsWith("/tasks/task-commit")) return response(task);
@@ -465,6 +467,10 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
+    fireEvent.click((await screen.findAllByRole("button", { name: /.env.local/ }))[0]);
+    fireEvent.click(await screen.findByRole("checkbox", { name: "Select hunk 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add to commit selection" }));
+    expect(screen.getByText(/Other staged changes stay in the index/)).toBeDefined();
     const textarea = await screen.findByRole("textbox", { name: "Commit message" });
     await waitFor(() => expect(screen.getByRole("button", { name: "Commit" }).hasAttribute("disabled")).toBe(true));
     expect(screen.getByText(/Review sensitive staged files/)).toBeDefined();
@@ -473,11 +479,17 @@ describe("App", () => {
     fireEvent.change(textarea, { target: { value: "feat: add environment config" } });
     const commitButton = screen.getByRole("button", { name: "Commit" });
     await waitFor(() => expect(commitButton.hasAttribute("disabled")).toBe(false));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Amend" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sign-off" }));
+    expect(screen.getByText(/Amend replaces the current HEAD commit/)).toBeDefined();
     fireEvent.click(commitButton);
     await waitFor(() => expect(fetcher.mock.calls.some(([input]) => new URL(String(input)).pathname.endsWith("/commits"))).toBe(true));
     const request = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/commits"));
     expect(request?.[1]?.method).toBe("POST");
-    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ message: "feat: add environment config" });
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({
+      message: "feat: add environment config", amend: true, signOff: true, sign: false,
+      selections: [{ path: ".env.local", revision: "sha256:staged-fixture", selections: [{ hunkIndex: 0 }] }],
+    });
     expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
   });
 

@@ -1,13 +1,30 @@
 use serde::Deserialize;
 
+use crate::diff::DiffSelection;
 use crate::status::{ChangeCategory, StatusSnapshot};
 
 const MAX_COMMIT_MESSAGE_BYTES: usize = 64 * 1024;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CommitRequest {
     pub message: String,
+    #[serde(default)]
+    pub amend: bool,
+    #[serde(default)]
+    pub sign_off: bool,
+    #[serde(default)]
+    pub sign: bool,
+    #[serde(default)]
+    pub selections: Vec<CommitSelection>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommitSelection {
+    pub path: String,
+    pub revision: String,
+    pub selections: Vec<DiffSelection>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -17,6 +34,9 @@ pub enum CommitError {
     MessageContainsNul,
     NoStagedChanges,
     ConflictsMustBeResolved,
+    AmendRequiresHead,
+    InvalidSelection,
+    StaleSelection,
 }
 
 pub fn validate_message(message: &str) -> Result<(), CommitError> {
@@ -46,6 +66,23 @@ pub fn validate_snapshot(snapshot: &StatusSnapshot) -> Result<(), CommitError> {
         .any(|file| file.categories.contains(&ChangeCategory::Staged))
     {
         return Err(CommitError::NoStagedChanges);
+    }
+    Ok(())
+}
+
+pub fn validate_selection_shape(selections: &[CommitSelection]) -> Result<(), CommitError> {
+    if selections.len() > 512 {
+        return Err(CommitError::InvalidSelection);
+    }
+    let mut paths = std::collections::HashSet::new();
+    for selection in selections {
+        if selection.path.is_empty()
+            || selection.revision.is_empty()
+            || selection.selections.is_empty()
+            || !paths.insert(&selection.path)
+        {
+            return Err(CommitError::InvalidSelection);
+        }
     }
     Ok(())
 }

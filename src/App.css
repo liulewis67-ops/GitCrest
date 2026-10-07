@@ -275,7 +275,7 @@ button:disabled { cursor: not-allowed; }
 .splitDiffHunkHeader { display: flex; align-items: center; gap: 12px; padding: 5px 10px; background: var(--accent-soft); color: var(--accent-strong); font: 8px var(--font-mono); }
 .hunkSelection { display: inline-flex; align-items: center; gap: 5px; color: var(--text-secondary); font: 9px var(--font-mono); }
 .hunkSelection input { accent-color: var(--accent); }
-.diffSelectionActions { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--surface-raised); color: var(--text-secondary); font-size: 10px; }
+.diffSelectionActions { position: sticky; bottom: 0; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); background: var(--surface-raised); color: var(--text-secondary); font-size: 11px; }
 .diffSelectionActions button { padding: 6px 10px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--text); cursor: pointer; font: inherit; }
 .diffSelectionActions button:disabled { cursor: not-allowed; opacity: .45; }
 .splitDiffRow { display: grid; grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr); min-height: 19px; font: 9px/1.55 var(--font-mono); }
@@ -323,10 +323,14 @@ button:disabled { cursor: not-allowed; }
 .commitSection textarea::placeholder { color: var(--text-muted); }
 .commitSection textarea:disabled { opacity: .65; }
 .commitAdvisory { margin: 0; color: var(--warning); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.commitSelectionNotice { color: var(--text-secondary); font-size: 11px; line-height: 1.35; }
+.amendAdvisory { margin: 0; color: var(--warning); font-size: 11px; line-height: 1.35; }
+.commitSelectionNotice button { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
 .commitControls { display: flex; align-items: center; justify-content: space-between; }
-.disabledCheck { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 9px; }
+.commitOptions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.disabledCheck { display: inline-flex; align-items: center; gap: 4px; color: var(--text-muted); font-size: 11px; }
 .disabledCheck input { accent-color: var(--accent); }
-.commitButton { min-height: 26px; padding: 0 9px; font-size: 9px; }
+.commitButton { min-height: 28px; padding: 0 10px; font-size: 11px; }
 .statusbar { display: flex; align-items: center; gap: 7px; min-width: 0; padding: 0 12px; border-top: 1px solid var(--line); background: var(--surface); color: var(--text-muted); font-size: 8px; }
 .statusbarDivider { height: 11px; border-left: 1px solid var(--line-strong); }
 

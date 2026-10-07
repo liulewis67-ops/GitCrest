@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{ffi::OsString, path::Path, process::ExitStatus, time::Duration};
 
 use tokio::{
@@ -16,6 +17,7 @@ use crate::tasks::{TaskContext, TaskFailure};
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
+static NEXT_TEMP_INDEX: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GitOperation {
@@ -72,6 +74,7 @@ impl GitCommandService {
             None,
             None,
             Vec::new(),
+            Vec::new(),
             Some(repository_path),
             operation.label(),
             task,
@@ -99,6 +102,7 @@ impl GitCommandService {
             None,
             None,
             Vec::new(),
+            Vec::new(),
             Some(parent),
             "Clone",
             task,
@@ -124,6 +128,7 @@ impl GitCommandService {
             Some(log_label.into()),
             input,
             Vec::new(),
+            Vec::new(),
             Some(repository_path),
             label,
             task,
@@ -135,24 +140,127 @@ impl GitCommandService {
         &self,
         repository_path: &Path,
         message: String,
+        amend: bool,
+        sign_off: bool,
+        sign: bool,
+        selections: Option<Vec<u8>>,
+        base_head: Option<String>,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        let _temporary_index = if let Some(patch) = selections {
+            let temporary = TemporaryIndex::create()?;
+            let index_env = vec![(
+                OsString::from("GIT_INDEX_FILE"),
+                temporary.index.as_os_str().to_owned(),
+            )];
+            let read_tree = base_head.map_or_else(
+                || vec!["read-tree".into(), "--empty".into()],
+                |head| vec!["read-tree".into(), head.into()],
+            );
+            run_command(
+                &self.git_program,
+                read_tree,
+                Some("read-tree <base> (temporary commit index)".into()),
+                None,
+                Vec::new(),
+                index_env.clone(),
+                Some(repository_path),
+                "Prepare selected commit index",
+                task.clone(),
+            )
+            .await?;
+            run_command(
+                &self.git_program,
+                ["apply".into(), "--cached".into(), "--unidiff-zero".into()].into(),
+                Some("apply selected staged patch to temporary commit index".into()),
+                Some(patch),
+                Vec::new(),
+                index_env.clone(),
+                Some(repository_path),
+                "Prepare selected commit index",
+                task.clone(),
+            )
+            .await?;
+            Some((temporary, index_env))
+        } else {
+            None
+        };
         let redactions = message
             .lines()
             .filter(|line| !line.is_empty())
             .map(str::to_owned)
             .collect();
+        let mut arguments = vec!["commit".into(), "--file=-".into()];
+        if amend {
+            arguments.push("--amend".into());
+        }
+        if sign_off {
+            arguments.push("--signoff".into());
+        }
+        if sign {
+            arguments.push("-S".into());
+        } else {
+            arguments.push("--no-gpg-sign".into());
+        }
         run_command(
             &self.git_program,
-            ["commit".into(), "--file=-".into()].into(),
+            arguments,
             Some("commit --file=-".into()),
             Some(message.into_bytes()),
             redactions,
+            _temporary_index
+                .as_ref()
+                .map_or_else(Vec::new, |(_, env)| env.clone()),
             Some(repository_path),
             "Commit",
             task,
         )
         .await
+    }
+}
+
+struct TemporaryIndex {
+    directory: std::path::PathBuf,
+    index: std::path::PathBuf,
+}
+
+impl TemporaryIndex {
+    fn create() -> Result<Self, TaskFailure> {
+        let parent = std::env::temp_dir();
+        for _ in 0..10 {
+            let directory = parent.join(format!(
+                "gitcrest-commit-index-{}-{}",
+                std::process::id(),
+                NEXT_TEMP_INDEX.fetch_add(1, Ordering::Relaxed)
+            ));
+            match std::fs::create_dir(&directory) {
+                Ok(()) => {
+                    let index = directory.join("index");
+                    return Ok(Self { directory, index });
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(_) => break,
+            }
+        }
+        Err(TaskFailure::Failed(
+            "A temporary index could not be created for the selected commit".into(),
+        ))
+    }
+}
+
+impl Drop for TemporaryIndex {
+    fn drop(&mut self) {
+        if let Ok(entries) = std::fs::read_dir(&self.directory) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_type()
+                    .is_ok_and(|kind| kind.is_file() || kind.is_symlink())
+                {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+        let _ = std::fs::remove_dir(&self.directory);
     }
 }
 
@@ -162,6 +270,7 @@ async fn run_command(
     log_label: Option<String>,
     input: Option<Vec<u8>>,
     redactions: Vec<String>,
+    environment: Vec<(OsString, OsString)>,
     working_directory: Option<&Path>,
     label: &str,
     mut task: TaskContext,
@@ -181,6 +290,7 @@ async fn run_command(
         .args(&arguments)
         .env("GIT_TERMINAL_PROMPT", "0")
         .env("GCM_INTERACTIVE", "never")
+        .envs(environment)
         .stdin(if input.is_some() {
             std::process::Stdio::piped()
         } else {

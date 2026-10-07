@@ -100,11 +100,11 @@ export class GitCrestApiClient {
     });
   }
 
-  commitRepository(repoId: RepoId, message: string): Promise<TaskSnapshotResponse> {
+  commitRepository(repoId: RepoId, message: string, options: Partial<Omit<CommitRequest, "message">> = {}): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message } satisfies CommitRequest),
+      body: JSON.stringify({ message, ...options } satisfies CommitRequest),
     });
   }
 

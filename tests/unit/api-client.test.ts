@@ -134,10 +134,11 @@ describe("GitCrestApiClient", () => {
     }));
     const client = new GitCrestApiClient(baseUrl, token, fetcher);
 
-    await expect(client.commitRepository("repo/fixture", " subject \n\nbody\n")).resolves.toEqual(task);
+    const options = { amend: true, signOff: true, sign: false, selections: [{ path: "src/file.ts", revision: "sha256:fixture", selections: [{ hunkIndex: 1, rowIndex: 2 }] }] };
+    await expect(client.commitRepository("repo/fixture", " subject \n\nbody\n", options)).resolves.toEqual(task);
     expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/commits`);
     expect(fetcher.mock.calls[0][1]?.method).toBe("POST");
-    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ message: " subject \n\nbody\n" }));
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ message: " subject \n\nbody\n", ...options }));
   });
 
   it("queues file-level stage operations with a literal selected path payload", async () => {

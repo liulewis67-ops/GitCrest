@@ -375,6 +375,21 @@ impl ApiError {
                 ApiErrorCode::CommitConflict,
                 "Resolve repository conflicts before committing.",
             ),
+            commits::CommitError::AmendRequiresHead => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::CommitConflict,
+                "An existing commit is required to amend.",
+            ),
+            commits::CommitError::InvalidSelection => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "Choose one or more valid staged diff rows to commit.",
+            ),
+            commits::CommitError::StaleSelection => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::ResourceVersionStale,
+                "The staged diff changed. Refresh it and select changes again.",
+            ),
         }
     }
 
@@ -948,6 +963,57 @@ struct FetchRequest {
     prune: bool,
 }
 
+enum CommitPatchError {
+    Invalid,
+    Stale,
+    Diff(DiffError),
+}
+
+async fn selected_commit_patch(
+    repo_id: &str,
+    repository_path: &std::path::Path,
+    snapshot: &status::StatusSnapshot,
+    selections: &[commits::CommitSelection],
+) -> Result<Option<Vec<u8>>, CommitPatchError> {
+    if selections.is_empty() {
+        return Ok(None);
+    }
+    commits::validate_selection_shape(selections).map_err(|_| CommitPatchError::Invalid)?;
+    let mut selected_patch = Vec::new();
+    for selection in selections {
+        let file = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == selection.path)
+            .filter(|file| file.categories.contains(&status::ChangeCategory::Staged))
+            .ok_or(CommitPatchError::Invalid)?;
+        let current =
+            diff::read_with_patch(repo_id.to_owned(), repository_path, file, DiffScope::Index)
+                .await
+                .map_err(CommitPatchError::Diff)?;
+        if current.document.revision != selection.revision {
+            return Err(CommitPatchError::Stale);
+        }
+        selected_patch.extend(
+            diff::select_changes(&current, &selection.selections)
+                .map_err(|_| CommitPatchError::Invalid)?,
+        );
+    }
+    Ok(Some(selected_patch))
+}
+
+fn map_commit_patch_error(error: CommitPatchError) -> ApiError {
+    match error {
+        CommitPatchError::Invalid => {
+            ApiError::from_commit_error(commits::CommitError::InvalidSelection)
+        }
+        CommitPatchError::Stale => {
+            ApiError::from_commit_error(commits::CommitError::StaleSelection)
+        }
+        CommitPatchError::Diff(error) => ApiError::from_diff_error(error),
+    }
+}
+
 async fn commit_repository(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
@@ -961,6 +1027,19 @@ async fn commit_repository(
         )
     })?;
     commits::validate_message(&request.message).map_err(ApiError::from_commit_error)?;
+    if request.amend
+        && state
+            .repositories
+            .refresh_metadata(&repo_id)
+            .await
+            .map_err(ApiError::from_repository_error)?
+            .head
+            .is_none()
+    {
+        return Err(ApiError::from_commit_error(
+            commits::CommitError::AmendRequiresHead,
+        ));
+    }
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -972,11 +1051,25 @@ async fn commit_repository(
         .await
         .map_err(ApiError::from_repository_error)?;
     commits::validate_snapshot(&snapshot).map_err(ApiError::from_commit_error)?;
+    commits::validate_selection_shape(&request.selections).map_err(ApiError::from_commit_error)?;
+    let _selected_patch = selected_commit_patch(
+        &repo_id,
+        &target.repository_path,
+        &snapshot,
+        &request.selections,
+    )
+    .await
+    .map_err(map_commit_patch_error)?;
 
     let repositories = state.repositories.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
+    let message = request.message;
+    let amend = request.amend;
+    let sign_off = request.sign_off;
+    let sign = request.sign;
+    let commit_selections = request.selections;
     let task = state
         .tasks
         .submit(
@@ -1004,8 +1097,40 @@ async fn commit_repository(
                 commits::validate_snapshot(&current).map_err(|error| {
                     TaskFailure::Failed(format!("Commit precondition changed: {error:?}"))
                 })?;
+                let selected_patch = selected_commit_patch(
+                    &task_repo_id,
+                    &repository_path,
+                    &current,
+                    &commit_selections,
+                )
+                .await
+                .map_err(|error| {
+                    TaskFailure::Failed(match error {
+                        CommitPatchError::Invalid => "Commit selection is no longer valid".into(),
+                        CommitPatchError::Stale => {
+                            "The staged diff became stale; refresh and select changes again".into()
+                        }
+                        CommitPatchError::Diff(_) => {
+                            "Could not refresh the selected staged diff before committing".into()
+                        }
+                    })
+                })?;
+                if amend && before.head.is_none() {
+                    return Err(TaskFailure::Failed(
+                        "An existing commit is required to amend".into(),
+                    ));
+                }
                 let result = commands
-                    .execute_commit(&repository_path, request.message, context)
+                    .execute_commit(
+                        &repository_path,
+                        message,
+                        amend,
+                        sign_off,
+                        sign,
+                        selected_patch,
+                        before.head.clone(),
+                        context,
+                    )
                     .await;
                 let after = repositories.refresh_metadata(&task_repo_id).await;
                 if let Ok(after) = after {
@@ -2074,7 +2199,11 @@ mod tests {
         git(&["init", "--quiet"]);
         git(&["config", "user.name", "GitCrest Test"]);
         git(&["config", "user.email", "gitcrest-test@example.invalid"]);
-        std::fs::write(root.join("staged.txt"), "staged content\n").unwrap();
+        std::fs::write(
+            root.join("staged.txt"),
+            "first staged line\nsecond staged line\n",
+        )
+        .unwrap();
         git(&["add", "staged.txt"]);
         let hooks = directory.path().join("hooks");
         std::fs::create_dir(&hooks).unwrap();
@@ -2107,6 +2236,23 @@ mod tests {
             .as_str()
             .unwrap()
             .to_owned();
+        let index_diff_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=staged.txt&scope=index"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(index_diff_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let initial_diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let initial_selection = serde_json::json!([{
+            "path": "staged.txt",
+            "revision": initial_diff["revision"],
+            "selections": [{ "hunkIndex": 0, "rowIndex": 0 }]
+        }]);
         let message = "commit message private body";
         let failed = app
             .clone()
@@ -2117,9 +2263,7 @@ mod tests {
                     .header("X-GitCrest-API-Version", API_VERSION)
                     .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
                     .header(CONTENT_TYPE, "application/json")
-                    .body(Body::from(
-                        serde_json::json!({ "message": message }).to_string(),
-                    ))
+                    .body(Body::from(serde_json::json!({ "message": message, "selections": initial_selection.clone() }).to_string()))
                     .unwrap(),
             )
             .await
@@ -2134,6 +2278,60 @@ mod tests {
         assert!(staged.files.iter().any(|file| file.path == "staged.txt"
             && file.categories.contains(&status::ChangeCategory::Staged)));
         std::fs::remove_file(pre_commit).unwrap();
+        git(&["config", "user.signingkey", "fixture-signing-key"]);
+        git(&[
+            "config",
+            "gpg.program",
+            "gitcrest-intentionally-missing-gpg",
+        ]);
+        let signing_failure = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/commits"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::json!({ "message": message, "sign": true, "selections": initial_selection }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(signing_failure.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let signing_task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let signing_task = wait_for_task(&app, signing_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(signing_task["status"], "failed");
+        assert!(signing_task["logs"]
+            .to_string()
+            .to_lowercase()
+            .contains("sign"));
+        assert!(!std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["rev-parse", "--verify", "HEAD"])
+            .output()
+            .unwrap()
+            .status
+            .success());
+        let staged = status::read("repo_test".into(), &root).await.unwrap();
+        assert!(staged.files.iter().any(|file| {
+            file.path == "staged.txt" && file.categories.contains(&status::ChangeCategory::Staged)
+        }));
+        git(&["config", "--unset", "gpg.program"]);
+        git(&["config", "--unset", "user.signingkey"]);
+        let staged_diff = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=staged.txt&scope=index"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(staged_diff.into_body(), usize::MAX).await.unwrap();
+        let staged_diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let accepted = app
             .clone()
             .oneshot(
@@ -2143,9 +2341,10 @@ mod tests {
                     .header("X-GitCrest-API-Version", API_VERSION)
                     .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
                     .header(CONTENT_TYPE, "application/json")
-                    .body(Body::from(
-                        serde_json::json!({ "message": message }).to_string(),
-                    ))
+                    .body(Body::from(serde_json::json!({
+                        "message": message,
+                        "selections": [{ "path": "staged.txt", "revision": staged_diff["revision"], "selections": [{ "hunkIndex": 0, "rowIndex": 0 }] }]
+                    }).to_string()))
                     .unwrap(),
             )
             .await
@@ -2188,12 +2387,182 @@ mod tests {
         let body = to_bytes(status_response.into_body(), usize::MAX)
             .await
             .unwrap();
+        let staged_after_partial: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(staged_after_partial["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|file| {
+                file["path"] == "staged.txt" && file["categories"] == serde_json::json!(["staged"])
+            }));
+        assert_eq!(
+            git_output(&root, &["show", "HEAD:staged.txt"]),
+            "first staged line\n"
+        );
+        let remaining = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/commits"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "message": "commit remaining staged line" })
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(remaining.into_body(), usize::MAX).await.unwrap();
+        let remaining_task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let remaining_task = wait_for_task(&app, remaining_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(remaining_task["status"], "succeeded");
+        assert_eq!(
+            git_output(&root, &["show", "HEAD:staged.txt"]),
+            "first staged line\nsecond staged line\n"
+        );
+        let status_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/status"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(status_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
         assert!(
             serde_json::from_slice::<serde_json::Value>(&body).unwrap()["files"]
                 .as_array()
                 .unwrap()
                 .is_empty()
         );
+        std::fs::write(root.join("amended.txt"), "amended tree\n").unwrap();
+        git(&["add", "amended.txt"]);
+        let head_before_cancel = git_output(&root, &["rev-parse", "HEAD"]);
+        let slow_hook = hooks.join("pre-commit");
+        std::fs::write(&slow_hook, "#!/bin/sh\necho 'hook waiting'\nsleep 30\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&slow_hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let amend_diff = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=amended.txt&scope=index"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(amend_diff.into_body(), usize::MAX).await.unwrap();
+        let amend_diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let cancelled = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/commits"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::json!({
+                        "message": "cancel selected commit",
+                        "selections": [{ "path": "amended.txt", "revision": amend_diff["revision"], "selections": [{ "hunkIndex": 0 }] }]
+                    }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let body = to_bytes(cancelled.into_body(), usize::MAX).await.unwrap();
+        let cancelled_task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let cancelled_task_id = cancelled_task["taskId"].as_str().unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let response = app
+                    .clone()
+                    .oneshot(request("/api/v1/tasks", Some(WRITE_TOKEN)))
+                    .await
+                    .unwrap();
+                let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+                let tasks: serde_json::Value = serde_json::from_slice(&body).unwrap();
+                if tasks
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .any(|task| task["taskId"] == cancelled_task_id && task["status"] == "running")
+                {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        let cancel_response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/tasks/{cancelled_task_id}/cancel"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(cancel_response.status(), StatusCode::OK);
+        let cancelled_result = wait_for_task(&app, cancelled_task_id).await;
+        assert_eq!(cancelled_result["status"], "cancelled");
+        assert_eq!(
+            git_output(&root, &["rev-parse", "HEAD"]),
+            head_before_cancel
+        );
+        let temporary_prefix = format!("gitcrest-commit-index-{}-", std::process::id());
+        assert!(!std::fs::read_dir(std::env::temp_dir())
+            .unwrap()
+            .flatten()
+            .any(|entry| entry
+                .file_name()
+                .to_string_lossy()
+                .starts_with(&temporary_prefix)));
+        let staged_after_cancel = status::read("repo_test".into(), &root).await.unwrap();
+        assert!(staged_after_cancel
+            .files
+            .iter()
+            .any(|file| file.path == "amended.txt"
+                && file.categories.contains(&status::ChangeCategory::Staged)));
+        std::fs::remove_file(slow_hook).unwrap();
+        let amended = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/commits"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "message": "amended message", "amend": true, "signOff": true }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(amended.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(amended.into_body(), usize::MAX).await.unwrap();
+        let amended_task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let amended_task = wait_for_task(&app, amended_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(amended_task["status"], "succeeded");
+        let amended_message = git_output(&root, &["log", "-1", "--format=%B"]);
+        assert!(amended_message.starts_with("amended message"));
+        assert!(amended_message
+            .contains("Signed-off-by: GitCrest Test <gitcrest-test@example.invalid>"));
         let rejected = app
             .oneshot(
                 Request::builder()
