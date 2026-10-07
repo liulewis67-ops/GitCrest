@@ -16,6 +16,9 @@ const api = {
   chooseRepository: (): Promise<string | undefined> => {
     return ipcRenderer.invoke("gitcrest:choose-repository");
   },
+  chooseCloneParent: (): Promise<string | undefined> => {
+    return ipcRenderer.invoke("gitcrest:choose-clone-parent");
+  },
   subscribeToEvents: async (listener: (event: EventEnvelope) => void): Promise<() => void> => {
     const handleEvent = (_event: Electron.IpcRendererEvent, payload: EventEnvelope): void => listener(payload);
     ipcRenderer.on("gitcrest:event", handleEvent);

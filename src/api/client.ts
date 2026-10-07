@@ -93,6 +93,14 @@ export class GitCrestApiClient {
     });
   }
 
+  cloneRepository(remoteUrl: string, parentPath: string, directoryName: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>("/api/v1/clones", true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ remoteUrl, parentPath, directoryName }),
+    });
+  }
+
   private async request<T>(path: string, versioned = true, init: RequestInit = {}): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${this.token}`);

@@ -72,6 +72,20 @@ ipcMain.handle("gitcrest:choose-repository", async (event) => {
   return selection.canceled ? undefined : selection.filePaths[0];
 });
 
+ipcMain.handle("gitcrest:choose-clone-parent", async (event) => {
+  const windowAccess = windowAccessByContentsId.get(event.sender.id);
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (windowAccess !== "readWrite" || !window) {
+    throw new Error("This window is not authorized to choose a clone destination.");
+  }
+  const selection = await dialog.showOpenDialog(window, {
+    title: "Choose Clone Location",
+    buttonLabel: "Choose this folder",
+    properties: ["openDirectory", "createDirectory"],
+  });
+  return selection.canceled ? undefined : selection.filePaths[0];
+});
+
 function connectEventStream(contentsId: number, stream: EventStream): void {
   if (stream.stopped || stream.webContents.isDestroyed() || !sidecarConnection) {
     return;

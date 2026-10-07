@@ -145,6 +145,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/clones": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue a clone into a user-selected parent folder
+         * @description Clones to a private staging folder and registers the repository only after a successful move.
+         */
+        post: operations["cloneRepository"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/events": {
         parameters: {
             query?: never;
@@ -305,7 +327,9 @@ export interface components {
         TaskStatus: "queued" | "running" | "waitingForInput" | "succeeded" | "failed" | "cancelled";
         TaskSnapshot: {
             taskId: string;
-            repoId: components["schemas"]["RepoId"];
+            repoId: components["schemas"]["RepoId"] | null;
+            targetPath: string | null;
+            resultRepoId: components["schemas"]["RepoId"] | null;
             operation: string;
             status: components["schemas"]["TaskStatus"];
             phase: string;
@@ -839,6 +863,66 @@ export interface operations {
                 };
             };
             /** @description The Git executable could not be started. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    cloneRepository: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    remoteUrl: string;
+                    parentPath: string;
+                    directoryName: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Clone task accepted. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description Remote or destination is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Destination already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The bounded task queue is unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

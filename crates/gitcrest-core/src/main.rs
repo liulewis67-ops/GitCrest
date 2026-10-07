@@ -28,12 +28,14 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+mod cloning;
 mod git_command;
 mod repository;
 mod status;
 mod storage;
 mod tasks;
 
+use cloning::{CloneError, CloneService};
 use git_command::{GitCommandService, GitOperation};
 use repository::{Repository, RepositoryError, RepositoryManager};
 use tasks::{TaskService, TaskSnapshot, TaskSubmitError};
@@ -48,6 +50,7 @@ struct AppState {
     repositories: RepositoryManager,
     tasks: TaskService,
     git_commands: GitCommandService,
+    clones: CloneService,
 }
 
 #[derive(Serialize)]
@@ -88,6 +91,7 @@ enum ApiErrorCode {
     RepositoryStateConflict,
     ResourceVersionStale,
     RequestInvalid,
+    CloneDestinationExists,
     InternalError,
 }
 
@@ -235,6 +239,37 @@ impl ApiError {
         }
     }
 
+    fn from_clone_error(error: CloneError) -> Self {
+        match error {
+            CloneError::InvalidRemote => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "Enter a supported HTTPS or SSH Git remote without embedded credentials.",
+            ),
+            CloneError::InvalidTarget => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "Choose an existing parent folder and a valid single folder name.",
+            ),
+            CloneError::ParentNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RepositoryPathNotFound,
+                "The selected clone location no longer exists.",
+            ),
+            CloneError::ParentAccessDenied => Self::new(
+                StatusCode::FORBIDDEN,
+                ApiErrorCode::RepositoryAccessDenied,
+                "GitCrest does not have permission to write to the selected clone location.",
+            ),
+            CloneError::DestinationExists => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::CloneDestinationExists,
+                "The selected destination already exists. Choose another folder name.",
+            ),
+            CloneError::Queue(error) => Self::task_submit(error),
+        }
+    }
+
     #[allow(dead_code)]
     fn state_conflict(message: impl Into<String>) -> Self {
         Self::new(
@@ -308,12 +343,15 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "Could not initialize the repository database")?;
     let tasks = TaskService::with_store(repositories.store())
         .map_err(|_| "Could not recover background task history")?;
+    let git_commands = GitCommandService::default();
+    let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
     let state = AppState {
         read_write_token: Arc::new(write_token),
         read_only_token: read_only_token.map(Arc::new),
         repositories,
         tasks,
-        git_commands: GitCommandService::default(),
+        git_commands,
+        clones,
     };
     let cors_origin = env::var("GITCREST_CORS_ORIGIN")
         .ok()
@@ -348,6 +386,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route("/v1/repositories/:repo_id/status", get(repository_status))
         .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
+        .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
         .route("/v1/tasks/:task_id", get(get_task))
         .route("/v1/tasks/:task_id/cancel", post(cancel_task))
@@ -586,13 +625,50 @@ async fn fetch_repository(
     let task = state
         .tasks
         .submit(
-            repo_id,
+            Some(repo_id),
+            None,
             target.resource_key,
             if request.prune { "fetchPrune" } else { "fetch" },
-            move |context| async move { command.execute(&path, operation, context).await },
+            move |context| async move {
+                command
+                    .execute(&path, operation, context)
+                    .await
+                    .map(|()| None)
+            },
         )
         .await
         .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CloneRequest {
+    remote_url: String,
+    parent_path: String,
+    directory_name: String,
+}
+
+async fn clone_repository(
+    State(state): State<AppState>,
+    request: Result<Json<CloneRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote URL, parent folder, and folder name are required.",
+        )
+    })?;
+    let task = state
+        .clones
+        .queue(
+            request.remote_url,
+            request.parent_path,
+            request.directory_name,
+        )
+        .await
+        .map_err(ApiError::from_clone_error)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
@@ -768,12 +844,16 @@ mod tests {
     const READ_ONLY_TOKEN: &str = "test-read-only-token";
 
     fn test_app(cors_origin: Option<&str>) -> Router {
+        let repositories = RepositoryManager::default();
+        let tasks = TaskService::default();
+        let git_commands = GitCommandService::default();
         let state = AppState {
             read_write_token: Arc::new(WRITE_TOKEN.to_string()),
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
-            repositories: RepositoryManager::default(),
-            tasks: TaskService::default(),
-            git_commands: GitCommandService::default(),
+            clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
+            repositories,
+            tasks,
+            git_commands,
         };
         app_router(state, cors_origin.map(|origin| origin.parse().unwrap()))
     }
@@ -1025,7 +1105,8 @@ mod tests {
         let tasks = TaskService::default();
         let task = tasks
             .submit(
-                "repo-opaque",
+                Some("repo-opaque".into()),
+                None,
                 "common-dir",
                 "test-operation",
                 |mut context| async move {
@@ -1045,6 +1126,11 @@ mod tests {
                 repositories: RepositoryManager::default(),
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),
+                clones: CloneService::new(
+                    tasks.clone(),
+                    GitCommandService::default(),
+                    RepositoryManager::default(),
+                ),
             },
             None,
         );
@@ -1160,6 +1246,11 @@ mod tests {
                 repositories,
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),
+                clones: CloneService::new(
+                    tasks.clone(),
+                    GitCommandService::default(),
+                    RepositoryManager::default(),
+                ),
             },
             None,
         );

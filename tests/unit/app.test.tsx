@@ -131,6 +131,53 @@ describe("App", () => {
     expect(fetcher.mock.calls[3][1]?.method).toBe("POST");
   });
 
+  it("queues a clone and automatically opens the registered repository after it succeeds", async () => {
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository: vi.fn(),
+        chooseCloneParent: vi.fn().mockResolvedValue("C:/projects"),
+      },
+    });
+    const task = {
+      taskId: "task-clone-1", repoId: null, targetPath: "C:/projects/Hello-World", resultRepoId: "repo_cloned",
+      operation: "clone", status: "succeeded", phase: "Complete", progress: 100, message: "Task completed",
+      errorCategory: null, logs: ["Receiving objects: 100%"], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false,
+    };
+    const repository = {
+      repoId: "repo_cloned", path: "C:/projects/Hello-World", head: null, branch: "main", detached: false,
+      state: "normal", isFavorite: false, lastAccessedAt: 2, availability: "available",
+    };
+    const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith("/api/version")) return response({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 });
+      if (url.endsWith("/api/v1/repositories") && init?.method === "POST") return response(repository);
+      if (url.endsWith("/api/v1/repositories")) return response([]);
+      if (url.endsWith("/api/v1/clones")) return response(task, 202);
+      if (url.endsWith("/api/v1/tasks")) return response([task]);
+      if (url.endsWith("/api/v1/repositories/repo_cloned/status")) return response({ repoId: "repo_cloned", refreshedAtMs: 2, files: [] });
+      if (url.endsWith("/api/v1/repositories/repo_cloned")) return response(repository);
+      throw new Error(`Unexpected API request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(screen.getByRole("button", { name: /^Clone repository$/ }));
+    const dialog = screen.getByRole("dialog", { name: "Clone repository" });
+    fireEvent.change(within(dialog).getByLabelText("Remote URL"), { target: { value: "https://github.com/octocat/Hello-World.git" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Choose folder" }));
+    await waitFor(() => expect(within(dialog).getByText("C:/projects")).toBeDefined());
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start clone" }));
+
+    await waitFor(() => expect(screen.getByText("C:/projects/Hello-World")).toBeDefined());
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/api/v1/clones"))).toBe(true);
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith("/api/v1/repositories/repo_cloned/status"))).toBe(true);
+  });
+
   it("opens the selected local repository and shows its workspace context", async () => {
     const repository = {
       repoId: "repo_fixture",

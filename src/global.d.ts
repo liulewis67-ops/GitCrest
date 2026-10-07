@@ -13,6 +13,7 @@ declare global {
     gitcrest: {
       getSidecarConnection: () => Promise<GitCrestSidecarConnection>;
       chooseRepository: () => Promise<string | undefined>;
+      chooseCloneParent: () => Promise<string | undefined>;
       subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
     };
   };

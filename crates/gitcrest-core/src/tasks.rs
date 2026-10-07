@@ -50,7 +50,11 @@ pub enum TaskErrorCategory {
 #[serde(rename_all = "camelCase")]
 pub struct TaskSnapshot {
     pub task_id: String,
-    pub repo_id: String,
+    pub repo_id: Option<String>,
+    #[serde(default)]
+    pub target_path: Option<String>,
+    #[serde(default)]
+    pub result_repo_id: Option<String>,
     pub operation: String,
     pub status: TaskStatus,
     pub phase: String,
@@ -185,16 +189,16 @@ impl TaskService {
 
     pub async fn submit<F, Fut>(
         &self,
-        repo_id: impl Into<String>,
+        repo_id: Option<String>,
+        target_path: Option<String>,
         resource_key: impl Into<String>,
         operation: impl Into<String>,
         work: F,
     ) -> Result<TaskSnapshot, TaskSubmitError>
     where
         F: FnOnce(TaskContext) -> Fut + Send + 'static,
-        Fut: Future<Output = Result<(), TaskFailure>> + Send + 'static,
+        Fut: Future<Output = Result<Option<String>, TaskFailure>> + Send + 'static,
     {
-        let repo_id = repo_id.into();
         let resource_key = resource_key.into();
         let operation = operation.into();
         let task_id = next_task_id();
@@ -214,7 +218,9 @@ impl TaskService {
                 task_id.clone(),
                 TaskSnapshot {
                     task_id: task_id.clone(),
-                    repo_id: repo_id.clone(),
+                    repo_id,
+                    target_path,
+                    result_repo_id: None,
                     operation,
                     status: TaskStatus::Queued,
                     phase: "Waiting for repository access".into(),
@@ -253,6 +259,10 @@ impl TaskService {
 }
 
 impl TaskContext {
+    pub fn task_id(&self) -> &str {
+        &self.task_id
+    }
+
     pub fn cancellation_requested(&self) -> bool {
         *self.cancellation.borrow()
     }
@@ -297,7 +307,7 @@ async fn run_task<F, Fut>(
     work: F,
 ) where
     F: FnOnce(TaskContext) -> Fut,
-    Fut: Future<Output = Result<(), TaskFailure>>,
+    Fut: Future<Output = Result<Option<String>, TaskFailure>>,
 {
     let repository_lock = {
         let mut locks = inner.repo_locks.lock().await;
@@ -309,7 +319,7 @@ async fn run_task<F, Fut>(
     let repo_guard = tokio::select! {
         biased;
         _ = wait_for_cancel(&mut cancellation) => {
-            finish_task(&inner, &task_id, TaskStatus::Cancelled, "Cancelled while queued".into()).await;
+            finish_task(&inner, &task_id, TaskStatus::Cancelled, "Cancelled while queued".into(), None).await;
             cleanup_task(&inner, &task_id).await;
             return;
         }
@@ -320,7 +330,7 @@ async fn run_task<F, Fut>(
         biased;
         _ = wait_for_cancel(&mut cancellation) => {
             drop(repo_guard);
-            finish_task(&inner, &task_id, TaskStatus::Cancelled, "Cancelled while queued".into()).await;
+            finish_task(&inner, &task_id, TaskStatus::Cancelled, "Cancelled while queued".into(), None).await;
             cleanup_task(&inner, &task_id).await;
             return;
         }
@@ -328,7 +338,7 @@ async fn run_task<F, Fut>(
             Ok(permit) => permit,
             Err(_) => {
                 drop(repo_guard);
-                finish_task(&inner, &task_id, TaskStatus::Failed, "Task worker is unavailable".into()).await;
+                finish_task(&inner, &task_id, TaskStatus::Failed, "Task worker is unavailable".into(), None).await;
                 cleanup_task(&inner, &task_id).await;
                 return;
             }
@@ -347,17 +357,22 @@ async fn run_task<F, Fut>(
         cancellation: cancellation.clone(),
     };
     let outcome = work(context).await;
-    let (status, message) = match outcome {
-        Ok(()) => (TaskStatus::Succeeded, "Task completed".into()),
+    let (status, message, result_repo_id) = match outcome {
+        Ok(result_repo_id) => (
+            TaskStatus::Succeeded,
+            "Task completed".into(),
+            result_repo_id,
+        ),
         Err(TaskFailure::Cancelled) => (
             TaskStatus::Cancelled,
             "Cancellation completed safely".into(),
+            None,
         ),
-        Err(TaskFailure::Failed(message)) => (TaskStatus::Failed, redact_log_line(&message)),
+        Err(TaskFailure::Failed(message)) => (TaskStatus::Failed, redact_log_line(&message), None),
     };
     drop(worker_permit);
     drop(repo_guard);
-    finish_task(&inner, &task_id, status, message).await;
+    finish_task(&inner, &task_id, status, message, result_repo_id).await;
     cleanup_task(&inner, &task_id).await;
 }
 
@@ -386,7 +401,13 @@ async fn update_task(
     }
 }
 
-async fn finish_task(inner: &TaskServiceInner, task_id: &str, status: TaskStatus, message: String) {
+async fn finish_task(
+    inner: &TaskServiceInner,
+    task_id: &str,
+    status: TaskStatus,
+    message: String,
+    result_repo_id: Option<String>,
+) {
     update_task(inner, task_id, |task| {
         task.status = status;
         task.phase = match status {
@@ -401,6 +422,7 @@ async fn finish_task(inner: &TaskServiceInner, task_id: &str, status: TaskStatus
             _ => task.progress,
         };
         task.message = Some(message);
+        task.result_repo_id = result_repo_id;
         task.error_category = if status == TaskStatus::Failed {
             Some(classify_error(task))
         } else {
@@ -450,7 +472,7 @@ fn persist_snapshot(store: &RepositoryStore, snapshot: &TaskSnapshot) -> Result<
     let serialized = serde_json::to_string(snapshot).map_err(|error| error.to_string())?;
     store.save_task_snapshot(
         &snapshot.task_id,
-        &snapshot.repo_id,
+        snapshot.repo_id.as_deref().unwrap_or_default(),
         status_label(snapshot.status),
         &serialized,
         snapshot.created_at_ms.min(i64::MAX as u128) as i64,
@@ -485,6 +507,8 @@ fn classify_error(task: &TaskSnapshot) -> TaskErrorCategory {
     } else if details.contains("could not resolve host")
         || details.contains("failed to connect")
         || details.contains("connection timed out")
+        || details.contains("network timeout")
+        || details.contains("no progress before")
         || details.contains("network is unreachable")
     {
         TaskErrorCategory::Network
@@ -640,15 +664,21 @@ mod tests {
             let started = started_sender.clone();
             let released = release_receiver.clone();
             service
-                .submit(repo_id, resource_key, name, move |context| async move {
-                    context.progress("Running test work", Some(20)).await;
-                    started.send(name).unwrap();
-                    let mut released = released;
-                    while !*released.borrow() {
-                        released.changed().await.unwrap();
-                    }
-                    Ok(())
-                })
+                .submit(
+                    Some(repo_id.into()),
+                    None,
+                    resource_key,
+                    name,
+                    move |context| async move {
+                        context.progress("Running test work", Some(20)).await;
+                        started.send(name).unwrap();
+                        let mut released = released;
+                        while !*released.borrow() {
+                            released.changed().await.unwrap();
+                        }
+                        Ok(None)
+                    },
+                )
                 .await
                 .unwrap();
         }
@@ -670,14 +700,20 @@ mod tests {
     async fn cancellation_and_failure_are_distinct_and_logs_are_bounded_and_redacted() {
         let service = TaskService::default();
         let task = service
-            .submit("repo", "common-dir", "test", |mut context| async move {
-                context
-                    .log("remote https://alice:hunter2@example.test/repo token=secret")
-                    .await;
-                context.progress("Waiting", Some(140)).await;
-                context.cancelled().await;
-                Err(TaskFailure::Cancelled)
-            })
+            .submit(
+                Some("repo".into()),
+                None,
+                "common-dir",
+                "test",
+                |mut context| async move {
+                    context
+                        .log("remote https://alice:hunter2@example.test/repo token=secret")
+                        .await;
+                    context.progress("Waiting", Some(140)).await;
+                    context.cancelled().await;
+                    Err(TaskFailure::Cancelled)
+                },
+            )
             .await
             .unwrap();
         let running = tokio::time::timeout(Duration::from_secs(1), async {
@@ -719,10 +755,16 @@ mod tests {
         );
 
         let failed = service
-            .submit("repo", "common-dir", "failure", |context| async move {
-                context.log("fatal: Authentication failed for remote").await;
-                Err(TaskFailure::Failed("operation failed".into()))
-            })
+            .submit(
+                Some("repo".into()),
+                None,
+                "common-dir",
+                "failure",
+                |context| async move {
+                    context.log("fatal: Authentication failed for remote").await;
+                    Err(TaskFailure::Failed("operation failed".into()))
+                },
+            )
             .await
             .unwrap();
         let failed = tokio::time::timeout(Duration::from_secs(1), async {
@@ -750,7 +792,9 @@ mod tests {
         let store = RepositoryStore::open(&directory.path().join("gitcrest.sqlite")).unwrap();
         let snapshot = TaskSnapshot {
             task_id: "task-interrupted".into(),
-            repo_id: "repo-1".into(),
+            repo_id: Some("repo-1".into()),
+            target_path: None,
+            result_repo_id: None,
             operation: "fetch".into(),
             status: TaskStatus::Running,
             phase: "Receiving objects".into(),
@@ -765,7 +809,7 @@ mod tests {
         store
             .save_task_snapshot(
                 &snapshot.task_id,
-                &snapshot.repo_id,
+                snapshot.repo_id.as_deref().unwrap_or_default(),
                 "running",
                 &serde_json::to_string(&snapshot).unwrap(),
                 1,

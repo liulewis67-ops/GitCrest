@@ -38,7 +38,7 @@
 | 大阶段 | 目标与退出条件 | 前置 | 状态 |
 |---|---|---|---|
 | 0. 工程与契约基座 | 可启动、安全通信、统一契约、可执行测试和界面骨架 | 无 | 已完成 |
-| 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 进行中 |
+| 1. 仓库与状态 | 打开/初始化/克隆、持久化、多仓切换、可靠状态读取 | 0 | 已完成 |
 | 2. 工作区、基础 Diff 与提交（Alpha 主流程） | 修改 → 审阅 → 精确暂存 → 提交可闭环 | 1 | 未开始 |
 | 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 未开始 |
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 未开始 |
@@ -66,7 +66,7 @@
 | S1.3 | 多仓库 Tab 与每仓 UI 状态持久化。 | 两个仓库之间切换不串用状态；各 Tab 的模式、选中提交、提交图滚动位置恢复；关闭 Tab 不关闭实际仓库；重新打开应用恢复符合 `03` 的持久化项。 | 已完成 |
 | S1.4 | 全量 StatusSnapshot、工作区/Changes 列表和显式刷新。 | staged、unstaged、untracked、ignored、conflicted、renamed/deleted、文件 mode 变化正确分组；状态同时有文本/图标；外部 Git 修改后手动刷新与 `git status` 一致；大仓库刷新期间显示加载和错误状态，不显示伪空结果。 | 已完成 |
 | S1.5 | TaskService 与统一 GitCommandService：仓库级写锁、进度、取消、错误分类、脱敏日志。 | 同仓两个写任务不能并发；不同仓库任务可并行；取消与失败状态可区分；任务完成后按需刷新 repository/status/log；日志不含 token、凭证或 URL 密码；UI 可查看任务进度和可复制的脱敏日志。 | 已完成 |
-| S1.6 | 克隆仓库任务与欢迎页入口。 | HTTPS/SSH 至少用受控测试 remote 跑通；clone 进度、取消、认证/网络失败和重试有明确结果；取消或失败不把不完整目录注册为最近仓库；成功后自动打开且状态可读。 | 未开始 |
+| S1.6 | 克隆仓库任务与欢迎页入口。 | HTTPS/SSH 至少用受控测试 remote 跑通；clone 进度、取消、认证/网络失败和重试有明确结果；取消或失败不把不完整目录注册为最近仓库；成功后自动打开且状态可读。 | 已完成 |
 
 ## 6. 大阶段 2：工作区、基础 Diff 与提交
 
@@ -227,3 +227,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/tasks.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/storage.rs`、`crates/gitcrest-core/migrations/0002_tasks.sql`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/features/tasks/TaskCenter.tsx`、`src/api/client.ts`、`tests/unit/app.test.tsx`。
 - 完成 commit：`8adaead`
 - 限制/后续：fetch 任务只接入 Git remote-tracking 更新和任务结果；可视化 refs/log 刷新等待 S3。sidecar 重启时未完成任务以 `outcomeUnknown` 错误记录展示并要求核对，不自动重放。
+
+### S1.6 — 克隆任务与欢迎页入口
+- 状态：已完成
+- 日期：2026-10-08
+- 测试：`pnpm api:types` 与 `pnpm check` 通过；门禁包含 renderer/Electron 类型检查和构建、17 个 Vitest 用例、34 个 Rust 测试及 Electron E2E。Rust 临时仓库测试覆盖无效 remote 清理、不可达 HTTPS 的 Network 分类、相同目标修复后重试成功并注册、空 status、排队取消后目标/暂存目录均不存在，以及安全 URL/目录名验证。前端测试填写 remote/选择目标目录/提交 clone，并验证任务成功后自动打开仓库且刷新 status。另以本地自签名 HTTPS smart-HTTP 测试 remote 通过真实 sidecar API 完成 `POST clone → 202 → succeeded`，随后确认仓库列表已注册且 status 为空；同一受控 TLS fixture 的 401 响应产生 `authentication` 错误分类，失败目标未创建。
+- 手工验证：Windows 本机启动 sidecar；临时 Git bare remote 由 `git update-server-info` 提供只读 HTTPS clone。分别验证成功、认证拒绝和网络拒绝，并确认 clone staging 目录不残留。fixture、临时证书、证书库条目、sidecar 与 HTTPS 服务均已清理。
+- 证据：`crates/gitcrest-core/src/cloning.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/tasks.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/features/cloning/CloneDialog.tsx`、`src/features/tasks/TaskCenter.tsx`、`src/App.tsx`、`electron/main/index.ts`、`electron/preload/index.ts`、`tests/unit/app.test.tsx`。
+- 完成 commit：待补记
+- 限制/后续：系统 Git Credential Manager/SSH agent 使用机器现有配置；本机端到端覆盖 HTTPS，SSH agent 在 S7.4 跨平台验收。认证失败后可在任务面板用 `Retry clone` 重新提交同一目标与 remote；remote URL 仅留在 renderer 当前会话内，不持久化到任务记录。Git 任务有 5 分钟无输出网络期限和 2 小时执行期限；大仓库若超过期限会安全终止并可重新发起。

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { GitCrestApiClient, GitCrestApiError, type RepositoryResponse, type StatusSnapshotResponse, type TaskSnapshotResponse } from "./api/client";
 import { TaskCenter } from "./features/tasks/TaskCenter";
+import { CloneDialog } from "./features/cloning/CloneDialog";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -155,6 +156,12 @@ function App() {
   const [statusLoadingByRepo, setStatusLoadingByRepo] = useState<Record<string, boolean>>({});
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneBusy, setCloneBusy] = useState(false);
+  const [cloneError, setCloneError] = useState("");
+  const [cloneDraft, setCloneDraft] = useState({ remoteUrl: "", parentPath: "", directoryName: "" });
+  const openedCloneTasks = useRef(new Set<string>());
+  const cloneTaskIds = useRef(new Set<string>());
   const [tasksError, setTasksError] = useState("");
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
@@ -250,6 +257,56 @@ function App() {
       setTasksError(error instanceof Error ? error.message : "Could not start a fetch task.");
       setTasksOpen(true);
     }
+  }
+
+  async function startClone(remoteUrl: string, parentPath: string, directoryName: string) {
+    const api = apiRef.current;
+    if (!api) return;
+    setCloneBusy(true);
+    setCloneError("");
+    setCloneDraft({ remoteUrl, parentPath, directoryName });
+    try {
+      const task = await api.cloneRepository(remoteUrl, parentPath, directoryName);
+      cloneTaskIds.current.add(task.taskId);
+      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      setCloneOpen(false);
+      setTasksOpen(true);
+      setTasksError("");
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setCloneError(message || (error instanceof Error ? error.message : "Could not start the clone task."));
+    } finally {
+      setCloneBusy(false);
+    }
+  }
+
+  async function openClonedRepository(task: TaskSnapshotResponse) {
+    if (!cloneTaskIds.current.has(task.taskId) || task.operation !== "clone" || task.status !== "succeeded" || !task.resultRepoId || openedCloneTasks.current.has(task.taskId)) return;
+    openedCloneTasks.current.add(task.taskId);
+    const api = apiRef.current;
+    if (!api) return;
+    try {
+      const repository = await api.getRepository(task.resultRepoId);
+      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
+      activateRepository(repository);
+      setCloneOpen(false);
+      setTasksOpen(false);
+      setTasksError("");
+    } catch (error) {
+      openedCloneTasks.current.delete(task.taskId);
+      setTasksError(error instanceof Error ? error.message : "Clone completed, but the repository could not be opened.");
+      setTasksOpen(true);
+    }
+  }
+
+  function retryClone(task: TaskSnapshotResponse) {
+    if (task.targetPath) {
+      const separator = Math.max(task.targetPath.lastIndexOf("/"), task.targetPath.lastIndexOf("\\"));
+      setCloneDraft((current) => ({ ...current, parentPath: task.targetPath!.slice(0, separator), directoryName: task.targetPath!.slice(separator + 1) }));
+    }
+    setCloneError("");
+    setTasksOpen(false);
+    setCloneOpen(true);
   }
 
   async function copyTaskLogs(task: TaskSnapshotResponse) {
@@ -470,6 +527,10 @@ function App() {
   }, [tasksOpen]);
 
   useEffect(() => {
+    for (const task of tasks) void openClonedRepository(task);
+  }, [tasks]);
+
+  useEffect(() => {
     try {
       window.localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(workspaceSession));
     } catch {
@@ -559,7 +620,7 @@ function App() {
     { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${themeCycle[(themeCycle.indexOf(theme) + 1) % themeCycle.length]}`, available: true, run: nextTheme },
     { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
     { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
-    { id: "clone", label: "Clone repository", detail: "Clone task flow arrives with S1.6", available: false, run: () => undefined },
+    { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { setCloneError(""); setCloneOpen(true); } },
     { id: "diff", label: "Open Diff view", detail: "Select a changed file after opening a repository", available: false, run: () => undefined },
   ];
   const filteredCommands = commands.filter((command) => `${command.label} ${command.detail}`.toLowerCase().includes(paletteQuery.toLowerCase()));
@@ -616,7 +677,7 @@ function App() {
               <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()}>
                 <span aria-hidden="true">＋</span> {openingRepository ? "Opening repository…" : "Open a repository"}
               </button>
-              <button className="secondaryButton" type="button" disabled title="Clone task flow arrives with S1.6">Clone repository</button>
+              <button className="secondaryButton" type="button" disabled={!connected} onClick={() => { setCloneError(""); setCloneOpen(true); }}>Clone repository</button>
               <button className="textButton" type="button" onClick={() => setPage("workspace")}>Preview workspace</button>
             </div>
           </div>
@@ -656,7 +717,7 @@ function App() {
               <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()}>
                 <span className="actionIcon" aria-hidden="true">↗</span><span><strong>Open local repository</strong><small>Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
-              <button className="actionRow" type="button" disabled title="Clone task flow arrives with S1.6">
+              <button className="actionRow" type="button" disabled={!connected} onClick={() => { setCloneError(""); setCloneOpen(true); }}>
                 <span className="actionIcon" aria-hidden="true">⇣</span><span><strong>Clone a repository</strong><small>Bring a remote project here</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
               <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void initializeLocalRepository()}>
@@ -802,7 +863,8 @@ function App() {
         </div>
       )}
 
-      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} />}
+      {tasksOpen && <TaskCenter tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} />}
+      {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
     </main>
   );
 }

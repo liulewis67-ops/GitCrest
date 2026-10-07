@@ -1,15 +1,20 @@
-use std::{path::Path, process::ExitStatus, time::Duration};
+use std::{ffi::OsString, path::Path, process::ExitStatus, time::Duration};
 
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::Command,
+    sync::watch,
     task::JoinHandle,
+    time::Instant,
 };
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
 use crate::tasks::{TaskContext, TaskFailure};
+
+const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
+const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GitOperation {
@@ -58,58 +63,127 @@ impl GitCommandService {
         &self,
         repository_path: &Path,
         operation: GitOperation,
-        mut task: TaskContext,
+        task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        task.progress(operation.label(), None).await;
-        task.log(format!("git {}", operation.arguments().join(" ")))
-            .await;
+        run_command(
+            &self.git_program,
+            operation.arguments().iter().map(OsString::from).collect(),
+            Some(repository_path),
+            operation.label(),
+            task,
+        )
+        .await
+    }
 
-        let mut command = Command::new(&self.git_program);
-        command
-            .args(operation.arguments())
-            .current_dir(repository_path)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .env("GCM_INTERACTIVE", "never")
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .kill_on_drop(true);
-        #[cfg(unix)]
-        command.as_std_mut().process_group(0);
-        let mut child = command
-            .spawn()
-            .map_err(|_| TaskFailure::Failed("Git could not be started".into()))?;
+    pub async fn execute_clone(
+        &self,
+        remote_url: &str,
+        destination: &Path,
+        parent: &Path,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        run_command(
+            &self.git_program,
+            [
+                "clone".into(),
+                "--progress".into(),
+                "--".into(),
+                remote_url.into(),
+                destination.as_os_str().to_owned(),
+            ]
+            .into(),
+            Some(parent),
+            "Clone",
+            task,
+        )
+        .await
+    }
+}
 
-        let stdout = child.stdout.take();
-        let stderr = child.stderr.take();
-        let stdout_reader = stdout.map(|stream| read_task_output(stream, task.clone()));
-        let stderr_reader = stderr.map(|stream| read_task_output(stream, task.clone()));
-        let status = loop {
-            tokio::select! {
-                biased;
-                _ = task.cancelled() => {
-                    terminate_process_tree(&mut child).await;
-                    abort_reader(stdout_reader).await;
-                    abort_reader(stderr_reader).await;
-                    return Err(TaskFailure::Cancelled);
+async fn run_command(
+    git_program: &str,
+    arguments: Vec<OsString>,
+    working_directory: Option<&Path>,
+    label: &str,
+    mut task: TaskContext,
+) -> Result<(), TaskFailure> {
+    task.progress(label, None).await;
+    let rendered_args = arguments
+        .iter()
+        .map(|argument| argument.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(" ");
+    task.log(format!("git {rendered_args}")).await;
+
+    let mut command = Command::new(git_program);
+    command
+        .args(&arguments)
+        .env("GIT_TERMINAL_PROMPT", "0")
+        .env("GCM_INTERACTIVE", "never")
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .kill_on_drop(true);
+    if let Some(working_directory) = working_directory {
+        command.current_dir(working_directory);
+    }
+    #[cfg(unix)]
+    command.as_std_mut().process_group(0);
+    let mut child = command
+        .spawn()
+        .map_err(|_| TaskFailure::Failed("Git could not be started".into()))?;
+
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let (activity_sender, mut activity) = watch::channel(Instant::now());
+    let stdout_reader =
+        stdout.map(|stream| read_task_output(stream, task.clone(), activity_sender.clone()));
+    let stderr_reader =
+        stderr.map(|stream| read_task_output(stream, task.clone(), activity_sender.clone()));
+    let execution_deadline = Instant::now() + GIT_EXECUTION_DEADLINE;
+    let mut network_deadline = Instant::now() + GIT_NETWORK_NO_PROGRESS_DEADLINE;
+    let status = loop {
+        tokio::select! {
+            biased;
+            _ = task.cancelled() => {
+                terminate_process_tree(&mut child).await;
+                abort_reader(stdout_reader).await;
+                abort_reader(stderr_reader).await;
+                return Err(TaskFailure::Cancelled);
+            }
+            _ = tokio::time::sleep_until(execution_deadline) => {
+                terminate_process_tree(&mut child).await;
+                abort_reader(stdout_reader).await;
+                abort_reader(stderr_reader).await;
+                return Err(TaskFailure::Failed("Git operation exceeded its two-hour execution deadline".into()));
+            }
+            _ = tokio::time::sleep_until(network_deadline) => {
+                terminate_process_tree(&mut child).await;
+                abort_reader(stdout_reader).await;
+                abort_reader(stderr_reader).await;
+                return Err(TaskFailure::Failed("Git operation made no progress before the five-minute network timeout".into()));
+            }
+            changed = activity.changed() => {
+                if changed.is_ok() {
+                    network_deadline = *activity.borrow() + GIT_NETWORK_NO_PROGRESS_DEADLINE;
                 }
-                result = child.wait() => {
-                    match result {
-                        Ok(status) => break status,
-                        Err(_) => {
-                            terminate_process_tree(&mut child).await;
-                            abort_reader(stdout_reader).await;
-                            abort_reader(stderr_reader).await;
-                            return Err(TaskFailure::Failed("Git process ended unexpectedly".into()));
-                        }
+            }
+            result = child.wait() => {
+                match result {
+                    Ok(status) => break status,
+                    Err(_) => {
+                        terminate_process_tree(&mut child).await;
+                        abort_reader(stdout_reader).await;
+                        abort_reader(stderr_reader).await;
+                        return Err(TaskFailure::Failed("Git process ended unexpectedly".into()));
                     }
                 }
             }
-        };
-        await_reader(stdout_reader).await;
-        await_reader(stderr_reader).await;
-        finish_status(status)
-    }
+        }
+    };
+    await_reader(stdout_reader).await;
+    await_reader(stderr_reader).await;
+    finish_status(status)
 }
 
 fn finish_status(status: ExitStatus) -> Result<(), TaskFailure> {
@@ -125,7 +199,11 @@ fn finish_status(status: ExitStatus) -> Result<(), TaskFailure> {
     }
 }
 
-fn read_task_output<R>(stream: R, task: TaskContext) -> JoinHandle<()>
+fn read_task_output<R>(
+    stream: R,
+    task: TaskContext,
+    activity: watch::Sender<Instant>,
+) -> JoinHandle<()>
 where
     R: tokio::io::AsyncRead + Unpin + Send + 'static,
 {
@@ -134,6 +212,7 @@ where
         loop {
             match lines.next_line().await {
                 Ok(Some(line)) => {
+                    activity.send_replace(Instant::now());
                     if let Some(progress) = parse_progress(&line) {
                         task.progress("Receiving objects", Some(progress)).await;
                     }
@@ -292,9 +371,18 @@ mod tests {
         let command = GitCommandService::default();
         let path = PathBuf::from(target);
         let task = tasks
-            .submit("repo", "common-dir", "fetch", move |context| async move {
-                command.execute(&path, GitOperation::Fetch, context).await
-            })
+            .submit(
+                Some("repo".into()),
+                None,
+                "common-dir",
+                "fetch",
+                move |context| async move {
+                    command
+                        .execute(&path, GitOperation::Fetch, context)
+                        .await
+                        .map(|()| None)
+                },
+            )
             .await
             .unwrap();
         tokio::time::timeout(Duration::from_secs(5), async {
