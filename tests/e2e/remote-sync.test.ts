@@ -504,6 +504,94 @@ describe("remote sync E2E", () => {
 
   it("resolves a pull rebase conflict from the waiting task and completes the rebase", async () => runPullConflictRecovery("rebase"), 90_000);
 
+  it("cancels a pull rebase before replay changes repository state", async () => {
+    const fixture = await createTempGitRepository();
+    const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-pull-rebase-cancel-remote-"));
+    const peerPath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-pull-rebase-cancel-peer-"));
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-pull-rebase-cancel-app-data-"));
+    const markerPath = resolve(appDataPath, "pre-rebase-started.txt");
+
+    try {
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(resolve(fixture.path, "src/rebase-cancel-base.ts"), "export const base = true;\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/rebase-cancel-base.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add rebase cancellation fixture"]);
+      await execFileAsync("git", ["init", "--bare", "--quiet", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", "--set-upstream", "origin", "HEAD"]);
+      await execFileAsync("git", ["clone", "--quiet", bareRemotePath, peerPath]);
+      await execFileAsync("git", ["-C", peerPath, "config", "user.name", "GitCrest Peer Test"]);
+      await execFileAsync("git", ["-C", peerPath, "config", "user.email", "gitcrest-peer@example.invalid"]);
+
+      await writeFile(resolve(fixture.path, "src/local-rebase-only.ts"), "export const local = true;\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/local-rebase-only.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "local commit before rebase pull"]);
+      const localHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+
+      await writeFile(resolve(peerPath, "src/remote-rebase-only.ts"), "export const remote = true;\n");
+      await execFileAsync("git", ["-C", peerPath, "add", "src/remote-rebase-only.ts"]);
+      await execFileAsync("git", ["-C", peerPath, "commit", "--quiet", "-m", "remote commit before rebase pull"]);
+      await execFileAsync("git", ["-C", peerPath, "push", "--quiet", "origin", "HEAD"]);
+      const remoteHead = (await execFileAsync("git", ["-C", peerPath, "rev-parse", "HEAD"])).stdout.trim();
+      await execFileAsync("git", ["-C", fixture.path, "fetch", "--quiet", "origin"]);
+
+      const hookDirectory = resolve(fixture.path, ".git", "gitcrest-hooks");
+      await mkdir(hookDirectory, { recursive: true });
+      const shellMarkerPath = markerPath.replace(/\\/g, "/").replace(/'/g, "'\\''");
+      await writeFile(resolve(hookDirectory, "pre-rebase"), `#!/bin/sh\nprintf started > '${shellMarkerPath}'\nsleep 30\n`, "utf8");
+      await execFileAsync("git", ["-C", fixture.path, "config", "core.hooksPath", hookDirectory]);
+
+      app = await electron.launch({
+        args: ["."],
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+      });
+      const window = await app.firstWindow();
+      await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return response.status;
+      }, fixture.path);
+      expect(opened).toBe(200);
+
+      await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      await window.locator(".repositoryRowOpen").click();
+      await window.locator(".workspaceCrumb").waitFor();
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Pull", exact: true }).click();
+      const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
+      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
+      await pullDialog.locator('input[name="pull-strategy"][value="rebase"]').check();
+      await pullDialog.getByRole("button", { name: "Pull with rebase" }).click();
+
+      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "pullRebase" }) }).last();
+      await pullTask.waitFor({ state: "visible" });
+      await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("started");
+      await pullTask.getByRole("button", { name: "Cancel task" }).click();
+      await pullTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(localHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "refs/remotes/origin/" + (await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim()])).stdout.trim()).toBe(remoteHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain"])).stdout.trim()).toBe("");
+    } finally {
+      await app?.close();
+      app = undefined;
+      await fixture.cleanup();
+      await rm(bareRemotePath, { recursive: true, force: true });
+      await rm(peerPath, { recursive: true, force: true });
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 90_000);
+
   async function runPullConflictRecovery(strategy: "merge" | "rebase") {
     const fixture = await createTempGitRepository();
     const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-pull-conflict-remote-"));
