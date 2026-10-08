@@ -1130,3 +1130,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workflow recovery 执行与 conflict file/AI suggestion/save/resolve handlers 仍留在 `main.rs`；继续按接口职责迁移，并把恢复识别/预检 helper 收敛到 workflows feature。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`dfa3f97`
+
+### 后端 workflows recovery 执行 handler 迁移 — 小阶段 59
+- 状态：已完成（workflow recovery 执行 DTO 与 handler 进入 workflows feature）
+- 日期：2026-10-09
+- 交付：将 recovery request DTO 与 recovery task handler 从 `main.rs` 迁入 `features/workflows/{dto,handlers}.rs`，并由 feature route 绑定本地 handler。继续复用进程入口的 workflow/shelf operation 识别及恢复预检 helper；merge/cherry-pick/revert 与 shelf apply 的 continue/skip/abort 执行、stale 检查、undo 保留和任务状态更新行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；workflow recovery、cherry-pick conflict 与 shelf recovery 集成用例通过。
+- 限制/后续：conflict file/AI suggestion/save/resolve handlers 及 recovery helper 仍留在 `main.rs`；继续迁移 conflict handlers，并收敛 workflows helper 归属。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`30ff81d`
