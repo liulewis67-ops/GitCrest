@@ -2,7 +2,7 @@ use axum::http::Uri;
 use std::{collections::HashSet, net::IpAddr, time::Duration};
 
 use super::dto::{AiProvider, AiRequest, AiSettingsRequest};
-use crate::diff::{DiffDocument, DiffRowKind, DiffScope, DiffSelection};
+use crate::features::diff::{DiffDocument, DiffRowKind, DiffScope, DiffSelection};
 
 pub const MAX_REQUEST_FILES: usize = 20;
 pub const MAX_REQUEST_DIFF_BYTES: usize = 1024 * 1024;

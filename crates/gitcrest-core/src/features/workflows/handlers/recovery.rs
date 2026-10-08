@@ -9,8 +9,8 @@ use super::super::dto::{
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    diff::DiffScope,
     domain::workflow::WorkflowRecoveryAction,
+    features::diff::DiffScope,
     ports::git::GitReadPort,
     shelves,
     state::AppState,

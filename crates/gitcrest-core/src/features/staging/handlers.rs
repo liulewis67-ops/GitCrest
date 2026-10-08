@@ -8,7 +8,7 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    diff::{self, DiffError, DiffScope},
+    features::diff::{self, DiffError, DiffScope},
     git::command::GitCommandService,
     shelves, staging,
     state::AppState,

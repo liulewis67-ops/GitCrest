@@ -22,7 +22,7 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::repositories::{cloning, repository};
-pub(crate) use features::{diff, history, remotes, shelves, staging, status, tasks, workflows};
+pub(crate) use features::{history, remotes, shelves, staging, status, tasks, workflows};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
@@ -591,11 +591,11 @@ mod tests {
             .iter()
             .find(|file| file.path == "selected.txt")
             .unwrap();
-        let preview = diff::read(
+        let preview = features::diff::read(
             repository.repo_id.clone(),
             &repository_path,
             selected_file,
-            diff::DiffScope::WorkingTree,
+            features::diff::DiffScope::WorkingTree,
         )
         .await
         .unwrap();

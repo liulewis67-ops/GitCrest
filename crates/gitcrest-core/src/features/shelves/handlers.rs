@@ -11,7 +11,7 @@ use super::dto::{
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    diff::{self, DiffError, DiffScope},
+    features::diff::{self, DiffError, DiffScope},
     repository::RepositoryManager,
     shelves, staging,
     state::AppState,

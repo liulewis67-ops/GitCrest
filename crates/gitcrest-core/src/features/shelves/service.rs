@@ -9,7 +9,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{diff::DiffScope, staging::StagingCommand};
+use crate::features::{diff::DiffScope, staging::StagingCommand};
 
 pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
 const APPLY_CHECK_DEADLINE: Duration = Duration::from_secs(10);

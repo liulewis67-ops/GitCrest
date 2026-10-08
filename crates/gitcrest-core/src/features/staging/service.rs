@@ -2,7 +2,7 @@ use std::{ffi::OsString, path::Component};
 
 use super::dto::{StagingAction, StagingPatchAction, StagingPatchRequest, StagingRequest};
 use crate::{
-    diff::DiffScope,
+    features::diff::DiffScope,
     status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot},
 };
 
@@ -543,13 +543,17 @@ mod tests {
             .iter()
             .find(|file| file.path == "multi.txt")
             .unwrap();
-        let working =
-            crate::diff::read_with_patch("repo".into(), &root, file, DiffScope::WorkingTree)
-                .await
-                .unwrap();
+        let working = crate::features::diff::read_with_patch(
+            "repo".into(),
+            &root,
+            file,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
         assert_eq!(working.document.hunks.len(), 2);
         assert!(working.document.revision.starts_with("sha256:"));
-        let selected = crate::diff::select_hunks(&working, &[0]).unwrap();
+        let selected = crate::features::diff::select_hunks(&working, &[0]).unwrap();
         run_with_input(&root, &["apply", "--cached", "--unidiff-zero"], &selected);
 
         let cached = git_output(&root, &["diff", "--cached", "--", "multi.txt"]);
@@ -565,11 +569,15 @@ mod tests {
             .iter()
             .find(|file| file.path == "multi.txt")
             .unwrap();
-        let remaining_diff =
-            crate::diff::read_with_patch("repo".into(), &root, file, DiffScope::WorkingTree)
-                .await
-                .unwrap();
-        let selected = crate::diff::select_hunks(&remaining_diff, &[0]).unwrap();
+        let remaining_diff = crate::features::diff::read_with_patch(
+            "repo".into(),
+            &root,
+            file,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
+        let selected = crate::features::diff::select_hunks(&remaining_diff, &[0]).unwrap();
         run_with_input(&root, &["apply", "--cached", "--unidiff-zero"], &selected);
 
         let after_stage = crate::status::read("repo".into(), &root).await.unwrap();
@@ -579,12 +587,12 @@ mod tests {
             .find(|file| file.path == "multi.txt")
             .unwrap();
         let staged_diff =
-            crate::diff::read_with_patch("repo".into(), &root, file, DiffScope::Index)
+            crate::features::diff::read_with_patch("repo".into(), &root, file, DiffScope::Index)
                 .await
                 .unwrap();
         assert_eq!(staged_diff.document.hunks.len(), 2);
         let revision = staged_diff.document.revision.clone();
-        let selected = crate::diff::select_hunks(&staged_diff, &[0]).unwrap();
+        let selected = crate::features::diff::select_hunks(&staged_diff, &[0]).unwrap();
         run_with_input(
             &root,
             &["apply", "--cached", "--reverse", "--unidiff-zero"],
@@ -602,9 +610,10 @@ mod tests {
             .iter()
             .find(|file| file.path == "multi.txt")
             .unwrap();
-        let new_diff = crate::diff::read_with_patch("repo".into(), &root, file, DiffScope::Index)
-            .await
-            .unwrap();
+        let new_diff =
+            crate::features::diff::read_with_patch("repo".into(), &root, file, DiffScope::Index)
+                .await
+                .unwrap();
         assert_ne!(revision, new_diff.document.revision);
     }
 
@@ -635,25 +644,30 @@ mod tests {
             .iter()
             .find(|file| file.path == "lines.txt")
             .unwrap();
-        let diff = crate::diff::read_with_patch("repo".into(), &root, file, DiffScope::WorkingTree)
-            .await
-            .unwrap();
+        let diff = crate::features::diff::read_with_patch(
+            "repo".into(),
+            &root,
+            file,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
         assert_eq!(diff.document.hunks.len(), 1);
         assert_eq!(
             diff.document.hunks[0]
                 .rows
                 .iter()
-                .filter(|row| row.kind == crate::diff::DiffRowKind::Change)
+                .filter(|row| row.kind == crate::features::diff::DiffRowKind::Change)
                 .count(),
             2
         );
-        let all_rows = crate::diff::select_rows(&diff, &[(0, 1), (0, 2)]).unwrap();
+        let all_rows = crate::features::diff::select_rows(&diff, &[(0, 1), (0, 2)]).unwrap();
         run_with_input(
             &root,
             &["apply", "--cached", "--check", "--unidiff-zero"],
             &all_rows,
         );
-        let patch = crate::diff::select_rows(&diff, &[(0, 1)]).unwrap();
+        let patch = crate::features::diff::select_rows(&diff, &[(0, 1)]).unwrap();
         run_with_input(&root, &["apply", "--cached", "--unidiff-zero"], &patch);
         let cached = git_output(&root, &["diff", "--cached", "--", "lines.txt"]);
         let unstaged = git_output(&root, &["diff", "--", "lines.txt"]);
@@ -676,10 +690,15 @@ mod tests {
             .iter()
             .find(|file| file.path == "new file.txt")
             .unwrap();
-        let diff = crate::diff::read_with_patch("repo".into(), &root, file, DiffScope::WorkingTree)
-            .await
-            .unwrap();
-        let selected = crate::diff::select_rows(&diff, &[(0, 0)]).unwrap();
+        let diff = crate::features::diff::read_with_patch(
+            "repo".into(),
+            &root,
+            file,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
+        let selected = crate::features::diff::select_rows(&diff, &[(0, 0)]).unwrap();
         run_with_input(&root, &["apply", "--cached", "--unidiff-zero"], &selected);
         let cached = git_output(&root, &["diff", "--cached", "--", "new file.txt"]);
         assert!(cached.contains("+first line"));

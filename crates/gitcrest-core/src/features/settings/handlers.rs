@@ -7,8 +7,7 @@ use axum::{
 use super::{dto as ai_dto, service as ai};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    diff::{self},
-    features::credentials,
+    features::{credentials, diff},
     state::AppState,
     status,
 };

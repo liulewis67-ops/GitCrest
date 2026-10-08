@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::diff::{DiffScope, DiffSelection};
+use crate::features::diff::{DiffScope, DiffSelection};
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

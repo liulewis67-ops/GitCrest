@@ -7,7 +7,7 @@ use std::{
 
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::diff::DiffScope;
+use crate::features::diff::DiffScope;
 use crate::repository::Repository;
 use crate::shelves::{ShelfRecord, ShelfSnapshot};
 
@@ -797,11 +797,13 @@ impl UndoOperation {
     }
 }
 
-fn parse_shelf_scope(value: Option<String>) -> Result<Option<crate::diff::DiffScope>, String> {
+fn parse_shelf_scope(
+    value: Option<String>,
+) -> Result<Option<crate::features::diff::DiffScope>, String> {
     match value.as_deref() {
         None => Ok(None),
-        Some("Index") => Ok(Some(crate::diff::DiffScope::Index)),
-        Some("WorkingTree") => Ok(Some(crate::diff::DiffScope::WorkingTree)),
+        Some("Index") => Ok(Some(crate::features::diff::DiffScope::Index)),
+        Some("WorkingTree") => Ok(Some(crate::features::diff::DiffScope::WorkingTree)),
         Some(_) => Err("invalid shelf scope".into()),
     }
 }
@@ -1140,7 +1142,7 @@ mod tests {
                 name: "before refactor".into(),
                 description: "unfinished function".into(),
                 paths: vec!["src/lib.rs".into(), "notes.md".into()],
-                scope: Some(crate::diff::DiffScope::WorkingTree),
+                scope: Some(crate::features::diff::DiffScope::WorkingTree),
                 head_oid: Some("a".repeat(40)),
                 created_at_ms: 123,
             },
