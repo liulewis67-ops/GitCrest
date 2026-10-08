@@ -598,3 +598,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：当前默认 GPU 滚动 P5 为 55.249fps。禁用 GPU 仍低于 ≥60fps 且没有达到 idle 内存门槛；in-process GPU 明显恶化滚动，故不改变生产 GPU 启动参数。替代模式需在可复现的多轮正式基准和其他硬件上复核。
 - 证据：`doc/evidence/S7.2/desktop-win32-gpu-mode-diagnostic.json`。
 - 完成 commit：`c78477f`
+
+### 后端 API 错误边界拆分 — 小阶段 2
+- 状态：已完成（API 共用传输规则模块化；后端规范整体仍需继续对齐）
+- 日期：2026-10-09
+- 交付：将 API 错误码、统一错误响应 DTO、领域错误到 HTTP 状态/错误码的映射及 `IntoResponse` 实现从 13,320 行的 `main.rs` 移至 `src/api/error.rs`，由 `src/api/mod.rs` 声明模块。保留现有映射、用户可见消息与响应 envelope；业务 handlers 继续使用同一 `ApiError` 接口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：`main.rs` 仍包含启动、路由注册、handlers 与集成测试；下一阶段继续按 `api/router.rs`、feature routes/handlers/service 等规范拆分，不把本次抽离视为整体架构收口。
+- 证据：`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/api/mod.rs`、`crates/gitcrest-core/src/main.rs`。
