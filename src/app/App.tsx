@@ -8,7 +8,7 @@ import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
 import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
 import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
-import { ariaShortcut, displayShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, THEME_CYCLE, useThemePreference, type ShortcutPreferences } from "../features/settings";
+import { ariaShortcut, displayShortcut, THEME_CYCLE, useShortcutPreferences, useThemePreference } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
@@ -96,13 +96,7 @@ function App() {
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
-  const [shortcuts, setShortcuts] = useState<ShortcutPreferences>(() => {
-    try {
-      return readShortcutPreferences(window.localStorage.getItem(SHORTCUT_PREFERENCES_KEY));
-    } catch {
-      return readShortcutPreferences(null);
-    }
-  });
+  const { shortcuts, setShortcuts } = useShortcutPreferences();
   const [workflowDialog, setWorkflowDialog] = useState<{ repoId: string; targetOid: string; action: WorkflowAction }>();
   const [rebaseDialogOpen, setRebaseDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -251,13 +245,6 @@ function App() {
       unsubscribe();
     };
   }, []);
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SHORTCUT_PREFERENCES_KEY, JSON.stringify(shortcuts));
-    } catch {
-      // Shortcut edits remain active for this session when storage is unavailable.
-    }
-  }, [shortcuts]);
   const connected = status === "Connected to local Rust core";
   const connecting = status.startsWith("Starting");
   const connectionLabel = connected ? "Core connected" : connecting ? "Starting core" : "Core unavailable";

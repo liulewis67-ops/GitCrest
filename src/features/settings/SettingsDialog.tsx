@@ -9,7 +9,7 @@ import {
   shortcutFromEvent,
   type ShortcutAction,
   type ShortcutPreferences,
-} from "./shortcut-preferences";
+} from "./model/shortcut-preferences";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 import type { UpdateStatus } from "../../api/update-status";
 
