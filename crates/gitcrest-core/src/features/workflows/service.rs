@@ -148,7 +148,7 @@ mod tests {
 
     use super::read_preflight;
     use crate::domain::workflow::{WorkflowAction, WorkflowOperation};
-    use crate::git_command::workflow_state::parse_status;
+    use crate::git::status::parse_status;
 
     #[test]
     fn parses_worktree_and_conflict_paths_with_a_bounded_list() {

@@ -30,7 +30,7 @@ use crate::{
     ports::git::GitReadPort,
 };
 
-pub(crate) use super::workflow_state;
+use super::{status, workflow_state};
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
@@ -137,14 +137,14 @@ impl GitReadPort for GitCommandService {
         &self,
         repository_path: &Path,
     ) -> Result<WorkflowState, WorkflowError> {
-        workflow_state::read_worktree_state(&self.git_program, repository_path).await
+        status::read_worktree_state(&self.git_program, repository_path).await
     }
 
     async fn read_operation(
         &self,
         repository_path: &Path,
     ) -> Result<Option<crate::domain::workflow::WorkflowOperation>, WorkflowError> {
-        workflow_state::read_operation(&self.git_program, repository_path).await
+        status::read_operation(&self.git_program, repository_path).await
     }
 
     async fn list_backup_references(
@@ -400,7 +400,7 @@ impl GitCommandService {
         repository_path: &Path,
         expected: &crate::remotes::pull::PullPreflight,
     ) -> Result<(), TaskFailure> {
-        match workflow_state::read_operation(&self.git_program, repository_path).await {
+        match status::read_operation(&self.git_program, repository_path).await {
             Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
                 let rebase_apply = capture_git_output(
                     &self.git_program,
@@ -711,7 +711,7 @@ impl GitCommandService {
         .await;
         if result.is_ok()
             && matches!(
-                workflow_state::read_operation(&self.git_program, repository_path).await,
+                status::read_operation(&self.git_program, repository_path).await,
                 Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase))
             )
         {
@@ -1490,7 +1490,7 @@ async fn workflow_command_result(
     if result.is_ok() {
         return result;
     }
-    match workflow_state::read_operation(git_program, repository_path).await {
+    match status::read_operation(git_program, repository_path).await {
         Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
             "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
             match operation {
