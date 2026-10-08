@@ -5,6 +5,7 @@ import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
 import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
+import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
 import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
@@ -26,7 +27,6 @@ const RebaseDialog = lazy(() => import("../features/workflows/RebaseDialog").the
 const ResetDialog = lazy(() => import("../features/workflows/ResetDialog").then(({ ResetDialog }) => ({ default: ResetDialog })));
 const RemoteBranchDeleteDialog = lazy(() => import("../features/branches/RemoteBranchDeleteDialog").then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
 const CloneDialog = lazy(() => import("../features/cloning/CloneDialog").then(({ CloneDialog }) => ({ default: CloneDialog })));
-const CommitDetails = lazy(() => import("../features/history").then(({ CommitDetails }) => ({ default: CommitDetails })));
 const WorkspaceMainPanel = lazy(() => import("../pages/workspace/WorkspaceMainPanel").then(({ WorkspaceMainPanel }) => ({ default: WorkspaceMainPanel })));
 const PushDialog = lazy(() => import("../features/remotes/PushDialog").then(({ PushDialog }) => ({ default: PushDialog })));
 const PullDialog = lazy(() => import("../features/remotes/PullDialog").then(({ PullDialog }) => ({ default: PullDialog })));
@@ -1827,21 +1827,20 @@ function App() {
             </Suspense>
             {mode === "graph" && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />}
 
-            {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
-              <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">Loading commit details…</div>}><CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} workflowDisabledReason={!connected ? "Connect to the Git engine to start this operation." : selectedRepository.availability !== "available" ? "This repository is unavailable." : hasActiveRepositoryTask ? "Wait for the current repository task." : undefined} openTagRequest={tagEditorRequest} onTagRequestHandled={(sequence) => setTagEditorRequest((request) => request?.sequence === sequence ? undefined : request)} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={(action, oid) => setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action })} /></Suspense> : selectedRepository ? (
-                <div className="repositoryDetails">
-                  <span className="detailsGlyph" aria-hidden="true">G</span>
-                  <h2>{repositoryName(selectedRepository.path)}</h2>
-                  <p>{selectedRepository.path}</p>
-                  <div className="repositoryFact"><span>BRANCH</span><strong>{selectedRepository.detached ? "Detached HEAD" : selectedRepository.branch || "Unborn"}</strong></div>
-                  <div className="repositoryFact"><span>{selectedCommit && selectedCommit !== selectedRepository.head ? "SELECTED COMMIT" : "HEAD"}</span><strong className="monoText">{selectedCommit?.slice(0, 12) || "No commits"}</strong></div>
-                  <div className="repositoryFact"><span>REPO ID</span><strong className="monoText">{selectedRepository.repoId.slice(0, 17)}…</strong></div>
-                </div>
-              ) : (
-                <><div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div><div className="detailPlaceholder"><span>AUTHOR</span><strong>—</strong><span>COMMIT</span><strong className="monoText">—</strong></div></>
-              )}
-            </aside>}
+            {mode === "graph" && <WorkspaceDetailsPanel
+              repository={selectedRepository}
+              selectedCommit={selectedCommit}
+              api={apiRef.current}
+              connected={connected}
+              hasActiveRepositoryTask={hasActiveRepositoryTask}
+              openTagRequest={tagEditorRequest}
+              shortcuts={shortcuts}
+              isMacPlatform={isMacPlatform}
+              onOpenFile={openCommitFileDiff}
+              onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
+              onTagRequestHandled={(sequence) => setTagEditorRequest((request) => request?.sequence === sequence ? undefined : request)}
+              onWorkflow={(action, oid) => { if (selectedRepository) setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action }); }}
+            />}
           </div>
 
           <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label="Resize changes and commit area" onResize={setWorkbenchHeight} />
