@@ -10,6 +10,7 @@ import { SplitDiff } from "./features/diff/SplitDiff";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "./features/settings/shortcut-preferences";
 import { useDialogFocus } from "./shared/use-dialog-focus";
 import { supportsWorkflowRecovery } from "./features/tasks/task-operations";
+import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "./features/repositories/model/workspace-session";
 import type { components } from "./api/schema";
 import type { UpdateStatus } from "./api/update-status";
 import "./App.css";
@@ -29,49 +30,7 @@ const CommitMessageAssistant = lazy(() => import("./features/settings/CommitMess
 
 type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
-type WorkspaceMode = "graph" | "diff";
-type CommitAction = "commit" | "commitAndPush" | "commitAndPushTo" | "commitAndPushForce";
 type CommitIntent = { action: CommitAction; target?: PushTarget; forceWithLease: boolean };
-type RepositoryTabState = { mode: WorkspaceMode; selectedCommit?: string; selectedFilePath?: string; selectedFileScope?: "workingTree" | "index" | "commit"; selectedDiffCommitOid?: string; graphScrollTop: number; commitAction?: CommitAction };
-type WorkspaceSession = { openRepoIds: string[]; activeRepoId?: string; tabs: Record<string, RepositoryTabState> };
-
-const WORKSPACE_SESSION_KEY = "gitcrest-workspace-session-v1";
-
-function readWorkspaceSession(): WorkspaceSession {
-  try {
-    const value: unknown = JSON.parse(window.localStorage.getItem(WORKSPACE_SESSION_KEY) || "null");
-    if (!value || typeof value !== "object") return { openRepoIds: [], tabs: {} };
-    const session = value as Partial<WorkspaceSession>;
-    const openRepoIds = Array.isArray(session.openRepoIds)
-      ? [...new Set(session.openRepoIds.filter((id): id is string => typeof id === "string"))]
-      : [];
-    const tabs: WorkspaceSession["tabs"] = {};
-    if (session.tabs && typeof session.tabs === "object") {
-      for (const [repoId, state] of Object.entries(session.tabs)) {
-        if (!state || typeof state !== "object") continue;
-        const candidate = state as Partial<RepositoryTabState>;
-        tabs[repoId] = {
-          mode: candidate.mode === "diff" ? "diff" : "graph",
-          ...(typeof candidate.selectedCommit === "string" ? { selectedCommit: candidate.selectedCommit } : {}),
-          ...(typeof candidate.selectedFilePath === "string" ? { selectedFilePath: candidate.selectedFilePath } : {}),
-          ...(candidate.selectedFileScope === "workingTree" || candidate.selectedFileScope === "index" || candidate.selectedFileScope === "commit" ? { selectedFileScope: candidate.selectedFileScope } : {}),
-          ...(typeof candidate.selectedDiffCommitOid === "string" ? { selectedDiffCommitOid: candidate.selectedDiffCommitOid } : {}),
-          ...(candidate.commitAction === "commit" || candidate.commitAction === "commitAndPush" || candidate.commitAction === "commitAndPushTo" || candidate.commitAction === "commitAndPushForce" ? { commitAction: candidate.commitAction } : {}),
-          graphScrollTop: typeof candidate.graphScrollTop === "number" && Number.isFinite(candidate.graphScrollTop)
-            ? Math.max(0, candidate.graphScrollTop)
-            : 0,
-        };
-      }
-    }
-    return {
-      openRepoIds,
-      ...(typeof session.activeRepoId === "string" ? { activeRepoId: session.activeRepoId } : {}),
-      tabs,
-    };
-  } catch {
-    return { openRepoIds: [], tabs: {} };
-  }
-}
 
 const themeCycle: Theme[] = ["system", "light", "dark"];
 const changeGroups = [
@@ -290,7 +249,7 @@ function App() {
   const [openingRepository, setOpeningRepository] = useState(false);
   const apiRef = useRef<GitCrestApiClient>();
   const [page, setPage] = useState<Page>("welcome");
-  const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession>(readWorkspaceSession);
+  const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession>(loadWorkspaceSession);
   const workspaceSessionRef = useRef(workspaceSession);
   workspaceSessionRef.current = workspaceSession;
   const repositoryCacheGenerationRef = useRef(new Map<string, number>());
@@ -1765,11 +1724,7 @@ function App() {
   }, [tasks]);
 
   useEffect(() => {
-    try {
-      window.localStorage.setItem(WORKSPACE_SESSION_KEY, JSON.stringify(workspaceSession));
-    } catch {
-      // Repository tabs remain available for this session if local storage is unavailable.
-    }
+    saveWorkspaceSession(workspaceSession);
   }, [workspaceSession]);
 
   useEffect(() => {
