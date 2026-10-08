@@ -652,3 +652,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：仓库生命周期 handler、status 以外 handlers、feature DTO 仍未完全归位；继续按契约分组迁移，并避免跨 feature 调用私有实现。
 - 证据：`crates/gitcrest-core/src/features/status/handlers.rs`、`crates/gitcrest-core/src/features/status/routes.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`547d3a5`
+
+### 后端 repositories handlers 与 DTO 拆分 — 小阶段 8
+- 状态：已完成（仓库生命周期请求边界进入 feature；整体架构仍需继续对齐）
+- 日期：2026-10-09
+- 交付：将仓库打开、初始化、查询列表/单仓库、收藏和移除 handlers 从 `main.rs` 迁至 `features/repositories/handlers.rs`，请求 DTO 迁至 `features/repositories/dto.rs`。保持原 JSON 字段、未知字段拒绝规则、错误响应和 HTTP 状态不变；routes 只负责路由绑定。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：仓库 feature 的存储协调逻辑仍通过共享 `AppState` 调用；其他 feature handlers/DTO 与顶层路由仍待迁移，继续按规范逐个契约组推进。
+- 证据：`crates/gitcrest-core/src/features/repositories/{dto,handlers,routes,mod}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`870a768`
