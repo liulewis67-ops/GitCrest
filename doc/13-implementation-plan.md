@@ -1778,3 +1778,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：所有 API feature 均已由 `features/mod.rs` 统一声明；crate root 暂保留兼容重导出，后续可按计划逐步收敛直接跨 feature 路径。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,workflows/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`39f1cdb`
+
+### 后端 tags 跨 feature 调用改用公开 feature 路径 — 小阶段 131
+- 状态：已完成（API router 和错误映射不再依赖 crate-root `tags` 兼容重导出）
+- 日期：2026-10-09
+- 交付：将 tags router 的组合路径与 API 错误映射依赖改为 `features::tags`，并从 `lib.rs` 移除 `tags` crate-root 重导出。TagError 映射和路由内容保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：其他 feature 的兼容重导出仍供现有跨层引用使用，后续按单个 feature 梳理并切换到规范入口。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/api/{error.rs,router.rs}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`ca6cb28`
