@@ -45,7 +45,7 @@ mod credentials;
 mod diff;
 #[path = "git/git_command.rs"]
 mod git_command;
-#[path = "features/history/history.rs"]
+#[path = "features/history/mod.rs"]
 mod history;
 #[path = "features/remotes/pull.rs"]
 mod pull;
