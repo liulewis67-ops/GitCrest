@@ -724,3 +724,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：handler 暂时复用 `main.rs` 中的 `branch_for_mutation` helper；后续迁移重命名/删除操作时，将共享验证逻辑归入 feature 并移除此过渡依赖。
 - 证据：`crates/gitcrest-core/src/features/branches/{dto,handlers,routes,service}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`c656f21`
+
+### 后端 branch create handler 与 DTO 拆分 — 小阶段 16
+- 状态：已完成（分支创建请求边界进入 feature）
+- 日期：2026-10-09
+- 交付：将本地分支创建 handler 与 request DTO 从 `main.rs` 移至 `features/branches/{handlers,dto}.rs`，由 branches feature router 绑定。保留分支名校验、初始 commit 前置条件、重复名称冲突、任务提交和 202 响应行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：分支重命名/删除与远端分支删除 handlers/DTO 尚在 `main.rs`；继续分组迁移并收拢共享分支验证 helper。
+- 证据：`crates/gitcrest-core/src/features/branches/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`76db697`
