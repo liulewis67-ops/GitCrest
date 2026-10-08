@@ -1580,3 +1580,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：滚动 viewport 的 DOM 恢复仍由 App 根据 session 状态协调；仓库选中提交状态及 commit task 编排也仍在 App，继续沿 feature model 边界迁出。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-workspace-graph-scroll.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`921050e`
+
+### Workspace 选中提交状态迁入 repositories model — 小阶段 109
+- 状态：已完成（当前仓库选中提交的 session 派生和更新由 repositories hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/repositories/model/use-workspace-commit-selection.ts`，按 RepoId 从 workspace session 派生选中 commit，并在无显式选中值时回退到仓库 HEAD；提供更新指定仓库 tab 选中 commit 的 setter。App 移除内联派生与更新函数，通过 repositories feature 入口组合该 hook。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。首次检查发现 head 允许 null，已将 hook 输入类型扩展为可空并复验通过。构建保留 tree-sitter `eval`、commits 模块动态/静态导入提示与 Monaco contribution 大 chunk 警告。
+- 限制/后续：仓库 tab 的其它 session 更新、viewport 恢复与 commit task 编排仍由 App 协调；继续按 feature model/use case 边界拆分。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-workspace-commit-selection.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`44721e1`
