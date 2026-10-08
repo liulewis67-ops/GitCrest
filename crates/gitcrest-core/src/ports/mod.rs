@@ -1,1 +1,1 @@
-pub(crate) mod workflow_git;
+pub(crate) mod git;

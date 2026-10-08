@@ -5,7 +5,7 @@ use crate::{
         error::WorkflowError,
         workflow::{WorkflowAction, WorkflowOperation},
     },
-    ports::workflow_git::WorkflowGitPort,
+    ports::git::GitReadPort,
 };
 
 #[derive(Clone, Debug)]
@@ -39,7 +39,7 @@ pub struct WorkflowRecoveryPreflight {
     pub can_abort: bool,
 }
 
-pub async fn read_preflight<G: WorkflowGitPort>(
+pub async fn read_preflight<G: GitReadPort>(
     git: &G,
     repo_id: String,
     repository_path: &Path,
@@ -80,7 +80,7 @@ pub async fn read_preflight<G: WorkflowGitPort>(
     })
 }
 
-pub async fn read_recovery_preflight<G: WorkflowGitPort>(
+pub async fn read_recovery_preflight<G: GitReadPort>(
     git: &G,
     repo_id: String,
     task_id: String,
@@ -114,7 +114,7 @@ pub async fn read_recovery_preflight<G: WorkflowGitPort>(
     })
 }
 
-pub async fn read_shelf_apply_preflight<G: WorkflowGitPort>(
+pub async fn read_shelf_apply_preflight<G: GitReadPort>(
     git: &G,
     repo_id: String,
     task_id: String,

@@ -27,7 +27,7 @@ use crate::{
             WorkflowRemoteBranchComparison, WorkflowResetComparison, WorkflowState,
         },
     },
-    ports::workflow_git::WorkflowGitPort,
+    ports::git::GitReadPort,
 };
 
 #[path = "workflow_state.rs"]
@@ -106,7 +106,7 @@ impl Default for GitCommandService {
     }
 }
 
-impl WorkflowGitPort for GitCommandService {
+impl GitReadPort for GitCommandService {
     async fn resolve_commit_target(
         &self,
         repository_path: &Path,

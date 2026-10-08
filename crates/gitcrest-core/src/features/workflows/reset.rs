@@ -5,7 +5,7 @@ use crate::{
         error::WorkflowError,
         workflow::{WorkflowBackupNamespace, WorkflowOperation},
     },
-    ports::workflow_git::WorkflowGitPort,
+    ports::git::GitReadPort,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -65,7 +65,7 @@ pub struct ResetBackupSnapshot {
     pub can_restore: bool,
 }
 
-pub async fn read_backup_snapshot<G: WorkflowGitPort>(
+pub async fn read_backup_snapshot<G: GitReadPort>(
     git: &G,
     repository_path: &Path,
 ) -> Result<ResetBackupSnapshot, WorkflowError> {
@@ -99,7 +99,7 @@ pub async fn read_backup_snapshot<G: WorkflowGitPort>(
     })
 }
 
-pub async fn read_preview<G: WorkflowGitPort>(
+pub async fn read_preview<G: GitReadPort>(
     git: &G,
     repo_id: String,
     repository_path: &Path,

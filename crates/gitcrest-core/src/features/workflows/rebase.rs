@@ -3,7 +3,7 @@ use std::{collections::HashSet, path::Path};
 use crate::{
     domain::error::WorkflowError,
     domain::workflow::{RebaseAction, RebaseTodoItem, WorkflowBackupNamespace, WorkflowOperation},
-    ports::workflow_git::WorkflowGitPort,
+    ports::git::GitReadPort,
 };
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -110,7 +110,7 @@ pub struct RebaseBackupSnapshot {
     pub can_rollback: bool,
 }
 
-pub async fn read_backup_snapshot<G: WorkflowGitPort>(
+pub async fn read_backup_snapshot<G: GitReadPort>(
     git: &G,
     repository_path: &Path,
 ) -> Result<RebaseBackupSnapshot, WorkflowError> {
@@ -134,7 +134,7 @@ pub async fn read_backup_snapshot<G: WorkflowGitPort>(
     })
 }
 
-pub async fn list_backups<G: WorkflowGitPort>(
+pub async fn list_backups<G: GitReadPort>(
     git: &G,
     repository_path: &Path,
 ) -> Result<Vec<RebaseBackup>, WorkflowError> {
@@ -152,7 +152,7 @@ pub async fn list_backups<G: WorkflowGitPort>(
     Ok(backups)
 }
 
-pub async fn read_preview<G: WorkflowGitPort>(
+pub async fn read_preview<G: GitReadPort>(
     git: &G,
     repo_id: String,
     repository_path: &Path,

@@ -7,7 +7,7 @@ use tokio::{
     process::Command,
 };
 
-use crate::{domain::workflow::WorkflowOperation, ports::workflow_git::WorkflowGitPort};
+use crate::{domain::workflow::WorkflowOperation, ports::git::GitReadPort};
 
 const MAX_REMOTE_OUTPUT: usize = 8 * 1024 * 1024;
 const REMOTE_READ_DEADLINE: Duration = Duration::from_secs(20);
@@ -56,7 +56,7 @@ pub enum RemoteError {
     GitFailed,
 }
 
-pub async fn read_remote_branch_delete_preview<G: WorkflowGitPort>(
+pub async fn read_remote_branch_delete_preview<G: GitReadPort>(
     git: &G,
     repo_id: String,
     repository_path: &Path,

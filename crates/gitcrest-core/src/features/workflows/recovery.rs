@@ -5,7 +5,7 @@ use crate::api::error::ApiError;
 use super::service as workflows;
 use crate::{
     domain::workflow::{WorkflowOperation, WorkflowRecoveryAction},
-    ports::workflow_git::WorkflowGitPort,
+    ports::git::GitReadPort,
 };
 
 pub(crate) fn workflow_operation_for_task(operation: &str) -> Option<WorkflowOperation> {
@@ -33,7 +33,7 @@ pub(crate) fn shelf_apply_before_tree(operation: &str) -> Option<&str> {
         .then_some(tree)
 }
 
-pub(crate) async fn read_task_recovery_preflight<G: WorkflowGitPort>(
+pub(crate) async fn read_task_recovery_preflight<G: GitReadPort>(
     git: &G,
     repo_id: &str,
     task_id: &str,

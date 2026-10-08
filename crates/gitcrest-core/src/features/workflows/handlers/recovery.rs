@@ -11,7 +11,7 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     diff::DiffScope,
     domain::workflow::WorkflowRecoveryAction,
-    ports::workflow_git::WorkflowGitPort,
+    ports::git::GitReadPort,
     shelves,
     state::AppState,
     status,

@@ -8,7 +8,7 @@ use crate::domain::{
     },
 };
 
-pub(crate) trait WorkflowGitPort: Send + Sync {
+pub(crate) trait GitReadPort: Send + Sync {
     async fn resolve_commit_target(
         &self,
         repository_path: &Path,
