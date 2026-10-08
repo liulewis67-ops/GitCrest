@@ -8,6 +8,7 @@ import type {
   ShelfResponse,
   StatusSnapshotResponse,
 } from "../../api/client";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 type SelectedChange = { revision: string; hunks?: number[] };
 
@@ -47,6 +48,8 @@ export function ShelfCenter({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<ShelfResponse>();
+  const { dialogRef: composerRef, onKeyDown: onComposerKeyDown } = useDialogFocus<HTMLElement>(() => setComposerOpen(false), busy, undefined, composerOpen);
+  const { dialogRef: deleteRef, onKeyDown: onDeleteKeyDown } = useDialogFocus<HTMLElement>(() => setDeleteConfirm(undefined), busy, undefined, Boolean(deleteConfirm));
 
   const availableFiles = useMemo(() => files.filter((file) => {
     if (file.categories.includes("conflicted") || file.categories.includes("ignored")) return false;
@@ -287,9 +290,9 @@ export function ShelfCenter({
       </section>}
 
       {composerOpen && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setComposerOpen(false); }}>
-        <section className="dialogCard shelfComposer" role="dialog" aria-modal="true" aria-labelledby="shelf-composer-title">
+        <section ref={composerRef} className="dialogCard shelfComposer" role="dialog" aria-modal="true" aria-labelledby="shelf-composer-title" onKeyDown={onComposerKeyDown}>
           <div className="dialogHeading"><div><span className="sectionEyebrow">WORKTREE · {repoId}</span><h2 id="shelf-composer-title">Shelve selected changes</h2></div><button className="dialogClose" type="button" aria-label="Close shelf composer" disabled={busy} onClick={() => setComposerOpen(false)}>×</button></div>
-          <label className="shelfField">Name<input autoFocus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API retry draft" /></label>
+          <label className="shelfField">Name<input autoFocus data-dialog-initial-focus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API retry draft" /></label>
           <label className="shelfField">Description<textarea maxLength={500} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional note" /></label>
           <label className="shelfField">Change scope<select value={scope} onChange={(event) => { setScope(event.target.value as "workingTree" | "index"); setSelected({}); setDiffs({}); }}><option value="workingTree">Working tree</option><option value="index">Staged index</option></select></label>
           <div className="shelfFilePicker" aria-label="Select files or hunks to shelve">
@@ -314,11 +317,11 @@ export function ShelfCenter({
       </div>}
 
       {deleteConfirm && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDeleteConfirm(undefined); }}>
-        <section className="dialogCard shelfDeleteDialog" role="alertdialog" aria-modal="true" aria-labelledby="shelf-delete-title" aria-describedby="shelf-delete-description">
+        <section ref={deleteRef} className="dialogCard shelfDeleteDialog" role="alertdialog" aria-modal="true" aria-labelledby="shelf-delete-title" aria-describedby="shelf-delete-description" onKeyDown={onDeleteKeyDown}>
           <div className="dialogHeading"><div><span className="sectionEyebrow">PERMANENTLY REMOVE SAVED PATCH</span><h2 id="shelf-delete-title">Delete “{deleteConfirm.name}”?</h2></div></div>
           <p id="shelf-delete-description">This removes the saved shelf without changing repository files. It contains {deleteConfirm.paths.length} paths:</p>
           <div className="shelfPathList">{deleteConfirm.paths.map((path) => <code key={path}>{path}</code>)}</div>
-          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} onClick={() => setDeleteConfirm(undefined)}>Keep shelf</button><button className="dangerButton" type="button" disabled={busy} onClick={() => void deleteShelf()}>{busy ? "Deleting…" : "Delete shelf"}</button></div>
+          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} data-dialog-initial-focus onClick={() => setDeleteConfirm(undefined)}>Keep shelf</button><button className="dangerButton" type="button" disabled={busy} onClick={() => void deleteShelf()}>{busy ? "Deleting…" : "Delete shelf"}</button></div>
         </section>
       </div>}
     </div>
