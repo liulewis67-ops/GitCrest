@@ -1411,11 +1411,25 @@ async fn repository_diff(
         .read_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let snapshot = state
-        .repositories
-        .status_snapshot_paths(&repo_id, std::slice::from_ref(&query.path))
-        .await
-        .map_err(ApiError::from_repository_error)?;
+    let candidate = status::StatusFile {
+        path: query.path.clone(),
+        original_path: None,
+        index_status: ".".into(),
+        worktree_status: "M".into(),
+        kind: status::ChangeKind::Modified,
+        categories: vec![match query.scope {
+            DiffScope::Index => status::ChangeCategory::Staged,
+            DiffScope::WorkingTree | DiffScope::Commit => status::ChangeCategory::Unstaged,
+        }],
+        mode_changed: false,
+    };
+    let (snapshot, candidate_diff) = tokio::join!(
+        state
+            .repositories
+            .status_snapshot_paths(&repo_id, std::slice::from_ref(&query.path),),
+        diff::read(repo_id.clone(), &repository_path, &candidate, query.scope),
+    );
+    let snapshot = snapshot.map_err(ApiError::from_repository_error)?;
     let file = snapshot
         .files
         .iter()
@@ -1427,10 +1441,26 @@ async fn repository_diff(
                 "The selected path is not present in the latest change snapshot.",
             )
         })?;
-    diff::read(repo_id, &repository_path, file, query.scope)
-        .await
-        .map(Json)
-        .map_err(ApiError::from_diff_error)
+    if query.scope == DiffScope::Commit
+        || file.original_path.is_some()
+        || file.categories.iter().any(|category| {
+            matches!(
+                category,
+                status::ChangeCategory::Untracked
+                    | status::ChangeCategory::Ignored
+                    | status::ChangeCategory::Conflicted
+            )
+        })
+    {
+        return diff::read(repo_id, &repository_path, file, query.scope)
+            .await
+            .map(Json)
+            .map_err(ApiError::from_diff_error);
+    }
+    let mut document = candidate_diff.map_err(ApiError::from_diff_error)?;
+    document.change_kind = file.kind.clone();
+    document.original_path = file.original_path.clone();
+    Ok(Json(document))
 }
 
 async fn stage_repository(
@@ -7411,6 +7441,27 @@ mod tests {
         let partial: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(partial["files"].as_array().unwrap().len(), 1);
         assert_eq!(partial["files"][0]["path"], "new file.txt");
+
+        let untracked_diff = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/diff?path=new%20file.txt&scope=workingTree"
+                ),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(untracked_diff.status(), StatusCode::OK);
+        let body = to_bytes(untracked_diff.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let untracked_diff: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert!(untracked_diff["hunks"][0]["rows"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|row| row["newText"] == "untracked"));
 
         let response = app
             .clone()
