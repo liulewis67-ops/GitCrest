@@ -123,7 +123,7 @@
 | S7.1 | RepositoryWatcher、dirty scope 合并与增量 StatusSnapshot。 | 工作树、HEAD、index、refs、config、忽略规则变化触发正确刷新；刷新期间新 dirty path 不丢失；rename/规则变更可升级全量刷新；外部 Git 操作和 WS 重连后与 `git status` 一致。 | 已完成 |
 | S7.2 | 性能基准与瓶颈修复。 | 记录硬件、OS、仓库 fixture、测量脚本及 20 次运行分布；冷启动 <1.5s、空闲内存 <250MB、工作中 <500MB、安装包 <150MB；100k 提交首屏 <1s、滚动目标 ≥60fps、1k 行 Diff <200ms、状态刷新 <100ms、搜索 <200ms。任何未达标项保留待验收并附复测数据。 | 待验收 |
 | S7.3 | 键盘、可访问性与安全回归。 | `07` 的 P0 快捷键可用且可自定义/检测冲突；全程键盘能完成打开仓库、暂存、提交、分支和冲突流程；焦点/屏幕阅读、减少动效和状态非仅颜色表达通过检查；窗口越权、无 token、确认绕过、日志泄密用自动化负例验证。 | 已完成 |
-| S7.4 | Windows/macOS/Linux 构建、签名与自动更新。 | 三平台均能安装、启动、找到对应 sidecar、关闭时退出子进程；更新包签名验证失败时拒绝安装；真实签名凭证仅来自 CI 密钥环境；安装包和升级流程留有构建/测试证据。 | 未开始 |
+| S7.4 | Windows/macOS/Linux 构建、签名与自动更新。 | 三平台均能安装、启动、找到对应 sidecar、关闭时退出子进程；更新包签名验证失败时拒绝安装；真实签名凭证仅来自 CI 密钥环境；安装包和升级流程留有构建/测试证据。 | 进行中 |
 | S7.5 | 全量 P0 E2E、故障恢复、发布验收与文档收口。 | `08` 的 E2E 场景逐项通过；临时仓库覆盖失败/重试/回滚；无 P0 阻塞缺陷；Alpha/Beta/GA 范围与实际功能一致；所有小阶段状态、证据、限制和最终 commit 可追溯，发布说明写明尚未支持的 P1/P2 功能。 | 未开始 |
 
 ## 12. 统一性能与安全验收口径
@@ -533,3 +533,8 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 屏幕阅读状态播报子阶段：Task Center 移除覆盖全部任务卡、日志和操作的大型 live region，改由每条动态任务状态文本使用 `role="status"` 单独播报。定向组件回归验证状态更新为 `failed` / `succeeded` 均有 status 语义且列表不再整体 live；静态复核还确认 14 个 Dialog/AlertDialog 组件使用共享焦点 Hook，CSS `prefers-reduced-motion` 覆盖动画/过渡，任务、Diff 和连接状态包含可读文本。验证：定向组件测试 8/8、完整 `pnpm test` 134/134 通过。限制：该阶段是代码语义检查和 DOM 回归，没有替代真实屏幕阅读器/高对比度手工验收。
 - 安全负例覆盖复核子阶段：检查现有后端回归，确认写路由缺失 token 返回 401、只读会话写操作返回 403；discard、reset、远端分支删除及 rebase/reset 恢复接口均有缺确认拒绝断言；任务失败日志测试覆盖 Authorization、URL 密码和敏感 query 脱敏。与此前 S7.3 台账所列确认绕过及权限测试合并审阅，当前未发现需要补写的安全代码。
 - S7.3 总体验收：`pnpm build`、`pnpm test`（134/134）、`pnpm test:e2e`（2/2，82.09 秒）、`git diff --check` 通过。核心与危险工作流键盘路径、弹窗焦点、动态状态读屏语义、减少动效、非颜色状态及安全负例均有代码和自动化证据；实机屏幕阅读器/高对比度体验作为发布前人工检查保留。
+
+### S7.4 — Windows/macOS/Linux 构建、签名与自动更新（进行中）
+- 状态：进行中；本阶段已开始平台 sidecar 解析和 Windows 打包验收，三平台 CI、签名验证更新与发布凭证流程尚待完成。
+- 平台 sidecar 子阶段：新增纯函数按目标平台选择 `gitcrest-core.exe` 或 `gitcrest-core`，开发目录和安装资源目录都由同一解析逻辑生成；electron-builder 为 Windows NSIS、macOS DMG、Linux AppImage 分别配置对应 release sidecar 资源。未知运行平台在启动时给出明确错误，不退回错误的 Windows 路径。验证：sidecar 路径单测 5/5、`pnpm build`、`pnpm electron:package`（Windows x64 release sidecar + NSIS）通过；`pnpm test:packaged` 启动 unpacked Windows 应用，确认 UI 连接及 `/health` 返回 204，退出 Electron 后 sidecar 端口不可连接。安装包 108,147,751 bytes（103.1 MiB），资源中的 sidecar 17,211,392 bytes。此主机产物 `Get-AuthenticodeSignature` 为 `NotSigned`，未读取或注入任何签名密钥；仅为本机构建验证，不是可发布签名。
+- 限制/后续：Windows 打包与 sidecar 启停已实测；macOS/Linux 资源配置尚未在原生 runner 构建，CI 仍只运行 Windows。未实现更新包签名校验/拒绝路径及自动更新流程，真实代码签名凭证需后续仅从 CI 密钥环境接入。当前已忽略的 `dist/` 工件不纳入提交。

@@ -1,8 +1,9 @@
 import { ChildProcessWithoutNullStreams, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { app } from "electron";
+import { resolveSidecarPath } from "./sidecar-path";
 
 export interface SidecarConnection {
   baseUrl: string;
@@ -20,14 +21,6 @@ interface ReadyMessage {
 let child: ChildProcessWithoutNullStreams | undefined;
 let connection: SidecarConnection | undefined;
 const STARTUP_TIMEOUT_MS = 10_000;
-
-function resolveSidecarPath(): string {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, "bin", "gitcrest-core.exe");
-  }
-
-  return resolve(app.getAppPath(), "crates", "gitcrest-core", "target", "debug", "gitcrest-core.exe");
-}
 
 function parseReadyLine(line: string): ReadyMessage | undefined {
   try {
@@ -54,7 +47,7 @@ export async function startSidecar(): Promise<SidecarConnection> {
     return connection;
   }
 
-  const sidecarPath = resolveSidecarPath();
+  const sidecarPath = resolveSidecarPath(process.platform, app.isPackaged, process.resourcesPath, app.getAppPath());
   if (!existsSync(sidecarPath)) {
     throw new Error(`Rust sidecar not found at ${sidecarPath}. Run "pnpm core:build" first.`);
   }

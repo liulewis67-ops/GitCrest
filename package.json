@@ -11,6 +11,7 @@
     "test": "vitest run --config vitest.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "check": "pnpm build && cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check && cargo build --manifest-path crates/gitcrest-core/Cargo.toml && pnpm test && cargo test --manifest-path crates/gitcrest-core/Cargo.toml && pnpm test:e2e",
+    "test:packaged": "node scripts/packaged-smoke.mjs",
     "api:types": "openapi-typescript doc/api/v1.yaml -o src/api/schema.ts",
     "frontend:build": "tsc && vite build",
     "preview": "vite preview",
@@ -56,17 +57,32 @@
     "files": [
       "out/**"
     ],
-    "extraResources": [
-      {
-        "from": "crates/gitcrest-core/target/release/gitcrest-core.exe",
-        "to": "bin/gitcrest-core.exe",
-        "filter": [
-          "**/*"
-        ]
-      }
-    ],
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "extraResources": [
+        {
+          "from": "crates/gitcrest-core/target/release/gitcrest-core.exe",
+          "to": "bin/gitcrest-core.exe"
+        }
+      ]
+    },
+    "mac": {
+      "target": "dmg",
+      "extraResources": [
+        {
+          "from": "crates/gitcrest-core/target/release/gitcrest-core",
+          "to": "bin/gitcrest-core"
+        }
+      ]
+    },
+    "linux": {
+      "target": "AppImage",
+      "extraResources": [
+        {
+          "from": "crates/gitcrest-core/target/release/gitcrest-core",
+          "to": "bin/gitcrest-core"
+        }
+      ]
     }
   }
 }
