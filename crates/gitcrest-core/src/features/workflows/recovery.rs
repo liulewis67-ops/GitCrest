@@ -3,6 +3,7 @@ use std::path::Path;
 use crate::api::error::ApiError;
 
 use super::{service as workflows, WorkflowOperation};
+use crate::domain::workflow::WorkflowRecoveryAction;
 
 pub(crate) fn workflow_operation_for_task(operation: &str) -> Option<WorkflowOperation> {
     match operation {
@@ -53,11 +54,11 @@ pub(crate) async fn read_task_recovery_preflight(
 
 pub(crate) fn workflow_recovery_action_allowed(
     preview: &workflows::WorkflowRecoveryPreflight,
-    action: workflows::WorkflowRecoveryAction,
+    action: WorkflowRecoveryAction,
 ) -> bool {
     match action {
-        workflows::WorkflowRecoveryAction::Continue => preview.can_continue,
-        workflows::WorkflowRecoveryAction::Skip => preview.can_skip,
-        workflows::WorkflowRecoveryAction::Abort => preview.can_abort,
+        WorkflowRecoveryAction::Continue => preview.can_continue,
+        WorkflowRecoveryAction::Skip => preview.can_skip,
+        WorkflowRecoveryAction::Abort => preview.can_abort,
     }
 }

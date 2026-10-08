@@ -30,14 +30,6 @@ pub enum WorkflowOperation {
     ShelfApply,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum WorkflowRecoveryAction {
-    Continue,
-    Skip,
-    Abort,
-}
-
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkflowPreflight {

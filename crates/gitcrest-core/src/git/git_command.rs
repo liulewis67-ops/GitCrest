@@ -770,7 +770,7 @@ impl GitCommandService {
         &self,
         repository_path: &Path,
         operation: crate::workflows::WorkflowOperation,
-        action: crate::workflows::WorkflowRecoveryAction,
+        action: crate::domain::workflow::WorkflowRecoveryAction,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match (operation, action) {
@@ -781,52 +781,52 @@ impl GitCommandService {
             }
             (
                 crate::workflows::WorkflowOperation::Rebase,
-                crate::workflows::WorkflowRecoveryAction::Continue,
+                crate::domain::workflow::WorkflowRecoveryAction::Continue,
             ) => (
                 vec!["rebase".into(), "--continue".into()],
                 "Continue rebase",
             ),
             (
                 crate::workflows::WorkflowOperation::Rebase,
-                crate::workflows::WorkflowRecoveryAction::Skip,
+                crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => (vec!["rebase".into(), "--skip".into()], "Skip rebase commit"),
             (
                 crate::workflows::WorkflowOperation::Rebase,
-                crate::workflows::WorkflowRecoveryAction::Abort,
+                crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (vec!["rebase".into(), "--abort".into()], "Abort rebase"),
-            (_, crate::workflows::WorkflowRecoveryAction::Continue) => (
+            (_, crate::domain::workflow::WorkflowRecoveryAction::Continue) => (
                 vec!["commit".into(), "--no-edit".into()],
                 "Continue Git operation",
             ),
             (
                 crate::workflows::WorkflowOperation::CherryPick,
-                crate::workflows::WorkflowRecoveryAction::Skip,
+                crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => (
                 vec!["cherry-pick".into(), "--skip".into()],
                 "Skip cherry-pick commit",
             ),
             (
                 crate::workflows::WorkflowOperation::Revert,
-                crate::workflows::WorkflowRecoveryAction::Skip,
+                crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => (vec!["revert".into(), "--skip".into()], "Skip revert commit"),
             (
                 crate::workflows::WorkflowOperation::Merge,
-                crate::workflows::WorkflowRecoveryAction::Abort,
+                crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (vec!["merge".into(), "--abort".into()], "Abort merge"),
             (
                 crate::workflows::WorkflowOperation::CherryPick,
-                crate::workflows::WorkflowRecoveryAction::Abort,
+                crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (
                 vec!["cherry-pick".into(), "--abort".into()],
                 "Abort cherry-pick",
             ),
             (
                 crate::workflows::WorkflowOperation::Revert,
-                crate::workflows::WorkflowRecoveryAction::Abort,
+                crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (vec!["revert".into(), "--abort".into()], "Abort revert"),
             (
                 crate::workflows::WorkflowOperation::Merge,
-                crate::workflows::WorkflowRecoveryAction::Skip,
+                crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => {
                 return Err(TaskFailure::Failed(
                     "A merge operation cannot be skipped.".into(),
@@ -834,7 +834,7 @@ impl GitCommandService {
             }
         };
         let environment = if operation == crate::workflows::WorkflowOperation::Rebase
-            && action == crate::workflows::WorkflowRecoveryAction::Continue
+            && action == crate::domain::workflow::WorkflowRecoveryAction::Continue
         {
             vec![(OsString::from("GIT_EDITOR"), OsString::from("true"))]
         } else {

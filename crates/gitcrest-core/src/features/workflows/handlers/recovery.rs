@@ -11,6 +11,7 @@ use super::super::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     diff::DiffScope,
+    domain::workflow::WorkflowRecoveryAction,
     shelves,
     state::AppState,
     status,
@@ -84,6 +85,7 @@ pub(in crate::workflows) async fn recover_repository_workflow(
             "Workflow recovery requires a waiting task, action, operation, HEAD, and conflict snapshot.",
         )
     })?;
+    let action = WorkflowRecoveryAction::from(request.action);
     if request.expected_conflicted_paths.len() > 200 {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -131,7 +133,7 @@ pub(in crate::workflows) async fn recover_repository_workflow(
             "The Git operation or conflict set changed after recovery review. Refresh the preview.",
         ));
     }
-    if !crate::workflows::recovery::workflow_recovery_action_allowed(&preview, request.action) {
+    if !crate::workflows::recovery::workflow_recovery_action_allowed(&preview, action) {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::WorkflowRecoveryNotAllowed,
@@ -146,15 +148,14 @@ pub(in crate::workflows) async fn recover_repository_workflow(
     let waiting_task_id = request.task_id.clone();
     let path = target.repository_path;
     let resource_key = target.resource_key;
-    let action = request.action;
     let expected_operation = request.expected_operation;
     let expected_head_oid = request.expected_head_oid;
     let expected_conflicted_paths = request.expected_conflicted_paths;
     let waiting_task_operation = waiting_task.operation.clone();
     let operation = match action {
-        workflows::WorkflowRecoveryAction::Continue => "workflowContinue",
-        workflows::WorkflowRecoveryAction::Skip => "workflowSkip",
-        workflows::WorkflowRecoveryAction::Abort => "workflowAbort",
+        WorkflowRecoveryAction::Continue => "workflowContinue",
+        WorkflowRecoveryAction::Skip => "workflowSkip",
+        WorkflowRecoveryAction::Abort => "workflowAbort",
     };
     let task = state
         .tasks
@@ -294,19 +295,19 @@ pub(in crate::workflows) async fn recover_repository_workflow(
                             "The Git operation is still active. Review repository state and choose a recovery action.".into(),
                         ));
                     }
-                    let waiting_status = if action == workflows::WorkflowRecoveryAction::Abort {
+                    let waiting_status = if action == WorkflowRecoveryAction::Abort {
                         tasks::TaskStatus::Cancelled
                     } else {
                         tasks::TaskStatus::Succeeded
                     };
                     let waiting_message = match action {
-                        workflows::WorkflowRecoveryAction::Continue => {
+                        WorkflowRecoveryAction::Continue => {
                             "The Git operation was continued successfully."
                         }
-                        workflows::WorkflowRecoveryAction::Skip => {
+                        WorkflowRecoveryAction::Skip => {
                             "The conflicted Git change was skipped successfully."
                         }
-                        workflows::WorkflowRecoveryAction::Abort => {
+                        WorkflowRecoveryAction::Abort => {
                             "The Git operation was aborted safely."
                         }
                     };

@@ -28,10 +28,30 @@ pub(super) struct WorkflowRecoveryQuery {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct WorkflowRecoveryRequest {
     pub(super) task_id: String,
-    pub(super) action: super::service::WorkflowRecoveryAction,
+    pub(super) action: WorkflowRecoveryActionDto,
     pub(super) expected_operation: super::service::WorkflowOperation,
     pub(super) expected_head_oid: String,
     pub(super) expected_conflicted_paths: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum WorkflowRecoveryActionDto {
+    Continue,
+    Skip,
+    Abort,
+}
+
+impl From<WorkflowRecoveryActionDto> for crate::domain::workflow::WorkflowRecoveryAction {
+    fn from(action: WorkflowRecoveryActionDto) -> Self {
+        use crate::domain::workflow::WorkflowRecoveryAction;
+
+        match action {
+            WorkflowRecoveryActionDto::Continue => WorkflowRecoveryAction::Continue,
+            WorkflowRecoveryActionDto::Skip => WorkflowRecoveryAction::Skip,
+            WorkflowRecoveryActionDto::Abort => WorkflowRecoveryAction::Abort,
+        }
+    }
 }
 
 #[derive(Deserialize)]

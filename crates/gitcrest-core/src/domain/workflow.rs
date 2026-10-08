@@ -8,6 +8,13 @@ pub(crate) enum RebaseAction {
     Drop,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WorkflowRecoveryAction {
+    Continue,
+    Skip,
+    Abort,
+}
+
 impl RebaseAction {
     pub(crate) fn git_keyword(self) -> &'static str {
         match self {
