@@ -47,7 +47,7 @@ pub(in crate::features::workflows) async fn read_workflow_conflict_file(
         )
     })?;
     let Some(task_operation) =
-        crate::workflows::recovery::workflow_operation_for_task(&task.operation)
+        crate::features::workflows::recovery::workflow_operation_for_task(&task.operation)
     else {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -69,7 +69,7 @@ pub(in crate::features::workflows) async fn read_workflow_conflict_file(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::workflows::recovery::read_task_recovery_preflight(
+    let preview = crate::features::workflows::recovery::read_task_recovery_preflight(
         &state.git_commands,
         &repo_id,
         &query.task_id,
@@ -152,7 +152,7 @@ async fn read_reviewed_conflict_for_suggestion(
         )
     })?;
     let Some(task_operation) =
-        crate::workflows::recovery::workflow_operation_for_task(&task.operation)
+        crate::features::workflows::recovery::workflow_operation_for_task(&task.operation)
     else {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -175,7 +175,7 @@ async fn read_reviewed_conflict_for_suggestion(
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::workflows::recovery::read_task_recovery_preflight(
+    let preview = crate::features::workflows::recovery::read_task_recovery_preflight(
         &state.git_commands,
         repo_id,
         &request.task_id,
@@ -546,14 +546,15 @@ async fn inspect_waiting_conflict(
             "The waiting workflow task is unavailable.",
         )
     })?;
-    let task_operation = crate::workflows::recovery::workflow_operation_for_task(&task.operation)
-        .ok_or_else(|| {
-        ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::WorkflowNoActiveOperation,
-            "Conflict review requires a merge, cherry-pick, or revert task.",
-        )
-    })?;
+    let task_operation =
+        crate::features::workflows::recovery::workflow_operation_for_task(&task.operation)
+            .ok_or_else(|| {
+                ApiError::new(
+                    StatusCode::CONFLICT,
+                    ApiErrorCode::WorkflowNoActiveOperation,
+                    "Conflict review requires a merge, cherry-pick, or revert task.",
+                )
+            })?;
     if task.repo_id.as_deref() != Some(repo_id) || task.status != TaskStatus::WaitingForInput {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -565,7 +566,7 @@ async fn inspect_waiting_conflict(
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::workflows::recovery::read_task_recovery_preflight(
+    let preview = crate::features::workflows::recovery::read_task_recovery_preflight(
         git,
         repo_id,
         task_id,

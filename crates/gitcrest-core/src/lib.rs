@@ -22,7 +22,7 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::repositories::{cloning, repository};
-pub(crate) use features::{status, tasks, workflows};
+pub(crate) use features::{status, tasks};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
@@ -92,15 +92,15 @@ mod tests {
     #[test]
     fn maps_pull_waiting_tasks_to_their_git_recovery_operations() {
         assert_eq!(
-            workflows::recovery::workflow_operation_for_task("pullMerge"),
+            features::workflows::recovery::workflow_operation_for_task("pullMerge"),
             Some(crate::domain::workflow::WorkflowOperation::Merge)
         );
         assert_eq!(
-            workflows::recovery::workflow_operation_for_task("pullRebase"),
+            features::workflows::recovery::workflow_operation_for_task("pullRebase"),
             Some(crate::domain::workflow::WorkflowOperation::Rebase)
         );
         assert_eq!(
-            workflows::recovery::workflow_operation_for_task("fetch"),
+            features::workflows::recovery::workflow_operation_for_task("fetch"),
             None
         );
     }
@@ -2960,7 +2960,7 @@ mod tests {
         let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
         let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let repo_id = repository["repoId"].as_str().unwrap();
-        let direct_preview = workflows::rebase::read_preview(
+        let direct_preview = features::workflows::rebase::read_preview(
             &GitCommandService::default(),
             repo_id.to_owned(),
             &repository_path,
