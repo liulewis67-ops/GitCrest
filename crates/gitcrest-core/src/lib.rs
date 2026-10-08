@@ -23,7 +23,7 @@ mod state;
 mod storage;
 pub(crate) use features::repositories::{cloning, repository};
 pub(crate) use features::{
-    branches, credentials, diff, history, remotes, shelves, staging, status, tasks, workflows,
+    credentials, diff, history, remotes, shelves, staging, status, tasks, workflows,
 };
 #[path = "refresh/watcher.rs"]
 mod watcher;

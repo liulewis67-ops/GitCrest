@@ -57,7 +57,7 @@ pub async fn read_pull_preflight(
         return Err(PullError::NoCurrentBranch);
     }
     let local_branch = current.ok_or(PullError::NoCurrentBranch)?;
-    crate::branches::validate_branch_name(repository_path, local_branch)
+    crate::features::branches::validate_branch_name(repository_path, local_branch)
         .await
         .map_err(|_| PullError::NoCurrentBranch)?;
     let config = run_git(
@@ -89,7 +89,7 @@ pub async fn read_pull_preflight(
         .strip_prefix("refs/heads/")
         .filter(|name| !name.is_empty())
         .ok_or(PullError::InvalidUpstream)?;
-    crate::branches::validate_branch_name(repository_path, remote_branch)
+    crate::features::branches::validate_branch_name(repository_path, remote_branch)
         .await
         .map_err(|_| PullError::InvalidUpstream)?;
     let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");

@@ -64,7 +64,7 @@ pub async fn read_remote_branch_delete_preview<G: GitReadPort>(
     remote_branch: &str,
 ) -> Result<RemoteBranchDeletePreview, RemoteError> {
     validate_remote_name(repository_path, remote_name).await?;
-    crate::branches::validate_branch_name(repository_path, remote_branch)
+    crate::features::branches::validate_branch_name(repository_path, remote_branch)
         .await
         .map_err(|_| RemoteError::InvalidName)?;
     if !read_remotes(repo_id.clone(), repository_path)

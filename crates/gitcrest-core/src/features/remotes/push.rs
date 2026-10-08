@@ -69,7 +69,7 @@ pub async fn read_push_preflight_for_target(
         return Err(PushError::NoCurrentBranch);
     }
     let local_branch = current.ok_or(PushError::NoCurrentBranch)?;
-    crate::branches::validate_branch_name(repository_path, local_branch)
+    crate::features::branches::validate_branch_name(repository_path, local_branch)
         .await
         .map_err(|_| PushError::NoCurrentBranch)?;
     let (local_oid, remote_name, remote_branch) = if let Some((remote_name, remote_branch)) = target
@@ -87,7 +87,7 @@ pub async fn read_push_preflight_for_target(
         {
             return Err(PushError::InvalidUpstream);
         }
-        crate::branches::validate_branch_name(repository_path, remote_branch)
+        crate::features::branches::validate_branch_name(repository_path, remote_branch)
             .await
             .map_err(|_| PushError::InvalidUpstream)?;
         let local_oid = run_git(
@@ -139,7 +139,7 @@ pub async fn read_push_preflight_for_target(
     crate::remotes::validate_remote_name(repository_path, &remote_name)
         .await
         .map_err(|_| PushError::InvalidUpstream)?;
-    crate::branches::validate_branch_name(repository_path, &remote_branch)
+    crate::features::branches::validate_branch_name(repository_path, &remote_branch)
         .await
         .map_err(|_| PushError::InvalidUpstream)?;
     let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");

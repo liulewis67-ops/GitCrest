@@ -6,7 +6,8 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    branches, status, AppState, BranchCommand, RepositoryError, TaskFailure, TaskSnapshot,
+    features::{branches, status},
+    AppState, BranchCommand, RepositoryError, TaskFailure, TaskSnapshot,
 };
 
 use super::dto::{
