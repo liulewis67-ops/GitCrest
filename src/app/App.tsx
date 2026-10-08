@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
@@ -10,6 +10,7 @@ import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
 import { useDialogFocus } from "../shared/use-dialog-focus";
+import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
@@ -54,80 +55,6 @@ function repositoryName(path: string): string {
 
 function isFullObjectId(value: string | null | undefined): value is string {
   return typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
-}
-
-function ResizeSeparator({
-  orientation,
-  edge,
-  value,
-  min,
-  max,
-  label,
-  onResize,
-}: {
-  orientation: "vertical" | "horizontal";
-  edge: "left" | "right" | "bottom";
-  value: number;
-  min: number;
-  max: number;
-  label: string;
-  onResize: (value: number) => void;
-}) {
-  const drag = useRef<{ pointerId: number; coordinate: number; value: number }>();
-
-  function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    drag.current = {
-      pointerId: event.pointerId,
-      coordinate: orientation === "vertical" ? event.clientX : event.clientY,
-      value,
-    };
-  }
-
-  function onPointerMove(event: PointerEvent<HTMLDivElement>) {
-    if (drag.current?.pointerId !== event.pointerId) return;
-    const sign = edge === "left" ? 1 : -1;
-    const delta = orientation === "horizontal"
-      ? (event.clientY - drag.current.coordinate) * (edge === "bottom" ? -1 : 1)
-      : (event.clientX - drag.current.coordinate) * sign;
-    onResize(Math.max(min, Math.min(max, drag.current.value + delta)));
-  }
-
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const increaseKeys = orientation === "vertical" ? ["ArrowRight", "ArrowUp"] : ["ArrowUp", "ArrowRight"];
-    const decreaseKeys = orientation === "vertical" ? ["ArrowLeft", "ArrowDown"] : ["ArrowDown", "ArrowLeft"];
-    if (increaseKeys.includes(event.key)) {
-      event.preventDefault();
-      onResize(Math.min(max, value + 16));
-    } else if (decreaseKeys.includes(event.key)) {
-      event.preventDefault();
-      onResize(Math.max(min, value - 16));
-    } else if (event.key === "Home") {
-      event.preventDefault();
-      onResize(min);
-    } else if (event.key === "End") {
-      event.preventDefault();
-      onResize(max);
-    }
-  }
-
-  return (
-    <div
-      className={`resizeSeparator ${orientation}`}
-      role="separator"
-      aria-label={label}
-      aria-orientation={orientation}
-      aria-valuemin={min}
-      aria-valuemax={max}
-      aria-valuenow={Math.round(value)}
-      tabIndex={0}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={() => { drag.current = undefined; }}
-      onPointerCancel={() => { drag.current = undefined; }}
-      onKeyDown={onKeyDown}
-    />
-  );
 }
 
 function App() {
