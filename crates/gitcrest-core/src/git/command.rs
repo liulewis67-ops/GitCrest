@@ -30,7 +30,7 @@ use crate::{
     ports::git::GitReadPort,
 };
 
-use super::{refs, status, workflow_state};
+use super::{history, refs, status};
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
@@ -111,7 +111,7 @@ impl GitReadPort for GitCommandService {
         repository_path: &Path,
         target: &str,
     ) -> Result<String, WorkflowError> {
-        workflow_state::resolve_commit_target(&self.git_program, repository_path, target).await
+        history::resolve_commit_target(&self.git_program, repository_path, target).await
     }
 
     async fn read_commit_subject(
@@ -119,18 +119,18 @@ impl GitReadPort for GitCommandService {
         repository_path: &Path,
         target_oid: &str,
     ) -> Result<String, WorkflowError> {
-        workflow_state::read_commit_subject(&self.git_program, repository_path, target_oid).await
+        history::read_commit_subject(&self.git_program, repository_path, target_oid).await
     }
 
     async fn read_head_oid(&self, repository_path: &Path) -> Result<Option<String>, WorkflowError> {
-        workflow_state::read_head_oid(&self.git_program, repository_path).await
+        history::read_head_oid(&self.git_program, repository_path).await
     }
 
     async fn read_current_branch(
         &self,
         repository_path: &Path,
     ) -> Result<Option<String>, WorkflowError> {
-        workflow_state::read_current_branch(&self.git_program, repository_path).await
+        history::read_current_branch(&self.git_program, repository_path).await
     }
 
     async fn read_worktree_state(
@@ -161,8 +161,7 @@ impl GitReadPort for GitCommandService {
         head_oid: &str,
         target_oid: &str,
     ) -> Result<WorkflowResetComparison, WorkflowError> {
-        workflow_state::compare_for_reset(&self.git_program, repository_path, head_oid, target_oid)
-            .await
+        history::compare_for_reset(&self.git_program, repository_path, head_oid, target_oid).await
     }
 
     async fn list_rebase_commits(
@@ -171,8 +170,7 @@ impl GitReadPort for GitCommandService {
         onto_oid: &str,
         head_oid: &str,
     ) -> Result<WorkflowRebaseCommitList, WorkflowError> {
-        workflow_state::list_rebase_commits(&self.git_program, repository_path, onto_oid, head_oid)
-            .await
+        history::list_rebase_commits(&self.git_program, repository_path, onto_oid, head_oid).await
     }
 
     async fn compare_remote_branch_delete(
