@@ -31,7 +31,7 @@ mod api;
 
 #[path = "features/settings/ai.rs"]
 mod ai;
-#[path = "features/branches/branches.rs"]
+#[path = "features/branches/mod.rs"]
 mod branches;
 #[path = "features/repositories/cloning.rs"]
 mod cloning;
