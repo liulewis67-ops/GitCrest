@@ -1031,3 +1031,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：settings handlers 和 DTO 仍在 `main.rs`/`ai.rs`；下一阶段迁移 settings handlers/DTO，再将 repository AI request 端点归入其业务 feature。
 - 证据：`crates/gitcrest-core/src/features/settings/{mod,routes,ai}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`983c81a`
+
+### 后端 settings feature handlers 迁移 — 小阶段 48
+- 状态：已完成（AI settings/credential handlers 进入 settings feature）
+- 日期：2026-10-09
+- 交付：新增 `features/settings/handlers.rs`，承接 AI settings 查询/更新、AI credential 设置/删除及 provider 到 API model 的映射 helper；settings routes 改为绑定 feature 内 handlers。workflow conflict AI settings 查询经 feature 根导出的 handler 复用。`main.rs` 移除上述 handler 与 provider helper，AI request 仍留待单独迁移。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；AI settings、credential 和 workflow settings 相关 API 用例通过。
+- 限制/后续：AI settings DTO 仍定义于 service 文件 `ai.rs`，AI request endpoint/helper 仍在 `main.rs`；下一阶段抽取 DTO，并把 AI request 用例迁入 settings/AI feature handlers。
+- 证据：`crates/gitcrest-core/src/features/settings/{mod,routes,handlers,ai}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`fb73923`
