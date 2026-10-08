@@ -92,6 +92,8 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
       });
       return (await response.json() as { branch: string }).branch;
     }, repoId), { timeout: 15_000 }).toBe("keyboard-target");
+    const postSwitchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
+    if (await postSwitchTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
 
     const resetBaseOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
     await execFileAsync("git", ["-C", fixture.path, "branch", "keyboard-reset-base", resetBaseOid]);
@@ -100,8 +102,13 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
     await window.getByText("reset-trigger.ts", { exact: true }).waitFor();
     await window.keyboard.press("Control+Shift+a");
     await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("reset-trigger.ts").waitFor();
-    await window.getByRole("textbox", { name: "Commit message", exact: true }).focus();
+    const resetCommitMessage = window.getByRole("textbox", { name: "Commit message", exact: true });
+    await resetCommitMessage.focus();
+    await window.keyboard.press("Control+a");
+    await window.keyboard.press("Backspace");
     await window.keyboard.type("keyboard reset review");
+    expect(await resetCommitMessage.inputValue()).toBe("keyboard reset review");
+    await expect.poll(() => window.getByRole("button", { name: "Commit", exact: true }).isDisabled(), { timeout: 15_000 }).toBe(false);
     await window.keyboard.press("Control+Enter");
     await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim(), { timeout: 15_000 }).toBe("keyboard reset review");
     await window.keyboard.press("Control+k");
