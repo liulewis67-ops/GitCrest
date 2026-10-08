@@ -1886,3 +1886,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：staging/status/tasks/workflows aliases 仍有消费者；按依赖方向继续迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{shelves,staging,workflows}/`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`584fec8`
+
+### staging feature 调用切换并移除 crate-root alias — 小阶段 143
+- 状态：已完成（staging command/service 通过 feature 模块访问）
+- 日期：2026-10-09
+- 交付：将 Git command adapter、shelves handler 与 staging handler 对暂存命令/错误的依赖改为 `features::staging`；API router/error mapper 和 shelves service 已使用 feature 路径。移除 `lib.rs` 的 staging root re-export，Git 写操作流程与行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：status/tasks/workflows aliases 仍被多个模块消费；继续逐项迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{staging,shelves}/`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`d014fcc`
