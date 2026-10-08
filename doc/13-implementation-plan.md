@@ -670,3 +670,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff handlers 与请求/响应 DTO 仍在 `main.rs`；blame 仍注册在顶层 router，应归入 history feature。继续逐个迁移，避免扩大本阶段范围。
 - 证据：`crates/gitcrest-core/src/features/diff/{mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`7374a77`
+
+### 后端 diff handlers 与查询 DTO 拆分 — 小阶段 10
+- 状态：已完成（Diff 查询协议边界进入 feature；history/blame 仍待迁移）
+- 日期：2026-10-09
+- 交付：将工作区 Diff 与提交文件 Diff handlers 从 `main.rs` 迁至 `features/diff/handlers.rs`，查询参数 DTO 迁至 `features/diff/dto.rs`。路由调用 feature handlers；保持查询字段、未知字段拒绝、路径校验、状态码和错误 envelope 不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：Diff handlers 仍直接协调仓库状态、history 和 service；后续可提取用例 service 并明确注入边界。Blame handler 应随 history feature 路由迁移。
+- 证据：`crates/gitcrest-core/src/features/diff/{dto,handlers,mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`2acab3e`
