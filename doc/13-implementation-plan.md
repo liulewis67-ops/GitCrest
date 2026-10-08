@@ -511,11 +511,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - Status 冷读优化：增加关闭网络传输特性的 bundled libgit2 0.20.4；在 spawn_blocking 执行全量 status，保留 rename 上下文后按路径过滤；冲突/不可读状态回退到原 CLI Porcelain v2，CLI 超时仍为 30 秒。100k commits / 1,000 行 fixture Release API 20 轮，强制全量 status P95 9.264ms、watcher dirty-scope P95 13.247ms（此前 150.304/138.170ms）；sidecar 16,948,736 bytes。全 Rust 测试 109/109、Clippy、fmt、Windows NSIS 打包通过；安装包 108,090,696 bytes（103.08 MiB），仍低于 150 MiB。证据：doc/evidence/S7.2/api-win32-status-libgit2.json、doc/evidence/S7.2/installer-win32.json。
 - 限制/后续：最新 Release API 基准搜索 P95 105.752ms、100k/1k 行 Diff P95 138.334ms，均达到各自目标。libgit2 status 的 20 轮强刷/dirty-scope P95 分别 9.264/13.247ms，已达到 <100ms；稳定缓存命中全量/路径 status P95 均低于 1ms。默认空闲进程树峰值 414.5MB（目标 <250MB）、载入仓库后 451.5MB；30 秒滚动 P5 为 55.25fps（目标 ≥60fps），仍未达标。关闭 GPU 后空闲/仓库峰值 403.4/438.7MB、滚动 P5 59.52fps，仍未通过。默认滚动工作集峰值 485.8MB，禁用 GPU 后 491.7MB，均低于 500MB 门槛。空闲 RAF 与滚动结果表明列表没有额外可测帧时延，需在具备稳定 ≥60Hz 帧调度的环境复测。启动样本的操作系统文件缓存已热，不代表全新开机冷缓存。API 首页及桌面历史首帧达到各自阈值，桌面启动也低于 1.5 秒，但同样不是冷缓存验收。当前二进制单样本进程树工作集为 idle 414,834,688 bytes、打开仓库后 450,691,072 bytes（含 Playwright 包装进程）；与既有 20 轮门槛数据接近，仍高于 idle <250MB。Sidecar API harness 的单样本内存只作参考；跨平台性能和发行包分别在 S7.4 验收。
 
-### S7.3 — 当前快捷键配置子阶段（进行中）
-- 状态：进行中；本提交只完成快捷键注册与自定义的基础能力，不代表 S7.3 验收完成。
+### S7.3 — 快捷键注册与核心工作流（进行中）
+- 状态：进行中；完成当前可用动作的快捷键注册与自定义，不代表 S7.3 验收完成。
 - 日期：2026-10-08
-- 交付：把当前已接线的命令面板、提交、提交并推送、拉取、交互式 rebase、分支切换及 AI 提交建议 7 个快捷键集中到配置模块；设置窗口支持录制/更改、恢复默认值和本机持久化，检测重复绑定及保留的系统快捷键；菜单提示、`aria-keyshortcuts` 与实际绑定同步。全局处理跳过输入控件、可编辑区域和输入法组合态，提交文本框内保留可配置的提交快捷键。
-- 测试：`pnpm build`、`pnpm test`（118 tests）、`pnpm test:e2e`（1 test）及 `git diff --check` 通过；快捷键单测覆盖配置恢复、跨平台匹配与显示、冲突/保留键检查和输入法组合态，设置 UI 单测覆盖重新绑定和冲突提示。
+- 交付：将命令面板、打开/克隆/初始化仓库、提交/提交并推送、全部暂存、Fetch/Push/Pull、状态刷新、打开选中文件 Diff、Shelve、设置、交互式 Rebase、分支切换和 AI 提交建议共 17 个当前可用动作集中到快捷键注册表。设置窗口支持录制/更改、恢复默认值和本机持久化，检测重复绑定及保留的系统快捷键；菜单提示、`aria-keyshortcuts` 与实际绑定同步。全局处理跳过输入控件、可编辑区域和输入法组合态，提交文本框内保留可配置的提交快捷键。配置恢复支持用户交换两个默认快捷键，并在冲突配置下回退到默认值。
+- 测试：`pnpm build`、`pnpm test`（119 tests）、`pnpm test:e2e`（1 test）及 `git diff --check` 通过；快捷键单测覆盖配置恢复、交换绑定、跨平台匹配与显示、冲突/保留键检查和输入法组合态，设置 UI 单测覆盖重新绑定和冲突提示；App 单测验证 `Ctrl+O` 打开仓库选择器。
 - 证据：`src/features/settings/shortcut-preferences.ts`、`src/features/settings/SettingsDialog.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/shortcut-preferences.test.ts`、`tests/unit/settings-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。
-- 完成 commit：`c8df08c`（快捷键配置基础能力）。
-- 限制/后续：尚需逐项对照 `07` 补齐其余 P0 快捷键；完成打开仓库、暂存、分支及冲突流程的全键盘操作验证，并检查焦点管理、屏幕阅读、减少动效、非颜色状态提示和计划要求的安全负例。上述项目通过前 S7.3 保持进行中。
+- 进度 commits：`c8df08c`（快捷键配置基础能力）、`40ce5b0`（核心工作流快捷键）。
+- 限制/后续：尚未实现 `07` 中提交历史搜索、撤销最近操作、Cherry-pick、新建 Tag 和 Split/Unified 切换快捷键；需先确认这些动作在当前 UI 中的可用入口与安全语义。还需完成打开仓库、暂存、分支及冲突流程的全键盘操作验证，并检查焦点管理、屏幕阅读、减少动效、非颜色状态提示和计划要求的安全负例。上述项目通过前 S7.3 保持进行中。
