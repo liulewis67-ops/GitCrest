@@ -1823,3 +1823,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：剩余 feature aliases 仍被基础设施模块和业务 features 消费，后续继续按跨层依赖关系迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/workflows/handlers/conflicts.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`2a83996`
+
+### repositories feature crate-root alias 收敛 — 小阶段 136
+- 状态：已完成（repositories 调用与子模块出口通过 features 路径）
+- 日期：2026-10-09
+- 交付：确认 `repositories` 的 crate-root feature alias 已无消费者后，从 `lib.rs` 移除该 re-export；`cloning` 与 `repository` 的既有兼容出口改为显式从 `features::repositories` 导出。API router 已直接导入 `features::repositories`，仓库服务行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：branches/credentials/diff/history/remotes/shelves/staging/status/tasks/workflows 的 crate-root feature aliases 仍保留；按实际调用逐项迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/lib.rs`、`crates/gitcrest-core/src/features/repositories/`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`b2bca4e`
