@@ -14,7 +14,7 @@ import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { useCommitDraft, useCommitSubmission } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
-import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
+import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
@@ -194,6 +194,7 @@ function App() {
     workspaceSession,
     setWorkspaceSession,
   );
+  const rememberCommitAction = useWorkspaceCommitAction(selectedRepository?.repoId, setWorkspaceSession);
   const graphViewportRef = useRef<HTMLDivElement>(null);
   const { theme, nextTheme } = useThemePreference();
   const [paletteOpen, setPaletteOpen] = useState(false);
@@ -685,21 +686,6 @@ function App() {
   function reviewTaskPush(task: TaskSnapshotResponse) {
     setTasksOpen(false);
     openPushDialog(task.repoId || selectedRepository?.repoId, pushTargetsByTask.current.get(task.taskId), task.operation.startsWith("pushForceWithLease"));
-  }
-
-  function rememberCommitAction(action: CommitAction) {
-    const repoId = selectedRepository?.repoId;
-    if (!repoId) return;
-    setWorkspaceSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: {
-          ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }),
-          commitAction: action,
-        },
-      },
-    }));
   }
 
   function runCommitAction(action: CommitAction) {
