@@ -1373,3 +1373,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：备份 refs、reset/rebase 查询及只读子进程 runner 仍集中在 `workflow_state.rs`；后续分别移入 `refs.rs`、`history.rs` 与 `process.rs`，再收敛文件命名。
 - 证据：`crates/gitcrest-core/src/git/{mod.rs,status.rs,workflow_state.rs,command.rs}`、`crates/gitcrest-core/src/features/workflows/service.rs`。
 - 实施 commit：`4f95c8e`
+
+### 后端 Git refs adapter 独立模块 — 小阶段 86
+- 状态：已完成（备份 refs 与 remote-tracking 比较归入 git/refs.rs）
+- 日期：2026-10-09
+- 交付：新增 `git/refs.rs`，承接 rebase/reset 备份引用枚举和 remote branch delete 的远端提交数/影响路径查询；Git command adapter 的 port 实现改为调用 refs 模块，原 `workflow_state.rs` 移除这些职责。保持 reset refs 1000 条限制、查询参数和 NUL 路径解析不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：reset/rebase 提交历史查询仍在 `workflow_state.rs`；下一阶段迁入 `git/history.rs`，剩余 process runner 再单独归位。
+- 证据：`crates/gitcrest-core/src/git/{mod.rs,refs.rs,status.rs,workflow_state.rs,command.rs}`。
+- 实施 commit：`ae9634f`
