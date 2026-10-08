@@ -2226,6 +2226,103 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/reset-preview:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: preflightRepositoryReset
+      summary: Review the target, commit range, worktree paths, and reset mode
+      parameters:
+        - name: targetOid
+          in: query
+          required: true
+          schema: { type: string, minLength: 4, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        - name: mode
+          in: query
+          required: true
+          schema: { type: string, enum: [soft, mixed, hard] }
+      responses:
+        "200":
+          description: Snapshot-bound reset impact and eligibility.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetPreview"
+        "400":
+          description: The target commit or mode is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+    post:
+      operationId: startRepositoryReset
+      summary: Queue a confirmed reset after creating a recovery reference
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ResetRequest"
+      responses:
+        "202":
+          description: Reset task accepted after snapshot revalidation.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The request is malformed or explicit confirmation is missing.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: An operation is active or hard reset would overwrite local changes.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "412":
+          description: The reviewed reset snapshot is stale.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/workflows:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3285,6 +3382,37 @@ components:
         backupReference: { type: string, pattern: "^refs/gitcrest/rebase-backups/[A-Za-z0-9-]+$" }
         backupOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         confirmRollback: { type: boolean, description: Must be true after explicit user confirmation. }
+    ResetMode:
+      type: string
+      enum: [soft, mixed, hard]
+    ResetPreview:
+      type: object
+      additionalProperties: false
+      required: [repoId, expectedHeadOid, targetOid, currentBranch, mode, commitsRemoved, commitsAdded, affectedPaths, omittedPathCount, dirtyPaths, operationInProgress, previewRevision, canStart]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        targetOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        currentBranch: { type: string, maxLength: 1024 }
+        mode: { $ref: "#/components/schemas/ResetMode" }
+        commitsRemoved: { type: integer, minimum: 0 }
+        commitsAdded: { type: integer, minimum: 0 }
+        affectedPaths: { type: array, maxItems: 200, items: { type: string } }
+        omittedPathCount: { type: integer, minimum: 0 }
+        dirtyPaths: { type: array, maxItems: 200, items: { type: string } }
+        operationInProgress: { type: [string, "null"], enum: [merge, cherryPick, revert, rebase, shelfApply, null] }
+        previewRevision: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
+        canStart: { type: boolean }
+    ResetRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedHeadOid, targetOid, mode, previewRevision, confirmReset]
+      properties:
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        targetOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        mode: { $ref: "#/components/schemas/ResetMode" }
+        previewRevision: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
+        confirmReset: { type: boolean, description: Must be true after reviewing the affected commits and paths. }
     WorkflowRequest:
       type: object
       additionalProperties: false

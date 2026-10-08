@@ -441,6 +441,30 @@ describe("GitCrestApiClient", () => {
     expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body))).toEqual(request);
   });
 
+  it("previews and starts reset with the reviewed mode and commit target", async () => {
+    const preview = {
+      repoId: "repo_fixture", expectedHeadOid: "a".repeat(40), targetOid: "b".repeat(40), currentBranch: "feature",
+      mode: "mixed" as const, commitsRemoved: 2, commitsAdded: 0, affectedPaths: ["src/file.ts"], omittedPathCount: 0,
+      dirtyPaths: [], operationInProgress: null, previewRevision: `sha256:${"c".repeat(64)}`, canStart: true,
+    };
+    const task = { taskId: "task-reset", repoId: "repo_fixture", operation: "reset", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    await expect(client.preflightRepositoryReset("repo/fixture", preview.targetOid, "mixed")).resolves.toEqual(preview);
+    const url = new URL(String(fetcher.mock.calls[0]![0]));
+    expect(url.pathname).toBe("/api/v1/repositories/repo%2Ffixture/workflows/reset-preview");
+    expect(url.searchParams.get("mode")).toBe("mixed");
+    const request = {
+      expectedHeadOid: preview.expectedHeadOid, targetOid: preview.targetOid, mode: preview.mode,
+      previewRevision: preview.previewRevision, confirmReset: true,
+    };
+    await expect(client.startRepositoryReset("repo/fixture", request)).resolves.toEqual(task);
+    expect(fetcher.mock.calls[1]![1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body))).toEqual(request);
+  });
+
   it("queues a snapshot-bound cherry-pick using a typed workflow request", async () => {
     const task = { taskId: "task-cherry-pick", repoId: "repo_fixture", operation: "cherryPick", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {

@@ -351,6 +351,53 @@ impl GitCommandService {
         .await
     }
 
+    pub async fn execute_reset(
+        &self,
+        repository_path: &Path,
+        preview: &crate::reset::ResetPreview,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let backup_ref = format!("refs/gitcrest/reset-backups/{}", task.task_id());
+        run_command(
+            &self.git_program,
+            vec![
+                "update-ref".into(),
+                backup_ref.clone().into(),
+                preview.expected_head_oid.clone().into(),
+            ],
+            Some(format!("reset backup {backup_ref}")),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Create reset backup reference",
+            task.clone(),
+        )
+        .await?;
+        task.log(format!("Created recovery reference {backup_ref}."))
+            .await;
+        let mode = preview.mode.git_argument();
+        run_command(
+            &self.git_program,
+            vec![
+                "reset".into(),
+                mode.into(),
+                preview.target_oid.clone().into(),
+            ],
+            Some(format!(
+                "reset {mode} {}",
+                &preview.target_oid[..7.min(preview.target_oid.len())]
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Reset current branch",
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_workflow_recovery(
         &self,
         repository_path: &Path,

@@ -313,6 +313,10 @@ button:disabled { cursor: not-allowed; }
 .rebaseConfirm input { margin-top: 1px; }
 .rebaseRollbackPanel { display: grid; gap: 10px; border: 1px solid var(--line); border-radius: 12px; padding: 14px; background: var(--surface-raised); }
 .rebaseRollbackPanel h3 { margin: 0; font-size: 14px; }
+.resetDialog { width: min(760px, 100%); max-height: min(86vh, 900px); }
+.resetAffectedPaths { display: grid; gap: 6px; min-width: 0; }
+.resetAffectedPaths ul { display: grid; gap: 3px; max-height: 150px; overflow: auto; margin: 0; padding-left: 18px; color: var(--text-secondary); font-size: 11px; }
+.resetAffectedPaths li { overflow-wrap: anywhere; }
 .workflowPathList { max-height: 160px; overflow: auto; margin: 0; padding: 7px 9px 7px 26px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font: 11px/1.55 var(--font-mono); }
 .workflowPathList li { overflow-wrap: anywhere; }
 .workflowRecovery { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }

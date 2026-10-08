@@ -200,6 +200,22 @@ describe("desktop startup E2E", () => {
       await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "rebaseRollback" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
       expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("change feature branch");
 
+      await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
+      await window.keyboard.press("Control+k");
+      const commandPalette = window.getByRole("dialog", { name: "Command palette" });
+      await commandPalette.getByRole("button", { name: /Reset current branch/ }).click();
+      const resetDialog = window.getByRole("dialog", { name: "Reset current branch" });
+      await resetDialog.waitFor();
+      await resetDialog.locator("#reset-target").selectOption(mainOid);
+      await resetDialog.getByRole("button", { name: "Review impact" }).click();
+      await resetDialog.getByText(/Affected paths/).waitFor();
+      await resetDialog.getByLabel(/I reviewed the commit and path impact/).check();
+      await resetDialog.getByRole("button", { name: "Reset mixed" }).click();
+      const resetTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "reset" }) });
+      await resetTaskCard.waitFor({ state: "visible" });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "reset" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(mainOid);
+
       const forgotten = await window.evaluate(async (repoId) => {
         const connection = await (globalThis.window as unknown as Window & {
           gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };

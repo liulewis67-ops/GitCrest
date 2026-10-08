@@ -943,6 +943,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/workflows/reset-preview": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Review the target, commit range, worktree paths, and reset mode */
+        get: operations["preflightRepositoryReset"];
+        put?: never;
+        /** Queue a confirmed reset after creating a recovery reference */
+        post: operations["startRepositoryReset"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/workflows": {
         parameters: {
             query?: never;
@@ -1449,6 +1471,32 @@ export interface components {
             backupOid: string;
             /** @description Must be true after explicit user confirmation. */
             confirmRollback: boolean;
+        };
+        /** @enum {string} */
+        ResetMode: "soft" | "mixed" | "hard";
+        ResetPreview: {
+            repoId: components["schemas"]["RepoId"];
+            expectedHeadOid: string;
+            targetOid: string;
+            currentBranch: string;
+            mode: components["schemas"]["ResetMode"];
+            commitsRemoved: number;
+            commitsAdded: number;
+            affectedPaths: string[];
+            omittedPathCount: number;
+            dirtyPaths: string[];
+            /** @enum {string|null} */
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            previewRevision: string;
+            canStart: boolean;
+        };
+        ResetRequest: {
+            expectedHeadOid: string;
+            targetOid: string;
+            mode: components["schemas"]["ResetMode"];
+            previewRevision: string;
+            /** @description Must be true after reviewing the affected commits and paths. */
+            confirmReset: boolean;
         };
         WorkflowRequest: {
             /** @enum {string} */
@@ -4646,6 +4694,123 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             406: components["responses"]["UnsupportedVersion"];
             /** @description The branch, worktree, or selected backup changed after review. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git cannot be started. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    preflightRepositoryReset: {
+        parameters: {
+            query: {
+                targetOid: string;
+                mode: "soft" | "mixed" | "hard";
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snapshot-bound reset impact and eligibility. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetPreview"];
+                };
+            };
+            /** @description The target commit or mode is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is not available. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    startRepositoryReset: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Reset task accepted after snapshot revalidation. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The request is malformed or explicit confirmation is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description An operation is active or hard reset would overwrite local changes. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The reviewed reset snapshot is stale. */
             412: {
                 headers: {
                     [name: string]: unknown;

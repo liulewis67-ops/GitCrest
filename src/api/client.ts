@@ -24,6 +24,7 @@ export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchP
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
 export type RebasePreviewResponse = components["schemas"]["RebasePreview"];
 export type RebaseBackupSnapshotResponse = components["schemas"]["RebaseBackupSnapshot"];
+export type ResetPreviewResponse = components["schemas"]["ResetPreview"];
 export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
 export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
 export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowConflictMutationRequest"];
@@ -397,6 +398,25 @@ export class GitCrestApiClient {
   ): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(
       `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/rebase-rollback`,
+      true,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  preflightRepositoryReset(repoId: RepoId, targetOid: string, mode: components["schemas"]["ResetMode"]): Promise<ResetPreviewResponse> {
+    const query = new URLSearchParams({ targetOid, mode });
+    return this.request<ResetPreviewResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/reset-preview?${query}`,
+    );
+  }
+
+  startRepositoryReset(repoId: RepoId, request: components["schemas"]["ResetRequest"]): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/reset-preview`,
       true,
       {
         method: "POST",

@@ -43,6 +43,7 @@ mod push;
 mod rebase;
 mod remotes;
 mod repository;
+mod reset;
 mod shelves;
 mod staging;
 mod status;
@@ -1037,6 +1038,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/workflows/rebase-rollback",
             post(rollback_repository_rebase),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/reset-preview",
+            get(preflight_repository_reset).post(start_repository_reset),
         )
         .route(
             "/v1/repositories/:repo_id/workflows",
@@ -4048,6 +4053,152 @@ async fn rollback_repository_rebase(
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context
                         .log("Repository metadata refresh failed after rollback; refresh the repository before the next write.")
+                        .await;
+                }
+                result.map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ResetPreviewQuery {
+    target_oid: String,
+    mode: reset::ResetMode,
+}
+
+async fn preflight_repository_reset(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<ResetPreviewQuery>, QueryRejection>,
+) -> Result<Json<reset::ResetPreview>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Reset preview requires a target commit and mode.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    reset::read_preview(
+        repo_id,
+        &target.repository_path,
+        &query.target_oid,
+        query.mode,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_workflow_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ResetRequest {
+    expected_head_oid: String,
+    target_oid: String,
+    mode: reset::ResetMode,
+    preview_revision: String,
+    confirm_reset: bool,
+}
+
+async fn start_repository_reset(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<ResetRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Reset requires the reviewed HEAD, target, mode, and preview revision.",
+        )
+    })?;
+    if !request.confirm_reset {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Reset requires explicit confirmation after reviewing the affected commits and paths.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = reset::read_preview(
+        repo_id.clone(),
+        &target.repository_path,
+        &request.target_oid,
+        request.mode,
+    )
+    .await
+    .map_err(ApiError::from_workflow_error)?;
+    if preview.expected_head_oid != request.expected_head_oid
+        || preview.target_oid != request.target_oid
+        || preview.preview_revision != request.preview_revision
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowPreflightStale,
+            "HEAD, target, or affected paths changed after review. Refresh the reset preview.",
+        ));
+    }
+    if !preview.can_start {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowRequiresClean,
+            "This reset cannot start because the target is already HEAD, a Git operation is active, or hard reset would overwrite local changes.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let repositories = state.repositories.clone();
+    let task_repo_id = repo_id.clone();
+    let path = target.repository_path;
+    let resource_key = target.resource_key;
+    let expected_head_oid = request.expected_head_oid;
+    let target_oid = request.target_oid;
+    let mode = request.mode;
+    let expected_revision = request.preview_revision;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            "reset",
+            move |context| async move {
+                let current = reset::read_preview(
+                    task_repo_id.clone(),
+                    &path,
+                    &target_oid,
+                    mode,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "Reset preconditions could not be rechecked. Refresh repository state.".into(),
+                    )
+                })?;
+                if current.expected_head_oid != expected_head_oid
+                    || current.preview_revision != expected_revision
+                    || !current.can_start
+                {
+                    return Err(TaskFailure::Failed(
+                        "Reset preconditions changed before Git could start. Review the affected commits and paths again.".into(),
+                    ));
+                }
+                let task_context = context.clone();
+                let result = command.execute_reset(&path, &current, context).await;
+                if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                    task_context
+                        .log("Repository metadata refresh failed after reset; refresh the repository before the next write.")
                         .await;
                 }
                 result.map(|()| None)
@@ -7665,6 +7816,185 @@ mod tests {
                 .unwrap()
                 .replace("\r\n", "\n"),
             "resolved feature line\nkeep line\n"
+        );
+    }
+
+    #[tokio::test]
+    async fn reset_requires_review_confirmation_and_keeps_a_recovery_reference() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("reset-workflow-repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["config", "user.name", "Reset Workflow Test"]);
+        git(&["config", "user.email", "reset-workflow@example.invalid"]);
+        std::fs::write(repository_path.join("base.txt"), "base\n").unwrap();
+        git(&["add", "base.txt"]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        let target_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "-b", "feature"]);
+        std::fs::write(repository_path.join("feature.txt"), "feature\n").unwrap();
+        git(&["add", "feature.txt"]);
+        git(&["commit", "--quiet", "-m", "feature commit"]);
+        let old_head = git(&["rev-parse", "HEAD"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let preview_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/reset-preview?targetOid={target_oid}&mode=mixed"
+        );
+        let preview_response = app
+            .clone()
+            .oneshot(request(&preview_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        assert_eq!(preview_response.status(), StatusCode::OK);
+        let bytes = to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(preview["commitsRemoved"], 1);
+        assert_eq!(preview["commitsAdded"], 0);
+        assert_eq!(preview["affectedPaths"], serde_json::json!(["feature.txt"]));
+        assert_eq!(preview["canStart"], true);
+
+        let missing_confirmation = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/reset-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": old_head,
+                    "targetOid": target_oid,
+                    "mode": "mixed",
+                    "previewRevision": preview["previewRevision"],
+                    "confirmReset": false
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(missing_confirmation.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(git(&["rev-parse", "HEAD"]), old_head);
+        let stale_review = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/reset-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": old_head,
+                    "targetOid": target_oid,
+                    "mode": "mixed",
+                    "previewRevision": format!("sha256:{}", "0".repeat(64)),
+                    "confirmReset": true
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(stale_review.status(), StatusCode::PRECONDITION_FAILED);
+        assert_eq!(git(&["rev-parse", "HEAD"]), old_head);
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/reset-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": old_head,
+                    "targetOid": target_oid,
+                    "mode": "mixed",
+                    "previewRevision": preview["previewRevision"],
+                    "confirmReset": true
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let accepted: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let completed = wait_for_task(&app, accepted["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded", "{completed}");
+        assert_eq!(git(&["rev-parse", "HEAD"]), target_oid);
+        assert!(completed["logs"]
+            .to_string()
+            .contains("refs/gitcrest/reset-backups/"));
+        assert_eq!(
+            git(&[
+                "rev-parse",
+                &format!(
+                    "refs/gitcrest/reset-backups/{}",
+                    accepted["taskId"].as_str().unwrap()
+                )
+            ]),
+            old_head
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("feature.txt")).unwrap(),
+            "feature\n"
+        );
+
+        std::fs::write(repository_path.join("base.txt"), "local edit\n").unwrap();
+        let hard_preview_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/reset-preview?targetOid={old_head}&mode=hard"
+        );
+        let hard_preview = app
+            .clone()
+            .oneshot(request(&hard_preview_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(hard_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let hard_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(hard_preview["canStart"], false);
+        let hard_reset = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/reset-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": hard_preview["expectedHeadOid"],
+                    "targetOid": old_head,
+                    "mode": "hard",
+                    "previewRevision": hard_preview["previewRevision"],
+                    "confirmReset": true
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(hard_reset.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("base.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "local edit\n"
         );
     }
 
