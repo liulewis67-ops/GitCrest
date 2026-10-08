@@ -1103,3 +1103,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：rebase、reset、recovery 与 conflict handlers 仍在 `main.rs`；继续按功能边界迁移并拆 DTO/service，避免 workflows feature 退化为单一大 handler 文件。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`ee878e4`
+
+### 后端 workflows rebase handlers 迁移 — 小阶段 56
+- 状态：已完成（rebase preview/start、备份与 rollback handlers 进入 feature）
+- 日期：2026-10-09
+- 交付：将 rebase preview/start、backup listing、rollback handlers 及 backup reference 校验 helper 从 `main.rs` 迁入 `features/workflows/handlers.rs`；新增对应 preview/start/rollback request DTO，并由 feature routes 绑定本地 handlers。现有 HEAD/preview revision 检查、显式 rollback 确认与备份引用校验保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；rebase preview、rollback 和 workflow API 集成用例通过。
+- 限制/后续：reset、merge-backup recovery、conflict file/AI suggestion handlers 仍留在 `main.rs`；下一阶段按 reset/recovery 与 conflict 两组继续迁移。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`cad9333`
