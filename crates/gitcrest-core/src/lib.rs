@@ -21,7 +21,7 @@ mod ports;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
-pub(crate) use features::repositories::{cloning, repository};
+pub(crate) use features::repositories::repository;
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
@@ -38,7 +38,7 @@ use api::{
     router::app_router,
 };
 #[cfg(test)]
-use cloning::CloneService;
+use features::repositories::cloning::CloneService;
 #[cfg(test)]
 use features::tasks::TaskService;
 #[cfg(test)]

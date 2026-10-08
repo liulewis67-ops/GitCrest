@@ -5,9 +5,8 @@ use tokio::net::TcpListener;
 
 use crate::{
     api::router::app_router,
-    cloning::CloneService,
     config::AppConfig,
-    features::{credentials, tasks::TaskService},
+    features::{credentials, repositories::cloning::CloneService, tasks::TaskService},
     git::command::GitCommandService,
     repository::RepositoryManager,
     state::{AppState, EventBus},

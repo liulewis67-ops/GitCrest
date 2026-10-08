@@ -227,7 +227,8 @@ pub async fn validate_remote_name(repository_path: &Path, name: &str) -> Result<
 }
 
 pub fn validate_remote_url(url: &str) -> Result<(), RemoteError> {
-    crate::cloning::validate_remote_url(url).map_err(|_| RemoteError::InvalidUrl)
+    crate::features::repositories::cloning::validate_remote_url(url)
+        .map_err(|_| RemoteError::InvalidUrl)
 }
 
 pub fn safe_remote_url(url: &str) -> String {

@@ -6,13 +6,13 @@ use axum::{
 use serde::Serialize;
 
 use crate::{
-    cloning::CloneError,
     domain::error::{ConflictError, WorkflowError},
     features::{
         branches, commits, credentials,
         diff::DiffError,
         history,
         remotes::{self, pull, push},
+        repositories::cloning::CloneError,
         shelves, staging, tags,
         tasks::TaskSubmitError,
     },
