@@ -13,7 +13,7 @@ use tower_http::cors::CorsLayer;
 use crate::write_probe;
 
 use crate::{
-    add_api_version_header, api_not_found, commit_repository, get_workflow_conflict_ai_settings,
+    add_api_version_header, api_not_found, get_workflow_conflict_ai_settings,
     list_repository_rebase_backups, list_repository_reset_backups, mark_workflow_conflict_resolved,
     preflight_repository_rebase, preflight_repository_reset, preflight_repository_workflow,
     preflight_repository_workflow_recovery, read_workflow_conflict_file,
@@ -35,12 +35,9 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::shelves::routes::router())
         .merge(crate::credentials::routes::router())
         .merge(crate::settings::routes::router())
+        .merge(crate::commits::routes::router())
         .merge(crate::tags::routes::router())
         .merge(crate::tasks::routes::router())
-        .route(
-            "/v1/repositories/:repo_id/commits",
-            crate::history::routes::commits_get_route().post(commit_repository),
-        )
         .route(
             "/v1/repositories/:repo_id/workflows/preflight",
             get(preflight_repository_workflow),
