@@ -15,8 +15,6 @@ mod api;
 mod bootstrap;
 mod config;
 
-#[path = "features/settings/ai.rs"]
-mod ai;
 #[path = "features/branches/mod.rs"]
 mod branches;
 #[path = "features/repositories/cloning.rs"]
@@ -43,6 +41,8 @@ mod repositories;
 mod repository;
 #[path = "features/workflows/reset.rs"]
 mod reset;
+#[path = "features/settings/mod.rs"]
+mod settings;
 #[path = "features/shelves/mod.rs"]
 mod shelves;
 #[path = "features/staging/mod.rs"]
@@ -74,6 +74,7 @@ use diff::{DiffError, DiffScope};
 use git_command::GitCommandService;
 use git_command::{BranchCommand, GitOperation, RemoteCommand};
 use repository::{Repository, RepositoryError, RepositoryManager};
+use settings as ai;
 use state::{AppState, EventBus};
 use storage::{UndoOperation, UndoRecord};
 use tasks::{TaskFailure, TaskService, TaskSnapshot};
@@ -129,7 +130,9 @@ fn ai_settings_from_parts(
     })
 }
 
-async fn get_ai_settings(State(state): State<AppState>) -> Result<Json<ai::AiSettings>, ApiError> {
+pub(crate) async fn get_ai_settings(
+    State(state): State<AppState>,
+) -> Result<Json<ai::AiSettings>, ApiError> {
     let store = state.repositories.store();
     let manager = state.ai_credentials.clone();
     let settings = tokio::task::spawn_blocking(move || {
@@ -156,7 +159,7 @@ async fn get_ai_settings(State(state): State<AppState>) -> Result<Json<ai::AiSet
     Ok(Json(settings))
 }
 
-async fn set_ai_settings(
+pub(crate) async fn set_ai_settings(
     State(state): State<AppState>,
     request: Result<Json<ai::AiSettingsRequest>, JsonRejection>,
 ) -> Result<Json<ai::AiSettings>, ApiError> {
@@ -205,7 +208,7 @@ async fn set_ai_settings(
     Ok(Json(settings))
 }
 
-async fn set_ai_credential(
+pub(crate) async fn set_ai_credential(
     State(state): State<AppState>,
     request: Result<Json<ai::AiCredentialRequest>, JsonRejection>,
 ) -> Result<Json<ai::AiSettings>, ApiError> {
@@ -243,7 +246,9 @@ async fn set_ai_credential(
     Ok(Json(settings))
 }
 
-async fn delete_ai_credential(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+pub(crate) async fn delete_ai_credential(
+    State(state): State<AppState>,
+) -> Result<StatusCode, ApiError> {
     let manager = state.ai_credentials.clone();
     tokio::task::spawn_blocking(move || manager.delete())
         .await

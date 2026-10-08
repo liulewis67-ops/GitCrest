@@ -4,7 +4,7 @@ use axum::{
         HeaderName, HeaderValue, Method,
     },
     middleware,
-    routing::{get, post, put},
+    routing::{get, post},
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -13,15 +13,14 @@ use tower_http::cors::CorsLayer;
 use crate::write_probe;
 
 use crate::{
-    add_api_version_header, api_not_found, commit_repository, delete_ai_credential,
-    get_ai_settings, get_workflow_conflict_ai_settings, list_repository_rebase_backups,
-    list_repository_reset_backups, mark_workflow_conflict_resolved, preflight_repository_rebase,
-    preflight_repository_reset, preflight_repository_workflow,
+    add_api_version_header, api_not_found, commit_repository, get_workflow_conflict_ai_settings,
+    list_repository_rebase_backups, list_repository_reset_backups, mark_workflow_conflict_resolved,
+    preflight_repository_rebase, preflight_repository_reset, preflight_repository_workflow,
     preflight_repository_workflow_recovery, read_workflow_conflict_file,
     recover_repository_workflow, repositories, request_ai, request_workflow_conflict_suggestion,
     require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
-    save_workflow_conflict_file, set_ai_credential, set_ai_settings, start_repository_rebase,
-    start_repository_reset, start_repository_workflow, status, system, AppState,
+    save_workflow_conflict_file, start_repository_rebase, start_repository_reset,
+    start_repository_workflow, status, system, AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
@@ -35,13 +34,9 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::staging::routes::router())
         .merge(crate::shelves::routes::router())
         .merge(crate::credentials::routes::router())
+        .merge(crate::settings::routes::router())
         .merge(crate::tags::routes::router())
         .merge(crate::tasks::routes::router())
-        .route("/v1/ai/settings", get(get_ai_settings).put(set_ai_settings))
-        .route(
-            "/v1/ai/credential",
-            put(set_ai_credential).delete(delete_ai_credential),
-        )
         .route("/v1/repositories/:repo_id/ai/request", post(request_ai))
         .route(
             "/v1/repositories/:repo_id/commits",
