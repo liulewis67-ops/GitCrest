@@ -48,7 +48,7 @@ mod repository;
 mod reset;
 #[path = "features/shelves/shelves.rs"]
 mod shelves;
-#[path = "features/staging/staging.rs"]
+#[path = "features/staging/mod.rs"]
 mod staging;
 mod state;
 #[path = "features/status/mod.rs"]
@@ -89,7 +89,7 @@ async fn main() {
     }
 }
 
-async fn stage_repository(
+pub(crate) async fn stage_repository(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<staging::StagingRequest>, JsonRejection>,
@@ -175,7 +175,7 @@ async fn stage_repository(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-async fn stage_repository_patch(
+pub(crate) async fn stage_repository_patch(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<staging::StagingPatchRequest>, JsonRejection>,
@@ -320,7 +320,7 @@ async fn stage_repository_patch(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-async fn undo_recent_operation(
+pub(crate) async fn undo_recent_operation(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
@@ -473,7 +473,7 @@ async fn persist_staging_undo(
     }
 }
 
-async fn discard_repository_patch(
+pub(crate) async fn discard_repository_patch(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<staging::DiscardPatchRequest>, JsonRejection>,
