@@ -18,7 +18,7 @@ export function DiscardChangesDialog({ path, selectionCount, disabled, error, on
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>FILE</span><strong className="monoText">{path}</strong></div>
         <div className="repositoryFact"><span>SELECTED CHANGES</span><strong>{selectionCount} hunk or changed-row selection{selectionCount === 1 ? "" : "s"}</strong></div>
-        <p className="cloneHelp">Only the selected lines from this reviewed working-tree diff will be reverted. Staged changes are not included. GitCrest will refuse if the file changes before the task applies.</p>
+        <p className="cloneHelp">Only the selected lines from this reviewed working-tree diff will be reverted. Staged changes are not included. For a recovery copy, cancel and save these changes to a shelf first; GitCrest cannot undo this discard. GitCrest will refuse if the file changes before the task applies.</p>
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the selected lines and understand this discards their working-tree changes.</label>
         <div className="taskCenterActions">

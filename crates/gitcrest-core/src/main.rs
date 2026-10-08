@@ -6771,6 +6771,233 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn discard_git_apply_failure_preserves_the_working_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("discard-failure-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |arguments: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "Discard Failure Test"]);
+        git(&["config", "user.email", "discard-failure@example.invalid"]);
+        let original = "trailing space \n";
+        std::fs::write(root.join("tracked.txt"), original).unwrap();
+        git(&["add", "tracked.txt"]);
+        git(&["commit", "--quiet", "-m", "seed"]);
+        let changed = "working edit\n";
+        std::fs::write(root.join("tracked.txt"), changed).unwrap();
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": root }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=tracked.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        git(&["config", "apply.whitespace", "error"]);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging/discard"),
+                &serde_json::json!({
+                    "path": "tracked.txt",
+                    "revision": diff["revision"],
+                    "selections": [{"hunkIndex": 0}],
+                    "confirmDiscard": true,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "failed", "{completed}");
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt")).unwrap(),
+            changed
+        );
+    }
+
+    #[tokio::test]
+    async fn queued_discard_cancellation_does_not_change_the_working_tree() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("discard-cancel-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |arguments: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "Discard Cancel Test"]);
+        git(&["config", "user.email", "discard-cancel@example.invalid"]);
+        let original = "base line\n";
+        let changed = "working edit\n";
+        std::fs::write(root.join("tracked.txt"), original).unwrap();
+        git(&["add", "tracked.txt"]);
+        git(&["commit", "--quiet", "-m", "seed"]);
+        std::fs::write(root.join("tracked.txt"), changed).unwrap();
+
+        let repositories = RepositoryManager::default();
+        let tasks = TaskService::default();
+        let git_commands = GitCommandService::default();
+        let app = app_router(
+            AppState {
+                read_write_token: Arc::new(WRITE_TOKEN.to_string()),
+                read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
+                conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
+                credentials: test_credentials(),
+                clones: CloneService::new(
+                    tasks.clone(),
+                    git_commands.clone(),
+                    repositories.clone(),
+                ),
+                repositories: repositories.clone(),
+                tasks: tasks.clone(),
+                git_commands,
+            },
+            None,
+        );
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": root }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap().to_owned();
+        let resource_key = repositories
+            .task_target(&repo_id)
+            .await
+            .unwrap()
+            .resource_key;
+
+        let (started_sender, started_receiver) = tokio::sync::oneshot::channel();
+        let (release_sender, release_receiver) = tokio::sync::oneshot::channel();
+        let blocker = tasks
+            .submit(
+                Some(repo_id.clone()),
+                None,
+                resource_key,
+                "testRepositoryLock",
+                move |_context| async move {
+                    let _ = started_sender.send(());
+                    let _ = release_receiver.await;
+                    Ok(None)
+                },
+            )
+            .await
+            .unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(1), started_receiver)
+            .await
+            .unwrap()
+            .unwrap();
+
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=tracked.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging/discard"),
+                &serde_json::json!({
+                    "path": "tracked.txt",
+                    "revision": diff["revision"],
+                    "selections": [{"hunkIndex": 0}],
+                    "confirmDiscard": true,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let discard: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let cancelled = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!(
+                        "/api/v1/tasks/{}/cancel",
+                        discard["taskId"].as_str().unwrap()
+                    ))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(cancelled.status(), StatusCode::OK);
+        release_sender.send(()).unwrap();
+        assert_eq!(
+            wait_for_task(&app, blocker.task_id.as_str()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            wait_for_task(&app, discard["taskId"].as_str().unwrap()).await["status"],
+            "cancelled"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt")).unwrap(),
+            changed
+        );
+    }
+
+    #[tokio::test]
     async fn shelf_api_persists_a_selected_hunk_and_preserves_unselected_working_changes() {
         let directory = tempfile::tempdir().unwrap();
         let root = directory.path().join("shelf-repo");
