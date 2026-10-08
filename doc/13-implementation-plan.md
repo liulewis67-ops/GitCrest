@@ -1571,3 +1571,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：commit task 编排、快捷键监听及相关 task 映射仍在 App；后续按 feature model/use case 与 app orchestration 边界继续拆分。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/features/commits/model/use-commit-draft.ts`、`src/features/commits/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`bea253f`
+
+### Workspace 历史滚动持久化迁入 repositories model — 小阶段 108
+- 状态：已完成（历史图滚动位置按仓库延迟合并并保存到 workspace session）
+- 日期：2026-10-09
+- 交付：新增 `features/repositories/model/use-workspace-graph-scroll.ts`，封装 graph 模式与有效 RepoId 校验、非负滚动值规范化、120ms 合并写入及卸载时清理定时器；App 移除对应 refs 和内联回调，并通过 repositories feature 入口向 workspace 页面提供 hook 回调。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留现有 tree-sitter `eval`、commits 模块动态/静态导入提示与 Monaco contribution 大 chunk 警告。
+- 限制/后续：滚动 viewport 的 DOM 恢复仍由 App 根据 session 状态协调；仓库选中提交状态及 commit task 编排也仍在 App，继续沿 feature model 边界迁出。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-workspace-graph-scroll.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`921050e`
