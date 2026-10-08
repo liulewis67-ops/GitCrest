@@ -1364,3 +1364,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`workflow_state.rs` 尚未按指南拆到 `status.rs`、`refs.rs` 与 `history.rs`；后续逐类移动解析和 Git 查询实现，并在完成后移除兼容导出。
 - 证据：`crates/gitcrest-core/src/{main.rs,git/mod.rs,git/command.rs}`。
 - 实施 commit：`13ef455`
+
+### 后端 Git status adapter 独立模块 — 小阶段 85
+- 状态：已完成（worktree status 与活动操作读取归入 git/status.rs）
+- 日期：2026-10-09
+- 交付：新增 `git/status.rs`，承接 porcelain v2 status 读取、dirty/conflict 路径有界解析和 Git 活动操作标记识别；`git/command.rs` 的 `GitReadPort` 实现和执行后状态检查改经 status 模块。删除原 `workflow_state.rs` 中相应重复实现，service 解析用例改引用规范模块路径。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：备份 refs、reset/rebase 查询及只读子进程 runner 仍集中在 `workflow_state.rs`；后续分别移入 `refs.rs`、`history.rs` 与 `process.rs`，再收敛文件命名。
+- 证据：`crates/gitcrest-core/src/git/{mod.rs,status.rs,workflow_state.rs,command.rs}`、`crates/gitcrest-core/src/features/workflows/service.rs`。
+- 实施 commit：`4f95c8e`
