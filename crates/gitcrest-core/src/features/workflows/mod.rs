@@ -1,4 +1,4 @@
-#[path = "workflows.rs"]
+#[path = "service.rs"]
 mod service;
 
 #[path = "conflicts.rs"]
