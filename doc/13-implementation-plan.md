@@ -870,3 +870,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/api/{events,mod,router}.rs`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/state.rs`。
 - 实施 commit：`eb2b71d`
 
+
+### 前端 renderer routing 边界拆分 — 小阶段 31
+- 状态：已完成（renderer 入口按 app/routing 规范组织；前端架构迁移仍继续）
+- 日期：2026-10-09
+- 交付：新增 `src/app/routing/RendererRoot.tsx` 与纯解析模块 `renderer-view.ts`，将浏览器/Electron 入口的 URL view 解析和 workspace、Diff、conflict 三种窗口选择从 `main.tsx` 移入 `app/routing/`；未知 view 回退 workspace，保留原有 StrictMode 和窗口组件行为。
+- 验证：renderer view 单测 3/3、完整 Vitest 单测 149/149、`pnpm build`（Electron renderer/main/preload）、`pnpm frontend:build`（浏览器构建）、`git diff --check` 通过。构建显示既有 tree-sitter `eval` 与浏览器 bundle 大块警告，不影响成功状态。
+- 限制/后续：本阶段只拆分 renderer 入口路由边界；`App.tsx` 仍承载 workspace 大量组合状态，`src/styles`/Tailwind v4、查询缓存、feature 公开入口和 lint/format 工具仍待逐步按前端规范实施。S7.2 性能门槛、S7.4 跨平台签名/更新和 S7.5 发布验收仍未完成。
+- 证据：`src/app/routing/{RendererRoot.tsx,renderer-view.ts}`、`src/main.tsx`、`tests/unit/renderer-view.test.ts`。
+- 实施 commit：`4297ad7`
+
