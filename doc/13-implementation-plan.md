@@ -651,3 +651,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
 - 限制/后续：仓库生命周期 handler、status 以外 handlers、feature DTO 仍未完全归位；继续按契约分组迁移，并避免跨 feature 调用私有实现。
 - 证据：`crates/gitcrest-core/src/features/status/handlers.rs`、`crates/gitcrest-core/src/features/status/routes.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`547d3a5`
