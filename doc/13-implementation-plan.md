@@ -1256,3 +1256,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：领域 operation 和 API 序列化策略已分离，但多组 feature response DTO 仍集中在较大的 workflows `dto.rs`；下一阶段按后端目录规范拆分 response DTO 文件，并审视 API shared enum 的契约测试覆盖。
 - 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/api/workflow.rs`、`crates/gitcrest-core/src/features/{workflows,remotes}/{dto.rs,handlers,service.rs}`、`crates/gitcrest-core/src/git/git_command.rs`。
 - 实施 commit：`a073f0a`
+
+### 后端 workflows DTO 请求/响应分层 — 小阶段 73
+- 状态：已完成（workflows DTO 拆分为请求与响应模块）
+- 日期：2026-10-09
+- 交付：将原 `features/workflows/dto.rs` 拆为 `dto/requests.rs` 与 `dto/responses.rs`，保留 `dto.rs` 作为 feature 内聚合出口；请求 DTO 与领域转换、响应 DTO 与领域/服务模型转换分别归组。WorkflowAction 与 WorkflowOperation 的共享 wire enum 和双向映射移入 `api/workflow.rs`，避免 response DTO 依赖 request DTO 模块。响应字段、camelCase 名称及枚举值保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：DTO 目录现按传输方向分层，workflows service 本身仍包含多个预检/恢复用例；后续按规范继续拆分 use case service，并检查 `features/remotes/service.rs` 等是否混有传输模型。
+- 证据：`crates/gitcrest-core/src/api/workflow.rs`、`crates/gitcrest-core/src/features/workflows/{dto.rs,dto/requests.rs,dto/responses.rs}`。
+- 实施 commit：`4d2a796`
