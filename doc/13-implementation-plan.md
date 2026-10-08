@@ -1427,3 +1427,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：remote mutation/task 提交、任务列表和连接事件仍由 `App.tsx` 管理；后续按 feature 拆分写操作和后台任务协调。
 - 证据：`src/features/branches/model/use-repository-refs.ts`、`src/app/App.tsx`。
 - 实施 commit：`36dbd5b`
+
+### 前端 tasks server state 迁入 task feature model — 小阶段 92
+- 状态：已完成（task list 查询状态、错误、刷新及任务插入策略由 tasks feature hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/tasks/model/use-task-center.ts`，封装任务列表和读取错误状态、列表刷新，以及保持既有顺序语义的前插/后插 upsert；`App.tsx` 继续负责轮询时机、任务操作编排和任务中心 UI 状态。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）及 `git diff --check` 通过；未运行测试。
+- 限制/后续：任务操作和任务完成后的仓库刷新协调仍在 App；后续将任务事件副作用/操作编排按职责迁移，并继续拆解 App workspace composition。
+- 证据：`src/features/tasks/model/use-task-center.ts`、`src/app/App.tsx`。
+- 实施 commit：`16d0cea`
