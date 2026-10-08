@@ -26,6 +26,16 @@ pub(super) struct WorkflowRecoveryQuery {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct WorkflowRecoveryRequest {
+    pub(super) task_id: String,
+    pub(super) action: super::service::WorkflowRecoveryAction,
+    pub(super) expected_operation: super::service::WorkflowOperation,
+    pub(super) expected_head_oid: String,
+    pub(super) expected_conflicted_paths: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct RebasePreviewQuery {
     pub(super) onto_oid: String,
 }
