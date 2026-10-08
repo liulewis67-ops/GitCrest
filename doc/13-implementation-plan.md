@@ -1760,3 +1760,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：features 父模块当前包含 branches/commits/credentials/diff/history/remotes/settings/shelves/staging/status/system/tags/tasks；repositories/workflows 仍待迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,commits/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`59ec27f`
+
+### 后端 repositories feature 纳入 features 父模块 — 小阶段 129
+- 状态：已完成（仓库管理、克隆和仓库 API 由统一 features 父模块组织）
+- 日期：2026-10-09
+- 交付：将 `repositories` 加入 `src/features/mod.rs`，并在其 feature 模块内声明已有的 `cloning`、`repository` 子模块；删除 `lib.rs` 对这些模块的独立路径声明。通过 crate 内兼容重导出保留现有 `crate::repositories`、`crate::cloning` 和 `crate::repository` 引用，未改变仓库服务与克隆服务的访问边界。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：除 `workflows` 外，既有 API features 均已由统一 features 父模块声明；workflows 模块仍待按其内部限定可见性单独迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,repositories/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`8f5535d`
