@@ -2074,3 +2074,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workspace mode 和所选 commit 等 session 更新仍在 App 或其他 repository hooks；后续继续按 repositories feature 的会话职责迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-workspace-commit-action.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`5cb509f`
+
+### commits feature Workbench 使用公开 lazy loader — 小阶段 164
+- 状态：已完成（CommitWorkbench 保持懒加载，并由 commits feature 公开入口提供 loader）
+- 日期：2026-10-09
+- 交付：在 commits barrel 暴露 `loadCommitWorkbench`，App 经公开入口加载 UI；避免 barrel 同时被 App 静态和动态导入，保持 CommitWorkbench 独立异步 chunk，并消除构建中的对应 dynamic/static import 警告。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：其他 feature 的 lazy UI 入口可按需统一公开 loader；不影响现有功能门控。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/commits/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 实施 commit：`dcabdaa`
