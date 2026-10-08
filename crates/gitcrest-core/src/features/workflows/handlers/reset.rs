@@ -127,7 +127,15 @@ pub(in crate::workflows) async fn start_repository_reset(
                     ));
                 }
                 let task_context = context.clone();
-                let result = command.execute_reset(&path, &current, context).await;
+                let result = command
+                    .execute_reset(
+                        &path,
+                        &current.expected_head_oid,
+                        &current.target_oid,
+                        current.mode.git_argument(),
+                        context,
+                    )
+                    .await;
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context
                         .log("Repository metadata refresh failed after reset; refresh the repository before the next write.")

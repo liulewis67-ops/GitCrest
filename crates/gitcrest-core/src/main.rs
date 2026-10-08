@@ -58,7 +58,6 @@ mod tasks;
 mod watcher;
 #[path = "features/workflows/mod.rs"]
 mod workflows;
-pub(crate) use workflows::{rebase, reset};
 
 use api::error::ApiError;
 #[cfg(test)]
@@ -3106,9 +3105,10 @@ mod tests {
         let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
         let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         let repo_id = repository["repoId"].as_str().unwrap();
-        let direct_preview = rebase::read_preview(repo_id.to_owned(), &repository_path, &onto_oid)
-            .await
-            .unwrap();
+        let direct_preview =
+            workflows::rebase::read_preview(repo_id.to_owned(), &repository_path, &onto_oid)
+                .await
+                .unwrap();
         assert_eq!(direct_preview.commits.len(), 2);
         let preview_path =
             format!("/api/v1/repositories/{repo_id}/workflows/rebase-preview?ontoOid={onto_oid}");

@@ -555,20 +555,17 @@ impl GitCommandService {
     pub async fn execute_rebase(
         &self,
         repository_path: &Path,
-        expected_head_oid: &str,
-        onto_oid: &str,
-        preview: &crate::rebase::RebasePreview,
-        todo: &[crate::domain::workflow::RebaseTodoItem],
+        execution: &crate::domain::workflow::RebaseExecutionPlan,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let todo_plan = TemporaryRebasePlan::create(preview, todo)?;
+        let todo_plan = TemporaryRebasePlan::create(execution)?;
         let backup_ref = format!("refs/gitcrest/rebase-backups/{}", task.task_id());
         run_command(
             &self.git_program,
             vec![
                 "update-ref".into(),
                 backup_ref.clone().into(),
-                expected_head_oid.into(),
+                execution.expected_head_oid.clone().into(),
             ],
             Some(format!("rebase backup {backup_ref}")),
             None,
@@ -599,12 +596,12 @@ impl GitCommandService {
                 "rebase".into(),
                 "--interactive".into(),
                 "--onto".into(),
-                onto_oid.into(),
-                onto_oid.into(),
+                execution.onto_oid.clone().into(),
+                execution.onto_oid.clone().into(),
             ],
             Some(format!(
                 "rebase onto {}",
-                &onto_oid[..7.min(onto_oid.len())]
+                &execution.onto_oid[..7.min(execution.onto_oid.len())]
             )),
             None,
             Vec::new(),
@@ -679,7 +676,9 @@ impl GitCommandService {
     pub async fn execute_reset(
         &self,
         repository_path: &Path,
-        preview: &crate::reset::ResetPreview,
+        expected_head_oid: &str,
+        target_oid: &str,
+        mode_argument: &str,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let backup_ref = format!("refs/gitcrest/reset-backups/{}", task.task_id());
@@ -688,7 +687,7 @@ impl GitCommandService {
             vec![
                 "update-ref".into(),
                 backup_ref.clone().into(),
-                preview.expected_head_oid.clone().into(),
+                expected_head_oid.into(),
             ],
             Some(format!("reset backup {backup_ref}")),
             None,
@@ -701,17 +700,12 @@ impl GitCommandService {
         .await?;
         task.log(format!("Created recovery reference {backup_ref}."))
             .await;
-        let mode = preview.mode.git_argument();
         run_command(
             &self.git_program,
-            vec![
-                "reset".into(),
-                mode.into(),
-                preview.target_oid.clone().into(),
-            ],
+            vec!["reset".into(), mode_argument.into(), target_oid.into()],
             Some(format!(
-                "reset {mode} {}",
-                &preview.target_oid[..7.min(preview.target_oid.len())]
+                "reset {mode_argument} {}",
+                &target_oid[..7.min(target_oid.len())]
             )),
             None,
             Vec::new(),
@@ -1531,8 +1525,7 @@ struct TemporaryRebasePlan {
 
 impl TemporaryRebasePlan {
     fn create(
-        preview: &crate::rebase::RebasePreview,
-        todo: &[crate::domain::workflow::RebaseTodoItem],
+        execution: &crate::domain::workflow::RebaseExecutionPlan,
     ) -> Result<Self, TaskFailure> {
         let parent = std::env::temp_dir();
         let directory = (0..10)
@@ -1555,13 +1548,13 @@ impl TemporaryRebasePlan {
             todo_file: directory.join("todo"),
             directory,
         };
-        let subjects = preview
+        let subjects = execution
             .commits
             .iter()
             .map(|commit| (commit.oid.as_str(), commit.subject.as_str()))
             .collect::<std::collections::HashMap<_, _>>();
         let mut lines = Vec::new();
-        for (index, item) in todo.iter().enumerate() {
+        for (index, item) in execution.todo.iter().enumerate() {
             let subject = subjects.get(item.oid.as_str()).ok_or_else(|| {
                 TaskFailure::Failed("The reviewed rebase todo no longer matches its preview".into())
             })?;

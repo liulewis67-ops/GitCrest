@@ -161,9 +161,26 @@ pub(in crate::workflows) async fn start_repository_rebase(
                         "The reviewed rebase todo is no longer valid. Review the current commit sequence.".into(),
                     )
                 })?;
+                let plan = crate::domain::workflow::RebaseExecutionPlan {
+                    expected_head_oid: current.head_oid.clone().ok_or_else(|| {
+                        TaskFailure::Failed(
+                            "The reviewed rebase no longer has a branch HEAD.".into(),
+                        )
+                    })?,
+                    onto_oid: current.onto_oid.clone(),
+                    commits: current
+                        .commits
+                        .iter()
+                        .map(|commit| crate::domain::workflow::RebaseCommitSubject {
+                            oid: commit.oid.clone(),
+                            subject: commit.subject.clone(),
+                        })
+                        .collect(),
+                    todo,
+                };
                 let task_context = context.clone();
                 let result = command
-                    .execute_rebase(&path, &expected_head_oid, &onto_oid, &current, &todo, context)
+                    .execute_rebase(&path, &plan, context)
                     .await;
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context

@@ -26,3 +26,17 @@ pub(crate) struct RebaseTodoItem {
     pub(crate) action: RebaseAction,
     pub(crate) message: Option<String>,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RebaseCommitSubject {
+    pub(crate) oid: String,
+    pub(crate) subject: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RebaseExecutionPlan {
+    pub(crate) expected_head_oid: String,
+    pub(crate) onto_oid: String,
+    pub(crate) commits: Vec<RebaseCommitSubject>,
+    pub(crate) todo: Vec<RebaseTodoItem>,
+}
