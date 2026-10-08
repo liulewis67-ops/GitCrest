@@ -12,7 +12,7 @@ import { ariaShortcut, displayShortcut, THEME_CYCLE, useShortcutPreferences, use
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
-import { useCommitDraft } from "../features/commits";
+import { useCommitDraft, useCommitSubmission } from "../features/commits";
 import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
@@ -40,8 +40,6 @@ const SettingsDialog = lazy(() => import("../features/settings/SettingsDialog").
 const CommitWorkbench = lazy(() => import("../features/commits").then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
 
 type Page = "welcome" | "workspace";
-type CommitIntent = { action: CommitAction; target?: PushTarget; forceWithLease: boolean };
-
 const changeGroups = [
   { category: "staged", label: "Staged" },
   { category: "unstaged", label: "Unstaged" },
@@ -115,11 +113,7 @@ function App() {
     setSelectionRepoId: setCommitSelectionRepoId,
   } = useCommitDraft(selectedRepository?.repoId);
   const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
-  const commitSelectionsByTask = useRef(new Map<string, string>());
-  const commitMessagesByTask = useRef(new Map<string, string>());
-  const commitIntentsByTask = useRef(new Map<string, CommitIntent>());
   const pushTargetsByTask = useRef(new Map<string, PushTarget>());
-  const [commitBusy, setCommitBusy] = useState(false);
   const [commitActionMenuOpen, setCommitActionMenuOpen] = useState(false);
   const taskRefreshPlannerRef = useRef(new TaskRefreshPlanner());
   const [taskActionId, setTaskActionId] = useState("");
@@ -332,12 +326,29 @@ function App() {
         : hasActiveRepositoryTask
           ? "Wait for the current repository task to finish before pulling."
           : "";
-  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const commitActionLabel = amendCommit
     ? activeCommitAction === "commit" ? "Amend" : activeCommitAction === "commitAndPushTo" ? "Amend and Push to…" : "Amend and Push"
     : activeCommitAction === "commit" ? "Commit" : activeCommitAction === "commitAndPushTo" ? "Commit and Push to…" : activeCommitAction === "commitAndPushForce" ? "Commit and Push (force-with-lease)" : "Commit and Push";
   const commitActionIsDanger = activeCommitAction === "commitAndPushForce" || (amendCommit && activeCommitAction !== "commit");
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
+  const commitSubmission = useCommitSubmission({
+    getApi: () => apiRef.current,
+    repoId: selectedRepository?.repoId,
+    message: commitMessage,
+    selections: commitSelections,
+    amend: amendCommit,
+    signOff: signOffCommit,
+    sign: signCommit,
+    setSelections: setCommitSelections,
+    appendTask,
+    setTaskError: setTasksError,
+    openTaskCenter: () => setTasksOpen(true),
+    openPushTargetPicker: () => setPushTargetDialogOpen(true),
+    refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
+    retryDiff: () => setDiffRetry((current) => current + 1),
+  });
+  const commitBusy = commitSubmission.busy;
+  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const {
     busy: stagingBusy,
     stageChanges,
@@ -694,39 +705,8 @@ function App() {
     runCommitAction(action);
   }
 
-  async function commitChanges(action: CommitAction = activeCommitAction, target?: PushTarget) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (!api || !repoId || !canCommit) return;
-    if (action === "commitAndPushTo" && !target) {
-      setPushTargetDialogOpen(true);
-      return;
-    }
-    setCommitBusy(true);
-    setTasksError("");
-    try {
-      const task = await api.commitRepository(repoId, commitMessage, { amend: amendCommit, signOff: signOffCommit, sign: signCommit, ...(commitSelections.length > 0 ? { selections: commitSelections } : {}) });
-      appendTask(task);
-      commitSelectionsByTask.current.set(task.taskId, JSON.stringify(commitSelections));
-      commitMessagesByTask.current.set(task.taskId, commitMessage);
-      commitIntentsByTask.current.set(task.taskId, {
-        action,
-        ...(target ? { target } : {}),
-        forceWithLease: action === "commitAndPushForce" || (action !== "commit" && amendCommit),
-      });
-      setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      if (error instanceof GitCrestApiError && error.body.error.code === "RESOURCE_VERSION_STALE") {
-        setCommitSelections([]);
-        setDiffRetry((current) => current + 1);
-        if (repoId) void refreshRepositoryStatus(repoId);
-      }
-      setTasksError(message || (error instanceof Error ? error.message : "Could not start the commit task."));
-      setTasksOpen(true);
-    } finally {
-      setCommitBusy(false);
-    }
+  function commitChanges(action: CommitAction = activeCommitAction, target?: PushTarget) {
+    void commitSubmission.submit(action, canCommit, target);
   }
 
   function addDiffSelectionToCommit(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
@@ -1070,16 +1050,12 @@ function App() {
 
       const refreshPlan = taskRefreshPlannerRef.current.takeTerminalTaskPlan(task);
       if (!refreshPlan) continue;
-      let commitIntent: CommitIntent | undefined;
+      let commitIntent: { action: CommitAction; target?: PushTarget; forceWithLease: boolean } | undefined;
       if (refreshPlan.kind === "commit") {
-        const submittedSelection = commitSelectionsByTask.current.get(task.taskId);
-        commitSelectionsByTask.current.delete(task.taskId);
-        const submittedMessage = commitMessagesByTask.current.get(task.taskId);
-        commitMessagesByTask.current.delete(task.taskId);
-        commitIntent = commitIntentsByTask.current.get(task.taskId);
-        commitIntentsByTask.current.delete(task.taskId);
-        if (task.status === "succeeded" && submittedMessage === commitMessage) setCommitMessage("");
-        if (task.status === "succeeded" && submittedSelection === JSON.stringify(commitSelections)) {
+        const commitContext = commitSubmission.takeTaskContext(task.taskId);
+        commitIntent = commitContext?.intent;
+        if (task.status === "succeeded" && commitContext?.message === commitMessage) setCommitMessage("");
+        if (task.status === "succeeded" && commitContext?.selections === JSON.stringify(commitSelections)) {
           setCommitSelections([]);
         }
       }
