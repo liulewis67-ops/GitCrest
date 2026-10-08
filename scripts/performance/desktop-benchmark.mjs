@@ -32,6 +32,20 @@ function makeAppEnv(databasePath) {
   return env;
 }
 
+function benchmarkGpuFlags() {
+  const args = [];
+  if (process.env.GITCREST_BENCH_DISABLE_GPU === "1" && process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1") {
+    throw new Error("Choose either disabled GPU or in-process GPU for a benchmark run.");
+  }
+  if (process.env.GITCREST_BENCH_DISABLE_GPU === "1") args.push("--disable-gpu");
+  if (process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1") args.push("--in-process-gpu");
+  return args;
+}
+
+function benchmarkElectronArgs(dataDir) {
+  return [...benchmarkGpuFlags(), `--user-data-dir=${join(dataDir, "user-data")}`, "."];
+}
+
 async function processTreeIds(pid) {
   if (process.platform === "win32") {
     const command = `$rootPid=${pid}; $processes=Get-CimInstance Win32_Process; $ids=@([uint32]$rootPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $ids -join ','`;
@@ -135,7 +149,7 @@ async function runColdLaunch() {
     dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-desktop-"));
     const start = performance.now();
     try {
-      const args = process.env.GITCREST_BENCH_DISABLE_GPU === "1" ? ["--disable-gpu", "."] : ["."];
+      const args = benchmarkElectronArgs(dataDir);
       app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
       page = await app.firstWindow();
       await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
@@ -178,7 +192,7 @@ async function runMemorySnapshot() {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-memory-"));
   let app;
   try {
-    const args = process.env.GITCREST_BENCH_DISABLE_GPU === "1" ? ["--disable-gpu", "."] : ["."];
+    const args = benchmarkElectronArgs(dataDir);
     app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
@@ -276,7 +290,7 @@ async function runCacheLifecycle() {
       repositoryCount,
       filesPerRepository,
     );
-    app = await electron.launch({ args: ["."], cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+    app = await electron.launch({ args: benchmarkElectronArgs(dataDir), cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
     await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
@@ -346,7 +360,7 @@ async function runScroll() {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-scroll-"));
   let app;
   try {
-    const args = process.env.GITCREST_BENCH_DISABLE_GPU === "1" ? ["--disable-gpu", "."] : ["."];
+    const args = benchmarkElectronArgs(dataDir);
     app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded");
@@ -428,7 +442,7 @@ const report = {
   mode: scrollOnly ? "scroll-only" : memoryOnly ? "memory-only" : cacheLifecycleOnly ? "cache-lifecycle" : "full",
   generatedAt: new Date().toISOString(),
   host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown", logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
-  software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", gpuDisabled: process.env.GITCREST_BENCH_DISABLE_GPU === "1" },
+  software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true },
   fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath },
   iterations: scrollOnly || memoryOnly || cacheLifecycleOnly ? 1 : iterations,
   startedAt,
