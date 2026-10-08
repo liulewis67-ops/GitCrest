@@ -588,5 +588,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`node --check scripts/performance/desktop-benchmark.mjs` 通过；单样本 memory-only 诊断成功；完整桌面基准 20 轮成功，含 5 秒空闲 RAF 与 30 秒滚动采样。启动 P95 1,171.307ms、100k 历史首帧 P95 420.837ms、Electron 进程树空闲峰值 398,716,928 bytes、打开仓库后 437,350,400 bytes、滚动峰值 467,894,272 bytes、滚动 P5 55.249fps；Windows NSIS 为 108,568,874 bytes（103.54 MiB）。
 - 手工验证：未执行额外 UI 操作；桌面采样通过 Playwright 启动隔离 profile 的生产 renderer 与 Release sidecar。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-memory-main-process-root.json`、`doc/evidence/S7.2/desktop-win32-main-process-root.json`。
-- 完成 commit：待补记
+- 完成 commit：`1d63eed`
 - 限制/后续：修正的是测量边界，不是产品内存优化；旧进程树读数含约 17MB 测试包装进程，不能和本次值直接比较。本次 idle working set 仍高于 <250MB，30 秒滚动 P5 仍低于 ≥60fps；S7.2 不得据此标记完成。结果仅代表此 Windows 主机，其他平台尚待测量。
