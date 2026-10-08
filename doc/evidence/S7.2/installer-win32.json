@@ -1,8 +1,8 @@
 {
-  "measuredAt": "2026-10-08T04:15:39Z",
+  "measuredAt": "2026-10-08T06:43:51Z",
   "platform": "win32-x64",
   "installer": "dist/GitCrest Setup 0.1.0.exe",
-  "bytes": 107488294,
-  "mebibytes": 102.51,
-  "sha256": "ADB6A2DD324B553E080A80BB5734244F5AD2AAAB5650ED89202A5AE85D43A164"
+  "bytes": 108090696,
+  "mebibytes": 103.08,
+  "sha256": "2FCA065E4724F473F5092A3F5FDA048D9868DA0761F222CCF1944C18D1D76181"
 }
