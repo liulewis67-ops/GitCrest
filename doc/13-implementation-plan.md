@@ -910,3 +910,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/api/bridge.ts`、`src/global.d.ts`、`src/app/App.tsx`、`src/features/diff/DiffWindow.tsx`、`src/features/workflows/ConflictWindow.tsx`、`tests/unit/bridge.test.ts`。
 - 实施 commit：`341a9e3`
 
+
+### 前端 API 请求取消与 Diff 生命周期 — 小阶段 35
+- 状态：已完成（API client 提供 AbortSignal 作用域，Diff 读请求在失效时取消）
+- 日期：2026-10-09
+- 交付：`GitCrestApiClient.withSignal(signal)` 为现有 typed API 方法提供请求级取消作用域，信号经统一 request/fetch 传输层透传。Diff 窗口在初始仓库状态/提交文件加载和活动文件 Diff 读取中创建 AbortController，窗口卸载或标签切换时 abort；取消后的 Diff 读取不再显示为用户错误。写操作 API 保持原调用方式，不因页面切换自动取消。
+- 验证：API client AbortSignal 定向用例通过（中止 fetcher 中的在途请求并断言 AbortError）；完整 Vitest 单测 156/156、`pnpm build`（Electron）、`pnpm frontend:build`（浏览器）、`git diff --check` 通过。构建仍有既有 tree-sitter `eval` 与浏览器 bundle 大块警告。
+- 限制/后续：请求取消目前已接入 Diff 窗口读请求；App workspace 的 status/history/branches/remotes 和其他独立读取仍需按 effect 生命周期逐项传播 signal，完整查询缓存与按 RepoId 清理策略仍待实现。
+- 证据：`src/api/client.ts`、`src/features/diff/DiffWindow.tsx`、`tests/unit/api-client.test.ts`。
+- 实施 commit：`7093b98`
+
