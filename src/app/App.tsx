@@ -2,7 +2,6 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type K
 import { GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { bootstrapApp } from "./bootstrap";
-import { mergeStatusScope } from "../api/status-snapshot";
 import { CommitDetails, CommitGraph } from "../features/history/CommitGraph";
 import { RemoteManager } from "../features/remotes/RemoteManager";
 import { ShelfCenter } from "../features/shelves/ShelfCenter";
@@ -13,6 +12,7 @@ import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { supportsWorkflowRecovery } from "../features/tasks/task-operations";
 import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories/model/workspace-session";
+import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
@@ -152,13 +152,6 @@ function App() {
   const [version, setVersion] = useState("");
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
-  const [statusSnapshots, setStatusSnapshots] = useState<Record<string, StatusSnapshotResponse>>({});
-  const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
-  const [statusLoadingByRepo, setStatusLoadingByRepo] = useState<Record<string, boolean>>({});
-  const statusSnapshotsRef = useRef(statusSnapshots);
-  statusSnapshotsRef.current = statusSnapshots;
-  const statusRefreshPendingRef = useRef(new Map<string, { full: boolean; forceRefresh: boolean; paths: Set<string> }>());
-  const statusRefreshActiveRef = useRef(new Set<string>());
   const eventSequenceRef = useRef<number>();
   const [branchSnapshots, setBranchSnapshots] = useState<Record<string, BranchSnapshotResponse>>({});
   const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
@@ -256,6 +249,20 @@ function App() {
   workspaceSessionRef.current = workspaceSession;
   const repositoryCacheGenerationRef = useRef(new Map<string, number>());
   const repositoryCacheRequestCountRef = useRef(new Map<string, number>());
+  const {
+    snapshots: statusSnapshots,
+    errors: statusErrors,
+    loadingByRepo: statusLoadingByRepo,
+    refreshScope: refreshRepositoryStatusScope,
+    refresh: refreshRepositoryStatus,
+    clear: clearRepositoryStatus,
+  } = useRepositoryStatus({
+    getApi: () => apiRef.current,
+    isRepositoryOpen: isRepositoryTabOpen,
+    getCacheGeneration: repositoryCacheGeneration,
+    beginCacheRequest: beginRepositoryCacheRequest,
+    finishCacheRequest: finishRepositoryCacheRequest,
+  });
   const pendingGraphScrollRef = useRef<{ repoId: string; scrollTop: number }>();
   const graphScrollTimerRef = useRef<number>();
   const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
@@ -357,11 +364,7 @@ function App() {
     } else {
       repositoryCacheGenerationRef.current.delete(repoId);
     }
-    statusSnapshotsRef.current = withoutRecordKey(statusSnapshotsRef.current, repoId);
-    statusRefreshPendingRef.current.delete(repoId);
-    setStatusSnapshots((current) => withoutRecordKey(current, repoId));
-    setStatusErrors((current) => withoutRecordKey(current, repoId));
-    setStatusLoadingByRepo((current) => withoutRecordKey(current, repoId));
+    clearRepositoryStatus(repoId);
     setBranchSnapshots((current) => withoutRecordKey(current, repoId));
     setBranchErrors((current) => withoutRecordKey(current, repoId));
     setBranchLoadingByRepo((current) => withoutRecordKey(current, repoId));
@@ -425,67 +428,6 @@ function App() {
   hasActiveTasksRef.current = hasActiveTasks;
   const selectedRepositoryRef = useRef(selectedRepository);
   selectedRepositoryRef.current = selectedRepository;
-
-  async function refreshRepositoryStatusScope(repoId: string, full: boolean, paths: string[] = [], forceRefresh = false) {
-    if (!isRepositoryTabOpen(repoId)) return;
-    const pending = statusRefreshPendingRef.current.get(repoId) || { full: false, forceRefresh: false, paths: new Set<string>() };
-    pending.forceRefresh ||= forceRefresh;
-    if (full || paths.length === 0) {
-      pending.full = true;
-      pending.paths.clear();
-    } else if (!pending.full) {
-      for (const path of paths) pending.paths.add(path);
-      if (pending.paths.size > 256) {
-        pending.full = true;
-        pending.paths.clear();
-      }
-    }
-    statusRefreshPendingRef.current.set(repoId, pending);
-    if (statusRefreshActiveRef.current.has(repoId)) return;
-
-    const api = apiRef.current;
-    if (!api) return;
-    statusRefreshActiveRef.current.add(repoId);
-    let requestGeneration = beginRepositoryCacheRequest(repoId);
-    setStatusLoadingByRepo((current) => ({ ...current, [repoId]: true }));
-    setStatusErrors((current) => ({ ...current, [repoId]: "" }));
-    try {
-      while (statusRefreshPendingRef.current.has(repoId)) {
-        const requested = statusRefreshPendingRef.current.get(repoId)!;
-        statusRefreshPendingRef.current.delete(repoId);
-        requestGeneration = repositoryCacheGeneration(repoId);
-        const useFull = requested.full || !statusSnapshotsRef.current[repoId] || requested.paths.size === 0;
-        const snapshot = useFull
-          ? await api.getRepositoryStatus(repoId, requested.forceRefresh)
-          : await api.getRepositoryStatusPaths(repoId, [...requested.paths]);
-        if (!isRepositoryTabOpen(repoId) || repositoryCacheGeneration(repoId) !== requestGeneration) continue;
-        const next = !useFull && statusSnapshotsRef.current[repoId]
-          ? mergeStatusScope(statusSnapshotsRef.current[repoId]!, snapshot, [...requested.paths])
-          : snapshot;
-        statusSnapshotsRef.current = { ...statusSnapshotsRef.current, [repoId]: next };
-        setStatusSnapshots((current) => ({ ...current, [repoId]: next }));
-      }
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
-        setStatusErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
-      }
-    } finally {
-      statusRefreshActiveRef.current.delete(repoId);
-      setStatusLoadingByRepo((current) => isRepositoryTabOpen(repoId)
-        ? { ...current, [repoId]: false }
-        : withoutRecordKey(current, repoId));
-      finishRepositoryCacheRequest(repoId);
-      if (statusRefreshPendingRef.current.has(repoId)) {
-        const next = statusRefreshPendingRef.current.get(repoId)!;
-        void refreshRepositoryStatusScope(repoId, next.full, [...next.paths]);
-      }
-    }
-  }
-
-  async function refreshRepositoryStatus(repoId: string, forceRefresh = false) {
-    await refreshRepositoryStatusScope(repoId, true, [], forceRefresh);
-  }
 
   async function refreshRepositoryBranches(repoId: string) {
     if (!isRepositoryTabOpen(repoId)) return;
