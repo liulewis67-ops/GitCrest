@@ -15,7 +15,7 @@ use crate::write_probe;
 use crate::{
     add_api_version_header, api_not_found, apply_repository_shelf, commit_repository,
     create_repository_shelf, delete_ai_credential, delete_credential, delete_repository_shelf,
-    discard_repository_patch, events, get_ai_settings, get_credential_status, get_repository_shelf,
+    discard_repository_patch, get_ai_settings, get_credential_status, get_repository_shelf,
     get_workflow_conflict_ai_settings, list_repository_rebase_backups,
     list_repository_reset_backups, list_repository_shelves, mark_workflow_conflict_resolved,
     preflight_repository_rebase, preflight_repository_reset, preflight_repository_shelf_apply,
@@ -142,7 +142,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
             "/v1/repositories/:repo_id/workflows/conflicts/ai-settings",
             get(get_workflow_conflict_ai_settings),
         )
-        .route("/v1/events", get(events))
+        .route("/v1/events", get(crate::api::events::events))
         .fallback(api_not_found);
 
     #[cfg(test)]
