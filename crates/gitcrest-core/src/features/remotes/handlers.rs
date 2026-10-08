@@ -6,13 +6,14 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    branches, remotes as remote_service, AppState, GitOperation, RemoteCommand, TaskFailure,
+    branches, pull, remotes as remote_service, AppState, GitOperation, RemoteCommand, TaskFailure,
     TaskSnapshot,
 };
 
 use super::dto::{
-    BranchUpstreamRequest, DefaultRemoteRequest, FetchRequest, RemoteBranchDeleteQuery,
-    RemoteBranchDeleteRequest, RemoteNameRequest, RemoteRequest, RequiredNullableRemoteName,
+    BranchUpstreamRequest, DefaultRemoteRequest, FetchRequest, PullRequest,
+    RemoteBranchDeleteQuery, RemoteBranchDeleteRequest, RemoteNameRequest, RemoteRequest,
+    RequiredNullableRemoteName,
 };
 
 pub(super) async fn fetch_repository(
@@ -49,6 +50,104 @@ pub(super) async fn fetch_repository(
             move |context| async move {
                 command
                     .execute(&path, operation, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+pub(super) async fn preflight_repository_pull(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<pull::PullPreflight>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    pull::read_pull_preflight(
+        repo_id,
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_pull_error)
+}
+
+pub(super) async fn pull_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<PullRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Pull requires reviewed local and tracking OIDs and an explicit merge or rebase strategy.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preflight = pull::read_pull_preflight(
+        repo_id.clone(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map_err(ApiError::from_pull_error)?;
+    if preflight.local_oid != request.expected_local_oid
+        || preflight.tracking_oid != request.expected_tracking_oid
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PullPreflightStale,
+            "The local branch or tracked upstream changed after preflight. Refresh the preview before pulling.",
+        ));
+    }
+    if !preflight.is_clean {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PullRequiresClean,
+            "Pull requires a clean worktree with no unresolved conflicts or Git operation in progress. Review the preflight paths first.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let path = target.repository_path;
+    let preflight_for_task = preflight.clone();
+    let strategy = request.strategy;
+    let operation = match strategy {
+        pull::PullStrategy::Merge => "pullMerge",
+        pull::PullStrategy::Rebase => "pullRebase",
+    };
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation,
+            move |context| async move {
+                command
+                    .execute_pull(&path, &preflight_for_task, strategy, context)
                     .await
                     .map(|()| None)
             },

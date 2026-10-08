@@ -18,10 +18,9 @@ use crate::{
     delete_repository_shelf, discard_repository_patch, events, get_ai_settings,
     get_credential_status, get_repository_shelf, get_task, get_workflow_conflict_ai_settings,
     list_repository_rebase_backups, list_repository_reset_backups, list_repository_shelves,
-    list_tasks, mark_workflow_conflict_resolved, preflight_repository_pull,
-    preflight_repository_push, preflight_repository_rebase, preflight_repository_reset,
-    preflight_repository_shelf_apply, preflight_repository_workflow,
-    preflight_repository_workflow_recovery, pull_repository, push_repository,
+    list_tasks, mark_workflow_conflict_resolved, preflight_repository_push,
+    preflight_repository_rebase, preflight_repository_reset, preflight_repository_shelf_apply,
+    preflight_repository_workflow, preflight_repository_workflow_recovery, push_repository,
     read_workflow_conflict_file, recover_repository_workflow, repositories,
     repository_commit_create_tag, request_ai, request_workflow_conflict_suggestion,
     require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
@@ -87,11 +86,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
             "/v1/repositories/:repo_id/commits/:oid/tags",
             post(repository_commit_create_tag),
         )
-        .route(
-            "/v1/repositories/:repo_id/pull-preflight",
-            get(preflight_repository_pull),
-        )
-        .route("/v1/repositories/:repo_id/pull", post(pull_repository))
         .route(
             "/v1/repositories/:repo_id/workflows/preflight",
             get(preflight_repository_workflow),

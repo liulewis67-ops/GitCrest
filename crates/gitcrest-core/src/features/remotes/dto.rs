@@ -57,3 +57,11 @@ pub(super) struct BranchUpstreamRequest {
 pub(super) struct FetchRequest {
     pub(super) prune: bool,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct PullRequest {
+    pub(super) expected_local_oid: String,
+    pub(super) expected_tracking_oid: String,
+    pub(super) strategy: crate::pull::PullStrategy,
+}
