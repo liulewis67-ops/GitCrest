@@ -1733,3 +1733,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：features 父模块当前包含 branches/credentials/diff/history/remotes/settings/status/system/tags/tasks；repositories/shelves/staging/commits/workflows 仍待迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,settings/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`85c756e`
+
+### 后端 shelves feature 纳入 features 父模块 — 小阶段 126
+- 状态：已完成（shelf API 与服务由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `shelves` 加入 `src/features/mod.rs`，删除 `lib.rs` 中独立路径声明，并通过 crate 内重导出保留 `crate::shelves` 调用。该 feature 的 service 与指定 handler 已显式设为 `pub(crate)`，迁移后可见范围不变；路由与 API 行为未调整。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：features 父模块当前包含 branches/credentials/diff/history/remotes/settings/shelves/status/system/tags/tasks；repositories/staging/commits/workflows 仍待迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,shelves/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`dfe7bf1`
