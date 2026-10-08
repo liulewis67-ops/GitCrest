@@ -1238,3 +1238,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Git adapter 仍依赖 workflows feature 的 `WorkflowOperation` 与 `WorkflowAction`，相关预检/恢复响应也直接序列化 feature 模型；后续继续分离操作类型与 API response DTO，确保 domain 不依赖传输序列化。
 - 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/features/workflows/{dto.rs,recovery.rs,handlers/recovery.rs,workflows.rs}`、`crates/gitcrest-core/src/git/git_command.rs`。
 - 实施 commit：`c11d272`
+
+### 后端 merge/cherry-pick/revert action 领域化 — 小阶段 71
+- 状态：已完成（workflow action 进入 domain，API preflight 使用显式 DTO）
+- 日期：2026-10-09
+- 交付：将 `WorkflowAction` 从 workflows service 移至纯领域枚举，Git adapter 和 preflight 用例统一消费领域 action；API 请求/响应通过 `WorkflowActionDto` 转换。新增 preflight response DTO 显式承接领域 action，保持 `merge`、`cherryPick`、`revert` 的 wire 值与字段不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：`WorkflowOperation` 仍由 feature 定义并带 serde，且直接出现在多个预检/冲突/重置/变基响应；后续需将 operation 领域语义与 API DTO 映射拆开，再移除 adapter 对 feature operation 的引用。
+- 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/features/workflows/{dto.rs,workflows.rs,handlers/merge.rs}`、`crates/gitcrest-core/src/git/git_command.rs`。
+- 实施 commit：`8e2c82a`
