@@ -20,6 +20,7 @@ import { CommitMessageAssistant } from "./features/settings/CommitMessageAssista
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "./features/settings/shortcut-preferences";
 import { useDialogFocus } from "./shared/use-dialog-focus";
 import type { components } from "./api/schema";
+import type { UpdateStatus } from "./api/update-status";
 import "./App.css";
 
 type Theme = "system" | "light" | "dark";
@@ -234,6 +235,7 @@ function App() {
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
   const [shortcuts, setShortcuts] = useState<ShortcutPreferences>(() => {
     try {
       return readShortcutPreferences(window.localStorage.getItem(SHORTCUT_PREFERENCES_KEY));
@@ -311,6 +313,25 @@ function App() {
   const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", 284, 220, 420));
   const [workbenchHeight, setWorkbenchHeight] = useState(() => readStoredNumber("gitcrest-workbench-height", 204, 144, 360));
   const [layoutLoadedFor, setLayoutLoadedFor] = useState<string>();
+  useEffect(() => {
+    const getStatus = window.gitcrest.getUpdateStatus;
+    const subscribe = window.gitcrest.subscribeToUpdateStatus;
+    if (!getStatus || !subscribe) return;
+
+    let active = true;
+    const unsubscribe = subscribe((next) => {
+      if (active) setUpdateStatus(next);
+    });
+    void getStatus().then((next) => {
+      if (active) setUpdateStatus(next);
+    }).catch(() => {
+      if (active) setUpdateStatus({ state: "error", message: "Update status could not be loaded." });
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
   useEffect(() => {
     try {
       window.localStorage.setItem(SHORTCUT_PREFERENCES_KEY, JSON.stringify(shortcuts));
@@ -2331,7 +2352,15 @@ function App() {
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, preview, action) => void recoverWorkflowTask(task, preview, action)} onOpenConflictWindow={(task) => void openWorkflowConflictWindow(task)} />}
-      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} />}
+      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={async () => {
+        const check = window.gitcrest.checkForUpdates;
+        if (!check) return;
+        try { setUpdateStatus(await check()); }
+        catch { setUpdateStatus({ state: "error", message: "The update check failed. Try again later." }); }
+      }} onInstallUpdate={() => {
+        const install = window.gitcrest.installUpdate;
+        if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
+      }} />}
       {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
       {workflowDialog && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.repoId} targetOid={workflowDialog.targetOid} action={workflowDialog.action} onClose={() => setWorkflowDialog(undefined)} onStarted={(task) => void startWorkflowTask(task)} />}
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}

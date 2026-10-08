@@ -1,10 +1,6 @@
-export type UpdateStatus =
-  | { state: "notConfigured" }
-  | { state: "idle" | "checking" | "notAvailable" }
-  | { state: "available"; version: string }
-  | { state: "downloading"; version?: string; percent: number }
-  | { state: "downloaded"; version: string }
-  | { state: "error"; message: string };
+import type { UpdateStatus } from "../../src/api/update-status";
+
+export type { UpdateStatus } from "../../src/api/update-status";
 
 type UpdateInfo = { version?: unknown };
 type DownloadProgress = { percent?: unknown };

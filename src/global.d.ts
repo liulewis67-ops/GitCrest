@@ -1,4 +1,5 @@
 import type { components } from "./api/schema";
+import type { UpdateStatus } from "./api/update-status";
 
 type GitCrestEventEnvelope = components["schemas"]["EventEnvelope"];
 
@@ -21,6 +22,10 @@ declare global {
         commitOid?: string;
       }) => Promise<void>;
       openConflictWindow: (request: { repoId: string; taskId: string }) => Promise<void>;
+      getUpdateStatus?: () => Promise<UpdateStatus>;
+      checkForUpdates?: () => Promise<UpdateStatus>;
+      installUpdate?: () => Promise<boolean>;
+      subscribeToUpdateStatus?: (listener: (status: UpdateStatus) => void) => () => void;
       subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
     };
   };

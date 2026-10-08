@@ -11,6 +11,7 @@ import {
   type ShortcutPreferences,
 } from "./shortcut-preferences";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
+import type { UpdateStatus } from "../../api/update-status";
 
 export function SettingsDialog({
   api,
@@ -18,12 +19,18 @@ export function SettingsDialog({
   onClose,
   shortcuts = defaultShortcutPreferences,
   onShortcutsChange = () => {},
+  updateStatus,
+  onCheckForUpdates,
+  onInstallUpdate,
 }: {
   api: GitCrestApiClient;
   repoId?: string;
   onClose: () => void;
   shortcuts?: ShortcutPreferences;
   onShortcutsChange?: (shortcuts: ShortcutPreferences) => void;
+  updateStatus?: UpdateStatus;
+  onCheckForUpdates?: () => void | Promise<void>;
+  onInstallUpdate?: () => void;
 }) {
   const [settings, setSettings] = useState<AiSettingsResponse>();
   const [provider, setProvider] = useState<AiSettingsResponse["provider"]>("none");
@@ -139,6 +146,25 @@ export function SettingsDialog({
             </div>
             {shortcutError && <p className="formError" role="alert">{shortcutError}</p>}
           </section>
+          {updateStatus && <section className="shortcutPreferences" aria-labelledby="application-updates-title">
+            <div className="settingsSectionHeading"><h3 id="application-updates-title">Application updates</h3></div>
+            <p role="status" aria-live="polite">
+              {updateStatus.state === "notConfigured" && "Updates are not configured for this build."}
+              {updateStatus.state === "idle" && "You can check for a newer version."}
+              {updateStatus.state === "checking" && "Checking for updates…"}
+              {updateStatus.state === "notAvailable" && "GitCrest is up to date."}
+              {updateStatus.state === "available" && `Version ${updateStatus.version} is available. Downloading…`}
+              {updateStatus.state === "downloading" && `Downloading update${updateStatus.version ? ` ${updateStatus.version}` : ""}… ${Math.round(updateStatus.percent)}%`}
+              {updateStatus.state === "downloaded" && `Version ${updateStatus.version} is ready to install.`}
+              {updateStatus.state === "error" && updateStatus.message}
+            </p>
+            <div className="settingsActions">
+              <button className="secondaryButton" type="button" disabled={!onCheckForUpdates || ["notConfigured", "checking", "available", "downloading", "downloaded"].includes(updateStatus.state)} onClick={() => void onCheckForUpdates?.()}>
+                {updateStatus.state === "checking" ? "Checking…" : "Check for updates"}
+              </button>
+              {updateStatus.state === "downloaded" && <button className="primaryButton" type="button" disabled={!onInstallUpdate} onClick={onInstallUpdate}>Restart to install</button>}
+            </div>
+          </section>}
           <p className="settingsNotice">Provider settings are stored locally. Saving them does not send a request to an AI provider.</p>
           <form className="settingsForm" onSubmit={saveSettings}>
             <label>Provider<select aria-label="AI provider" value={provider} onChange={(event) => changeProvider(event.target.value as AiSettingsResponse["provider"])}><option value="none">Disabled</option><option value="openAiCompatible">OpenAI-compatible cloud</option><option value="ollama">Ollama on this machine</option></select></label>

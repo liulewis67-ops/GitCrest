@@ -1,7 +1,10 @@
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell, type WebContents } from "electron";
+import electronUpdater from "electron-updater";
 import { startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
+import { UpdateController } from "./update-controller";
 import WebSocket from "ws";
 
 let mainWindow: BrowserWindow | undefined;
@@ -26,6 +29,19 @@ interface EventStream {
 }
 
 const eventStreamsByContentsId = new Map<number, EventStream>();
+const { autoUpdater } = electronUpdater;
+const updateFeedConfigured = app.isPackaged && existsSync(join(process.resourcesPath, "app-update.yml"));
+if (updateFeedConfigured) {
+  autoUpdater.autoDownload = true;
+  autoUpdater.autoInstallOnAppQuit = true;
+}
+const updateController = new UpdateController(updateFeedConfigured, autoUpdater, (status) => {
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (windowAccessByContentsId.has(window.webContents.id) && !window.webContents.isDestroyed()) {
+      window.webContents.send("gitcrest:update-status", status);
+    }
+  }
+});
 
 function isRendererNavigation(url: string): boolean {
   const rendererUrl = process.env.ELECTRON_RENDERER_URL;
@@ -63,6 +79,29 @@ ipcMain.handle("gitcrest:get-sidecar-connection", (event) => {
     windowAccess,
   };
 });
+
+ipcMain.handle("gitcrest:get-update-status", (event) => {
+  if (!windowAccessByContentsId.has(event.sender.id)) {
+    throw new Error("This window is not authorized to read application update status.");
+  }
+  return updateController.getStatus();
+});
+
+ipcMain.handle("gitcrest:check-for-updates", async (event) => {
+  assertApplicationWindow(event.sender.id);
+  return await updateController.checkForUpdates();
+});
+
+ipcMain.handle("gitcrest:install-update", (event) => {
+  assertApplicationWindow(event.sender.id);
+  return updateController.installDownloadedUpdate();
+});
+
+function assertApplicationWindow(contentsId: number): void {
+  if (!windowAccessByContentsId.has(contentsId)) {
+    throw new Error("This window is not authorized to manage application updates.");
+  }
+}
 
 ipcMain.handle("gitcrest:choose-repository", async (event) => {
   const windowAccess = windowAccessByContentsId.get(event.sender.id);
