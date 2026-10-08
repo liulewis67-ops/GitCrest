@@ -1850,3 +1850,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：diff/history/remotes/shelves/staging/status/tasks/workflows 等 aliases 仍有调用点；按依赖关系继续迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/{bootstrap.rs,state.rs,lib.rs}`、`crates/gitcrest-core/src/features/{credentials,settings}/`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`a7e779c`
+
+### diff feature 调用切换并移除 crate-root alias — 小阶段 139
+- 状态：已完成（所有 Diff consumers 通过 features 路径访问）
+- 日期：2026-10-09
+- 交付：将 settings、shelves、staging、workflows 与 storage 中的 Diff 类型/服务引用迁移到 `features::diff`；crate-level API 测试也改用 feature 路径。确认无剩余 `crate::diff` import 后，从 `lib.rs` 移除 `diff` crate-root re-export。差异选择、暂存和 shelf 数据行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：history/remotes/shelves/staging/status/tasks/workflows aliases 仍有调用点；按跨层依赖关系继续收敛。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{settings,shelves,staging,workflows}/`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`a7f78f5`
