@@ -578,5 +578,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check` 通过；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（116/116）通过；`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 通过；`pnpm build` 通过（第三方 tree-sitter 文件报告既有 `eval` 警告）。`git diff --check` 通过。
 - 手工验证：未执行独立 UI 操作；本次只调整 Rust 源文件路径并由全量构建确认 Electron/renderer 可构建。
 - 证据：`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/features/`、`crates/gitcrest-core/src/git/`、`crates/gitcrest-core/src/refresh/`、`crates/gitcrest-core/src/storage/`、`crates/gitcrest-core/src/credentials/`。
-- 完成 commit：待补记
+- 完成 commit：`1476fdb`
 - 限制/后续：保持功能逻辑在本次不变；模块内部仍需按后端规范逐步拆分 routes、handlers、DTO、service、domain 与 ports，启动装配也需在后续阶段从 `main.rs` 收敛。该子阶段不代表整体架构规范已全部达成。
