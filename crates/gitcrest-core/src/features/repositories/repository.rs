@@ -691,11 +691,9 @@ fn now_ms() -> i64 {
 }
 
 fn stable_repo_id(root: &Path) -> String {
-    let mut normalized_path = root.to_string_lossy().into_owned();
+    let normalized_path = root.to_string_lossy();
     #[cfg(windows)]
-    {
-        normalized_path = normalized_path.to_lowercase();
-    }
+    let normalized_path = normalized_path.to_lowercase();
 
     let digest = Sha256::digest(normalized_path.as_bytes());
     let mut repo_id = String::with_capacity(69);

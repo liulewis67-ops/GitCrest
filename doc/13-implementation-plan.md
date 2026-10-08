@@ -570,3 +570,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - Linux 更新器 fail-closed 子阶段：日期 2026-10-08。打包的 Linux 只有在 updater 能认证更新清单时才允许启用；当前锁定 electron-updater 6.8.10 的 AppImage 更新只校验 SHA-512，故 Linux 即使存在 `app-update.yml` 也保持 `notConfigured`，主进程不会动态加载 updater。增加平台配置测试，验证 generic feed metadata 以及 SHA-512 字段都不能使 Linux 更新通过；Windows publisher gate 与 macOS 分支保持原有行为。验证：定向 update-config Vitest（2/2）、完整 `pnpm test`（145/145）、`pnpm build`、`git diff --check` 通过。完整单测在该实现 commit 后复跑。证据：`electron/main/update-config.ts`、`tests/unit/update-config.test.ts`。完成 commit：`05cf6e0`。限制：这是临时拒绝策略，未实现第一方 Ed25519 verifier；S7.4 Linux signed update 验收继续阻塞。
 - S7.4 Linux packaged unsigned feed 拒绝回归子阶段：日期 2026-10-08。Linux CI packaged smoke 可选择在 `linux-unpacked/resources` 临时注入 generic `.invalid` `app-update.yml`，启动实际打包应用并要求 updater 状态保持 `notConfigured`；smoke 在成功或失败退出路径都会恢复原配置或移除临时文件。Linux matrix smoke 开启该场景，普通 smoke 默认不改包内容。同步修正文档中“CI 平台覆盖目前为 Windows”的过期描述，区分 Windows 全量 check 与三平台 package-smoke。验证：`node --check scripts/packaged-smoke.mjs`、更新配置 Vitest（2/2）、完整 `pnpm test`（146/146）、`pnpm build`、临时目录 Windows NSIS 打包及 packaged smoke、`git diff --check` 通过。证据：`scripts/packaged-smoke.mjs`、`.github/workflows/ci.yml`。实施 commit：`e4eeff2`。限制：本机 Windows 无法执行 Linux AppImage；Linux 合成 feed smoke 的实际运行留待 GitHub Actions runner；该测试只验证拒绝未认证 feed，Linux 正向签名更新链仍未实现，S7.4 继续进行中。
 - S7.5 Pull 脏工作区保护 E2E 子阶段：日期 2026-10-08。新增桌面端隔离临时仓库流程，在已有 upstream 的仓库保留一处未提交文件修改，打开 Pull 预览并验证具体路径可见、Merge 与 Rebase 两种执行按钮均禁用；关闭预览后核对 HEAD、remote-tracking ref 和本地编辑均未变化。更新 P0 远端同步场景矩阵。验证：E2E TypeScript 检查、定向 E2E（1/1）、`pnpm build`、完整 `pnpm test:e2e`（16/16，205.00 秒）及 `git diff --check` 通过。证据：`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md`。实施 commit：`a89fb40`。限制：本机 Windows 验收；S7.5 整体仍待收口，S7.2 性能及 S7.4 跨平台签名/更新验收尚未通过。
+
+### 后端目录结构对齐 — 小阶段 1
+- 状态：已完成（仅本目录整理子阶段；不改变 S7.2 性能阶段状态）
+- 日期：2026-10-08
+- 交付：按业务归属将现有 Rust 模块移入 `features/`、`git/`、`refresh/`、`storage/` 与 `credentials/`，入口使用显式路径保持模块可见性和现有 API 行为；修正 storage 移动后 migration SQL 的编译期包含路径。
+- 测试：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check` 通过；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（116/116）通过；`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 通过；`pnpm build` 通过（第三方 tree-sitter 文件报告既有 `eval` 警告）。`git diff --check` 通过。
+- 手工验证：未执行独立 UI 操作；本次只调整 Rust 源文件路径并由全量构建确认 Electron/renderer 可构建。
+- 证据：`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/features/`、`crates/gitcrest-core/src/git/`、`crates/gitcrest-core/src/refresh/`、`crates/gitcrest-core/src/storage/`、`crates/gitcrest-core/src/credentials/`。
+- 完成 commit：待补记
+- 限制/后续：保持功能逻辑在本次不变；模块内部仍需按后端规范逐步拆分 routes、handlers、DTO、service、domain 与 ports，启动装配也需在后续阶段从 `main.rs` 收敛。该子阶段不代表整体架构规范已全部达成。

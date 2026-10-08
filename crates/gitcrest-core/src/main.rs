@@ -28,28 +28,51 @@ use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+#[path = "features/settings/ai.rs"]
 mod ai;
+#[path = "features/branches/branches.rs"]
 mod branches;
+#[path = "features/repositories/cloning.rs"]
 mod cloning;
+#[path = "features/commits/commits.rs"]
 mod commits;
+#[path = "features/workflows/conflicts.rs"]
 mod conflicts;
+#[path = "credentials/credentials.rs"]
 mod credentials;
+#[path = "features/diff/diff.rs"]
 mod diff;
+#[path = "git/git_command.rs"]
 mod git_command;
+#[path = "features/history/history.rs"]
 mod history;
+#[path = "features/remotes/pull.rs"]
 mod pull;
+#[path = "features/remotes/push.rs"]
 mod push;
+#[path = "features/workflows/rebase.rs"]
 mod rebase;
+#[path = "features/remotes/remotes.rs"]
 mod remotes;
+#[path = "features/repositories/repository.rs"]
 mod repository;
+#[path = "features/workflows/reset.rs"]
 mod reset;
+#[path = "features/shelves/shelves.rs"]
 mod shelves;
+#[path = "features/staging/staging.rs"]
 mod staging;
+#[path = "features/status/status.rs"]
 mod status;
+#[path = "storage/storage.rs"]
 mod storage;
+#[path = "features/tags/tags.rs"]
 mod tags;
+#[path = "features/tasks/tasks.rs"]
 mod tasks;
+#[path = "refresh/watcher.rs"]
 mod watcher;
+#[path = "features/workflows/workflows.rs"]
 mod workflows;
 
 use cloning::{CloneError, CloneService};

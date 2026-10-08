@@ -613,6 +613,8 @@ async fn inspect_path(repository_path: &Path, relative: &str) -> Result<FilePath
 fn validate_repo_relative_path(value: &str) -> Result<(), DiffError> {
     if value.is_empty()
         || value.chars().any(char::is_control)
+        || has_windows_drive_prefix(value)
+        || value.contains('\\')
         || Path::new(value).is_absolute()
         || !Path::new(value)
             .components()
@@ -621,6 +623,11 @@ fn validate_repo_relative_path(value: &str) -> Result<(), DiffError> {
         return Err(DiffError::InvalidPath);
     }
     Ok(())
+}
+
+fn has_windows_drive_prefix(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
 }
 
 struct ParsedDiff {
@@ -836,6 +843,14 @@ mod tests {
         );
         assert_eq!(
             validate_repo_relative_path("C:/secret"),
+            Err(DiffError::InvalidPath)
+        );
+        assert_eq!(
+            validate_repo_relative_path(r"C:\secret"),
+            Err(DiffError::InvalidPath)
+        );
+        assert_eq!(
+            validate_repo_relative_path(r"\\server\share\secret"),
             Err(DiffError::InvalidPath)
         );
     }

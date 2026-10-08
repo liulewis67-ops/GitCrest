@@ -706,47 +706,49 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
-        connection.execute_batch(include_str!("../migrations/0001_repositories.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0001_repositories.sql"))?;
         connection.pragma_update(None, "user_version", 1)?;
     }
     if version < 2 {
-        connection.execute_batch(include_str!("../migrations/0002_tasks.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0002_tasks.sql"))?;
         connection.pragma_update(None, "user_version", 2)?;
     }
     if version < 3 {
-        connection.execute_batch(include_str!("../migrations/0003_branch_favorites.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0003_branch_favorites.sql"))?;
         connection.pragma_update(None, "user_version", 3)?;
     }
     if version < 4 {
-        connection.execute_batch(include_str!("../migrations/0004_shelves.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0004_shelves.sql"))?;
         connection.pragma_update(None, "user_version", 4)?;
     }
     if version < 5 {
-        connection.execute_batch(include_str!("../migrations/0005_shelf_scope.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0005_shelf_scope.sql"))?;
         connection.pragma_update(None, "user_version", 5)?;
     }
     if version < 6 {
-        connection.execute_batch(include_str!("../migrations/0006_ai_provider_settings.sql"))?;
+        connection.execute_batch(include_str!(
+            "../../migrations/0006_ai_provider_settings.sql"
+        ))?;
         connection.pragma_update(None, "user_version", 6)?;
     }
     if version < 7 {
-        connection.execute_batch(include_str!("../migrations/0007_history_search.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0007_history_search.sql"))?;
         connection.pragma_update(None, "user_version", 7)?;
     }
     if version < 8 {
-        connection.execute_batch(include_str!("../migrations/0008_staging_undo.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0008_staging_undo.sql"))?;
         connection.pragma_update(None, "user_version", 8)?;
     }
     if version < 9 {
-        connection.execute_batch(include_str!("../migrations/0009_shelf_apply_undo.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0009_shelf_apply_undo.sql"))?;
         connection.pragma_update(None, "user_version", 9)?;
     }
     if version < 10 {
-        connection.execute_batch(include_str!("../migrations/0010_undo_shelf_restore.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0010_undo_shelf_restore.sql"))?;
         connection.pragma_update(None, "user_version", 10)?;
     }
     if version < 11 {
-        connection.execute_batch(include_str!("../migrations/0011_undo_shelf_patch.sql"))?;
+        connection.execute_batch(include_str!("../../migrations/0011_undo_shelf_patch.sql"))?;
         connection.pragma_update(None, "user_version", 11)?;
     }
     Ok(())
@@ -883,12 +885,12 @@ mod tests {
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
         for migration in [
-            include_str!("../migrations/0001_repositories.sql"),
-            include_str!("../migrations/0002_tasks.sql"),
-            include_str!("../migrations/0003_branch_favorites.sql"),
-            include_str!("../migrations/0004_shelves.sql"),
-            include_str!("../migrations/0005_shelf_scope.sql"),
-            include_str!("../migrations/0006_ai_provider_settings.sql"),
+            include_str!("../../migrations/0001_repositories.sql"),
+            include_str!("../../migrations/0002_tasks.sql"),
+            include_str!("../../migrations/0003_branch_favorites.sql"),
+            include_str!("../../migrations/0004_shelves.sql"),
+            include_str!("../../migrations/0005_shelf_scope.sql"),
+            include_str!("../../migrations/0006_ai_provider_settings.sql"),
         ] {
             connection.execute_batch(migration).unwrap();
         }
@@ -1004,14 +1006,14 @@ mod tests {
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
         for migration in [
-            include_str!("../migrations/0001_repositories.sql"),
-            include_str!("../migrations/0002_tasks.sql"),
-            include_str!("../migrations/0003_branch_favorites.sql"),
-            include_str!("../migrations/0004_shelves.sql"),
-            include_str!("../migrations/0005_shelf_scope.sql"),
-            include_str!("../migrations/0006_ai_provider_settings.sql"),
-            include_str!("../migrations/0007_history_search.sql"),
-            include_str!("../migrations/0008_staging_undo.sql"),
+            include_str!("../../migrations/0001_repositories.sql"),
+            include_str!("../../migrations/0002_tasks.sql"),
+            include_str!("../../migrations/0003_branch_favorites.sql"),
+            include_str!("../../migrations/0004_shelves.sql"),
+            include_str!("../../migrations/0005_shelf_scope.sql"),
+            include_str!("../../migrations/0006_ai_provider_settings.sql"),
+            include_str!("../../migrations/0007_history_search.sql"),
+            include_str!("../../migrations/0008_staging_undo.sql"),
         ] {
             connection.execute_batch(migration).unwrap();
         }
