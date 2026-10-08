@@ -1625,3 +1625,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：设置 UI、快捷键编辑冲突校验仍在 settings feature 组件；App 仍持有大量 Git/task 编排，继续逐项迁入对应 feature。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/features/settings/model/{shortcut-preferences.ts,use-shortcut-preferences.ts}`、`src/features/settings/index.ts`、`src/features/settings/SettingsDialog.tsx`、`src/app/App.tsx`。
 - 实施 commit：`9216952`
+
+### 后端 HTTP middleware 归入 API 层 — 小阶段 114
+- 状态：已完成（认证 capability、API 版本校验与响应头不再定义于 crate 根）
+- 日期：2026-10-09
+- 交付：新增 `api/middleware/{auth.rs,version.rs}` 与模块入口；将 bearer token 权限判定、冲突窗口能力路径/方法限制、版本头校验及响应版本头从 `main.rs` 迁入 API middleware。`api/router.rs` 直接组合该层中间件并在 router 内处理 API fallback；原错误码、路径允许列表、HTTP 方法和 bootstrap version 例外保持不变。为 crate 内既有 `crate::Type` feature imports 保留必要根级类型导入。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：后端仍以 binary crate root 承载模块声明及兼容类型导入，`main.rs` 内还有大型 crate-level 测试模块；后续结合指南与现有测试可见性逐步收敛，避免一次性破坏内部访问。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/api/middleware/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`、`doc/14-backend-development-guidelines.md` 第 3、5 节。
+- 实施 commit：`11d9345`
