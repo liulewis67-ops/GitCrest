@@ -915,13 +915,13 @@ function App() {
     }
   }
 
-  async function undoRecentStaging() {
+  async function undoRecentOperation() {
     const api = apiRef.current;
     const repository = selectedRepository;
     if (!api || !repository || !connected || repository.availability !== "available" || hasActiveRepositoryTask) return;
     setTasksError("");
     try {
-      const task = await api.undoRecentStaging(repository.repoId);
+      const task = await api.undoRecentOperation(repository.repoId);
       setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
       setTasksOpen(true);
     } catch (error) {
@@ -1700,7 +1700,7 @@ function App() {
         void stageChanges("stageAll");
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.undoRecentOperation, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
         event.preventDefault();
-        void undoRecentStaging();
+        void undoRecentOperation();
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.fetch, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
         event.preventDefault();
         void fetchRepository();

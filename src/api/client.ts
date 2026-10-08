@@ -413,7 +413,7 @@ export class GitCrestApiClient {
     });
   }
 
-  undoRecentStaging(repoId: RepoId): Promise<TaskSnapshotResponse> {
+  undoRecentOperation(repoId: RepoId): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/undo`, true, {
       method: "POST",
     });

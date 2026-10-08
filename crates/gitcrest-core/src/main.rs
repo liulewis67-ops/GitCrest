@@ -56,7 +56,7 @@ use cloning::{CloneError, CloneService};
 use diff::{DiffError, DiffScope};
 use git_command::{BranchCommand, GitCommandService, GitOperation, RemoteCommand};
 use repository::{Repository, RepositoryError, RepositoryManager};
-use storage::{RepositoryStore, StagingUndoRecord};
+use storage::{RepositoryStore, UndoOperation, UndoRecord};
 use tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError};
 
 const API_VERSION: &str = "1";
@@ -1049,7 +1049,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route("/v1/repositories/:repo_id/ai/request", post(request_ai))
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
-        .route("/v1/repositories/:repo_id/undo", post(undo_recent_staging))
+        .route(
+            "/v1/repositories/:repo_id/undo",
+            post(undo_recent_operation),
+        )
         .route(
             "/v1/repositories/:repo_id/staging/patch",
             post(stage_repository_patch),
@@ -1719,7 +1722,7 @@ async fn stage_repository_patch(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-async fn undo_recent_staging(
+async fn undo_recent_operation(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
@@ -1730,14 +1733,14 @@ async fn undo_recent_staging(
         .map_err(ApiError::from_repository_error)?;
     let store = state.repositories.store();
     if store
-        .latest_staging_undo_record(&repo_id)
+        .latest_undo_record(&repo_id)
         .map_err(|_| ApiError::task_storage_unavailable())?
         .is_none()
     {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::RepositoryStateConflict,
-            "There is no recent staging operation available to undo.",
+            "There is no recent operation available to undo.",
         ));
     }
     let task_repo_id = repo_id.clone();
@@ -1750,36 +1753,73 @@ async fn undo_recent_staging(
             Some(repo_id),
             None,
             target.resource_key,
-            "undoStaging",
+            "undoRecentOperation",
             move |context| async move {
                 let record = task_store
-                    .latest_staging_undo_record(&task_repo_id)
+                    .latest_undo_record(&task_repo_id)
                     .map_err(|_| {
-                        TaskFailure::Failed("Could not load the recent staging undo record".into())
+                        TaskFailure::Failed("Could not load the recent undo record".into())
                     })?
                     .ok_or_else(|| {
                         TaskFailure::Failed(
-                            "There is no recent staging operation available to undo".into(),
+                            "There is no recent operation available to undo".into(),
                         )
-                    })?;
-                commands
-                    .execute_staging(
-                        &repository_path,
-                        staging::undo_command(record.reverse_patch),
-                        context.clone(),
-                    )
-                    .await
-                    .map_err(|_| {
-                        TaskFailure::Failed(
-                            "Git could not safely apply this undo patch. The index may have changed; refresh and review it before trying again.".into(),
+                })?;
+                let undo_patch = record.reverse_patch.clone();
+                let shelf_already_restored = if let Some(snapshot) = record.restore_shelf.as_ref() {
+                    let repo_id = task_repo_id.clone();
+                    let shelf_id = snapshot.shelf_id.clone();
+                    let store = task_store.clone();
+                    let existing = tokio::task::spawn_blocking(move || store.get_shelf(&repo_id, &shelf_id))
+                        .await
+                        .map_err(|_| TaskFailure::Failed("Could not verify the saved shelf state before undo.".into()))?
+                        .map_err(|_| TaskFailure::Failed("Could not verify the saved shelf state before undo.".into()))?;
+                    match existing {
+                        Some(existing) if existing.snapshot == *snapshot && existing.patch == undo_patch => true,
+                        Some(_) => return Err(TaskFailure::Failed("A different saved shelf already uses the identifier needed to undo this operation. Resolve the shelf list before retrying.".into())),
+                        None => false,
+                    }
+                } else {
+                    false
+                };
+                if !shelf_already_restored {
+                    commands
+                        .execute_staging(
+                            &repository_path,
+                            match record.operation {
+                                UndoOperation::Staging => staging::undo_command(undo_patch.clone()),
+                                UndoOperation::ShelfApply { scope } => {
+                                    shelves::undo_apply_command(undo_patch.clone(), scope)
+                                }
+                            },
+                            context.clone(),
                         )
-                    })?;
+                        .await
+                        .map_err(|_| {
+                            TaskFailure::Failed(
+                                "Git could not safely apply this undo patch. The working tree or index may have changed; refresh and review it before trying again.".into(),
+                            )
+                        })?;
+                }
+                if let Some(snapshot) = record.restore_shelf {
+                    if !shelf_already_restored {
+                    let shelf = shelves::ShelfRecord {
+                        snapshot,
+                        patch: undo_patch,
+                    };
+                    let store = task_store.clone();
+                    tokio::task::spawn_blocking(move || store.save_shelf(&shelf))
+                        .await
+                        .map_err(|_| TaskFailure::Failed("The shelf changes were undone, but the saved shelf entry could not be restored. The undo record was retained.".into()))?
+                        .map_err(|_| TaskFailure::Failed("The shelf changes were undone, but the saved shelf entry could not be restored. The undo record was retained.".into()))?;
+                    }
+                }
                 if task_store
-                    .delete_staging_undo_record(&task_repo_id, &record.operation_task_id)
+                    .delete_undo_record(&task_repo_id, &record.operation_task_id)
                     .is_err()
                 {
                     context
-                        .log("The staging change was undone, but its undo record could not be removed.")
+                        .log("The operation was undone, but its undo record could not be removed.")
                         .await;
                 }
                 Ok(None)
@@ -1813,11 +1853,13 @@ async fn persist_staging_undo(
             return Ok(());
         }
         store
-            .save_staging_undo_record(&StagingUndoRecord {
+            .save_undo_record(&UndoRecord {
                 operation_task_id: context.task_id().to_owned(),
                 repo_id: repo_id.to_owned(),
                 created_at_ms: shelves::now_ms(),
                 reverse_patch,
+                operation: UndoOperation::Staging,
+                restore_shelf: None,
             })
             .map_err(|_| TaskFailure::Failed("The undo snapshot could not be saved".into()))
     }
@@ -2242,10 +2284,11 @@ async fn apply_repository_shelf(
                 let can_apply = shelves::check_apply(&task_path, &patch, current_scope)
                     .await
                     .map_err(|_| TaskFailure::Failed("Git could not recheck the reviewed shelf patch.".into()))?;
-                if can_apply {
+                let clean_apply = if can_apply {
                     commands
                         .execute_staging(&task_path, shelves::restore_command(patch.clone(), current_scope), context.clone())
                         .await?;
+                    true
                 } else {
                     let can_resolve_conflicts = can_shelf_apply_with_conflicts(
                         &repositories,
@@ -2279,12 +2322,44 @@ async fn apply_repository_shelf(
                         }
                         Err(TaskFailure::Cancelled) => return Err(TaskFailure::Cancelled),
                     }
+                    false
+                };
+                if clean_apply {
+                    let undo_record = UndoRecord {
+                        operation_task_id: context.task_id().to_owned(),
+                        repo_id: task_repo_id.clone(),
+                        created_at_ms: shelves::now_ms(),
+                        reverse_patch: patch.clone(),
+                        operation: UndoOperation::ShelfApply {
+                            scope: current_scope,
+                        },
+                        restore_shelf: Some(current_shelf.snapshot.clone()),
+                    };
+                    let store = repositories.store();
+                    tokio::task::spawn_blocking(move || store.save_undo_record(&undo_record))
+                        .await
+                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?
+                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?;
                 }
                 let store = repositories.store();
-                tokio::task::spawn_blocking(move || store.delete_shelf(&task_repo_id, &task_shelf_id))
+                let delete_repo_id = task_repo_id.clone();
+                let delete_task_shelf_id = task_shelf_id.clone();
+                let deletion = tokio::task::spawn_blocking(move || store.delete_shelf(&delete_repo_id, &delete_task_shelf_id))
                     .await
-                    .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?
-                    .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?;
+                    .map_err(|_| "The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".to_owned())
+                    .and_then(|result| result.map_err(|_| "The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".to_owned()));
+                if deletion != Ok(true) {
+                    if clean_apply {
+                        let store = repositories.store();
+                        let repo_id = task_repo_id.clone();
+                        let operation_task_id = context.task_id().to_owned();
+                        let _ = tokio::task::spawn_blocking(move || {
+                            store.delete_undo_record(&repo_id, &operation_task_id)
+                        })
+                        .await;
+                    }
+                    return Err(TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()));
+                }
                 Ok(Some("The reviewed shelf was applied and removed from the saved shelf list.".into()))
             },
         )
@@ -8494,6 +8569,149 @@ mod tests {
         let detail: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert!(detail["patch"].as_str().unwrap().contains("changed2"));
         assert!(detail["patch"].as_str().unwrap().contains("line2"));
+        let preview = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply-preview"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview.status(), StatusCode::OK);
+        let bytes = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(preview["canApplyCleanly"], true);
+        let applied = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply"),
+                &serde_json::json!({
+                    "expectedHeadOid": preview["expectedHeadOid"],
+                    "previewRevision": preview["previewRevision"]
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(applied.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(applied.into_body(), usize::MAX).await.unwrap();
+        let apply_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, apply_task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let applied_content = std::fs::read_to_string(root.join("notes.txt")).unwrap();
+        assert!(applied_content.lines().any(|line| line == "changed2"));
+        assert!(applied_content.lines().any(|line| line == "changed11"));
+        assert!(applied_content.lines().any(|line| line == "external edit"));
+        let undo = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(undo.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(undo.into_body(), usize::MAX).await.unwrap();
+        let undo_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, undo_task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let undone_content = std::fs::read_to_string(root.join("notes.txt")).unwrap();
+        assert!(undone_content.lines().any(|line| line == "line2"));
+        assert!(undone_content.lines().any(|line| line == "changed11"));
+        assert!(undone_content.lines().any(|line| line == "external edit"));
+        let restored_shelves = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(restored_shelves.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let restored_shelves: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(restored_shelves.as_array().unwrap().len(), 1);
+        assert_eq!(restored_shelves[0]["shelfId"], shelf_id);
+        assert!(restored_shelves[0]["name"] == "first hunk");
+        let retry_preview = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply-preview"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(retry_preview.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let retry_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let reapplied = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply"),
+                &serde_json::json!({
+                    "expectedHeadOid": retry_preview["expectedHeadOid"],
+                    "previewRevision": retry_preview["previewRevision"]
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(reapplied.into_body(), usize::MAX).await.unwrap();
+        let reapplied_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, reapplied_task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let external_edit = applied_content.replace("changed2", "external replacement");
+        std::fs::write(root.join("notes.txt"), &external_edit).unwrap();
+        let unsafe_undo = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(unsafe_undo.into_body(), usize::MAX).await.unwrap();
+        let unsafe_undo_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, unsafe_undo_task["taskId"].as_str().unwrap()).await["status"],
+            "failed"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("notes.txt")).unwrap(),
+            external_edit
+        );
+        std::fs::write(root.join("notes.txt"), &applied_content).unwrap();
+        let retry_undo = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(retry_undo.into_body(), usize::MAX).await.unwrap();
+        let retry_undo_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, retry_undo_task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("notes.txt")).unwrap(),
+            undone_content
+        );
         let deleted = app
             .clone()
             .oneshot(

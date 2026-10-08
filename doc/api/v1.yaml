@@ -1316,7 +1316,7 @@ paths:
         schema:
           $ref: "#/components/schemas/RepoId"
     post:
-      operationId: undoRecentStaging
+      operationId: undoRecentOperation
       summary: Queue a safe undo of the most recent staging operation
       description: Applies a stored inverse index patch. The working tree is not changed; if the current index no longer accepts the patch, the task fails without overwriting the index.
       responses:

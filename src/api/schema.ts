@@ -679,7 +679,7 @@ export interface paths {
          * Queue a safe undo of the most recent staging operation
          * @description Applies a stored inverse index patch. The working tree is not changed; if the current index no longer accepts the patch, the task fails without overwriting the index.
          */
-        post: operations["undoRecentStaging"];
+        post: operations["undoRecentOperation"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4077,7 +4077,7 @@ export interface operations {
             };
         };
     };
-    undoRecentStaging: {
+    undoRecentOperation: {
         parameters: {
             query?: never;
             header: {

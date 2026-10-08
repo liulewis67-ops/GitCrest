@@ -6,7 +6,7 @@ use std::{
     time::Duration,
 };
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, process::Command};
 
 use crate::{diff::DiffScope, staging::StagingCommand};
@@ -15,7 +15,7 @@ pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
 const APPLY_CHECK_DEADLINE: Duration = Duration::from_secs(10);
 static NEXT_SHELF_ID: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShelfSnapshot {
     pub shelf_id: String,
@@ -163,6 +163,19 @@ pub fn restore_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
     }
 }
 
+pub fn undo_apply_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
+    let mut arguments = vec![OsString::from("apply"), OsString::from("--reverse")];
+    if scope == DiffScope::Index {
+        arguments.push("--index".into());
+    }
+    StagingCommand {
+        arguments,
+        input: Some(patch),
+        label: "Undo saved shelf apply",
+        log_label: "git apply --reverse <shelf patch>",
+    }
+}
+
 pub fn restore_three_way_command(patch: Vec<u8>) -> StagingCommand {
     StagingCommand {
         arguments: ["apply", "--3way", "--index"]
@@ -247,5 +260,25 @@ mod tests {
             validate_patch(&vec![0; MAX_PATCH_BYTES + 1], &["a.txt".into()]),
             Err(ShelfError::PatchTooLarge)
         );
+    }
+
+    #[test]
+    fn shelf_apply_undo_reverses_worktree_or_index_and_worktree_together() {
+        let worktree = undo_apply_command(b"patch".to_vec(), DiffScope::WorkingTree);
+        let worktree_arguments = worktree
+            .arguments
+            .iter()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(worktree_arguments, ["apply", "--reverse"]);
+        assert_eq!(worktree.input.as_deref(), Some(&b"patch"[..]));
+
+        let index = undo_apply_command(b"patch".to_vec(), DiffScope::Index);
+        let index_arguments = index
+            .arguments
+            .iter()
+            .map(|argument| argument.to_string_lossy().into_owned())
+            .collect::<Vec<_>>();
+        assert_eq!(index_arguments, ["apply", "--reverse", "--index"]);
     }
 }

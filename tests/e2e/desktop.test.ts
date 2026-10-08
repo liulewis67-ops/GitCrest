@@ -378,9 +378,9 @@ describe("desktop startup E2E", () => {
       await refreshStatusButton.focus();
       expect(await window.evaluate(() => document.activeElement?.textContent?.trim())).toBe("Refresh ↻");
       await window.keyboard.press("Control+z");
-      const undoTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "undoStaging" }) });
+      const undoTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "undoRecentOperation" }) });
       await undoTask.waitFor({ state: "visible", timeout: 5000 });
-      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "undoStaging" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 10_000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "undoRecentOperation" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 10_000 });
       const stagedAfterUndo = (await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only"])).stdout.trim();
       expect(stagedAfterUndo).toBe(stagedBeforeUndo);
       expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain", "--", "src/undo-me.ts"])).stdout.trim()).toBe("?? src/undo-me.ts");
