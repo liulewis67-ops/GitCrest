@@ -9,6 +9,7 @@ import type { PushTarget } from "./features/remotes/PushTargetDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "./features/settings/shortcut-preferences";
 import { useDialogFocus } from "./shared/use-dialog-focus";
+import { supportsWorkflowRecovery } from "./features/tasks/task-operations";
 import type { components } from "./api/schema";
 import type { UpdateStatus } from "./api/update-status";
 import "./App.css";
@@ -1639,7 +1640,7 @@ function App() {
 
   useEffect(() => {
     for (const task of tasks) {
-      if (task.status === "waitingForInput" && (["merge", "cherryPick", "revert", "rebase"].includes(task.operation) || task.operation.startsWith("shelfApply:")) && task.repoId && !refreshedWaitingWorkflowTasks.current.has(task.taskId)) {
+      if (task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && task.repoId && !refreshedWaitingWorkflowTasks.current.has(task.taskId)) {
         refreshedWaitingWorkflowTasks.current.add(task.taskId);
         void refreshRepositoryStatus(task.repoId);
       }

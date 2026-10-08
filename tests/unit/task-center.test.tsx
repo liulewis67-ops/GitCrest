@@ -112,3 +112,18 @@ it("offers rebase recovery and skip while a rebase waits for input", async () =>
   fireEvent.click(screen.getByRole("button", { name: "Skip" }));
   expect(onRecoverWorkflow).toHaveBeenCalledWith(waiting, preview, "skip");
 });
+
+it("offers conflict recovery for a pull-merge task", async () => {
+  const waiting = { ...failedFetch, taskId: "task-pull-merge", operation: "pullMerge", status: "waitingForInput" as const, message: "Resolve pull conflicts" };
+  const preview = {
+    repoId: "repo_fixture", taskId: waiting.taskId, operation: "merge" as const, headOid: "b".repeat(40),
+    dirtyPaths: ["src/conflict.ts"], omittedDirtyPathCount: 0, conflictedPaths: ["src/conflict.ts"], omittedConflictedPathCount: 0,
+    canContinue: false, canSkip: false, canAbort: true,
+  };
+  const api = { preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValue(preview) } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const onOpenConflictWindow = vi.fn();
+  render(<TaskCenter api={api} tasks={[waiting]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={onOpenConflictWindow} />);
+  expect(await screen.findByText("src/conflict.ts")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Open conflict resolver" }));
+  expect(onOpenConflictWindow).toHaveBeenCalledWith(waiting);
+});

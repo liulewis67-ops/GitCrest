@@ -246,7 +246,7 @@ impl GitCommandService {
             crate::pull::PullStrategy::Merge => "--no-rebase",
             crate::pull::PullStrategy::Rebase => "--rebase",
         };
-        run_command(
+        let result = run_command(
             &self.git_program,
             vec![
                 "pull".into(),
@@ -275,7 +275,8 @@ impl GitCommandService {
             },
             task,
         )
-        .await
+        .await;
+        workflow_command_result(repository_path, result).await
     }
 
     pub async fn execute_workflow(

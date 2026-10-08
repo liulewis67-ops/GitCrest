@@ -5619,7 +5619,7 @@ async fn preflight_repository_workflow_recovery(
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::WorkflowNoActiveOperation,
-            "Recovery requires a waiting merge, cherry-pick, or revert task for this repository.",
+            "Recovery requires a waiting merge, pull, cherry-pick, or revert task for this repository.",
         ));
     }
     let target = state
@@ -6501,10 +6501,10 @@ async fn recover_repository_workflow(
 
 fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOperation> {
     match operation {
-        "merge" => Some(workflows::WorkflowOperation::Merge),
+        "merge" | "pullMerge" => Some(workflows::WorkflowOperation::Merge),
         "cherryPick" => Some(workflows::WorkflowOperation::CherryPick),
         "revert" => Some(workflows::WorkflowOperation::Revert),
-        "rebase" => Some(workflows::WorkflowOperation::Rebase),
+        "rebase" | "pullRebase" => Some(workflows::WorkflowOperation::Rebase),
         value if shelf_apply_shelf_id(value).is_some() => {
             Some(workflows::WorkflowOperation::ShelfApply)
         }
@@ -6999,6 +6999,19 @@ mod tests {
     const WRITE_TOKEN: &str = "test-write-token";
     const READ_ONLY_TOKEN: &str = "test-read-only-token";
     const CONFLICT_TOKEN: &str = "test-conflict-token";
+
+    #[test]
+    fn maps_pull_waiting_tasks_to_their_git_recovery_operations() {
+        assert_eq!(
+            workflow_operation_for_task("pullMerge"),
+            Some(workflows::WorkflowOperation::Merge)
+        );
+        assert_eq!(
+            workflow_operation_for_task("pullRebase"),
+            Some(workflows::WorkflowOperation::Rebase)
+        );
+        assert_eq!(workflow_operation_for_task("fetch"), None);
+    }
 
     fn test_credentials() -> credentials::CredentialManager {
         credentials::CredentialManager::with_store(Arc::new(
