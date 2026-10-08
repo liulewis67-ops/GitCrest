@@ -13,24 +13,21 @@ use tower_http::cors::CorsLayer;
 use crate::write_probe;
 
 use crate::{
-    add_api_version_header, add_repository_remote, api_not_found, apply_repository_shelf,
-    cancel_task, clone_repository, commit_repository, create_repository_shelf,
-    delete_ai_credential, delete_credential, delete_repository_remote, delete_repository_shelf,
-    discard_repository_patch, events, fetch_repository, get_ai_settings, get_credential_status,
-    get_repository_shelf, get_task, get_workflow_conflict_ai_settings,
+    add_api_version_header, api_not_found, apply_repository_shelf, cancel_task, clone_repository,
+    commit_repository, create_repository_shelf, delete_ai_credential, delete_credential,
+    delete_repository_shelf, discard_repository_patch, events, fetch_repository, get_ai_settings,
+    get_credential_status, get_repository_shelf, get_task, get_workflow_conflict_ai_settings,
     list_repository_rebase_backups, list_repository_reset_backups, list_repository_shelves,
     list_tasks, mark_workflow_conflict_resolved, preflight_repository_pull,
     preflight_repository_push, preflight_repository_rebase, preflight_repository_reset,
     preflight_repository_shelf_apply, preflight_repository_workflow,
     preflight_repository_workflow_recovery, pull_repository, push_repository,
     read_workflow_conflict_file, recover_repository_workflow, repositories,
-    repository_commit_create_tag, repository_remotes, request_ai,
-    request_workflow_conflict_suggestion, require_api_version, require_auth,
-    restore_repository_reset, rollback_repository_rebase, save_workflow_conflict_file,
-    set_ai_credential, set_ai_settings, set_branch_upstream, set_credential, set_default_remote,
-    set_repository_remote_url, stage_repository, stage_repository_patch, start_repository_rebase,
-    start_repository_reset, start_repository_workflow, status, system, undo_recent_operation,
-    AppState,
+    repository_commit_create_tag, request_ai, request_workflow_conflict_suggestion,
+    require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
+    save_workflow_conflict_file, set_ai_credential, set_ai_settings, set_credential,
+    stage_repository, stage_repository_patch, start_repository_rebase, start_repository_reset,
+    start_repository_workflow, status, system, undo_recent_operation, AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
@@ -41,26 +38,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::history::routes::router())
         .merge(crate::branches::routes::router())
         .merge(crate::remotes::routes::router())
-        .route(
-            "/v1/repositories/:repo_id/remotes",
-            get(repository_remotes).post(add_repository_remote),
-        )
-        .route(
-            "/v1/repositories/:repo_id/remotes/url",
-            put(set_repository_remote_url),
-        )
-        .route(
-            "/v1/repositories/:repo_id/remotes/delete",
-            post(delete_repository_remote),
-        )
-        .route(
-            "/v1/repositories/:repo_id/remotes/default",
-            put(set_default_remote),
-        )
-        .route(
-            "/v1/repositories/:repo_id/remotes/upstream",
-            put(set_branch_upstream),
-        )
         .route(
             "/v1/credentials",
             get(get_credential_status)
