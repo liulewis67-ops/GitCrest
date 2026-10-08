@@ -4,17 +4,17 @@ use axum::{
     Json,
 };
 
-use super::service as ai;
+use super::{dto as ai_dto, service as ai};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     credentials,
     state::AppState,
 };
-fn ai_provider_name(provider: ai::AiProvider) -> &'static str {
+fn ai_provider_name(provider: ai_dto::AiProvider) -> &'static str {
     match provider {
-        ai::AiProvider::None => "none",
-        ai::AiProvider::OpenAiCompatible => "openAiCompatible",
-        ai::AiProvider::Ollama => "ollama",
+        ai_dto::AiProvider::None => "none",
+        ai_dto::AiProvider::OpenAiCompatible => "openAiCompatible",
+        ai_dto::AiProvider::Ollama => "ollama",
     }
 }
 
@@ -23,11 +23,11 @@ fn ai_settings_from_parts(
     base_url: String,
     model: String,
     has_cloud_credential: bool,
-) -> Result<ai::AiSettings, ApiError> {
+) -> Result<ai_dto::AiSettings, ApiError> {
     let provider = match provider {
-        "none" => ai::AiProvider::None,
-        "openAiCompatible" => ai::AiProvider::OpenAiCompatible,
-        "ollama" => ai::AiProvider::Ollama,
+        "none" => ai_dto::AiProvider::None,
+        "openAiCompatible" => ai_dto::AiProvider::OpenAiCompatible,
+        "ollama" => ai_dto::AiProvider::Ollama,
         _ => {
             return Err(ApiError::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -36,7 +36,7 @@ fn ai_settings_from_parts(
             ))
         }
     };
-    Ok(ai::AiSettings {
+    Ok(ai_dto::AiSettings {
         provider,
         base_url,
         model,
@@ -46,7 +46,7 @@ fn ai_settings_from_parts(
 
 pub(crate) async fn get_ai_settings(
     State(state): State<AppState>,
-) -> Result<Json<ai::AiSettings>, ApiError> {
+) -> Result<Json<ai_dto::AiSettings>, ApiError> {
     let store = state.repositories.store();
     let manager = state.ai_credentials.clone();
     let settings = tokio::task::spawn_blocking(move || {
@@ -75,8 +75,8 @@ pub(crate) async fn get_ai_settings(
 
 pub(super) async fn set_ai_settings(
     State(state): State<AppState>,
-    request: Result<Json<ai::AiSettingsRequest>, JsonRejection>,
-) -> Result<Json<ai::AiSettings>, ApiError> {
+    request: Result<Json<ai_dto::AiSettingsRequest>, JsonRejection>,
+) -> Result<Json<ai_dto::AiSettings>, ApiError> {
     let Json(request) = request.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -124,8 +124,8 @@ pub(super) async fn set_ai_settings(
 
 pub(super) async fn set_ai_credential(
     State(state): State<AppState>,
-    request: Result<Json<ai::AiCredentialRequest>, JsonRejection>,
-) -> Result<Json<ai::AiSettings>, ApiError> {
+    request: Result<Json<ai_dto::AiCredentialRequest>, JsonRejection>,
+) -> Result<Json<ai_dto::AiSettings>, ApiError> {
     let Json(request) = request.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
