@@ -1958,3 +1958,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：remote 管理查询和跨 feature task 刷新仍由 App 协调；继续按 feature model 与应用装配边界逐步迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/remotes/model/use-remote-mutations.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`tests/unit/{settings-dialog,shortcut-preferences}.test.*`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`f9792e3`
+
+### S7.2 — 桌面内存进程分布复采（探索性单样本）
+- 状态：探索性诊断；不构成 S7.2 验收
+- 日期：2026-10-09
+- 交付：使用现有 `desktop-benchmark.mjs` 的 `memory-only` 模式，在 Windows x64、Electron 37、Release sidecar、100k commits / 1k 行 fixture 下复采一次隔离 profile 的 idle/loaded 进程分布。Electron 主进程及 descendants 的 Working Set 总和为 398,180,352 / 431,132,672 bytes；Private Working Set 窗口峰值为 103,395,328 / 123,609,088 bytes。GPU、renderer、main、utility 与 sidecar 均有独立记录。
+- 验证：命令 `GITCREST_BENCH_MODE=memory node scripts/performance/desktop-benchmark.mjs <100k-fixture> <report>` 正常退出并生成 JSON；该单样本没有启动/首帧/20 次稳定峰值/滚动测量，不用于判定门槛。
+- 限制/后续：结果显示本次单样本 Working Set 低于先前 20 轮稳定峰值，但仍高于 idle <250MB 门槛；Private Working Set 不能替代计划指定的 Working Set。继续定位能降低真实总 Working Set 且不损害 ≥60fps 的实现路径，S7.2 保持待验收。
+- 证据：`doc/evidence/S7.2/desktop-win32-memory-current-diagnostic.json`、`scripts/performance/desktop-benchmark.mjs`。
