@@ -411,10 +411,10 @@ function App() {
         if (repository) activateRepository(repository);
       }
     },
-    onTaskAccepted: (task, target) => {
+    onTaskAccepted: (task, target, clearTaskError) => {
       pushTargetsByTask.current.set(task.taskId, target);
       prependTask(task);
-      setTasksError("");
+      if (clearTaskError) setTasksError("");
       setTasksOpen(true);
     },
   });
@@ -422,19 +422,14 @@ function App() {
     open: pushOpen,
     setOpen: setPushOpen,
     preflight: pushPreflight,
-    setPreflight: setPushPreflight,
     loading: pushLoading,
-    setLoading: setPushLoading,
     busy: pushBusy,
-    setBusy: setPushBusy,
     error: pushError,
-    setError: setPushError,
     forceOnly: pushForceOnly,
-    setForceOnly: setPushForceOnly,
-    setTarget: setPushTarget,
     refreshPreflight: refreshPushPreflight,
     openDialog: openPushDialog,
     submit: submitPush,
+    continueCommitPush,
   } = repositoryPush;
 
   function openBranchSwitcher() {
@@ -649,40 +644,6 @@ function App() {
   function reviewTaskPush(task: TaskSnapshotResponse) {
     setTasksOpen(false);
     openPushDialog(task.repoId || selectedRepository?.repoId, pushTargetsByTask.current.get(task.taskId), task.operation.startsWith("pushForceWithLease"));
-  }
-
-  async function continueCommitPush(repoId: string, intent: CommitIntent) {
-    const api = apiRef.current;
-    if (!api) return;
-    setPushTarget(intent.target);
-    setPushForceOnly(intent.forceWithLease);
-    setPushPreflight(undefined);
-    setPushError("");
-    setPushOpen(true);
-    setPushLoading(true);
-    try {
-      const preview = await api.preflightRepositoryPush(repoId, intent.target);
-      setPushPreflight(preview);
-      if (intent.forceWithLease || preview.behind > 0 || preview.ahead === 0) return;
-      setPushBusy(true);
-      const task = await api.pushRepository(repoId, {
-        expectedLocalOid: preview.localOid,
-        expectedRemoteOid: preview.expectedRemoteOid,
-        forceWithLease: false,
-        remoteName: preview.remoteName,
-        remoteBranch: preview.remoteBranch,
-      });
-      pushTargetsByTask.current.set(task.taskId, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch });
-      prependTask(task);
-      setPushOpen(false);
-      setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setPushError(message || (error instanceof Error ? error.message : "The commit succeeded, but its push could not start."));
-    } finally {
-      setPushLoading(false);
-      setPushBusy(false);
-    }
   }
 
   async function stageChanges(action: StagingRequest["action"], path?: string) {

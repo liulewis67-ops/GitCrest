@@ -11,7 +11,7 @@ interface RepositoryPushOptions {
   getApi: () => GitCrestApiClient | undefined;
   repoId?: string;
   onSelectRepository: (repoId: string) => void;
-  onTaskAccepted: (task: TaskSnapshotResponse, target: PushTarget) => void;
+  onTaskAccepted: (task: TaskSnapshotResponse, target: PushTarget, clearTaskError: boolean) => void;
 }
 
 export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAccepted }: RepositoryPushOptions) {
@@ -62,7 +62,7 @@ export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAc
         remoteName: preview.remoteName,
         remoteBranch: preview.remoteBranch,
       });
-      onTaskAccepted(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch });
+      onTaskAccepted(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, true);
       setOpen(false);
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
@@ -75,23 +75,52 @@ export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAc
     }
   }
 
+  async function continueCommitPush(
+    targetRepoId: string,
+    intent: { target?: PushTarget; forceWithLease: boolean },
+  ) {
+    const api = getApi();
+    if (!api) return;
+    setTarget(intent.target);
+    setForceOnly(intent.forceWithLease);
+    setPreflight(undefined);
+    setError("");
+    setOpen(true);
+    setLoading(true);
+    try {
+      const preview = await api.preflightRepositoryPush(targetRepoId, intent.target);
+      setPreflight(preview);
+      if (intent.forceWithLease || preview.behind > 0 || preview.ahead === 0) return;
+      setBusy(true);
+      const task = await api.pushRepository(targetRepoId, {
+        expectedLocalOid: preview.localOid,
+        expectedRemoteOid: preview.expectedRemoteOid,
+        forceWithLease: false,
+        remoteName: preview.remoteName,
+        remoteBranch: preview.remoteBranch,
+      });
+      onTaskAccepted(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, false);
+      setOpen(false);
+    } catch (requestError) {
+      const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
+      setError(message || (requestError instanceof Error ? requestError.message : "The commit succeeded, but its push could not start."));
+    } finally {
+      setLoading(false);
+      setBusy(false);
+    }
+  }
+
   return {
     open,
     setOpen,
     preflight,
-    setPreflight,
     loading,
-    setLoading,
     busy,
-    setBusy,
     error,
-    setError,
     forceOnly,
-    setForceOnly,
-    target,
-    setTarget,
     refreshPreflight,
     openDialog,
     submit,
+    continueCommitPush,
   };
 }
