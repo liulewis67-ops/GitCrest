@@ -7,7 +7,7 @@ use crate::{
     api::router::app_router,
     cloning::CloneService,
     config::AppConfig,
-    credentials,
+    features::credentials,
     git::command::GitCommandService,
     repository::RepositoryManager,
     state::{AppState, EventBus},

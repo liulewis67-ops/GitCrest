@@ -7,7 +7,7 @@ use axum::{
 use super::dto::{CredentialHostQuery, SetCredentialRequest};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    credentials,
+    features::credentials,
     state::AppState,
 };
 

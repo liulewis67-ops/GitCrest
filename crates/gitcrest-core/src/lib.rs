@@ -22,9 +22,7 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::repositories::{cloning, repository};
-pub(crate) use features::{
-    credentials, diff, history, remotes, shelves, staging, status, tasks, workflows,
-};
+pub(crate) use features::{diff, history, remotes, shelves, staging, status, tasks, workflows};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
@@ -54,9 +52,9 @@ pub async fn run() -> i32 {
 }
 
 #[cfg(test)]
-fn test_ai_credentials() -> credentials::AiCredentialManager {
-    credentials::AiCredentialManager::with_store(Arc::new(
-        credentials::MemoryAiCredentialStore::default(),
+fn test_ai_credentials() -> features::credentials::AiCredentialManager {
+    features::credentials::AiCredentialManager::with_store(Arc::new(
+        features::credentials::MemoryAiCredentialStore::default(),
     ))
 }
 
@@ -107,9 +105,9 @@ mod tests {
         );
     }
 
-    fn test_credentials() -> credentials::CredentialManager {
-        credentials::CredentialManager::with_store(Arc::new(
-            credentials::MemoryCredentialStore::default(),
+    fn test_credentials() -> features::credentials::CredentialManager {
+        features::credentials::CredentialManager::with_store(Arc::new(
+            features::credentials::MemoryCredentialStore::default(),
         ))
     }
 
