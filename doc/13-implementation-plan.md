@@ -1445,3 +1445,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：任务完成副作用和 Git event subscription 仍在 `App.tsx`；后续继续迁移这些业务协调逻辑，避免根组件承载完整 event handler。
 - 证据：`src/features/tasks/model/use-task-refresh-lifecycle.ts`、`src/app/App.tsx`。
 - 实施 commit：`4f6c03b`
+
+### 前端 event sequence 与 repository refresh policy 拆分 — 小阶段 94
+- 状态：已完成（API event sequence 跟踪和 repository event 刷新决策离开 App 根组件）
+- 日期：2026-10-09
+- 交付：新增 `src/api/events.ts` 管理连接内 eventId 缺口检测；新增 repositories model `repository-event-refresh-plan.ts` 将 resync、status.changed 路径范围、repository.updated、log.refsChanged、任务通知和未知事件转换为刷新计划。App 保留订阅/取消订阅与执行刷新动作，并沿用协议中的重连/缺口快照刷新语义。
+- 验证：对照 `doc/api/events-v1.md` 核对事件路由语义；`pnpm frontend:build`（TypeScript 检查与 Vite production build）及 `git diff --check` 通过；未运行测试。
+- 限制/后续：订阅仍由 bootstrap 连接 Effect 建立，任务完成副作用仍在 App；继续迁移连接和任务操作编排，逐步收敛 App。
+- 证据：`src/api/events.ts`、`src/features/repositories/model/repository-event-refresh-plan.ts`、`src/app/App.tsx`。
+- 实施 commit：`e092e85`
