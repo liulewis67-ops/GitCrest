@@ -1,6 +1,7 @@
 pub(crate) mod branches;
 pub(crate) mod credentials;
 pub(crate) mod diff;
+pub(crate) mod history;
 pub(crate) mod status;
 pub(crate) mod system;
 pub(crate) mod tags;

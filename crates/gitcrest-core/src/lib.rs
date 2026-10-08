@@ -21,8 +21,6 @@ mod cloning;
 mod commits;
 mod domain;
 mod git;
-#[path = "features/history/mod.rs"]
-mod history;
 mod ports;
 #[path = "features/remotes/mod.rs"]
 mod remotes;
@@ -39,7 +37,7 @@ mod staging;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
-pub(crate) use features::{branches, credentials, diff, status, system, tags, tasks};
+pub(crate) use features::{branches, credentials, diff, history, status, system, tags, tasks};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 #[path = "features/workflows/mod.rs"]
