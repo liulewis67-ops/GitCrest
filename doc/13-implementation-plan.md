@@ -800,3 +800,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`d404eee`
 
+
+### 后端 clone handler 与 DTO 拆分 — 小阶段 24
+- 状态：已完成（clone HTTP 边界进入 repositories feature）
+- 日期：2026-10-09
+- 交付：将 `/v1/clones` 路由从顶层 API router 移入 repositories feature，并将 clone 请求 DTO 与任务 handler 从 `main.rs` 迁至 `features/repositories/{dto,handlers}.rs`。保留 remote URL/目标路径/目录名字段校验、CloneService 队列行为、错误映射和 202 响应。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；clone service 相关用例通过。
+- 限制/后续：`main.rs` 仍包含启动组装和大量其他 handlers；按规范继续迁移其余功能并收敛 bootstrap/state、API DTO 和 use-case 边界。
+- 证据：`crates/gitcrest-core/src/features/repositories/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`f970c65`
+
