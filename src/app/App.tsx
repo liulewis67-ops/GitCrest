@@ -19,7 +19,7 @@ import { useRepositoryRefs } from "../features/branches/model/use-repository-ref
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
 import { TaskRefreshPlanner } from "../features/tasks/model/task-refresh-planner";
-import { useRemoteMutations, useRepositoryFetch, useRepositoryPull } from "../features/remotes";
+import { useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush } from "../features/remotes";
 import { getRepositoryEventRefreshPlan } from "../features/repositories/model/repository-event-refresh-plan";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
@@ -64,13 +64,6 @@ function App() {
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
-  const [pushOpen, setPushOpen] = useState(false);
-  const [pushPreflight, setPushPreflight] = useState<components["schemas"]["PushPreflight"]>();
-  const [pushLoading, setPushLoading] = useState(false);
-  const [pushBusy, setPushBusy] = useState(false);
-  const [pushError, setPushError] = useState("");
-  const [pushForceOnly, setPushForceOnly] = useState(false);
-  const [pushTarget, setPushTarget] = useState<PushTarget>();
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [historySearchFocusRequest, setHistorySearchFocusRequest] = useState<{ repoId: string; sequence: number }>();
@@ -409,6 +402,40 @@ function App() {
     },
     refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
   });
+  const repositoryPush = useRepositoryPush({
+    getApi: () => apiRef.current,
+    repoId: selectedRepository?.repoId,
+    onSelectRepository: (repoId) => {
+      if (repoId !== selectedRepository?.repoId) {
+        const repository = repositories.find((entry) => entry.repoId === repoId);
+        if (repository) activateRepository(repository);
+      }
+    },
+    onTaskAccepted: (task, target) => {
+      pushTargetsByTask.current.set(task.taskId, target);
+      prependTask(task);
+      setTasksError("");
+      setTasksOpen(true);
+    },
+  });
+  const {
+    open: pushOpen,
+    setOpen: setPushOpen,
+    preflight: pushPreflight,
+    setPreflight: setPushPreflight,
+    loading: pushLoading,
+    setLoading: setPushLoading,
+    busy: pushBusy,
+    setBusy: setPushBusy,
+    error: pushError,
+    setError: setPushError,
+    forceOnly: pushForceOnly,
+    setForceOnly: setPushForceOnly,
+    setTarget: setPushTarget,
+    refreshPreflight: refreshPushPreflight,
+    openDialog: openPushDialog,
+    submit: submitPush,
+  } = repositoryPush;
 
   function openBranchSwitcher() {
     if (!selectedRepository || selectedRepository.availability !== "available") return;
@@ -611,65 +638,6 @@ function App() {
       setTasksError(error instanceof Error ? error.message : "Could not request task cancellation.");
     } finally {
       setTaskActionId("");
-    }
-  }
-
-  async function refreshPushPreflight(repoId = selectedRepository?.repoId, target: PushTarget | null = pushTarget || null) {
-    const api = apiRef.current;
-    if (!api || !repoId) return;
-    setPushLoading(true);
-    setPushError("");
-    try {
-      setPushPreflight(await api.preflightRepositoryPush(repoId, target || undefined));
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setPushPreflight(undefined);
-      setPushError(message || (error instanceof Error ? error.message : "Could not preview the push."));
-    } finally {
-      setPushLoading(false);
-    }
-  }
-
-  function openPushDialog(repoId = selectedRepository?.repoId, target?: PushTarget, forceOnly = false) {
-    if (!repoId) return;
-    if (repoId !== selectedRepository?.repoId) {
-      const repository = repositories.find((entry) => entry.repoId === repoId);
-      if (repository) activateRepository(repository);
-    }
-    setPushTarget(target);
-    setPushForceOnly(forceOnly);
-    setPushOpen(true);
-    void refreshPushPreflight(repoId, target || null);
-  }
-
-  async function submitPush(forceWithLease: boolean) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    const preview = pushPreflight;
-    if (!api || !repoId || !preview || preview.repoId !== repoId || pushBusy) return;
-    setPushBusy(true);
-    setPushError("");
-    try {
-      const task = await api.pushRepository(repoId, {
-        expectedLocalOid: preview.localOid,
-        expectedRemoteOid: preview.expectedRemoteOid,
-        forceWithLease,
-        remoteName: preview.remoteName,
-        remoteBranch: preview.remoteBranch,
-      });
-      pushTargetsByTask.current.set(task.taskId, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch });
-      prependTask(task);
-      setTasksError("");
-      setPushOpen(false);
-      setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setPushError(message || (error instanceof Error ? error.message : "Could not start the push task."));
-      if (error instanceof GitCrestApiError && error.body.error.code === "PUSH_PREFLIGHT_STALE") {
-        void refreshPushPreflight(repoId, pushTarget || null);
-      }
-    } finally {
-      setPushBusy(false);
     }
   }
 
