@@ -41,7 +41,7 @@ mod commits;
 mod conflicts;
 #[path = "credentials/credentials.rs"]
 mod credentials;
-#[path = "features/diff/diff.rs"]
+#[path = "features/diff/mod.rs"]
 mod diff;
 #[path = "git/git_command.rs"]
 mod git_command;

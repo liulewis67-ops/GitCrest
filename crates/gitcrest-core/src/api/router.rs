@@ -27,21 +27,20 @@ use crate::{
     preview_repository_remote_branch_delete, pull_repository, push_repository,
     read_workflow_conflict_file, recover_repository_workflow, rename_repository_branch,
     repositories, repository_blame, repository_branches, repository_commit_create_tag,
-    repository_commit_detail, repository_commit_file_diff, repository_commits, repository_diff,
-    repository_refs, repository_remotes, request_ai, request_workflow_conflict_suggestion,
-    require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
-    save_workflow_conflict_file, set_ai_credential, set_ai_settings, set_branch_favorite,
-    set_branch_upstream, set_credential, set_default_remote, set_repository_remote_url,
-    stage_repository, stage_repository_patch, start_repository_rebase, start_repository_reset,
-    start_repository_workflow, status, switch_repository_branch, system, undo_recent_operation,
-    AppState,
+    repository_commit_detail, repository_commits, repository_refs, repository_remotes, request_ai,
+    request_workflow_conflict_suggestion, require_api_version, require_auth,
+    restore_repository_reset, rollback_repository_rebase, save_workflow_conflict_file,
+    set_ai_credential, set_ai_settings, set_branch_favorite, set_branch_upstream, set_credential,
+    set_default_remote, set_repository_remote_url, stage_repository, stage_repository_patch,
+    start_repository_rebase, start_repository_reset, start_repository_workflow, status,
+    switch_repository_branch, system, undo_recent_operation, AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
     let api = system::routes::api_router()
         .merge(repositories::routes::router())
         .merge(status::routes::router())
-        .route("/v1/repositories/:repo_id/diff", get(repository_diff))
+        .merge(crate::diff::routes::router())
         .route("/v1/repositories/:repo_id/blame", get(repository_blame))
         .route(
             "/v1/repositories/:repo_id/branches",
@@ -147,10 +146,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .route(
             "/v1/repositories/:repo_id/commits/:oid",
             get(repository_commit_detail),
-        )
-        .route(
-            "/v1/repositories/:repo_id/commits/:oid/diff",
-            get(repository_commit_file_diff),
         )
         .route(
             "/v1/repositories/:repo_id/commits/:oid/tags",
