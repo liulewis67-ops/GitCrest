@@ -1013,3 +1013,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：shelves feature 已具备 dto/handlers/routes/service 分层；继续核对 recovery helper 与 workflows 的依赖归属，并推进其他尚未按规范分层的后端 feature。
 - 证据：`crates/gitcrest-core/src/features/shelves/{mod,dto,handlers,routes,service}.rs`。
 - 实施 commit：`917fefb`
+
+### 后端 credentials feature API 分层 — 小阶段 46
+- 状态：已完成（Git 凭据 API 纳入 feature DTO/handler/routes/service 结构）
+- 日期：2026-10-09
+- 交付：新增 `features/credentials/{mod,dto,handlers,routes}.rs`，将 Git HTTPS 凭据查询、设置、删除 handlers 与 `/v1/credentials` 路由迁出 `main.rs`/顶层 router；既有凭据 manager 暂由 feature service 路径引用并通过根模块 re-export，AI credential 等调用继续兼容。路径、字段校验、状态码、错误映射和 token 零化行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；凭据查询/设置/删除 API 用例通过。
+- 限制/后续：AI settings/credential 与 AI request handlers 仍在 `main.rs`；凭据 manager 源文件仍在旧目录。后续按 settings/AI 职责进一步分 feature，并消除跨 feature 对凭据 service 的隐式根级访问。
+- 证据：`crates/gitcrest-core/src/features/credentials/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`bd63f7b`
