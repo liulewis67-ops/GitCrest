@@ -25,6 +25,7 @@ export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight
 export type RebasePreviewResponse = components["schemas"]["RebasePreview"];
 export type RebaseBackupSnapshotResponse = components["schemas"]["RebaseBackupSnapshot"];
 export type ResetPreviewResponse = components["schemas"]["ResetPreview"];
+export type ResetBackupSnapshotResponse = components["schemas"]["ResetBackupSnapshot"];
 export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
 export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
 export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowConflictMutationRequest"];
@@ -417,6 +418,24 @@ export class GitCrestApiClient {
   startRepositoryReset(repoId: RepoId, request: components["schemas"]["ResetRequest"]): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(
       `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/reset-preview`,
+      true,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  getRepositoryResetBackups(repoId: RepoId): Promise<ResetBackupSnapshotResponse> {
+    return this.request<ResetBackupSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/reset-backups`,
+    );
+  }
+
+  restoreRepositoryReset(repoId: RepoId, request: components["schemas"]["ResetRestoreRequest"]): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/reset-restore`,
       true,
       {
         method: "POST",

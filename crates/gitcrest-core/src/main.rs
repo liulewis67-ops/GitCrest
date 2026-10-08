@@ -1044,6 +1044,14 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             get(preflight_repository_reset).post(start_repository_reset),
         )
         .route(
+            "/v1/repositories/:repo_id/workflows/reset-backups",
+            get(list_repository_reset_backups),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/reset-restore",
+            post(restore_repository_reset),
+        )
+        .route(
             "/v1/repositories/:repo_id/workflows",
             post(start_repository_workflow),
         )
@@ -4199,6 +4207,133 @@ async fn start_repository_reset(
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context
                         .log("Repository metadata refresh failed after reset; refresh the repository before the next write.")
+                        .await;
+                }
+                result.map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn list_repository_reset_backups(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<reset::ResetBackupSnapshot>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    reset::read_backup_snapshot(&target.repository_path)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_workflow_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ResetRestoreRequest {
+    expected_head_oid: String,
+    backup_reference: String,
+    backup_oid: String,
+    confirm_restore: bool,
+}
+
+fn is_reset_backup_reference(reference: &str) -> bool {
+    let Some(suffix) = reference.strip_prefix("refs/gitcrest/reset-backups/") else {
+        return false;
+    };
+    !suffix.is_empty()
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+async fn restore_repository_reset(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<ResetRestoreRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Reset restore requires the reviewed HEAD and a reset backup reference.",
+        )
+    })?;
+    if !request.confirm_restore || !is_reset_backup_reference(&request.backup_reference) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Restore requires explicit confirmation and a GitCrest reset backup reference.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = reset::read_backup_snapshot(&target.repository_path)
+        .await
+        .map_err(ApiError::from_workflow_error)?;
+    if snapshot.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
+        || !snapshot.can_restore
+        || !snapshot.backups.iter().any(|backup| {
+            backup.reference == request.backup_reference && backup.oid == request.backup_oid
+        })
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowPreflightStale,
+            "The current branch, worktree, or selected backup changed. Refresh the restore review.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let repositories = state.repositories.clone();
+    let task_repo_id = repo_id.clone();
+    let path = target.repository_path;
+    let resource_key = target.resource_key;
+    let expected_head_oid = request.expected_head_oid;
+    let backup_reference = request.backup_reference;
+    let backup_oid = request.backup_oid;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            "resetRestore",
+            move |context| async move {
+                let current = reset::read_backup_snapshot(&path).await.map_err(|_| {
+                    TaskFailure::Failed(
+                        "Reset restore preconditions could not be rechecked. Refresh repository state.".into(),
+                    )
+                })?;
+                if current.head_oid.as_deref() != Some(expected_head_oid.as_str())
+                    || !current.can_restore
+                    || !current.backups.iter().any(|backup| {
+                        backup.reference == backup_reference && backup.oid == backup_oid
+                    })
+                {
+                    return Err(TaskFailure::Failed(
+                        "Reset restore preconditions changed before Git could start. Review repository state again.".into(),
+                    ));
+                }
+                let task_context = context.clone();
+                let result = command
+                    .execute_reset_restore(
+                        &path,
+                        &expected_head_oid,
+                        &backup_oid,
+                        &backup_reference,
+                        context,
+                    )
+                    .await;
+                if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                    task_context
+                        .log("Repository metadata refresh failed after reset restore; refresh the repository before the next write.")
                         .await;
                 }
                 result.map(|()| None)
@@ -7958,10 +8093,70 @@ mod tests {
             std::fs::read_to_string(repository_path.join("feature.txt")).unwrap(),
             "feature\n"
         );
+        git(&["clean", "-f"]);
+        let backups_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/workflows/reset-backups"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(backups_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let backups: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(backups["canRestore"], true);
+        let backup_reference = format!(
+            "refs/gitcrest/reset-backups/{}",
+            accepted["taskId"].as_str().unwrap()
+        );
+        let missing_restore_confirmation = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/reset-restore"),
+                &serde_json::json!({
+                    "expectedHeadOid": target_oid,
+                    "backupReference": backup_reference,
+                    "backupOid": old_head,
+                    "confirmRestore": false
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            missing_restore_confirmation.status(),
+            StatusCode::BAD_REQUEST
+        );
+        let restore = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/reset-restore"),
+                &serde_json::json!({
+                    "expectedHeadOid": target_oid,
+                    "backupReference": backup_reference,
+                    "backupOid": old_head,
+                    "confirmRestore": true
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(restore.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(restore.into_body(), usize::MAX).await.unwrap();
+        let restore: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let restored = wait_for_task(&app, restore["taskId"].as_str().unwrap()).await;
+        assert_eq!(restored["status"], "succeeded");
+        assert_eq!(git(&["rev-parse", "HEAD"]), old_head);
+        assert!(restored["logs"].to_string().contains("before-restore"));
+        assert!(repository_path.join("feature.txt").exists());
 
         std::fs::write(repository_path.join("base.txt"), "local edit\n").unwrap();
         let hard_preview_path = format!(
-            "/api/v1/repositories/{repo_id}/workflows/reset-preview?targetOid={old_head}&mode=hard"
+            "/api/v1/repositories/{repo_id}/workflows/reset-preview?targetOid={target_oid}&mode=hard"
         );
         let hard_preview = app
             .clone()
@@ -7980,7 +8175,7 @@ mod tests {
                 &format!("/api/v1/repositories/{repo_id}/workflows/reset-preview"),
                 &serde_json::json!({
                     "expectedHeadOid": hard_preview["expectedHeadOid"],
-                    "targetOid": old_head,
+                    "targetOid": target_oid,
                     "mode": "hard",
                     "previewRevision": hard_preview["previewRevision"],
                     "confirmReset": true

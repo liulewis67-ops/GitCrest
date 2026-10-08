@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type ResetPreviewResponse, type TaskSnapshotResponse } from "../../api/client";
+import { useEffect, useState } from "react";
+import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type ResetBackupSnapshotResponse, type ResetPreviewResponse, type TaskSnapshotResponse } from "../../api/client";
 import type { components } from "../../api/schema";
 
 type ResetMode = components["schemas"]["ResetMode"];
@@ -18,10 +18,25 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
   const [targetOid, setTargetOid] = useState("");
   const [mode, setMode] = useState<ResetMode>("mixed");
   const [preview, setPreview] = useState<ResetPreviewResponse>();
+  const [backupSnapshot, setBackupSnapshot] = useState<ResetBackupSnapshotResponse>();
+  const [selectedBackup, setSelectedBackup] = useState("");
   const [confirmed, setConfirmed] = useState(false);
+  const [confirmRestore, setConfirmRestore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void api.getRepositoryResetBackups(repoId).then((snapshot) => {
+      if (!active) return;
+      setBackupSnapshot(snapshot);
+      setSelectedBackup(snapshot.backups[0]?.reference || "");
+    }).catch((reason) => {
+      if (active) setError(reason instanceof GitCrestApiError ? reason.body.error.message : "Could not load reset recovery references.");
+    });
+    return () => { active = false; };
+  }, [api, repoId]);
 
   async function inspect() {
     if (!targetOid || disabled || loading || busy) return;
@@ -57,6 +72,25 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
     }
   }
 
+  async function restore() {
+    const backup = backupSnapshot?.backups.find((item) => item.reference === selectedBackup);
+    if (!backupSnapshot?.canRestore || !backupSnapshot.headOid || !backup || !confirmRestore || disabled || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onStarted(await api.restoreRepositoryReset(repoId, {
+        expectedHeadOid: backupSnapshot.headOid,
+        backupReference: backup.reference,
+        backupOid: backup.oid,
+        confirmRestore: true,
+      }));
+    } catch (reason) {
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start restore.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section className="taskCenter resetDialog" role="dialog" aria-modal="true" aria-labelledby="reset-dialog-title">
       <div className="taskCenterHeader">
@@ -77,6 +111,19 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
         </label>
         <p className="cloneHelp">Soft moves HEAD and keeps the index and files. Mixed moves HEAD and resets the index while keeping files. Hard also replaces tracked files and is available only when the working tree is clean.</p>
         {error && <p className="taskCenterError" role="alert">{error}</p>}
+        <section className="rebaseRollbackPanel" aria-labelledby="reset-restore-heading">
+          <h3 id="reset-restore-heading">Restore a reset backup</h3>
+          {backupSnapshot?.backups.length ? <>
+            <label className="rebaseTargetField" htmlFor="reset-backup">Saved branch state
+              <select id="reset-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRestore(false); }}>
+                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || "(no subject)"} · {backup.oid.slice(0, 9)}</option>)}
+              </select>
+            </label>
+            {!backupSnapshot.canRestore && <p className="cloneHelp">Restore is available only on a clean attached branch with no Git operation in progress.</p>}
+            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRestore} onChange={(event) => setConfirmRestore(event.target.checked)} />I understand restoring the saved state replaces the current branch and checked-out files. A safety backup will be created first.</label>
+            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRestore || !confirmRestore || disabled || busy} onClick={() => void restore()}>{busy ? "Starting…" : "Restore selected reset backup"}</button>
+          </> : <p className="cloneHelp">No reset recovery references are available in this repository.</p>}
+        </section>
         {loading && <p role="status">Reviewing reset impact…</p>}
         {preview && <>
           <div className="rebasePreviewFacts">

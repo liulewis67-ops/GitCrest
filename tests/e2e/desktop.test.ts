@@ -210,11 +210,27 @@ describe("desktop startup E2E", () => {
       await resetDialog.getByRole("button", { name: "Review impact" }).click();
       await resetDialog.getByText(/Affected paths/).waitFor();
       await resetDialog.getByLabel(/I reviewed the commit and path impact/).check();
+      const featureOidBeforeReset = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
       await resetDialog.getByRole("button", { name: "Reset mixed" }).click();
       const resetTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "reset" }) });
       await resetTaskCard.waitFor({ state: "visible" });
       await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "reset" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(mainOid);
+
+      await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
+      await execFileAsync("git", ["-C", fixture.path, "restore", "--worktree", "--", "."]);
+      await execFileAsync("git", ["-C", fixture.path, "clean", "-f"]);
+      await window.keyboard.press("Control+k");
+      const restorePalette = window.getByRole("dialog", { name: "Command palette" });
+      await restorePalette.getByRole("button", { name: /Reset current branch/ }).click();
+      const restoreResetDialog = window.getByRole("dialog", { name: "Reset current branch" });
+      await restoreResetDialog.getByRole("button", { name: "Restore selected reset backup" }).waitFor({ state: "visible" });
+      await restoreResetDialog.getByLabel(/replaces the current branch and checked-out files/).check();
+      await restoreResetDialog.getByRole("button", { name: "Restore selected reset backup" }).click();
+      const restoreTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "resetRestore" }) });
+      await restoreTaskCard.waitFor({ state: "visible" });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "resetRestore" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(featureOidBeforeReset);
 
       const forgotten = await window.evaluate(async (repoId) => {
         const connection = await (globalThis.window as unknown as Window & {

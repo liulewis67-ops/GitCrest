@@ -398,6 +398,55 @@ impl GitCommandService {
         .await
     }
 
+    pub async fn execute_reset_restore(
+        &self,
+        repository_path: &Path,
+        expected_head_oid: &str,
+        backup_oid: &str,
+        backup_ref: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let safety_ref = format!(
+            "refs/gitcrest/reset-backups/{}-before-restore",
+            task.task_id()
+        );
+        run_command(
+            &self.git_program,
+            vec![
+                "update-ref".into(),
+                safety_ref.clone().into(),
+                expected_head_oid.into(),
+            ],
+            Some(format!("reset restore safety backup {safety_ref}")),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Save current branch before reset restore",
+            task.clone(),
+        )
+        .await?;
+        task.log(format!("Created safety reference {safety_ref}."))
+            .await;
+        task.log(format!("Restoring reviewed reset backup {backup_ref}."))
+            .await;
+        run_command(
+            &self.git_program,
+            vec!["reset".into(), "--hard".into(), backup_oid.into()],
+            Some(format!(
+                "reset --hard {}",
+                &backup_oid[..7.min(backup_oid.len())]
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Restore reset backup",
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_workflow_recovery(
         &self,
         repository_path: &Path,

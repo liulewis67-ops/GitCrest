@@ -1318,7 +1318,7 @@ function App() {
           setHistoryRefreshKey((current) => current + 1);
         }
       }
-      if ((task.operation.startsWith("workflow") || task.operation.startsWith("shelfApply:") || ["merge", "cherryPick", "revert", "rebase", "rebaseRollback", "reset"].includes(task.operation)) && !refreshedWorkflowTasks.current.has(task.taskId)) {
+      if ((task.operation.startsWith("workflow") || task.operation.startsWith("shelfApply:") || ["merge", "cherryPick", "revert", "rebase", "rebaseRollback", "reset", "resetRestore"].includes(task.operation)) && !refreshedWorkflowTasks.current.has(task.taskId)) {
         refreshedWorkflowTasks.current.add(task.taskId);
         if (!task.repoId) continue;
         void refreshRepositoryStatus(task.repoId);

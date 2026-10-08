@@ -46,6 +46,82 @@ pub struct ResetPreview {
     pub can_start: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetBackup {
+    pub reference: String,
+    pub oid: String,
+    pub subject: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetBackupSnapshot {
+    pub head_oid: Option<String>,
+    pub current_branch: Option<String>,
+    pub dirty_paths: Vec<String>,
+    pub operation_in_progress: Option<WorkflowOperation>,
+    pub backups: Vec<ResetBackup>,
+    pub can_restore: bool,
+}
+
+pub async fn read_backup_snapshot(
+    repository_path: &Path,
+) -> Result<ResetBackupSnapshot, WorkflowError> {
+    let head_oid = match git(repository_path, &["rev-parse", "--verify", "HEAD^{commit}"]).await {
+        Ok(value) => Some(value),
+        Err(WorkflowError::GitFailed) => None,
+        Err(error) => return Err(error),
+    };
+    let current_branch = match git(
+        repository_path,
+        &["symbolic-ref", "--quiet", "--short", "HEAD"],
+    )
+    .await
+    {
+        Ok(value) => Some(value),
+        Err(WorkflowError::GitFailed) => None,
+        Err(error) => return Err(error),
+    };
+    let (dirty_paths, _, _, _, operation_in_progress) =
+        read_worktree_state(repository_path).await?;
+    let backup_output = git(
+        repository_path,
+        &[
+            "for-each-ref",
+            "--count=1000",
+            "--format=%(refname)%00%(objectname)%00%(subject)",
+            "refs/gitcrest/reset-backups",
+        ],
+    )
+    .await?;
+    let mut backups = backup_output
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.splitn(3, '\0');
+            Some(ResetBackup {
+                reference: fields.next()?.to_owned(),
+                oid: fields.next()?.to_owned(),
+                subject: fields.next()?.to_owned(),
+            })
+        })
+        .collect::<Vec<_>>();
+    backups.sort_by(|left, right| right.reference.cmp(&left.reference));
+    let can_restore = head_oid.is_some()
+        && current_branch.is_some()
+        && dirty_paths.is_empty()
+        && operation_in_progress.is_none()
+        && !backups.is_empty();
+    Ok(ResetBackupSnapshot {
+        head_oid,
+        current_branch,
+        dirty_paths,
+        operation_in_progress,
+        backups,
+        can_restore,
+    })
+}
+
 pub async fn read_preview(
     repo_id: String,
     repository_path: &Path,

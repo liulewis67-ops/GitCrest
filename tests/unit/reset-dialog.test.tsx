@@ -28,6 +28,7 @@ const task: TaskSnapshotResponse = {
 
 it("previews reset impact and requires explicit confirmation before starting", async () => {
   const api = {
+    getRepositoryResetBackups: vi.fn().mockResolvedValue({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }),
     preflightRepositoryReset: vi.fn().mockResolvedValue(preview),
     startRepositoryReset: vi.fn().mockResolvedValue(task),
   } as unknown as import("../../src/api/client").GitCrestApiClient;
@@ -54,6 +55,7 @@ it("previews reset impact and requires explicit confirmation before starting", a
 
 it("does not enable hard reset over local modifications", async () => {
   const api = {
+    getRepositoryResetBackups: vi.fn().mockResolvedValue({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }),
     preflightRepositoryReset: vi.fn().mockResolvedValue({ ...preview, mode: "hard", dirtyPaths: ["notes.txt"], canStart: false }),
     startRepositoryReset: vi.fn(),
   } as unknown as import("../../src/api/client").GitCrestApiClient;
@@ -65,4 +67,30 @@ it("does not enable hard reset over local modifications", async () => {
   expect(await screen.findByText(/This reset cannot start/)).toBeTruthy();
   expect(await screen.findByText(/hard reset is disabled/)).toBeTruthy();
   expect((screen.getByRole("button", { name: "Reset hard" }) as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("requires confirmation before restoring a reset backup", async () => {
+  const backupSnapshot = {
+    headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null,
+    backups: [{ reference: "refs/gitcrest/reset-backups/task-1", oid: "d".repeat(40), subject: "feature commit" }],
+    canRestore: true,
+  };
+  const api = {
+    getRepositoryResetBackups: vi.fn().mockResolvedValue(backupSnapshot),
+    restoreRepositoryReset: vi.fn().mockResolvedValue(task),
+  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const onStarted = vi.fn();
+  render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
+
+  const restore = await screen.findByRole("button", { name: "Restore selected reset backup" });
+  expect((restore as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByLabelText(/replaces the current branch and checked-out files/));
+  fireEvent.click(restore);
+  await waitFor(() => expect(api.restoreRepositoryReset).toHaveBeenCalledWith("repo_fixture", {
+    expectedHeadOid: preview.expectedHeadOid,
+    backupReference: backupSnapshot.backups[0]!.reference,
+    backupOid: backupSnapshot.backups[0]!.oid,
+    confirmRestore: true,
+  }));
+  expect(onStarted).toHaveBeenCalledWith(task);
 });
