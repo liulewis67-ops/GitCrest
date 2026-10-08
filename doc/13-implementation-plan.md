@@ -950,3 +950,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/staging/{mod,routes,staging}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`a5b6105`
 
+
+### 后端 staging feature handler 迁移 — 小阶段 39
+- 状态：已完成（staging、partial staging、discard 和 undo handlers 进入 feature handlers 模块）
+- 日期：2026-10-09
+- 交付：新增 `features/staging/handlers.rs`，承接四个 staging API handlers 及其撤销记录持久化 helper；staging feature routes 改为调用 feature 内 handlers，`main.rs` 删除对应实现。路由、请求/响应、错误映射与既有行为保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（120/120）与 `git diff --check` 通过。
+- 限制/后续：staging DTO 和 service 仍在既有 `staging.rs`；本阶段只迁移 handlers。继续按 feature 规范拆分 DTO/service 并迁移 shelves/workflows 等剩余 API。
+- 证据：`crates/gitcrest-core/src/features/staging/{mod,routes,handlers,staging}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`ecf741b`
