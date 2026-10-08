@@ -22,7 +22,7 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::repositories::{cloning, repository};
-pub(crate) use features::{remotes, shelves, staging, status, tasks, workflows};
+pub(crate) use features::{shelves, staging, status, tasks, workflows};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 

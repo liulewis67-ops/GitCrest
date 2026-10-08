@@ -74,10 +74,10 @@ pub async fn read_push_preflight_for_target(
         .map_err(|_| PushError::NoCurrentBranch)?;
     let (local_oid, remote_name, remote_branch) = if let Some((remote_name, remote_branch)) = target
     {
-        crate::remotes::validate_remote_name(repository_path, remote_name)
+        crate::features::remotes::validate_remote_name(repository_path, remote_name)
             .await
             .map_err(|_| PushError::InvalidUpstream)?;
-        let remotes = crate::remotes::read_remotes(repo_id.clone(), repository_path)
+        let remotes = crate::features::remotes::read_remotes(repo_id.clone(), repository_path)
             .await
             .map_err(|_| PushError::InvalidUpstream)?;
         if !remotes
@@ -136,7 +136,7 @@ pub async fn read_push_preflight_for_target(
             .ok_or(PushError::InvalidUpstream)?;
         (local_oid, remote_name, remote_branch.to_owned())
     };
-    crate::remotes::validate_remote_name(repository_path, &remote_name)
+    crate::features::remotes::validate_remote_name(repository_path, &remote_name)
         .await
         .map_err(|_| PushError::InvalidUpstream)?;
     crate::features::branches::validate_branch_name(repository_path, &remote_branch)

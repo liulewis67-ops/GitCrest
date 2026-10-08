@@ -101,7 +101,7 @@ pub(super) struct FetchRequest {
 pub(super) struct PullRequest {
     pub(super) expected_local_oid: String,
     pub(super) expected_tracking_oid: String,
-    pub(super) strategy: crate::remotes::pull::PullStrategy,
+    pub(super) strategy: crate::features::remotes::pull::PullStrategy,
 }
 
 #[derive(Deserialize)]

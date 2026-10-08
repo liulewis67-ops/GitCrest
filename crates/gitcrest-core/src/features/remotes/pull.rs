@@ -82,7 +82,7 @@ pub async fn read_pull_preflight(
     if remote_name == "." || !remote_ref.starts_with("refs/heads/") {
         return Err(PullError::InvalidUpstream);
     }
-    crate::remotes::validate_remote_name(repository_path, &remote_name)
+    crate::features::remotes::validate_remote_name(repository_path, &remote_name)
         .await
         .map_err(|_| PullError::InvalidUpstream)?;
     let remote_branch = remote_ref
