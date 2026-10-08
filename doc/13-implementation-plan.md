@@ -1975,3 +1975,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍负责分支切换及 Shelf 恢复跨 feature 编排；后续按功能 use case 边界继续拆分。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/branches/model/use-repository-refs.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`30abcd8`
+
+### remotes feature fetch task 受理迁入 model — 小阶段 153
+- 状态：已完成（Fetch API 请求与 task 受理由 remotes feature model 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/remotes/model/use-repository-fetch.ts`，将当前仓库 Fetch task 受理、任务错误回调和已受理任务回调从 App 迁出，并通过 remotes feature 入口暴露。App 继续决定任务列表插入方式、清错与打开任务中心；快捷键、Remote Manager 和 Push 对话框入口共用同一流程，API 与用户反馈不变。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。
+- 限制/后续：Pull/Push preflight 与任务执行仍由 App 协调；后续继续评估 remotes feature 与应用 UI 状态边界。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/remotes/model/use-repository-fetch.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`476bdbb`
