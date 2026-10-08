@@ -79,12 +79,26 @@ export function useRepositoryRefs({
     }
   }
 
-  function updateBranchSnapshot(repoId: string, snapshot: BranchSnapshotResponse) {
-    setBranches((current) => ({ ...current, [repoId]: snapshot }));
-  }
-
-  function setBranchError(repoId: string, message: string) {
-    setBranchErrors((current) => ({ ...current, [repoId]: message }));
+  async function toggleFavorite(repoId: string | undefined, fullName: string, favorite: boolean) {
+    const api = getApi();
+    if (!api || !repoId) return;
+    const requestGeneration = beginCacheRequest(repoId);
+    try {
+      const snapshot = await api.setRepositoryBranchFavorite(repoId, fullName, !favorite);
+      if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
+        setBranches((current) => ({ ...current, [repoId]: snapshot }));
+      }
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
+        setBranchErrors((current) => ({
+          ...current,
+          [repoId]: message || (error instanceof Error ? error.message : "Could not update branch favorite."),
+        }));
+      }
+    } finally {
+      finishCacheRequest(repoId);
+    }
   }
 
   function setRemoteError(repoId: string, message: string) {
@@ -109,8 +123,7 @@ export function useRepositoryRefs({
     remoteLoadingByRepo,
     refreshBranches,
     refreshRemotes,
-    updateBranchSnapshot,
-    setBranchError,
+    toggleFavorite,
     setRemoteError,
     clear,
   };

@@ -200,8 +200,7 @@ function App() {
     remoteLoadingByRepo,
     refreshBranches: refreshRepositoryBranches,
     refreshRemotes: refreshRepositoryRemotes,
-    updateBranchSnapshot,
-    setBranchError,
+    toggleFavorite: toggleBranchFavorite,
     setRemoteError,
     clear: clearRepositoryRefs,
   } = useRepositoryRefs({
@@ -376,26 +375,6 @@ function App() {
       setTasksOpen(true);
     },
   });
-
-  async function toggleBranchFavorite(fullName: string, favorite: boolean) {
-    const api = apiRef.current;
-    const repository = selectedRepository;
-    if (!api || !repository) return;
-    const requestGeneration = beginRepositoryCacheRequest(repository.repoId);
-    try {
-      const snapshot = await api.setRepositoryBranchFavorite(repository.repoId, fullName, !favorite);
-      if (isRepositoryTabOpen(repository.repoId) && repositoryCacheGeneration(repository.repoId) === requestGeneration) {
-        updateBranchSnapshot(repository.repoId, snapshot);
-      }
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      if (isRepositoryTabOpen(repository.repoId) && repositoryCacheGeneration(repository.repoId) === requestGeneration) {
-        setBranchError(repository.repoId, message || (error instanceof Error ? error.message : "Could not update branch favorite."));
-      }
-    } finally {
-      finishRepositoryCacheRequest(repository.repoId);
-    }
-  }
 
   function openBranchSwitcher() {
     if (!selectedRepository || selectedRepository.availability !== "available") return;
@@ -1502,7 +1481,7 @@ function App() {
               onRefreshRepositoryBranches={(repoId) => void refreshRepositoryBranches(repoId)}
               onOpenFileDiff={openFileDiff}
               onDeleteRemoteBranch={setRemoteBranchDeleteTarget}
-              onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(fullName, favorite)}
+              onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository?.repoId, fullName, favorite)}
               onFetchRepository={() => void fetchRepository()}
               onRefreshRepositoryRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}
               onAddRepositoryRemote={remoteMutations.addRepositoryRemote}
