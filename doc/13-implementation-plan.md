@@ -706,3 +706,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：分支 handlers 与请求 DTO 仍在 `main.rs`；下一阶段按 feature 归属迁移 handlers/DTO，再提取业务用例 service。
 - 证据：`crates/gitcrest-core/src/features/branches/{mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`b9cdbb4`
+
+### 后端 branches 查询与收藏 handlers/DTO 拆分 — 小阶段 14
+- 状态：已完成（分支查询与收藏请求边界进入 feature）
+- 日期：2026-10-09
+- 交付：将分支列表读取、收藏状态更新 handlers 从 `main.rs` 移至 `features/branches/handlers.rs`，收藏请求 DTO 移至 `features/branches/dto.rs`；feature routes 改为绑定本模块 handlers。保持仓库 metadata 刷新、收藏存储访问、未知字段拒绝和 API 错误语义不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：分支创建、重命名、删除、远端分支删除与切换 handlers/DTO 仍在 `main.rs`；后续按请求契约分组迁移。
+- 证据：`crates/gitcrest-core/src/features/branches/{dto,handlers,mod,routes,service}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`7c98037`
