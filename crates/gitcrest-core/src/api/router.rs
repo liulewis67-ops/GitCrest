@@ -19,7 +19,7 @@ use crate::{
     delete_repository_remote, delete_repository_remote_branch, delete_repository_shelf,
     discard_repository_patch, events, fetch_repository, forget_repository, get_ai_settings,
     get_credential_status, get_repository, get_repository_shelf, get_task,
-    get_workflow_conflict_ai_settings, health, initialize_repository, list_repositories,
+    get_workflow_conflict_ai_settings, initialize_repository, list_repositories,
     list_repository_rebase_backups, list_repository_reset_backups, list_repository_shelves,
     list_tasks, mark_workflow_conflict_resolved, open_repository, preflight_branch_switch,
     preflight_repository_pull, preflight_repository_push, preflight_repository_rebase,
@@ -34,13 +34,12 @@ use crate::{
     save_workflow_conflict_file, set_ai_credential, set_ai_settings, set_branch_favorite,
     set_branch_upstream, set_credential, set_default_remote, set_repository_favorite,
     set_repository_remote_url, stage_repository, stage_repository_patch, start_repository_rebase,
-    start_repository_reset, start_repository_workflow, switch_repository_branch,
-    undo_recent_operation, version, AppState,
+    start_repository_reset, start_repository_workflow, switch_repository_branch, system,
+    undo_recent_operation, AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
-    let api = Router::new()
-        .route("/version", get(version))
+    let api = system::routes::api_router()
         .route(
             "/v1/repositories",
             get(list_repositories).post(open_repository),
@@ -275,8 +274,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
     };
     let api = api.layer(middleware::from_fn(add_api_version_header));
 
-    Router::new()
-        .route("/health", get(health))
+    system::routes::health_router()
         .nest("/api", api)
         .with_state(state)
 }

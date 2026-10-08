@@ -67,6 +67,8 @@ mod staging;
 mod status;
 #[path = "storage/storage.rs"]
 mod storage;
+#[path = "features/system/mod.rs"]
+mod system;
 #[path = "features/tags/tags.rs"]
 mod tags;
 #[path = "features/tasks/tasks.rs"]
@@ -130,14 +132,6 @@ struct ReadyMessage<'a> {
     event: &'a str,
     host: &'a str,
     port: u16,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct VersionResponse<'a> {
-    name: &'a str,
-    version: &'a str,
-    api_version: u8,
 }
 
 #[derive(Clone, Serialize)]
@@ -294,18 +288,6 @@ fn default_database_path() -> std::path::PathBuf {
             .join("gitcrest.sqlite");
     }
     env::temp_dir().join("gitcrest").join("gitcrest.sqlite")
-}
-
-async fn health() -> impl IntoResponse {
-    (StatusCode::NO_CONTENT, [("Cache-Control", "no-store")])
-}
-
-async fn version() -> impl IntoResponse {
-    Json(VersionResponse {
-        name: "gitcrest-core",
-        version: env!("CARGO_PKG_VERSION"),
-        api_version: 1,
-    })
 }
 
 async fn get_repository(
