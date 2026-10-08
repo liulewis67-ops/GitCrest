@@ -1562,3 +1562,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：shared/ui 仍只有此通用组件，App 的全局快捷键监听和 commit/session 选择状态仍未完全拆分；继续按规范建立真实职责边界。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/shared/ui/ResizeSeparator.tsx`、`src/app/App.tsx`。
 - 实施 commit：`be6c57f`
+
+### 提交草稿状态迁入 commits model — 小阶段 107
+- 状态：已完成（提交 message、模板、amend/sign-off/sign 选项及文件选区由 commits feature hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/commits/model/use-commit-draft.ts`，统一管理提交草稿与仓库关联的文件选区；切换当前仓库时清空草稿、模板、提交选项和选区，并更新选区所属 RepoId。App 继续负责 commit task 编排和结果副作用，通过 hook 暴露的 state/setter 与提交工作台交互。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留现有 tree-sitter `eval`、commits 模块动态/静态导入提示与 Monaco contribution 大 chunk 警告。
+- 限制/后续：commit task 编排、快捷键监听及相关 task 映射仍在 App；后续按 feature model/use case 与 app orchestration 边界继续拆分。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/features/commits/model/use-commit-draft.ts`、`src/features/commits/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`bea253f`
