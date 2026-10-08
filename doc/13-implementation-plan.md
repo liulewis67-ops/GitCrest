@@ -1409,3 +1409,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Git adapter 目录边界已对齐指南列出的主要职责；接下来核对后端目录整体与模块可见性，结合实施计划后续未完成项持续迁移。
 - 证据：`crates/gitcrest-core/src/{main.rs,bootstrap.rs,state.rs,git/mod.rs,git/command.rs}`、受影响 feature imports。
 - 实施 commit：`929da3d`
+
+### 前端 changes repository status 生命周期迁入 feature model — 小阶段 90
+- 状态：已完成（status 快照、局部刷新合并、错误/loading 状态与并发请求协调由 changes feature hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/changes/model/use-repository-status.ts`，封装按仓库 keyed 的 status 状态、路径范围合并、并发刷新合并、过期缓存代次检查与清理；`App.tsx` 注入 API 和 repository cache 生命周期回调，并保留现有事件订阅与 UI 组合职责。排队刷新后续执行时保留 `forceRefresh` 标记。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）及 `git diff --check` 通过；未运行测试。
+- 限制/后续：分支、remote、tasks 等 server state 与连接/事件生命周期仍由 `App.tsx` 管理；后续按功能继续迁出请求状态和事件协调，逐步将 App 收敛为 workspace composition。
+- 证据：`src/features/changes/model/use-repository-status.ts`、`src/app/App.tsx`。
+- 实施 commit：`138ffdb`
