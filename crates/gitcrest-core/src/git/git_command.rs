@@ -112,7 +112,7 @@ impl WorkflowGitPort for GitCommandService {
         repository_path: &Path,
         target: &str,
     ) -> Result<String, WorkflowError> {
-        workflow_state::resolve_commit_target(repository_path, target).await
+        workflow_state::resolve_commit_target(&self.git_program, repository_path, target).await
     }
 
     async fn read_commit_subject(
@@ -120,32 +120,32 @@ impl WorkflowGitPort for GitCommandService {
         repository_path: &Path,
         target_oid: &str,
     ) -> Result<String, WorkflowError> {
-        workflow_state::read_commit_subject(repository_path, target_oid).await
+        workflow_state::read_commit_subject(&self.git_program, repository_path, target_oid).await
     }
 
     async fn read_head_oid(&self, repository_path: &Path) -> Result<Option<String>, WorkflowError> {
-        workflow_state::read_head_oid(repository_path).await
+        workflow_state::read_head_oid(&self.git_program, repository_path).await
     }
 
     async fn read_current_branch(
         &self,
         repository_path: &Path,
     ) -> Result<Option<String>, WorkflowError> {
-        workflow_state::read_current_branch(repository_path).await
+        workflow_state::read_current_branch(&self.git_program, repository_path).await
     }
 
     async fn read_worktree_state(
         &self,
         repository_path: &Path,
     ) -> Result<WorkflowState, WorkflowError> {
-        workflow_state::read_worktree_state(repository_path).await
+        workflow_state::read_worktree_state(&self.git_program, repository_path).await
     }
 
     async fn read_operation(
         &self,
         repository_path: &Path,
     ) -> Result<Option<crate::domain::workflow::WorkflowOperation>, WorkflowError> {
-        workflow_state::read_operation(repository_path).await
+        workflow_state::read_operation(&self.git_program, repository_path).await
     }
 
     async fn list_backup_references(
@@ -153,7 +153,7 @@ impl WorkflowGitPort for GitCommandService {
         repository_path: &Path,
         namespace: WorkflowBackupNamespace,
     ) -> Result<Vec<WorkflowBackupReference>, WorkflowError> {
-        workflow_state::list_backup_references(repository_path, namespace).await
+        workflow_state::list_backup_references(&self.git_program, repository_path, namespace).await
     }
 
     async fn compare_for_reset(
@@ -162,7 +162,8 @@ impl WorkflowGitPort for GitCommandService {
         head_oid: &str,
         target_oid: &str,
     ) -> Result<WorkflowResetComparison, WorkflowError> {
-        workflow_state::compare_for_reset(repository_path, head_oid, target_oid).await
+        workflow_state::compare_for_reset(&self.git_program, repository_path, head_oid, target_oid)
+            .await
     }
 
     async fn list_rebase_commits(
@@ -171,7 +172,8 @@ impl WorkflowGitPort for GitCommandService {
         onto_oid: &str,
         head_oid: &str,
     ) -> Result<WorkflowRebaseCommitList, WorkflowError> {
-        workflow_state::list_rebase_commits(repository_path, onto_oid, head_oid).await
+        workflow_state::list_rebase_commits(&self.git_program, repository_path, onto_oid, head_oid)
+            .await
     }
 
     async fn compare_remote_branch_delete(
@@ -181,6 +183,7 @@ impl WorkflowGitPort for GitCommandService {
         expected_remote_oid: &str,
     ) -> Result<WorkflowRemoteBranchComparison, WorkflowError> {
         workflow_state::compare_remote_branch_delete(
+            &self.git_program,
             repository_path,
             current_head_oid,
             expected_remote_oid,
@@ -384,7 +387,7 @@ impl GitCommandService {
                 .reconcile_cancelled_pull_rebase(repository_path, expected)
                 .await;
         }
-        let result = workflow_command_result(repository_path, result).await;
+        let result = workflow_command_result(&self.git_program, repository_path, result).await;
         if matches!(&result, Err(TaskFailure::Cancelled)) {
             return self
                 .reconcile_cancelled_pull(repository_path, expected)
@@ -398,7 +401,7 @@ impl GitCommandService {
         repository_path: &Path,
         expected: &crate::remotes::pull::PullPreflight,
     ) -> Result<(), TaskFailure> {
-        match workflow_state::read_operation(repository_path).await {
+        match workflow_state::read_operation(&self.git_program, repository_path).await {
             Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
                 let rebase_apply = capture_git_output(
                     &self.git_program,
@@ -645,7 +648,7 @@ impl GitCommandService {
             task,
         )
         .await;
-        workflow_command_result(repository_path, result).await
+        workflow_command_result(&self.git_program, repository_path, result).await
     }
 
     pub async fn execute_rebase(
@@ -709,7 +712,7 @@ impl GitCommandService {
         .await;
         if result.is_ok()
             && matches!(
-                workflow_state::read_operation(repository_path).await,
+                workflow_state::read_operation(&self.git_program, repository_path).await,
                 Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase))
             )
         {
@@ -717,7 +720,7 @@ impl GitCommandService {
                 "Rebase paused at an edit step. Amend the current commit if needed, then continue or abort from Task Center.".into(),
             ));
         }
-        workflow_command_result(repository_path, result).await
+        workflow_command_result(&self.git_program, repository_path, result).await
     }
 
     pub async fn execute_rebase_rollback(
@@ -948,7 +951,7 @@ impl GitCommandService {
             task,
         )
         .await;
-        workflow_command_result(repository_path, result).await
+        workflow_command_result(&self.git_program, repository_path, result).await
     }
 
     pub async fn execute_branch(
@@ -1481,13 +1484,14 @@ async fn capture_git_output_args_with_env(
 }
 
 async fn workflow_command_result(
+    git_program: &str,
     repository_path: &Path,
     result: Result<(), TaskFailure>,
 ) -> Result<(), TaskFailure> {
     if result.is_ok() {
         return result;
     }
-    match workflow_state::read_operation(repository_path).await {
+    match workflow_state::read_operation(git_program, repository_path).await {
         Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
             "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
             match operation {

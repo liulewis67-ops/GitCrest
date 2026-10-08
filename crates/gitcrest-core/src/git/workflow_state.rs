@@ -21,6 +21,7 @@ const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
 const MAX_REBASE_COMMITS: usize = 200;
 
 pub(crate) async fn list_backup_references(
+    git_program: &str,
     repository_path: &Path,
     namespace: WorkflowBackupNamespace,
 ) -> Result<Vec<WorkflowBackupReference>, WorkflowError> {
@@ -34,7 +35,7 @@ pub(crate) async fn list_backup_references(
     }
     arguments.push("--format=%(refname)%00%(objectname)%00%(subject)".into());
     arguments.push(references.into());
-    let output = run_git(repository_path, &arguments).await?;
+    let output = run_git(git_program, repository_path, &arguments).await?;
     let output = text(&output)?;
     output
         .lines()
@@ -50,11 +51,13 @@ pub(crate) async fn list_backup_references(
 }
 
 pub(crate) async fn compare_for_reset(
+    git_program: &str,
     repository_path: &Path,
     head_oid: &str,
     target_oid: &str,
 ) -> Result<WorkflowResetComparison, WorkflowError> {
     let counts = run_git(
+        git_program,
         repository_path,
         &[
             "rev-list".into(),
@@ -69,6 +72,7 @@ pub(crate) async fn compare_for_reset(
         .and_then(|(left, right)| Some((left.parse().ok()?, right.parse().ok()?)))
         .ok_or(WorkflowError::GitFailed)?;
     let paths = run_git(
+        git_program,
         repository_path,
         &[
             "diff".into(),
@@ -92,12 +96,14 @@ pub(crate) async fn compare_for_reset(
 }
 
 pub(crate) async fn list_rebase_commits(
+    git_program: &str,
     repository_path: &Path,
     onto_oid: &str,
     head_oid: &str,
 ) -> Result<WorkflowRebaseCommitList, WorkflowError> {
     let range = format!("{onto_oid}..{head_oid}");
     let output = run_git(
+        git_program,
         repository_path,
         &[
             "log".into(),
@@ -131,12 +137,14 @@ pub(crate) async fn list_rebase_commits(
         let oid = commit.oid.clone();
         let path = repository_path.to_path_buf();
         let semaphore = semaphore.clone();
+        let git_program = git_program.to_owned();
         checks.spawn(async move {
             let permit = semaphore
                 .acquire_owned()
                 .await
                 .map_err(|_| WorkflowError::GitFailed)?;
             let refs = run_git(
+                &git_program,
                 &path,
                 &[
                     "for-each-ref".into(),
@@ -167,6 +175,7 @@ pub(crate) async fn list_rebase_commits(
 }
 
 pub(crate) async fn compare_remote_branch_delete(
+    git_program: &str,
     repository_path: &Path,
     current_head_oid: Option<&str>,
     expected_remote_oid: &str,
@@ -175,6 +184,7 @@ pub(crate) async fn compare_remote_branch_delete(
     let mut affected_paths = Vec::new();
     if let Some(head_oid) = current_head_oid {
         let count = run_git(
+            git_program,
             repository_path,
             &[
                 "rev-list".into(),
@@ -187,6 +197,7 @@ pub(crate) async fn compare_remote_branch_delete(
             .parse()
             .map_err(|_| WorkflowError::GitFailed)?;
         let paths = run_git(
+            git_program,
             repository_path,
             &[
                 "diff".into(),
@@ -210,9 +221,11 @@ pub(crate) async fn compare_remote_branch_delete(
     })
 }
 pub(crate) async fn read_worktree_state(
+    git_program: &str,
     repository_path: &Path,
 ) -> Result<WorkflowState, WorkflowError> {
     let status = run_git(
+        git_program,
         repository_path,
         &[
             "status".into(),
@@ -224,7 +237,7 @@ pub(crate) async fn read_worktree_state(
     .await?;
     let (dirty_paths, omitted_dirty_path_count, conflicted_paths, omitted_conflicted_path_count) =
         parse_status(&status)?;
-    let operation = read_operation(repository_path).await?;
+    let operation = read_operation(git_program, repository_path).await?;
     Ok(WorkflowState {
         dirty_paths,
         omitted_dirty_path_count,
@@ -235,9 +248,15 @@ pub(crate) async fn read_worktree_state(
 }
 
 pub(crate) async fn read_operation(
+    git_program: &str,
     repository_path: &Path,
 ) -> Result<Option<WorkflowOperation>, WorkflowError> {
-    let git_dir = run_git(repository_path, &["rev-parse".into(), "--git-dir".into()]).await?;
+    let git_dir = run_git(
+        git_program,
+        repository_path,
+        &["rev-parse".into(), "--git-dir".into()],
+    )
+    .await?;
     let git_dir = Path::new(text(&git_dir)?);
     let git_dir = if git_dir.is_absolute() {
         git_dir.to_path_buf()
@@ -262,10 +281,12 @@ pub(crate) async fn read_operation(
 }
 
 pub(crate) async fn resolve_commit_target(
+    git_program: &str,
     repository_path: &Path,
     target: &str,
 ) -> Result<String, WorkflowError> {
     let output = run_git(
+        git_program,
         repository_path,
         &[
             "rev-parse".into(),
@@ -279,10 +300,12 @@ pub(crate) async fn resolve_commit_target(
 }
 
 pub(crate) async fn read_commit_subject(
+    git_program: &str,
     repository_path: &Path,
     target_oid: &str,
 ) -> Result<String, WorkflowError> {
     let output = run_git(
+        git_program,
         repository_path,
         &[
             "show".into(),
@@ -295,8 +318,12 @@ pub(crate) async fn read_commit_subject(
     Ok(text(&output)?.to_owned())
 }
 
-pub(crate) async fn read_head_oid(repository_path: &Path) -> Result<Option<String>, WorkflowError> {
+pub(crate) async fn read_head_oid(
+    git_program: &str,
+    repository_path: &Path,
+) -> Result<Option<String>, WorkflowError> {
     run_git_optional(
+        git_program,
         repository_path,
         &[
             "rev-parse".into(),
@@ -312,9 +339,11 @@ pub(crate) async fn read_head_oid(repository_path: &Path) -> Result<Option<Strin
 }
 
 pub(crate) async fn read_current_branch(
+    git_program: &str,
     repository_path: &Path,
 ) -> Result<Option<String>, WorkflowError> {
     run_git_optional(
+        git_program,
         repository_path,
         &[
             "symbolic-ref".into(),
@@ -396,27 +425,30 @@ pub(super) fn text(bytes: &[u8]) -> Result<&str, WorkflowError> {
 }
 
 pub(super) async fn run_git(
+    git_program: &str,
     repository_path: &Path,
     arguments: &[std::ffi::OsString],
 ) -> Result<Vec<u8>, WorkflowError> {
-    run_git_inner(repository_path, arguments, false)
+    run_git_inner(git_program, repository_path, arguments, false)
         .await?
         .ok_or(WorkflowError::GitFailed)
 }
 
 pub(super) async fn run_git_optional(
+    git_program: &str,
     repository_path: &Path,
     arguments: &[std::ffi::OsString],
 ) -> Result<Option<Vec<u8>>, WorkflowError> {
-    run_git_inner(repository_path, arguments, true).await
+    run_git_inner(git_program, repository_path, arguments, true).await
 }
 
 async fn run_git_inner(
+    git_program: &str,
     repository_path: &Path,
     arguments: &[std::ffi::OsString],
     allow_nonzero: bool,
 ) -> Result<Option<Vec<u8>>, WorkflowError> {
-    let mut command = Command::new("git");
+    let mut command = Command::new(git_program);
     command
         .current_dir(repository_path)
         .args(arguments)
