@@ -8,14 +8,14 @@ use serde::Serialize;
 use crate::{
     branches,
     cloning::CloneError,
-    commits, conflicts, credentials,
+    commits, credentials,
     diff::DiffError,
+    domain::error::{ConflictError, WorkflowError},
     history, remotes,
     remotes::{pull, push},
     repository::RepositoryError,
     shelves, staging, tags,
     tasks::TaskSubmitError,
-    workflows,
 };
 
 #[derive(Clone, Copy, Serialize)]
@@ -303,49 +303,49 @@ impl ApiError {
         }
     }
 
-    pub(crate) fn from_conflict_error(error: conflicts::ConflictError) -> Self {
+    pub(crate) fn from_conflict_error(error: ConflictError) -> Self {
         match error {
-            conflicts::ConflictError::InvalidPath => Self::new(
+            ConflictError::InvalidPath => Self::new(
                 StatusCode::BAD_REQUEST,
                 ApiErrorCode::RequestInvalid,
                 "The conflict path is invalid.",
             ),
-            conflicts::ConflictError::FileNotFound => Self::new(
+            ConflictError::FileNotFound => Self::new(
                 StatusCode::NOT_FOUND,
                 ApiErrorCode::RepositoryFileNotFound,
                 "The conflict file is no longer present in the working tree.",
             ),
-            conflicts::ConflictError::TooLarge => Self::new(
+            ConflictError::TooLarge => Self::new(
                 StatusCode::PAYLOAD_TOO_LARGE,
                 ApiErrorCode::DiffTooLarge,
                 "Conflict text is limited to 1 MiB.",
             ),
-            conflicts::ConflictError::StaleRevision => Self::new(
+            ConflictError::StaleRevision => Self::new(
                 StatusCode::PRECONDITION_FAILED,
                 ApiErrorCode::WorkflowRecoveryStale,
                 "The conflict result changed after review. Refresh before writing.",
             ),
-            conflicts::ConflictError::UnresolvedMarkers => Self::new(
+            ConflictError::UnresolvedMarkers => Self::new(
                 StatusCode::CONFLICT,
                 ApiErrorCode::WorkflowRecoveryNotAllowed,
                 "Remove all conflict markers before marking this file resolved.",
             ),
-            conflicts::ConflictError::NotConflicted
-            | conflicts::ConflictError::Binary
-            | conflicts::ConflictError::Io => Self::state_conflict(
+            ConflictError::NotConflicted
+            | ConflictError::Binary
+            | ConflictError::Io => Self::state_conflict(
                 "The conflict file changed or cannot be safely accessed. Refresh conflict state.",
             ),
-            conflicts::ConflictError::GitUnavailable => Self::new(
+            ConflictError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,
                 "Git is unavailable for conflict resolution.",
             ),
-            conflicts::ConflictError::GitFailed => Self::new(
+            ConflictError::GitFailed => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::WorkflowPreflightUnavailable,
                 "Git could not read or stage this conflict file.",
             ),
-            conflicts::ConflictError::TimedOut => Self::new(
+            ConflictError::TimedOut => Self::new(
                 StatusCode::GATEWAY_TIMEOUT,
                 ApiErrorCode::WorkflowPreflightUnavailable,
                 "Git did not finish conflict review within 10 seconds.",
@@ -641,31 +641,31 @@ impl ApiError {
         }
     }
 
-    pub(crate) fn from_workflow_error(error: workflows::WorkflowError) -> Self {
+    pub(crate) fn from_workflow_error(error: WorkflowError) -> Self {
         match error {
-            workflows::WorkflowError::InvalidTarget => Self::new(
+            WorkflowError::InvalidTarget => Self::new(
                 StatusCode::BAD_REQUEST,
                 ApiErrorCode::RequestInvalid,
                 "A merge, cherry-pick, or revert target must be a hexadecimal commit ID.",
             ),
-            workflows::WorkflowError::CommitNotFound => Self::new(
+            WorkflowError::CommitNotFound => Self::new(
                 StatusCode::NOT_FOUND,
                 ApiErrorCode::HistoryCommitNotFound,
                 "The requested commit does not exist in this repository.",
             ),
-            workflows::WorkflowError::NoActiveOperation => Self::new(
+            WorkflowError::NoActiveOperation => Self::new(
                 StatusCode::CONFLICT,
                 ApiErrorCode::WorkflowNoActiveOperation,
                 "The waiting task no longer has a merge, cherry-pick, or revert operation to recover.",
             ),
-            workflows::WorkflowError::GitUnavailable => Self::new(
+            WorkflowError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,
                 "Git is unavailable for workflow preflight.",
             ),
-            workflows::WorkflowError::TimedOut
-            | workflows::WorkflowError::TooLarge
-            | workflows::WorkflowError::GitFailed => Self::new(
+            WorkflowError::TimedOut
+            | WorkflowError::TooLarge
+            | WorkflowError::GitFailed => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::WorkflowPreflightUnavailable,
                 "Workflow preflight could not be completed. Refresh repository state and retry.",

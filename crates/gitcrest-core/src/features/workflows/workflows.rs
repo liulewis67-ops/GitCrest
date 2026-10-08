@@ -6,6 +6,8 @@ use tokio::{
     process::Command,
 };
 
+use crate::domain::error::WorkflowError;
+
 const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PATHS: usize = 200;
 const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
@@ -67,17 +69,6 @@ pub struct WorkflowRecoveryPreflight {
     pub can_continue: bool,
     pub can_skip: bool,
     pub can_abort: bool,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum WorkflowError {
-    InvalidTarget,
-    CommitNotFound,
-    NoActiveOperation,
-    GitUnavailable,
-    TimedOut,
-    TooLarge,
-    GitFailed,
 }
 
 pub async fn read_preflight(

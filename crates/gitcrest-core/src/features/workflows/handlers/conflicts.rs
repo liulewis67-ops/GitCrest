@@ -458,10 +458,10 @@ pub(in crate::workflows) async fn mark_workflow_conflict_resolved(
                     .await
                     .map_err(|error| {
                         TaskFailure::Failed(match error {
-                            conflicts::ConflictError::UnresolvedMarkers => {
+                            crate::domain::error::ConflictError::UnresolvedMarkers => {
                                 "Remove all conflict markers before marking resolved.".into()
                             }
-                            conflicts::ConflictError::StaleRevision => {
+                            crate::domain::error::ConflictError::StaleRevision => {
                                 "The result changed after review. Refresh before marking resolved."
                                     .into()
                             }

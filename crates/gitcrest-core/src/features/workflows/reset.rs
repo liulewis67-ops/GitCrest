@@ -4,7 +4,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use tokio::{io::AsyncReadExt, process::Command, time::timeout};
 
-use crate::workflows::{read_worktree_state, WorkflowError, WorkflowOperation};
+use crate::{
+    domain::error::WorkflowError,
+    workflows::{read_worktree_state, WorkflowOperation},
+};
 
 const MAX_RESET_PATHS: usize = 200;
 const MAX_GIT_OUTPUT: usize = 2 * 1024 * 1024;

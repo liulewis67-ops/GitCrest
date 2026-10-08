@@ -26,6 +26,7 @@ mod commits;
 mod credentials;
 #[path = "features/diff/mod.rs"]
 mod diff;
+mod domain;
 #[path = "git/git_command.rs"]
 mod git_command;
 #[path = "features/history/mod.rs"]
@@ -57,7 +58,7 @@ mod tasks;
 mod watcher;
 #[path = "features/workflows/mod.rs"]
 mod workflows;
-pub(crate) use workflows::{conflicts, rebase, reset};
+pub(crate) use workflows::{rebase, reset};
 
 use api::error::ApiError;
 #[cfg(test)]

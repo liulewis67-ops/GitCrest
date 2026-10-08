@@ -10,7 +10,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, io::AsyncWriteExt, process::Command};
 
-use crate::workflows::WorkflowOperation;
+use crate::{domain::error::ConflictError, workflows::WorkflowOperation};
 
 const MAX_CONFLICT_FILE_BYTES: usize = 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 16 * 1024;
@@ -30,21 +30,6 @@ pub struct ConflictFile {
     pub result_content: Option<String>,
     pub result_revision: String,
     pub is_text: bool,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum ConflictError {
-    InvalidPath,
-    NotConflicted,
-    FileNotFound,
-    TooLarge,
-    Binary,
-    GitUnavailable,
-    GitFailed,
-    TimedOut,
-    Io,
-    StaleRevision,
-    UnresolvedMarkers,
 }
 
 pub async fn read_file(

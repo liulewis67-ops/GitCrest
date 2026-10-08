@@ -9,7 +9,10 @@ use tokio::{
     task::JoinSet,
 };
 
-use crate::workflows::{read_worktree_state, WorkflowError, WorkflowOperation};
+use crate::{
+    domain::error::WorkflowError,
+    workflows::{read_worktree_state, WorkflowOperation},
+};
 
 const MAX_COMMITS: usize = 200;
 const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
