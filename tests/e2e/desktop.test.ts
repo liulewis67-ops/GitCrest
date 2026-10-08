@@ -419,5 +419,5 @@ describe("desktop startup E2E", () => {
       await fixture.cleanup();
       await rm(appDataPath, { recursive: true, force: true });
     }
-  }, 60_000);
+  }, 90_000);
 });

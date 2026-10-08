@@ -35,9 +35,9 @@ it("stages and commits through the registered keyboard shortcuts", async () => {
         headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
         body: JSON.stringify({ path: repositoryPath }),
       });
-      return response.status;
+      return { status: response.status, repository: await response.json() as { repoId: string } };
     }, fixture.path);
-    expect(opened).toBe(200);
+    expect(opened.status).toBe(200);
 
     await window.reload();
     await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
@@ -59,6 +59,41 @@ it("stages and commits through the registered keyboard shortcuts", async () => {
     await message.press("Control+Enter");
     await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim(), { timeout: 15_000 }).toBe("keyboard stage and commit");
     expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain"])).stdout.trim()).toBe("");
+
+    const branchCreation = await window.evaluate(async ({ repoId, name }) => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      const response = await fetch(new URL(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`, connection.baseUrl), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      return response.status;
+    }, { repoId: opened.repository.repoId, name: "keyboard-target" });
+    expect(branchCreation).toBe(202);
+    await window.getByText("keyboard-target", { exact: true }).waitFor();
+    const branchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
+    if (await branchTasksDialog.count()) await branchTasksDialog.getByRole("button", { name: "Close tasks" }).click();
+    await window.keyboard.press("Control+b");
+    const switchDialog = window.getByRole("dialog", { name: "Switch branch" });
+    await switchDialog.waitFor();
+    const targetChoice = switchDialog.getByRole("button", { name: /keyboard-target/ });
+    await targetChoice.focus();
+    await targetChoice.press("Enter");
+    await switchDialog.getByText("The working tree is clean.").waitFor();
+    const switchButton = switchDialog.getByRole("button", { name: "Switch to keyboard-target" });
+    await switchButton.focus();
+    await switchButton.press("Enter");
+    await expect.poll(async () => await window.evaluate(async (repoId) => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      const response = await fetch(new URL(`/api/v1/repositories/${encodeURIComponent(repoId)}`, connection.baseUrl), {
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+      });
+      return (await response.json() as { branch: string }).branch;
+    }, opened.repository.repoId), { timeout: 15_000 }).toBe("keyboard-target");
   } finally {
     await app?.close();
     await fixture.cleanup();
