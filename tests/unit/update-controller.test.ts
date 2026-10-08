@@ -49,3 +49,15 @@ it("does not expose updater error details that may contain feed credentials", as
   emit("error", new Error("https://updates.example.test?token=secret"));
   expect(controller.getStatus()).toEqual({ state: "error", message: "The update check failed. Try again later." });
 });
+
+it("refuses installation after the updater reports a signature verification failure", async () => {
+  const { updater, emit } = makeUpdater();
+  const controller = new UpdateController(true, updater, vi.fn());
+
+  emit("update-available", { version: "0.2.0" });
+  emit("error", new Error("ERR_UPDATER_INVALID_SIGNATURE"));
+
+  expect(controller.getStatus()).toEqual({ state: "error", message: "The update check failed. Try again later." });
+  expect(controller.installDownloadedUpdate()).toBe(false);
+  expect(updater.quitAndInstall).not.toHaveBeenCalled();
+});
