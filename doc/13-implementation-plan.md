@@ -1121,3 +1121,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workflow recovery、conflict file/AI suggestion handlers 仍留在 `main.rs`；继续迁移这些处理器，并审视 feature handler 文件拆分边界。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`0745557`
+
+### 后端 workflows recovery preflight handler 迁移 — 小阶段 58
+- 状态：已完成（workflow recovery 预检端点 DTO 与 handler 进入 workflows feature）
+- 日期：2026-10-09
+- 交付：新增 `WorkflowRecoveryQuery` DTO，并将 recovery preflight handler 从 `main.rs` 迁入 `features/workflows/handlers.rs`；workflows route 改为绑定 feature 内 handler。恢复操作识别与任务预检 helper 暂留进程入口模块并通过 crate 可见性复用，预检条件、状态码和响应保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；workflow recovery 相关 API 集成用例通过。
+- 限制/后续：workflow recovery 执行与 conflict file/AI suggestion/save/resolve handlers 仍留在 `main.rs`；继续按接口职责迁移，并把恢复识别/预检 helper 收敛到 workflows feature。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`dfa3f97`
