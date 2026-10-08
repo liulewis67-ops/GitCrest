@@ -1,6 +1,8 @@
 use axum::{routing::get, Router};
 
-use crate::{repository_commit_file_diff, repository_diff, AppState};
+use crate::AppState;
+
+use super::handlers::{repository_commit_file_diff, repository_diff};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
