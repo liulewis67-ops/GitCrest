@@ -29,6 +29,12 @@ describe("keyboard shortcut preferences", () => {
     expect(readShortcutPreferences(JSON.stringify({ commandPalette: "Mod+K", pull: "Mod+K" }))).toEqual(defaultShortcutPreferences);
   });
 
+  it("loads valid shortcut swaps without treating other stored defaults as conflicts", () => {
+    const preferences = readShortcutPreferences(JSON.stringify({ commandPalette: "Mod+O", openRepository: "Mod+K" }));
+    expect(preferences.commandPalette).toBe("Mod+O");
+    expect(preferences.openRepository).toBe("Mod+K");
+  });
+
   it("captures a normalized cross-platform binding and ignores IME composition", () => {
     expect(shortcutFromEvent(keyEvent("l", { ctrlKey: true, shiftKey: true }))).toBe("Mod+Shift+L");
     expect(shortcutFromEvent(keyEvent("Enter", { metaKey: true }))).toBe("Mod+Enter");

@@ -1663,7 +1663,38 @@ function App() {
       if (event.isComposing) return;
       const target = event.target instanceof HTMLElement ? event.target : undefined;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      if (page === "workspace" && matchesShortcut(event, shortcuts.commit, isMacPlatform)) {
+      if (matchesShortcut(event, shortcuts.openRepository, isMacPlatform)) {
+        event.preventDefault();
+        void openLocalRepository();
+      } else if (matchesShortcut(event, shortcuts.cloneRepository, isMacPlatform) && connected) {
+        event.preventDefault();
+        setCloneError("");
+        setCloneOpen(true);
+      } else if (matchesShortcut(event, shortcuts.initializeRepository, isMacPlatform)) {
+        event.preventDefault();
+        void initializeLocalRepository();
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.stageAll, isMacPlatform) && activeStatus && workingCount > 0 && !hasConflicts && !stagingBusy && !hasActiveStagingTask) {
+        event.preventDefault();
+        void stageChanges("stageAll");
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.fetch, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
+        event.preventDefault();
+        void fetchRepository();
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.push, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
+        event.preventDefault();
+        openPushDialog();
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.refreshStatus, isMacPlatform) && selectedRepository && !activeStatusLoading) {
+        event.preventDefault();
+        void refreshRepositoryStatus(selectedRepository.repoId, true);
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.openDiff, isMacPlatform) && selectedFilePath) {
+        event.preventDefault();
+        changeWorkspaceMode("diff");
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.shelve, isMacPlatform) && selectedRepository) {
+        event.preventDefault();
+        setShelfComposerRequest((request) => request + 1);
+      } else if (matchesShortcut(event, shortcuts.settings, isMacPlatform)) {
+        event.preventDefault();
+        setSettingsOpen(true);
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.commit, isMacPlatform)) {
         event.preventDefault();
         void commitChanges("commit");
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.commitAndPush, isMacPlatform)) {
@@ -1691,7 +1722,7 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [page, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability, activeBranches, stagedCount, hasConflicts, commitBusy, shortcuts, isMacPlatform]);
+  }, [page, connected, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability, activeBranches, activeStatus, activeStatusLoading, workingCount, stagingBusy, hasActiveStagingTask, hasActiveRepositoryTask, selectedFilePath, stagedCount, hasConflicts, commitBusy, shortcuts, isMacPlatform]);
 
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -1752,7 +1783,7 @@ function App() {
         <button className="quietButton taskCenterButton" type="button" onClick={() => setTasksOpen(true)} aria-label={`Background tasks, ${tasks.filter((task) => task.status === "queued" || task.status === "running").length} active`}>
           Tasks <span className="countBadge">{tasks.filter((task) => task.status === "queued" || task.status === "running").length}</span>
         </button>
-        <button className="quietButton" type="button" onClick={() => setSettingsOpen(true)}>Settings</button>
+        <button className="quietButton" type="button" onClick={() => setSettingsOpen(true)} aria-keyshortcuts={ariaShortcut(shortcuts.settings, isMacPlatform)} title={`Settings (${displayShortcut(shortcuts.settings, isMacPlatform)})`}>Settings</button>
         <div className={`connectionBadge ${connected ? "connected" : ""}`} role="status" aria-live="polite" aria-label={status} title={status}>
           <span className="connectionDot" aria-hidden="true" />
           <span>{connectionLabel}</span>
@@ -1769,7 +1800,7 @@ function App() {
               <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()}>
                 <span aria-hidden="true">＋</span> {openingRepository ? "Opening repository…" : "Open a repository"}
               </button>
-              <button className="secondaryButton" type="button" disabled={!connected} onClick={() => { setCloneError(""); setCloneOpen(true); }}>Clone repository</button>
+              <button className="secondaryButton" type="button" disabled={!connected} onClick={() => { setCloneError(""); setCloneOpen(true); }} aria-keyshortcuts={ariaShortcut(shortcuts.cloneRepository, isMacPlatform)} title={`Clone repository (${displayShortcut(shortcuts.cloneRepository, isMacPlatform)})`}>Clone repository</button>
               <button className="textButton" type="button" onClick={() => setPage("workspace")}>Preview workspace</button>
             </div>
           </div>
@@ -1806,13 +1837,13 @@ function App() {
             </section>
             <aside className="quickActions" aria-labelledby="quick-heading">
               <div className="sectionHeading"><div><p className="sectionEyebrow">GET STARTED</p><h2 id="quick-heading">Quick actions</h2></div></div>
-              <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()}>
+                <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={`Open local repository (${displayShortcut(shortcuts.openRepository, isMacPlatform)})`}>
                 <span className="actionIcon" aria-hidden="true">↗</span><span><strong>Open local repository</strong><small>Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
               <button className="actionRow" type="button" disabled={!connected} onClick={() => { setCloneError(""); setCloneOpen(true); }}>
                 <span className="actionIcon" aria-hidden="true">⇣</span><span><strong>Clone a repository</strong><small>Bring a remote project here</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
-              <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void initializeLocalRepository()}>
+              <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void initializeLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.initializeRepository, isMacPlatform)} title={`Initialize a repository (${displayShortcut(shortcuts.initializeRepository, isMacPlatform)})`}>
                 <span className="actionIcon" aria-hidden="true">＋</span><span><strong>Initialize a repository</strong><small>Start tracking a new project</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
               <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Initialize creates Git metadata only in the folder you select and keeps its files.</div>
@@ -1826,11 +1857,11 @@ function App() {
             <div className="workspaceCrumb"><span className="crumbMark" aria-hidden="true">G</span><span>Workspace</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || "No repository open"}</span></div>
             <div className="toolbarActions">
               <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => changeWorkspaceMode("graph")}>Graph</button>
-              <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} title={!selectedFilePath ? "Select a changed file to open Diff" : "Open the selected file diff"} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
+              <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} aria-keyshortcuts={ariaShortcut(shortcuts.openDiff, isMacPlatform)} title={!selectedFilePath ? "Select a changed file to open Diff" : `Open the selected file diff (${displayShortcut(shortcuts.openDiff, isMacPlatform)})`} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pushDisabledReason || "Preview the current branch push"} onClick={() => openPushDialog()}>Push</button>
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.push, isMacPlatform)} title={pushDisabledReason || `Preview the current branch push (${displayShortcut(shortcuts.push, isMacPlatform)})`} onClick={() => openPushDialog()}>Push</button>
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pullDisabledReason || `Review worktree state, then pull with merge or rebase (${displayShortcut(shortcuts.pull, isMacPlatform)})`} onClick={() => openPullDialog()}>Pull</button>
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={selectedRepository ? "Fetch from configured remotes" : "Open a repository to fetch"} onClick={() => void fetchRepository()}>Fetch</button>
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.fetch, isMacPlatform)} title={selectedRepository ? `Fetch from configured remotes (${displayShortcut(shortcuts.fetch, isMacPlatform)})` : "Open a repository to fetch"} onClick={() => void fetchRepository()}>Fetch</button>
               <span className="toolbarDivider" />
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available"} title={selectedRepository ? `Switch branches (${displayShortcut(shortcuts.branchSwitcher, isMacPlatform)})` : "Open a repository to switch branches"} onClick={openBranchSwitcher}><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
             </div>
@@ -1842,7 +1873,7 @@ function App() {
               <div className="navGroup changesNavigation">
                 <div className="navGroupTitle changesHeading"><span>Changes</span><span className="countBadge">{activeStatus ? activeStatus.files.length : "—"}</span></div>
                 <div className="changeGroupActions">
-                  <button type="button" disabled={!activeStatus || workingCount === 0 || activeStatus.files.some((file) => file.kind === "conflicted") || stagingBusy || hasActiveStagingTask} onClick={() => void stageChanges("stageAll")}>Stage all</button>
+                  <button type="button" disabled={!activeStatus || workingCount === 0 || activeStatus.files.some((file) => file.kind === "conflicted") || stagingBusy || hasActiveStagingTask} aria-keyshortcuts={ariaShortcut(shortcuts.stageAll, isMacPlatform)} title={`Stage all changes (${displayShortcut(shortcuts.stageAll, isMacPlatform)})`} onClick={() => void stageChanges("stageAll")}>Stage all</button>
                   <button type="button" disabled={!activeStatus || stagedCount === 0 || activeStatus.files.some((file) => file.kind === "conflicted") || stagingBusy || hasActiveStagingTask} onClick={() => void stageChanges("unstageAll")}>Unstage all</button>
                 </div>
                 {!selectedRepository && <div className="navEmpty">No repository open</div>}
@@ -1931,7 +1962,7 @@ function App() {
             <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />
 
             <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
-              <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId, true); }} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
+              <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : `Refresh working tree status (${displayShortcut(shortcuts.refreshStatus, isMacPlatform)})`}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
               {mode === "graph" ? selectedRepository && apiRef.current && isFullObjectId(selectedRepository.head) ? <CommitGraph
                 key={selectedRepository.repoId}
                 api={apiRef.current}
@@ -2034,7 +2065,7 @@ function App() {
                   </div>
                   <div className="branchSwitchOptions">
                     <button className="secondaryButton" type="button" onClick={() => { setBranchSwitcherOpen(false); requestAnimationFrame(() => document.getElementById("commit-message")?.focus()); }}>Commit changes</button>
-                    <button className="secondaryButton" type="button" disabled={switchBusy || !connected || hasActiveRepositoryTask} title="Choose the changed files or hunks to save, then review the branch switch again" onClick={() => { setBranchSwitcherOpen(false); setShelfComposerRequest((request) => request + 1); }}>Shelve changes</button>
+                    <button className="secondaryButton" type="button" disabled={switchBusy || !connected || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.shelve, isMacPlatform)} title={`Choose changes to shelve (${displayShortcut(shortcuts.shelve, isMacPlatform)})`} onClick={() => { setBranchSwitcherOpen(false); setShelfComposerRequest((request) => request + 1); }}>Shelve changes</button>
                     <button className="secondaryButton" type="button" disabled title="Commit or shelve the listed changes, then run preflight again">Continue</button>
                   </div>
                 </>}

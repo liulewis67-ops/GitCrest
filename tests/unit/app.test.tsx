@@ -64,6 +64,7 @@ describe("App", () => {
   });
 
   it("opens a keyboard-accessible command palette with reasons for unavailable actions", async () => {
+    const chooseRepository = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
       value: {
@@ -73,7 +74,7 @@ describe("App", () => {
           windowAccess: "readWrite",
         }),
         subscribeToEvents: vi.fn(async () => vi.fn()),
-        chooseRepository: vi.fn().mockResolvedValue(undefined),
+        chooseRepository,
       },
     });
     vi.stubGlobal("fetch", vi.fn<typeof fetch>()
@@ -92,6 +93,8 @@ describe("App", () => {
 
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull());
+    fireEvent.keyDown(window, { key: "o", ctrlKey: true });
+    await waitFor(() => expect(chooseRepository).toHaveBeenCalledOnce());
   });
 
   it("shows task progress and sanitized logs, and requests cancellation", async () => {

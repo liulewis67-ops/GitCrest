@@ -2,9 +2,19 @@ export const SHORTCUT_PREFERENCES_KEY = "gitcrest-shortcuts-v1";
 
 export const shortcutActions = [
   { id: "commandPalette", label: "Open command palette", defaultBinding: "Mod+K" },
+  { id: "openRepository", label: "Open local repository", defaultBinding: "Mod+O" },
+  { id: "cloneRepository", label: "Clone repository", defaultBinding: "Mod+Shift+O" },
+  { id: "initializeRepository", label: "Initialize repository", defaultBinding: "Mod+N" },
   { id: "commit", label: "Commit staged changes", defaultBinding: "Mod+Enter" },
   { id: "commitAndPush", label: "Commit and push", defaultBinding: "Mod+Shift+Enter" },
+  { id: "stageAll", label: "Stage all changes", defaultBinding: "Mod+Shift+A" },
+  { id: "fetch", label: "Fetch from remotes", defaultBinding: "Mod+Shift+F" },
+  { id: "push", label: "Open push review", defaultBinding: "Mod+Shift+P" },
   { id: "pull", label: "Open pull review", defaultBinding: "Mod+Shift+L" },
+  { id: "refreshStatus", label: "Refresh working tree status", defaultBinding: "Mod+R" },
+  { id: "openDiff", label: "Open selected file diff", defaultBinding: "Mod+D" },
+  { id: "shelve", label: "Shelve changes", defaultBinding: "Mod+Shift+S" },
+  { id: "settings", label: "Open settings", defaultBinding: "Mod+," },
   { id: "rebase", label: "Interactive rebase", defaultBinding: "Mod+I" },
   { id: "branchSwitcher", label: "Switch branch", defaultBinding: "Mod+B" },
   { id: "aiCommitMessage", label: "Generate commit message", defaultBinding: "Mod+G" },
@@ -27,9 +37,9 @@ export function readShortcutPreferences(value: string | null): ShortcutPreferenc
     const result = { ...defaultShortcutPreferences };
     for (const { id } of shortcutActions) {
       const binding = (saved as Record<string, unknown>)[id];
-      if (typeof binding === "string" && !shortcutConflict(id, binding, result)) result[id] = binding;
+      if (typeof binding === "string" && isValidBinding(binding) && !reservedBindings.has(binding)) result[id] = binding;
     }
-    return result;
+    return new Set(Object.values(result)).size === shortcutActions.length ? result : { ...defaultShortcutPreferences };
   } catch {
     return { ...defaultShortcutPreferences };
   }
