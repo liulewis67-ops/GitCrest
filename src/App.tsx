@@ -300,6 +300,7 @@ function App() {
   });
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
+  const { dialogRef: paletteRef, onKeyDown: onPaletteFocusKeyDown } = useDialogFocus<HTMLElement>(() => setPaletteOpen(false), false, undefined, paletteOpen);
   const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber("gitcrest-sidebar-width", 236, 190, 340));
   const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", 284, 220, 420));
   const [workbenchHeight, setWorkbenchHeight] = useState(() => readStoredNumber("gitcrest-workbench-height", 204, 144, 360));
@@ -2108,11 +2109,14 @@ function App() {
       {paletteOpen && (
         <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaletteOpen(false); }}>
           <section
+            ref={paletteRef}
             className="commandPalette"
             role="dialog"
             aria-modal="true"
             aria-labelledby="palette-title"
             onKeyDown={(event) => {
+              onPaletteFocusKeyDown(event);
+              if (event.defaultPrevented) return;
               if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter") return;
               const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(".commandItem:not(:disabled)"));
               if (items.length === 0) return;
@@ -2130,7 +2134,7 @@ function App() {
             }}
           >
             <h2 id="palette-title" className="srOnly">Command palette</h2>
-            <div className="paletteSearch"><span aria-hidden="true">⌕</span><input autoFocus aria-label="Search commands" placeholder="Search commands…" value={paletteQuery} onChange={(event) => setPaletteQuery(event.target.value)} /><kbd>ESC</kbd></div>
+            <div className="paletteSearch"><span aria-hidden="true">⌕</span><input autoFocus data-dialog-initial-focus aria-label="Search commands" placeholder="Search commands…" value={paletteQuery} onChange={(event) => setPaletteQuery(event.target.value)} /><kbd>ESC</kbd></div>
           <div className="paletteContext">{page === "welcome" ? "WELCOME" : selectedRepository ? `WORKSPACE · ${repositoryName(selectedRepository.path).toUpperCase()}` : "WORKSPACE · NO REPOSITORY"}</div>
             <div className="commandList">
               {filteredCommands.map((command) => (

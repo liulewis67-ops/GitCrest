@@ -87,13 +87,15 @@ describe("App", () => {
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     const dialog = screen.getByRole("dialog", { name: "Command palette" });
     expect(dialog).toBeDefined();
+    const search = within(dialog).getByRole("textbox", { name: "Search commands" });
+    await waitFor(() => expect(document.activeElement).toBe(search));
     const openCommand = within(dialog).getByRole("button", { name: /Open local repository/ }) as HTMLButtonElement;
     expect(openCommand.disabled).toBe(false);
     expect(within(dialog).getByRole("button", { name: /Clone repository/ })).toBeDefined();
     fireEvent.keyDown(openCommand, { key: "o", ctrlKey: true });
     expect(chooseRepository).not.toHaveBeenCalled();
 
-    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(search, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull());
     fireEvent.keyDown(window, { key: "o", ctrlKey: true });
     await waitFor(() => expect(chooseRepository).toHaveBeenCalledOnce());
