@@ -213,7 +213,7 @@ paths:
     get:
       operationId: getRepositoryStatus
       summary: Read the working tree status snapshot or a bounded path scope
-      description: Omitting paths returns the complete current snapshot. Repeating paths returns only status records matching those literal relative paths; use this form only for a reviewed watcher dirty scope and merge it into the previously read complete snapshot.
+      description: Omitting paths returns the current snapshot, using the watcher-invalidated cache when available. Set refresh=true to force a fresh Git read. Repeating paths returns only status records matching those literal relative paths; use this form only for a reviewed watcher dirty scope and merge it into the previously read complete snapshot. Forced refresh cannot be combined with paths.
       parameters:
         - name: paths
           in: query
@@ -226,6 +226,12 @@ paths:
               type: string
               minLength: 1
               maxLength: 4096
+        - name: refresh
+          in: query
+          required: false
+          description: Force Git to rebuild the complete working tree status snapshot.
+          schema:
+            type: boolean
       responses:
         "200":
           description: Current status snapshot or the changed records within the requested path scope.

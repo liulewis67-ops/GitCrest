@@ -57,6 +57,11 @@ pub async fn read_paths(
     path: &Path,
     paths: &[String],
 ) -> Result<StatusSnapshot, std::io::Error> {
+    validate_paths(paths)?;
+    read_scope(repo_id, path, paths).await
+}
+
+pub fn validate_paths(paths: &[String]) -> Result<(), std::io::Error> {
     if paths.is_empty()
         || paths.len() > 256
         || paths.iter().any(|path| {
@@ -77,7 +82,7 @@ pub async fn read_paths(
             "The status path scope is invalid or too large",
         ));
     }
-    read_scope(repo_id, path, paths).await
+    Ok(())
 }
 
 async fn read_scope(

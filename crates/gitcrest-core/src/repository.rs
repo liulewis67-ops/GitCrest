@@ -1,15 +1,22 @@
 use std::{
+    collections::HashMap,
     fmt::Write as _,
     path::{Path, PathBuf},
     process::Stdio,
+    sync::{Arc, Mutex},
 };
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
-use crate::status::StatusSnapshot;
+use crate::status::{StatusFile, StatusSnapshot};
 use crate::storage::RepositoryStore;
+
+const MAX_CACHED_STATUS_REPOSITORIES: usize = 8;
+const MAX_CACHED_STATUS_FILES: usize = 10_000;
+const MAX_CACHED_STATUS_PATH_FILES: usize = 10_000;
+const MAX_CACHED_STATUS_PATHS: usize = 256;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -28,6 +35,26 @@ pub struct Repository {
 #[derive(Clone, Default)]
 pub struct RepositoryManager {
     store: RepositoryStore,
+    status_cache: Arc<Mutex<StatusCache>>,
+}
+
+#[derive(Default)]
+struct StatusCache {
+    entries: HashMap<String, StatusCacheEntry>,
+    sequence: u64,
+}
+
+#[derive(Default)]
+struct StatusCacheEntry {
+    version: u64,
+    last_used: u64,
+    full_snapshot: Option<StatusSnapshot>,
+    path_snapshots: HashMap<String, CachedPathStatus>,
+}
+
+struct CachedPathStatus {
+    files: Vec<StatusFile>,
+    refreshed_at_ms: i64,
 }
 
 #[derive(Clone, Debug)]
@@ -57,6 +84,19 @@ pub enum RepositoryError {
 }
 
 impl RepositoryManager {
+    pub fn invalidate_status(&self, repo_id: &str) {
+        let mut cache = self
+            .status_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        ensure_status_cache_entry(&mut cache, repo_id);
+        if let Some(entry) = cache.entries.get_mut(repo_id) {
+            entry.version = entry.version.wrapping_add(1);
+            entry.full_snapshot = None;
+            entry.path_snapshots.clear();
+        }
+    }
+
     pub fn store(&self) -> RepositoryStore {
         self.store.clone()
     }
@@ -145,7 +185,10 @@ impl RepositoryManager {
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?;
-        Ok(Self { store })
+        Ok(Self {
+            store,
+            status_cache: Arc::default(),
+        })
     }
 
     pub async fn open_path(&self, path: &str) -> Result<Repository, RepositoryError> {
@@ -308,6 +351,7 @@ impl RepositoryManager {
     }
 
     pub async fn forget(&self, repo_id: String) -> Result<bool, RepositoryError> {
+        self.invalidate_status(&repo_id);
         let store = self.store.clone();
         task::spawn_blocking(move || store.forget(&repo_id))
             .await
@@ -316,6 +360,24 @@ impl RepositoryManager {
     }
 
     pub async fn status_snapshot(&self, repo_id: &str) -> Result<StatusSnapshot, RepositoryError> {
+        let version = self.status_cache_version(repo_id);
+        let snapshot = self.read_status_snapshot(repo_id).await?;
+        self.cache_full_status(repo_id, version, &snapshot);
+        Ok(snapshot)
+    }
+
+    /// Read the latest watcher-valid snapshot, running Git only when the cache is cold.
+    pub async fn status_snapshot_cached(
+        &self,
+        repo_id: &str,
+    ) -> Result<StatusSnapshot, RepositoryError> {
+        if let Some(snapshot) = self.cached_full_status(repo_id) {
+            return Ok(snapshot);
+        }
+        self.status_snapshot(repo_id).await
+    }
+
+    async fn read_status_snapshot(&self, repo_id: &str) -> Result<StatusSnapshot, RepositoryError> {
         let store = self.store.clone();
         let repo_id = repo_id.to_owned();
         let repository = task::spawn_blocking(move || store.get(&repo_id))
@@ -339,6 +401,29 @@ impl RepositoryManager {
         repo_id: &str,
         paths: &[String],
     ) -> Result<StatusSnapshot, RepositoryError> {
+        let version = self.status_cache_version(repo_id);
+        let snapshot = self.read_status_snapshot_paths(repo_id, paths).await?;
+        self.cache_path_status(repo_id, version, paths, &snapshot);
+        Ok(snapshot)
+    }
+
+    pub async fn status_snapshot_paths_cached(
+        &self,
+        repo_id: &str,
+        paths: &[String],
+    ) -> Result<StatusSnapshot, RepositoryError> {
+        crate::status::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
+        if let Some(snapshot) = self.cached_path_status(repo_id, paths) {
+            return Ok(snapshot);
+        }
+        self.status_snapshot_paths(repo_id, paths).await
+    }
+
+    async fn read_status_snapshot_paths(
+        &self,
+        repo_id: &str,
+        paths: &[String],
+    ) -> Result<StatusSnapshot, RepositoryError> {
         let store = self.store.clone();
         let repo_id_owned = repo_id.to_owned();
         let repository = task::spawn_blocking(move || store.get(&repo_id_owned))
@@ -357,6 +442,161 @@ impl RepositoryManager {
                 _ => RepositoryError::StatusFailed,
             })
     }
+
+    fn status_cache_version(&self, repo_id: &str) -> u64 {
+        let mut cache = self
+            .status_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        ensure_status_cache_entry(&mut cache, repo_id);
+        cache.entries.get(repo_id).map_or(0, |entry| entry.version)
+    }
+
+    fn cached_full_status(&self, repo_id: &str) -> Option<StatusSnapshot> {
+        let mut cache = self
+            .status_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        cache.sequence = cache.sequence.wrapping_add(1);
+        let sequence = cache.sequence;
+        let entry = cache.entries.get_mut(repo_id)?;
+        entry.last_used = sequence;
+        entry.full_snapshot.clone()
+    }
+
+    fn cached_path_status(&self, repo_id: &str, paths: &[String]) -> Option<StatusSnapshot> {
+        let mut cache = self
+            .status_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        cache.sequence = cache.sequence.wrapping_add(1);
+        let sequence = cache.sequence;
+        let entry = cache.entries.get_mut(repo_id)?;
+        entry.last_used = sequence;
+        if let Some(full_snapshot) = &entry.full_snapshot {
+            let files = full_snapshot
+                .files
+                .iter()
+                .filter(|file| {
+                    paths.iter().any(|path| {
+                        file.path == *path || file.original_path.as_deref() == Some(path.as_str())
+                    })
+                })
+                .cloned()
+                .collect();
+            return Some(StatusSnapshot {
+                repo_id: repo_id.to_owned(),
+                refreshed_at_ms: full_snapshot.refreshed_at_ms,
+                files,
+            });
+        }
+        let mut files = Vec::new();
+        let mut refreshed_at_ms = 0;
+        for path in paths {
+            let cached = entry.path_snapshots.get(path)?;
+            refreshed_at_ms = refreshed_at_ms.max(cached.refreshed_at_ms);
+            for file in &cached.files {
+                if !files.contains(file) {
+                    files.push(file.clone());
+                }
+            }
+        }
+        Some(StatusSnapshot {
+            repo_id: repo_id.to_owned(),
+            refreshed_at_ms,
+            files,
+        })
+    }
+
+    fn cache_full_status(&self, repo_id: &str, version: u64, snapshot: &StatusSnapshot) {
+        let mut cache = self
+            .status_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        ensure_status_cache_entry(&mut cache, repo_id);
+        if let Some(entry) = cache.entries.get_mut(repo_id) {
+            if entry.version == version {
+                entry.full_snapshot =
+                    (snapshot.files.len() <= MAX_CACHED_STATUS_FILES).then(|| snapshot.clone());
+                entry.path_snapshots.clear();
+            }
+        }
+    }
+
+    fn cache_path_status(
+        &self,
+        repo_id: &str,
+        version: u64,
+        paths: &[String],
+        snapshot: &StatusSnapshot,
+    ) {
+        let mut cache = self
+            .status_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        ensure_status_cache_entry(&mut cache, repo_id);
+        let Some(entry) = cache.entries.get_mut(repo_id) else {
+            return;
+        };
+        if entry.version != version {
+            return;
+        }
+        for path in paths {
+            let files = snapshot
+                .files
+                .iter()
+                .filter(|file| {
+                    file.path == *path || file.original_path.as_deref() == Some(path.as_str())
+                })
+                .cloned()
+                .collect();
+            entry.path_snapshots.insert(
+                path.clone(),
+                CachedPathStatus {
+                    files,
+                    refreshed_at_ms: snapshot.refreshed_at_ms,
+                },
+            );
+        }
+        while entry.path_snapshots.len() > MAX_CACHED_STATUS_PATHS
+            || entry
+                .path_snapshots
+                .values()
+                .map(|cached| cached.files.len())
+                .sum::<usize>()
+                > MAX_CACHED_STATUS_PATH_FILES
+        {
+            let Some(oldest) = entry.path_snapshots.keys().next().cloned() else {
+                break;
+            };
+            entry.path_snapshots.remove(&oldest);
+        }
+    }
+}
+
+fn ensure_status_cache_entry(cache: &mut StatusCache, repo_id: &str) {
+    if !cache.entries.contains_key(repo_id) && cache.entries.len() >= MAX_CACHED_STATUS_REPOSITORIES
+    {
+        if let Some(oldest) = cache
+            .entries
+            .iter()
+            .min_by_key(|(_, entry)| entry.last_used)
+            .map(|(id, _)| id.clone())
+        {
+            cache.entries.remove(&oldest);
+        }
+    }
+    cache.sequence = cache.sequence.wrapping_add(1);
+    let sequence = cache.sequence;
+    let entry = cache
+        .entries
+        .entry(repo_id.to_owned())
+        .or_insert_with(|| StatusCacheEntry {
+            version: sequence,
+            last_used: sequence,
+            ..StatusCacheEntry::default()
+        });
+    entry.last_used = sequence;
 }
 
 fn now_ms() -> i64 {

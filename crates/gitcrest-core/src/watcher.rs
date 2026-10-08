@@ -106,7 +106,7 @@ pub async fn run(repositories: RepositoryManager, events: EventBus) {
                 else { std::future::pending::<()>().await; }
             } => {
                 flush_at = None;
-                publish_pending(&events, &mut pending);
+                publish_pending(&repositories, &events, &mut pending);
             }
             input = receiver.recv() => {
                 if let Some(input) = input {
@@ -184,6 +184,7 @@ async fn reconcile_repositories(
         match create_registration(
             &repository.repo_id,
             PathBuf::from(repository.path),
+            repositories.clone(),
             sender,
             overflowed,
         )
@@ -219,6 +220,7 @@ async fn reconcile_repositories(
 async fn create_registration(
     repo_id: &str,
     root: PathBuf,
+    repositories: RepositoryManager,
     sender: &mpsc::Sender<WatchInput>,
     overflowed: &Arc<AtomicBool>,
 ) -> Result<Registration, ()> {
@@ -234,6 +236,7 @@ async fn create_registration(
     };
     let repo_id = repo_id.to_owned();
     let sender = sender.clone();
+    let repositories = repositories.clone();
     let overflowed = Arc::clone(overflowed);
     let mut watcher = notify::recommended_watcher(move |result: notify::Result<Event>| {
         let scope = match result {
@@ -249,6 +252,7 @@ async fn create_registration(
         if scope.is_empty() {
             return;
         }
+        repositories.invalidate_status(&repo_id);
         if sender
             .try_send(WatchInput {
                 repo_id: repo_id.clone(),
@@ -425,8 +429,13 @@ fn classify_path(path: &Path, location: &WatchLocation) -> DirtyScope {
     scope
 }
 
-fn publish_pending(events: &EventBus, pending: &mut HashMap<String, DirtyScope>) {
+fn publish_pending(
+    repositories: &RepositoryManager,
+    events: &EventBus,
+    pending: &mut HashMap<String, DirtyScope>,
+) {
     for (repo_id, scope) in pending.drain() {
+        repositories.invalidate_status(&repo_id);
         if scope.full || !scope.paths.is_empty() {
             events.publish(
                 Some(repo_id.clone()),

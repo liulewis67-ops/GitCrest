@@ -1,0 +1,224 @@
+{
+  "generatedAt": "2026-10-08T05:30:53.784Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "node": "v22.19.0",
+    "git": "git version 2.37.3.windows.1",
+    "rustProfile": "release",
+    "executable": "E:\\personal_projects\\GitCrest\\crates\\gitcrest-core\\target\\release\\gitcrest-core.exe",
+    "executableBytes": 15312384
+  },
+  "fixture": {
+    "commits": 100000,
+    "diffFileLines": 1000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-v2",
+    "historyQuery": "first page, 50 entries",
+    "searchQuery": "message contains benchmark commit 099999"
+  },
+  "iterations": 20,
+  "searchIndexWarmup": {
+    "ready": true,
+    "attempts": 3,
+    "elapsedMs": 15034.58
+  },
+  "results": [
+    {
+      "name": "sidecarStartupToReady",
+      "samples": 20,
+      "p50Ms": 84.551,
+      "p95Ms": 105.477,
+      "maxMs": 136.612,
+      "samplesMs": [
+        136.612,
+        94.791,
+        91.132,
+        92.37,
+        93.539,
+        98.145,
+        83.813,
+        82.676,
+        82.172,
+        78.98,
+        85.844,
+        84.551,
+        83.487,
+        105.477,
+        88.149,
+        80.06,
+        80.007,
+        78.571,
+        83.747,
+        88.586
+      ]
+    },
+    {
+      "name": "historyFirstPage100k",
+      "samples": 20,
+      "p50Ms": 105.588,
+      "p95Ms": 130.268,
+      "maxMs": 131.328,
+      "samplesMs": [
+        108.809,
+        110.769,
+        109.827,
+        118.94,
+        104.078,
+        102.554,
+        96.704,
+        98.29,
+        106.857,
+        105.588,
+        104.523,
+        107.545,
+        130.268,
+        105.338,
+        96.028,
+        103.751,
+        100.875,
+        131.328,
+        124.97,
+        116.497
+      ]
+    },
+    {
+      "name": "historySearch100k",
+      "samples": 20,
+      "p50Ms": 73.738,
+      "p95Ms": 110.66,
+      "maxMs": 128.134,
+      "samplesMs": [
+        90.134,
+        110.66,
+        128.134,
+        90.698,
+        80.698,
+        83.631,
+        89.848,
+        89.374,
+        71.661,
+        70.107,
+        69.786,
+        73.302,
+        71.874,
+        70.345,
+        68.797,
+        74.365,
+        68.009,
+        70.293,
+        76.395,
+        73.738
+      ]
+    },
+    {
+      "name": "fullStatusSnapshot",
+      "samples": 20,
+      "p50Ms": 0.443,
+      "p95Ms": 0.953,
+      "maxMs": 113.132,
+      "samplesMs": [
+        113.132,
+        0.611,
+        0.447,
+        0.418,
+        0.465,
+        0.416,
+        0.401,
+        0.401,
+        0.404,
+        0.401,
+        0.953,
+        0.769,
+        0.79,
+        0.633,
+        0.587,
+        0.443,
+        0.409,
+        0.397,
+        0.406,
+        0.816
+      ]
+    },
+    {
+      "name": "incrementalStatusSnapshot",
+      "samples": 20,
+      "p50Ms": 0.413,
+      "p95Ms": 0.772,
+      "maxMs": 0.894,
+      "samplesMs": [
+        0.482,
+        0.413,
+        0.398,
+        0.393,
+        0.462,
+        0.393,
+        0.396,
+        0.57,
+        0.894,
+        0.416,
+        0.398,
+        0.387,
+        0.529,
+        0.405,
+        0.445,
+        0.427,
+        0.436,
+        0.398,
+        0.772,
+        0.412
+      ]
+    },
+    {
+      "name": "workingTreeDiff1000Lines",
+      "samples": 20,
+      "p50Ms": 125.722,
+      "p95Ms": 165.38,
+      "maxMs": 165.523,
+      "samplesMs": [
+        142.388,
+        165.38,
+        161.931,
+        136.709,
+        165.523,
+        146.315,
+        114.493,
+        116.354,
+        132.524,
+        135.272,
+        120.482,
+        121.656,
+        119.446,
+        134.961,
+        132.578,
+        109.706,
+        111.768,
+        125.722,
+        119.207,
+        121.651
+      ]
+    }
+  ],
+  "memory": {
+    "sidecarWorkingSetBytes": 17772544,
+    "sampleCount": 1,
+    "note": "Sidecar only; Electron renderer and desktop process tree are not included."
+  },
+  "limitations": [
+    "This harness measures the Rust sidecar API and does not claim Electron cold start, desktop process-tree memory, 30-second scroll P5, or installer size."
+  ],
+  "stderr": "[gitcrest-core] History message index ready in 14362ms"
+}

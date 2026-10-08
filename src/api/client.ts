@@ -108,8 +108,9 @@ export class GitCrestApiClient {
     return this.request<void>(`/api/v1/repositories/${encodeURIComponent(repoId)}`, true, { method: "DELETE" });
   }
 
-  getRepositoryStatus(repoId: RepoId): Promise<StatusSnapshotResponse> {
-    return this.request<StatusSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/status`);
+  getRepositoryStatus(repoId: RepoId, forceRefresh = false): Promise<StatusSnapshotResponse> {
+    const query = forceRefresh ? "?refresh=true" : "";
+    return this.request<StatusSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/status${query}`);
   }
 
   getRepositoryStatusPaths(repoId: RepoId, paths: string[]): Promise<StatusSnapshotResponse> {

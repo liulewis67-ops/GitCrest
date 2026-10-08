@@ -181,7 +181,7 @@ function App() {
   const [statusLoadingByRepo, setStatusLoadingByRepo] = useState<Record<string, boolean>>({});
   const statusSnapshotsRef = useRef(statusSnapshots);
   statusSnapshotsRef.current = statusSnapshots;
-  const statusRefreshPendingRef = useRef(new Map<string, { full: boolean; paths: Set<string> }>());
+  const statusRefreshPendingRef = useRef(new Map<string, { full: boolean; forceRefresh: boolean; paths: Set<string> }>());
   const statusRefreshActiveRef = useRef(new Set<string>());
   const eventSequenceRef = useRef<number>();
   const [branchSnapshots, setBranchSnapshots] = useState<Record<string, BranchSnapshotResponse>>({});
@@ -357,8 +357,9 @@ function App() {
   const selectedRepositoryRef = useRef(selectedRepository);
   selectedRepositoryRef.current = selectedRepository;
 
-  async function refreshRepositoryStatusScope(repoId: string, full: boolean, paths: string[] = []) {
-    const pending = statusRefreshPendingRef.current.get(repoId) || { full: false, paths: new Set<string>() };
+  async function refreshRepositoryStatusScope(repoId: string, full: boolean, paths: string[] = [], forceRefresh = false) {
+    const pending = statusRefreshPendingRef.current.get(repoId) || { full: false, forceRefresh: false, paths: new Set<string>() };
+    pending.forceRefresh ||= forceRefresh;
     if (full || paths.length === 0) {
       pending.full = true;
       pending.paths.clear();
@@ -383,7 +384,7 @@ function App() {
         statusRefreshPendingRef.current.delete(repoId);
         const useFull = requested.full || !statusSnapshotsRef.current[repoId] || requested.paths.size === 0;
         const snapshot = useFull
-          ? await api.getRepositoryStatus(repoId)
+          ? await api.getRepositoryStatus(repoId, requested.forceRefresh)
           : await api.getRepositoryStatusPaths(repoId, [...requested.paths]);
         const next = !useFull && statusSnapshotsRef.current[repoId]
           ? mergeStatusScope(statusSnapshotsRef.current[repoId]!, snapshot, [...requested.paths])
@@ -404,8 +405,8 @@ function App() {
     }
   }
 
-  async function refreshRepositoryStatus(repoId: string) {
-    await refreshRepositoryStatusScope(repoId, true);
+  async function refreshRepositoryStatus(repoId: string, forceRefresh = false) {
+    await refreshRepositoryStatusScope(repoId, true, [], forceRefresh);
   }
 
   async function refreshRepositoryBranches(repoId: string) {
@@ -1728,7 +1729,7 @@ function App() {
                 </div>
                 {!selectedRepository && <div className="navEmpty">No repository open</div>}
                 {selectedRepository && !activeStatus && activeStatusLoading && <div className="navEmpty" role="status">Loading working tree status…</div>}
-                {selectedRepository && !activeStatus && activeStatusError && <div className="statusLoadError" role="alert"><span>{activeStatusError}</span><button type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId)}>Retry</button></div>}
+                {selectedRepository && !activeStatus && activeStatusError && <div className="statusLoadError" role="alert"><span>{activeStatusError}</span><button type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId, true)}>Retry</button></div>}
                 {activeStatus && activeStatus.files.length === 0 && <div className="navEmpty">Working tree clean</div>}
                 {activeStatus && activeStatusError && <div className="statusStaleNotice" role="status">Refresh failed. Showing the last snapshot.</div>}
                 {statusGroups.filter((group) => group.files.length > 0).map((group) => (
@@ -1812,7 +1813,7 @@ function App() {
             <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />
 
             <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
-              <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId); }} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
+              <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId, true); }} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
               {mode === "graph" ? selectedRepository && apiRef.current && isFullObjectId(selectedRepository.head) ? <CommitGraph
                 key={selectedRepository.repoId}
                 api={apiRef.current}

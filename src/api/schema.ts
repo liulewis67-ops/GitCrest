@@ -114,7 +114,7 @@ export interface paths {
         };
         /**
          * Read the working tree status snapshot or a bounded path scope
-         * @description Omitting paths returns the complete current snapshot. Repeating paths returns only status records matching those literal relative paths; use this form only for a reviewed watcher dirty scope and merge it into the previously read complete snapshot.
+         * @description Omitting paths returns the current snapshot, using the watcher-invalidated cache when available. Set refresh=true to force a fresh Git read. Repeating paths returns only status records matching those literal relative paths; use this form only for a reviewed watcher dirty scope and merge it into the previously read complete snapshot. Forced refresh cannot be combined with paths.
          */
         get: operations["getRepositoryStatus"];
         put?: never;
@@ -2450,6 +2450,8 @@ export interface operations {
             query?: {
                 /** @description Repeated literal repository-relative path scopes. Up to 256 paths and 64 KiB combined; omitted for a complete snapshot. */
                 paths?: string[];
+                /** @description Force Git to rebuild the complete working tree status snapshot. */
+                refresh?: boolean;
             };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
