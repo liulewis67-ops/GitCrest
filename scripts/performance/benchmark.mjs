@@ -251,6 +251,9 @@ async function runBenchmark(fixturePath, reportPath) {
       const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`);
       if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) throw new Error("History search did not return its matching commit.");
     });
+    const forcedFullStatus = await measure("forcedFullStatusSnapshot", async () => {
+      await fetchJson(`/api/v1/repositories/${repoId}/status?refresh=true`);
+    });
     const fullStatus = await measure("fullStatusSnapshot", async () => { await fetchJson(`/api/v1/repositories/${repoId}/status`); });
     const partialStatus = await measure("incrementalStatusSnapshot", async () => { await fetchJson(`/api/v1/repositories/${repoId}/status?paths=bench-diff.txt`); });
     const diff = await measure("workingTreeDiff1000Lines", async () => {
@@ -265,7 +268,7 @@ async function runBenchmark(fixturePath, reportPath) {
       fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath, historyQuery: "first page, 50 entries", searchQuery: "message contains benchmark commit 099999" },
       iterations,
       searchIndexWarmup: { ready: historySearchIndexReady, attempts: historySearchWarmupAttempts, elapsedMs: historySearchWarmupMs },
-      results: [startup, history, historySearch, fullStatus, partialStatus, diff],
+      results: [startup, history, historySearch, forcedFullStatus, fullStatus, partialStatus, diff],
       memory: { sidecarWorkingSetBytes: workingSetBytes, sampleCount: 1, note: "Sidecar only; Electron renderer and desktop process tree are not included." },
       limitations: ["This harness measures the Rust sidecar API and does not claim Electron cold start, desktop process-tree memory, 30-second scroll P5, or installer size."],
       stderr: started.getStderr().trim() || undefined,
