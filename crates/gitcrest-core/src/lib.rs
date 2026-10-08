@@ -15,8 +15,6 @@ mod bootstrap;
 mod config;
 mod features;
 
-#[path = "features/branches/mod.rs"]
-mod branches;
 #[path = "features/repositories/cloning.rs"]
 mod cloning;
 #[path = "features/commits/mod.rs"]
@@ -45,7 +43,7 @@ mod staging;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
-pub(crate) use features::{status, system, tags, tasks};
+pub(crate) use features::{branches, status, system, tags, tasks};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 #[path = "features/workflows/mod.rs"]
