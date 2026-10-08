@@ -1643,3 +1643,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`lib.rs` 仍声明并重新导出多个 crate-root feature 兼容路径，单元测试也仍集中在一个大型 crate-root 文件；下一步按依赖与可见性逐个迁移 feature 模块，避免一次性重写测试边界。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/{main.rs,lib.rs,bootstrap.rs}`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 实施 commit：`8c0ebf2`
+
+### 后端 system feature 纳入 features 父模块 — 小阶段 116
+- 状态：已完成（system API feature 由 features/mod.rs 声明并归入统一 feature 层）
+- 日期：2026-10-09
+- 交付：新增 `src/features/mod.rs` 并将 `system` 作为首个子模块迁入；`lib.rs` 删除直接路径声明，使用 `pub(crate) use features::system` 保持现有 `crate::system` 路由引用。system 内部 handler/DTO 可见性未扩大，health/version API 与路由行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：其余 feature 暂仍由 lib.rs crate root 声明并通过兼容路径提供；继续逐个迁移时需检查每个模块的 `pub(super)` 和 `pub(in ...)` 边界。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,system/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 实施 commit：`8213492`
