@@ -1139,3 +1139,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：conflict file/AI suggestion/save/resolve handlers 及 recovery helper 仍留在 `main.rs`；继续迁移 conflict handlers，并收敛 workflows helper 归属。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`30ff81d`
+
+### 后端 workflows conflict handlers 语义分组 — 小阶段 60
+- 状态：已完成（workflow conflict APIs 进入独立 handler 子模块）
+- 日期：2026-10-09
+- 交付：将 conflict file read/save、resolved 标记、AI suggestion、conflict AI settings handlers 及校验/预检 helper 从 `main.rs` 迁至 `features/workflows/handlers/conflicts.rs`；新增的 conflict 查询和请求 DTO 收拢到 `features/workflows/dto.rs`，由 workflows handlers 聚合导出并继续绑定现有 routes。HTTP 行为、stale 检查、AI 调用前后复核、任务执行及权限边界保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；conflict capability、conflict/stale precondition、workflow recovery 与 AI suggestion 集成用例通过。
+- 限制/后续：通用/rebase/reset/recovery handlers 仍在 `handlers.rs`，workflow operation 与 recovery preflight helpers 仍在 `main.rs`；继续按规范拆分 handler 子模块并将 helper 收归 workflows feature。
+- 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/conflicts.rs,routes.rs}`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`7768ee3`
