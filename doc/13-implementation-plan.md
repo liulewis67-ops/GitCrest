@@ -2020,3 +2020,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff 查询、discard 审阅状态以及任务完成后的刷新仍由 App/page 协调；继续按 changes feature 的请求与页面组合边界迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/changes/{index.ts,model/use-staging-operations.ts,model/use-repository-status.ts}`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`3a40409`
+
+### commits feature commit task 与 task context 迁入 model — 小阶段 158
+- 状态：已完成（commit 请求、busy 状态和提交快照由 commits feature 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/commits/model/use-commit-submission.ts`，迁入 commit API 受理、参数快照、busy/error 状态、stale selection 处理及按 task ID 保存 message/selection/action/Push target 上下文；App 在终态消费上下文以条件清除未被用户新修改的草稿，并触发后续 commit-and-push。通过 commits feature 入口公开 hook，App 保留可提交性规则、快捷动作和 UI 装配。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。
+- 限制/后续：Diff selection 写入 commit draft、模板/动作选择和终态后的 UI 协调仍在 App；继续沿 commits feature model 与页面组合边界迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/commits/{index.ts,model/use-commit-submission.ts,model/use-commit-draft.ts}`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`6b66729`
