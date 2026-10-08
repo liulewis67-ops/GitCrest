@@ -1679,3 +1679,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：features 父模块当前包含 system/tags/tasks/status；其余 feature 继续逐项迁入。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,status/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`8527948`
+
+### 后端 branches feature 纳入 features 父模块 — 小阶段 120
+- 状态：已完成（分支 API 与共享分支查询服务由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `branches` 加入 `src/features/mod.rs`，删除 `lib.rs` 独立路径声明，并从父模块 crate 内重导出以保留 `crate::branches` 调用兼容。`branches/mod.rs` 的 service re-export 从 `pub(super)` 调整为 `pub(crate)`，维持迁移前其 crate-root 父级下的有效可见范围；router、DTO 和 handlers 行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：features 父模块当前包含 branches/status/system/tags/tasks，其他业务 feature 继续逐个迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,branches/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`f060430`
