@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { AiSettingsResponse, GitCrestApiClient } from "../../api/client";
+import { PrivacyScopePreview } from "./PrivacyScopePreview";
 
-export function SettingsDialog({ api, onClose }: { api: GitCrestApiClient; onClose: () => void }) {
+export function SettingsDialog({ api, repoId, onClose }: { api: GitCrestApiClient; repoId?: string; onClose: () => void }) {
   const [settings, setSettings] = useState<AiSettingsResponse>();
   const [provider, setProvider] = useState<AiSettingsResponse["provider"]>("none");
   const [baseUrl, setBaseUrl] = useState("");
@@ -69,7 +70,7 @@ export function SettingsDialog({ api, onClose }: { api: GitCrestApiClient; onClo
       <section className="taskCenter workflowDialog settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <header className="taskCenterHeader"><div><p className="sectionEyebrow">PREFERENCES</p><h2 id="settings-title">AI provider</h2></div><button className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label="Close settings">×</button></header>
         <div className="workflowDialogBody">
-          <p className="settingsNotice">Provider settings are stored locally. Saving them does not send a request to an AI provider. Diff privacy review is not available yet.</p>
+          <p className="settingsNotice">Provider settings are stored locally. Saving them does not send a request to an AI provider.</p>
           <form className="settingsForm" onSubmit={saveSettings}>
             <label>Provider<select aria-label="AI provider" value={provider} onChange={(event) => changeProvider(event.target.value as AiSettingsResponse["provider"])}><option value="none">Disabled</option><option value="openAiCompatible">OpenAI-compatible cloud</option><option value="ollama">Ollama on this machine</option></select></label>
             {provider !== "none" && <>
@@ -85,6 +86,7 @@ export function SettingsDialog({ api, onClose }: { api: GitCrestApiClient; onClo
             <label>API key<input aria-label="Cloud API key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" /></label>
             <div className="settingsActions"><button className="secondaryButton" type="submit" disabled={busy || settings?.provider !== "openAiCompatible" || !apiKey}>{busy ? "Saving…" : "Save API key"}</button>{settings?.hasCloudCredential && <button className="dangerTextButton" type="button" disabled={busy} onClick={() => void removeKey()}>Remove key</button>}</div>
           </form>}
+          <PrivacyScopePreview api={api} repoId={repoId} />
           {error && <p className="formError" role="alert">{error}</p>}{notice && <p className="settingsNotice" role="status">{notice}</p>}
         </div>
       </section>

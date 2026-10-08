@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { SettingsDialog } from "../../src/features/settings/SettingsDialog";
+import { PrivacyScopePreview } from "../../src/features/settings/PrivacyScopePreview";
 
 afterEach(cleanup);
 
@@ -37,4 +38,27 @@ it("submits cloud keys through the credential API and clears the field", async (
   expect(keyInput).toHaveProperty("value", "");
   expect(screen.queryByText("private-test-key")).toBeNull();
   expect(await screen.findByText("API key saved to the system credential store.")).toBeTruthy();
+});
+
+it("shows reviewable staged and worktree scopes and previews selected local diff text", async () => {
+  const api = {
+    getRepositoryStatus: vi.fn().mockResolvedValue({ repoId: "repo_fixture", refreshedAtMs: 1, files: [
+      { path: "src/staged.ts", indexStatus: "M", worktreeStatus: " ", kind: "modified", categories: ["staged"], modeChanged: false },
+      { path: "src/both.ts", indexStatus: "M", worktreeStatus: "M", kind: "modified", categories: ["staged", "unstaged"], modeChanged: false },
+      { path: "secret.env", indexStatus: " ", worktreeStatus: "?", kind: "untracked", categories: ["untracked", "ignored"], modeChanged: false },
+      { path: "src/conflict.ts", indexStatus: "U", worktreeStatus: "U", kind: "conflicted", categories: ["conflicted"], modeChanged: false },
+    ] }),
+    getFileDiff: vi.fn().mockResolvedValue({ repoId: "repo_fixture", path: "src/staged.ts", revision: "rev", originalPath: null, scope: "index", changeKind: "modified", status: "text", hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change", oldLine: 1, newLine: 1, oldText: "old value", newText: "new value" }] }] }),
+  } as unknown as GitCrestApiClient;
+  render(<PrivacyScopePreview api={api} repoId="repo_fixture" />);
+  await screen.findByText("src/staged.ts");
+  expect(screen.queryByText("secret.env")).toBeNull();
+  expect(screen.queryByText("src/conflict.ts")).toBeNull();
+  const checkboxes = screen.getAllByRole("checkbox");
+  fireEvent.click(checkboxes[0]);
+  fireEvent.click(checkboxes[1]);
+  fireEvent.click(screen.getAllByRole("button", { name: "Preview diff" })[0]);
+  await waitFor(() => expect(api.getFileDiff).toHaveBeenCalledWith("repo_fixture", "src/staged.ts", "index"));
+  expect((screen.getByLabelText("Diff preview for src/staged.ts").querySelector("pre")?.textContent ?? "")).toContain("-old value\n+new value");
+  expect(await screen.findByText("2 selected")).toBeTruthy();
 });

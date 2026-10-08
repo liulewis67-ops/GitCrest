@@ -100,6 +100,15 @@ describe("desktop startup E2E", () => {
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'welcome';\n");
       await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'changed';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.getByRole("button", { name: "Settings" }).click();
+      const privacyDialog = window.getByRole("dialog", { name: "AI provider" });
+      await privacyDialog.locator(".privacyScopeList").waitFor();
+      await privacyDialog.locator(".privacyScopeList input").first().check();
+      await privacyDialog.getByRole("button", { name: "Preview diff" }).first().click();
+      await privacyDialog.locator(".privacyDiffPreview pre").waitFor();
+      expect(await privacyDialog.locator(".privacyDiffPreview pre").innerText()).toContain("+export const greeting = 'welcome';");
+      expect(await privacyDialog.innerText()).toContain("No provider request is made here.");
+      await privacyDialog.getByRole("button", { name: "Close settings" }).click();
       await window.keyboard.press("Control+b");
       const dirtySwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
       await dirtySwitchDialog.waitFor();

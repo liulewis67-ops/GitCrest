@@ -404,4 +404,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 安全验证：OpenAI-compatible 拒绝明文 HTTP、本机 loopback、内嵌 user-info、query；Ollama 只接受 loopback HTTP。API 集成测试保存随机测试 key 后确认 PUT/GET 响应均不包含 key；删除后状态转为未配置。AI key 使用独立于 Git HTTPS 凭证的 Keychain service。
 - 证据：`crates/gitcrest-core/migrations/0006_ai_provider_settings.sql`、`crates/gitcrest-core/src/ai.rs`、`crates/gitcrest-core/src/credentials.rs`、`crates/gitcrest-core/src/storage.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/features/settings/SettingsDialog.tsx`、`tests/unit/settings-dialog.test.tsx`、`tests/unit/api-client.test.ts`、`tests/e2e/desktop.test.ts`。
 - 剩余限制：尚未实现请求前文件/diff 范围预览，也未实现任何模型调用；这些属于 S6.1 子阶段 B，完成前 S6.1 不能标记完成。
+- 完成 commit：`6ee670e`。
+
+### S6.1 — 子阶段 B：逐文件隐私范围预览（已完成；S6.1 整体进行中）
+- 状态：子阶段 B 已完成；S6.1 尚待模型请求传输、云端最小 diff 与本地网络边界验证。
+- 日期：2026-10-08
+- 交付：设置窗在选定仓库后列出 staged/index 和 unstaged/worktree 文件范围；用户逐项勾选后可单独展开查看实际文本 Diff。ignored/conflicted 文件不进入候选，binary/非文本内容明确提示；最多显示 200 个文件/范围对，并披露省略数量。Diff 加载请求采用序号淘汰，避免较迟的旧结果覆盖当前所选项。预览只调用本地 GitCrest API，不发起 provider 请求。
+- 测试：`pnpm test`（96 tests）、`pnpm build`、`pnpm test:e2e`（1 Electron test）通过。组件测试覆盖 index/worktree 范围、ignored/conflicted 排除和 Diff 文本；Electron E2E 在临时仓库选中工作树变更并查看 Diff，验证 UI 明示未调用 provider。
+- 手工验证：未另行手工操作；范围勾选与 Diff 预览由组件测试和 Electron E2E 覆盖。
+- 证据：`src/features/settings/PrivacyScopePreview.tsx`、`src/features/settings/SettingsDialog.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/settings-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。
+- 剩余限制：尚未实现任何 AI 模型请求或将已审核范围转换为请求 payload；S6.1 总验收还需要证明云端请求只包含选中 diff，并以网络测试证明 Ollama 模式不触达外网。
 - 完成 commit：待提交后补记。

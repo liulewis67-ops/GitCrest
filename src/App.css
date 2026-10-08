@@ -768,7 +768,8 @@ button:disabled { cursor: not-allowed; }
 .remoteAddFields select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .remoteClearDefault { justify-self: start; margin-top: 6px; }
 
-.settingsDialog { width: min(520px, 100%); }
+.settingsDialog { width: min(760px, 100%); }
+.settingsDialog .workflowDialogBody { max-height: min(75vh, 760px); }
 .settingsForm { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .settingsForm label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 11px; }
 .settingsForm input, .settingsForm select { min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text); background: var(--surface); font: 11px var(--font-ui); }
@@ -779,6 +780,24 @@ button:disabled { cursor: not-allowed; }
 .settingsActions { display: flex; align-items: center; gap: 12px; }
 .settingsKeyForm { margin-top: 2px; }
 .settingsDialog .taskCenterError { margin: 0; }
+.privacyScope { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.privacyScopeHeader { display: flex; align-items: start; gap: 12px; }
+.privacyScopeHeader > div { flex: 1; }
+.privacyScopeHeader h3 { margin: 0 0 4px; color: var(--text); font-size: 12px; }
+.privacyScopeHeader p, .privacyScopeSummary { margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; }
+.privacyScopeCount { color: var(--text-secondary); font: 10px var(--font-mono); white-space: nowrap; }
+.privacyScopeList { display: grid; gap: 2px; max-height: 200px; margin: 0; padding: 0; overflow: auto; list-style: none; }
+.privacyScopeList li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 8px; padding: 5px 6px; border-radius: 4px; }
+.privacyScopeList li:hover { background: var(--surface-soft); }
+.privacyScopeList label { display: flex; align-items: center; gap: 7px; min-width: 0; color: var(--text-secondary); font-size: 10px; }
+.privacyScopeList input { accent-color: var(--accent); }
+.privacyScopePath { overflow: hidden; color: var(--text); font-family: var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.privacyScopeScope { flex: none; color: var(--text-muted); font-size: 9px; }
+.privacyDiffPreview { min-width: 0; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+.privacyDiffPreview header { display: flex; justify-content: space-between; gap: 8px; padding: 6px 8px; border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 10px; }
+.privacyDiffPreview header strong { overflow: hidden; color: var(--text); font-family: var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.privacyDiffPreview pre { max-height: 180px; margin: 0; padding: 8px; overflow: auto; color: var(--text-secondary); background: var(--surface-soft); font: 10px/1.5 var(--font-mono); white-space: pre; }
+.privacyDiffPreview > p { margin: 8px; color: var(--text-muted); font-size: 10px; }
 
 @media (max-width: 600px) {
   .remoteDialog { max-height: 92vh; }
