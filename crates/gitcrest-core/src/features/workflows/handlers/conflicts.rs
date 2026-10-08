@@ -14,8 +14,8 @@ use super::super::{
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    features::settings as ai,
     repository::RepositoryManager,
-    settings as ai,
     state::AppState,
     tasks::{TaskFailure, TaskService, TaskSnapshot, TaskStatus},
 };
