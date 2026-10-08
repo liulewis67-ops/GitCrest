@@ -7,6 +7,7 @@ import { performance } from "node:perf_hooks";
 import { promisify } from "node:util";
 import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import WebSocket from "ws";
 
 const execFileAsync = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -126,11 +127,12 @@ function percentile(values, quantile = 0.95) {
   return sorted[Math.max(0, Math.ceil(sorted.length * quantile) - 1)];
 }
 
-async function measure(name, operation, count = iterations) {
+async function measure(name, operation, count = iterations, beforeEach = async () => {}) {
   const samplesMs = [];
   for (let index = 0; index < count; index += 1) {
+    await beforeEach(index);
     const start = performance.now();
-    await operation();
+    await operation(index);
     samplesMs.push(Number((performance.now() - start).toFixed(3)));
   }
   return { name, samples: samplesMs.length, p50Ms: percentile(samplesMs, 0.5), p95Ms: percentile(samplesMs), maxMs: Math.max(...samplesMs), samplesMs };
@@ -148,6 +150,39 @@ async function requestJson(url, token, method = "GET", body) {
   });
   if (!response.ok) throw new Error(`HTTP ${response.status} for ${url}: ${await response.text()}`);
   return response.json();
+}
+
+async function openEventSocket(baseUrl, token) {
+  const socket = new WebSocket(`${baseUrl.replace(/^http/, "ws")}/api/v1/events`, "gitcrest.events.v1", {
+    headers: { Authorization: `Bearer ${token}`, "X-GitCrest-API-Version": "1" },
+  });
+  await new Promise((resolveOpen, rejectOpen) => {
+    socket.once("open", resolveOpen);
+    socket.once("error", rejectOpen);
+  });
+  return socket;
+}
+
+function waitForEvent(socket, predicate, timeoutMs = 5_000) {
+  return new Promise((resolveEvent, rejectEvent) => {
+    const onMessage = (data) => {
+      let event;
+      try {
+        event = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
+      if (!predicate(event)) return;
+      clearTimeout(timeout);
+      socket.off("message", onMessage);
+      resolveEvent(event);
+    };
+    const timeout = setTimeout(() => {
+      socket.off("message", onMessage);
+      rejectEvent(new Error("Timed out waiting for the expected watcher event."));
+    }, timeoutMs);
+    socket.on("message", onMessage);
+  });
 }
 
 async function cpuModel() {
@@ -203,6 +238,7 @@ async function runBenchmark(fixturePath, reportPath) {
   const tempData = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-data-"));
   const databasePath = join(tempData, "gitcrest.sqlite");
   let child;
+  let eventSocket;
   try {
     const startup = await measure("sidecarStartupToReady", async () => {
       const startTime = performance.now();
@@ -221,6 +257,7 @@ async function runBenchmark(fixturePath, reportPath) {
     const baseUrl = `http://${address.host}:${address.port}`;
     const repository = await requestJson(`${baseUrl}/api/v1/repositories`, token, "POST", { path: fixturePath });
     const repoId = repository.repoId;
+    eventSocket = await openEventSocket(baseUrl, token);
     const headers = { Authorization: `Bearer ${token}`, "X-GitCrest-API-Version": "1" };
     const fetchJson = async (url) => {
       const response = await fetch(`${baseUrl}${url}`, { headers });
@@ -251,6 +288,36 @@ async function runBenchmark(fixturePath, reportPath) {
       const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`);
       if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) throw new Error("History search did not return its matching commit.");
     });
+    const diffPath = join(fixturePath, "bench-diff.txt");
+    const originalDiff = await readFile(diffPath, "utf8");
+    let dirtyScopedStatus;
+    try {
+      dirtyScopedStatus = await measure(
+        "dirtyScopedStatusSnapshot",
+        async () => {
+          const snapshot = await fetchJson(`/api/v1/repositories/${repoId}/status?paths=bench-diff.txt`);
+          if (!snapshot.files.some((file) => file.path === "bench-diff.txt" && file.worktreeStatus !== ".")) {
+            throw new Error("Dirty-scope status refresh did not return the modified benchmark file.");
+          }
+        },
+        iterations,
+        async (index) => {
+          const eventPromise = waitForEvent(
+            eventSocket,
+            (event) => event.type === "status.changed" && event.repoId === repoId,
+          );
+          const lines = originalDiff.split("\n");
+          lines[0] = `changed row 0001 scope-refresh-${index} baseline row 0001`;
+          await writeFile(diffPath, lines.join("\n"));
+          const event = await eventPromise;
+          if (event.payload.full || !event.payload.paths?.includes("bench-diff.txt")) {
+            throw new Error("The watcher did not publish the benchmark file as a dirty path scope.");
+          }
+        },
+      );
+    } finally {
+      await writeFile(diffPath, originalDiff);
+    }
     const forcedFullStatus = await measure("forcedFullStatusSnapshot", async () => {
       await fetchJson(`/api/v1/repositories/${repoId}/status?refresh=true`);
     });
@@ -268,7 +335,7 @@ async function runBenchmark(fixturePath, reportPath) {
       fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath, historyQuery: "first page, 50 entries", searchQuery: "message contains benchmark commit 099999" },
       iterations,
       searchIndexWarmup: { ready: historySearchIndexReady, attempts: historySearchWarmupAttempts, elapsedMs: historySearchWarmupMs },
-      results: [startup, history, historySearch, forcedFullStatus, fullStatus, partialStatus, diff],
+      results: [startup, history, historySearch, dirtyScopedStatus, forcedFullStatus, fullStatus, partialStatus, diff],
       memory: { sidecarWorkingSetBytes: workingSetBytes, sampleCount: 1, note: "Sidecar only; Electron renderer and desktop process tree are not included." },
       limitations: ["This harness measures the Rust sidecar API and does not claim Electron cold start, desktop process-tree memory, 30-second scroll P5, or installer size."],
       stderr: started.getStderr().trim() || undefined,
@@ -277,6 +344,10 @@ async function runBenchmark(fixturePath, reportPath) {
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
     process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
   } finally {
+    if (eventSocket?.readyState === WebSocket.OPEN) {
+      eventSocket.close();
+      await new Promise((resolveClose) => eventSocket.once("close", resolveClose));
+    }
     if (child) await stop(child);
     await rm(tempData, { recursive: true, force: true });
   }
