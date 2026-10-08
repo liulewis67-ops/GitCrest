@@ -317,7 +317,7 @@ describe("App", () => {
     expect(await within(commitDialog).findByText("src/working.ts")).toBeDefined();
     fireEvent.click(within(commitDialog).getByRole("button", { name: "Commit changes" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
-    fireEvent.click(screen.getByTitle("Switch branches (Ctrl/Cmd+B)"));
+    fireEvent.click(screen.getByTitle(/Switch branches/));
     const secondDialog = await screen.findByRole("dialog", { name: "Switch branch" });
     fireEvent.click(within(secondDialog).getByRole("button", { name: /feature\/test/ }));
     fireEvent.click(await within(secondDialog).findByRole("button", { name: "Switch to feature/test" }));

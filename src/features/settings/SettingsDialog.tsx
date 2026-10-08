@@ -1,8 +1,29 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { AiSettingsResponse, GitCrestApiClient } from "../../api/client";
+import {
+  defaultShortcutPreferences,
+  displayShortcut,
+  shortcutActions,
+  shortcutConflict,
+  shortcutFromEvent,
+  type ShortcutAction,
+  type ShortcutPreferences,
+} from "./shortcut-preferences";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 
-export function SettingsDialog({ api, repoId, onClose }: { api: GitCrestApiClient; repoId?: string; onClose: () => void }) {
+export function SettingsDialog({
+  api,
+  repoId,
+  onClose,
+  shortcuts = defaultShortcutPreferences,
+  onShortcutsChange = () => {},
+}: {
+  api: GitCrestApiClient;
+  repoId?: string;
+  onClose: () => void;
+  shortcuts?: ShortcutPreferences;
+  onShortcutsChange?: (shortcuts: ShortcutPreferences) => void;
+}) {
   const [settings, setSettings] = useState<AiSettingsResponse>();
   const [provider, setProvider] = useState<AiSettingsResponse["provider"]>("none");
   const [baseUrl, setBaseUrl] = useState("");
@@ -11,6 +32,33 @@ export function SettingsDialog({ api, repoId, onClose }: { api: GitCrestApiClien
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction>();
+  const [shortcutError, setShortcutError] = useState("");
+  const isMac = navigator.platform.toLowerCase().includes("mac");
+
+  function captureShortcut(event: KeyboardEvent<HTMLButtonElement>, action: ShortcutAction) {
+    if (recordingShortcut !== action) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === "Escape") {
+      setRecordingShortcut(undefined);
+      setShortcutError("");
+      return;
+    }
+    const binding = shortcutFromEvent(event.nativeEvent);
+    if (!binding) {
+      setShortcutError("Press a Ctrl/Cmd shortcut. Escape cancels recording.");
+      return;
+    }
+    const conflict = shortcutConflict(action, binding, shortcuts);
+    if (conflict) {
+      setShortcutError(conflict);
+      return;
+    }
+    onShortcutsChange({ ...shortcuts, [action]: binding });
+    setRecordingShortcut(undefined);
+    setShortcutError("");
+  }
 
   useEffect(() => {
     let current = true;
@@ -68,8 +116,27 @@ export function SettingsDialog({ api, repoId, onClose }: { api: GitCrestApiClien
   return (
     <div className="paletteBackdrop cloneBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <section className="taskCenter workflowDialog settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <header className="taskCenterHeader"><div><p className="sectionEyebrow">PREFERENCES</p><h2 id="settings-title">AI provider</h2></div><button className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label="Close settings">×</button></header>
+        <header className="taskCenterHeader"><div><p className="sectionEyebrow">PREFERENCES</p><h2 id="settings-title">Settings</h2></div><button className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label="Close settings">×</button></header>
         <div className="workflowDialogBody">
+          <section className="shortcutPreferences" aria-labelledby="shortcut-preferences-title">
+            <div className="settingsSectionHeading"><h3 id="shortcut-preferences-title">Keyboard shortcuts</h3><button type="button" className="quietButton" onClick={() => { onShortcutsChange({ ...defaultShortcutPreferences }); setRecordingShortcut(undefined); setShortcutError(""); }}>Restore defaults</button></div>
+            <p>Choose a shortcut, then press the replacement. Shortcuts are saved on this device.</p>
+            <div className="shortcutPreferenceList">
+              {shortcutActions.map(({ id, label }) => <div className="shortcutPreferenceRow" key={id}>
+                <span>{label}</span>
+                <button
+                  type="button"
+                  className="shortcutCaptureButton"
+                  aria-label={`Record shortcut for ${label}`}
+                  onClick={() => { setRecordingShortcut(id); setShortcutError(""); }}
+                  onKeyDown={(event) => captureShortcut(event, id)}
+                >
+                  <kbd>{recordingShortcut === id ? "Press shortcut…" : displayShortcut(shortcuts[id], isMac)}</kbd>
+                </button>
+              </div>)}
+            </div>
+            {shortcutError && <p className="formError" role="alert">{shortcutError}</p>}
+          </section>
           <p className="settingsNotice">Provider settings are stored locally. Saving them does not send a request to an AI provider.</p>
           <form className="settingsForm" onSubmit={saveSettings}>
             <label>Provider<select aria-label="AI provider" value={provider} onChange={(event) => changeProvider(event.target.value as AiSettingsResponse["provider"])}><option value="none">Disabled</option><option value="openAiCompatible">OpenAI-compatible cloud</option><option value="ollama">Ollama on this machine</option></select></label>

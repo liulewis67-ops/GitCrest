@@ -3,9 +3,27 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { SettingsDialog } from "../../src/features/settings/SettingsDialog";
+import { defaultShortcutPreferences } from "../../src/features/settings/shortcut-preferences";
 import { PrivacyScopePreview } from "../../src/features/settings/PrivacyScopePreview";
 
 afterEach(cleanup);
+
+it("records a replacement shortcut and rejects an existing assignment", async () => {
+  const api = {
+    getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
+  } as unknown as GitCrestApiClient;
+  const onShortcutsChange = vi.fn();
+  render(<SettingsDialog api={api} onClose={vi.fn()} onShortcutsChange={onShortcutsChange} />);
+
+  const commandPalette = screen.getByRole("button", { name: "Record shortcut for Open command palette" });
+  fireEvent.click(commandPalette);
+  fireEvent.keyDown(commandPalette, { key: "b", ctrlKey: true });
+  expect((await screen.findByRole("alert")).textContent).toContain("Already assigned to Switch branch.");
+  expect(onShortcutsChange).not.toHaveBeenCalled();
+
+  fireEvent.keyDown(commandPalette, { key: "m", ctrlKey: true });
+  expect(onShortcutsChange).toHaveBeenCalledWith({ ...defaultShortcutPreferences, commandPalette: "Mod+M" });
+});
 
 it("saves provider configuration without sending a model request", async () => {
   const api = {

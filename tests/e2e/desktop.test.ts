@@ -68,7 +68,7 @@ describe("desktop startup E2E", () => {
       if (!mockAddress || typeof mockAddress === "string") throw new Error("Could not bind the loopback AI test server.");
 
       await window.getByRole("button", { name: "Settings" }).click();
-      const settingsDialog = window.getByRole("dialog", { name: "AI provider" });
+      const settingsDialog = window.getByRole("dialog", { name: "Settings" });
       await settingsDialog.waitFor();
       await settingsDialog.getByRole("combobox", { name: "AI provider" }).selectOption("ollama");
       await settingsDialog.getByRole("textbox", { name: "AI endpoint" }).fill(`http://127.0.0.1:${mockAddress.port}`);
@@ -130,7 +130,7 @@ describe("desktop startup E2E", () => {
       await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'changed';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
       await window.getByRole("button", { name: "Settings" }).click();
-      const privacyDialog = window.getByRole("dialog", { name: "AI provider" });
+      const privacyDialog = window.getByRole("dialog", { name: "Settings" });
       await privacyDialog.locator(".privacyScopeList").waitFor();
       await privacyDialog.locator(".privacyScopeList input").first().check();
       await privacyDialog.getByRole("button", { name: "Preview diff" }).first().click();
@@ -210,7 +210,7 @@ describe("desktop startup E2E", () => {
       expect(await dirtySwitchDialog.getByRole("button", { name: "Shelve changes" }).isDisabled()).toBe(false);
       await dirtySwitchDialog.getByRole("button", { name: "Cancel" }).click();
       await dirtySwitchDialog.waitFor({ state: "detached" });
-      expect(await window.getByTitle("Switch branches (Ctrl/Cmd+B)").innerText()).toContain(originalBranch);
+      expect(await window.getByTitle(/Switch branches \((?:Ctrl\+B|⌘B)\)/).innerText()).toContain(originalBranch);
       await window.getByRole("button", { name: "modified src/example.ts" }).click();
       const rendererErrors: string[] = [];
       window.on("console", (message) => { if (message.type() === "error") rendererErrors.push(message.text()); });
@@ -264,7 +264,7 @@ describe("desktop startup E2E", () => {
       await cleanSwitchDialog.getByRole("button", { name: /feature\/e2e/ }).click();
       await cleanSwitchDialog.getByText("The working tree is clean.").waitFor();
       await cleanSwitchDialog.getByRole("button", { name: "Switch to feature/e2e" }).click();
-      await window.waitForFunction(() => document.querySelector('[title="Switch branches (Ctrl/Cmd+B)"]')?.textContent?.includes("feature/e2e") === true, undefined, { timeout: 15_000 });
+      await window.waitForFunction(() => [...document.querySelectorAll('button[title^="Switch branches"]')].some((button) => button.textContent?.includes("feature/e2e")), undefined, { timeout: 15_000 });
 
       await window.setViewportSize({ width: 900, height: 820 });
       expect(await window.locator(".navigationPanel").isVisible()).toBe(false);

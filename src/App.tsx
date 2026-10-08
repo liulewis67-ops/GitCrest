@@ -17,6 +17,7 @@ import { SplitDiff } from "./features/diff/SplitDiff";
 import { DiscardChangesDialog } from "./features/diff/DiscardChangesDialog";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
 import { CommitMessageAssistant } from "./features/settings/CommitMessageAssistant";
+import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "./features/settings/shortcut-preferences";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -178,7 +179,8 @@ function ResizeSeparator({
 }
 
 function App() {
-  const commandKey = navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl";
+  const isMacPlatform = navigator.platform.toLowerCase().includes("mac");
+  const commandKey = isMacPlatform ? "⌘" : "Ctrl";
   const [status, setStatus] = useState("Starting local GitCrest core...");
   const [version, setVersion] = useState("");
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
@@ -222,6 +224,13 @@ function App() {
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [shortcuts, setShortcuts] = useState<ShortcutPreferences>(() => {
+    try {
+      return readShortcutPreferences(window.localStorage.getItem(SHORTCUT_PREFERENCES_KEY));
+    } catch {
+      return readShortcutPreferences(null);
+    }
+  });
   const [workflowDialog, setWorkflowDialog] = useState<{ repoId: string; targetOid: string; action: WorkflowAction }>();
   const [rebaseDialogOpen, setRebaseDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -291,6 +300,13 @@ function App() {
   const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", 284, 220, 420));
   const [workbenchHeight, setWorkbenchHeight] = useState(() => readStoredNumber("gitcrest-workbench-height", 204, 144, 360));
   const [layoutLoadedFor, setLayoutLoadedFor] = useState<string>();
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SHORTCUT_PREFERENCES_KEY, JSON.stringify(shortcuts));
+    } catch {
+      // Shortcut edits remain active for this session when storage is unavailable.
+    }
+  }, [shortcuts]);
   const connected = status === "Connected to local Rust core";
   const connecting = status.startsWith("Starting");
   const connectionLabel = connected ? "Core connected" : connecting ? "Starting core" : "Core unavailable";
@@ -1644,25 +1660,29 @@ function App() {
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (page === "workspace" && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      if (event.isComposing) return;
+      const target = event.target instanceof HTMLElement ? event.target : undefined;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (page === "workspace" && matchesShortcut(event, shortcuts.commit, isMacPlatform)) {
         event.preventDefault();
-        void commitChanges(event.shiftKey ? "commitAndPush" : "commit");
-      } else if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "l") {
+        void commitChanges("commit");
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.commitAndPush, isMacPlatform)) {
+        event.preventDefault();
+        void commitChanges("commitAndPush");
+      } else if (matchesShortcut(event, shortcuts.pull, isMacPlatform)) {
         event.preventDefault();
         openPullDialog();
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "i") {
-        const target = event.target instanceof HTMLElement ? event.target : undefined;
-        if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      } else if (matchesShortcut(event, shortcuts.rebase, isMacPlatform)) {
         event.preventDefault();
         if (selectedRepository && activeBranches) setRebaseDialogOpen(true);
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "b") {
+      } else if (matchesShortcut(event, shortcuts.branchSwitcher, isMacPlatform)) {
         event.preventDefault();
         openBranchSwitcher();
-      } else if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+      } else if (matchesShortcut(event, shortcuts.commandPalette, isMacPlatform)) {
         event.preventDefault();
         setPaletteOpen((open) => !open);
         setPaletteQuery("");
-      } else if (page === "workspace" && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "g" && selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy) {
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.aiCommitMessage, isMacPlatform) && selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy) {
         event.preventDefault();
         setCommitAssistantOpen(true);
       } else if (event.key === "Escape") {
@@ -1671,7 +1691,7 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [page, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability, activeBranches, stagedCount, hasConflicts, commitBusy]);
+  }, [page, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability, activeBranches, stagedCount, hasConflicts, commitBusy, shortcuts, isMacPlatform]);
 
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -1687,10 +1707,10 @@ function App() {
     { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
     { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
     { id: "pull", label: "Pull current branch", detail: "Review worktree state and choose merge or rebase", available: Boolean(selectedRepository), run: () => openPullDialog() },
-    { id: "rebase", label: "Interactive rebase", detail: "Review, reorder, and edit the current branch commit sequence (Ctrl/Cmd+I)", available: Boolean(selectedRepository && activeBranches && connected), run: () => setRebaseDialogOpen(true) },
+    { id: "rebase", label: "Interactive rebase", detail: `Review, reorder, and edit the current branch commit sequence (${displayShortcut(shortcuts.rebase, isMacPlatform)})`, available: Boolean(selectedRepository && activeBranches && connected), run: () => setRebaseDialogOpen(true) },
     { id: "reset", label: "Reset current branch", detail: "Review commit and file impact before moving HEAD", available: Boolean(selectedRepository && activeBranches && connected), run: () => setResetDialogOpen(true) },
     { id: "push", label: "Push current branch", detail: "Review commits, target, and overwrite scope before pushing", available: Boolean(selectedRepository), run: () => openPushDialog() },
-    { id: "ai-commit-message", label: "Generate commit message suggestion", detail: "Review staged diffs and ask the configured AI provider (Ctrl/Cmd+G)", available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
+    { id: "ai-commit-message", label: "Generate commit message suggestion", detail: `Review staged diffs and ask the configured AI provider (${displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)})`, available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
     { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { setCloneError(""); setCloneOpen(true); } },
     { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
@@ -1723,8 +1743,8 @@ function App() {
           })}
         </div>
         <div className="titlebarSpacer" />
-        <button className="quietButton searchShortcut" type="button" onClick={() => setPaletteOpen(true)} aria-keyshortcuts="Control+K Meta+K">
-          <span aria-hidden="true">⌕</span><span>Search commands</span><kbd>{commandKey} K</kbd>
+        <button className="quietButton searchShortcut" type="button" onClick={() => setPaletteOpen(true)} aria-keyshortcuts={ariaShortcut(shortcuts.commandPalette, isMacPlatform)}>
+          <span aria-hidden="true">⌕</span><span>Search commands</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>
         </button>
         <button className="quietButton themeButton" type="button" onClick={nextTheme} aria-label={`Color theme: ${theme}. Activate to cycle theme`} title={`Theme: ${theme}`}>
           <span aria-hidden="true">◐</span><span>{theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light"}</span>
@@ -1809,10 +1829,10 @@ function App() {
               <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} title={!selectedFilePath ? "Select a changed file to open Diff" : "Open the selected file diff"} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
               <span className="toolbarDivider" />
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pushDisabledReason || "Preview the current branch push"} onClick={() => openPushDialog()}>Push</button>
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pullDisabledReason || "Review worktree state, then pull with merge or rebase (Ctrl/Cmd+Shift+L)"} onClick={() => openPullDialog()}>Pull</button>
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pullDisabledReason || `Review worktree state, then pull with merge or rebase (${displayShortcut(shortcuts.pull, isMacPlatform)})`} onClick={() => openPullDialog()}>Pull</button>
               <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={selectedRepository ? "Fetch from configured remotes" : "Open a repository to fetch"} onClick={() => void fetchRepository()}>Fetch</button>
               <span className="toolbarDivider" />
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available"} title={selectedRepository ? "Switch branches (Ctrl/Cmd+B)" : "Open a repository to switch branches"} onClick={openBranchSwitcher}><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
+              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available"} title={selectedRepository ? `Switch branches (${displayShortcut(shortcuts.branchSwitcher, isMacPlatform)})` : "Open a repository to switch branches"} onClick={openBranchSwitcher}><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
             </div>
           </div>
 
@@ -1959,14 +1979,14 @@ function App() {
             <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">{activeStatus ? workingCount : "—"}</span></div><p>{!selectedRepository ? "No changed files" : activeStatusLoading && !activeStatus ? "Reading working tree…" : activeStatusError && !activeStatus ? activeStatusError : workingCount === 0 ? "Working tree clean" : "Unstaged changes"}</p><small>{selectedRepository && activeStatusLoading ? "Refreshing repository status…" : selectedRepository && !activeStatus && !activeStatusError ? "Waiting for the first status snapshot." : "Working tree changes are read from Git."}</small></div>
             <div className="workbenchSection stagedSection"><div className="workbenchTitle">Staged changes <span className="countBadge">{activeStatus ? stagedCount : "—"}</span></div><div className="stagedEmpty">{!activeStatus ? activeStatusError || "Waiting for repository status…" : stagedCount === 0 ? "Nothing staged" : `${stagedCount} staged file${stagedCount === 1 ? "" : "s"}`}</div><small>Review staged files before the commit workflow becomes available.</small></div>
             <div className="workbenchSection commitSection">
-              <div className="commitMessageHeading"><label className="workbenchTitle" htmlFor="commit-message">Commit message</label><button type="button" className="textButton commitAiTrigger" disabled={!selectedRepository || stagedCount === 0 || hasConflicts || commitBusy} title={hasConflicts ? "Resolve conflicts before requesting a commit suggestion" : stagedCount === 0 ? "Stage changes before requesting a suggestion" : "Review staged diffs before sending (Ctrl/Cmd+G)"} onClick={() => setCommitAssistantOpen((open) => !open)}>AI suggestion · {commandKey} G</button></div>
+              <div className="commitMessageHeading"><label className="workbenchTitle" htmlFor="commit-message">Commit message</label><button type="button" className="textButton commitAiTrigger" disabled={!selectedRepository || stagedCount === 0 || hasConflicts || commitBusy} title={hasConflicts ? "Resolve conflicts before requesting a commit suggestion" : stagedCount === 0 ? "Stage changes before requesting a suggestion" : `Review staged diffs before sending (${displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)})`} onClick={() => setCommitAssistantOpen((open) => !open)}>AI suggestion · {displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)}</button></div>
               <label className="srOnly" htmlFor="commit-template">Message template</label>
               <select id="commit-template" aria-label="Message template" value={commitTemplate} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => chooseCommitTemplate(event.target.value)}>
                 <option value="plain">Plain message</option>
                 <option value="conventional">Conventional commit</option>
                 <option value="fix">Fix</option>
               </select>
-              <textarea id="commit-message" aria-label="Commit message" placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); event.stopPropagation(); void commitChanges(event.shiftKey ? "commitAndPush" : "commit"); } }} />
+              <textarea id="commit-message" aria-label="Commit message" aria-keyshortcuts={`${ariaShortcut(shortcuts.commit, isMacPlatform)} ${ariaShortcut(shortcuts.commitAndPush, isMacPlatform)}`} placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if (!event.nativeEvent.isComposing && matchesShortcut(event.nativeEvent, shortcuts.commit, isMacPlatform)) { event.preventDefault(); event.stopPropagation(); void commitChanges("commit"); } else if (!event.nativeEvent.isComposing && matchesShortcut(event.nativeEvent, shortcuts.commitAndPush, isMacPlatform)) { event.preventDefault(); event.stopPropagation(); void commitChanges("commitAndPush"); } }} />
               {commitSelections.length > 0 && <div className="commitSelectionNotice" role="status">{commitSelections.length} staged file selection{commitSelections.length === 1 ? "" : "s"} will be committed. Other staged changes stay in the index. <button type="button" onClick={() => setCommitSelections([])}>Clear selection</button></div>}
               {commitAssistantOpen && selectedRepository && apiRef.current && <CommitMessageAssistant api={apiRef.current} repoId={selectedRepository.repoId} draftMessage={commitMessage} commitSelections={commitSelections} commitSelectionRepoId={commitSelectionRepoId} statusSnapshot={activeStatus} onUseSuggestion={(message) => { setCommitMessage(message); setCommitTemplate("plain"); setCommitAssistantOpen(false); }} onClose={() => setCommitAssistantOpen(false)} />}
               <div className="commitControls">
@@ -2030,7 +2050,7 @@ function App() {
               </div>
             )}
             <div className="dialogActions"><button className="secondaryButton" type="button" disabled={switchBusy} onClick={() => setBranchSwitcherOpen(false)}>Cancel</button>{switchTargetName && switchPreflight?.isClean && <button className="primaryButton" type="button" disabled={switchBusy} onClick={() => void continueBranchSwitch()}>{switchBusy ? "Switching…" : `Switch to ${switchTargetName}`}</button>}</div>
-            <div className="branchSwitcherHint"><kbd>{commandKey} B</kbd> opens this switcher <span>Esc closes</span></div>
+            <div className="branchSwitcherHint"><kbd>{displayShortcut(shortcuts.branchSwitcher, isMacPlatform)}</kbd> opens this switcher <span>Esc closes</span></div>
           </section>
         </div>
       )}
@@ -2080,7 +2100,7 @@ function App() {
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, preview, action) => void recoverWorkflowTask(task, preview, action)} onOpenConflictWindow={(task) => void openWorkflowConflictWindow(task)} />}
-      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} />}
       {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
       {workflowDialog && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.repoId} targetOid={workflowDialog.targetOid} action={workflowDialog.action} onClose={() => setWorkflowDialog(undefined)} onStarted={(task) => void startWorkflowTask(task)} />}
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}

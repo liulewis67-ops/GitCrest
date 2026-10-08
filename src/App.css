@@ -806,6 +806,15 @@ button:disabled { cursor: not-allowed; }
 
 .settingsDialog { width: min(760px, 100%); }
 .settingsDialog .workflowDialogBody { max-height: min(75vh, 760px); }
+.shortcutPreferences { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.settingsSectionHeading, .shortcutPreferenceRow { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.settingsSectionHeading h3, .shortcutPreferences > p { margin: 0; }
+.settingsSectionHeading h3 { color: var(--text); font-size: 12px; }
+.shortcutPreferences > p { color: var(--text-muted); font-size: 10px; line-height: 1.5; }
+.shortcutPreferenceList { display: grid; }
+.shortcutPreferenceRow { min-height: 36px; border-top: 1px solid var(--line); color: var(--text-secondary); font-size: 11px; }
+.shortcutCaptureButton { min-width: 112px; border: 1px solid var(--line-strong); border-radius: 4px; padding: 4px 8px; color: var(--text); background: var(--surface-raised); font: 11px var(--font-mono); cursor: pointer; }
+.shortcutCaptureButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .settingsForm { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .settingsForm label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 11px; }
 .settingsForm input, .settingsForm select { min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text); background: var(--surface); font: 11px var(--font-ui); }
