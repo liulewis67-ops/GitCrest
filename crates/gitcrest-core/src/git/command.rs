@@ -30,7 +30,7 @@ use crate::{
     ports::git::GitReadPort,
 };
 
-use super::{status, workflow_state};
+use super::{refs, status, workflow_state};
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
@@ -152,7 +152,7 @@ impl GitReadPort for GitCommandService {
         repository_path: &Path,
         namespace: WorkflowBackupNamespace,
     ) -> Result<Vec<WorkflowBackupReference>, WorkflowError> {
-        workflow_state::list_backup_references(&self.git_program, repository_path, namespace).await
+        refs::list_backup_references(&self.git_program, repository_path, namespace).await
     }
 
     async fn compare_for_reset(
@@ -181,7 +181,7 @@ impl GitReadPort for GitCommandService {
         current_head_oid: Option<&str>,
         expected_remote_oid: &str,
     ) -> Result<WorkflowRemoteBranchComparison, WorkflowError> {
-        workflow_state::compare_remote_branch_delete(
+        refs::compare_remote_branch_delete(
             &self.git_program,
             repository_path,
             current_head_oid,
