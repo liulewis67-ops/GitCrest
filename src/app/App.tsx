@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
-import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
+import { GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
+import { bootstrapApp } from "./bootstrap";
 import { mergeStatusScope } from "../api/status-snapshot";
 import { CommitDetails, CommitGraph } from "../features/history/CommitGraph";
 import { RemoteManager } from "../features/remotes/RemoteManager";
@@ -1459,18 +1460,16 @@ function App() {
 
     async function connect() {
       try {
-        const bridge = requireGitCrestBridge();
-        const connection = await bridge.getSidecarConnection();
-        const api = new GitCrestApiClient(connection.baseUrl, connection.token);
+        const bootstrap = await bootstrapApp();
+        const api = bootstrap.api;
         apiRef.current = api;
-        const body = await api.getVersion();
         if (!cancelled) {
-          setVersion(`${body.name} ${body.version} (API v${body.apiVersion})`);
+          setVersion(`${bootstrap.version.name} ${bootstrap.version.version} (API v${bootstrap.version.apiVersion})`);
           setStatus("Connected to local Rust core");
         }
         await refreshRepositories(api, true);
 
-        const unsubscribe = await bridge.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
+        const unsubscribe = await bootstrap.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
           const eventSequence = Number(event.eventId);
           const previousEventSequence = eventSequenceRef.current;
           const sequenceGap = Number.isSafeInteger(eventSequence)
