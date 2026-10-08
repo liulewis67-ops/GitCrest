@@ -1,5 +1,10 @@
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::{ffi::OsString, path::Path, process::ExitStatus, time::Duration};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+    process::ExitStatus,
+    time::Duration,
+};
 
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
@@ -276,6 +281,13 @@ impl GitCommandService {
             task,
         )
         .await;
+        if strategy == crate::pull::PullStrategy::Rebase
+            && matches!(&result, Err(TaskFailure::Cancelled))
+        {
+            return self
+                .reconcile_cancelled_pull_rebase(repository_path, expected)
+                .await;
+        }
         let result = workflow_command_result(repository_path, result).await;
         if matches!(&result, Err(TaskFailure::Cancelled)) {
             return self
@@ -283,6 +295,125 @@ impl GitCommandService {
                 .await;
         }
         result
+    }
+
+    async fn reconcile_cancelled_pull_rebase(
+        &self,
+        repository_path: &Path,
+        expected: &crate::pull::PullPreflight,
+    ) -> Result<(), TaskFailure> {
+        match crate::workflows::read_operation(repository_path).await {
+            Ok(Some(crate::workflows::WorkflowOperation::Rebase)) => {
+                let rebase_apply = capture_git_output(
+                    &self.git_program,
+                    repository_path,
+                    ["rev-parse", "--git-path", "rebase-apply"],
+                    4096,
+                )
+                .await
+                .ok()
+                .and_then(|output| String::from_utf8(output).ok())
+                .map(|path| PathBuf::from(path.trim()))
+                .map(|path| {
+                    if path.is_absolute() {
+                        path
+                    } else {
+                        repository_path.join(path)
+                    }
+                });
+                if rebase_apply.is_some_and(|path| path.is_dir()) {
+                    capture_git_output_args(
+                        &self.git_program,
+                        repository_path,
+                        vec!["am".into(), "--abort".into()],
+                        1024,
+                    )
+                    .await
+                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                } else {
+                    let status = capture_git_output(
+                        &self.git_program,
+                        repository_path,
+                        ["status", "--porcelain=v1", "--untracked-files=all"],
+                        2 * 1024 * 1024,
+                    )
+                    .await
+                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                    if !status.is_empty() {
+                        return Err(TaskFailure::WaitingForInput(
+                            "Pull rebase was cancelled while user changes remain in the worktree. Review the changes before aborting the rebase.".into(),
+                        ));
+                    }
+                    capture_git_output_args(
+                        &self.git_program,
+                        repository_path,
+                        vec!["rebase".into(), "--abort".into()],
+                        1024,
+                    )
+                    .await
+                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                }
+
+                let branch_ref = format!("refs/heads/{}", expected.local_branch);
+                let branch_oid = capture_git_output_args(
+                    &self.git_program,
+                    repository_path,
+                    vec!["rev-parse".into(), "--verify".into(), branch_ref.into()],
+                    1024,
+                )
+                .await
+                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                if std::str::from_utf8(&branch_oid).ok().map(str::trim)
+                    != Some(expected.local_oid.as_str())
+                {
+                    return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+                }
+
+                let current_branch = capture_git_output(
+                    &self.git_program,
+                    repository_path,
+                    ["branch", "--show-current"],
+                    1024,
+                )
+                .await
+                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                if std::str::from_utf8(&current_branch).ok().map(str::trim)
+                    != Some(expected.local_branch.as_str())
+                {
+                    capture_git_output_args(
+                        &self.git_program,
+                        repository_path,
+                        vec!["switch".into(), "--".into(), expected.local_branch.clone().into()],
+                        1024,
+                    )
+                    .await
+                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                }
+
+                let restored = crate::pull::read_pull_preflight(
+                    expected.repo_id.clone(),
+                    repository_path,
+                    Some(&expected.local_branch),
+                    false,
+                )
+                .await
+                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                if restored.local_oid == expected.local_oid
+                    && restored.tracking_oid == expected.tracking_oid
+                    && !restored.operation_in_progress
+                    && !restored.has_conflicts
+                {
+                    Err(TaskFailure::Cancelled)
+                } else {
+                    Err(TaskFailure::Failed(pull_cancel_outcome_unknown()))
+                }
+            }
+            Ok(Some(_)) => Err(TaskFailure::WaitingForInput(
+                "Pull rebase was cancelled while another Git operation remains active. Review repository state before continuing.".into(),
+            )),
+            Ok(None) => self.reconcile_cancelled_pull(repository_path, expected).await,
+            Err(_) => Err(TaskFailure::Failed(pull_cancel_outcome_unknown())),
+        }
     }
 
     async fn reconcile_cancelled_pull(
