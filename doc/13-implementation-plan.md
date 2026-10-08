@@ -1832,3 +1832,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：branches/credentials/diff/history/remotes/shelves/staging/status/tasks/workflows 的 crate-root feature aliases 仍保留；按实际调用逐项迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/lib.rs`、`crates/gitcrest-core/src/features/repositories/`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`b2bca4e`
+
+### branches feature 调用切换并移除 crate-root alias — 小阶段 137
+- 状态：已完成（branches 的跨 feature 消费使用公开 feature 路径）
+- 日期：2026-10-09
+- 交付：将 remotes handler、pull/push preflight 与 remote service 中的分支规则依赖改为 `features::branches`；branches handler 自身也通过 `features::{branches,status}` 导入同级服务。确认其他分支模块调用均由 feature/API 路径覆盖后，从 `lib.rs` 移除 `branches` crate-root re-export。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：credentials/diff/history/remotes/shelves/staging/status/tasks/workflows aliases 仍有调用点；按实际模块依赖继续迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{branches,remotes}/`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`65bf1a8`
