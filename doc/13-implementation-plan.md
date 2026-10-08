@@ -1193,3 +1193,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workflows handlers 已按业务语义分组；后续需继续核对规范要求的 service/domain/ports 边界及 `main.rs` crate 根职责，避免仅完成路由层目录整理。
 - 证据：`crates/gitcrest-core/src/features/workflows/{handlers.rs,handlers/recovery.rs,handlers/merge.rs,handlers/rebase.rs,handlers/reset.rs,handlers/conflicts.rs,routes.rs}`。
 - 实施 commit：`e25977f`
+
+### 后端 workflows service 模块归属 — 小阶段 66
+- 状态：已完成（conflicts/rebase/reset service 模块由 workflows feature 声明）
+- 日期：2026-10-09
+- 交付：将 conflict、rebase、reset service 的模块声明从 crate 根移入 `features/workflows/mod.rs`；workflows DTO 和对应 handler 子模块改为 feature 内相对依赖。保留 crate 根兼容导出，以满足当前 `git_command` 对 rebase/reset 类型及 API 错误映射对 conflict 错误类型的依赖；业务逻辑和 API 行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；测试名空间现显示 `workflows::{conflicts,rebase,service}`。
+- 限制/后续：crate 根兼容导出尚未移除，Git adapter/API error 仍直接依赖 feature service 的部分类型；后续将共享 workflow 模型迁入 domain 并调整错误边界，再移除兼容导出，避免仅通过移动 module declaration 宣称已满足依赖方向。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod.rs,dto.rs,handlers/conflicts.rs,handlers/rebase.rs,handlers/reset.rs}`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/git/git_command.rs`、`crates/gitcrest-core/src/api/error.rs`。
+- 实施 commit：`eb8846b`
