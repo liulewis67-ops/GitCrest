@@ -12,7 +12,7 @@ import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { useCommitDraft } from "../features/commits";
-import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
+import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
@@ -220,9 +220,12 @@ function App() {
   });
   const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
   const rememberGraphScroll = useWorkspaceGraphScroll(selectedRepository?.repoId, mode, setWorkspaceSession);
-  const selectedCommit = selectedRepository
-    ? workspaceSession.tabs[selectedRepository.repoId]?.selectedCommit || selectedRepository.head || undefined
-    : undefined;
+  const { selectedCommit, selectCommit } = useWorkspaceCommitSelection(
+    selectedRepository?.repoId,
+    selectedRepository?.head,
+    workspaceSession,
+    setWorkspaceSession,
+  );
   const graphViewportRef = useRef<HTMLDivElement>(null);
   const [theme, setTheme] = useState<Theme>(() => {
     try {
@@ -1136,18 +1139,6 @@ function App() {
     } catch (error) {
       setDiffState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Could not open the Diff window." }));
     }
-  }
-
-  function selectCommit(oid: string) {
-    const repoId = selectedRepository?.repoId;
-    if (!repoId) return;
-    setWorkspaceSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: { ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }), selectedCommit: oid },
-      },
-    }));
   }
 
   function closeRepositoryTab(repoId: string) {
