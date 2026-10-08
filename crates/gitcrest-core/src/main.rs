@@ -1,8 +1,4 @@
-use std::{
-    path::Path as FilePath,
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::path::Path as FilePath;
 
 use axum::{
     body::Body,
@@ -24,6 +20,8 @@ use axum::{
 use axum::{http::header::CONTENT_TYPE, Router};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+#[cfg(test)]
+use std::sync::Arc;
 mod api;
 mod bootstrap;
 mod config;
@@ -60,6 +58,7 @@ mod reset;
 mod shelves;
 #[path = "features/staging/staging.rs"]
 mod staging;
+mod state;
 #[path = "features/status/mod.rs"]
 mod status;
 #[path = "storage/storage.rs"]
@@ -78,78 +77,16 @@ mod workflows;
 use api::error::{ApiError, ApiErrorCode};
 #[cfg(test)]
 use api::router::app_router;
+#[cfg(test)]
 use cloning::CloneService;
 use diff::{DiffError, DiffScope};
 use git_command::{BranchCommand, GitCommandService, GitOperation, RemoteCommand};
 use repository::{Repository, RepositoryError, RepositoryManager};
+use state::{AppState, EventBus, EventEnvelope};
 use storage::{RepositoryStore, UndoOperation, UndoRecord};
 use tasks::{TaskFailure, TaskService, TaskSnapshot};
 
 const API_VERSION: &str = "1";
-
-#[derive(Clone)]
-struct AppState {
-    read_write_token: Arc<String>,
-    read_only_token: Option<Arc<String>>,
-    conflict_token: Option<Arc<String>>,
-    repositories: RepositoryManager,
-    tasks: TaskService,
-    git_commands: GitCommandService,
-    clones: CloneService,
-    credentials: credentials::CredentialManager,
-    ai_credentials: credentials::AiCredentialManager,
-    events: EventBus,
-}
-
-#[derive(Clone)]
-struct EventBus(tokio::sync::broadcast::Sender<EventEnvelope>);
-
-impl Default for EventBus {
-    fn default() -> Self {
-        let (sender, _) = tokio::sync::broadcast::channel(512);
-        Self(sender)
-    }
-}
-
-impl EventBus {
-    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<EventEnvelope> {
-        self.0.subscribe()
-    }
-
-    fn publish(&self, repo_id: Option<String>, event_type: &str, payload: serde_json::Value) {
-        let event = EventEnvelope::new(repo_id, event_type, payload);
-        let _ = self.0.send(event);
-    }
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-struct EventEnvelope {
-    event_id: String,
-    protocol_version: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    repo_id: Option<String>,
-    #[serde(rename = "type")]
-    event_type: String,
-    occurred_at_ms: u128,
-    payload: serde_json::Value,
-}
-
-impl EventEnvelope {
-    fn new(repo_id: Option<String>, event_type: &str, payload: serde_json::Value) -> Self {
-        Self {
-            event_id: String::new(),
-            protocol_version: 1,
-            repo_id,
-            event_type: event_type.to_owned(),
-            occurred_at_ms: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis(),
-            payload,
-        }
-    }
-}
 
 #[tokio::main]
 async fn main() {

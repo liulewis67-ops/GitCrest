@@ -4,9 +4,15 @@ use serde::Serialize;
 use tokio::net::TcpListener;
 
 use crate::{
-    api::router::app_router, cloning::CloneService, config::AppConfig, credentials,
-    git_command::GitCommandService, repository::RepositoryManager, tasks::TaskService, watcher,
-    AppState, EventBus,
+    api::router::app_router,
+    cloning::CloneService,
+    config::AppConfig,
+    credentials,
+    git_command::GitCommandService,
+    repository::RepositoryManager,
+    state::{AppState, EventBus},
+    tasks::TaskService,
+    watcher,
 };
 
 #[derive(Serialize)]
