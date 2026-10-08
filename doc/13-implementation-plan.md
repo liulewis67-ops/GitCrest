@@ -580,3 +580,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/features/`、`crates/gitcrest-core/src/git/`、`crates/gitcrest-core/src/refresh/`、`crates/gitcrest-core/src/storage/`、`crates/gitcrest-core/src/credentials/`。
 - 完成 commit：`1476fdb`
 - 限制/后续：保持功能逻辑在本次不变；模块内部仍需按后端规范逐步拆分 routes、handlers、DTO、service、domain 与 ports，启动装配也需在后续阶段从 `main.rs` 收敛。该子阶段不代表整体架构规范已全部达成。
+
+### S7.2 — 桌面进程树基准采样口径修正
+- 状态：已完成（基准工具子阶段；S7.2 整体仍待验收）
+- 日期：2026-10-09
+- 交付：桌面基准先从 Playwright 启动 PID 解析 Electron 主进程，再只采样主进程及其后代，排除 `cmd.exe` 启动包装和其 `conhost.exe`。JSON 明确记录 `memoryMeasurementRoot`，避免把测试启动器内存计入应用。
+- 测试：`node --check scripts/performance/desktop-benchmark.mjs` 通过；单样本 memory-only 诊断成功；完整桌面基准 20 轮成功，含 5 秒空闲 RAF 与 30 秒滚动采样。启动 P95 1,171.307ms、100k 历史首帧 P95 420.837ms、Electron 进程树空闲峰值 398,716,928 bytes、打开仓库后 437,350,400 bytes、滚动峰值 467,894,272 bytes、滚动 P5 55.249fps；Windows NSIS 为 108,568,874 bytes（103.54 MiB）。
+- 手工验证：未执行额外 UI 操作；桌面采样通过 Playwright 启动隔离 profile 的生产 renderer 与 Release sidecar。
+- 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-memory-main-process-root.json`、`doc/evidence/S7.2/desktop-win32-main-process-root.json`。
+- 完成 commit：待补记
+- 限制/后续：修正的是测量边界，不是产品内存优化；旧进程树读数含约 17MB 测试包装进程，不能和本次值直接比较。本次 idle working set 仍高于 <250MB，30 秒滚动 P5 仍低于 ≥60fps；S7.2 不得据此标记完成。结果仅代表此 Windows 主机，其他平台尚待测量。

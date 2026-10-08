@@ -46,6 +46,15 @@ function benchmarkElectronArgs(dataDir) {
   return [...benchmarkGpuFlags(), `--user-data-dir=${join(dataDir, "user-data")}`, "."];
 }
 
+async function electronProcessRootPid(launcherPid) {
+  if (process.platform !== "win32") return launcherPid;
+  const command = `$launcherPid=${launcherPid}; $processes=Get-CimInstance Win32_Process; $ids=@([uint32]$launcherPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $main=@($processes | Where-Object { $ids -contains $_.ProcessId -and $_.Name -ieq 'electron.exe' -and $_.CommandLine -notmatch '--type=' }); if ($main.Count -ne 1) { throw "Expected exactly one Electron main process under launcher PID $launcherPid; found $($main.Count)." }; [uint32]$main[0].ProcessId`;
+  const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", command]);
+  const pid = Number(stdout.trim());
+  if (!Number.isInteger(pid) || pid <= 0) throw new Error("Could not resolve the Electron main process PID for memory measurement.");
+  return pid;
+}
+
 async function processTreeIds(pid) {
   if (process.platform === "win32") {
     const command = `$rootPid=${pid}; $processes=Get-CimInstance Win32_Process; $ids=@([uint32]$rootPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $ids -join ','`;
@@ -173,8 +182,9 @@ async function runColdLaunch() {
       startupMs.push(Number((performance.now() - start).toFixed(3)));
 
       if (index === iterations - 1) {
+        const memoryRootPid = await electronProcessRootPid(app.process().pid);
         await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
-        const sampler = await startProcessTreeMemorySampler(app.process().pid);
+        const sampler = await startProcessTreeMemorySampler(memoryRootPid);
         await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
         await sampler.stop();
         idleMemorySamplesBytes.push(...sampler.samples);
@@ -189,7 +199,8 @@ async function runColdLaunch() {
 
       if (index === iterations - 1) {
         await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
-        const sampler = await startProcessTreeMemorySampler(app.process().pid);
+        const memoryRootPid = await electronProcessRootPid(app.process().pid);
+        const sampler = await startProcessTreeMemorySampler(memoryRootPid);
         await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
         await sampler.stop();
         repositoryMemorySamplesBytes.push(...sampler.samples);
@@ -214,16 +225,17 @@ async function runMemorySnapshot() {
     await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
     await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
-    const idle = await processTreeMemoryBreakdown(app.process().pid);
-    const idlePrivateWorkingSetSamplesBytes = await privateWorkingSetWindowSamples(app.process().pid);
+    const memoryRootPid = await electronProcessRootPid(app.process().pid);
+    const idle = await processTreeMemoryBreakdown(memoryRootPid);
+    const idlePrivateWorkingSetSamplesBytes = await privateWorkingSetWindowSamples(memoryRootPid);
     await openFixtureFromWindow(page);
     await page.reload();
     await page.getByRole("heading", { name: "Recent repositories" }).waitFor({ timeout: 15_000 });
     await page.locator(".repositoryRowOpen").first().click();
     await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
-    const loaded = await processTreeMemoryBreakdown(app.process().pid);
-    const loadedPrivateWorkingSetSamplesBytes = await privateWorkingSetWindowSamples(app.process().pid);
+    const loaded = await processTreeMemoryBreakdown(memoryRootPid);
+    const loadedPrivateWorkingSetSamplesBytes = await privateWorkingSetWindowSamples(memoryRootPid);
     const total = (processes) => ({
       workingSetBytes: processes.reduce((sum, process) => sum + process.workingSetBytes, 0),
       privateWorkingSetBytes: processes.every((process) => Number.isFinite(process.privateWorkingSetBytes))
@@ -347,7 +359,7 @@ async function runCacheLifecycle() {
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 2_000));
     const openState = {
       rendererJsHeapBytes: await rendererHeapUsage(page),
-      processes: await processTreeMemoryBreakdown(app.process().pid),
+      processes: await processTreeMemoryBreakdown(await electronProcessRootPid(app.process().pid)),
       visibleStatusRows: await page.locator(".statusFileRow").count(),
       openRepositoryTabs: await page.getByRole("tab").count(),
     };
@@ -364,7 +376,7 @@ async function runCacheLifecycle() {
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 2_000));
     const closedState = {
       rendererJsHeapBytes: await rendererHeapUsage(page),
-      processes: await processTreeMemoryBreakdown(app.process().pid),
+      processes: await processTreeMemoryBreakdown(await electronProcessRootPid(app.process().pid)),
       visibleStatusRows: await page.locator(".statusFileRow").count(),
       openRepositoryTabs: await page.getByRole("tab").count(),
     };
@@ -422,7 +434,7 @@ async function runScroll() {
       return { durationMs: 5_000, frameSamples: deltas.length, p95FrameMs, p5Fps: p95FrameMs ? 1000 / p95FrameMs : null };
     });
 
-    const sampler = await startProcessTreeMemorySampler(app.process().pid, 500);
+    const sampler = await startProcessTreeMemorySampler(await electronProcessRootPid(app.process().pid), 500);
     let scroll;
     try {
       scroll = await page.evaluate(async () => {
@@ -475,7 +487,7 @@ const report = {
   mode: scrollOnly ? "scroll-only" : memoryOnly ? "memory-only" : cacheLifecycleOnly ? "cache-lifecycle" : "full",
   generatedAt: new Date().toISOString(),
   host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown", logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
-  software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true },
+  software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true, memoryMeasurementRoot: "Electron main process and descendants; Playwright launcher excluded" },
   fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath },
   iterations: scrollOnly || memoryOnly || cacheLifecycleOnly ? 1 : iterations,
   startedAt,
