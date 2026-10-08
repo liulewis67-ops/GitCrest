@@ -113,7 +113,7 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 已完成 |
-| S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 进行中 |
+| S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 已完成 |
 | S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 未开始 |
 
 ## 11. 大阶段 7：性能、安全、跨平台发布
@@ -444,4 +444,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未另行连接真实 provider；provider 边界及桌面工作流由临时 loopback Ollama mock 和 Electron E2E 验证。
 - 证据：`src/features/settings/CommitMessageAssistant.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/commit-message-assistant.test.tsx`、`tests/e2e/desktop.test.ts`。
 - 限制：本子阶段完成 commit message 建议；变更摘要 UI/工作流仍待 S6.2 后续子阶段完成。真实云端/Ollama 服务及 Keychain 运行验证按 S7.4 验收。
+- 完成 commit：`616fccf`。
+
+### S6.2 — 子阶段 C：已审核 staged Diff 变更摘要（已完成；S6.2 整体已完成）
+- 状态：已完成。
+- 日期：2026-10-08
+- 交付：commit assistant 增加 Conventional Commit message/变更摘要输出模式。摘要使用专用 prompt，只总结已审核 staged Diff；沿用相同的 endpoint 展示、文件/行范围预览、明确发送确认、发送前/返回后 status 与 revision 检查。摘要作为独立文本展示，不能应用到 commit message；message 模式保持“Use suggestion”显式应用语义。
+- 测试：`pnpm test`（103 tests）、`pnpm build`、`pnpm test:e2e`（1 Electron test）、`git diff --check` 均通过。组件测试验证摘要使用专用 prompt、仅发送已审核 staged index 范围且不会修改提交框；桌面 E2E 使用 loopback Ollama mock 验证完整摘要请求和独立显示。
+- 手工验证：未连接真实 provider；loopback Ollama mock 覆盖本机传输与窗口交互。
+- 证据：`src/features/settings/CommitMessageAssistant.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/commit-message-assistant.test.tsx`、`tests/e2e/desktop.test.ts`。
+- 限制：provider 请求边界继续采用 S6.1 已记录的限制：未连接真实云端/Ollama；系统 Keychain 跨平台实际运行检查属于 S7.4。
 - 完成 commit：待提交后补记。

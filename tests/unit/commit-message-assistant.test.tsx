@@ -121,3 +121,17 @@ it("marks a suggestion stale when a refresh shows that staged status changed dur
   expect(await screen.findByText("This suggestion is stale and cannot be applied.")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Use suggestion" })).toHaveProperty("disabled", true);
 });
+
+it("summarizes only reviewed staged changes without writing the summary into the commit message", async () => {
+  const request = vi.fn().mockResolvedValue({ provider: "ollama", model: "qwen", response: "- Updates the staged value.\n- Leaves unstaged edits untouched.", files: ["src/only.ts [index]"] });
+  render(<Harness api={makeApi(request)} />);
+  await screen.findByText("src/only.ts · staged/index · all staged changes");
+  fireEvent.change(screen.getByRole("combobox", { name: "AI output" }), { target: { value: "changeSummary" } });
+  expect(screen.getByText(/Summarize the reviewed staged changes/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Summarize reviewed staged diff" }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith("repo_fixture", expect.stringContaining("concise bullet points"), [{ path: "src/only.ts", scope: "index", revision: "sha256:staged" }]));
+  expect(await screen.findByLabelText("AI change summary")).toBeTruthy();
+  expect(screen.getByLabelText("Commit message")).toHaveProperty("value", "original draft");
+  expect(screen.queryByRole("button", { name: "Use suggestion" })).toBeNull();
+});

@@ -5,6 +5,7 @@ type CommitSelection = NonNullable<CommitRequest["selections"]>[number];
 type ReviewedFile = { path: string; document: DiffDocumentResponse; selections?: CommitSelection["selections"] };
 
 const PROMPT = "Write a concise Conventional Commit message for the reviewed staged changes. Return only the commit subject and optional body. Do not use Markdown fences. Do not claim unreviewed changes.";
+const SUMMARY_PROMPT = "Summarize the reviewed staged changes in concise bullet points. Mention key behavior changes and important risks visible from the diff. Do not claim unreviewed changes. Return plain text.";
 
 function statusFingerprint(snapshot: StatusSnapshotResponse): string {
   return JSON.stringify(snapshot.files.map(({ path, indexStatus, worktreeStatus, kind, categories, modeChanged }) => ({ path, indexStatus, worktreeStatus, kind, categories: [...categories].sort(), modeChanged })));
@@ -83,7 +84,9 @@ export function CommitMessageAssistant({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [suggestion, setSuggestion] = useState<AiReplyResponse>();
+  const [summaryResult, setSummaryResult] = useState<AiReplyResponse>();
   const [suggestionText, setSuggestionText] = useState("");
+  const [outputMode, setOutputMode] = useState<"commitMessage" | "changeSummary">("commitMessage");
   const [requestDraft, setRequestDraft] = useState("");
   const [draftChanged, setDraftChanged] = useState(false);
   const [workspaceStale, setWorkspaceStale] = useState(false);
@@ -121,7 +124,7 @@ export function CommitMessageAssistant({
   }, [api, repoId]);
 
   async function reviewCurrentChanges() {
-    setBusy(true); setError(""); setReviewed([]); setSuggestion(undefined); setSuggestionText("");
+    setBusy(true); setError(""); setReviewed([]); setSuggestion(undefined); setSummaryResult(undefined); setSuggestionText("");
     setConfirmed(false); setWorkspaceStale(false); setDraftChanged(false);
     try {
       const snapshot = await api.getRepositoryStatus(repoId);
@@ -164,9 +167,11 @@ export function CommitMessageAssistant({
 
   async function sendReviewed() {
     if (!settings || settings.provider === "none" || !confirmed || reviewed.length === 0 || busy) return;
+    const requestMode = outputMode;
+    const prompt = requestMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT;
     const baselineDraft = draftRef.current;
     setRequestDraft(baselineDraft);
-    setBusy(true); setError(""); setSuggestion(undefined); setSuggestionText("");
+    setBusy(true); setError(""); setSuggestion(undefined); setSummaryResult(undefined); setSuggestionText("");
     try {
       if (!(await checkFresh(reviewed, reviewFingerprint))) {
         setWorkspaceStale(true);
@@ -178,12 +183,13 @@ export function CommitMessageAssistant({
         revision: file.document.revision,
         ...(file.selections ? { selections: file.selections } : {}),
       }));
-      const result = await api.requestAiReview(repoId, PROMPT, files);
+      const result = await api.requestAiReview(repoId, prompt, files);
       const [freshWorkspace, draftStillMatches] = await Promise.all([
         checkFresh(reviewed, reviewFingerprint),
         Promise.resolve(draftRef.current === baselineDraft),
       ]);
-      setSuggestion(result); setSuggestionText(result.response);
+      if (requestMode === "changeSummary") setSummaryResult(result);
+      else { setSuggestion(result); setSuggestionText(result.response); }
       setWorkspaceStale(!freshWorkspace);
       setDraftChanged(!draftStillMatches);
     } catch (reason) {
@@ -197,14 +203,15 @@ export function CommitMessageAssistant({
   return (
     <section className="commitAiAssistant" aria-labelledby="commit-ai-title">
       <div className="commitAiHeader"><h4 id="commit-ai-title">AI commit message suggestion</h4><button className="textButton" type="button" onClick={onClose}>Close</button></div>
-      <p className="settingsNotice">The provider receives only the reviewed staged diff. The suggestion stays separate until you choose to use it. Manual commit remains available.</p>
+      <p className="settingsNotice">The provider receives only the reviewed staged diff. Responses stay separate from the commit message unless you explicitly use a commit suggestion. Manual commit remains available.</p>
+      <label className="commitAiOutputMode">AI output<select aria-label="AI output" value={outputMode} disabled={busy} onChange={(event) => { setOutputMode(event.target.value as typeof outputMode); setSuggestion(undefined); setSummaryResult(undefined); setSuggestionText(""); setConfirmed(false); setDraftChanged(false); }}><option value="commitMessage">Conventional commit message</option><option value="changeSummary">Change summary</option></select></label>
       {busy && reviewed.length === 0 && <p role="status">Loading staged changes for review…</p>}
       {settings?.provider === "none" && <p className="settingsNotice">Choose an AI provider in Settings before sending a request.</p>}
       {settings?.provider === "openAiCompatible" && !settings.hasCloudCredential && <p className="settingsNotice">Save a cloud API key in Settings before sending a request.</p>}
       {reviewed.length > 0 && <>
         <div className="commitAiRequestDetails">
           <p><strong>Provider endpoint:</strong> {settings?.baseUrl || (settings?.provider === "ollama" ? "Loopback Ollama endpoint" : "Loading provider settings…")}</p>
-          <p><strong>Prompt:</strong> {PROMPT}</p>
+          <p><strong>Prompt:</strong> {outputMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT}</p>
           <p><strong>Scope:</strong> {reviewed.length} staged file scope{reviewed.length === 1 ? "" : "s"} · {(reviewDiffBytes / 1024).toFixed(1)} KiB</p>
         </div>
         {reviewed.map((file) => <details className="privacyDiffPreview" key={file.path} open>
@@ -214,7 +221,7 @@ export function CommitMessageAssistant({
         {workspaceStale && <p role="alert" className="taskCenterError">Staged changes changed. Review the current staged changes again.</p>}
         {suggestion && workspaceStale && <p role="status">This suggestion is stale and cannot be applied.</p>}
         {suggestion && draftChanged && <p role="status">The commit draft changed while the provider was responding. Your text was kept; start a new request to use a suggestion.</p>}
-        {!suggestion && <label className="aiRequestConsent"><input type="checkbox" checked={confirmed} disabled={busy || workspaceStale} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the staged diff, prompt, and provider endpoint and want to send them.</label>}
+        {!suggestion && !summaryResult && <label className="aiRequestConsent"><input type="checkbox" checked={confirmed} disabled={busy || workspaceStale} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the staged diff, prompt, and provider endpoint and want to send them.</label>}
         {suggestion && <>
           <label className="commitAiSuggestion">Suggestion from {suggestion.provider} · {suggestion.model}<textarea aria-label="Commit message suggestion" value={suggestionText} disabled={busy} onChange={(event) => setSuggestionText(event.target.value)} /></label>
           <div className="commitAiActions">
@@ -222,7 +229,8 @@ export function CommitMessageAssistant({
             <button type="button" className="primaryButton" disabled={!canUseSuggestion} onClick={() => { if (canUseSuggestion) onUseSuggestion(suggestionText); }}>Use suggestion</button>
           </div>
         </>}
-        {!suggestion && <button type="button" className="primaryButton" disabled={!confirmed || busy || settings?.provider === "none" || !settings || (settings.provider === "openAiCompatible" && !settings.hasCloudCredential)} onClick={() => void sendReviewed()}>{busy ? "Waiting for provider…" : "Send reviewed staged diff"}</button>}
+        {summaryResult && <section className="commitAiSummary" aria-label="AI change summary"><h5>Change summary · {summaryResult.model}</h5><pre>{summaryResult.response}</pre><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>Review current staged changes again</button></section>}
+        {!suggestion && !summaryResult && <button type="button" className="primaryButton" disabled={!confirmed || busy || settings?.provider === "none" || !settings || (settings.provider === "openAiCompatible" && !settings.hasCloudCredential)} onClick={() => void sendReviewed()}>{busy ? "Waiting for provider…" : outputMode === "changeSummary" ? "Summarize reviewed staged diff" : "Send reviewed staged diff"}</button>}
       </>}
       {error && <div className="commitAiError" role="alert"><span>{error}</span><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>Review and retry</button></div>}
     </section>

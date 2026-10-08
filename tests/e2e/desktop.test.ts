@@ -50,7 +50,12 @@ describe("desktop startup E2E", () => {
         request.on("end", () => {
           const requestBody = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
           providerBodies.push(requestBody);
-          const content = providerBodies.length === 1 ? "Mock local review response" : "feat: describe reviewed staged change";
+          const prompt = String(requestBody.messages && (requestBody.messages as Array<{ content?: string }>)[0]?.content);
+          const content = providerBodies.length === 1
+            ? "Mock local review response"
+            : prompt.includes("Summarize the reviewed staged changes")
+              ? "- Adds the reviewed staged export.\n- Leaves worktree edits out of this summary."
+              : "feat: describe reviewed staged change";
           const body = JSON.stringify({ message: { content } });
           setTimeout(() => {
             response.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
@@ -177,6 +182,20 @@ describe("desktop startup E2E", () => {
       expect(commitPrompt).toContain("reviewedTitle = 'staged'");
       expect(commitPrompt).not.toContain("reviewedTitle = 'unstaged'");
       expect(await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).toMatchObject({ stdout: "add source fixture\n" });
+
+      await window.keyboard.press("Control+g");
+      const summaryAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
+      await summaryAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      await summaryAssistant.getByRole("combobox", { name: "AI output" }).selectOption("changeSummary");
+      expect(await summaryAssistant.locator(".commitAiRequestDetails").innerText()).toContain("Summarize the reviewed staged changes");
+      await summaryAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
+      await summaryAssistant.getByRole("button", { name: "Summarize reviewed staged diff" }).click();
+      await summaryAssistant.locator(".commitAiSummary").waitFor();
+      expect(await summaryAssistant.locator(".commitAiSummary").innerText()).toContain("Adds the reviewed staged export");
+      expect(await window.getByRole("textbox", { name: "Commit message", exact: true }).inputValue()).toBe("feat: describe reviewed staged change");
+      expect(await summaryAssistant.getByRole("button", { name: "Use suggestion" }).count()).toBe(0);
+      await summaryAssistant.getByRole("button", { name: "Close" }).click();
+
       await execFileAsync("git", ["-C", fixture.path, "reset", "--quiet", "HEAD", "--", "src/commit-ai.ts"]);
       await rm(resolve(fixture.path, "src/commit-ai.ts"));
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
