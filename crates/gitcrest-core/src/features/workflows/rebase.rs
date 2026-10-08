@@ -1,6 +1,6 @@
 use std::{collections::HashSet, path::Path, process::Stdio, time::Duration};
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{
     io::AsyncReadExt,
@@ -11,6 +11,7 @@ use tokio::{
 
 use crate::{
     domain::error::WorkflowError,
+    domain::workflow::{RebaseAction, RebaseTodoItem},
     workflows::{read_worktree_state, WorkflowOperation},
 };
 
@@ -22,37 +23,6 @@ const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
 pub struct RebaseCommit {
     pub oid: String,
     pub subject: String,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "lowercase")]
-pub enum RebaseAction {
-    Pick,
-    Reword,
-    Edit,
-    Squash,
-    Fixup,
-    Drop,
-}
-
-impl RebaseAction {
-    pub fn git_keyword(self) -> &'static str {
-        match self {
-            Self::Pick | Self::Reword => "pick",
-            Self::Edit => "edit",
-            Self::Squash => "squash",
-            Self::Fixup => "fixup",
-            Self::Drop => "drop",
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RebaseTodoItem {
-    pub oid: String,
-    pub action: RebaseAction,
-    pub message: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -59,6 +59,11 @@ pub(in crate::workflows) async fn start_repository_rebase(
     )
     .await
     .map_err(ApiError::from_workflow_error)?;
+    let todo = request
+        .todo
+        .into_iter()
+        .map(crate::domain::workflow::RebaseTodoItem::from)
+        .collect::<Vec<_>>();
     if preview.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
         || preview.onto_oid != request.expected_onto_oid
         || preview.preview_revision != request.preview_revision
@@ -78,7 +83,7 @@ pub(in crate::workflows) async fn start_repository_rebase(
     }
     rebase::validate_todo(
         &preview,
-        &request.todo,
+        &todo,
         request.confirm_drop,
         request.confirm_published_rewrite,
     )
@@ -119,7 +124,6 @@ pub(in crate::workflows) async fn start_repository_rebase(
     let expected_head_oid = request.expected_head_oid;
     let onto_oid = request.expected_onto_oid;
     let expected_preview_revision = request.preview_revision;
-    let todo = request.todo;
     let confirm_drop = request.confirm_drop;
     let confirm_published_rewrite = request.confirm_published_rewrite;
     let task = state

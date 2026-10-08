@@ -558,7 +558,7 @@ impl GitCommandService {
         expected_head_oid: &str,
         onto_oid: &str,
         preview: &crate::rebase::RebasePreview,
-        todo: &[crate::rebase::RebaseTodoItem],
+        todo: &[crate::domain::workflow::RebaseTodoItem],
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let todo_plan = TemporaryRebasePlan::create(preview, todo)?;
@@ -1532,7 +1532,7 @@ struct TemporaryRebasePlan {
 impl TemporaryRebasePlan {
     fn create(
         preview: &crate::rebase::RebasePreview,
-        todo: &[crate::rebase::RebaseTodoItem],
+        todo: &[crate::domain::workflow::RebaseTodoItem],
     ) -> Result<Self, TaskFailure> {
         let parent = std::env::temp_dir();
         let directory = (0..10)
@@ -1565,7 +1565,7 @@ impl TemporaryRebasePlan {
             let subject = subjects.get(item.oid.as_str()).ok_or_else(|| {
                 TaskFailure::Failed("The reviewed rebase todo no longer matches its preview".into())
             })?;
-            if item.action == crate::rebase::RebaseAction::Reword {
+            if item.action == crate::domain::workflow::RebaseAction::Reword {
                 let message_path = plan.directory.join(format!("message-{index}"));
                 std::fs::write(
                     &message_path,

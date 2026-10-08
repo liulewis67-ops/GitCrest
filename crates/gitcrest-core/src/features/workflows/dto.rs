@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
+use super::reset;
 use super::service::WorkflowAction;
-use super::{rebase, reset};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -46,9 +46,48 @@ pub(super) struct RebaseRequest {
     pub(super) expected_head_oid: String,
     pub(super) expected_onto_oid: String,
     pub(super) preview_revision: String,
-    pub(super) todo: Vec<rebase::RebaseTodoItem>,
+    pub(super) todo: Vec<RebaseTodoItemDto>,
     pub(super) confirm_drop: bool,
     pub(super) confirm_published_rewrite: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct RebaseTodoItemDto {
+    pub(super) oid: String,
+    pub(super) action: RebaseActionDto,
+    pub(super) message: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub(super) enum RebaseActionDto {
+    Pick,
+    Reword,
+    Edit,
+    Squash,
+    Fixup,
+    Drop,
+}
+
+impl From<RebaseTodoItemDto> for crate::domain::workflow::RebaseTodoItem {
+    fn from(item: RebaseTodoItemDto) -> Self {
+        use crate::domain::workflow::RebaseAction;
+
+        let action = match item.action {
+            RebaseActionDto::Pick => RebaseAction::Pick,
+            RebaseActionDto::Reword => RebaseAction::Reword,
+            RebaseActionDto::Edit => RebaseAction::Edit,
+            RebaseActionDto::Squash => RebaseAction::Squash,
+            RebaseActionDto::Fixup => RebaseAction::Fixup,
+            RebaseActionDto::Drop => RebaseAction::Drop,
+        };
+        Self {
+            oid: item.oid,
+            action,
+            message: item.message,
+        }
+    }
 }
 
 #[derive(Deserialize)]
