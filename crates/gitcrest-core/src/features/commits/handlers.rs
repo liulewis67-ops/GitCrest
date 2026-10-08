@@ -6,11 +6,13 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    commits,
-    diff::{self, DiffError, DiffScope},
+    features::{
+        commits,
+        diff::{self, DiffError, DiffScope},
+        status,
+        tasks::{TaskFailure, TaskSnapshot},
+    },
     state::AppState,
-    status,
-    tasks::{TaskFailure, TaskSnapshot},
 };
 enum CommitPatchError {
     Invalid,

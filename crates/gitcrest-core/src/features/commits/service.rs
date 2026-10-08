@@ -1,5 +1,5 @@
 use super::dto::CommitSelection;
-use crate::status::{ChangeCategory, StatusSnapshot};
+use crate::features::status::{ChangeCategory, StatusSnapshot};
 
 const MAX_COMMIT_MESSAGE_BYTES: usize = 64 * 1024;
 

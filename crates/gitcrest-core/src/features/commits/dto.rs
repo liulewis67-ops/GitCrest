@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::diff::DiffSelection;
+use crate::features::diff::DiffSelection;
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
