@@ -30,8 +30,7 @@ use crate::{
     ports::git::GitReadPort,
 };
 
-#[path = "workflow_state.rs"]
-pub(crate) mod workflow_state;
+pub(crate) use super::workflow_state;
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);

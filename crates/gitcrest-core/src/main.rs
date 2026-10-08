@@ -27,8 +27,8 @@ mod credentials;
 #[path = "features/diff/mod.rs"]
 mod diff;
 mod domain;
-#[path = "git/git_command.rs"]
-mod git_command;
+mod git;
+pub(crate) use git::command as git_command;
 #[path = "features/history/mod.rs"]
 mod history;
 mod ports;
