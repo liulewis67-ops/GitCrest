@@ -190,6 +190,73 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
+  it("blocks pull while preserving uncommitted worktree changes", async () => {
+    const fixture = await createTempGitRepository();
+    const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-dirty-pull-remote-"));
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-dirty-pull-e2e-app-data-"));
+    const filePath = resolve(fixture.path, "src/dirty-pull.ts");
+
+    try {
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(filePath, "export const state = 'committed baseline';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/dirty-pull.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add dirty pull fixture"]);
+      await execFileAsync("git", ["init", "--bare", "--quiet", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", "--set-upstream", "origin", "HEAD"]);
+      const branch = (await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim();
+      const baselineHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+      const baselineTracking = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim();
+      const localEdit = "export const state = 'keep my uncommitted edit';\n";
+      await writeFile(filePath, localEdit);
+
+      app = await electron.launch({
+        args: ["."],
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+      });
+      const window = await app.firstWindow();
+      await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return response.status;
+      }, fixture.path);
+      expect(opened).toBe(200);
+
+      await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      await window.locator(".repositoryRowOpen").click();
+      await window.locator(".workspaceCrumb").waitFor();
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Pull", exact: true }).click();
+
+      const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
+      await pullDialog.getByText("Resolve the worktree state before pulling.").waitFor();
+      await pullDialog.getByRole("region", { name: "Local changes blocking pull" }).getByText("src/dirty-pull.ts").waitFor();
+      expect(await pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(false);
+      await pullDialog.getByLabel("Rebase").check();
+      expect(await pullDialog.getByRole("button", { name: "Pull with rebase" }).isEnabled()).toBe(false);
+      await pullDialog.getByRole("button", { name: "Cancel" }).click();
+
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(baselineHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim()).toBe(baselineTracking);
+      expect((await readFile(filePath, "utf8")).replace(/\r\n/g, "\n")).toBe(localEdit);
+    } finally {
+      await app?.close();
+      app = undefined;
+      await fixture.cleanup();
+      await rm(bareRemotePath, { recursive: true, force: true });
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("keeps remote tracking refs unchanged after a failed fetch and succeeds after retry", async () => {
     const fixture = await createTempGitRepository();
     const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-fetch-retry-"));
