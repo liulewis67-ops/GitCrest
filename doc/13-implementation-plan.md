@@ -1697,3 +1697,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：features 父模块当前包含 branches/credentials/status/system/tags/tasks，其他业务 feature 继续迁移；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,credentials/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`c2f74aa`
+
+### 后端 diff feature 纳入 features 父模块 — 小阶段 122
+- 状态：已完成（Diff 查询、选择模型与 API 由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `diff` 加入 `src/features/mod.rs`，删除 `lib.rs` 的独立路径声明，并通过 crate 内兼容重导出保留 `crate::diff` 调用。`diff/mod.rs` service re-export 从 `pub(super)` 改为 `pub(crate)`，保持迁移前 crate-root 父级下的有效可见范围；Diff DTO 与 handler 仍封装在 feature 内。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：features 父模块当前包含 branches/credentials/diff/status/system/tags/tasks；history/remotes/repositories/settings/shelves/staging/commits/workflows 等继续逐步迁入。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,diff/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`186bc92`
