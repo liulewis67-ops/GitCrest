@@ -3,19 +3,19 @@ use serde::Serialize;
 use crate::api::workflow::{WorkflowActionDto, WorkflowOperationDto};
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) struct WorkflowPreflightDto {
-    pub(in crate::workflows) repo_id: String,
-    pub(in crate::workflows) action: WorkflowActionDto,
-    pub(in crate::workflows) head_oid: Option<String>,
-    pub(in crate::workflows) target_oid: String,
-    pub(in crate::workflows) target_subject: String,
-    pub(in crate::workflows) operation_in_progress: Option<WorkflowOperationDto>,
-    pub(in crate::workflows) is_clean: bool,
-    pub(in crate::workflows) dirty_paths: Vec<String>,
-    pub(in crate::workflows) omitted_dirty_path_count: u32,
-    pub(in crate::workflows) conflicted_paths: Vec<String>,
-    pub(in crate::workflows) omitted_conflicted_path_count: u32,
-    pub(in crate::workflows) can_start: bool,
+pub(in crate::features::workflows) struct WorkflowPreflightDto {
+    pub(in crate::features::workflows) repo_id: String,
+    pub(in crate::features::workflows) action: WorkflowActionDto,
+    pub(in crate::features::workflows) head_oid: Option<String>,
+    pub(in crate::features::workflows) target_oid: String,
+    pub(in crate::features::workflows) target_subject: String,
+    pub(in crate::features::workflows) operation_in_progress: Option<WorkflowOperationDto>,
+    pub(in crate::features::workflows) is_clean: bool,
+    pub(in crate::features::workflows) dirty_paths: Vec<String>,
+    pub(in crate::features::workflows) omitted_dirty_path_count: u32,
+    pub(in crate::features::workflows) conflicted_paths: Vec<String>,
+    pub(in crate::features::workflows) omitted_conflicted_path_count: u32,
+    pub(in crate::features::workflows) can_start: bool,
 }
 
 impl From<super::super::service::WorkflowPreflight> for WorkflowPreflightDto {
@@ -39,18 +39,18 @@ impl From<super::super::service::WorkflowPreflight> for WorkflowPreflightDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) struct WorkflowRecoveryPreflightDto {
-    pub(in crate::workflows) repo_id: String,
-    pub(in crate::workflows) task_id: String,
-    pub(in crate::workflows) operation: WorkflowOperationDto,
-    pub(in crate::workflows) head_oid: Option<String>,
-    pub(in crate::workflows) dirty_paths: Vec<String>,
-    pub(in crate::workflows) omitted_dirty_path_count: u32,
-    pub(in crate::workflows) conflicted_paths: Vec<String>,
-    pub(in crate::workflows) omitted_conflicted_path_count: u32,
-    pub(in crate::workflows) can_continue: bool,
-    pub(in crate::workflows) can_skip: bool,
-    pub(in crate::workflows) can_abort: bool,
+pub(in crate::features::workflows) struct WorkflowRecoveryPreflightDto {
+    pub(in crate::features::workflows) repo_id: String,
+    pub(in crate::features::workflows) task_id: String,
+    pub(in crate::features::workflows) operation: WorkflowOperationDto,
+    pub(in crate::features::workflows) head_oid: Option<String>,
+    pub(in crate::features::workflows) dirty_paths: Vec<String>,
+    pub(in crate::features::workflows) omitted_dirty_path_count: u32,
+    pub(in crate::features::workflows) conflicted_paths: Vec<String>,
+    pub(in crate::features::workflows) omitted_conflicted_path_count: u32,
+    pub(in crate::features::workflows) can_continue: bool,
+    pub(in crate::features::workflows) can_skip: bool,
+    pub(in crate::features::workflows) can_abort: bool,
 }
 
 impl From<super::super::service::WorkflowRecoveryPreflight> for WorkflowRecoveryPreflightDto {
@@ -73,18 +73,18 @@ impl From<super::super::service::WorkflowRecoveryPreflight> for WorkflowRecovery
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) struct ConflictFileDto {
-    pub(in crate::workflows) repo_id: String,
-    pub(in crate::workflows) task_id: String,
-    pub(in crate::workflows) path: String,
-    pub(in crate::workflows) operation: WorkflowOperationDto,
-    pub(in crate::workflows) head_oid: Option<String>,
-    pub(in crate::workflows) base_content: Option<String>,
-    pub(in crate::workflows) ours_content: Option<String>,
-    pub(in crate::workflows) theirs_content: Option<String>,
-    pub(in crate::workflows) result_content: Option<String>,
-    pub(in crate::workflows) result_revision: String,
-    pub(in crate::workflows) is_text: bool,
+pub(in crate::features::workflows) struct ConflictFileDto {
+    pub(in crate::features::workflows) repo_id: String,
+    pub(in crate::features::workflows) task_id: String,
+    pub(in crate::features::workflows) path: String,
+    pub(in crate::features::workflows) operation: WorkflowOperationDto,
+    pub(in crate::features::workflows) head_oid: Option<String>,
+    pub(in crate::features::workflows) base_content: Option<String>,
+    pub(in crate::features::workflows) ours_content: Option<String>,
+    pub(in crate::features::workflows) theirs_content: Option<String>,
+    pub(in crate::features::workflows) result_content: Option<String>,
+    pub(in crate::features::workflows) result_revision: String,
+    pub(in crate::features::workflows) is_text: bool,
 }
 
 impl From<super::super::conflicts::ConflictFile> for ConflictFileDto {
@@ -107,19 +107,19 @@ impl From<super::super::conflicts::ConflictFile> for ConflictFileDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) struct RebasePreviewDto {
-    pub(in crate::workflows) repo_id: String,
-    pub(in crate::workflows) head_oid: Option<String>,
-    pub(in crate::workflows) onto_oid: String,
-    pub(in crate::workflows) current_branch: Option<String>,
-    pub(in crate::workflows) commits: Vec<super::super::rebase::RebaseCommit>,
-    pub(in crate::workflows) omitted_commit_count: u32,
-    pub(in crate::workflows) published_commit_oids: Vec<String>,
-    pub(in crate::workflows) dirty_paths: Vec<String>,
-    pub(in crate::workflows) omitted_dirty_path_count: u32,
-    pub(in crate::workflows) operation_in_progress: Option<WorkflowOperationDto>,
-    pub(in crate::workflows) preview_revision: String,
-    pub(in crate::workflows) can_start: bool,
+pub(in crate::features::workflows) struct RebasePreviewDto {
+    pub(in crate::features::workflows) repo_id: String,
+    pub(in crate::features::workflows) head_oid: Option<String>,
+    pub(in crate::features::workflows) onto_oid: String,
+    pub(in crate::features::workflows) current_branch: Option<String>,
+    pub(in crate::features::workflows) commits: Vec<super::super::rebase::RebaseCommit>,
+    pub(in crate::features::workflows) omitted_commit_count: u32,
+    pub(in crate::features::workflows) published_commit_oids: Vec<String>,
+    pub(in crate::features::workflows) dirty_paths: Vec<String>,
+    pub(in crate::features::workflows) omitted_dirty_path_count: u32,
+    pub(in crate::features::workflows) operation_in_progress: Option<WorkflowOperationDto>,
+    pub(in crate::features::workflows) preview_revision: String,
+    pub(in crate::features::workflows) can_start: bool,
 }
 
 impl From<super::super::rebase::RebasePreview> for RebasePreviewDto {
@@ -143,13 +143,13 @@ impl From<super::super::rebase::RebasePreview> for RebasePreviewDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) struct RebaseBackupSnapshotDto {
-    pub(in crate::workflows) head_oid: Option<String>,
-    pub(in crate::workflows) current_branch: Option<String>,
-    pub(in crate::workflows) dirty_paths: Vec<String>,
-    pub(in crate::workflows) operation_in_progress: Option<WorkflowOperationDto>,
-    pub(in crate::workflows) backups: Vec<super::super::rebase::RebaseBackup>,
-    pub(in crate::workflows) can_rollback: bool,
+pub(in crate::features::workflows) struct RebaseBackupSnapshotDto {
+    pub(in crate::features::workflows) head_oid: Option<String>,
+    pub(in crate::features::workflows) current_branch: Option<String>,
+    pub(in crate::features::workflows) dirty_paths: Vec<String>,
+    pub(in crate::features::workflows) operation_in_progress: Option<WorkflowOperationDto>,
+    pub(in crate::features::workflows) backups: Vec<super::super::rebase::RebaseBackup>,
+    pub(in crate::features::workflows) can_rollback: bool,
 }
 
 impl From<super::super::rebase::RebaseBackupSnapshot> for RebaseBackupSnapshotDto {
@@ -167,20 +167,20 @@ impl From<super::super::rebase::RebaseBackupSnapshot> for RebaseBackupSnapshotDt
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) struct ResetPreviewDto {
-    pub(in crate::workflows) repo_id: String,
-    pub(in crate::workflows) expected_head_oid: String,
-    pub(in crate::workflows) target_oid: String,
-    pub(in crate::workflows) current_branch: String,
-    pub(in crate::workflows) mode: super::super::reset::ResetMode,
-    pub(in crate::workflows) commits_removed: u32,
-    pub(in crate::workflows) commits_added: u32,
-    pub(in crate::workflows) affected_paths: Vec<String>,
-    pub(in crate::workflows) omitted_path_count: u32,
-    pub(in crate::workflows) dirty_paths: Vec<String>,
-    pub(in crate::workflows) operation_in_progress: Option<WorkflowOperationDto>,
-    pub(in crate::workflows) preview_revision: String,
-    pub(in crate::workflows) can_start: bool,
+pub(in crate::features::workflows) struct ResetPreviewDto {
+    pub(in crate::features::workflows) repo_id: String,
+    pub(in crate::features::workflows) expected_head_oid: String,
+    pub(in crate::features::workflows) target_oid: String,
+    pub(in crate::features::workflows) current_branch: String,
+    pub(in crate::features::workflows) mode: super::super::reset::ResetMode,
+    pub(in crate::features::workflows) commits_removed: u32,
+    pub(in crate::features::workflows) commits_added: u32,
+    pub(in crate::features::workflows) affected_paths: Vec<String>,
+    pub(in crate::features::workflows) omitted_path_count: u32,
+    pub(in crate::features::workflows) dirty_paths: Vec<String>,
+    pub(in crate::features::workflows) operation_in_progress: Option<WorkflowOperationDto>,
+    pub(in crate::features::workflows) preview_revision: String,
+    pub(in crate::features::workflows) can_start: bool,
 }
 
 impl From<super::super::reset::ResetPreview> for ResetPreviewDto {
@@ -205,13 +205,13 @@ impl From<super::super::reset::ResetPreview> for ResetPreviewDto {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) struct ResetBackupSnapshotDto {
-    pub(in crate::workflows) head_oid: Option<String>,
-    pub(in crate::workflows) current_branch: Option<String>,
-    pub(in crate::workflows) dirty_paths: Vec<String>,
-    pub(in crate::workflows) operation_in_progress: Option<WorkflowOperationDto>,
-    pub(in crate::workflows) backups: Vec<super::super::reset::ResetBackup>,
-    pub(in crate::workflows) can_restore: bool,
+pub(in crate::features::workflows) struct ResetBackupSnapshotDto {
+    pub(in crate::features::workflows) head_oid: Option<String>,
+    pub(in crate::features::workflows) current_branch: Option<String>,
+    pub(in crate::features::workflows) dirty_paths: Vec<String>,
+    pub(in crate::features::workflows) operation_in_progress: Option<WorkflowOperationDto>,
+    pub(in crate::features::workflows) backups: Vec<super::super::reset::ResetBackup>,
+    pub(in crate::features::workflows) can_restore: bool,
 }
 
 impl From<super::super::reset::ResetBackupSnapshot> for ResetBackupSnapshotDto {

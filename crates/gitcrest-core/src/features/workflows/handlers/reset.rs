@@ -14,7 +14,7 @@ use crate::{
     tasks::{TaskFailure, TaskSnapshot},
 };
 
-pub(in crate::workflows) async fn preflight_repository_reset(
+pub(in crate::features::workflows) async fn preflight_repository_reset(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<ResetPreviewQuery>, QueryRejection>,
@@ -44,7 +44,7 @@ pub(in crate::workflows) async fn preflight_repository_reset(
     .map_err(ApiError::from_workflow_error)
 }
 
-pub(in crate::workflows) async fn start_repository_reset(
+pub(in crate::features::workflows) async fn start_repository_reset(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<ResetRequest>, JsonRejection>,
@@ -155,7 +155,7 @@ pub(in crate::workflows) async fn start_repository_reset(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-pub(in crate::workflows) async fn list_repository_reset_backups(
+pub(in crate::features::workflows) async fn list_repository_reset_backups(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<ResetBackupSnapshotDto>, ApiError> {
@@ -181,7 +181,7 @@ fn is_reset_backup_reference(reference: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
-pub(in crate::workflows) async fn restore_repository_reset(
+pub(in crate::features::workflows) async fn restore_repository_reset(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<ResetRestoreRequest>, JsonRejection>,

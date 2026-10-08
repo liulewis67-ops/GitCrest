@@ -20,7 +20,7 @@ use crate::{
     tasks::{TaskFailure, TaskSnapshot},
 };
 
-pub(in crate::workflows) async fn preflight_repository_workflow_recovery(
+pub(in crate::features::workflows) async fn preflight_repository_workflow_recovery(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowRecoveryQuery>, QueryRejection>,
@@ -74,7 +74,7 @@ pub(in crate::workflows) async fn preflight_repository_workflow_recovery(
     Ok(Json(preview.into()))
 }
 
-pub(in crate::workflows) async fn recover_repository_workflow(
+pub(in crate::features::workflows) async fn recover_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowRecoveryRequest>, JsonRejection>,

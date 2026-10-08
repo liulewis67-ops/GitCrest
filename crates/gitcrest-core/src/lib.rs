@@ -23,13 +23,11 @@ mod state;
 mod storage;
 pub(crate) use features::{
     branches, commits, credentials, diff, history, remotes, repositories, settings, shelves,
-    staging, status, system, tags, tasks,
+    staging, status, system, tags, tasks, workflows,
 };
 pub(crate) use repositories::{cloning, repository};
 #[path = "refresh/watcher.rs"]
 mod watcher;
-#[path = "features/workflows/mod.rs"]
-mod workflows;
 
 use git::command::{BranchCommand, GitOperation, RemoteCommand};
 use repository::{Repository, RepositoryError};

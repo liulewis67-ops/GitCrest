@@ -20,7 +20,7 @@ use crate::{
     tasks::{TaskFailure, TaskService, TaskSnapshot, TaskStatus},
 };
 
-pub(in crate::workflows) async fn read_workflow_conflict_file(
+pub(in crate::features::workflows) async fn read_workflow_conflict_file(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowConflictFileQuery>, QueryRejection>,
@@ -98,7 +98,7 @@ pub(in crate::workflows) async fn read_workflow_conflict_file(
     .map_err(ApiError::from_conflict_error)
 }
 
-pub(in crate::workflows) async fn get_workflow_conflict_ai_settings(
+pub(in crate::features::workflows) async fn get_workflow_conflict_ai_settings(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<ai::AiSettings>, ApiError> {
@@ -213,7 +213,7 @@ async fn read_reviewed_conflict_for_suggestion(
     Ok(file)
 }
 
-pub(in crate::workflows) async fn request_workflow_conflict_suggestion(
+pub(in crate::features::workflows) async fn request_workflow_conflict_suggestion(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowConflictSuggestionRequest>, JsonRejection>,
@@ -273,7 +273,7 @@ pub(in crate::workflows) async fn request_workflow_conflict_suggestion(
     }))
 }
 
-pub(in crate::workflows) async fn save_workflow_conflict_file(
+pub(in crate::features::workflows) async fn save_workflow_conflict_file(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowConflictSaveRequest>, JsonRejection>,
@@ -386,7 +386,7 @@ pub(in crate::workflows) async fn save_workflow_conflict_file(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-pub(in crate::workflows) async fn mark_workflow_conflict_resolved(
+pub(in crate::features::workflows) async fn mark_workflow_conflict_resolved(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowConflictMutationRequest>, JsonRejection>,

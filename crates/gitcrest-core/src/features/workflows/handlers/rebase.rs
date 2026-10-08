@@ -15,7 +15,7 @@ use crate::{
     tasks::{TaskFailure, TaskSnapshot},
 };
 
-pub(in crate::workflows) async fn preflight_repository_rebase(
+pub(in crate::features::workflows) async fn preflight_repository_rebase(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<RebasePreviewQuery>, QueryRejection>,
@@ -44,7 +44,7 @@ pub(in crate::workflows) async fn preflight_repository_rebase(
     .map_err(ApiError::from_workflow_error)
 }
 
-pub(in crate::workflows) async fn start_repository_rebase(
+pub(in crate::features::workflows) async fn start_repository_rebase(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<RebaseRequest>, JsonRejection>,
@@ -205,7 +205,7 @@ pub(in crate::workflows) async fn start_repository_rebase(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-pub(in crate::workflows) async fn list_repository_rebase_backups(
+pub(in crate::features::workflows) async fn list_repository_rebase_backups(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<RebaseBackupSnapshotDto>, ApiError> {
@@ -231,7 +231,7 @@ fn is_rebase_backup_reference(reference: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
-pub(in crate::workflows) async fn rollback_repository_rebase(
+pub(in crate::features::workflows) async fn rollback_repository_rebase(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<RebaseRollbackRequest>, JsonRejection>,

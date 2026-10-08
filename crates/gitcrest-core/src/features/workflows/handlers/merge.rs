@@ -15,7 +15,7 @@ use crate::{
     tasks::{TaskFailure, TaskSnapshot},
 };
 
-pub(in crate::workflows) async fn preflight_repository_workflow(
+pub(in crate::features::workflows) async fn preflight_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowPreflightQuery>, QueryRejection>,
@@ -46,7 +46,7 @@ pub(in crate::workflows) async fn preflight_repository_workflow(
     .map_err(ApiError::from_workflow_error)
 }
 
-pub(in crate::workflows) async fn start_repository_workflow(
+pub(in crate::features::workflows) async fn start_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowRequest>, JsonRejection>,

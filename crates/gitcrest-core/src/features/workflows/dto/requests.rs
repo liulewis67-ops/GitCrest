@@ -9,39 +9,39 @@ use super::super::reset;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowPreflightQuery {
-    pub(in crate::workflows) action: WorkflowActionDto,
-    pub(in crate::workflows) target_oid: String,
+pub(in crate::features::workflows) struct WorkflowPreflightQuery {
+    pub(in crate::features::workflows) action: WorkflowActionDto,
+    pub(in crate::features::workflows) target_oid: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowRequest {
-    pub(in crate::workflows) action: WorkflowActionDto,
-    pub(in crate::workflows) target_oid: String,
-    pub(in crate::workflows) expected_head_oid: String,
+pub(in crate::features::workflows) struct WorkflowRequest {
+    pub(in crate::features::workflows) action: WorkflowActionDto,
+    pub(in crate::features::workflows) target_oid: String,
+    pub(in crate::features::workflows) expected_head_oid: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowRecoveryQuery {
-    pub(in crate::workflows) task_id: String,
+pub(in crate::features::workflows) struct WorkflowRecoveryQuery {
+    pub(in crate::features::workflows) task_id: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowRecoveryRequest {
-    pub(in crate::workflows) task_id: String,
-    pub(in crate::workflows) action: WorkflowRecoveryActionDto,
+pub(in crate::features::workflows) struct WorkflowRecoveryRequest {
+    pub(in crate::features::workflows) task_id: String,
+    pub(in crate::features::workflows) action: WorkflowRecoveryActionDto,
     #[serde(deserialize_with = "deserialize_workflow_operation")]
-    pub(in crate::workflows) expected_operation: WorkflowOperation,
-    pub(in crate::workflows) expected_head_oid: String,
-    pub(in crate::workflows) expected_conflicted_paths: Vec<String>,
+    pub(in crate::features::workflows) expected_operation: WorkflowOperation,
+    pub(in crate::features::workflows) expected_head_oid: String,
+    pub(in crate::features::workflows) expected_conflicted_paths: Vec<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub(in crate::workflows) enum WorkflowRecoveryActionDto {
+pub(in crate::features::workflows) enum WorkflowRecoveryActionDto {
     Continue,
     Skip,
     Abort,
@@ -61,32 +61,32 @@ impl From<WorkflowRecoveryActionDto> for crate::domain::workflow::WorkflowRecove
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct RebasePreviewQuery {
-    pub(in crate::workflows) onto_oid: String,
+pub(in crate::features::workflows) struct RebasePreviewQuery {
+    pub(in crate::features::workflows) onto_oid: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct RebaseRequest {
-    pub(in crate::workflows) expected_head_oid: String,
-    pub(in crate::workflows) expected_onto_oid: String,
-    pub(in crate::workflows) preview_revision: String,
-    pub(in crate::workflows) todo: Vec<RebaseTodoItemDto>,
-    pub(in crate::workflows) confirm_drop: bool,
-    pub(in crate::workflows) confirm_published_rewrite: bool,
+pub(in crate::features::workflows) struct RebaseRequest {
+    pub(in crate::features::workflows) expected_head_oid: String,
+    pub(in crate::features::workflows) expected_onto_oid: String,
+    pub(in crate::features::workflows) preview_revision: String,
+    pub(in crate::features::workflows) todo: Vec<RebaseTodoItemDto>,
+    pub(in crate::features::workflows) confirm_drop: bool,
+    pub(in crate::features::workflows) confirm_published_rewrite: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct RebaseTodoItemDto {
-    pub(in crate::workflows) oid: String,
-    pub(in crate::workflows) action: RebaseActionDto,
-    pub(in crate::workflows) message: Option<String>,
+pub(in crate::features::workflows) struct RebaseTodoItemDto {
+    pub(in crate::features::workflows) oid: String,
+    pub(in crate::features::workflows) action: RebaseActionDto,
+    pub(in crate::features::workflows) message: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "lowercase")]
-pub(in crate::workflows) enum RebaseActionDto {
+pub(in crate::features::workflows) enum RebaseActionDto {
     Pick,
     Reword,
     Edit,
@@ -117,74 +117,74 @@ impl From<RebaseTodoItemDto> for crate::domain::workflow::RebaseTodoItem {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct RebaseRollbackRequest {
-    pub(in crate::workflows) expected_head_oid: String,
-    pub(in crate::workflows) backup_reference: String,
-    pub(in crate::workflows) backup_oid: String,
-    pub(in crate::workflows) confirm_rollback: bool,
+pub(in crate::features::workflows) struct RebaseRollbackRequest {
+    pub(in crate::features::workflows) expected_head_oid: String,
+    pub(in crate::features::workflows) backup_reference: String,
+    pub(in crate::features::workflows) backup_oid: String,
+    pub(in crate::features::workflows) confirm_rollback: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct ResetPreviewQuery {
-    pub(in crate::workflows) target_oid: String,
-    pub(in crate::workflows) mode: reset::ResetMode,
+pub(in crate::features::workflows) struct ResetPreviewQuery {
+    pub(in crate::features::workflows) target_oid: String,
+    pub(in crate::features::workflows) mode: reset::ResetMode,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct ResetRequest {
-    pub(in crate::workflows) expected_head_oid: String,
-    pub(in crate::workflows) target_oid: String,
-    pub(in crate::workflows) mode: reset::ResetMode,
-    pub(in crate::workflows) preview_revision: String,
-    pub(in crate::workflows) confirm_reset: bool,
+pub(in crate::features::workflows) struct ResetRequest {
+    pub(in crate::features::workflows) expected_head_oid: String,
+    pub(in crate::features::workflows) target_oid: String,
+    pub(in crate::features::workflows) mode: reset::ResetMode,
+    pub(in crate::features::workflows) preview_revision: String,
+    pub(in crate::features::workflows) confirm_reset: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct ResetRestoreRequest {
-    pub(in crate::workflows) expected_head_oid: String,
-    pub(in crate::workflows) backup_reference: String,
-    pub(in crate::workflows) backup_oid: String,
-    pub(in crate::workflows) confirm_restore: bool,
+pub(in crate::features::workflows) struct ResetRestoreRequest {
+    pub(in crate::features::workflows) expected_head_oid: String,
+    pub(in crate::features::workflows) backup_reference: String,
+    pub(in crate::features::workflows) backup_oid: String,
+    pub(in crate::features::workflows) confirm_restore: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowConflictFileQuery {
-    pub(in crate::workflows) task_id: String,
-    pub(in crate::workflows) path: String,
+pub(in crate::features::workflows) struct WorkflowConflictFileQuery {
+    pub(in crate::features::workflows) task_id: String,
+    pub(in crate::features::workflows) path: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowConflictSuggestionRequest {
-    pub(in crate::workflows) task_id: String,
-    pub(in crate::workflows) path: String,
+pub(in crate::features::workflows) struct WorkflowConflictSuggestionRequest {
+    pub(in crate::features::workflows) task_id: String,
+    pub(in crate::features::workflows) path: String,
     #[serde(deserialize_with = "deserialize_workflow_operation")]
-    pub(in crate::workflows) expected_operation: WorkflowOperation,
-    pub(in crate::workflows) expected_head_oid: Option<String>,
-    pub(in crate::workflows) expected_result_revision: String,
+    pub(in crate::features::workflows) expected_operation: WorkflowOperation,
+    pub(in crate::features::workflows) expected_head_oid: Option<String>,
+    pub(in crate::features::workflows) expected_result_revision: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowConflictMutationRequest {
-    pub(in crate::workflows) task_id: String,
-    pub(in crate::workflows) path: String,
+pub(in crate::features::workflows) struct WorkflowConflictMutationRequest {
+    pub(in crate::features::workflows) task_id: String,
+    pub(in crate::features::workflows) path: String,
     #[serde(deserialize_with = "deserialize_workflow_operation")]
-    pub(in crate::workflows) expected_operation: WorkflowOperation,
-    pub(in crate::workflows) expected_head_oid: String,
-    pub(in crate::workflows) expected_result_revision: String,
+    pub(in crate::features::workflows) expected_operation: WorkflowOperation,
+    pub(in crate::features::workflows) expected_head_oid: String,
+    pub(in crate::features::workflows) expected_result_revision: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(in crate::workflows) struct WorkflowConflictSaveRequest {
+pub(in crate::features::workflows) struct WorkflowConflictSaveRequest {
     #[serde(flatten)]
-    pub(in crate::workflows) mutation: WorkflowConflictMutationRequest,
-    pub(in crate::workflows) content: String,
+    pub(in crate::features::workflows) mutation: WorkflowConflictMutationRequest,
+    pub(in crate::features::workflows) content: String,
 }
 
 fn deserialize_workflow_operation<'de, D>(deserializer: D) -> Result<WorkflowOperation, D::Error>
