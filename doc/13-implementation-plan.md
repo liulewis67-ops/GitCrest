@@ -1670,3 +1670,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：features 父模块当前包含 system/tags/tasks，其他业务 feature 仍由 lib.rs 根级声明；继续逐模块迁移并保留兼容路径，S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,tasks/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 实施 commit：`a000668`
+
+### 后端 status feature 纳入 features 父模块 — 小阶段 119
+- 状态：已完成（状态查询 feature 由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `status` 加入 `src/features/mod.rs`，删除 `lib.rs` 的独立路径声明，并通过 `pub(crate)` root re-export 保留 `crate::status` 消费路径。将 `status/mod.rs` 对 service API 的 `pub(super)` 调整为 `pub(crate)`；其原父级是 crate root，因此迁移前后的有效可见范围一致，未额外暴露此前不可访问的接口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：features 父模块当前包含 system/tags/tasks/status；其余 feature 继续逐项迁入。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,status/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`8527948`
