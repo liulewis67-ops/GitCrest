@@ -900,3 +900,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/app/App.tsx`、`src/app/routing/RendererRoot.tsx`、`tests/unit/app.test.tsx`。
 - 实施 commit：`e933bf5`
 
+
+### 前端 preload bridge 适配器边界 — 小阶段 34
+- 状态：已完成（桌面桥接契约和 renderer 访问集中到 api/bridge）
+- 日期：2026-10-09
+- 交付：新增 `src/api/bridge.ts` 定义 preload 连接、事件和 bridge 类型，集中提供可选/必需 bridge 获取；`Window.gitcrest` 类型改为可缺省，App、Diff 和冲突窗口统一经适配器访问。浏览器预览缺少 preload 时，主窗口启动错误或独立 Diff/冲突窗口展示明确桌面应用要求，不再直接解引用缺失的 `window.gitcrest`。
+- 验证：bridge 与冲突窗口定向测试 4/4、完整 Vitest 单测 155/155、`pnpm build`、`pnpm frontend:build`、测试 TypeScript 检查及 `git diff --check` 通过。Electron/浏览器构建仍显示既有 tree-sitter `eval` 与浏览器 bundle 大块警告。
+- 限制/后续：目前仅把 preload 类型及调用边界集中起来，尚未把所有 sidecar 连接生命周期/API client 装配迁至 app bootstrap；桥接的权限仍由现有 preload/Electron IPC 具体实现负责，需继续按功能规范拆解并验证。S7.2、S7.4、S7.5 验收仍未完成。
+- 证据：`src/api/bridge.ts`、`src/global.d.ts`、`src/app/App.tsx`、`src/features/diff/DiffWindow.tsx`、`src/features/workflows/ConflictWindow.tsx`、`tests/unit/bridge.test.ts`。
+- 实施 commit：`341a9e3`
+
