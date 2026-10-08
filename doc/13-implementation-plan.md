@@ -1301,3 +1301,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：rebase/reset preview 和 remote branch delete preview 的其余只读 Git 查询仍由 feature 直接执行；后续继续将这些查询移至有明确语义的 port 方法。
 - 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/workflows/{rebase.rs,reset.rs}`。
 - 实施 commit：`78ab1c8`
+
+### 后端 rebase/reset preview 基础标识读取复用 Git port — 小阶段 78
+- 状态：已完成（目标 commit、HEAD 与分支读取统一经过 port）
+- 日期：2026-10-09
+- 交付：rebase/reset preview 改用 `WorkflowGitPort` 解析目标 commit、读取当前 HEAD 与分支；reset 对缺失 HEAD/分支仍返回 Git 预检失败，rebase 仍保留 unborn/detached HEAD 可预览状态。删除 rebase feature 不再需要的 optional 子进程 helper，其余 preview 查询逻辑和结果计算不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：rebase commit 列表/远端发布检查、reset 变更计数/路径枚举，以及 remote delete preview 查询仍从 feature 直接执行 Git；后续按查询职责继续收敛到 adapter。
+- 证据：`crates/gitcrest-core/src/features/workflows/{rebase.rs,reset.rs}`、`crates/gitcrest-core/src/ports/workflow_git.rs`。
+- 实施 commit：`69a42c3`
