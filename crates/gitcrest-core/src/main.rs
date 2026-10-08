@@ -30,6 +30,7 @@ use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
+mod ai;
 mod branches;
 mod cloning;
 mod commits;
@@ -71,6 +72,7 @@ struct AppState {
     git_commands: GitCommandService,
     clones: CloneService,
     credentials: credentials::CredentialManager,
+    ai_credentials: credentials::AiCredentialManager,
 }
 
 #[derive(Serialize)]
@@ -895,6 +897,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         git_commands,
         clones,
         credentials: credentials::CredentialManager::system(),
+        ai_credentials: credentials::AiCredentialManager::system(),
     };
     let cors_origin = env::var("GITCREST_CORS_ORIGIN")
         .ok()
@@ -991,6 +994,11 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             get(get_credential_status)
                 .put(set_credential)
                 .delete(delete_credential),
+        )
+        .route("/v1/ai/settings", get(get_ai_settings).put(set_ai_settings))
+        .route(
+            "/v1/ai/credential",
+            put(set_ai_credential).delete(delete_ai_credential),
         )
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
         .route(
@@ -2732,6 +2740,170 @@ async fn delete_credential(
     })?;
     let manager = state.credentials.clone();
     tokio::task::spawn_blocking(move || manager.delete(&query.host))
+        .await
+        .map_err(|_| ApiError::from_credential_error(credentials::CredentialError::Unavailable))?
+        .map_err(ApiError::from_credential_error)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+fn test_ai_credentials() -> credentials::AiCredentialManager {
+    credentials::AiCredentialManager::with_store(Arc::new(
+        credentials::MemoryAiCredentialStore::default(),
+    ))
+}
+
+fn ai_provider_name(provider: ai::AiProvider) -> &'static str {
+    match provider {
+        ai::AiProvider::None => "none",
+        ai::AiProvider::OpenAiCompatible => "openAiCompatible",
+        ai::AiProvider::Ollama => "ollama",
+    }
+}
+
+fn ai_settings_from_parts(
+    provider: &str,
+    base_url: String,
+    model: String,
+    has_cloud_credential: bool,
+) -> Result<ai::AiSettings, ApiError> {
+    let provider = match provider {
+        "none" => ai::AiProvider::None,
+        "openAiCompatible" => ai::AiProvider::OpenAiCompatible,
+        "ollama" => ai::AiProvider::Ollama,
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::InternalError,
+                "AI provider settings could not be read.",
+            ))
+        }
+    };
+    Ok(ai::AiSettings {
+        provider,
+        base_url,
+        model,
+        has_cloud_credential,
+    })
+}
+
+async fn get_ai_settings(State(state): State<AppState>) -> Result<Json<ai::AiSettings>, ApiError> {
+    let store = state.repositories.store();
+    let manager = state.ai_credentials.clone();
+    let settings = tokio::task::spawn_blocking(move || {
+        let (provider, base_url, model) = store.ai_provider_settings().map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::DatabaseUnavailable,
+                "AI provider settings are unavailable.",
+            )
+        })?;
+        let has_credential = manager
+            .is_configured()
+            .map_err(ApiError::from_credential_error)?;
+        ai_settings_from_parts(&provider, base_url, model, has_credential)
+    })
+    .await
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            ApiErrorCode::DatabaseUnavailable,
+            "AI provider settings are unavailable.",
+        )
+    })??;
+    Ok(Json(settings))
+}
+
+async fn set_ai_settings(
+    State(state): State<AppState>,
+    request: Result<Json<ai::AiSettingsRequest>, JsonRejection>,
+) -> Result<Json<ai::AiSettings>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Valid AI provider settings are required.",
+        )
+    })?;
+    ai::validate_settings(&request).map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The AI provider endpoint or model is invalid for the selected provider.",
+        )
+    })?;
+    let store = state.repositories.store();
+    let provider = ai_provider_name(request.provider).to_owned();
+    let base_url = request.base_url;
+    let model = request.model;
+    let manager = state.ai_credentials.clone();
+    let settings = tokio::task::spawn_blocking(move || {
+        store
+            .set_ai_provider_settings(&provider, &base_url, &model)
+            .map_err(|_| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    ApiErrorCode::DatabaseUnavailable,
+                    "AI provider settings could not be saved.",
+                )
+            })?;
+        let has_credential = manager
+            .is_configured()
+            .map_err(ApiError::from_credential_error)?;
+        ai_settings_from_parts(&provider, base_url, model, has_credential)
+    })
+    .await
+    .map_err(|_| {
+        ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            ApiErrorCode::DatabaseUnavailable,
+            "AI provider settings could not be saved.",
+        )
+    })??;
+    Ok(Json(settings))
+}
+
+async fn set_ai_credential(
+    State(state): State<AppState>,
+    request: Result<Json<ai::AiCredentialRequest>, JsonRejection>,
+) -> Result<Json<ai::AiSettings>, ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A non-empty API key is required.",
+        )
+    })?;
+    let store = state.repositories.store();
+    let manager = state.ai_credentials.clone();
+    let settings = tokio::task::spawn_blocking(move || {
+        let (provider, base_url, model) = store.ai_provider_settings().map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::DatabaseUnavailable,
+                "AI provider settings are unavailable.",
+            )
+        })?;
+        if provider != "openAiCompatible" {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::RequestInvalid,
+                "Select the OpenAI-compatible provider before saving an API key.",
+            ));
+        }
+        manager
+            .set(&request.api_key)
+            .map_err(ApiError::from_credential_error)?;
+        ai_settings_from_parts(&provider, base_url, model, true)
+    })
+    .await
+    .map_err(|_| ApiError::from_credential_error(credentials::CredentialError::Unavailable))??;
+    Ok(Json(settings))
+}
+
+async fn delete_ai_credential(State(state): State<AppState>) -> Result<StatusCode, ApiError> {
+    let manager = state.ai_credentials.clone();
+    tokio::task::spawn_blocking(move || manager.delete())
         .await
         .map_err(|_| ApiError::from_credential_error(credentials::CredentialError::Unavailable))?
         .map_err(ApiError::from_credential_error)?;
@@ -5883,6 +6055,7 @@ mod tests {
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
             credentials: test_credentials(),
+            ai_credentials: test_ai_credentials(),
             clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
             repositories,
             tasks,
@@ -6029,6 +6202,7 @@ mod tests {
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
                 conflict_token: None,
                 credentials: test_credentials(),
+                ai_credentials: test_ai_credentials(),
                 repositories,
                 tasks: tasks.clone(),
                 git_commands: commands.clone(),
@@ -6238,6 +6412,56 @@ mod tests {
         let status: serde_json::Value = serde_json::from_slice(&body).unwrap();
         assert_eq!(status["username"], serde_json::Value::Null);
         assert_eq!(status["isConfigured"], false);
+    }
+
+    #[tokio::test]
+    async fn ai_settings_and_credentials_never_return_the_api_key() {
+        let app = test_app(None);
+        let configured = app.clone().oneshot(json_request(
+            Method::PUT,
+            "/api/v1/ai/settings",
+            r#"{"provider":"openAiCompatible","baseUrl":"https://api.example.test/v1","model":"model-a"}"#,
+        )).await.unwrap();
+        assert_eq!(configured.status(), StatusCode::OK);
+
+        let saved = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                "/api/v1/ai/credential",
+                r#"{"apiKey":"secret-ai-token"}"#,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(saved.status(), StatusCode::OK);
+        let body = to_bytes(saved.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(text.contains("hasCloudCredential\":true"));
+        assert!(!text.contains("secret-ai-token"));
+
+        let status = app
+            .clone()
+            .oneshot(request("/api/v1/ai/settings", Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let body = to_bytes(status.into_body(), usize::MAX).await.unwrap();
+        let text = String::from_utf8(body.to_vec()).unwrap();
+        assert!(text.contains("hasCloudCredential\":true"));
+        assert!(!text.contains("secret-ai-token"));
+
+        let removed = app
+            .clone()
+            .oneshot(json_request(Method::DELETE, "/api/v1/ai/credential", "{}"))
+            .await
+            .unwrap();
+        assert_eq!(removed.status(), StatusCode::NO_CONTENT);
+        let status = app
+            .oneshot(request("/api/v1/ai/settings", Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let body = to_bytes(status.into_body(), usize::MAX).await.unwrap();
+        let status: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(status["hasCloudCredential"], false);
     }
 
     #[tokio::test]
@@ -6887,6 +7111,7 @@ mod tests {
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
                 conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
                 credentials: test_credentials(),
+                ai_credentials: test_ai_credentials(),
                 clones: CloneService::new(
                     tasks.clone(),
                     git_commands.clone(),
@@ -7601,6 +7826,7 @@ mod tests {
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
                 conflict_token: None,
                 credentials: test_credentials(),
+                ai_credentials: test_ai_credentials(),
                 repositories: RepositoryManager::default(),
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),
@@ -7723,6 +7949,7 @@ mod tests {
                 read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
                 conflict_token: None,
                 credentials: test_credentials(),
+                ai_credentials: test_ai_credentials(),
                 repositories,
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),

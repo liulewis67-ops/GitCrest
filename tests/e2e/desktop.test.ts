@@ -39,6 +39,20 @@ describe("desktop startup E2E", () => {
       expect(body).toContain("gitcrest-core 0.1.0 (API v1)");
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 
+      await window.getByRole("button", { name: "Settings" }).click();
+      const settingsDialog = window.getByRole("dialog", { name: "AI provider" });
+      await settingsDialog.waitFor();
+      await settingsDialog.getByRole("combobox", { name: "AI provider" }).selectOption("ollama");
+      await settingsDialog.getByRole("textbox", { name: "Model" }).fill("qwen2.5-coder:7b");
+      const settingsLoaded = await window.waitForFunction(() => {
+        const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Save provider settings"));
+        return Boolean(button && !button.disabled);
+      }, undefined, { timeout: 5000 }).catch(() => false);
+      if (!settingsLoaded) throw new Error(`AI settings did not load: ${await settingsDialog.innerText()}`);
+      await settingsDialog.getByRole("button", { name: "Save provider settings" }).click();
+      await settingsDialog.getByText("Provider settings saved. No model request was made.").waitFor();
+      await settingsDialog.getByRole("button", { name: "Close settings" }).click();
+
       const opened = await window.evaluate(async (repositoryPath) => {
         const connection = await (globalThis.window as unknown as Window & {
           gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };

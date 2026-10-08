@@ -1,12 +1,21 @@
 use std::{
     path::Path,
     sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::repository::Repository;
 use crate::shelves::{ShelfRecord, ShelfSnapshot};
+
+fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis()
+        .min(i64::MAX as u128) as i64
+}
 
 #[derive(Clone)]
 pub struct RepositoryStore {
@@ -82,6 +91,39 @@ impl RepositoryStore {
             .list()?
             .into_iter()
             .find(|repository| repository.repo_id == repo_id))
+    }
+
+    pub fn ai_provider_settings(&self) -> Result<(String, String, String), String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        connection
+            .query_row(
+                "SELECT provider, base_url, model FROM ai_provider_settings WHERE singleton_id=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn set_ai_provider_settings(
+        &self,
+        provider: &str,
+        base_url: &str,
+        model: &str,
+    ) -> Result<(), String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        connection
+            .execute(
+                "UPDATE ai_provider_settings SET provider=?1, base_url=?2, model=?3, updated_at_ms=?4 WHERE singleton_id=1",
+                params![provider, base_url, model, now_ms()],
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(())
     }
 
     pub fn mark_opened(
@@ -390,7 +432,7 @@ impl RepositoryStore {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 5 {
+    if version > 6 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -412,6 +454,10 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     if version < 5 {
         connection.execute_batch(include_str!("../migrations/0005_shelf_scope.sql"))?;
         connection.pragma_update(None, "user_version", 5)?;
+    }
+    if version < 6 {
+        connection.execute_batch(include_str!("../migrations/0006_ai_provider_settings.sql"))?;
+        connection.pragma_update(None, "user_version", 6)?;
     }
     Ok(())
 }
@@ -492,10 +538,35 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 6).unwrap();
+        connection.pragma_update(None, "user_version", 7).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
+    }
+
+    #[test]
+    fn ai_provider_settings_survive_database_reopen() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let store = RepositoryStore::open(&database).unwrap();
+        assert_eq!(
+            store.ai_provider_settings().unwrap(),
+            ("none".into(), "".into(), "".into())
+        );
+        store
+            .set_ai_provider_settings("ollama", "http://127.0.0.1:11434", "qwen2.5-coder:7b")
+            .unwrap();
+        drop(store);
+
+        let reopened = RepositoryStore::open(&database).unwrap();
+        assert_eq!(
+            reopened.ai_provider_settings().unwrap(),
+            (
+                "ollama".into(),
+                "http://127.0.0.1:11434".into(),
+                "qwen2.5-coder:7b".into()
+            )
+        );
     }
 
     #[test]

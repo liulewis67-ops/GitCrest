@@ -112,7 +112,7 @@
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 未开始 |
+| S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 进行中 |
 | S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 未开始 |
 | S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 未开始 |
 
@@ -394,3 +394,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 子阶段 C：新增远程分支删除预览和确认任务。预览绑定配置 remote、完整远程分支名、当前 remote-tracking OID、HEAD、两侧提交差异、最多 200 条受影响文件、操作状态和 revision；缺失或过期 tracking ref 会拒绝操作。UI 仅为非 /HEAD 远程分支提供删除入口，展示 ref、OID、提交/文件影响与不可撤销提示，必须显式确认。任务在仓库写许可下复核预览，再以 --force-with-lease=<ref>:<reviewed-oid> 删除远端分支；成功后通过 expected-OID compare-and-swap 清理本地 tracking ref，ref 已变化则保留并提示 fetch prune。验收：Rust bare remote API 集成用例验证 preview 绑定、无确认拒绝且远端 ref 不变、确认后远端与本地 tracking refs 删除；pnpm api:types、pnpm build、cargo check、cargo clippy --all-targets -- -D warnings、Rust fmt、git diff --check 通过。证据：crates/gitcrest-core/src/remotes.rs、crates/gitcrest-core/src/git_command.rs、crates/gitcrest-core/src/main.rs、doc/api/v1.yaml、src/api/client.ts、src/api/schema.ts、src/features/branches/RemoteBranchDeleteDialog.tsx、src/App.tsx、src/App.css。完成 commit：6b5abb2。
 - 子阶段 D：在工作区 Diff 中增加按选中 hunks/变更行精确丢弃。UI 显示文件和选择数量，并要求显式确认；提示可先 Shelve 保存恢复副本。API 只接受 working-tree 变更、路径、Diff revision 与选择，受理前和仓库写许可下均复核 revision，随后只向 git apply --reverse 输入已选 patch，不重置整个文件或索引。验收：Rust 临时仓库 API 用例验证仅首个 hunk 被还原、未选 hunk 保留、无确认拒绝、外部编辑后 stale 请求拒绝且新内容不变；另两项 API 用例验证 apply.whitespace 拒绝 patch 时文件不变，以及任务排队期间取消后工作树不变。pnpm api:types、pnpm build、cargo check、Clippy（all targets, -D warnings）、Rust fmt、git diff --check 通过。二进制 diff 不提供 hunk 丢弃入口。证据：crates/gitcrest-core/src/staging.rs、crates/gitcrest-core/src/main.rs、doc/api/v1.yaml、src/api/client.ts、src/api/schema.ts、src/features/diff/SplitDiff.tsx、src/features/diff/DiscardChangesDialog.tsx、src/App.tsx。功能 commits：29cfc7a、eaacda2。
 - 完成说明：S5.5 的 Reset 预览/备份/恢复、leased remote branch deletion、精确工作区 hunk/row discard 与确认/过期保护均已实现。S5.5 相关 feature commits：57242d5、e4772cd、6b5abb2、29cfc7a、eaacda2；计划记录见 e133587、3190ec1、acd688d、b430788 及本次完成记录。
+
+### S6.1 — 子阶段 A：provider 配置与安全凭证（已完成；S6.1 整体进行中）
+- 状态：子阶段 A 已完成；S6.1 尚待隐私范围预览与本地/云端请求边界验收。
+- 日期：2026-10-08
+- 交付：新增 SQLite provider 设置迁移/API 和系统 Keychain 独立命名空间；支持 HTTPS OpenAI-compatible 和仅 loopback HTTP Ollama，密钥 API 只返回配置状态。设置界面可保存 provider/endpoint/model 和云端 key；保存配置不发起模型请求，key 保存后清空输入，不进入 localStorage。
+- 测试：`pnpm api:types`、`pnpm test`（95 tests）、`pnpm build`、`pnpm test:e2e`（1 Electron test）、`cargo build`、`cargo test -- --test-threads=1`（93 Rust tests）、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`、`git diff --check` 均通过。E2E 验证打开设置并保存 Ollama 端点/model，UI 明确显示未请求模型。
+- 手工验证：未另行手工操作；桌面设置流程由 Electron E2E 覆盖。系统 Keychain 的跨平台交互留待 S7.4 实际安装包检查。
+- 安全验证：OpenAI-compatible 拒绝明文 HTTP、本机 loopback、内嵌 user-info、query；Ollama 只接受 loopback HTTP。API 集成测试保存随机测试 key 后确认 PUT/GET 响应均不包含 key；删除后状态转为未配置。AI key 使用独立于 Git HTTPS 凭证的 Keychain service。
+- 证据：`crates/gitcrest-core/migrations/0006_ai_provider_settings.sql`、`crates/gitcrest-core/src/ai.rs`、`crates/gitcrest-core/src/credentials.rs`、`crates/gitcrest-core/src/storage.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/features/settings/SettingsDialog.tsx`、`tests/unit/settings-dialog.test.tsx`、`tests/unit/api-client.test.ts`、`tests/e2e/desktop.test.ts`。
+- 剩余限制：尚未实现请求前文件/diff 范围预览，也未实现任何模型调用；这些属于 S6.1 子阶段 B，完成前 S6.1 不能标记完成。
+- 完成 commit：待提交后补记。

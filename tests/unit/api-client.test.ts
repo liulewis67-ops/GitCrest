@@ -5,6 +5,25 @@ const baseUrl = "http://127.0.0.1:43210";
 const token = "test-session-token";
 
 describe("GitCrestApiClient", () => {
+  it("stores AI provider settings and cloud credentials through separate versioned APIs", async () => {
+    const settings = { provider: "openAiCompatible" as const, baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(settings), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(settings), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await client.setAiSettings(settings.provider, settings.baseUrl, settings.model);
+    await client.setAiCredential("private-test-key");
+    await client.deleteAiCredential();
+    expect(new URL(String(fetcher.mock.calls[0][0])).pathname).toBe("/api/v1/ai/settings");
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ provider: settings.provider, baseUrl: settings.baseUrl, model: settings.model }));
+    expect(new URL(String(fetcher.mock.calls[1][0])).pathname).toBe("/api/v1/ai/credential");
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ apiKey: "private-test-key" }));
+    expect(new Headers(fetcher.mock.calls[1][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
+    expect(fetcher.mock.calls[2][1]?.method).toBe("DELETE");
+  });
+
   it("loads the authenticated bootstrap version without a v1 header", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       name: "gitcrest-core",

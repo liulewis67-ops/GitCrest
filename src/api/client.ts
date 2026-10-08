@@ -34,6 +34,7 @@ export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowCon
 export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflictSaveRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
+export type AiSettingsResponse = components["schemas"]["AiSettings"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
 export type CommitHistoryFilters = Pick<
   NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
@@ -244,6 +245,30 @@ export class GitCrestApiClient {
   deleteCredential(host: string): Promise<void> {
     const query = new URLSearchParams({ host });
     return this.request<void>(`/api/v1/credentials?${query}`, true, { method: "DELETE" });
+  }
+
+  getAiSettings(): Promise<AiSettingsResponse> {
+    return this.request<AiSettingsResponse>("/api/v1/ai/settings");
+  }
+
+  setAiSettings(provider: AiSettingsResponse["provider"], baseUrl: string, model: string): Promise<AiSettingsResponse> {
+    return this.request<AiSettingsResponse>("/api/v1/ai/settings", true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, baseUrl, model } satisfies components["schemas"]["AiSettingsRequest"]),
+    });
+  }
+
+  setAiCredential(apiKey: string): Promise<AiSettingsResponse> {
+    return this.request<AiSettingsResponse>("/api/v1/ai/credential", true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ apiKey } satisfies components["schemas"]["AiCredentialRequest"]),
+    });
+  }
+
+  deleteAiCredential(): Promise<void> {
+    return this.request<void>("/api/v1/ai/credential", true, { method: "DELETE" });
   }
 
   addRepositoryRemote(repoId: RepoId, name: string, url: string): Promise<TaskSnapshotResponse> {

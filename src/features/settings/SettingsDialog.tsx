@@ -1,0 +1,93 @@
+import { useEffect, useState, type FormEvent } from "react";
+import type { AiSettingsResponse, GitCrestApiClient } from "../../api/client";
+
+export function SettingsDialog({ api, onClose }: { api: GitCrestApiClient; onClose: () => void }) {
+  const [settings, setSettings] = useState<AiSettingsResponse>();
+  const [provider, setProvider] = useState<AiSettingsResponse["provider"]>("none");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [model, setModel] = useState("");
+  const [apiKey, setApiKey] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+
+  useEffect(() => {
+    let current = true;
+    void api.getAiSettings().then((value) => {
+      if (!current) return;
+      setSettings(value);
+      setProvider(value.provider);
+      setBaseUrl(value.baseUrl);
+      setModel(value.model);
+    }).catch((reason: unknown) => {
+      if (current) setError(reason instanceof Error ? reason.message : "Settings could not be loaded.");
+    });
+    return () => { current = false; };
+  }, [api]);
+
+  function changeProvider(next: AiSettingsResponse["provider"]) {
+    setProvider(next);
+    if (next === "openAiCompatible" && !baseUrl) setBaseUrl("https://api.openai.com/v1");
+    if (next === "openAiCompatible" && !model) setModel("gpt-4o-mini");
+    if (next === "ollama" && !baseUrl) setBaseUrl("http://127.0.0.1:11434");
+    if (next === "ollama" && !model) setModel("qwen2.5-coder:7b");
+    if (next === "none") { setBaseUrl(""); setModel(""); }
+  }
+
+  async function saveSettings(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const saved = await api.setAiSettings(provider, provider === "none" ? "" : baseUrl, provider === "none" ? "" : model);
+      setSettings(saved); setBaseUrl(saved.baseUrl); setModel(saved.model); setNotice("Provider settings saved. No model request was made.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "Settings could not be saved."); }
+    finally { setBusy(false); }
+  }
+
+  async function saveKey(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const saved = await api.setAiCredential(apiKey);
+      setSettings(saved); setApiKey(""); setNotice("API key saved to the system credential store.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "API key could not be saved."); }
+    finally { setBusy(false); }
+  }
+
+  async function removeKey() {
+    setBusy(true); setError(""); setNotice("");
+    try {
+      await api.deleteAiCredential();
+      setSettings((current) => current ? { ...current, hasCloudCredential: false } : current);
+      setNotice("Saved API key removed.");
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "API key could not be removed."); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <div className="paletteBackdrop cloneBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
+      <section className="taskCenter workflowDialog settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <header className="taskCenterHeader"><div><p className="sectionEyebrow">PREFERENCES</p><h2 id="settings-title">AI provider</h2></div><button className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label="Close settings">×</button></header>
+        <div className="workflowDialogBody">
+          <p className="settingsNotice">Provider settings are stored locally. Saving them does not send a request to an AI provider. Diff privacy review is not available yet.</p>
+          <form className="settingsForm" onSubmit={saveSettings}>
+            <label>Provider<select aria-label="AI provider" value={provider} onChange={(event) => changeProvider(event.target.value as AiSettingsResponse["provider"])}><option value="none">Disabled</option><option value="openAiCompatible">OpenAI-compatible cloud</option><option value="ollama">Ollama on this machine</option></select></label>
+            {provider !== "none" && <>
+              <label>Endpoint<input aria-label="AI endpoint" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={provider === "ollama" ? "http://127.0.0.1:11434" : "https://api.openai.com/v1"} autoComplete="url" /></label>
+              <label>Model<input aria-label="AI model" value={model} onChange={(event) => setModel(event.target.value)} /></label>
+            </>}
+            <button className="primaryButton" type="submit" disabled={busy || !settings}>{busy ? "Saving…" : "Save provider settings"}</button>
+          </form>
+          {provider === "openAiCompatible" && <form className="settingsForm settingsKeyForm" onSubmit={saveKey}>
+            <h3>Cloud API key</h3>
+            {settings?.provider !== "openAiCompatible" && <p>Save the OpenAI-compatible provider settings before adding its key.</p>}
+            <p>{settings?.hasCloudCredential ? "An API key is saved in the system credential store." : "No API key is saved."} The key is never returned to this window.</p>
+            <label>API key<input aria-label="Cloud API key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" /></label>
+            <div className="settingsActions"><button className="secondaryButton" type="submit" disabled={busy || settings?.provider !== "openAiCompatible" || !apiKey}>{busy ? "Saving…" : "Save API key"}</button>{settings?.hasCloudCredential && <button className="dangerTextButton" type="button" disabled={busy} onClick={() => void removeKey()}>Remove key</button>}</div>
+          </form>}
+          {error && <p className="formError" role="alert">{error}</p>}{notice && <p className="settingsNotice" role="status">{notice}</p>}
+        </div>
+      </section>
+    </div>
+  );
+}

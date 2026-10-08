@@ -401,6 +401,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/ai/settings": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** Read AI provider configuration and whether a cloud key is stored */
+        get: operations["getAiSettings"];
+        /** Save AI provider metadata without making a provider request */
+        put: operations["setAiSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/credential": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Store an OpenAI-compatible API key in the system credential store */
+        put: operations["setAiCredential"];
+        post?: never;
+        /** Remove the saved OpenAI-compatible API key */
+        delete: operations["deleteAiCredential"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/branches/delete-preview": {
         parameters: {
             query?: never;
@@ -1753,6 +1793,24 @@ export interface components {
             host: string;
             username: string | null;
             isConfigured: boolean;
+        };
+        AiSettings: {
+            /** @enum {string} */
+            provider: "none" | "openAiCompatible" | "ollama";
+            baseUrl: string;
+            model: string;
+            /** @description Presence only; the credential value is never returned. */
+            hasCloudCredential: boolean;
+        };
+        AiSettingsRequest: {
+            /** @enum {string} */
+            provider: "none" | "openAiCompatible" | "ollama";
+            /** @description OpenAI-compatible endpoints require HTTPS; Ollama requires a loopback HTTP endpoint. */
+            baseUrl: string;
+            model: string;
+        };
+        AiCredentialRequest: {
+            apiKey: string;
         };
         DeleteBranchRequest: {
             name: string;
@@ -3237,6 +3295,118 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    getAiSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider metadata only; the key is never returned. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    setAiSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Saved configuration and secret presence metadata. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    setAiCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiCredentialRequest"];
+            };
+        };
+        responses: {
+            /** @description Provider metadata only; the key is never returned. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    deleteAiCredential: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Credential removed or already absent. */
+            204: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     previewRepositoryBranchDelete: {

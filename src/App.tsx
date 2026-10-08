@@ -14,6 +14,7 @@ import { ShelfCenter } from "./features/shelves/ShelfCenter";
 import { PushTargetDialog, type PushTarget } from "./features/remotes/PushTargetDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
 import { DiscardChangesDialog } from "./features/diff/DiscardChangesDialog";
+import { SettingsDialog } from "./features/settings/SettingsDialog";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -206,6 +207,7 @@ function App() {
   const [switchBusy, setSwitchBusy] = useState(false);
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [workflowDialog, setWorkflowDialog] = useState<{ repoId: string; targetOid: string; action: WorkflowAction }>();
   const [rebaseDialogOpen, setRebaseDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
@@ -1517,6 +1519,7 @@ function App() {
         <button className="quietButton taskCenterButton" type="button" onClick={() => setTasksOpen(true)} aria-label={`Background tasks, ${tasks.filter((task) => task.status === "queued" || task.status === "running").length} active`}>
           Tasks <span className="countBadge">{tasks.filter((task) => task.status === "queued" || task.status === "running").length}</span>
         </button>
+        <button className="quietButton" type="button" onClick={() => setSettingsOpen(true)}>Settings</button>
         <div className={`connectionBadge ${connected ? "connected" : ""}`} role="status" aria-live="polite" aria-label={status} title={status}>
           <span className="connectionDot" aria-hidden="true" />
           <span>{connectionLabel}</span>
@@ -1863,6 +1866,7 @@ function App() {
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, preview, action) => void recoverWorkflowTask(task, preview, action)} onOpenConflictWindow={(task) => void openWorkflowConflictWindow(task)} />}
+      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} onClose={() => setSettingsOpen(false)} />}
       {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
       {workflowDialog && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.repoId} targetOid={workflowDialog.targetOid} action={workflowDialog.action} onClose={() => setWorkflowDialog(undefined)} onStarted={(task) => void startWorkflowTask(task)} />}
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}

@@ -832,6 +832,65 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "503": { description: The system credential store is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/ai/settings:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: getAiSettings
+      summary: Read AI provider configuration and whether a cloud key is stored
+      responses:
+        "200":
+          description: Provider metadata only; the key is never returned.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/AiSettings" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+    put:
+      operationId: setAiSettings
+      summary: Save AI provider metadata without making a provider request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiSettingsRequest" }
+      responses:
+        "200":
+          description: Saved configuration and secret presence metadata.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/AiSettings" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/ai/credential:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    put:
+      operationId: setAiCredential
+      summary: Store an OpenAI-compatible API key in the system credential store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiCredentialRequest" }
+      responses:
+        "200":
+          description: Provider metadata only; the key is never returned.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/AiSettings" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+    delete:
+      operationId: deleteAiCredential
+      summary: Remove the saved OpenAI-compatible API key
+      responses:
+        "204": { description: Credential removed or already absent., headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/branches/delete-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3829,6 +3888,29 @@ components:
         host: { type: string }
         username: { type: [string, "null"] }
         isConfigured: { type: boolean }
+    AiSettings:
+      type: object
+      additionalProperties: false
+      required: [provider, baseUrl, model, hasCloudCredential]
+      properties:
+        provider: { type: string, enum: [none, openAiCompatible, ollama] }
+        baseUrl: { type: string, maxLength: 2048 }
+        model: { type: string, maxLength: 255 }
+        hasCloudCredential: { type: boolean, description: Presence only; the credential value is never returned. }
+    AiSettingsRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, baseUrl, model]
+      properties:
+        provider: { type: string, enum: [none, openAiCompatible, ollama] }
+        baseUrl: { type: string, maxLength: 2048, description: OpenAI-compatible endpoints require HTTPS; Ollama requires a loopback HTTP endpoint. }
+        model: { type: string, maxLength: 255 }
+    AiCredentialRequest:
+      type: object
+      additionalProperties: false
+      required: [apiKey]
+      properties:
+        apiKey: { type: string, minLength: 1, maxLength: 65536, writeOnly: true }
     DeleteBranchRequest:
       type: object
       additionalProperties: false

@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 const KEYRING_SERVICE: &str = "com.gitcrest.git-https";
+const AI_KEYRING_SERVICE: &str = "com.gitcrest.ai-provider";
 const MAX_CREDENTIAL_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -27,6 +28,48 @@ pub struct GitCredential {
 pub enum CredentialError {
     InvalidInput,
     Unavailable,
+}
+
+pub trait AiCredentialStore: Send + Sync {
+    fn is_configured(&self) -> Result<bool, CredentialError>;
+    fn set(&self, api_key: &str) -> Result<(), CredentialError>;
+    fn delete(&self) -> Result<(), CredentialError>;
+}
+
+#[derive(Clone)]
+pub struct AiCredentialManager {
+    store: Arc<dyn AiCredentialStore>,
+}
+
+impl AiCredentialManager {
+    pub fn system() -> Self {
+        Self {
+            store: Arc::new(SystemAiCredentialStore),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn with_store(store: Arc<dyn AiCredentialStore>) -> Self {
+        Self { store }
+    }
+
+    pub fn is_configured(&self) -> Result<bool, CredentialError> {
+        self.store.is_configured()
+    }
+
+    pub fn set(&self, api_key: &str) -> Result<(), CredentialError> {
+        if api_key.is_empty()
+            || api_key.len() > MAX_CREDENTIAL_BYTES
+            || api_key.chars().any(char::is_control)
+        {
+            return Err(CredentialError::InvalidInput);
+        }
+        self.store.set(api_key)
+    }
+
+    pub fn delete(&self) -> Result<(), CredentialError> {
+        self.store.delete()
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -144,6 +187,41 @@ pub fn answer_askpass_prompt(prompt: &str) -> Result<Zeroizing<String>, Credenti
 
 struct SystemCredentialStore;
 
+struct SystemAiCredentialStore;
+
+impl AiCredentialStore for SystemAiCredentialStore {
+    fn is_configured(&self) -> Result<bool, CredentialError> {
+        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
+            .map_err(|_| CredentialError::Unavailable)?;
+        match entry.get_password() {
+            Ok(value) => {
+                let _secret = Zeroizing::new(value);
+                Ok(true)
+            }
+            Err(keyring::Error::NoEntry) => Ok(false),
+            Err(_) => Err(CredentialError::Unavailable),
+        }
+    }
+
+    fn set(&self, api_key: &str) -> Result<(), CredentialError> {
+        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
+            .map_err(|_| CredentialError::Unavailable)?;
+        let secret = Zeroizing::new(api_key.to_owned());
+        entry
+            .set_password(&secret)
+            .map_err(|_| CredentialError::Unavailable)
+    }
+
+    fn delete(&self) -> Result<(), CredentialError> {
+        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
+            .map_err(|_| CredentialError::Unavailable)?;
+        match entry.delete_credential() {
+            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
+            Err(_) => Err(CredentialError::Unavailable),
+        }
+    }
+}
+
 impl CredentialStore for SystemCredentialStore {
     fn get(&self, host: &str) -> Result<Option<GitCredential>, CredentialError> {
         let entry =
@@ -246,6 +324,39 @@ pub fn normalize_host(host: &str) -> Result<String, CredentialError> {
 #[derive(Default)]
 pub struct MemoryCredentialStore {
     values: Mutex<HashMap<String, GitCredential>>,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+pub struct MemoryAiCredentialStore {
+    value: Mutex<Option<Zeroizing<String>>>,
+}
+
+#[cfg(test)]
+impl AiCredentialStore for MemoryAiCredentialStore {
+    fn is_configured(&self) -> Result<bool, CredentialError> {
+        Ok(self
+            .value
+            .lock()
+            .map_err(|_| CredentialError::Unavailable)?
+            .is_some())
+    }
+
+    fn set(&self, api_key: &str) -> Result<(), CredentialError> {
+        *self
+            .value
+            .lock()
+            .map_err(|_| CredentialError::Unavailable)? = Some(Zeroizing::new(api_key.to_owned()));
+        Ok(())
+    }
+
+    fn delete(&self) -> Result<(), CredentialError> {
+        *self
+            .value
+            .lock()
+            .map_err(|_| CredentialError::Unavailable)? = None;
+        Ok(())
+    }
 }
 
 #[cfg(test)]

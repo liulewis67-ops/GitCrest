@@ -768,6 +768,18 @@ button:disabled { cursor: not-allowed; }
 .remoteAddFields select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .remoteClearDefault { justify-self: start; margin-top: 6px; }
 
+.settingsDialog { width: min(520px, 100%); }
+.settingsForm { display: grid; gap: 9px; padding: 12px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
+.settingsForm label { display: grid; gap: 5px; color: var(--text-secondary); font-size: 11px; }
+.settingsForm input, .settingsForm select { min-width: 0; height: 32px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text); background: var(--surface); font: 11px var(--font-ui); }
+.settingsForm input:focus-visible, .settingsForm select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.settingsForm h3, .settingsForm p { margin: 0; }
+.settingsForm h3 { color: var(--text); font-size: 12px; }
+.settingsForm p, .settingsNotice { color: var(--text-muted); font-size: 10px; line-height: 1.5; }
+.settingsActions { display: flex; align-items: center; gap: 12px; }
+.settingsKeyForm { margin-top: 2px; }
+.settingsDialog .taskCenterError { margin: 0; }
+
 @media (max-width: 600px) {
   .remoteDialog { max-height: 92vh; }
   .remoteAddFields, .remoteUpstreamForm .remoteAddFields { grid-template-columns: 1fr; }
