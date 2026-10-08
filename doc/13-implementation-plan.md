@@ -860,3 +860,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/tasks/{mod,service,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`d96ff17`
 
+
+### 后端 WebSocket event transport 拆分 — 小阶段 30
+- 状态：已完成（事件协议 handler 进入 api transport 模块）
+- 日期：2026-10-09
+- 交付：新增 `src/api/events.rs`，承接 `/v1/events` WebSocket upgrade、子协议检查、首条连接重同步事件、广播 lag 重同步、eventId 序号和 ping/pong 生命周期；`api/router.rs` 绑定 API transport handler，`main.rs` 移除事件传输实现。事件 envelope 与广播句柄继续由 state 模块提供，共享 auth/version middleware 不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（120/120）与 `git diff --check` 通过；WebSocket 鉴权、协议协商和首条 resync API 用例通过。
+- 限制/后续：API middleware/fallback 仍在顶层 router 组合；继续整理传输层边界、剩余 main.rs handlers，并推进 frontend 规范和 S7.4/S7.5 验收项。
+- 证据：`crates/gitcrest-core/src/api/{events,mod,router}.rs`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/state.rs`。
+- 实施 commit：`eb2b71d`
+
