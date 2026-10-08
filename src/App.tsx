@@ -219,6 +219,12 @@ function App() {
   const [historySearchFocusRequest, setHistorySearchFocusRequest] = useState<{ repoId: string; sequence: number }>();
   const [tagEditorRequest, setTagEditorRequest] = useState<{ repoId: string; oid: string; sequence: number }>();
   const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
+  const [shelfComposerAfterSwitch, setShelfComposerAfterSwitch] = useState<{ repoId: string; target: string; existingShelfIds: string[] }>();
+  const autoSwitchAfterShelfRef = useRef(new Map<string, { repoId: string; target: string; existingShelfIds: string[] }>());
+  const autoApplyAfterSwitchRef = useRef(new Map<string, { repoId: string; target: string; existingShelfIds: string[] }>());
+  const autoRestoreAfterShelfRef = useRef(new Map<string, { repoId: string; remainingShelfIds: string[] }>());
+  const shelfSwitchBaselineRef = useRef(new Map<string, string[]>());
+  const savedShelfSwitchTargetsRef = useRef(new Set<string>());
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [switchTargetName, setSwitchTargetName] = useState("");
   const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
@@ -651,6 +657,112 @@ function App() {
       setTasksOpen(true);
     } catch (error) {
       setSwitchError(error instanceof GitCrestApiError ? error.body.error.message : error instanceof Error ? error.message : "Could not switch branches.");
+    } finally {
+      setSwitchBusy(false);
+    }
+  }
+
+  async function continueBranchSwitchAfterShelf(repoId: string, target: string, existingShelfIds: string[]) {
+    const api = apiRef.current;
+    if (!api) return;
+    try {
+      const preflight = await api.preflightRepositoryBranchSwitch(repoId, target);
+      if (preflight.potentiallyOverwrittenPaths.length > 0) {
+        if (selectedRepository?.repoId === repoId) {
+          setSwitchTargetName(target);
+          setSwitchPreflight(preflight);
+          setSwitchError("Some changes remain on paths the target branch updates. Shelve or commit them, then review the switch again.");
+          setBranchSwitcherOpen(true);
+        } else {
+          setTasksError(`The shelf was created, but ${preflight.potentiallyOverwrittenPaths.length} remaining path(s) still overlap ${target}. Reopen that repository to review the switch.`);
+        }
+        return;
+      }
+      const task = await api.switchRepositoryBranch(repoId, target);
+      autoApplyAfterSwitchRef.current.set(task.taskId, { repoId, target, existingShelfIds });
+      setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+      setTasksOpen(true);
+    } catch (error) {
+      setTasksError(error instanceof GitCrestApiError ? error.body.error.message : error instanceof Error ? error.message : "The shelf was created, but GitCrest could not continue the branch switch.");
+    }
+  }
+
+  async function applyShelvedChangesAfterSwitch(repoId: string, target: string, existingShelfIds: string[]) {
+    const api = apiRef.current;
+    if (!api) return;
+    try {
+      const shelves = await api.listRepositoryShelves(repoId);
+      const newlyCreated = shelves
+        .filter((shelf) => !existingShelfIds.includes(shelf.shelfId))
+        .sort((left, right) => left.createdAtMs - right.createdAtMs);
+      if (newlyCreated.length === 0) {
+        setTasksError("The branch switched, but GitCrest could not identify the newly created shelf. Review the shelf list and restore it manually.");
+        setTasksOpen(true);
+        return;
+      }
+      const baselineKey = JSON.stringify([repoId, target]);
+      shelfSwitchBaselineRef.current.delete(baselineKey);
+      savedShelfSwitchTargetsRef.current.delete(baselineKey);
+      await applyNextAutoShelf(repoId, newlyCreated.map((shelf) => shelf.shelfId));
+    } catch (error) {
+      setTasksError(error instanceof GitCrestApiError ? error.body.error.message : error instanceof Error ? error.message : "The branch switched, but GitCrest could not restore the saved shelf.");
+      setTasksOpen(true);
+    }
+  }
+
+  async function applyNextAutoShelf(repoId: string, shelfIds: string[]) {
+    const [shelfId, ...remainingShelfIds] = shelfIds;
+    if (!shelfId) return;
+    const api = apiRef.current;
+    if (!api) return;
+    try {
+      const preview = await api.preflightRepositoryShelfApply(repoId, shelfId);
+      if (!preview.canApplyCleanly && !preview.canApplyWithConflicts) {
+        setTasksError("The branch switched, but a saved shelf cannot be restored safely on this branch. Review and apply the remaining shelf manually.");
+        setTasksOpen(true);
+        return;
+      }
+      const task = await api.applyRepositoryShelf(repoId, shelfId, {
+        expectedHeadOid: preview.expectedHeadOid,
+        previewRevision: preview.previewRevision,
+      });
+      if (task.status === "succeeded") {
+        setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+        if (remainingShelfIds.length > 0) void applyNextAutoShelf(repoId, remainingShelfIds);
+      } else {
+        autoRestoreAfterShelfRef.current.set(task.taskId, { repoId, remainingShelfIds });
+        setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+      }
+      setTasksOpen(true);
+    } catch (error) {
+      setTasksError(error instanceof GitCrestApiError ? error.body.error.message : error instanceof Error ? error.message : "GitCrest could not restore the saved shelf.");
+      setTasksOpen(true);
+    }
+  }
+
+  async function openShelfComposerForBranchSwitch() {
+    const repository = selectedRepository;
+    const api = apiRef.current;
+    if (!repository || !api || !switchTargetName) return;
+    setSwitchBusy(true);
+    setSwitchError("");
+    try {
+      const baselineKey = JSON.stringify([repository.repoId, switchTargetName]);
+      let existingShelfIds = shelfSwitchBaselineRef.current.get(baselineKey);
+      if (!existingShelfIds) {
+        const shelves = await api.listRepositoryShelves(repository.repoId);
+        existingShelfIds = shelves.map((shelf) => shelf.shelfId);
+        shelfSwitchBaselineRef.current.set(baselineKey, existingShelfIds);
+      }
+      setShelfComposerAfterSwitch({
+        repoId: repository.repoId,
+        target: switchTargetName,
+        existingShelfIds,
+      });
+      setBranchSwitcherOpen(false);
+      setShelfComposerRequest((request) => request + 1);
+    } catch (error) {
+      setSwitchError(error instanceof Error ? error.message : "Could not prepare the shelf before switching branches.");
     } finally {
       setSwitchBusy(false);
     }
@@ -1507,6 +1619,29 @@ function App() {
         refreshedWaitingWorkflowTasks.current.add(task.taskId);
         void refreshRepositoryStatus(task.repoId);
       }
+      const autoSwitch = autoSwitchAfterShelfRef.current.get(task.taskId);
+      if (autoSwitch && !["queued", "running"].includes(task.status)) {
+        autoSwitchAfterShelfRef.current.delete(task.taskId);
+        if (task.status === "succeeded") void continueBranchSwitchAfterShelf(autoSwitch.repoId, autoSwitch.target, autoSwitch.existingShelfIds);
+      }
+      const autoApply = autoApplyAfterSwitchRef.current.get(task.taskId);
+      if (autoApply && !["queued", "running"].includes(task.status)) {
+        autoApplyAfterSwitchRef.current.delete(task.taskId);
+        if (task.status === "succeeded") void applyShelvedChangesAfterSwitch(autoApply.repoId, autoApply.target, autoApply.existingShelfIds);
+      }
+      const pendingShelfRestore = autoRestoreAfterShelfRef.current.get(task.taskId);
+      if (pendingShelfRestore && task.status === "succeeded") {
+        autoRestoreAfterShelfRef.current.delete(task.taskId);
+        if (pendingShelfRestore.remainingShelfIds.length > 0) {
+          void applyNextAutoShelf(pendingShelfRestore.repoId, pendingShelfRestore.remainingShelfIds);
+        }
+      } else if (pendingShelfRestore && ["failed", "cancelled"].includes(task.status)) {
+        autoRestoreAfterShelfRef.current.delete(task.taskId);
+        if (pendingShelfRestore.remainingShelfIds.length > 0) {
+          setTasksError("A shelf restore did not finish. The remaining shelves are still saved and can be applied manually.");
+          setTasksOpen(true);
+        }
+      }
       if (!["succeeded", "failed", "cancelled"].includes(task.status)) continue;
       if (task.operation.startsWith("stage") || task.operation.startsWith("unstage") || task.operation === "discardChanges") {
         if (refreshedStagingTasks.current.has(task.taskId)) continue;
@@ -1988,9 +2123,32 @@ function App() {
                 disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
                 refreshKey={historyRefreshKey}
                 openComposerRequest={shelfComposerRequest}
-                onTaskSubmitted={() => {
+                afterCreateAction={shelfComposerAfterSwitch ? { switchTarget: shelfComposerAfterSwitch.target, existingShelfIds: shelfComposerAfterSwitch.existingShelfIds } : undefined}
+                onTaskSubmitted={(task, switchTarget) => {
                   if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId);
+                  if (task) {
+                    setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+                    if (switchTarget) {
+                      const repoId = shelfComposerAfterSwitch?.repoId;
+                      if (repoId) {
+                        autoSwitchAfterShelfRef.current.set(task.taskId, {
+                          repoId,
+                          target: switchTarget.switchTarget,
+                          existingShelfIds: switchTarget.existingShelfIds,
+                        });
+                        savedShelfSwitchTargetsRef.current.add(JSON.stringify([repoId, switchTarget.switchTarget]));
+                      }
+                      setShelfComposerAfterSwitch(undefined);
+                    }
+                  }
                   void refreshTasks();
+                }}
+                onComposerClosed={() => {
+                  if (shelfComposerAfterSwitch) {
+                    const baselineKey = JSON.stringify([shelfComposerAfterSwitch.repoId, shelfComposerAfterSwitch.target]);
+                    if (!savedShelfSwitchTargetsRef.current.has(baselineKey)) shelfSwitchBaselineRef.current.delete(baselineKey);
+                  }
+                  setShelfComposerAfterSwitch(undefined);
                 }}
               /> : <div className="navGroup"><div className="navGroupTitle">Shelves</div><div className="navEmpty">Open a repository to manage shelves</div></div>}
               <div className="panelFooter"><span className="statusIcon" aria-hidden="true">●</span> {connected ? "Engine ready" : connecting ? "Connecting to engine" : "Engine unavailable"}</div>
@@ -2104,7 +2262,7 @@ function App() {
                   </div>
                   <div className="branchSwitchOptions">
                     <button className="secondaryButton" type="button" onClick={() => { setBranchSwitcherOpen(false); requestAnimationFrame(() => document.getElementById("commit-message")?.focus()); }}>Commit changes</button>
-                    <button className="secondaryButton" type="button" disabled={switchBusy || !connected || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.shelve, isMacPlatform)} title={`Choose changes to shelve (${displayShortcut(shortcuts.shelve, isMacPlatform)})`} onClick={() => { setBranchSwitcherOpen(false); setShelfComposerRequest((request) => request + 1); }}>Shelve changes</button>
+                    <button className="secondaryButton" type="button" disabled={switchBusy || !connected || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.shelve, isMacPlatform)} title={`Shelve selected changes, then switch to ${switchTargetName} (${displayShortcut(shortcuts.shelve, isMacPlatform)})`} onClick={() => void openShelfComposerForBranchSwitch()}>Shelve &amp; switch</button>
                     <button className="secondaryButton" type="button" disabled={switchBusy || switchPreflight.potentiallyOverwrittenPaths.length > 0} title={switchPreflight.potentiallyOverwrittenPaths.length > 0 ? "The target branch changes one or more listed paths" : "Switch branches while keeping these non-overlapping changes"} onClick={() => void continueBranchSwitch()}>Continue</button>
                   </div>
                 </>}

@@ -6,11 +6,13 @@ import type {
   ShelfCreateRequest,
   ShelfDetailResponse,
   ShelfResponse,
+  TaskSnapshotResponse,
   StatusSnapshotResponse,
 } from "../../api/client";
 import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 type SelectedChange = { revision: string; hunks?: number[] };
+type ShelfAfterCreateAction = { switchTarget: string; existingShelfIds: string[] };
 
 export function ShelfCenter({
   api,
@@ -21,7 +23,9 @@ export function ShelfCenter({
   disabled,
   refreshKey,
   openComposerRequest,
+  afterCreateAction,
   onTaskSubmitted,
+  onComposerClosed,
 }: {
   api: GitCrestApiClient;
   repoId: string;
@@ -31,7 +35,9 @@ export function ShelfCenter({
   disabled: boolean;
   refreshKey: number;
   openComposerRequest: number;
-  onTaskSubmitted: () => void;
+  afterCreateAction?: ShelfAfterCreateAction;
+  onTaskSubmitted: (task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) => void;
+  onComposerClosed?: () => void;
 }) {
   const [shelves, setShelves] = useState<ShelfResponse[]>([]);
   const [selectedShelfId, setSelectedShelfId] = useState<string>();
@@ -48,7 +54,12 @@ export function ShelfCenter({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<ShelfResponse>();
-  const { dialogRef: composerRef, onKeyDown: onComposerKeyDown } = useDialogFocus<HTMLElement>(() => setComposerOpen(false), busy, undefined, composerOpen);
+  const closeComposer = () => {
+    if (busy) return;
+    setComposerOpen(false);
+    onComposerClosed?.();
+  };
+  const { dialogRef: composerRef, onKeyDown: onComposerKeyDown } = useDialogFocus<HTMLElement>(closeComposer, busy, undefined, composerOpen);
   const { dialogRef: deleteRef, onKeyDown: onDeleteKeyDown } = useDialogFocus<HTMLElement>(() => setDeleteConfirm(undefined), busy, undefined, Boolean(deleteConfirm));
 
   const availableFiles = useMemo(() => files.filter((file) => {
@@ -183,7 +194,7 @@ export function ShelfCenter({
       setSelected({});
       setName("");
       setDescription("");
-      onTaskSubmitted();
+      onTaskSubmitted(task, afterCreateAction);
       await refreshShelves();
     } catch (error) {
       setLoadError(error instanceof Error ? error.message : "Could not create the shelf.");
@@ -289,9 +300,9 @@ export function ShelfCenter({
         </div>
       </section>}
 
-      {composerOpen && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setComposerOpen(false); }}>
+      {composerOpen && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeComposer(); }}>
         <section ref={composerRef} className="dialogCard shelfComposer" role="dialog" aria-modal="true" aria-labelledby="shelf-composer-title" onKeyDown={onComposerKeyDown}>
-          <div className="dialogHeading"><div><span className="sectionEyebrow">WORKTREE · {repoId}</span><h2 id="shelf-composer-title">Shelve selected changes</h2></div><button className="dialogClose" type="button" aria-label="Close shelf composer" disabled={busy} onClick={() => setComposerOpen(false)}>×</button></div>
+          <div className="dialogHeading"><div><span className="sectionEyebrow">WORKTREE · {repoId}</span><h2 id="shelf-composer-title">Shelve selected changes</h2>{afterCreateAction && <p role="status">After the selected changes are shelved, GitCrest will switch to {afterCreateAction.switchTarget} and restore this shelf if the remaining changes are safe.</p>}</div><button className="dialogClose" type="button" aria-label="Close shelf composer" disabled={busy} onClick={closeComposer}>×</button></div>
           <label className="shelfField">Name<input autoFocus data-dialog-initial-focus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API retry draft" /></label>
           <label className="shelfField">Description<textarea maxLength={500} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional note" /></label>
           <label className="shelfField">Change scope<select value={scope} onChange={(event) => { setScope(event.target.value as "workingTree" | "index"); setSelected({}); setDiffs({}); }}><option value="workingTree">Working tree</option><option value="index">Staged index</option></select></label>
@@ -312,7 +323,7 @@ export function ShelfCenter({
             })}
           </div>
           {loadError && <div className="shelfInlineError" role="alert">{loadError}</div>}
-          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} onClick={() => setComposerOpen(false)}>Cancel</button><button className="primaryButton" type="button" disabled={busy || disabled || Object.keys(selected).length === 0 || !name.trim()} onClick={() => void createShelf()}>{busy ? "Saving…" : "Create shelf"}</button></div>
+          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} onClick={closeComposer}>Cancel</button><button className="primaryButton" type="button" disabled={busy || disabled || Object.keys(selected).length === 0 || !name.trim()} onClick={() => void createShelf()}>{busy ? "Saving…" : "Create shelf"}</button></div>
         </section>
       </div>}
 

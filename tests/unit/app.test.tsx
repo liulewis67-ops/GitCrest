@@ -320,7 +320,7 @@ describe("App", () => {
     fireEvent.click(within(reopenedDialog).getByRole("button", { name: /feature\/test/ }));
     expect(await within(reopenedDialog).findByText("src/working.ts")).toBeDefined();
     expect(within(reopenedDialog).getByText("May be overwritten")).toBeDefined();
-    expect((within(reopenedDialog).getByRole("button", { name: "Shelve changes" }) as HTMLButtonElement).disabled).toBe(false);
+    expect((within(reopenedDialog).getByRole("button", { name: "Shelve & switch" }) as HTMLButtonElement).disabled).toBe(false);
     expect((within(reopenedDialog).getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(reopenedDialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
@@ -341,6 +341,85 @@ describe("App", () => {
     expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
     expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true);
   });
+
+  it("continues a reviewed branch switch after the selected changes are shelved", async () => {
+    const repository = { repoId: "repo_auto_shelf", path: "C:/auto-shelf", head: "a".repeat(40), branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
+    const branches = { repoId: repository.repoId, current: "main", detached: false, branches: [
+      { name: "main", fullName: "refs/heads/main", oid: "a".repeat(40), kind: "local", isCurrent: true, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null },
+      { name: "feature/auto", fullName: "refs/heads/feature/auto", oid: "b".repeat(40), kind: "local", isCurrent: false, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null },
+    ] };
+    const shelfTask = { taskId: "task-auto-shelf", repoId: repository.repoId, operation: "shelfCreate", status: "queued", phase: "Saving shelf", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const switchTask = { ...shelfTask, taskId: "task-auto-switch", operation: "branchSwitch", phase: "Switching branch" };
+    const restoreTask = { ...shelfTask, taskId: "task-auto-restore", operation: "shelfApply:shelf_new", phase: "Restoring shelf" };
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository: vi.fn().mockResolvedValue(repository.path),
+      },
+    });
+    const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "X-GitCrest-API-Version": "1" } });
+    let shelfCreated = false;
+    let branchSwitched = false;
+    let createdShelf: Record<string, unknown> | undefined;
+    let preflightCount = 0;
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
+      if (url.pathname === "/api/v1/repositories" && init?.method === "POST") return response(repository);
+      if (url.pathname === "/api/v1/repositories") return response([]);
+      if (url.pathname === "/api/v1/tasks") return response([
+        ...(shelfCreated ? [{ ...shelfTask, status: "succeeded" }] : []),
+        ...(branchSwitched ? [{ ...switchTask, status: "succeeded" }] : []),
+      ]);
+      if (url.pathname === `/api/v1/repositories/${repository.repoId}`) return response(repository);
+      if (url.pathname.endsWith("/status")) return response({ repoId: repository.repoId, refreshedAtMs: 1, files: shelfCreated ? [] : [{ path: "src/working.ts", indexStatus: ".", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false }] });
+      if (url.pathname.endsWith("/branches") && !url.pathname.includes("/switch")) return response(branches);
+      if (url.pathname.endsWith("/branches/switch-preflight")) {
+        preflightCount += 1;
+        return response(preflightCount === 1
+          ? { repoId: repository.repoId, current: "main", target: "feature/auto", isClean: false, dirtyFiles: ["src/working.ts"], potentiallyOverwrittenPaths: ["src/working.ts"] }
+          : { repoId: repository.repoId, current: "main", target: "feature/auto", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] });
+      }
+      if (url.pathname.endsWith("/diff")) return response({ repoId: repository.repoId, path: "src/working.ts", revision: "r1", originalPath: null, scope: "workingTree", changeKind: "modified", status: "text", hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change", oldLine: 1, newLine: 1, oldText: "old", newText: "new" }] }] });
+      if (url.pathname.endsWith("/shelves") && init?.method === "POST") {
+        shelfCreated = true;
+        createdShelf = { shelfId: "shelf_new", repoId: repository.repoId, name: "before feature/auto", description: "", paths: ["src/working.ts"], scope: "workingTree", headOid: repository.head, createdAtMs: 2 };
+        return response(shelfTask, 202);
+      }
+      if (url.pathname.endsWith("/shelves")) return response(createdShelf ? [createdShelf] : []);
+      if (url.pathname.endsWith("/shelf_new/apply-preview")) return response({ repoId: repository.repoId, shelf: createdShelf, expectedHeadOid: repository.head, previewRevision: "preview-1", canApplyCleanly: true, canApplyWithConflicts: true, conflictingPaths: [] });
+      if (url.pathname.endsWith("/shelf_new/apply") && init?.method === "POST") return response(restoreTask, 202);
+      if (url.pathname.endsWith("/branches/switch")) {
+        branchSwitched = true;
+        return response(switchTask, 202);
+      }
+      throw new Error(`Unexpected API request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+    await screen.findByText("C:/auto-shelf", { selector: ".workspaceCrumb .mutedText" });
+    fireEvent.keyDown(window, { key: "b", ctrlKey: true });
+    const switchDialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    fireEvent.click(within(switchDialog).getByRole("button", { name: /feature\/auto/ }));
+    await within(switchDialog).findByText("src/working.ts");
+    fireEvent.click(within(switchDialog).getByRole("button", { name: "Shelve & switch" }));
+
+    const shelfDialog = await screen.findByRole("dialog", { name: "Shelve selected changes" });
+    expect(within(shelfDialog).getByRole("status").textContent).toContain("feature/auto");
+    fireEvent.click(within(shelfDialog).getByRole("checkbox"));
+    await within(shelfDialog).findByText(/Whole file selected/);
+    fireEvent.change(within(shelfDialog).getByRole("textbox", { name: "Name" }), { target: { value: "before feature/auto" } });
+    fireEvent.click(within(shelfDialog).getByRole("button", { name: "Create shelf" }));
+
+    await waitFor(() => expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/shelf_new/apply") && init?.method === "POST"), JSON.stringify(fetcher.mock.calls.map(([input, init]) => [new URL(String(input)).pathname, init?.method]))).toBe(true), { timeout: 10000 });
+    expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/shelves") && init?.method === "POST")).toBe(true);
+    expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true);
+  }, 15000);
 
   it("shows persisted repositories in Welcome and lets the user favorite or forget them", async () => {
     const repository = {
