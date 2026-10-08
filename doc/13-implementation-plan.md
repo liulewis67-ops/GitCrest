@@ -820,3 +820,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/{mod,pull,push,dto,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/git/git_command.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`c463f8a`
 
+
+### 后端 bootstrap 启动入口拆分 — 小阶段 26
+- 状态：已完成（环境入口和依赖组装迁至 bootstrap）
+- 日期：2026-10-09
+- 交付：新增 `src/bootstrap.rs`，承接 Git askpass 分支、启动环境读取与校验、RepositoryManager/TaskService/GitCommandService/CloneService/凭证/EventBus 组装、watcher 启动、API router 构造、监听和 ready 协议；`main.rs` 入口收敛为调用 `bootstrap::run()` 并传递最终退出码。保持默认监听地址/端口、token 校验、数据库路径、stdout ready JSON 和 askpass 输出约定。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：二进制 crate 根仍包含 AppState、事件类型、feature module 声明和大量测试/handlers；后续按规范继续拆分 state、事件协议与业务入口，最终让 `main.rs` 只保留进程入口。
+- 证据：`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`52e70cf`
+
