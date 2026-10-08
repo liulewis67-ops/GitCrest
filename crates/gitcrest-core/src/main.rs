@@ -998,6 +998,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             post(stage_repository_patch),
         )
         .route(
+            "/v1/repositories/:repo_id/staging/discard",
+            post(discard_repository_patch),
+        )
+        .route(
             "/v1/repositories/:repo_id/shelves",
             get(list_repository_shelves).post(create_repository_shelf),
         )
@@ -1519,6 +1523,147 @@ async fn stage_repository_patch(
                     .execute_staging(
                         &repository_path,
                         staging::patch_command(action, selected_patch),
+                        context,
+                    )
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn discard_repository_patch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<staging::DiscardPatchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A selected working-tree diff and confirmation are required.",
+        )
+    })?;
+    if !request.confirm_discard {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Discarding working-tree changes requires explicit confirmation.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = state
+        .repositories
+        .status_snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let file = snapshot
+        .files
+        .iter()
+        .find(|file| file.path == request.path)
+        .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
+    let selection = staging::StagingPatchRequest {
+        action: staging::StagingPatchAction::Stage,
+        path: request.path.clone(),
+        scope: DiffScope::WorkingTree,
+        revision: request.revision.clone(),
+        selections: request.selections.clone(),
+    };
+    staging::validate_patch_request(&selection, file).map_err(ApiError::from_staging_error)?;
+    let current_diff = diff::read_with_patch(
+        repo_id.clone(),
+        &target.repository_path,
+        file,
+        DiffScope::WorkingTree,
+    )
+    .await
+    .map_err(ApiError::from_diff_error)?;
+    if current_diff.document.revision != request.revision {
+        return Err(ApiError::from_staging_error(
+            staging::StagingError::StaleSelection,
+        ));
+    }
+    let _ = diff::select_changes(&current_diff, &request.selections).map_err(|error| {
+        if error == DiffError::InvalidPath {
+            ApiError::from_staging_error(staging::StagingError::InvalidRequest)
+        } else {
+            ApiError::from_diff_error(error)
+        }
+    })?;
+    let repositories = state.repositories.clone();
+    let commands = state.git_commands.clone();
+    let task_repo_id = repo_id.clone();
+    let repository_path = target.repository_path;
+    let path = request.path;
+    let revision = request.revision;
+    let selections = request.selections;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "discardChanges",
+            move |context| async move {
+                let current = repositories
+                    .status_snapshot(&task_repo_id)
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed(
+                            "Could not refresh repository status before discarding changes".into(),
+                        )
+                    })?;
+                let file = current
+                    .files
+                    .iter()
+                    .find(|file| file.path == path)
+                    .ok_or_else(|| {
+                        TaskFailure::Failed(
+                            "The selected file changed before discarding its changes".into(),
+                        )
+                    })?;
+                let selection = staging::StagingPatchRequest {
+                    action: staging::StagingPatchAction::Stage,
+                    path: path.clone(),
+                    scope: DiffScope::WorkingTree,
+                    revision: revision.clone(),
+                    selections: selections.clone(),
+                };
+                staging::validate_patch_request(&selection, file).map_err(|_| {
+                    TaskFailure::Failed(
+                        "The selected working-tree file state changed before discard".into(),
+                    )
+                })?;
+                let current_diff = diff::read_with_patch(
+                    task_repo_id.clone(),
+                    &repository_path,
+                    file,
+                    DiffScope::WorkingTree,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "Could not refresh the selected diff before discarding changes".into(),
+                    )
+                })?;
+                if current_diff.document.revision != revision {
+                    return Err(TaskFailure::Failed(
+                        "The selected diff became stale; refresh and review it again".into(),
+                    ));
+                }
+                let patch = diff::select_changes(&current_diff, &selections).map_err(|_| {
+                    TaskFailure::Failed("The selected diff change is no longer available".into())
+                })?;
+                commands
+                    .execute_staging(
+                        &repository_path,
+                        staging::discard_patch_command(patch),
                         context,
                     )
                     .await
@@ -6485,6 +6630,144 @@ mod tests {
             .unwrap();
         assert!(cached_after_stale.status.success());
         assert_eq!(cached_after_stale.stdout, cached_before_stale.stdout);
+    }
+
+    #[tokio::test]
+    async fn discard_api_reverts_only_reviewed_changes_and_rejects_stale_diff() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("discard-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |arguments: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(arguments)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "Discard API Test"]);
+        git(&["config", "user.email", "discard@example.invalid"]);
+        let original = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nten\n";
+        std::fs::write(root.join("tracked.txt"), original).unwrap();
+        git(&["add", "tracked.txt"]);
+        git(&["commit", "--quiet", "-m", "seed"]);
+        let changed = "one\nTWO\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n";
+        std::fs::write(root.join("tracked.txt"), changed).unwrap();
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": root }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=tracked.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(diff["hunks"].as_array().unwrap().len(), 2);
+
+        let unconfirmed = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging/discard"),
+                &serde_json::json!({
+                    "path": "tracked.txt",
+                    "revision": diff["revision"],
+                    "selections": [{"hunkIndex": 0}],
+                    "confirmDiscard": false,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(unconfirmed.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt")).unwrap(),
+            changed
+        );
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging/discard"),
+                &serde_json::json!({
+                    "path": "tracked.txt",
+                    "revision": diff["revision"],
+                    "selections": [{"hunkIndex": 0}],
+                    "confirmDiscard": true,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded", "{completed}");
+        let after_partial_discard = "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n";
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            after_partial_discard
+        );
+
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=tracked.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let fresh_diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let external = "one\nexternal edit\nthree\nfour\nfive\nsix\nseven\neight\nnine\nTEN\n";
+        std::fs::write(root.join("tracked.txt"), external).unwrap();
+        let stale = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging/discard"),
+                &serde_json::json!({
+                    "path": "tracked.txt",
+                    "revision": fresh_diff["revision"],
+                    "selections": [{"hunkIndex": 0}],
+                    "confirmDiscard": true,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(stale.status(), StatusCode::CONFLICT);
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt")).unwrap(),
+            external
+        );
     }
 
     #[tokio::test]

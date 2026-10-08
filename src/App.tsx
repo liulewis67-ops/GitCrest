@@ -13,6 +13,7 @@ import { PullDialog } from "./features/remotes/PullDialog";
 import { ShelfCenter } from "./features/shelves/ShelfCenter";
 import { PushTargetDialog, type PushTarget } from "./features/remotes/PushTargetDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
+import { DiscardChangesDialog } from "./features/diff/DiscardChangesDialog";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -215,6 +216,7 @@ function App() {
   const [cloneDraft, setCloneDraft] = useState({ remoteUrl: "", parentPath: "", directoryName: "" });
   const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
   const [diffRetry, setDiffRetry] = useState(0);
+  const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
   const openedCloneTasks = useRef(new Set<string>());
   const cloneTaskIds = useRef(new Set<string>());
   const [tasksError, setTasksError] = useState("");
@@ -776,6 +778,25 @@ function App() {
     }
   }
 
+  async function discardSelectedChanges() {
+    const api = apiRef.current;
+    const repository = selectedRepository;
+    if (!api || !repository || !discardSelection || stagingBusy || hasActiveRepositoryTask) return;
+    setStagingBusy(true);
+    setTasksError("");
+    try {
+      const task = await api.discardSelectedDiffChanges(repository.repoId, { ...discardSelection, confirmDiscard: true });
+      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      setTasksOpen(true);
+      setDiscardSelection(undefined);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setTasksError(message || (error instanceof Error ? error.message : "Could not start the discard task."));
+    } finally {
+      setStagingBusy(false);
+    }
+  }
+
   function rememberCommitAction(action: CommitAction) {
     const repoId = selectedRepository?.repoId;
     if (!repoId) return;
@@ -1239,7 +1260,7 @@ function App() {
         void refreshRepositoryStatus(task.repoId);
       }
       if (!["succeeded", "failed", "cancelled"].includes(task.status)) continue;
-      if (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) {
+      if (task.operation.startsWith("stage") || task.operation.startsWith("unstage") || task.operation === "discardChanges") {
         if (refreshedStagingTasks.current.has(task.taskId)) continue;
         refreshedStagingTasks.current.add(task.taskId);
         if (task.repoId) void refreshRepositoryStatus(task.repoId);
@@ -1694,7 +1715,7 @@ function App() {
                 : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div></div>
                   : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
                   : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onCommitSelection={addDiffSelectionToCommit} onOpenWindow={() => void openDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></div>
+                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => { setTasksError(""); setDiscardSelection({ path: diffState.document!.path, revision: diffState.document!.revision, selections }); } : undefined} onCommitSelection={addDiffSelectionToCommit} onOpenWindow={() => void openDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></div>
                   : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div></div>}
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
             </section>
@@ -1842,6 +1863,7 @@ function App() {
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, preview, action) => void recoverWorkflowTask(task, preview, action)} onOpenConflictWindow={(task) => void openWorkflowConflictWindow(task)} />}
+      {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
       {workflowDialog && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.repoId} targetOid={workflowDialog.targetOid} action={workflowDialog.action} onClose={() => setWorkflowDialog(undefined)} onStarted={(task) => void startWorkflowTask(task)} />}
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}
       {resetDialogOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setResetDialogOpen(false)} onStarted={(task) => { setResetDialogOpen(false); void startWorkflowTask(task); }} />}

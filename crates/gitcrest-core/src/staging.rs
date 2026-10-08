@@ -34,6 +34,15 @@ pub struct StagingPatchRequest {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DiscardPatchRequest {
+    pub path: String,
+    pub revision: String,
+    pub selections: Vec<DiffSelection>,
+    pub confirm_discard: bool,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StagingRequest {
     pub action: StagingAction,
     #[serde(default)]
@@ -80,6 +89,18 @@ pub fn patch_command(action: StagingPatchAction, patch: Vec<u8>) -> StagingComma
         input: Some(patch),
         label,
         log_label,
+    }
+}
+
+pub fn discard_patch_command(patch: Vec<u8>) -> StagingCommand {
+    StagingCommand {
+        arguments: ["apply", "--reverse", "--unidiff-zero"]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+        input: Some(patch),
+        label: "Discard selected working-tree changes",
+        log_label: "git apply --reverse <selected working-tree patch>",
     }
 }
 

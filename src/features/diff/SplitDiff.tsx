@@ -9,13 +9,14 @@ const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({
 interface SplitDiffProps {
   document: DiffDocumentResponse;
   onStageSelection: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
+  onDiscardSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   onCommitSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   disabled: boolean;
   readOnly?: boolean;
   onOpenWindow?: () => void;
 }
 
-export function SplitDiff({ document, onStageSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow }: SplitDiffProps) {
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
   const [activeHunk, setActiveHunk] = useState<number | null>(null);
@@ -169,6 +170,7 @@ export function SplitDiff({ document, onStageSelection, onCommitSelection, disab
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
           {document.scope === "index" ? "Unstage selected changes" : "Stage selected changes"}
         </button>
+        {document.scope === "workingTree" && onDiscardSelection && <button className="dangerTextButton" type="button" disabled={disabled || selection.length === 0} onClick={() => onDiscardSelection(selection)}>Discard selected changes…</button>}
         {document.scope === "index" && onCommitSelection && <button type="button" disabled={disabled || selection.length === 0} onClick={() => onCommitSelection(selection)}>Add to commit selection</button>}
       </div>}
     </div>

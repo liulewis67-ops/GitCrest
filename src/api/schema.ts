@@ -619,6 +619,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/staging/discard": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue reviewed discard of selected working-tree hunks or change rows
+         * @description The working-tree diff revision and selected changes are checked before queueing and again under the repository write lock. An explicit destructive confirmation is required.
+         */
+        post: operations["discardSelectedDiffChanges"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/shelves": {
         parameters: {
             query?: never;
@@ -1794,6 +1818,13 @@ export interface components {
                 hunkIndex: number;
                 rowIndex?: number;
             }[];
+        };
+        DiscardPatchRequest: {
+            path: string;
+            revision: string;
+            selections: components["schemas"]["DiffSelection"][];
+            /** @description Must be true after the user reviews the selected working-tree changes. */
+            confirmDiscard: boolean;
         };
         ShelfCreateRequest: {
             name: string;
@@ -3742,6 +3773,74 @@ export interface operations {
                 };
             };
             /** @description Git, task capacity, or task storage is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    discardSelectedDiffChanges: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DiscardPatchRequest"];
+            };
+        };
+        responses: {
+            /** @description Selected changes discard task accepted after revision revalidation. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The selection is malformed or confirmation is absent. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository or selected file is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The selected diff revision expired or the repository has a conflicting state. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git or task capacity is unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

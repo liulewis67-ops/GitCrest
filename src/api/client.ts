@@ -10,6 +10,7 @@ export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
 export type BlameDocumentResponse = components["schemas"]["BlameDocument"];
 export type StagingRequest = components["schemas"]["StagingRequest"];
 export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
+export type DiscardPatchRequest = components["schemas"]["DiscardPatchRequest"];
 export type ShelfResponse = components["schemas"]["Shelf"];
 export type ShelfDetailResponse = components["schemas"]["ShelfDetail"];
 export type ShelfCreateRequest = components["schemas"]["ShelfCreateRequest"];
@@ -295,6 +296,14 @@ export class GitCrestApiClient {
 
   stageSelectedDiffHunks(repoId: RepoId, request: StagingPatchRequest): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/staging/patch`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  }
+
+  discardSelectedDiffChanges(repoId: RepoId, request: DiscardPatchRequest): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>("/api/v1/repositories/" + encodeURIComponent(repoId) + "/staging/discard", true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(request),
