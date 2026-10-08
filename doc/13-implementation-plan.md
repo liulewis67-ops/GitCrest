@@ -485,5 +485,5 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（99 tests）；`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`pnpm api:types`、`pnpm test`（111 tests）、`pnpm build`、`git diff --check` 均通过。临时仓库 watcher 集成测试覆盖外部文件编辑及 path scope、外部 `git add`/index、`.gitignore`、Git config 和 commit refs；API 测试覆盖带空格的增量路径，单测覆盖 scope 合并上限、rename 升级及 Windows 路径分隔符。
 - 手工验证：未单独操作桌面窗口；真实 `notify` 文件系统 watcher 和外部 Git 命令由 Windows 临时仓库集成测试验证。WS resync 和前端增量合并由自动化测试与构建覆盖。
 - 证据：`crates/gitcrest-core/src/watcher.rs`、`crates/gitcrest-core/src/status.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`doc/api/events-v1.md`、`src/App.tsx`、`src/api/status-snapshot.ts`、`src/api/client.ts`、`tests/unit/status-snapshot.test.ts`、`tests/unit/api-client.test.ts`。
-- 完成 commit：待补记。
+- 完成 commit：`16adc0a`；SHA 补记 commit：待补记。
 - 限制/后续：Windows 实际 watcher 集成已验证；macOS/Linux 文件系统通知实现和 S7.4 平台包验证待跨平台阶段。高事件量、轮询 fallback 及 100k 历史性能按 S7.2 测量。
