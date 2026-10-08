@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../src/api/client";
 import { RemoteManager } from "../../src/features/remotes/RemoteManager";
@@ -72,4 +72,18 @@ it("requires a second explicit action before removing a remote", () => {
   expect(onDelete).not.toHaveBeenCalled();
   fireEvent.click(within(upstream!).getByRole("button", { name: "Confirm remove" }));
   expect(onDelete).toHaveBeenCalledWith("upstream");
+});
+
+it("moves focus into remote management and closes it with Escape", async () => {
+  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" onRefresh={vi.fn()} onAdd={vi.fn()} onSetUrl={vi.fn()} onDelete={vi.fn()} onSetDefault={vi.fn()} onSetUpstream={vi.fn()} />);
+  const opener = screen.getByRole("button", { name: "Manage remotes" });
+  opener.focus();
+  fireEvent.click(opener);
+  const dialog = screen.getByRole("dialog", { name: "Manage remotes" });
+  const close = screen.getByRole("button", { name: "Close remote manager" });
+  await waitFor(() => expect(document.activeElement).toBe(close));
+
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(screen.queryByRole("dialog", { name: "Manage remotes" })).toBeNull();
+  await waitFor(() => expect(document.activeElement).toBe(opener));
 });

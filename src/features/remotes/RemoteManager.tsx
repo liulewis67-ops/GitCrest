@@ -1,5 +1,6 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse } from "../../api/client";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 import { CredentialEditor, httpsHostFromRemote } from "../credentials/CredentialEditor";
 
 interface RemoteManagerProps {
@@ -32,6 +33,8 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
   const [upstreamRemote, setUpstreamRemote] = useState("");
   const [upstreamBranch, setUpstreamBranch] = useState("");
   const [recoveryMode, setRecoveryMode] = useState(false);
+  const manageButtonRef = useRef<HTMLButtonElement>(null);
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(() => setOpen(false), busy, () => manageButtonRef.current, open);
 
   useEffect(() => {
     if (openRequest) {
@@ -76,7 +79,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
         <span>Remotes</span>
         {remoteList && <span className="countBadge">{remoteList.length}</span>}
         <button className="iconTextButton" type="button" disabled={disabled || loading} onClick={onRefresh} aria-label="Refresh remotes" title="Refresh remotes">↻</button>
-        <button className="iconTextButton" type="button" disabled={disabled} title={disabled ? disabledReason : "Manage remotes"} onClick={() => setOpen(true)} aria-label="Manage remotes">Manage</button>
+        <button ref={manageButtonRef} className="iconTextButton" type="button" disabled={disabled} title={disabled ? disabledReason : "Manage remotes"} onClick={() => setOpen(true)} aria-label="Manage remotes">Manage</button>
       </div>
       {!snapshot && loading && <div className="navEmpty" role="status">Loading remotes…</div>}
       {!snapshot && !loading && !error && <div className="navEmpty">Open a repository to view remotes</div>}
@@ -92,7 +95,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
       {disabled && disabledReason && <p className="cloneHelp remoteDisabledReason">{disabledReason}</p>}
 
       {open && <div className="paletteBackdrop remoteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setOpen(false); }}>
-        <section className="cloneDialog remoteDialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title">
+        <section ref={dialogRef} className="cloneDialog remoteDialog" role="dialog" aria-modal="true" aria-labelledby="remote-dialog-title" onKeyDown={onKeyDown}>
           <header className="taskCenterHeader">
             <div><p className="sectionEyebrow">REPOSITORY CONFIGURATION</p><h2 id="remote-dialog-title">Manage remotes</h2></div>
             <button className="quietButton compact" type="button" disabled={busy} onClick={() => setOpen(false)} aria-label="Close remote manager">Close</button>
