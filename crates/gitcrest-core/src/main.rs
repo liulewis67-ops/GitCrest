@@ -67,7 +67,7 @@ mod storage;
 mod system;
 #[path = "features/tags/tags.rs"]
 mod tags;
-#[path = "features/tasks/tasks.rs"]
+#[path = "features/tasks/mod.rs"]
 mod tasks;
 #[path = "refresh/watcher.rs"]
 mod watcher;
@@ -3729,35 +3729,6 @@ fn workflow_recovery_action_allowed(
         workflows::WorkflowRecoveryAction::Skip => preview.can_skip,
         workflows::WorkflowRecoveryAction::Abort => preview.can_abort,
     }
-}
-
-async fn list_tasks(State(state): State<AppState>) -> Json<Vec<TaskSnapshot>> {
-    Json(state.tasks.list().await)
-}
-
-async fn get_task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-) -> Result<Json<TaskSnapshot>, ApiError> {
-    state
-        .tasks
-        .get(&task_id)
-        .await
-        .map(Json)
-        .ok_or_else(ApiError::task_not_found)
-}
-
-async fn cancel_task(
-    State(state): State<AppState>,
-    Path(task_id): Path<String>,
-) -> Result<Json<TaskSnapshot>, ApiError> {
-    state
-        .tasks
-        .cancel(&task_id)
-        .await
-        .map_err(|_| ApiError::task_storage_unavailable())?
-        .map(Json)
-        .ok_or_else(ApiError::task_not_found)
 }
 
 async fn api_not_found() -> ApiError {
