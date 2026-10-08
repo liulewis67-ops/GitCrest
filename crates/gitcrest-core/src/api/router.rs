@@ -13,18 +13,16 @@ use tower_http::cors::CorsLayer;
 use crate::write_probe;
 
 use crate::{
-    add_api_version_header, api_not_found, apply_repository_shelf, commit_repository,
-    create_repository_shelf, delete_ai_credential, delete_credential, delete_repository_shelf,
-    get_ai_settings, get_credential_status, get_repository_shelf,
-    get_workflow_conflict_ai_settings, list_repository_rebase_backups,
-    list_repository_reset_backups, list_repository_shelves, mark_workflow_conflict_resolved,
-    preflight_repository_rebase, preflight_repository_reset, preflight_repository_shelf_apply,
-    preflight_repository_workflow, preflight_repository_workflow_recovery,
-    read_workflow_conflict_file, recover_repository_workflow, repositories, request_ai,
-    request_workflow_conflict_suggestion, require_api_version, require_auth,
-    restore_repository_reset, rollback_repository_rebase, save_workflow_conflict_file,
-    set_ai_credential, set_ai_settings, set_credential, start_repository_rebase,
-    start_repository_reset, start_repository_workflow, status, system, AppState,
+    add_api_version_header, api_not_found, commit_repository, delete_ai_credential,
+    delete_credential, get_ai_settings, get_credential_status, get_workflow_conflict_ai_settings,
+    list_repository_rebase_backups, list_repository_reset_backups, mark_workflow_conflict_resolved,
+    preflight_repository_rebase, preflight_repository_reset, preflight_repository_workflow,
+    preflight_repository_workflow_recovery, read_workflow_conflict_file,
+    recover_repository_workflow, repositories, request_ai, request_workflow_conflict_suggestion,
+    require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
+    save_workflow_conflict_file, set_ai_credential, set_ai_settings, set_credential,
+    start_repository_rebase, start_repository_reset, start_repository_workflow, status, system,
+    AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
@@ -36,6 +34,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::branches::routes::router())
         .merge(crate::remotes::routes::router())
         .merge(crate::staging::routes::router())
+        .merge(crate::shelves::routes::router())
         .merge(crate::tags::routes::router())
         .merge(crate::tasks::routes::router())
         .route(
@@ -50,22 +49,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
             put(set_ai_credential).delete(delete_ai_credential),
         )
         .route("/v1/repositories/:repo_id/ai/request", post(request_ai))
-        .route(
-            "/v1/repositories/:repo_id/shelves",
-            get(list_repository_shelves).post(create_repository_shelf),
-        )
-        .route(
-            "/v1/repositories/:repo_id/shelves/:shelf_id",
-            get(get_repository_shelf).delete(delete_repository_shelf),
-        )
-        .route(
-            "/v1/repositories/:repo_id/shelves/:shelf_id/apply-preview",
-            get(preflight_repository_shelf_apply),
-        )
-        .route(
-            "/v1/repositories/:repo_id/shelves/:shelf_id/apply",
-            post(apply_repository_shelf),
-        )
         .route(
             "/v1/repositories/:repo_id/commits",
             crate::history::routes::commits_get_route().post(commit_repository),

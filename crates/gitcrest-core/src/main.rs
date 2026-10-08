@@ -44,7 +44,7 @@ mod repositories;
 mod repository;
 #[path = "features/workflows/reset.rs"]
 mod reset;
-#[path = "features/shelves/shelves.rs"]
+#[path = "features/shelves/mod.rs"]
 mod shelves;
 #[path = "features/staging/mod.rs"]
 mod staging;
@@ -122,7 +122,7 @@ struct PreparedShelfItem {
     patch: Vec<u8>,
 }
 
-async fn list_repository_shelves(
+pub(crate) async fn list_repository_shelves(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<Vec<shelves::ShelfSnapshot>>, ApiError> {
@@ -139,7 +139,7 @@ async fn list_repository_shelves(
     Ok(Json(shelves))
 }
 
-async fn get_repository_shelf(
+pub(crate) async fn get_repository_shelf(
     State(state): State<AppState>,
     Path((repo_id, shelf_id)): Path<(String, String)>,
 ) -> Result<Json<ShelfDetailResponse>, ApiError> {
@@ -173,7 +173,7 @@ async fn get_repository_shelf(
     }))
 }
 
-async fn delete_repository_shelf(
+pub(crate) async fn delete_repository_shelf(
     State(state): State<AppState>,
     Path((repo_id, shelf_id)): Path<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
@@ -214,7 +214,7 @@ struct ShelfApplyRequest {
     preview_revision: String,
 }
 
-async fn preflight_repository_shelf_apply(
+pub(crate) async fn preflight_repository_shelf_apply(
     State(state): State<AppState>,
     Path((repo_id, shelf_id)): Path<(String, String)>,
 ) -> Result<Json<ShelfApplyPreviewResponse>, ApiError> {
@@ -264,7 +264,7 @@ async fn preflight_repository_shelf_apply(
     }))
 }
 
-async fn apply_repository_shelf(
+pub(crate) async fn apply_repository_shelf(
     State(state): State<AppState>,
     Path((repo_id, shelf_id)): Path<(String, String)>,
     request: Result<Json<ShelfApplyRequest>, JsonRejection>,
@@ -577,7 +577,7 @@ async fn shelf_apply_revision(
     Ok(format!("sha256:{:x}", digest.finalize()))
 }
 
-async fn create_repository_shelf(
+pub(crate) async fn create_repository_shelf(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<ShelfCreateRequest>, JsonRejection>,
