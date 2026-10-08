@@ -995,3 +995,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：请求 DTO 和 service 仍与历史 `shelves.rs`/handlers 共处；下一阶段拆分 `dto.rs` 与规范命名的 `service.rs`，再评估 recovery helper 的 feature 边界。
 - 证据：`crates/gitcrest-core/src/features/shelves/{mod,routes,handlers,shelves}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`3485f0e`
+
+### 后端 shelves feature DTO 拆分 — 小阶段 44
+- 状态：已完成（shelf API 请求与响应 DTO 进入独立 dto 模块）
+- 日期：2026-10-09
+- 交付：新增 `features/shelves/dto.rs`，集中定义 shelf create/selection、apply 请求，以及 shelf detail/apply preview 响应结构；handlers 引用 feature DTO。保留 camelCase、拒绝未知字段及 selections 默认空数组等 serde 契约。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；shelf API 集成用例通过。
+- 限制/后续：shelves service 仍以 `shelves.rs` 命名；下一阶段重命名为 `service.rs` 并检查与 storage/workflow recovery 的依赖边界。
+- 证据：`crates/gitcrest-core/src/features/shelves/{mod,dto,handlers,routes,shelves}.rs`。
+- 实施 commit：`f198eda`
