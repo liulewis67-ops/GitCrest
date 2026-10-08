@@ -698,6 +698,20 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ action: "stageFile", path: "folder/file [1].txt" }));
   });
 
+  it("queues an undo of the latest staging operation for one repository", async () => {
+    const task = { taskId: "task-undo", repoId: "repo_fixture", operation: "undoStaging", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {
+      status: 202,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.undoRecentStaging("repo/fixture")).resolves.toEqual(task);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/undo`);
+    expect(fetcher.mock.calls[0][1]?.method).toBe("POST");
+    expect(fetcher.mock.calls[0][1]?.body).toBeUndefined();
+  });
+
   it("queues revision-bound hunk staging selections", async () => {
     const task = { taskId: "task-hunk", repoId: "repo_fixture", operation: "stageHunks", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {

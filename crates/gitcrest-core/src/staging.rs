@@ -92,6 +92,18 @@ pub fn patch_command(action: StagingPatchAction, patch: Vec<u8>) -> StagingComma
     }
 }
 
+pub fn undo_command(reverse_patch: Vec<u8>) -> StagingCommand {
+    StagingCommand {
+        arguments: ["apply", "--cached"]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+        input: Some(reverse_patch),
+        label: "Undo recent staging change",
+        log_label: "git apply --cached <staging undo patch>",
+    }
+}
+
 pub fn discard_patch_command(patch: Vec<u8>) -> StagingCommand {
     StagingCommand {
         arguments: ["apply", "--reverse", "--unidiff-zero"]

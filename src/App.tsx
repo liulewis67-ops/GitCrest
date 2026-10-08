@@ -915,6 +915,22 @@ function App() {
     }
   }
 
+  async function undoRecentStaging() {
+    const api = apiRef.current;
+    const repository = selectedRepository;
+    if (!api || !repository || !connected || repository.availability !== "available" || hasActiveRepositoryTask) return;
+    setTasksError("");
+    try {
+      const task = await api.undoRecentStaging(repository.repoId);
+      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      setTasksOpen(true);
+    } catch (error) {
+      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
+      setTasksError(message || (error instanceof Error ? error.message : "Could not undo the recent staging operation."));
+      setTasksOpen(true);
+    }
+  }
+
   async function stageSelectedChanges(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
     const api = apiRef.current;
     const repository = selectedRepository;
@@ -1682,6 +1698,9 @@ function App() {
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.stageAll, isMacPlatform) && activeStatus && workingCount > 0 && !hasConflicts && !stagingBusy && !hasActiveStagingTask) {
         event.preventDefault();
         void stageChanges("stageAll");
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.undoRecentOperation, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
+        event.preventDefault();
+        void undoRecentStaging();
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.fetch, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
         event.preventDefault();
         void fetchRepository();

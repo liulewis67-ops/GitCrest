@@ -1,6 +1,7 @@
 use std::{
     env,
     net::SocketAddr,
+    path::Path as FilePath,
     sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -55,6 +56,7 @@ use cloning::{CloneError, CloneService};
 use diff::{DiffError, DiffScope};
 use git_command::{BranchCommand, GitCommandService, GitOperation, RemoteCommand};
 use repository::{Repository, RepositoryError, RepositoryManager};
+use storage::{RepositoryStore, StagingUndoRecord};
 use tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError};
 
 const API_VERSION: &str = "1";
@@ -1047,6 +1049,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route("/v1/repositories/:repo_id/ai/request", post(request_ai))
         .route("/v1/repositories/:repo_id/staging", post(stage_repository))
+        .route("/v1/repositories/:repo_id/undo", post(undo_recent_staging))
         .route(
             "/v1/repositories/:repo_id/staging/patch",
             post(stage_repository_patch),
@@ -1517,6 +1520,7 @@ async fn stage_repository(
         staging::StagingAction::UnstageAll => "unstageAll",
     };
     let repositories = state.repositories.clone();
+    let store = repositories.store();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
@@ -1539,10 +1543,30 @@ async fn stage_repository(
                 let command = staging::command(&current, &request).map_err(|error| {
                     TaskFailure::Failed(format!("Staging precondition changed: {error:?}"))
                 })?;
+                let before_tree = match commands.read_index_tree(&repository_path).await {
+                    Ok(tree) => Some(tree),
+                    Err(_) => {
+                        context
+                            .log(
+                                "Undo is unavailable because the Git index has unresolved entries.",
+                            )
+                            .await;
+                        None
+                    }
+                };
                 commands
-                    .execute_staging(&repository_path, command, context)
-                    .await
-                    .map(|()| None)
+                    .execute_staging(&repository_path, command, context.clone())
+                    .await?;
+                persist_staging_undo(
+                    &commands,
+                    &store,
+                    &repository_path,
+                    &task_repo_id,
+                    before_tree,
+                    context,
+                )
+                .await;
+                Ok(None)
             },
         )
         .await
@@ -1605,6 +1629,7 @@ async fn stage_repository_patch(
         staging::StagingPatchAction::Unstage => "unstageHunks",
     };
     let repositories = state.repositories.clone();
+    let store = repositories.store();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
@@ -1659,19 +1684,149 @@ async fn stage_repository_patch(
                     .map_err(|_| {
                         TaskFailure::Failed("The selected diff hunk is no longer available".into())
                     })?;
+                let before_tree = match commands.read_index_tree(&repository_path).await {
+                    Ok(tree) => Some(tree),
+                    Err(_) => {
+                        context
+                            .log(
+                                "Undo is unavailable because the Git index has unresolved entries.",
+                            )
+                            .await;
+                        None
+                    }
+                };
                 commands
                     .execute_staging(
                         &repository_path,
                         staging::patch_command(action, selected_patch),
-                        context,
+                        context.clone(),
                     )
-                    .await
-                    .map(|()| None)
+                    .await?;
+                persist_staging_undo(
+                    &commands,
+                    &store,
+                    &repository_path,
+                    &task_repo_id,
+                    before_tree,
+                    context,
+                )
+                .await;
+                Ok(None)
             },
         )
         .await
         .map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn undo_recent_staging(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let store = state.repositories.store();
+    if store
+        .latest_staging_undo_record(&repo_id)
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .is_none()
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::RepositoryStateConflict,
+            "There is no recent staging operation available to undo.",
+        ));
+    }
+    let task_repo_id = repo_id.clone();
+    let task_store = store.clone();
+    let commands = state.git_commands.clone();
+    let repository_path = target.repository_path;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "undoStaging",
+            move |context| async move {
+                let record = task_store
+                    .latest_staging_undo_record(&task_repo_id)
+                    .map_err(|_| {
+                        TaskFailure::Failed("Could not load the recent staging undo record".into())
+                    })?
+                    .ok_or_else(|| {
+                        TaskFailure::Failed(
+                            "There is no recent staging operation available to undo".into(),
+                        )
+                    })?;
+                commands
+                    .execute_staging(
+                        &repository_path,
+                        staging::undo_command(record.reverse_patch),
+                        context.clone(),
+                    )
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed(
+                            "Git could not safely apply this undo patch. The index may have changed; refresh and review it before trying again.".into(),
+                        )
+                    })?;
+                if task_store
+                    .delete_staging_undo_record(&task_repo_id, &record.operation_task_id)
+                    .is_err()
+                {
+                    context
+                        .log("The staging change was undone, but its undo record could not be removed.")
+                        .await;
+                }
+                Ok(None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn persist_staging_undo(
+    commands: &GitCommandService,
+    store: &RepositoryStore,
+    repository_path: &FilePath,
+    repo_id: &str,
+    before_tree: Option<String>,
+    context: tasks::TaskContext,
+) {
+    let Some(before_tree) = before_tree else {
+        return;
+    };
+    let result = async {
+        let after_tree = commands.read_index_tree(repository_path).await?;
+        if before_tree == after_tree {
+            return Ok(());
+        }
+        let reverse_patch = commands
+            .diff_index_trees(repository_path, &after_tree, &before_tree)
+            .await?;
+        if reverse_patch.is_empty() {
+            return Ok(());
+        }
+        store
+            .save_staging_undo_record(&StagingUndoRecord {
+                operation_task_id: context.task_id().to_owned(),
+                repo_id: repo_id.to_owned(),
+                created_at_ms: shelves::now_ms(),
+                reverse_patch,
+            })
+            .map_err(|_| TaskFailure::Failed("The undo snapshot could not be saved".into()))
+    }
+    .await;
+    if result.is_err() {
+        context
+            .log("This staging operation completed, but its undo data could not be saved.")
+            .await;
+    }
 }
 
 async fn discard_repository_patch(
@@ -7653,6 +7808,170 @@ mod tests {
             .unwrap();
         assert!(cached_after_stale.status.success());
         assert_eq!(cached_after_stale.stdout, cached_before_stale.stdout);
+    }
+
+    #[tokio::test]
+    async fn staging_undo_api_reverses_latest_stage_without_losing_later_index_changes() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("staging-undo-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "GitCrest Test"]);
+        git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+        std::fs::write(root.join("seed.txt"), "initial\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "-m", "seed"]);
+        std::fs::write(root.join("pre-staged.txt"), "keep staged\n").unwrap();
+        git(&["add", "pre-staged.txt"]);
+        std::fs::write(root.join("seed.txt"), "staged by GitCrest\n").unwrap();
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": root }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+
+        let no_undo = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(no_undo.status(), StatusCode::CONFLICT);
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging"),
+                &serde_json::json!({"action":"stageFile", "path":"seed.txt"}).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let staging_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let staged = wait_for_task(&app, staging_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(staged["status"], "succeeded");
+
+        std::fs::write(root.join("later.txt"), "keep later staging\n").unwrap();
+        git(&["add", "later.txt"]);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let undo_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let undone = wait_for_task(&app, undo_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(undone["status"], "succeeded");
+        assert_eq!(
+            git(&["diff", "--cached", "--name-only"])
+                .lines()
+                .collect::<Vec<_>>(),
+            ["later.txt", "pre-staged.txt"]
+        );
+        assert_eq!(git(&["diff", "--name-only"]), "seed.txt");
+
+        std::fs::write(root.join("stage-all.txt"), "stage all then undo\n").unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging"),
+                &serde_json::json!({"action":"stageAll"}).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let staging_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let staged = wait_for_task(&app, staging_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(staged["status"], "succeeded");
+        assert!(git(&["diff", "--cached", "--name-only"])
+            .lines()
+            .any(|path| path == "stage-all.txt"));
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let undo_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let undone = wait_for_task(&app, undo_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(undone["status"], "succeeded");
+        assert!(!git(&["diff", "--cached", "--name-only"])
+            .lines()
+            .any(|path| path == "stage-all.txt"));
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/staging"),
+                &serde_json::json!({"action":"stageFile", "path":"seed.txt"}).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let staging_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let staged = wait_for_task(&app, staging_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(staged["status"], "succeeded");
+
+        std::fs::write(root.join("seed.txt"), "external staged edit\n").unwrap();
+        git(&["add", "seed.txt"]);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let undo_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let rejected = wait_for_task(&app, undo_task["taskId"].as_str().unwrap()).await;
+        assert_eq!(rejected["status"], "failed");
+        assert_eq!(git(&["show", ":seed.txt"]), "external staged edit");
     }
 
     #[tokio::test]

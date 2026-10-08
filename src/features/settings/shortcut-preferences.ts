@@ -8,6 +8,7 @@ export const shortcutActions = [
   { id: "commit", label: "Commit staged changes", defaultBinding: "Mod+Enter" },
   { id: "commitAndPush", label: "Commit and push", defaultBinding: "Mod+Shift+Enter" },
   { id: "stageAll", label: "Stage all changes", defaultBinding: "Mod+Shift+A" },
+  { id: "undoRecentOperation", label: "Undo recent staging operation", defaultBinding: "Mod+Z" },
   { id: "fetch", label: "Fetch from remotes", defaultBinding: "Mod+Shift+F" },
   { id: "push", label: "Open push review", defaultBinding: "Mod+Shift+P" },
   { id: "pull", label: "Open pull review", defaultBinding: "Mod+Shift+L" },

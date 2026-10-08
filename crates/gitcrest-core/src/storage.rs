@@ -10,6 +10,17 @@ use rusqlite::{params, Connection, OptionalExtension};
 use crate::repository::Repository;
 use crate::shelves::{ShelfRecord, ShelfSnapshot};
 
+const MAX_STAGING_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
+const MAX_STAGING_UNDO_RECORDS_PER_REPOSITORY: i64 = 100;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StagingUndoRecord {
+    pub operation_task_id: String,
+    pub repo_id: String,
+    pub created_at_ms: i64,
+    pub reverse_patch: Vec<u8>,
+}
+
 fn now_ms() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -599,11 +610,83 @@ impl RepositoryStore {
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|error| error.to_string())
     }
+
+    pub fn save_staging_undo_record(&self, record: &StagingUndoRecord) -> Result<(), String> {
+        if record.reverse_patch.is_empty()
+            || record.reverse_patch.len() > MAX_STAGING_UNDO_PATCH_BYTES
+        {
+            return Err("staging undo patch is empty or exceeds the storage limit".into());
+        }
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let transaction = connection
+            .unchecked_transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO staging_undo_records (operation_task_id, repo_id, created_at_ms, reverse_patch) VALUES (?1, ?2, ?3, ?4)",
+                params![record.operation_task_id, record.repo_id, record.created_at_ms, record.reverse_patch],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "DELETE FROM staging_undo_records WHERE repo_id=?1 AND operation_task_id NOT IN (SELECT operation_task_id FROM staging_undo_records WHERE repo_id=?1 ORDER BY record_id DESC LIMIT ?2)",
+                params![record.repo_id, MAX_STAGING_UNDO_RECORDS_PER_REPOSITORY],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(())
+    }
+
+    pub fn latest_staging_undo_record(
+        &self,
+        repo_id: &str,
+    ) -> Result<Option<StagingUndoRecord>, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        connection
+            .query_row(
+                "SELECT operation_task_id, repo_id, created_at_ms, reverse_patch FROM staging_undo_records WHERE repo_id=?1 ORDER BY record_id DESC LIMIT 1",
+                [repo_id],
+                |row| {
+                    Ok(StagingUndoRecord {
+                        operation_task_id: row.get(0)?,
+                        repo_id: row.get(1)?,
+                        created_at_ms: row.get(2)?,
+                        reverse_patch: row.get(3)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(|error| error.to_string())
+    }
+
+    pub fn delete_staging_undo_record(
+        &self,
+        repo_id: &str,
+        operation_task_id: &str,
+    ) -> Result<bool, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        connection
+            .execute(
+                "DELETE FROM staging_undo_records WHERE repo_id=?1 AND operation_task_id=?2",
+                params![repo_id, operation_task_id],
+            )
+            .map(|changed| changed > 0)
+            .map_err(|error| error.to_string())
+    }
 }
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 7 {
+    if version > 8 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -633,6 +716,10 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     if version < 7 {
         connection.execute_batch(include_str!("../migrations/0007_history_search.sql"))?;
         connection.pragma_update(None, "user_version", 7)?;
+    }
+    if version < 8 {
+        connection.execute_batch(include_str!("../migrations/0008_staging_undo.sql"))?;
+        connection.pragma_update(None, "user_version", 8)?;
     }
     Ok(())
 }
@@ -713,14 +800,14 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 8).unwrap();
+        connection.pragma_update(None, "user_version", 9).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
     }
 
     #[test]
-    fn migrates_schema_six_to_history_message_search_index() {
+    fn migrates_schema_six_to_history_search_and_staging_undo_records() {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
@@ -749,8 +836,82 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 7);
+        let undo_table: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='staging_undo_records'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 8);
         assert_eq!(index_table, 1);
+        assert_eq!(undo_table, 1);
+    }
+
+    #[test]
+    fn staging_undo_records_survive_reopen_and_fall_back_to_previous_operation() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let first = StagingUndoRecord {
+            operation_task_id: "task-stage-9".into(),
+            repo_id: "repo-1".into(),
+            created_at_ms: 20,
+            reverse_patch: b"reverse patch one".to_vec(),
+        };
+        let latest = StagingUndoRecord {
+            operation_task_id: "task-stage-10".into(),
+            repo_id: "repo-1".into(),
+            created_at_ms: 20,
+            reverse_patch: b"reverse patch two".to_vec(),
+        };
+        {
+            let store = RepositoryStore::open(&database).unwrap();
+            store
+                .save_opened(repository("repo-1", "/repo/one", 1))
+                .unwrap();
+            store.save_staging_undo_record(&first).unwrap();
+            store.save_staging_undo_record(&latest).unwrap();
+            assert_eq!(
+                store.latest_staging_undo_record("repo-1").unwrap(),
+                Some(latest.clone())
+            );
+        }
+
+        let reopened = RepositoryStore::open(&database).unwrap();
+        assert_eq!(
+            reopened.latest_staging_undo_record("repo-1").unwrap(),
+            Some(latest.clone())
+        );
+        assert!(reopened
+            .delete_staging_undo_record("repo-1", "task-stage-10")
+            .unwrap());
+        assert_eq!(
+            reopened.latest_staging_undo_record("repo-1").unwrap(),
+            Some(first)
+        );
+        assert!(!reopened
+            .delete_staging_undo_record("repo-1", "task-stage-10")
+            .unwrap());
+        assert!(reopened.forget("repo-1").unwrap());
+        assert_eq!(reopened.latest_staging_undo_record("repo-1").unwrap(), None);
+    }
+
+    #[test]
+    fn staging_undo_storage_rejects_empty_and_oversized_patches() {
+        let store = RepositoryStore::default();
+        store
+            .save_opened(repository("repo-1", "/repo/one", 1))
+            .unwrap();
+        let mut record = StagingUndoRecord {
+            operation_task_id: "task-stage".into(),
+            repo_id: "repo-1".into(),
+            created_at_ms: 1,
+            reverse_patch: Vec::new(),
+        };
+        assert!(store.save_staging_undo_record(&record).is_err());
+        record.reverse_patch = vec![0; MAX_STAGING_UNDO_PATCH_BYTES + 1];
+        assert!(store.save_staging_undo_record(&record).is_err());
+        assert_eq!(store.latest_staging_undo_record("repo-1").unwrap(), None);
     }
 
     #[test]

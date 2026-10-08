@@ -356,6 +356,35 @@ describe("desktop startup E2E", () => {
       await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "resetRestore" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(featureOidBeforeReset);
 
+      await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
+      const stagedBeforeUndo = (await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only"])).stdout.trim();
+      await writeFile(resolve(fixture.path, "src/undo-me.ts"), "export const undoMe = true;\n");
+      await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.getByText("src/undo-me.ts", { exact: true }).waitFor();
+      const stageAllButton = window.getByRole("button", { name: "Stage all", exact: true });
+      await window.waitForFunction(() => {
+        const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.textContent?.trim() === "Stage all");
+        return Boolean(button && !button.disabled);
+      }, undefined, { timeout: 5000 });
+      await stageAllButton.click();
+      const stageAllTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "stageAll" }) });
+      await stageAllTask.waitFor({ state: "visible", timeout: 5000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "stageAll" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 10_000 });
+      expect((await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only", "--", "src/undo-me.ts"])).stdout.trim()).toBe("src/undo-me.ts");
+      const stageTasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      await stageTasksDialog.getByRole("button", { name: "Close tasks" }).click();
+      await stageTasksDialog.waitFor({ state: "hidden" });
+      const refreshStatusButton = window.getByRole("button", { name: "Refresh working tree status" });
+      await refreshStatusButton.focus();
+      expect(await window.evaluate(() => document.activeElement?.textContent?.trim())).toBe("Refresh ↻");
+      await window.keyboard.press("Control+z");
+      const undoTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "undoStaging" }) });
+      await undoTask.waitFor({ state: "visible", timeout: 5000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "undoStaging" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 10_000 });
+      const stagedAfterUndo = (await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only"])).stdout.trim();
+      expect(stagedAfterUndo).toBe(stagedBeforeUndo);
+      expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain", "--", "src/undo-me.ts"])).stdout.trim()).toBe("?? src/undo-me.ts");
+
       const forgotten = await window.evaluate(async (repoId) => {
         const connection = await (globalThis.window as unknown as Window & {
           gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };

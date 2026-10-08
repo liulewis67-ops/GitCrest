@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::{ffi::OsString, path::Path, process::ExitStatus, time::Duration};
 
 use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     process::Command,
     sync::watch,
     task::JoinHandle,
@@ -17,6 +17,7 @@ use crate::tasks::{TaskContext, TaskFailure};
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
+const MAX_CAPTURED_STAGING_PATCH_BYTES: usize = 20 * 1024 * 1024;
 static NEXT_TEMP_INDEX: AtomicU64 = AtomicU64::new(1);
 static NEXT_TEMP_REBASE: AtomicU64 = AtomicU64::new(1);
 
@@ -93,6 +94,49 @@ impl GitCommandService {
         Self {
             git_program: git_program.into(),
         }
+    }
+
+    pub async fn read_index_tree(&self, repository_path: &Path) -> Result<String, TaskFailure> {
+        let output =
+            capture_git_output(&self.git_program, repository_path, ["write-tree"], 128).await?;
+        let oid = String::from_utf8(output)
+            .map_err(|_| TaskFailure::Failed("Git returned an invalid index tree ID".into()))?;
+        let oid = oid.trim();
+        if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+            return Err(TaskFailure::Failed(
+                "Git returned an invalid index tree ID".into(),
+            ));
+        }
+        Ok(oid.to_ascii_lowercase())
+    }
+
+    pub async fn diff_index_trees(
+        &self,
+        repository_path: &Path,
+        before_tree: &str,
+        after_tree: &str,
+    ) -> Result<Vec<u8>, TaskFailure> {
+        for oid in [before_tree, after_tree] {
+            if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                return Err(TaskFailure::Failed(
+                    "Git returned an invalid index tree ID".into(),
+                ));
+            }
+        }
+        capture_git_output(
+            &self.git_program,
+            repository_path,
+            [
+                "diff",
+                "--binary",
+                "--no-ext-diff",
+                "--no-renames",
+                before_tree,
+                after_tree,
+            ],
+            MAX_CAPTURED_STAGING_PATCH_BYTES,
+        )
+        .await
     }
 
     pub async fn execute(
@@ -974,6 +1018,58 @@ impl GitCommandService {
         )
         .await
     }
+}
+
+async fn capture_git_output<const N: usize>(
+    git_program: &str,
+    repository_path: &Path,
+    arguments: [&str; N],
+    max_bytes: usize,
+) -> Result<Vec<u8>, TaskFailure> {
+    let capture = async {
+        let mut command = Command::new(git_program);
+        command
+            .args(arguments)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "never")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .current_dir(repository_path);
+        let mut child = command
+            .spawn()
+            .map_err(|_| TaskFailure::Failed("Git could not be started".into()))?;
+        let stdout = child
+            .stdout
+            .take()
+            .ok_or_else(|| TaskFailure::Failed("Git output could not be read".into()))?;
+        let mut output = Vec::new();
+        let read = stdout
+            .take(max_bytes.saturating_add(1) as u64)
+            .read_to_end(&mut output)
+            .await;
+        if read.is_err() || output.len() > max_bytes {
+            let _ = child.kill().await;
+            let _ = child.wait().await;
+            return Err(TaskFailure::Failed(if output.len() > max_bytes {
+                "The staging change is too large to keep an undo patch for".into()
+            } else {
+                "Git output could not be read".into()
+            }));
+        }
+        let status = child
+            .wait()
+            .await
+            .map_err(|_| TaskFailure::Failed("Git process ended unexpectedly".into()))?;
+        finish_status(status)?;
+        Ok(output)
+    };
+    tokio::time::timeout(Duration::from_secs(30), capture)
+        .await
+        .map_err(|_| {
+            TaskFailure::Failed("Git index snapshot exceeded its 30-second deadline".into())
+        })?
 }
 
 async fn workflow_command_result(
