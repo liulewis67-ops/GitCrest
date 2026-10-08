@@ -15,7 +15,7 @@ use crate::write_probe;
 use crate::{
     add_api_version_header, api_not_found, apply_repository_shelf, cancel_task, clone_repository,
     commit_repository, create_repository_shelf, delete_ai_credential, delete_credential,
-    delete_repository_shelf, discard_repository_patch, events, fetch_repository, get_ai_settings,
+    delete_repository_shelf, discard_repository_patch, events, get_ai_settings,
     get_credential_status, get_repository_shelf, get_task, get_workflow_conflict_ai_settings,
     list_repository_rebase_backups, list_repository_reset_backups, list_repository_shelves,
     list_tasks, mark_workflow_conflict_resolved, preflight_repository_pull,
@@ -87,7 +87,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
             "/v1/repositories/:repo_id/commits/:oid/tags",
             post(repository_commit_create_tag),
         )
-        .route("/v1/repositories/:repo_id/fetch", post(fetch_repository))
         .route(
             "/v1/repositories/:repo_id/pull-preflight",
             get(preflight_repository_pull),

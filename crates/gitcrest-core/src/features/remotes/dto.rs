@@ -51,3 +51,9 @@ pub(super) struct BranchUpstreamRequest {
     pub(super) remote_name: String,
     pub(super) remote_branch: String,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct FetchRequest {
+    pub(super) prune: bool,
+}

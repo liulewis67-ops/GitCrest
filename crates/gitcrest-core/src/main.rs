@@ -1552,12 +1552,6 @@ async fn prepare_shelf_items(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct FetchRequest {
-    prune: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CreateTagBody {
     name: String,
     message: String,
@@ -2233,49 +2227,6 @@ async fn commit_repository(
                     }
                 }
                 result.map(|()| None)
-            },
-        )
-        .await
-        .map_err(ApiError::task_submit)?;
-    Ok((StatusCode::ACCEPTED, Json(task)))
-}
-
-async fn fetch_repository(
-    State(state): State<AppState>,
-    Path(repo_id): Path<String>,
-    request: Result<Json<FetchRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
-    let Json(request) = request.map_err(|_| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            ApiErrorCode::RequestInvalid,
-            "A fetch options object is required.",
-        )
-    })?;
-    let target = state
-        .repositories
-        .task_target(&repo_id)
-        .await
-        .map_err(ApiError::from_repository_error)?;
-    let operation = if request.prune {
-        GitOperation::FetchPrune
-    } else {
-        GitOperation::Fetch
-    };
-    let command = state.git_commands.clone();
-    let path = target.repository_path;
-    let task = state
-        .tasks
-        .submit(
-            Some(repo_id),
-            None,
-            target.resource_key,
-            if request.prune { "fetchPrune" } else { "fetch" },
-            move |context| async move {
-                command
-                    .execute(&path, operation, context)
-                    .await
-                    .map(|()| None)
             },
         )
         .await

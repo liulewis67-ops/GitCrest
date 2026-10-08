@@ -6,13 +6,57 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    branches, remotes as remote_service, AppState, RemoteCommand, TaskFailure, TaskSnapshot,
+    branches, remotes as remote_service, AppState, GitOperation, RemoteCommand, TaskFailure,
+    TaskSnapshot,
 };
 
 use super::dto::{
-    BranchUpstreamRequest, DefaultRemoteRequest, RemoteBranchDeleteQuery,
+    BranchUpstreamRequest, DefaultRemoteRequest, FetchRequest, RemoteBranchDeleteQuery,
     RemoteBranchDeleteRequest, RemoteNameRequest, RemoteRequest, RequiredNullableRemoteName,
 };
+
+pub(super) async fn fetch_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<FetchRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A fetch options object is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let operation = if request.prune {
+        GitOperation::FetchPrune
+    } else {
+        GitOperation::Fetch
+    };
+    let command = state.git_commands.clone();
+    let path = target.repository_path;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            if request.prune { "fetchPrune" } else { "fetch" },
+            move |context| async move {
+                command
+                    .execute(&path, operation, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
 
 pub(super) async fn repository_remotes(
     State(state): State<AppState>,
