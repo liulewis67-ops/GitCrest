@@ -643,3 +643,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：status HTTP handler 仍在 `main.rs`；下一阶段继续迁移其 handler/DTO，并将 diff、staging 等功能路由从 `api/router.rs` 拆到各自 feature。
 - 证据：`crates/gitcrest-core/src/features/status/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`f12ee12`
+
+### 后端 status HTTP handler 拆分 — 小阶段 7
+- 状态：已完成（status 请求边界进入 feature；整体架构仍需继续对齐）
+- 日期：2026-10-09
+- 交付：将 `/v1/repositories/:repo_id/status` handler 从 `main.rs` 移至 `features/status/handlers.rs`，路由由 `features/status/routes.rs` 调用。保留 `refresh=true`、最多 256 个 `paths`、禁止同时传入强制刷新与路径 scope 的校验，以及原错误状态和错误 envelope。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：仓库生命周期 handler、status 以外 handlers、feature DTO 仍未完全归位；继续按契约分组迁移，并避免跨 feature 调用私有实现。
+- 证据：`crates/gitcrest-core/src/features/status/handlers.rs`、`crates/gitcrest-core/src/features/status/routes.rs`、`crates/gitcrest-core/src/main.rs`。
