@@ -1634,3 +1634,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：后端仍以 binary crate root 承载模块声明及兼容类型导入，`main.rs` 内还有大型 crate-level 测试模块；后续结合指南与现有测试可见性逐步收敛，避免一次性破坏内部访问。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/api/middleware/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`、`doc/14-backend-development-guidelines.md` 第 3、5 节。
 - 实施 commit：`11d9345`
+
+### 后端 binary entry 收敛并建立 lib crate 边界 — 小阶段 115
+- 状态：已完成（`main.rs` 仅调用 library entry 并处理最终退出码）
+- 日期：2026-10-09
+- 交付：将原 crate-root 模块组装、既有 crate 内兼容类型入口和单元测试移至 `src/lib.rs`；library 暴露唯一 `run() -> i32` 启动入口并委托 `bootstrap::run()`。`src/main.rs` 收敛为 Tokio runtime 入口、调用 library `run` 并仅在非零退出码时终止进程。测试仍位于 library crate root，原有私有可见性与 `pub(super)` 测试访问未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：`lib.rs` 仍声明并重新导出多个 crate-root feature 兼容路径，单元测试也仍集中在一个大型 crate-root 文件；下一步按依赖与可见性逐个迁移 feature 模块，避免一次性重写测试边界。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/{main.rs,lib.rs,bootstrap.rs}`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 实施 commit：`8c0ebf2`
