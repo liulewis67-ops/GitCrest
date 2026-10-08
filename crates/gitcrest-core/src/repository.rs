@@ -127,6 +127,19 @@ impl RepositoryManager {
         })
     }
 
+    pub async fn read_target(&self, repo_id: &str) -> Result<PathBuf, RepositoryError> {
+        let store = self.store.clone();
+        let repo_id = repo_id.to_owned();
+        let repository = task::spawn_blocking(move || store.get(&repo_id))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .ok_or(RepositoryError::RepositoryNotFound)?;
+        let path = PathBuf::from(repository.path);
+        fs::metadata(&path).await.map_err(map_path_error)?;
+        Ok(path)
+    }
+
     pub async fn open_database(path: PathBuf) -> Result<Self, RepositoryError> {
         let store = task::spawn_blocking(move || RepositoryStore::open(&path))
             .await

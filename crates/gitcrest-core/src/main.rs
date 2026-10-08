@@ -1406,14 +1406,14 @@ async fn repository_diff(
             "A changed file path and diff scope are required.",
         )
     })?;
-    let target = state
+    let repository_path = state
         .repositories
-        .task_target(&repo_id)
+        .read_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let snapshot = state
         .repositories
-        .status_snapshot(&repo_id)
+        .status_snapshot_paths(&repo_id, std::slice::from_ref(&query.path))
         .await
         .map_err(ApiError::from_repository_error)?;
     let file = snapshot
@@ -1427,7 +1427,7 @@ async fn repository_diff(
                 "The selected path is not present in the latest change snapshot.",
             )
         })?;
-    diff::read(repo_id, &target.repository_path, file, query.scope)
+    diff::read(repo_id, &repository_path, file, query.scope)
         .await
         .map(Json)
         .map_err(ApiError::from_diff_error)
