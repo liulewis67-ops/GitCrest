@@ -1805,3 +1805,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其他业务模块仍引用 crate-root feature 兼容路径，后续继续迁移跨 feature 调用并按编译结果移除已无消费者的兼容导出。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/features/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`f44dc2b`
+
+### commits feature 跨模块引用使用 features 路径 — 小阶段 134
+- 状态：已完成（commits feature 不再依赖 crate-root feature aliases）
+- 日期：2026-10-09
+- 交付：将 commits DTO、service、handlers 与 routes 对 diff/status/history 的依赖切换到 `crate::features::*`；同时让 handler 依赖 `features::commits`、`features::tasks`。确认 crate 内其余调用已通过 API feature 路径后，从 `lib.rs` 移除 `commits` crate-root re-export。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：其他 feature aliases 仍被 API、storage、git adapter 与 feature 实现消费；后续继续按依赖关系迁移并删除不再需要的 crate-root re-export。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/commits/`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`88d3fda`
