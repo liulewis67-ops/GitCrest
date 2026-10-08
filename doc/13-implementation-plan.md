@@ -688,3 +688,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：history HTTP handlers 和 DTO 仍在 `main.rs`；提交列表 GET 与 commit POST 当前共用顶层路由绑定，后续 commits/history router 组合时需一并归属并验证方法合并行为。
 - 证据：`crates/gitcrest-core/src/features/history/{mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`fe3ee5a`
+
+### 后端 history handlers 与查询 DTO 拆分 — 小阶段 12
+- 状态：已完成（history 请求协议边界进入 feature；更深层用例分层后续推进）
+- 日期：2026-10-09
+- 交付：将提交分页查询、提交详情、Blame 与 refs 查询 handlers 从 `main.rs` 迁入 `features/history/handlers.rs`，将分页过滤和 Blame query DTO 迁入 `features/history/dto.rs`。`/commits` 的 GET handler 由 history routes 提供 MethodRouter，再与顶层 commit POST 合并，保留同一路径的既有方法组合、校验和响应。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；history service 单测和历史 API 集成用例通过。
+- 限制/后续：handlers 仍直接通过 `AppState` 协调仓库和 history service；后续按规范建立显式 use-case/service 注入边界。其余 feature handlers 与 DTO 仍待迁移。
+- 证据：`crates/gitcrest-core/src/features/history/{dto,handlers,mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`8f294af`
