@@ -1481,3 +1481,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：S7.2 空闲/工作集内存与滚动帧率门槛仍待按既定 benchmark 复测；S7.4/S7.5 也仍未完成。
 - 证据：`src/app/App.tsx`、`src/features/diff/DiffWindow.tsx`、`doc/evidence/S7.2/renderer-lazy-workspace-bundle.md`。
 - 实施 commit：`ea0b449`
+
+### Welcome 页面迁入 pages 目录 — 小阶段 98
+- 状态：已完成（Welcome 页面展示与交互组合从应用根组件移入 `pages/welcome`）
+- 日期：2026-10-09
+- 交付：新增 `src/pages/welcome/WelcomePage.tsx`，以明确 props 接收最近仓库、连接/加载状态、快捷键与版本信息，并通过回调请求打开、初始化、克隆、收藏、移除仓库及进入 Workspace。`App.tsx` 保留应用级数据与操作编排，仅选择页面并组合 WelcomePage；既有页面结构、文案、CSS 类及操作语义不变。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。
+- 限制/后续：Workspace 页面仍占据 App 大部分 JSX 和交互组合；下一小阶段继续按规范创建 `pages/workspace/WorkspacePage.tsx` 并逐步收敛根组件。S7.2、S7.4、S7.5 仍需按主计划验收。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/app/App.tsx`。
+- 实施 commit：`3ed1051`
