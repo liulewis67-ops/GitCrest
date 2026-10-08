@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::Write as _,
     path::{Path, PathBuf},
     process::Stdio,
@@ -50,6 +50,7 @@ struct StatusCacheEntry {
     last_used: u64,
     full_snapshot: Option<StatusSnapshot>,
     path_snapshots: HashMap<String, CachedPathStatus>,
+    dirty_paths: HashSet<String>,
 }
 
 struct CachedPathStatus {
@@ -85,6 +86,10 @@ pub enum RepositoryError {
 
 impl RepositoryManager {
     pub fn invalidate_status(&self, repo_id: &str) {
+        self.invalidate_status_scope(repo_id, true, &[]);
+    }
+
+    pub fn invalidate_status_scope(&self, repo_id: &str, full: bool, paths: &[String]) {
         let mut cache = self
             .status_cache
             .lock()
@@ -92,8 +97,21 @@ impl RepositoryManager {
         ensure_status_cache_entry(&mut cache, repo_id);
         if let Some(entry) = cache.entries.get_mut(repo_id) {
             entry.version = entry.version.wrapping_add(1);
-            entry.full_snapshot = None;
-            entry.path_snapshots.clear();
+            if full
+                || paths.is_empty()
+                || entry.dirty_paths.len().saturating_add(paths.len()) > MAX_CACHED_STATUS_PATHS
+            {
+                entry.full_snapshot = None;
+                entry.path_snapshots.clear();
+                entry.dirty_paths.clear();
+            } else {
+                for path in paths {
+                    entry.dirty_paths.insert(path.clone());
+                    entry
+                        .path_snapshots
+                        .retain(|cached_path, _| !status_scopes_overlap(cached_path, path));
+                }
+            }
         }
     }
 
@@ -461,7 +479,11 @@ impl RepositoryManager {
         let sequence = cache.sequence;
         let entry = cache.entries.get_mut(repo_id)?;
         entry.last_used = sequence;
-        entry.full_snapshot.clone()
+        if entry.dirty_paths.is_empty() {
+            entry.full_snapshot.clone()
+        } else {
+            None
+        }
     }
 
     fn cached_path_status(&self, repo_id: &str, paths: &[String]) -> Option<StatusSnapshot> {
@@ -473,14 +495,22 @@ impl RepositoryManager {
         let sequence = cache.sequence;
         let entry = cache.entries.get_mut(repo_id)?;
         entry.last_used = sequence;
+        if paths.iter().any(|path| {
+            entry
+                .dirty_paths
+                .iter()
+                .any(|dirty_path| status_scopes_overlap(path, dirty_path))
+        }) {
+            return None;
+        }
         if let Some(full_snapshot) = &entry.full_snapshot {
             let files = full_snapshot
                 .files
                 .iter()
                 .filter(|file| {
-                    paths.iter().any(|path| {
-                        file.path == *path || file.original_path.as_deref() == Some(path.as_str())
-                    })
+                    paths
+                        .iter()
+                        .any(|path| status_file_matches_scope(file, path))
                 })
                 .cloned()
                 .collect();
@@ -519,6 +549,7 @@ impl RepositoryManager {
                 entry.full_snapshot =
                     (snapshot.files.len() <= MAX_CACHED_STATUS_FILES).then(|| snapshot.clone());
                 entry.path_snapshots.clear();
+                entry.dirty_paths.clear();
             }
         }
     }
@@ -545,9 +576,7 @@ impl RepositoryManager {
             let files = snapshot
                 .files
                 .iter()
-                .filter(|file| {
-                    file.path == *path || file.original_path.as_deref() == Some(path.as_str())
-                })
+                .filter(|file| status_file_matches_scope(file, path))
                 .cloned()
                 .collect();
             entry.path_snapshots.insert(
@@ -558,6 +587,27 @@ impl RepositoryManager {
                 },
             );
         }
+        if let Some(full_snapshot) = entry.full_snapshot.as_mut() {
+            full_snapshot.files.retain(|file| {
+                !paths
+                    .iter()
+                    .any(|path| status_file_matches_scope(file, path))
+            });
+            for file in &snapshot.files {
+                if !full_snapshot.files.contains(file) {
+                    full_snapshot.files.push(file.clone());
+                }
+            }
+            full_snapshot
+                .files
+                .sort_by(|left, right| left.path.cmp(&right.path));
+            full_snapshot.refreshed_at_ms = snapshot.refreshed_at_ms;
+        }
+        entry.dirty_paths.retain(|dirty_path| {
+            !paths
+                .iter()
+                .any(|path| status_scopes_overlap(dirty_path, path))
+        });
         while entry.path_snapshots.len() > MAX_CACHED_STATUS_PATHS
             || entry
                 .path_snapshots
@@ -572,6 +622,39 @@ impl RepositoryManager {
             entry.path_snapshots.remove(&oldest);
         }
     }
+}
+
+fn normalize_status_path(path: &str) -> String {
+    let path = path.replace('\\', "/");
+    let path = path.trim_end_matches('/');
+    let path = path.strip_prefix("./").unwrap_or(path);
+    if path == "." {
+        String::new()
+    } else {
+        path.to_owned()
+    }
+}
+
+fn status_path_matches_scope(path: &str, scope: &str) -> bool {
+    let path = normalize_status_path(path);
+    let scope = normalize_status_path(scope);
+    scope.is_empty()
+        || path == scope
+        || path
+            .strip_prefix(&scope)
+            .is_some_and(|suffix| suffix.starts_with('/'))
+}
+
+fn status_scopes_overlap(left: &str, right: &str) -> bool {
+    status_path_matches_scope(left, right) || status_path_matches_scope(right, left)
+}
+
+fn status_file_matches_scope(file: &StatusFile, scope: &str) -> bool {
+    status_path_matches_scope(&file.path, scope)
+        || file
+            .original_path
+            .as_deref()
+            .is_some_and(|path| status_path_matches_scope(path, scope))
 }
 
 fn ensure_status_cache_entry(cache: &mut StatusCache, repo_id: &str) {
@@ -728,6 +811,158 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    }
+
+    fn status_file(path: &str, kind: crate::status::ChangeKind) -> StatusFile {
+        StatusFile {
+            path: path.to_owned(),
+            original_path: None,
+            index_status: " ".into(),
+            worktree_status: "M".into(),
+            kind,
+            categories: vec![crate::status::ChangeCategory::Unstaged],
+            mode_changed: false,
+        }
+    }
+
+    fn status_snapshot(
+        repo_id: &str,
+        refreshed_at_ms: i64,
+        files: Vec<StatusFile>,
+    ) -> StatusSnapshot {
+        StatusSnapshot {
+            repo_id: repo_id.to_owned(),
+            refreshed_at_ms,
+            files,
+        }
+    }
+
+    #[test]
+    fn path_invalidation_keeps_unaffected_full_status_and_merges_refreshed_scope() {
+        let manager = RepositoryManager::default();
+        let repo_id = "repo_scope_cache";
+        let version = manager.status_cache_version(repo_id);
+        let before = status_snapshot(
+            repo_id,
+            10,
+            vec![
+                status_file("src/changed.rs", crate::status::ChangeKind::Modified),
+                status_file("src/kept.rs", crate::status::ChangeKind::Modified),
+                status_file("README.md", crate::status::ChangeKind::Modified),
+            ],
+        );
+        manager.cache_full_status(repo_id, version, &before);
+
+        manager.invalidate_status_scope(repo_id, false, &["src/changed.rs".into()]);
+        assert!(manager.cached_full_status(repo_id).is_none());
+        let unaffected = manager
+            .cached_path_status(repo_id, &["README.md".into()])
+            .unwrap();
+        assert_eq!(unaffected.files, [before.files[2].clone()]);
+
+        let refresh_version = manager.status_cache_version(repo_id);
+        let changed = status_snapshot(
+            repo_id,
+            20,
+            vec![status_file(
+                "src/changed.rs",
+                crate::status::ChangeKind::Added,
+            )],
+        );
+        manager.cache_path_status(
+            repo_id,
+            refresh_version,
+            &["src/changed.rs".into()],
+            &changed,
+        );
+
+        let merged = manager.cached_full_status(repo_id).unwrap();
+        assert_eq!(merged.refreshed_at_ms, 20);
+        assert_eq!(merged.files.len(), 3);
+        assert!(merged.files.iter().any(|file| {
+            file.path == "src/changed.rs" && file.kind == crate::status::ChangeKind::Added
+        }));
+        let directory_scope = manager
+            .cached_path_status(repo_id, &["src".into()])
+            .unwrap();
+        assert_eq!(directory_scope.files.len(), 2);
+    }
+
+    #[test]
+    fn stale_dirty_scope_refresh_cannot_clear_a_newer_invalidation() {
+        let manager = RepositoryManager::default();
+        let repo_id = "repo_stale_scope_cache";
+        let initial_version = manager.status_cache_version(repo_id);
+        manager.cache_full_status(
+            repo_id,
+            initial_version,
+            &status_snapshot(
+                repo_id,
+                10,
+                vec![status_file(
+                    "src/file.rs",
+                    crate::status::ChangeKind::Modified,
+                )],
+            ),
+        );
+        manager.invalidate_status_scope(repo_id, false, &["src/file.rs".into()]);
+        let stale_refresh = status_snapshot(
+            repo_id,
+            15,
+            vec![status_file("src/file.rs", crate::status::ChangeKind::Added)],
+        );
+        manager.cache_path_status(
+            repo_id,
+            initial_version,
+            &["src/file.rs".into()],
+            &stale_refresh,
+        );
+        assert!(manager.cached_full_status(repo_id).is_none());
+        assert!(manager
+            .cached_path_status(repo_id, &["src/file.rs".into()])
+            .is_none());
+    }
+
+    #[test]
+    fn status_scope_matches_directories_and_root_without_crossing_sibling_names() {
+        let nested = status_file("src/lib/file.rs", crate::status::ChangeKind::Modified);
+        assert!(status_file_matches_scope(&nested, "src"));
+        assert!(status_file_matches_scope(&nested, "./src/"));
+        assert!(status_file_matches_scope(&nested, "."));
+        assert!(!status_file_matches_scope(&nested, "src/liber"));
+    }
+
+    #[test]
+    fn excessive_dirty_paths_promote_status_cache_to_full_invalidation() {
+        let manager = RepositoryManager::default();
+        let repo_id = "repo_dirty_scope_limit";
+        let version = manager.status_cache_version(repo_id);
+        manager.cache_full_status(
+            repo_id,
+            version,
+            &status_snapshot(
+                repo_id,
+                10,
+                vec![status_file(
+                    "tracked.txt",
+                    crate::status::ChangeKind::Modified,
+                )],
+            ),
+        );
+        let paths = (0..=MAX_CACHED_STATUS_PATHS)
+            .map(|index| format!("file-{index}.txt"))
+            .collect::<Vec<_>>();
+
+        manager.invalidate_status_scope(repo_id, false, &paths);
+
+        let cache = manager
+            .status_cache
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        let entry = cache.entries.get(repo_id).unwrap();
+        assert!(entry.full_snapshot.is_none());
+        assert!(entry.path_snapshots.is_empty());
+        assert!(entry.dirty_paths.is_empty());
     }
 
     #[tokio::test]

@@ -18,6 +18,7 @@ const MAX_RETAINED_TASKS: usize = 100;
 const MAX_LOG_LINES: usize = 200;
 const MAX_LOG_LINE_CHARS: usize = 2_000;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
+type StatusInvalidator = dyn Fn(&str) + Send + Sync;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -78,6 +79,7 @@ struct TaskServiceInner {
     repo_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     workers: Arc<Semaphore>,
     store: Option<RepositoryStore>,
+    status_invalidator: Option<Arc<StatusInvalidator>>,
 }
 
 impl Default for TaskServiceInner {
@@ -87,6 +89,7 @@ impl Default for TaskServiceInner {
             repo_locks: Mutex::default(),
             workers: Arc::new(Semaphore::new(4)),
             store: None,
+            status_invalidator: None,
         }
     }
 }
@@ -118,7 +121,32 @@ pub struct TaskContext {
 }
 
 impl TaskService {
+    #[cfg(test)]
+    pub fn with_status_invalidator(invalidator: impl Fn(&str) + Send + Sync + 'static) -> Self {
+        Self {
+            inner: Arc::new(TaskServiceInner {
+                status_invalidator: Some(Arc::new(invalidator)),
+                ..TaskServiceInner::default()
+            }),
+        }
+    }
+
+    #[cfg(test)]
     pub fn with_store(store: RepositoryStore) -> Result<Self, String> {
+        Self::load_store(store, None)
+    }
+
+    pub fn with_store_and_status_invalidator(
+        store: RepositoryStore,
+        invalidator: impl Fn(&str) + Send + Sync + 'static,
+    ) -> Result<Self, String> {
+        Self::load_store(store, Some(Arc::new(invalidator)))
+    }
+
+    fn load_store(
+        store: RepositoryStore,
+        status_invalidator: Option<Arc<StatusInvalidator>>,
+    ) -> Result<Self, String> {
         let mut tasks = BTreeMap::new();
         for (task_id, stored_status, snapshot_json) in store.list_task_snapshots()? {
             let mut snapshot: TaskSnapshot = serde_json::from_str(&snapshot_json)
@@ -144,6 +172,7 @@ impl TaskService {
                 repo_locks: Mutex::default(),
                 workers: Arc::new(Semaphore::new(4)),
                 store: Some(store),
+                status_invalidator,
             }),
         })
     }
@@ -399,6 +428,18 @@ async fn run_task<F, Fut>(
         cancellation: cancellation.clone(),
     };
     let outcome = work(context).await;
+    if let Some(invalidator) = &inner.status_invalidator {
+        let repo_id = inner
+            .data
+            .lock()
+            .await
+            .tasks
+            .get(&task_id)
+            .and_then(|task| task.repo_id.clone());
+        if let Some(repo_id) = repo_id {
+            invalidator(&repo_id);
+        }
+    }
     let (status, message, result_repo_id) = match outcome {
         Ok(result_repo_id) => (
             TaskStatus::Succeeded,

@@ -922,7 +922,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let repositories = RepositoryManager::open_database(database_path)
         .await
         .map_err(|_| "Could not initialize the repository database")?;
-    let tasks = TaskService::with_store(repositories.store())
+    let task_status_repositories = repositories.clone();
+    let tasks =
+        TaskService::with_store_and_status_invalidator(repositories.store(), move |repo_id| {
+            task_status_repositories.invalidate_status(repo_id)
+        })
         .map_err(|_| "Could not recover background task history")?;
     let git_commands = GitCommandService::default();
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
@@ -6619,7 +6623,10 @@ mod tests {
 
     fn test_app(cors_origin: Option<&str>) -> Router {
         let repositories = RepositoryManager::default();
-        let tasks = TaskService::default();
+        let task_status_repositories = repositories.clone();
+        let tasks = TaskService::with_status_invalidator(move |repo_id| {
+            task_status_repositories.invalidate_status(repo_id);
+        });
         let git_commands = GitCommandService::default();
         let state = AppState {
             read_write_token: Arc::new(WRITE_TOKEN.to_string()),

@@ -252,7 +252,11 @@ async fn create_registration(
         if scope.is_empty() {
             return;
         }
-        repositories.invalidate_status(&repo_id);
+        repositories.invalidate_status_scope(
+            &repo_id,
+            scope.full,
+            &scope.paths.iter().cloned().collect::<Vec<_>>(),
+        );
         if sender
             .try_send(WatchInput {
                 repo_id: repo_id.clone(),
@@ -435,7 +439,11 @@ fn publish_pending(
     pending: &mut HashMap<String, DirtyScope>,
 ) {
     for (repo_id, scope) in pending.drain() {
-        repositories.invalidate_status(&repo_id);
+        repositories.invalidate_status_scope(
+            &repo_id,
+            scope.full,
+            &scope.paths.iter().cloned().collect::<Vec<_>>(),
+        );
         if scope.full || !scope.paths.is_empty() {
             events.publish(
                 Some(repo_id.clone()),
