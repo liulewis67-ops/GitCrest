@@ -1328,3 +1328,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：remote branch delete preview 的 Git 目标、差异计数和路径查询仍在 remotes feature 执行；接下来继续收敛该只读路径，随后审视 port 查询与现有 Git executable 配置的统一。
 - 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/workflows/rebase.rs`。
 - 实施 commit：`6065cce`
+
+### 后端 remote branch delete 比较查询迁入 adapter — 小阶段 81
+- 状态：已完成（远端目标 OID、提交差异和影响路径经 Git port 查询）
+- 日期：2026-10-09
+- 交付：新增领域 `WorkflowRemoteBranchComparison` 与 port 比较方法；remote delete preview 用 port 解析经过验证的 remote-tracking ref、读取当前 HEAD、获取远端独有提交数及 NUL 分隔影响路径。remotes feature 继续校验 remote/branch 配置、映射 `BranchNotFound`、排序去重/截断路径并计算 preview revision；无 HEAD 时保持空比较结果。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：Git 状态 port 与其余 read-only Git port 方法目前复用 `workflow_state.rs`，可继续按端口职责细分 adapter 文件；port 当前尚未复用 `GitCommandService` 的可配置 Git executable。
+- 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/remotes/service.rs`。
+- 实施 commit：`396c247`
