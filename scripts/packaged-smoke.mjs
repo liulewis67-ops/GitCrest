@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -17,6 +18,14 @@ try {
     args: [],
     env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: join(appData, "gitcrest.sqlite") },
   });
+  const runtime = await app.evaluate(({ app: electronApp }) => ({
+    isPackaged: electronApp.isPackaged,
+    resourcesPath: process.resourcesPath,
+    platform: process.platform,
+  }));
+  assert.equal(runtime.isPackaged, true, "smoke test should launch the packaged Electron application");
+  const sidecarName = runtime.platform === "win32" ? "gitcrest-core.exe" : "gitcrest-core";
+  assert.equal(existsSync(join(runtime.resourcesPath, "bin", sidecarName)), true, "platform sidecar should be copied to resources/bin");
   const window = await app.firstWindow();
   await window.waitForLoadState("domcontentloaded", { timeout: 15_000 });
   await window.getByText("Core connected").waitFor({ timeout: 20_000 });
