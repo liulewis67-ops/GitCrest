@@ -830,3 +830,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`52e70cf`
 
+
+### 后端启动配置模块与监听约束 — 小阶段 27
+- 状态：已完成（环境配置解析从 bootstrap 分离并集中校验）
+- 日期：2026-10-09
+- 交付：新增 `src/config.rs` 集中解析监听地址/端口、鉴权 token、数据库路径与 CORS Origin；bootstrap 仅消费已校验的 `AppConfig`。按规范拒绝非 loopback 监听、非法端口、空写 token、重复 token 和无效 CORS 值；保留 `127.0.0.1:0` 默认地址、sidecar 环境变量以及数据库路径回退规则。修正两个可选 token 均未设置时被 `None == None` 误判为冲突的问题。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（120/120）与 `git diff --check` 通过；配置单测覆盖 loopback、端口范围、token 必填/去重与默认监听值。
+- 限制/后续：`AppState` 和事件类型仍定义在 main.rs；其他资源上限尚未全部从业务模块集中到 config.rs，后续按规范迁移 state 并集中配置预算。
+- 证据：`crates/gitcrest-core/src/config.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`99f7017`
+
