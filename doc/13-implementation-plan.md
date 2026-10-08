@@ -624,3 +624,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；其中 health 公开状态、version 鉴权/版本头集成用例通过。
 - 限制/后续：其他 feature handler 和路由仍未拆分；`api/router.rs` 当前保留它们的组合，按同样边界逐组迁移。
 - 证据：`crates/gitcrest-core/src/features/system/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`45071e6`
