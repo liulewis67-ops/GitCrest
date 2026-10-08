@@ -5,9 +5,7 @@ use axum::{
 };
 
 use super::{
-    dto::{
-        WorkflowPreflightQuery, WorkflowRecoveryQuery, WorkflowRecoveryRequest, WorkflowRequest,
-    },
+    dto::{WorkflowRecoveryQuery, WorkflowRecoveryRequest},
     service as workflows,
 };
 use crate::{
@@ -22,6 +20,7 @@ use crate::{
 };
 
 mod conflicts;
+mod merge;
 mod rebase;
 mod reset;
 
@@ -29,6 +28,7 @@ pub(super) use conflicts::{
     get_workflow_conflict_ai_settings, mark_workflow_conflict_resolved,
     read_workflow_conflict_file, request_workflow_conflict_suggestion, save_workflow_conflict_file,
 };
+pub(super) use merge::{preflight_repository_workflow, start_repository_workflow};
 pub(super) use rebase::{
     list_repository_rebase_backups, preflight_repository_rebase, rollback_repository_rebase,
     start_repository_rebase,
@@ -37,34 +37,6 @@ pub(super) use reset::{
     list_repository_reset_backups, preflight_repository_reset, restore_repository_reset,
     start_repository_reset,
 };
-pub(super) async fn preflight_repository_workflow(
-    State(state): State<AppState>,
-    Path(repo_id): Path<String>,
-    query: Result<Query<WorkflowPreflightQuery>, QueryRejection>,
-) -> Result<Json<workflows::WorkflowPreflight>, ApiError> {
-    let Query(query) = query.map_err(|_| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            ApiErrorCode::RequestInvalid,
-            "Workflow preflight requires an action and targetOid.",
-        )
-    })?;
-    let target = state
-        .repositories
-        .task_target(&repo_id)
-        .await
-        .map_err(ApiError::from_repository_error)?;
-    workflows::read_preflight(
-        repo_id,
-        &target.repository_path,
-        query.action,
-        &query.target_oid,
-    )
-    .await
-    .map(Json)
-    .map_err(ApiError::from_workflow_error)
-}
-
 pub(super) async fn preflight_repository_workflow_recovery(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
@@ -116,105 +88,6 @@ pub(super) async fn preflight_repository_workflow_recovery(
         ));
     }
     Ok(Json(preview))
-}
-
-pub(super) async fn start_repository_workflow(
-    State(state): State<AppState>,
-    Path(repo_id): Path<String>,
-    request: Result<Json<WorkflowRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
-    let Json(request) = request.map_err(|_| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            ApiErrorCode::RequestInvalid,
-            "A workflow action, targetOid, and expectedHeadOid are required.",
-        )
-    })?;
-    let target = state
-        .repositories
-        .task_target(&repo_id)
-        .await
-        .map_err(ApiError::from_repository_error)?;
-    let preview = workflows::read_preflight(
-        repo_id.clone(),
-        &target.repository_path,
-        request.action,
-        &request.target_oid,
-    )
-    .await
-    .map_err(ApiError::from_workflow_error)?;
-    if preview.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
-        || preview.target_oid != request.target_oid
-    {
-        return Err(ApiError::new(
-            StatusCode::PRECONDITION_FAILED,
-            ApiErrorCode::WorkflowPreflightStale,
-            "HEAD or the selected commit changed after preflight. Refresh the workflow preview.",
-        ));
-    }
-    if !preview.can_start {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::WorkflowRequiresClean,
-            "Merge, cherry-pick, or revert requires a clean worktree and no Git operation in progress.",
-        ));
-    }
-    let command = state.git_commands.clone();
-    let repositories = state.repositories.clone();
-    let task_repo_id = repo_id.clone();
-    let path = target.repository_path;
-    let resource_key = target.resource_key;
-    let action = request.action;
-    let target_oid = request.target_oid;
-    let expected_head_oid = request.expected_head_oid;
-    let operation = match action {
-        workflows::WorkflowAction::Merge => "merge",
-        workflows::WorkflowAction::CherryPick => "cherryPick",
-        workflows::WorkflowAction::Revert => "revert",
-    };
-    let task = state
-        .tasks
-        .submit(
-            Some(repo_id),
-            None,
-            resource_key,
-            operation,
-            move |context| async move {
-                let current = workflows::read_preflight(
-                    task_repo_id.clone(),
-                    &path,
-                    action,
-                    &target_oid,
-                )
-                .await
-                .map_err(|_| {
-                    TaskFailure::Failed(
-                        "Workflow preconditions could not be rechecked. Refresh repository state.".into(),
-                    )
-                })?;
-                if current.head_oid.as_deref() != Some(expected_head_oid.as_str())
-                    || current.target_oid != target_oid
-                    || !current.can_start
-                {
-                    return Err(TaskFailure::Failed(
-                        "Workflow preconditions changed before Git could start. Review the current repository state.".into(),
-                    ));
-                }
-                let task_context = context.clone();
-                let result = command
-                    .execute_workflow(&path, action, &target_oid, context)
-                    .await;
-                if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
-                    task_context
-                        .log("Repository metadata refresh failed after the Git operation; refresh the repository before the next write.")
-                        .await;
-                }
-                result.map(|()| None)
-            },
-        )
-        .await
-        .map_err(ApiError::task_submit)?;
-    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
 pub(super) async fn recover_repository_workflow(
