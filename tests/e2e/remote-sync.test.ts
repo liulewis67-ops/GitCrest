@@ -190,12 +190,18 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
-  it("resolves a pull merge conflict from the waiting task and completes the merge", async () => {
+  it("resolves a pull merge conflict from the waiting task and completes the merge", async () => runPullConflictRecovery("merge"), 90_000);
+
+  it("resolves a pull rebase conflict from the waiting task and completes the rebase", async () => runPullConflictRecovery("rebase"), 90_000);
+
+  async function runPullConflictRecovery(strategy: "merge" | "rebase") {
     const fixture = await createTempGitRepository();
     const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-pull-conflict-remote-"));
     const peerPath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-pull-conflict-peer-"));
     const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-pull-conflict-e2e-app-data-"));
     const filePath = resolve(fixture.path, "src/pull-conflict.ts");
+    const pullOperation = strategy === "merge" ? "pullMerge" : "pullRebase";
+    const conflictSide = "theirs";
 
     try {
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
@@ -258,16 +264,24 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
       await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
-      await expect.poll(() => pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(true);
-      await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
+      if (strategy === "rebase") await pullDialog.locator('input[name="pull-strategy"][value="rebase"]').check();
+      await expect.poll(() => pullDialog.getByRole("button", { name: `Pull with ${strategy}` }).isEnabled()).toBe(true);
+      await pullDialog.getByRole("button", { name: `Pull with ${strategy}` }).click();
 
       const taskDialog = window.getByRole("dialog", { name: "Tasks" });
-      const pullTask = taskDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "pullMerge" }) });
+      const pullTask = taskDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: pullOperation }) });
       await pullTask.waitFor({ state: "visible" });
-      await window.waitForFunction(() => {
-        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "pullMerge");
-        return Boolean(card && ["waitingForInput", "failed", "cancelled", "succeeded"].includes(card.querySelector(".taskStatus")?.textContent || ""));
-      }, undefined, { timeout: 20_000 });
+      try {
+        await window.waitForFunction((operation) => {
+          const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === operation);
+          return Boolean(card && ["waitingForInput", "failed", "cancelled", "succeeded"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        }, pullOperation, { timeout: 20_000 });
+      } catch {
+        const state = await pullTask.innerText();
+        await pullTask.locator(".taskLogs summary").click();
+        const logs = await pullTask.locator(".taskLogs pre").innerText();
+        throw new Error(`Pull task did not reach a terminal or recovery state: ${state}\n${logs}`);
+      }
       const pullTaskState = await pullTask.innerText();
       if (!pullTaskState.toLowerCase().includes("waitingforinput")) {
         await pullTask.locator(".taskLogs summary").click();
@@ -279,7 +293,7 @@ describe("remote sync E2E", () => {
       await pullTask.getByRole("button", { name: "Open conflict resolver" }).click();
       const conflictWindow = await conflictWindowPromise;
       await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
-      await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
+      await conflictWindow.getByRole("button", { name: `Use ${conflictSide} for conflict 1` }).click();
       await conflictWindow.getByRole("button", { name: "Save result" }).click();
       await conflictWindow.getByText(/Saved to the working tree/).waitFor();
       await conflictWindow.getByRole("button", { name: "Mark resolved" }).click();
@@ -299,7 +313,7 @@ describe("remote sync E2E", () => {
         const tasks = await response.json() as Array<{ operation: string; status: string }>;
         return tasks.find((task) => task.operation === "workflowContinue")?.status;
       }), { timeout: 20_000 }).toBe("succeeded");
-      await expect.poll(async () => await window.evaluate(async () => {
+      await expect.poll(async () => await window.evaluate(async (operation) => {
         const connection = await (globalThis.window as unknown as Window & {
           gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
         }).gitcrest.getSidecarConnection();
@@ -307,13 +321,20 @@ describe("remote sync E2E", () => {
           headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
         });
         const tasks = await response.json() as Array<{ operation: string; status: string }>;
-        return tasks.find((task) => task.operation === "pullMerge")?.status;
-      }), { timeout: 20_000 }).toBe("succeeded");
+        return tasks.find((task) => task.operation === operation)?.status;
+      }, pullOperation), { timeout: 20_000 }).toBe("succeeded");
 
-      const mergeParents = (await execFileAsync("git", ["-C", fixture.path, "rev-list", "--parents", "-n", "1", "HEAD"])).stdout.trim().split(/\s+/);
-      expect(mergeParents).toContain(localCommit);
-      expect(mergeParents).toContain(remoteCommit);
-      expect((await readFile(filePath, "utf8")).replace(/\r\n/g, "\n")).toBe("export const value = 'remote';\n");
+      const headParents = (await execFileAsync("git", ["-C", fixture.path, "rev-list", "--parents", "-n", "1", "HEAD"])).stdout.trim().split(/\s+/);
+      if (strategy === "merge") {
+        expect(headParents).toContain(localCommit);
+        expect(headParents).toContain(remoteCommit);
+      } else {
+        expect(headParents).toHaveLength(2);
+        await execFileAsync("git", ["-C", fixture.path, "merge-base", "--is-ancestor", remoteCommit, "HEAD"]);
+        expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("local conflicting change");
+      }
+      const expectedValue = strategy === "merge" ? "remote" : "local";
+      expect((await readFile(filePath, "utf8")).replace(/\r\n/g, "\n")).toBe(`export const value = '${expectedValue}';\n`);
     } finally {
       await app?.close();
       app = undefined;
@@ -322,7 +343,7 @@ describe("remote sync E2E", () => {
       await rm(peerPath, { recursive: true, force: true });
       await rm(appDataPath, { recursive: true, force: true });
     }
-  }, 90_000);
+  }
 
   it("keeps a rejected push local and allows a reviewed retry after the remote is restored", async () => {
     const fixture = await createTempGitRepository();
@@ -394,19 +415,29 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["init", "--bare", "--quiet", unavailableRemotePath]);
       await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", unavailableRemotePath, `${originalRemoteHead}:refs/heads/${branch}`]);
 
-      const priorPushCount = await tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).count();
+      const previousPushTaskIds = await window.evaluate(async () => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+        });
+        const tasks = await response.json() as Array<{ taskId: string; operation: string }>;
+        return tasks.filter((task) => task.operation.startsWith("push")).map((task) => task.taskId);
+      });
       await failedPush.getByRole("button", { name: "Review and retry push" }).click();
       const retryDialog = window.getByRole("dialog", { name: "Push current branch" });
       await retryDialog.getByRole("button", { name: "Push", exact: true }).click();
-      const retriedPush = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).first();
-      await window.waitForFunction((previousCount) => {
-        const cards = [...document.querySelectorAll(".taskCard")].filter((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "push");
-        const card = cards[0];
-        return Boolean(cards.length > previousCount && card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
-      }, priorPushCount, { timeout: 20_000 });
-      await retriedPush.locator(".taskLogs summary").click();
-      const retryTaskBodies = await tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).allInnerTexts();
-      if (!retryTaskBodies.some((body) => body.includes("Succeeded"))) throw new Error(`Reviewed push retry did not succeed: ${JSON.stringify(retryTaskBodies)}`);
+      await expect.poll(async () => await window.evaluate(async (previousTaskIds) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+        });
+        const tasks = await response.json() as Array<{ taskId: string; operation: string; status: string }>;
+        return tasks.find((task) => task.operation.startsWith("push") && !previousTaskIds.includes(task.taskId))?.status;
+      }, previousPushTaskIds), { timeout: 20_000 }).toBe("succeeded");
       expect((await execFileAsync("git", ["-C", unavailableRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim()).toBe(localHead);
       expect((await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim()).toBe(originalRemoteHead);
     } finally {
