@@ -20,7 +20,13 @@ use super::{
 #[cfg(test)]
 use crate::write_probe;
 
-use crate::{repositories, status, system, AppState};
+use crate::{
+    features::{
+        branches, commits, credentials, diff, history, remotes, repositories, settings, shelves,
+        staging, status, system, tags, tasks, workflows,
+    },
+    AppState,
+};
 
 async fn api_not_found() -> ApiError {
     ApiError::route_not_found()
@@ -30,18 +36,18 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
     let api = system::routes::api_router()
         .merge(repositories::routes::router())
         .merge(status::routes::router())
-        .merge(crate::diff::routes::router())
-        .merge(crate::history::routes::router())
-        .merge(crate::branches::routes::router())
-        .merge(crate::remotes::routes::router())
-        .merge(crate::staging::routes::router())
-        .merge(crate::shelves::routes::router())
-        .merge(crate::credentials::routes::router())
-        .merge(crate::settings::routes::router())
-        .merge(crate::commits::routes::router())
-        .merge(crate::features::tags::routes::router())
-        .merge(crate::tasks::routes::router())
-        .merge(crate::workflows::routes::router())
+        .merge(diff::routes::router())
+        .merge(history::routes::router())
+        .merge(branches::routes::router())
+        .merge(remotes::routes::router())
+        .merge(staging::routes::router())
+        .merge(shelves::routes::router())
+        .merge(credentials::routes::router())
+        .merge(settings::routes::router())
+        .merge(commits::routes::router())
+        .merge(tags::routes::router())
+        .merge(tasks::routes::router())
+        .merge(workflows::routes::router())
         .route("/v1/events", get(crate::api::events::events))
         .fallback(api_not_found);
 
