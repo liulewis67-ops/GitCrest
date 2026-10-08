@@ -3,9 +3,12 @@ use axum::{
     http::StatusCode,
     Json,
 };
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::dto::{
+    ShelfApplyPreviewResponse, ShelfApplyRequest, ShelfCreateRequest, ShelfDetailResponse,
+    ShelfSelectionRequest,
+};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     diff::{self, DiffError, DiffScope},
@@ -16,32 +19,6 @@ use crate::{
     storage::{UndoOperation, UndoRecord},
     tasks::{TaskFailure, TaskSnapshot},
 };
-#[derive(Clone, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ShelfSelectionRequest {
-    path: String,
-    scope: DiffScope,
-    revision: String,
-    #[serde(default)]
-    selections: Vec<diff::DiffSelection>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct ShelfCreateRequest {
-    name: String,
-    description: String,
-    expected_head_oid: Option<String>,
-    items: Vec<ShelfSelectionRequest>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct ShelfDetailResponse {
-    shelf: shelves::ShelfSnapshot,
-    patch: String,
-}
-
 #[derive(Clone)]
 struct PreparedShelfItem {
     path: String,
@@ -122,23 +99,6 @@ pub(super) async fn delete_repository_shelf(
         ));
     }
     Ok(StatusCode::NO_CONTENT)
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct ShelfApplyPreviewResponse {
-    shelf: shelves::ShelfSnapshot,
-    expected_head_oid: Option<String>,
-    preview_revision: String,
-    can_apply_cleanly: bool,
-    can_apply_with_conflicts: bool,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct ShelfApplyRequest {
-    expected_head_oid: Option<String>,
-    preview_revision: String,
 }
 
 pub(super) async fn preflight_repository_shelf_apply(
