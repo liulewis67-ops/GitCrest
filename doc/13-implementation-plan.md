@@ -1904,3 +1904,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：status 与 tasks 是剩余的主要 feature aliases，仍被多处基础设施/业务模块使用；继续沿 feature 边界迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/workflows/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`e49d644`
+
+### tasks feature 调用切换并移除 crate-root alias — 小阶段 145
+- 状态：已完成（task service、状态与失败类型通过 feature 模块访问）
+- 日期：2026-10-09
+- 交付：将 bootstrap、AppState、Git command adapter、repositories clone、staging/shelves/workflows handlers 与 tasks handler 的任务类型依赖切换到 `features::tasks`；API router/error mapper 已使用 feature 路径，crate-level helper/tests 也改用 `features::tasks`。从 `lib.rs` 移除 tasks crate-root re-export，调度、取消和结果处理逻辑未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：status 是最后一个业务 feature crate-root alias，仍有多处基础设施及 feature consumers；继续迁移后清除该 alias。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{tasks,repositories,staging,shelves,workflows}/`、`crates/gitcrest-core/src/{bootstrap.rs,state.rs,git/command.rs,lib.rs}`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`aef8367`
