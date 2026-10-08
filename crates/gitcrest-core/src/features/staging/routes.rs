@@ -1,8 +1,9 @@
 use axum::{routing::post, Router};
 
-use crate::{
-    discard_repository_patch, stage_repository, stage_repository_patch, state::AppState,
-    undo_recent_operation,
+use crate::state::AppState;
+
+use super::handlers::{
+    discard_repository_patch, stage_repository, stage_repository_patch, undo_recent_operation,
 };
 
 pub(crate) fn router() -> Router<AppState> {
