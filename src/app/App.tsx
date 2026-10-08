@@ -1,8 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
-import { bootstrapApp } from "./bootstrap";
-import { createEventSequenceTracker } from "../api/events";
+import { useCoreConnection } from "./use-core-connection";
 import { CommitDetails, CommitGraph } from "../features/history/CommitGraph";
 import { RemoteManager } from "../features/remotes/RemoteManager";
 import { ShelfCenter } from "../features/shelves/ShelfCenter";
@@ -146,8 +145,6 @@ function ResizeSeparator({
 function App() {
   const isMacPlatform = navigator.platform.toLowerCase().includes("mac");
   const commandKey = isMacPlatform ? "⌘" : "Ctrl";
-  const [status, setStatus] = useState("Starting local GitCrest core...");
-  const [version, setVersion] = useState("");
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
   const [remoteActionBusy, setRemoteActionBusy] = useState(false);
@@ -231,7 +228,31 @@ function App() {
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
-  const apiRef = useRef<GitCrestApiClient>();
+  const { apiRef, status, version, setStatus } = useCoreConnection({
+    onConnected: (api) => refreshRepositories(api, true),
+    onEvent: (api, event, sequenceGap, isActive) => {
+      const plan = getRepositoryEventRefreshPlan(
+        event,
+        sequenceGap,
+        selectedRepositoryRef.current?.repoId,
+        isRepositoryTabOpen,
+      );
+      if (!plan) return;
+      if (plan.refreshRepositories) {
+        void refreshRepositories(api).catch((syncError: unknown) => {
+          if (plan.reportRepositoryRefreshError && isActive()) {
+            setStatus(syncError instanceof Error ? syncError.message : "Failed to refresh repository state");
+          }
+        });
+      }
+      if (plan.repoId && plan.status) {
+        void refreshRepositoryStatusScope(plan.repoId, plan.status.full, plan.status.paths);
+      }
+      if (plan.repoId && plan.refreshBranches) void refreshRepositoryBranches(plan.repoId);
+      if (plan.repoId && plan.refreshRemotes) void refreshRepositoryRemotes(plan.repoId);
+      if (plan.refreshHistory) setHistoryRefreshKey((current) => current + 1);
+    },
+  });
   const {
     tasks,
     error: tasksError,
@@ -1353,59 +1374,6 @@ function App() {
       setSelectedRepository((current) => currentRepositories.find((repository) => repository.repoId === current?.repoId));
     }
   }
-
-  useEffect(() => {
-    let cancelled = false;
-    let unsubscribeFromEvents: (() => void) | undefined;
-    const isSequenceGap = createEventSequenceTracker();
-
-    async function connect() {
-      try {
-        const bootstrap = await bootstrapApp();
-        const api = bootstrap.api;
-        apiRef.current = api;
-        if (!cancelled) {
-          setVersion(`${bootstrap.version.name} ${bootstrap.version.version} (API v${bootstrap.version.apiVersion})`);
-          setStatus("Connected to local Rust core");
-        }
-        await refreshRepositories(api, true);
-
-        const unsubscribe = await bootstrap.subscribeToEvents((event) => {
-          const plan = getRepositoryEventRefreshPlan(
-            event,
-            isSequenceGap(event),
-            selectedRepositoryRef.current?.repoId,
-            isRepositoryTabOpen,
-          );
-          if (!plan) return;
-          if (plan.refreshRepositories) {
-            void refreshRepositories(api).catch((syncError: unknown) => {
-              if (plan.reportRepositoryRefreshError && !cancelled) {
-                setStatus(syncError instanceof Error ? syncError.message : "Failed to refresh repository state");
-              }
-            });
-          }
-          if (plan.repoId && plan.status) {
-            void refreshRepositoryStatusScope(plan.repoId, plan.status.full, plan.status.paths);
-          }
-          if (plan.repoId && plan.refreshBranches) void refreshRepositoryBranches(plan.repoId);
-          if (plan.repoId && plan.refreshRemotes) void refreshRepositoryRemotes(plan.repoId);
-          if (plan.refreshHistory) setHistoryRefreshKey((current) => current + 1);
-        });
-        if (cancelled) unsubscribe();
-        else unsubscribeFromEvents = unsubscribe;
-      } catch (error) {
-        if (!cancelled) setStatus(error instanceof Error ? error.message : "Failed to connect to local Rust core");
-      }
-    }
-
-    void connect();
-    return () => {
-      cancelled = true;
-      apiRef.current = undefined;
-      unsubscribeFromEvents?.();
-    };
-  }, []);
 
   useEffect(() => {
     if (mode !== "diff" || !selectedRepository || !selectedFilePath || !selectedFileScope) {
