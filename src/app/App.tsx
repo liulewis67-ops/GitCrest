@@ -12,7 +12,7 @@ import { ariaShortcut, displayShortcut, THEME_CYCLE, useShortcutPreferences, use
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
-import { useCommitDraft, useCommitSubmission } from "../features/commits";
+import { loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
@@ -38,7 +38,7 @@ const PullDialog = lazy(() => import("../features/remotes/PullDialog").then(({ P
 const PushTargetDialog = lazy(() => import("../features/remotes/PushTargetDialog").then(({ PushTargetDialog }) => ({ default: PushTargetDialog })));
 const DiscardChangesDialog = lazy(() => import("../features/diff/DiscardChangesDialog").then(({ DiscardChangesDialog }) => ({ default: DiscardChangesDialog })));
 const SettingsDialog = lazy(() => import("../features/settings/SettingsDialog").then(({ SettingsDialog }) => ({ default: SettingsDialog })));
-const CommitWorkbench = lazy(() => import("../features/commits").then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
+const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
 
 type Page = "welcome" | "workspace";
 const changeGroups = [
