@@ -1913,3 +1913,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：status 是最后一个业务 feature crate-root alias，仍有多处基础设施及 feature consumers；继续迁移后清除该 alias。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{tasks,repositories,staging,shelves,workflows}/`、`crates/gitcrest-core/src/{bootstrap.rs,state.rs,git/command.rs,lib.rs}`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`aef8367`
+
+### status feature 调用切换并移除 crate-root alias — 小阶段 146
+- 状态：已完成（status feature 全部 consumers 通过规范 feature 路径访问）
+- 日期：2026-10-09
+- 交付：将 repositories、diff、settings、shelves、staging、workflows 与 RepositoryWatcher 中的 status 类型/服务引用切换到 `features::status`；API router 已直接导入 feature 路由，git command adapter 内的 `status` 属于 git adapter 模块。移除 `lib.rs` 的 status crate-root re-export；状态读取、刷新和 UI 数据行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：业务 feature 的 crate-root re-export 已全部清除；`cloning`/`repository` 根兼容出口及大型 `lib.rs` 测试归属仍可继续按规范收敛。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{status,diff,repositories,settings,shelves,staging,workflows}/`、`crates/gitcrest-core/src/refresh/watcher.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`20ff8cb`
