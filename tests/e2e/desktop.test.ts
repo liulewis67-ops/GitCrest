@@ -241,6 +241,8 @@ describe("desktop startup E2E", () => {
       expect(await diffWindow.locator(".diffWindowTabSelect").count()).toBe(1);
       await diffWindow.getByRole("button", { name: "Unified" }).click();
       expect(await diffWindow.locator(".unifiedDiff").count()).toBe(1);
+      expect(await diffWindow.getByRole("group", { name: /^Deleted line/ }).count()).toBeGreaterThan(0);
+      expect(await diffWindow.getByRole("group", { name: /^Added line/ }).count()).toBeGreaterThan(0);
       const readonlyResult = await diffWindow.evaluate(async (repoId) => {
         const connection = await (globalThis.window as unknown as Window & {
           gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string; windowAccess: string }> };

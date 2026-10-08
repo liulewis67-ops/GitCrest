@@ -140,7 +140,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
             />
           </Suspense>}
           {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => (
-            <div className={`splitDiffRow splitDiffRow-${row.kind}`} key={`${hunkIndex}:${rowIndex}`}>
+            <div className={`splitDiffRow splitDiffRow-${row.kind}`} role="group" aria-label={row.kind === "change" ? "Changed diff lines" : "Unchanged context lines"} key={`${hunkIndex}:${rowIndex}`}>
               {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"
                 aria-label={`Select hunk ${hunkIndex + 1} change row ${rowIndex + 1}`}
@@ -158,8 +158,30 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                   return [...next.filter((item) => item.hunkIndex !== hunkIndex), ...next.filter((item) => item.hunkIndex === hunkIndex)];
                 })}
               /></label> : <span className="diffRowSelect" aria-hidden="true" />}
-              <div className="splitDiffCell"><span className="splitDiffLineNumber">{row.oldLine ?? ""}</span><code>{row.oldText !== null && row.oldText !== undefined && row.kind === "change" ? <InlineDiffText text={row.oldText} counterpart={row.newText ?? null} /> : row.oldText ?? ""}</code></div>
-              <div className="splitDiffCell"><span className="splitDiffLineNumber">{row.newLine ?? ""}</span><code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code></div>
+              <div
+                className="splitDiffCell"
+                role="group"
+                aria-label={row.oldText === null
+                  ? "No previous line"
+                  : row.kind === "change"
+                    ? `Deleted line ${row.oldLine ?? "unknown"}: ${row.oldText}`
+                    : `Context line ${row.oldLine ?? "unknown"}: ${row.oldText}`}
+              >
+                <span className="splitDiffLineNumber">{row.oldLine ?? ""}</span>
+                <code>{row.oldText !== null && row.oldText !== undefined && row.kind === "change" ? <InlineDiffText text={row.oldText} counterpart={row.newText ?? null} /> : row.oldText ?? ""}</code>
+              </div>
+              <div
+                className="splitDiffCell"
+                role="group"
+                aria-label={row.newText === null
+                  ? "No added line"
+                  : row.kind === "change"
+                    ? `Added line ${row.newLine ?? "unknown"}: ${row.newText}`
+                    : `Context line ${row.newLine ?? "unknown"}: ${row.newText}`}
+              >
+                <span className="splitDiffLineNumber">{row.newLine ?? ""}</span>
+                <code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code>
+              </div>
             </div>
           ))}
         </section>

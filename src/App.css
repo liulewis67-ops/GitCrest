@@ -61,7 +61,7 @@ body {
 
 button, input, textarea { font: inherit; }
 button { color: inherit; }
-button:focus-visible, input:focus-visible, textarea:focus-visible, [role="separator"]:focus-visible {
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [role="separator"]:focus-visible {
   outline: 2px solid var(--accent-strong);
   outline-offset: 2px;
 }
@@ -570,6 +570,7 @@ button:disabled { cursor: not-allowed; }
 .paletteSearch { display: flex; align-items: center; gap: 10px; height: 48px; padding: 0 13px; border-bottom: 1px solid var(--line); color: var(--text-secondary); }
 .paletteSearch > span { font-size: 18px; }
 .paletteSearch input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--text); font-size: 12px; }
+.paletteSearch input:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; border-radius: 3px; }
 .paletteSearch input::placeholder { color: var(--text-muted); }
 .paletteContext { padding: 11px 13px 6px; color: var(--text-muted); font-size: 8px; font-weight: 720; letter-spacing: .12em; }
 .commandList { max-height: min(350px, 52vh); overflow: auto; padding: 2px 6px 6px; }

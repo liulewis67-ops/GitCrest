@@ -1903,7 +1903,7 @@ function App() {
                     <div className="changeGroupTitle"><span>{group.label}</span><span>{group.files.length}</span></div>
                     {group.files.map((file) => (
                       <div className="statusFileRow" key={`${group.category}:${file.path}`}>
-                        <button className={`statusFileItem statusFileButton${selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree") ? " selected" : ""}`} type="button" aria-pressed={selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree")} title={file.originalPath ? `${file.originalPath} → ${file.path}` : `Review ${file.path}`} onClick={() => openFileDiff(file.path, group.category === "staged" ? "index" : "workingTree")}>
+                        <button className={`statusFileItem statusFileButton${selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree") ? " selected" : ""}`} type="button" aria-label={`${file.kind} ${file.path}`} aria-pressed={selectedFilePath === file.path && selectedFileScope === (group.category === "staged" ? "index" : "workingTree")} title={file.originalPath ? `${file.originalPath} → ${file.path}` : `Review ${file.path}`} onClick={() => openFileDiff(file.path, group.category === "staged" ? "index" : "workingTree")}>
                           <span className={`statusFileCode status-${file.kind}`} aria-label={file.kind}>{changeCode(file.kind)}</span>
                           <span className="statusFilePath">{file.path}</span>
                           {file.modeChanged && <span className="modeChangedTag" title="File mode changed">mode</span>}

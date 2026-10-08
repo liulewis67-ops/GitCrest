@@ -39,6 +39,8 @@ describe("SplitDiff", () => {
     expect(screen.getByText("COMMIT ↔ FIRST PARENT")).toBeDefined();
     expect(screen.getByText("old")).toBeDefined();
     expect(screen.getByText("new")).toBeDefined();
+    expect(screen.getByRole("group", { name: "Deleted line 1: old" })).toBeDefined();
+    expect(screen.getByRole("group", { name: "Added line 1: new" })).toBeDefined();
     expect(screen.queryByRole("checkbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /stage|unstage/i })).toBeNull();
     expect(onStageSelection).not.toHaveBeenCalled();

@@ -254,6 +254,7 @@ describe("App", () => {
     expect(screen.getByRole("region", { name: "Conflicted changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Ignored changes" })).toBeDefined();
     expect(screen.getByText("scripts/tool.sh")).toBeDefined();
+    expect(screen.getByRole("button", { name: "untracked new file.txt" })).toBeDefined();
     expect(screen.getByText("mode", { exact: true })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Refresh working tree status" }));
     expect(await screen.findByText("Refresh failed. Showing the last snapshot.")).toBeDefined();

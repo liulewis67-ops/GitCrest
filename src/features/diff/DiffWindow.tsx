@@ -181,10 +181,10 @@ function UnifiedDiff({ document }: { document: DiffDocumentResponse }) {
     {document.hunks.map((hunk, hunkIndex) => <section className="unifiedDiffHunk" aria-label={`Change hunk ${hunkIndex + 1}`} key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`}>
       <header>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</header>
       {hunk.rows.map((row, rowIndex) => row.kind === "context"
-        ? <div className="unifiedDiffRow" key={rowIndex}><span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code> {row.oldText ?? row.newText ?? ""}</code></div>
+        ? <div className="unifiedDiffRow" role="group" aria-label={`Context line ${row.oldLine ?? row.newLine ?? "unknown"}: ${row.oldText ?? row.newText ?? ""}`} key={rowIndex}><span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code> {row.oldText ?? row.newText ?? ""}</code></div>
         : <Fragment key={rowIndex}>
-          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion"><span>{row.oldLine ?? ""}</span><span /> <code>-{row.oldText}</code></div>}
-          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition"><span /> <span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
+          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion" role="group" aria-label={`Deleted line ${row.oldLine ?? "unknown"}: ${row.oldText}`}><span>{row.oldLine ?? ""}</span><span /> <code>-{row.oldText}</code></div>}
+          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition" role="group" aria-label={`Added line ${row.newLine ?? "unknown"}: ${row.newText}`}><span /> <span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
         </Fragment>)}
     </section>)}
   </div>;
