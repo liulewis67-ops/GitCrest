@@ -116,6 +116,8 @@ jobs:
       - name: Launch the packaged app and check sidecar shutdown under Xvfb
         if: runner.os == 'Linux'
         run: xvfb-run -a pnpm test:packaged
+        env:
+          GITCREST_PACKAGED_LINUX_UNSIGNED_FEED: '1'
 
       - uses: actions/upload-artifact@v4
         if: always()

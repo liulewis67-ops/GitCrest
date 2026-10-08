@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
@@ -10,11 +10,23 @@ const root = process.cwd();
 const output = resolve(process.env.GITCREST_PACKAGED_OUTPUT ?? join(root, "dist"));
 const executable = await findPackagedExecutable(output);
 await assertReleaseArtifactSizes(output);
-const appData = await mkdtemp(join(tmpdir(), "gitcrest-package-smoke-"));
+const injectLinuxUnsignedFeed = process.platform === "linux" && process.env.GITCREST_PACKAGED_LINUX_UNSIGNED_FEED === "1";
+const linuxUpdateConfigPath = join(output, "linux-unpacked", "resources", "app-update.yml");
+let originalLinuxUpdateConfig;
+if (injectLinuxUnsignedFeed) {
+  try {
+    originalLinuxUpdateConfig = await readFile(linuxUpdateConfigPath);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+  await writeFile(linuxUpdateConfigPath, "provider: generic\nurl: https://updates.invalid\n");
+}
+let appData;
 let app;
 let sidecarUrl;
 
 try {
+  appData = await mkdtemp(join(tmpdir(), "gitcrest-package-smoke-"));
   app = await electron.launch({
     executablePath: executable,
     args: [],
@@ -47,8 +59,18 @@ try {
   const health = await fetch(new URL("/health", sidecarUrl));
   assert.equal(health.status, 204, "packaged sidecar health probe should succeed");
 } finally {
-  await app?.close();
-  await rm(appData, { recursive: true, force: true });
+  try {
+    await app?.close();
+  } finally {
+    try {
+      if (appData) await rm(appData, { recursive: true, force: true });
+    } finally {
+      if (injectLinuxUnsignedFeed) {
+        if (originalLinuxUpdateConfig) await writeFile(linuxUpdateConfigPath, originalLinuxUpdateConfig);
+        else await unlink(linuxUpdateConfigPath);
+      }
+    }
+  }
 }
 
 if (sidecarUrl) {
