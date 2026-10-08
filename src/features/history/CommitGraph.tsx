@@ -6,6 +6,7 @@ import type { components } from "../../api/schema";
 const PAGE_SIZE = 50;
 const ROW_HEIGHT = 52;
 const OVERSCAN = 8;
+const COMMIT_DATE_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 type CommitSummary = components["schemas"]["CommitSummary"];
 
 function isCommitSummary(value: unknown): value is CommitSummary {
@@ -43,7 +44,7 @@ type CommitGraphProps = {
 };
 
 function formatCommitDate(timestamp: number): string {
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(timestamp));
+  return COMMIT_DATE_FORMAT.format(new Date(timestamp));
 }
 
 function describeRefs(refs: RefSnapshotResponse["refs"], oid: string): string[] {
