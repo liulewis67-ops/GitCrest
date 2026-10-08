@@ -585,7 +585,11 @@ fn classify_error(task: &TaskSnapshot) -> TaskErrorCategory {
         task.logs.join(" ")
     )
     .to_ascii_lowercase();
-    if details.contains("authentication failed")
+    if details.contains("outcome could not be verified")
+        || details.contains("inspect repository state before retrying")
+    {
+        TaskErrorCategory::OutcomeUnknown
+    } else if details.contains("authentication failed")
         || details.contains("could not read username")
         || details.contains("permission denied (publickey)")
         || details.contains("access denied")
@@ -745,6 +749,30 @@ mod tests {
 
     use super::*;
     use crate::storage::RepositoryStore;
+
+    #[test]
+    fn classifies_unverified_pull_cancellation_as_unknown_outcome() {
+        let task = TaskSnapshot {
+            task_id: "task-pull-cancel".into(),
+            repo_id: Some("repo-test".into()),
+            target_path: None,
+            result_repo_id: None,
+            operation: "pullMerge".into(),
+            status: TaskStatus::Failed,
+            phase: "Failed".into(),
+            progress: None,
+            message: Some(
+                "Pull cancellation outcome could not be verified. Inspect repository state before retrying.".into(),
+            ),
+            error_category: None,
+            logs: Vec::new(),
+            created_at_ms: 1,
+            updated_at_ms: 2,
+            cancel_requested: true,
+        };
+
+        assert_eq!(classify_error(&task), TaskErrorCategory::OutcomeUnknown);
+    }
 
     #[tokio::test]
     async fn serializes_tasks_for_the_same_repository_and_runs_other_repositories_in_parallel() {

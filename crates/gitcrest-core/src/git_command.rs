@@ -276,7 +276,88 @@ impl GitCommandService {
             task,
         )
         .await;
-        workflow_command_result(repository_path, result).await
+        let result = workflow_command_result(repository_path, result).await;
+        if matches!(&result, Err(TaskFailure::Cancelled)) {
+            return self
+                .reconcile_cancelled_pull(repository_path, expected)
+                .await;
+        }
+        result
+    }
+
+    async fn reconcile_cancelled_pull(
+        &self,
+        repository_path: &Path,
+        expected: &crate::pull::PullPreflight,
+    ) -> Result<(), TaskFailure> {
+        let snapshot = crate::pull::read_pull_preflight(
+            expected.repo_id.clone(),
+            repository_path,
+            Some(&expected.local_branch),
+            false,
+        )
+        .await
+        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+        if snapshot.local_oid != expected.local_oid
+            || snapshot.tracking_oid != expected.tracking_oid
+        {
+            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+        }
+        if snapshot.operation_in_progress {
+            return Err(TaskFailure::WaitingForInput(
+                "Pull was cancelled while a Git operation remains active. Continue or abort it from Task Center.".into(),
+            ));
+        }
+        if snapshot.has_conflicts {
+            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+        }
+        if snapshot.is_clean {
+            return Err(TaskFailure::Cancelled);
+        }
+
+        let mut command = Command::new(&self.git_program);
+        command
+            .args(["reset", "--merge"])
+            .arg(&expected.local_oid)
+            .current_dir(repository_path)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true);
+        let output = tokio::time::timeout(Duration::from_secs(30), command.output())
+            .await
+            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?
+            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+        if !output.status.success() {
+            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+        }
+
+        let restored = crate::pull::read_pull_preflight(
+            expected.repo_id.clone(),
+            repository_path,
+            Some(&expected.local_branch),
+            false,
+        )
+        .await
+        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+        if restored.local_oid == expected.local_oid
+            && restored.tracking_oid == expected.tracking_oid
+            && !restored.operation_in_progress
+            && !restored.has_conflicts
+            && capture_git_output(
+                &self.git_program,
+                repository_path,
+                ["diff", "--cached", "--name-only", "-z"],
+                2 * 1024 * 1024,
+            )
+            .await
+            .is_ok_and(|staged_paths| staged_paths.is_empty())
+        {
+            Err(TaskFailure::Cancelled)
+        } else {
+            Err(TaskFailure::Failed(pull_cancel_outcome_unknown()))
+        }
     }
 
     pub async fn execute_workflow(
@@ -1325,6 +1406,11 @@ fn shell_quote_path(path: &Path) -> Result<String, TaskFailure> {
         .ok_or_else(|| TaskFailure::Failed("A temporary rebase path could not be encoded".into()))?
         .replace('\\', "/");
     Ok(format!("'{}'", path.replace('\'', "'\\''")))
+}
+
+fn pull_cancel_outcome_unknown() -> String {
+    "Pull cancellation outcome could not be verified. Inspect repository state before retrying."
+        .into()
 }
 
 // Git command execution carries process, logging, cancellation, and repository context together.

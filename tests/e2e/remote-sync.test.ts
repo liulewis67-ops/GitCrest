@@ -401,6 +401,98 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
+  it("safely rolls back an interrupted pull merge before reporting cancellation", async () => {
+    const fixture = await createTempGitRepository();
+    const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-pull-cancel-remote-"));
+    const peerPath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-pull-cancel-peer-"));
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-pull-cancel-app-data-"));
+    const markerPath = resolve(appDataPath, "pre-merge-commit-started.txt");
+    const localFile = resolve(fixture.path, "src/local-before-pull.ts");
+    const remoteFile = resolve(fixture.path, "src/remote-before-pull.ts");
+
+    try {
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(resolve(fixture.path, "src/pull-cancel-base.ts"), "export const base = true;\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/pull-cancel-base.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add pull cancellation fixture"]);
+      await execFileAsync("git", ["init", "--bare", "--quiet", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", "--set-upstream", "origin", "HEAD"]);
+      await execFileAsync("git", ["clone", "--quiet", bareRemotePath, peerPath]);
+      await execFileAsync("git", ["-C", peerPath, "config", "user.name", "GitCrest Peer Test"]);
+      await execFileAsync("git", ["-C", peerPath, "config", "user.email", "gitcrest-peer@example.invalid"]);
+
+      await writeFile(localFile, "export const local = 'retain after pull cancel';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/local-before-pull.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "local commit before pull"]);
+      const localHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+
+      await writeFile(resolve(peerPath, "src/remote-before-pull.ts"), "export const remote = 'retain after pull cancel';\n");
+      await execFileAsync("git", ["-C", peerPath, "add", "src/remote-before-pull.ts"]);
+      await execFileAsync("git", ["-C", peerPath, "commit", "--quiet", "-m", "remote commit before pull"]);
+      await execFileAsync("git", ["-C", peerPath, "push", "--quiet", "origin", "HEAD"]);
+      const remoteHead = (await execFileAsync("git", ["-C", peerPath, "rev-parse", "HEAD"])).stdout.trim();
+      await execFileAsync("git", ["-C", fixture.path, "fetch", "--quiet", "origin"]);
+
+      const hookDirectory = resolve(fixture.path, ".git", "gitcrest-hooks");
+      await mkdir(hookDirectory, { recursive: true });
+      const shellMarkerPath = markerPath.replace(/\\/g, "/").replace(/'/g, "'\\''");
+      await writeFile(resolve(hookDirectory, "pre-merge-commit"), `#!/bin/sh\nprintf started > '${shellMarkerPath}'\nsleep 30\n`, "utf8");
+      await execFileAsync("git", ["-C", fixture.path, "config", "core.hooksPath", hookDirectory]);
+
+      app = await electron.launch({
+        args: ["."],
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+      });
+      const window = await app.firstWindow();
+      await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return response.status;
+      }, fixture.path);
+      expect(opened).toBe(200);
+
+      await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      await window.locator(".repositoryRowOpen").click();
+      await window.locator(".workspaceCrumb").waitFor();
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Pull", exact: true }).click();
+      const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
+      await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
+      await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
+
+      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "pullMerge" }) }).last();
+      await pullTask.waitFor({ state: "visible" });
+      await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("started");
+      await writeFile(localFile, "export const local = 'concurrent user edit preserved';\n");
+      await pullTask.getByRole("button", { name: "Cancel task" }).click();
+      await pullTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(localHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only"])).stdout.trim()).toBe("");
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${(await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim()}`])).stdout.trim()).toBe(remoteHead);
+      expect((await readFile(localFile, "utf8")).replace(/\r\n/g, "\n")).toBe("export const local = 'concurrent user edit preserved';\n");
+      await expect(readFile(remoteFile, "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await app?.close();
+      app = undefined;
+      await fixture.cleanup();
+      await rm(bareRemotePath, { recursive: true, force: true });
+      await rm(peerPath, { recursive: true, force: true });
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 90_000);
+
   it("resolves a pull merge conflict from the waiting task and completes the merge", async () => runPullConflictRecovery("merge"), 90_000);
 
   it("resolves a pull rebase conflict from the waiting task and completes the rebase", async () => runPullConflictRecovery("rebase"), 90_000);
