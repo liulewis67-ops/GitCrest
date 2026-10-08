@@ -39,7 +39,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::credentials::routes::router())
         .merge(crate::settings::routes::router())
         .merge(crate::commits::routes::router())
-        .merge(crate::tags::routes::router())
+        .merge(crate::features::tags::routes::router())
         .merge(crate::tasks::routes::router())
         .merge(crate::workflows::routes::router())
         .route("/v1/events", get(crate::api::events::events))

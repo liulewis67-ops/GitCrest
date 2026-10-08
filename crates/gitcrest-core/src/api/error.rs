@@ -11,10 +11,11 @@ use crate::{
     commits, credentials,
     diff::DiffError,
     domain::error::{ConflictError, WorkflowError},
+    features::tags,
     history, remotes,
     remotes::{pull, push},
     repository::RepositoryError,
-    shelves, staging, tags,
+    shelves, staging,
     tasks::TaskSubmitError,
 };
 
