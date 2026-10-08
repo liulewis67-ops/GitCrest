@@ -1346,3 +1346,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workflow Git port 已覆盖预检与 preview 的只读查询；后续可按后端规范把多个 adapter 查询实现从 `git/workflow_state.rs` 拆到更聚焦的 adapter 模块，并继续核对其他 feature 的直接 Git 子进程边界。
 - 证据：`crates/gitcrest-core/src/git/{git_command.rs,workflow_state.rs}`。
 - 实施 commit：`32619c5`
+
+### 后端 Git read port 归入通用能力模块 — 小阶段 83
+- 状态：已完成（Git 只读能力接口使用规范模块路径与名称）
+- 日期：2026-10-09
+- 交付：将 `ports/workflow_git.rs` 迁移为规范目录 `ports/git.rs`，trait 改名 `GitReadPort`，反映其已由 workflows 与 remotes 共用的职责。更新所有 feature 与 `GitCommandService` 注入点，port 的中立领域签名和查询行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、旧名称源码搜索与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：Git command adapter 仍以 crate 根模块方式声明，workflow 只读实现集中在 `git/workflow_state.rs`；后续继续按指南的 `git/mod.rs` 和 status/refs/history/workflows 能力分组整理模块。
+- 证据：`crates/gitcrest-core/src/ports/{mod.rs,git.rs}`、`crates/gitcrest-core/src/features/{workflows,remotes}`、`crates/gitcrest-core/src/git/git_command.rs`。
+- 实施 commit：`1bb1a3b`
