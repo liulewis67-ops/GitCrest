@@ -1022,3 +1022,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：AI settings/credential 与 AI request handlers 仍在 `main.rs`；凭据 manager 源文件仍在旧目录。后续按 settings/AI 职责进一步分 feature，并消除跨 feature 对凭据 service 的隐式根级访问。
 - 证据：`crates/gitcrest-core/src/features/credentials/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`bd63f7b`
+
+### 后端 settings feature 路由归属 — 小阶段 47
+- 状态：已完成（AI settings 与 API credential 路由进入 settings feature）
+- 日期：2026-10-09
+- 交付：新增 `features/settings/mod.rs` 与 `routes.rs`，将 `GET/PUT /v1/ai/settings` 和 `PUT/DELETE /v1/ai/credential` 从顶层 router 迁入 settings feature。现有 AI settings service 通过 feature 模块引用；handler 暂留 `main.rs`，路径、方法、middleware 和 API 行为保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；AI settings/credential API 用例通过。
+- 限制/后续：settings handlers 和 DTO 仍在 `main.rs`/`ai.rs`；下一阶段迁移 settings handlers/DTO，再将 repository AI request 端点归入其业务 feature。
+- 证据：`crates/gitcrest-core/src/features/settings/{mod,routes,ai}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`983c81a`
