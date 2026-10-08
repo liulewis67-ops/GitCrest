@@ -14,14 +14,17 @@ export interface UpdateEventSource {
 export class UpdateController {
   private status: UpdateStatus;
   private checkPending = false;
+  private readonly updater?: UpdateEventSource;
 
   constructor(
     private readonly configured: boolean,
-    private readonly updater: UpdateEventSource,
+    updater: UpdateEventSource | undefined,
     private readonly onStatus: (status: UpdateStatus) => void,
   ) {
     this.status = configured ? { state: "idle" } : { state: "notConfigured" };
     if (!configured) return;
+    if (!updater) throw new Error("A configured update feed requires an updater runtime.");
+    this.updater = updater;
 
     updater.on("checking-for-update", () => this.publish({ state: "checking" }));
     updater.on("update-available", (value) => this.publish({ state: "available", version: readVersion(value) }));
@@ -40,7 +43,7 @@ export class UpdateController {
   }
 
   async checkForUpdates(): Promise<UpdateStatus> {
-    if (!this.configured || this.checkPending || this.status.state === "downloading" || this.status.state === "downloaded") {
+    if (!this.configured || !this.updater || this.checkPending || this.status.state === "downloading" || this.status.state === "downloaded") {
       return this.status;
     }
     this.checkPending = true;
@@ -56,7 +59,7 @@ export class UpdateController {
   }
 
   installDownloadedUpdate(): boolean {
-    if (!this.configured || this.status.state !== "downloaded") return false;
+    if (!this.configured || !this.updater || this.status.state !== "downloaded") return false;
     this.updater.quitAndInstall(false, true);
     return true;
   }

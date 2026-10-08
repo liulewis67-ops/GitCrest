@@ -2,9 +2,8 @@ import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell, type WebContents } from "electron";
-import electronUpdater from "electron-updater";
 import { startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
-import { UpdateController } from "./update-controller";
+import { UpdateController, type UpdateEventSource } from "./update-controller";
 import WebSocket from "ws";
 
 let mainWindow: BrowserWindow | undefined;
@@ -29,9 +28,11 @@ interface EventStream {
 }
 
 const eventStreamsByContentsId = new Map<number, EventStream>();
-const { autoUpdater } = electronUpdater;
 const updateFeedConfigured = app.isPackaged && existsSync(join(process.resourcesPath, "app-update.yml"));
-if (updateFeedConfigured) {
+const autoUpdater: (UpdateEventSource & { autoDownload: boolean; autoInstallOnAppQuit: boolean }) | undefined = updateFeedConfigured
+  ? (await import("electron-updater")).default.autoUpdater
+  : undefined;
+if (autoUpdater) {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
 }
