@@ -1499,3 +1499,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其他 feature 尚未系统补齐公开入口；后续在实际跨 feature 组合时继续按规范显式导出最小 API。
 - 证据：`src/features/settings/index.ts`、`src/pages/welcome/WelcomePage.tsx`、`src/app/App.tsx`、`src/features/diff/DiffWindow.tsx`。
 - 实施 commit：`9ddcd7c`
+
+### Workspace 页面壳层迁入 pages/workspace — 小阶段 100
+- 状态：已完成（Workspace 页面负责工具栏、主区/工作台插槽及状态栏；App 提供页面模型和工作区内容组合）
+- 日期：2026-10-09
+- 交付：新增 `src/pages/workspace/WorkspacePage.tsx`，承接 Git workspace 页面壳层、Graph/Diff 与 push/pull/fetch/branch 操作工具栏、状态栏，通过具名 props 接收页面状态和用户动作。App 将页面状态与操作作为 props 传入，并把现有 Changes/History/Diff/Details/Commit 区块作为内容组合。新增 `features/repositories/index.ts`，显式公开 workspace session 函数和类型，页面与 App 不再直接导入该 feature 内部 model 文件。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建中的 tree-sitter `eval` 与大型 Monaco contribution chunk 警告仍存在。
+- 限制/后续：Workspace 内部导航、历史/差异及提交工作台 JSX 仍由 App 组合；后续按页面组合边界分块迁出到 workspace 页面或对应 feature UI。S7.2、S7.4、S7.5 尚未完成验收。
+- 证据：`src/pages/workspace/WorkspacePage.tsx`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`dee73ad`
