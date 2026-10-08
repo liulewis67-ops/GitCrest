@@ -1553,3 +1553,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`ResizeSeparator` UI 本身及 keyboard shortcut、commit draft selection、history scroll 等生命周期仍在 App；后续继续按 shared UI 与 feature model 边界迁移。S7.2、S7.4、S7.5 尚待验收。
 - 证据：`src/features/repositories/model/use-workspace-layout.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`e2ea32c`
+
+### ResizeSeparator 迁入 shared/ui — 小阶段 106
+- 状态：已完成（拖拽/键盘可操作的分隔控件从 App 根模块独立）
+- 日期：2026-10-09
+- 交付：新增 `src/shared/ui/ResizeSeparator.tsx`，集中实现垂直/水平拖动、方向键步进、Home/End 边界定位、Pointer Capture 与 ARIA separator 信息；App 通过 shared UI 模块导入，原三个工作区分隔条的尺寸值、方向、边界和操作语义保持不变。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留现有 tree-sitter `eval` 与 Monaco contribution 大 chunk 警告。
+- 限制/后续：shared/ui 仍只有此通用组件，App 的全局快捷键监听和 commit/session 选择状态仍未完全拆分；继续按规范建立真实职责边界。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/shared/ui/ResizeSeparator.tsx`、`src/app/App.tsx`。
+- 实施 commit：`be6c57f`
