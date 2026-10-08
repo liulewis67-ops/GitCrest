@@ -13,10 +13,9 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::diff::{self, DiffError, DiffScope},
     features::tasks::{TaskFailure, TaskSnapshot},
-    features::{shelves, staging},
+    features::{shelves, staging, status},
     repository::RepositoryManager,
     state::AppState,
-    status,
     storage::{UndoOperation, UndoRecord},
 };
 #[derive(Clone)]

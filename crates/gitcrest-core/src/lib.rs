@@ -22,7 +22,6 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::repositories::{cloning, repository};
-pub(crate) use features::status;
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
@@ -1044,7 +1043,7 @@ mod tests {
         let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
         let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
         assert_eq!(completed["status"], "succeeded");
-        let snapshot = status::read(repo_id.into(), &root).await.unwrap();
+        let snapshot = features::status::read(repo_id.into(), &root).await.unwrap();
         let tracked = snapshot
             .files
             .iter()
@@ -1052,8 +1051,10 @@ mod tests {
             .unwrap();
         assert!(tracked
             .categories
-            .contains(&status::ChangeCategory::Unstaged));
-        assert!(!tracked.categories.contains(&status::ChangeCategory::Staged));
+            .contains(&features::status::ChangeCategory::Unstaged));
+        assert!(!tracked
+            .categories
+            .contains(&features::status::ChangeCategory::Staged));
 
         let response = app
             .clone()
@@ -6021,9 +6022,13 @@ mod tests {
         assert_eq!(failed_task["status"], "failed");
         assert!(failed_task["logs"].to_string().contains("hook denied"));
         assert!(!failed_task["logs"].to_string().contains(message));
-        let staged = status::read("repo_test".into(), &root).await.unwrap();
+        let staged = features::status::read("repo_test".into(), &root)
+            .await
+            .unwrap();
         assert!(staged.files.iter().any(|file| file.path == "staged.txt"
-            && file.categories.contains(&status::ChangeCategory::Staged)));
+            && file
+                .categories
+                .contains(&features::status::ChangeCategory::Staged)));
         std::fs::remove_file(pre_commit).unwrap();
         git(&["config", "user.signingkey", "fixture-signing-key"]);
         git(&[
@@ -6063,9 +6068,14 @@ mod tests {
             .unwrap()
             .status
             .success());
-        let staged = status::read("repo_test".into(), &root).await.unwrap();
+        let staged = features::status::read("repo_test".into(), &root)
+            .await
+            .unwrap();
         assert!(staged.files.iter().any(|file| {
-            file.path == "staged.txt" && file.categories.contains(&status::ChangeCategory::Staged)
+            file.path == "staged.txt"
+                && file
+                    .categories
+                    .contains(&features::status::ChangeCategory::Staged)
         }));
         git(&["config", "--unset", "gpg.program"]);
         git(&["config", "--unset", "user.signingkey"]);
@@ -6278,12 +6288,16 @@ mod tests {
                 .file_name()
                 .to_string_lossy()
                 .starts_with(&temporary_prefix)));
-        let staged_after_cancel = status::read("repo_test".into(), &root).await.unwrap();
+        let staged_after_cancel = features::status::read("repo_test".into(), &root)
+            .await
+            .unwrap();
         assert!(staged_after_cancel
             .files
             .iter()
             .any(|file| file.path == "amended.txt"
-                && file.categories.contains(&status::ChangeCategory::Staged)));
+                && file
+                    .categories
+                    .contains(&features::status::ChangeCategory::Staged)));
         std::fs::remove_file(slow_hook).unwrap();
         let amended = app
             .clone()

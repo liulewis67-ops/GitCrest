@@ -632,7 +632,7 @@ mod tests {
             .unwrap();
         assert!(indexed.files[0]
             .categories
-            .contains(&crate::status::ChangeCategory::Staged));
+            .contains(&crate::features::status::ChangeCategory::Staged));
 
         std::fs::write(root.join(".gitignore"), "ignored.tmp\n").unwrap();
         std::fs::write(root.join("ignored.tmp"), "ignored\n").unwrap();

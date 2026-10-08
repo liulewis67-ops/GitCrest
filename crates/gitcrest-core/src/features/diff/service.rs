@@ -11,7 +11,7 @@ use tokio::{
     process::Command,
 };
 
-use crate::status::{ChangeCategory, ChangeKind, StatusFile};
+use crate::features::status::{ChangeCategory, ChangeKind, StatusFile};
 
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ERROR_BYTES: usize = 16 * 1024;
@@ -779,7 +779,7 @@ fn flush_changes(rows: &mut Vec<DiffRow>, changes: &mut Vec<RawLine>) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::status;
+    use crate::features::status;
 
     fn git(root: &Path, args: &[&str]) {
         let output = std::process::Command::new("git")

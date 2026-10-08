@@ -1,8 +1,8 @@
 use std::{ffi::OsString, path::Component};
 
 use super::dto::{StagingAction, StagingPatchAction, StagingPatchRequest, StagingRequest};
-use crate::{
-    features::diff::DiffScope,
+use crate::features::{
+    diff::DiffScope,
     status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot},
 };
 
@@ -363,7 +363,9 @@ mod tests {
     async fn staging_and_unstaging_a_file_preserves_worktree_edits_and_added_files() {
         let (_directory, root) = fixture().await;
         std::fs::write(root.join("tracked.txt"), "staged version\n").unwrap();
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         run(
             &root,
             command(
@@ -376,7 +378,9 @@ mod tests {
         std::fs::write(root.join("new file.txt"), "new\n").unwrap();
         std::fs::remove_file(root.join("deleted.txt")).unwrap();
 
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let tracked = snapshot
             .files
             .iter()
@@ -392,7 +396,9 @@ mod tests {
             )
             .unwrap(),
         );
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let tracked = snapshot
             .files
             .iter()
@@ -401,7 +407,9 @@ mod tests {
         assert!(!tracked.categories.contains(&ChangeCategory::Staged));
         assert!(tracked.categories.contains(&ChangeCategory::Unstaged));
 
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         run(
             &root,
             command(
@@ -410,7 +418,9 @@ mod tests {
             )
             .unwrap(),
         );
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         run(
             &root,
             command(
@@ -420,7 +430,9 @@ mod tests {
             .unwrap(),
         );
         assert!(root.join("new file.txt").exists());
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let added = snapshot
             .files
             .iter()
@@ -429,7 +441,9 @@ mod tests {
         assert!(added.categories.contains(&ChangeCategory::Untracked));
         assert!(!added.categories.contains(&ChangeCategory::Staged));
 
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         run(
             &root,
             command(
@@ -438,7 +452,9 @@ mod tests {
             )
             .unwrap(),
         );
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         run(
             &root,
             command(
@@ -447,7 +463,9 @@ mod tests {
             )
             .unwrap(),
         );
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let deleted = snapshot
             .files
             .iter()
@@ -462,12 +480,16 @@ mod tests {
         let (_directory, root) = fixture().await;
         std::fs::write(root.join("tracked.txt"), "changed\n").unwrap();
         std::fs::write(root.join("new.txt"), "new\n").unwrap();
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         run(
             &root,
             command(&snapshot, &request(StagingAction::StageAll, None)).unwrap(),
         );
-        let staged = crate::status::read("repo".into(), &root).await.unwrap();
+        let staged = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         assert!(staged
             .files
             .iter()
@@ -476,7 +498,9 @@ mod tests {
             &root,
             command(&staged, &request(StagingAction::UnstageAll, None)).unwrap(),
         );
-        let unstaged = crate::status::read("repo".into(), &root).await.unwrap();
+        let unstaged = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         assert!(unstaged
             .files
             .iter()
@@ -496,17 +520,23 @@ mod tests {
             &["config", "user.email", "gitcrest-test@example.invalid"],
         );
         std::fs::write(unborn.join("new.txt"), "new\n").unwrap();
-        let snapshot = crate::status::read("repo".into(), &unborn).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &unborn)
+            .await
+            .unwrap();
         run(
             &unborn,
             command(&snapshot, &request(StagingAction::StageAll, None)).unwrap(),
         );
-        let staged = crate::status::read("repo".into(), &unborn).await.unwrap();
+        let staged = crate::features::status::read("repo".into(), &unborn)
+            .await
+            .unwrap();
         run(
             &unborn,
             command(&staged, &request(StagingAction::UnstageAll, None)).unwrap(),
         );
-        let unstaged = crate::status::read("repo".into(), &unborn).await.unwrap();
+        let unstaged = crate::features::status::read("repo".into(), &unborn)
+            .await
+            .unwrap();
         assert!(unstaged
             .files
             .iter()
@@ -537,7 +567,9 @@ mod tests {
         lines[21] = "unstaged last\n".into();
         std::fs::write(root.join("multi.txt"), lines.concat()).unwrap();
 
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let file = snapshot
             .files
             .iter()
@@ -563,7 +595,9 @@ mod tests {
         assert!(unstaged.contains("+unstaged last"));
         assert!(!unstaged.contains("staged first"));
 
-        let remaining_snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let remaining_snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let file = remaining_snapshot
             .files
             .iter()
@@ -580,7 +614,9 @@ mod tests {
         let selected = crate::features::diff::select_hunks(&remaining_diff, &[0]).unwrap();
         run_with_input(&root, &["apply", "--cached", "--unidiff-zero"], &selected);
 
-        let after_stage = crate::status::read("repo".into(), &root).await.unwrap();
+        let after_stage = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let file = after_stage
             .files
             .iter()
@@ -604,7 +640,9 @@ mod tests {
         assert!(!still_staged.contains("staged first"));
         assert!(remaining.contains("+staged first"));
         assert!(!remaining.contains("unstaged last"));
-        let refreshed = crate::status::read("repo".into(), &root).await.unwrap();
+        let refreshed = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let file = refreshed
             .files
             .iter()
@@ -638,7 +676,9 @@ mod tests {
         )
         .unwrap();
 
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let file = snapshot
             .files
             .iter()
@@ -684,7 +724,9 @@ mod tests {
         std::fs::create_dir(&root).unwrap();
         git(&root, &["init", "--quiet"]);
         std::fs::write(root.join("new file.txt"), "first line\nsecond line\n").unwrap();
-        let snapshot = crate::status::read("repo".into(), &root).await.unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
         let file = snapshot
             .files
             .iter()

@@ -10,7 +10,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
-use crate::status::{StatusFile, StatusSnapshot};
+use crate::features::status::{StatusFile, StatusSnapshot};
 use crate::storage::RepositoryStore;
 
 const MAX_CACHED_STATUS_REPOSITORIES: usize = 8;
@@ -405,7 +405,7 @@ impl RepositoryManager {
             .ok_or(RepositoryError::RepositoryNotFound)?;
         let path = PathBuf::from(&repository.path);
         fs::metadata(&path).await.map_err(map_path_error)?;
-        crate::status::read(repository.repo_id, &path)
+        crate::features::status::read(repository.repo_id, &path)
             .await
             .map_err(|error| match error.kind() {
                 std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
@@ -430,7 +430,7 @@ impl RepositoryManager {
         repo_id: &str,
         paths: &[String],
     ) -> Result<StatusSnapshot, RepositoryError> {
-        crate::status::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
+        crate::features::status::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
         if let Some(snapshot) = self.cached_path_status(repo_id, paths) {
             return Ok(snapshot);
         }
@@ -451,7 +451,7 @@ impl RepositoryManager {
             .ok_or(RepositoryError::RepositoryNotFound)?;
         let path = PathBuf::from(&repository.path);
         fs::metadata(&path).await.map_err(map_path_error)?;
-        crate::status::read_paths(repository.repo_id, &path, paths)
+        crate::features::status::read_paths(repository.repo_id, &path, paths)
             .await
             .map_err(|error| match error.kind() {
                 std::io::ErrorKind::InvalidInput => RepositoryError::InvalidPath,
@@ -811,14 +811,14 @@ mod tests {
         String::from_utf8_lossy(&output.stdout).trim().to_owned()
     }
 
-    fn status_file(path: &str, kind: crate::status::ChangeKind) -> StatusFile {
+    fn status_file(path: &str, kind: crate::features::status::ChangeKind) -> StatusFile {
         StatusFile {
             path: path.to_owned(),
             original_path: None,
             index_status: " ".into(),
             worktree_status: "M".into(),
             kind,
-            categories: vec![crate::status::ChangeCategory::Unstaged],
+            categories: vec![crate::features::status::ChangeCategory::Unstaged],
             mode_changed: false,
         }
     }
@@ -844,9 +844,12 @@ mod tests {
             repo_id,
             10,
             vec![
-                status_file("src/changed.rs", crate::status::ChangeKind::Modified),
-                status_file("src/kept.rs", crate::status::ChangeKind::Modified),
-                status_file("README.md", crate::status::ChangeKind::Modified),
+                status_file(
+                    "src/changed.rs",
+                    crate::features::status::ChangeKind::Modified,
+                ),
+                status_file("src/kept.rs", crate::features::status::ChangeKind::Modified),
+                status_file("README.md", crate::features::status::ChangeKind::Modified),
             ],
         );
         manager.cache_full_status(repo_id, version, &before);
@@ -864,7 +867,7 @@ mod tests {
             20,
             vec![status_file(
                 "src/changed.rs",
-                crate::status::ChangeKind::Added,
+                crate::features::status::ChangeKind::Added,
             )],
         );
         manager.cache_path_status(
@@ -878,7 +881,7 @@ mod tests {
         assert_eq!(merged.refreshed_at_ms, 20);
         assert_eq!(merged.files.len(), 3);
         assert!(merged.files.iter().any(|file| {
-            file.path == "src/changed.rs" && file.kind == crate::status::ChangeKind::Added
+            file.path == "src/changed.rs" && file.kind == crate::features::status::ChangeKind::Added
         }));
         let directory_scope = manager
             .cached_path_status(repo_id, &["src".into()])
@@ -899,7 +902,7 @@ mod tests {
                 10,
                 vec![status_file(
                     "src/file.rs",
-                    crate::status::ChangeKind::Modified,
+                    crate::features::status::ChangeKind::Modified,
                 )],
             ),
         );
@@ -907,7 +910,10 @@ mod tests {
         let stale_refresh = status_snapshot(
             repo_id,
             15,
-            vec![status_file("src/file.rs", crate::status::ChangeKind::Added)],
+            vec![status_file(
+                "src/file.rs",
+                crate::features::status::ChangeKind::Added,
+            )],
         );
         manager.cache_path_status(
             repo_id,
@@ -923,7 +929,10 @@ mod tests {
 
     #[test]
     fn status_scope_matches_directories_and_root_without_crossing_sibling_names() {
-        let nested = status_file("src/lib/file.rs", crate::status::ChangeKind::Modified);
+        let nested = status_file(
+            "src/lib/file.rs",
+            crate::features::status::ChangeKind::Modified,
+        );
         assert!(status_file_matches_scope(&nested, "src"));
         assert!(status_file_matches_scope(&nested, "./src/"));
         assert!(status_file_matches_scope(&nested, "."));
@@ -943,7 +952,7 @@ mod tests {
                 10,
                 vec![status_file(
                     "tracked.txt",
-                    crate::status::ChangeKind::Modified,
+                    crate::features::status::ChangeKind::Modified,
                 )],
             ),
         );
@@ -1179,30 +1188,22 @@ mod tests {
             .unwrap();
         assert!(staged_and_unstaged
             .categories
-            .contains(&crate::status::ChangeCategory::Staged));
+            .contains(&crate::features::status::ChangeCategory::Staged));
         assert!(staged_and_unstaged
             .categories
-            .contains(&crate::status::ChangeCategory::Unstaged));
-        assert!(snapshot
-            .files
-            .iter()
-            .any(|file| file.kind == crate::status::ChangeKind::Renamed
-                && file.original_path.as_deref() == Some("rename source.txt")));
-        assert!(snapshot
-            .files
-            .iter()
-            .any(|file| file.kind == crate::status::ChangeKind::Deleted
-                && file.path == "deleted.txt"));
-        assert!(snapshot
-            .files
-            .iter()
-            .any(|file| file.kind == crate::status::ChangeKind::Untracked
-                && file.path == "untracked file.txt"));
-        assert!(snapshot
-            .files
-            .iter()
-            .any(|file| file.kind == crate::status::ChangeKind::Ignored
-                && file.path == "ignored.log"));
+            .contains(&crate::features::status::ChangeCategory::Unstaged));
+        assert!(snapshot.files.iter().any(|file| file.kind
+            == crate::features::status::ChangeKind::Renamed
+            && file.original_path.as_deref() == Some("rename source.txt")));
+        assert!(snapshot.files.iter().any(|file| file.kind
+            == crate::features::status::ChangeKind::Deleted
+            && file.path == "deleted.txt"));
+        assert!(snapshot.files.iter().any(|file| file.kind
+            == crate::features::status::ChangeKind::Untracked
+            && file.path == "untracked file.txt"));
+        assert!(snapshot.files.iter().any(|file| file.kind
+            == crate::features::status::ChangeKind::Ignored
+            && file.path == "ignored.log"));
 
         fs::write(fixture.root.join("later.txt"), "external edit\n").unwrap();
         let refreshed = manager.status_snapshot(&repository.repo_id).await.unwrap();
@@ -1248,10 +1249,13 @@ mod tests {
             .iter()
             .find(|file| file.path == "conflict.txt")
             .unwrap();
-        assert_eq!(conflicted.kind, crate::status::ChangeKind::Conflicted);
+        assert_eq!(
+            conflicted.kind,
+            crate::features::status::ChangeKind::Conflicted
+        );
         assert_eq!(
             conflicted.categories,
-            [crate::status::ChangeCategory::Conflicted]
+            [crate::features::status::ChangeCategory::Conflicted]
         );
     }
 }

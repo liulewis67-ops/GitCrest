@@ -10,13 +10,12 @@ use super::super::dto::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::workflow::WorkflowRecoveryAction,
-    features::diff::DiffScope,
     features::shelves,
     features::tasks,
     features::tasks::{TaskFailure, TaskSnapshot},
+    features::{diff::DiffScope, status},
     ports::git::GitReadPort,
     state::AppState,
-    status,
     storage::{UndoOperation, UndoRecord},
 };
 

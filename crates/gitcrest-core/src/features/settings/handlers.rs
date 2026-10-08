@@ -7,9 +7,8 @@ use axum::{
 use super::{dto as ai_dto, service as ai};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    features::{credentials, diff},
+    features::{credentials, diff, status},
     state::AppState,
-    status,
 };
 fn ai_provider_name(provider: ai_dto::AiProvider) -> &'static str {
     match provider {
