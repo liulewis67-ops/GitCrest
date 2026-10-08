@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { components } from "../../api/schema";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 type PullPreflight = components["schemas"]["PullPreflight"];
 type PullStrategy = components["schemas"]["PullRequest"]["strategy"];
@@ -17,12 +18,13 @@ interface PullDialogProps {
 }
 
 export function PullDialog({ snapshot, loading, busy, error, disabled, disabledReason, onRefresh, onPull, onClose }: PullDialogProps) {
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const [strategy, setStrategy] = useState<PullStrategy>("merge");
   const canPull = Boolean(snapshot?.isClean && !snapshot.hasConflicts && !snapshot.operationInProgress);
 
   return (
     <div className="paletteBackdrop pushBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section className="cloneDialog pushDialog" role="dialog" aria-modal="true" aria-labelledby="pull-dialog-title">
+      <section ref={dialogRef} className="cloneDialog pushDialog" role="dialog" aria-modal="true" aria-labelledby="pull-dialog-title" onKeyDown={onKeyDown}>
         <header className="taskCenterHeader">
           <div><p className="sectionEyebrow">REVIEW BEFORE INTEGRATING</p><h2 id="pull-dialog-title">Pull current branch</h2></div>
           <button className="quietButton compact" type="button" disabled={busy} onClick={onClose} aria-label="Close pull dialog">Close</button>

@@ -40,3 +40,20 @@ it("keeps a blocked workflow unavailable", async () => {
   expect(screen.getByRole("button", { name: "Start revert" }).hasAttribute("disabled")).toBe(true);
   expect(api.startRepositoryWorkflow).not.toHaveBeenCalled();
 });
+
+it("moves focus into the workflow dialog and closes it with Escape", async () => {
+  const api = {
+    preflightRepositoryWorkflow: vi.fn().mockResolvedValue({
+      repoId: "repo_fixture", action: "merge", headOid: "b".repeat(40), targetOid: "a".repeat(40), targetSubject: "Merge this change",
+      operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true,
+    }),
+  } as unknown as GitCrestApiClient;
+  const onClose = vi.fn();
+  const { container } = render(<WorkflowDialog api={api} repoId="repo_fixture" targetOid={"a".repeat(40)} action="merge" onClose={onClose} onStarted={vi.fn()} />);
+  const dialog = await screen.findByRole("dialog", { name: "Merge commit" });
+  const close = screen.getByRole("button", { name: "Close" });
+  await waitFor(() => expect(document.activeElement).toBe(close));
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(container.querySelector('[role="dialog"]')).not.toBeNull();
+});

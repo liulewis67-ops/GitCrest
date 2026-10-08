@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type WorkflowPreflightResponse } from "../../api/client";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 export type WorkflowAction = WorkflowPreflightResponse["action"];
 
@@ -15,6 +16,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, onClose, onStar
 }) {
   const [state, setState] = useState<{ key: string; loading: boolean; snapshot?: WorkflowPreflightResponse; error?: string }>({ key: "", loading: false });
   const [busy, setBusy] = useState(false);
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const key = `${repoId}:${action}:${targetOid}`;
@@ -47,7 +49,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, onClose, onStar
 
   const snapshot = state.key === key ? state.snapshot : undefined;
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title">
+    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader"><div><p className="sectionEyebrow">REVIEW GIT OPERATION</p><h2 id="workflow-dialog-title">{labels[action]} commit</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button></div>
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>TARGET COMMIT</span><strong className="monoText" title={targetOid}>{targetOid.slice(0, 12)}</strong></div>

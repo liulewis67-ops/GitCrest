@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { GitCrestApiClient } from "../../api/client";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 import { CredentialEditor, httpsHostFromRemote } from "../credentials/CredentialEditor";
 
 interface CloneDialogProps {
@@ -20,6 +21,7 @@ function folderFromRemote(remote: string): string {
 }
 
 export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", parentPath, error, busy, api, onChooseParent, onClose, onSubmit }: CloneDialogProps) {
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const [remoteUrl, setRemoteUrl] = useState(initialRemoteUrl);
   const [directoryName, setDirectoryName] = useState(initialDirectoryName || folderFromRemote(initialRemoteUrl));
   const [folderEdited, setFolderEdited] = useState(Boolean(initialDirectoryName));
@@ -39,7 +41,7 @@ export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", 
   const credentialHost = httpsHostFromRemote(remoteUrl);
   return (
     <div className="paletteBackdrop cloneBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section className="cloneDialog" role="dialog" aria-modal="true" aria-labelledby="clone-title">
+      <section ref={dialogRef} className="cloneDialog" role="dialog" aria-modal="true" aria-labelledby="clone-title" onKeyDown={onKeyDown}>
         <div className="taskCenterHeader"><div><p className="sectionEyebrow">REMOTE REPOSITORY</p><h2 id="clone-title">Clone repository</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose} aria-label="Close clone dialog">Close</button></div>
         <div className="cloneFormBody">
           <label className="cloneField">Remote URL<input autoFocus value={remoteUrl} onChange={(event) => { setRemoteUrl(event.target.value); if (!folderEdited) setDirectoryName(folderFromRemote(event.target.value)); }} placeholder="https://host/owner/repository.git" autoComplete="url" /></label>
