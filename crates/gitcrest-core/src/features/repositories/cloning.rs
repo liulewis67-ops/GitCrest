@@ -3,9 +3,9 @@ use std::path::{Component, Path, PathBuf};
 use tokio::fs;
 
 use crate::{
+    features::tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError},
     git::command::GitCommandService,
     repository::RepositoryManager,
-    tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -368,7 +368,7 @@ mod tests {
             .await
             .unwrap();
         let failed = wait_for_terminal(&tasks, &failed.task_id).await;
-        assert_eq!(failed.status, crate::tasks::TaskStatus::Failed);
+        assert_eq!(failed.status, crate::features::tasks::TaskStatus::Failed);
         assert!(!parent.join("retry-me").exists());
         assert!(!parent
             .join(format!(".gitcrest-clone-{}.partial", failed.task_id))
@@ -389,10 +389,13 @@ mod tests {
             .await
             .unwrap();
         let unreachable = wait_for_terminal(&tasks, &unreachable.task_id).await;
-        assert_eq!(unreachable.status, crate::tasks::TaskStatus::Failed);
+        assert_eq!(
+            unreachable.status,
+            crate::features::tasks::TaskStatus::Failed
+        );
         assert_eq!(
             unreachable.error_category,
-            Some(crate::tasks::TaskErrorCategory::Network),
+            Some(crate::features::tasks::TaskErrorCategory::Network),
             "{:?}",
             unreachable.logs
         );
@@ -413,7 +416,7 @@ mod tests {
         let retried = wait_for_terminal(&tasks, &retried.task_id).await;
         assert_eq!(
             retried.status,
-            crate::tasks::TaskStatus::Succeeded,
+            crate::features::tasks::TaskStatus::Succeeded,
             "message={:?}, logs={:?}",
             retried.message,
             retried.logs
@@ -456,7 +459,7 @@ mod tests {
         for blocker in &blockers {
             for _ in 0..100 {
                 if tasks.get(&blocker.task_id).await.unwrap().status
-                    == crate::tasks::TaskStatus::Running
+                    == crate::features::tasks::TaskStatus::Running
                 {
                     break;
                 }
@@ -473,7 +476,10 @@ mod tests {
             .unwrap();
         tasks.cancel(&cancelled.task_id).await.unwrap();
         let cancelled = wait_for_terminal(&tasks, &cancelled.task_id).await;
-        assert_eq!(cancelled.status, crate::tasks::TaskStatus::Cancelled);
+        assert_eq!(
+            cancelled.status,
+            crate::features::tasks::TaskStatus::Cancelled
+        );
         assert!(!parent.join("cancel-me").exists());
         assert!(!parent
             .join(format!(".gitcrest-clone-{}.partial", cancelled.task_id))
@@ -489,9 +495,9 @@ mod tests {
             let task = tasks.get(task_id).await.unwrap();
             if matches!(
                 task.status,
-                crate::tasks::TaskStatus::Succeeded
-                    | crate::tasks::TaskStatus::Failed
-                    | crate::tasks::TaskStatus::Cancelled
+                crate::features::tasks::TaskStatus::Succeeded
+                    | crate::features::tasks::TaskStatus::Failed
+                    | crate::features::tasks::TaskStatus::Cancelled
             ) {
                 return task;
             }

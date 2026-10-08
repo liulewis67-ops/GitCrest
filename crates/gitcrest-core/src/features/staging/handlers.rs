@@ -9,11 +9,11 @@ use axum::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::diff::{self, DiffError, DiffScope},
+    features::tasks::{self, TaskFailure, TaskSnapshot},
     features::{shelves, staging},
     git::command::GitCommandService,
     state::AppState,
     storage::{RepositoryStore, UndoOperation, UndoRecord},
-    tasks::{self, TaskFailure, TaskSnapshot},
 };
 pub(crate) async fn stage_repository(
     State(state): State<AppState>,

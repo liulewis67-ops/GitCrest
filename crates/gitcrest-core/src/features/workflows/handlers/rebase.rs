@@ -11,8 +11,8 @@ use super::super::dto::{
 use super::super::rebase;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    features::tasks::{TaskFailure, TaskSnapshot},
     state::AppState,
-    tasks::{TaskFailure, TaskSnapshot},
 };
 
 pub(in crate::features::workflows) async fn preflight_repository_rebase(

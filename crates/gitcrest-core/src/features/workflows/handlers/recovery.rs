@@ -12,12 +12,12 @@ use crate::{
     domain::workflow::WorkflowRecoveryAction,
     features::diff::DiffScope,
     features::shelves,
+    features::tasks,
+    features::tasks::{TaskFailure, TaskSnapshot},
     ports::git::GitReadPort,
     state::AppState,
     status,
     storage::{UndoOperation, UndoRecord},
-    tasks,
-    tasks::{TaskFailure, TaskSnapshot},
 };
 
 pub(in crate::features::workflows) async fn preflight_repository_workflow_recovery(
@@ -40,7 +40,7 @@ pub(in crate::features::workflows) async fn preflight_repository_workflow_recove
         )
     })?;
     if task.repo_id.as_deref() != Some(repo_id.as_str())
-        || task.status != crate::tasks::TaskStatus::WaitingForInput
+        || task.status != crate::features::tasks::TaskStatus::WaitingForInput
         || crate::features::workflows::recovery::workflow_operation_for_task(&task.operation)
             .is_none()
     {

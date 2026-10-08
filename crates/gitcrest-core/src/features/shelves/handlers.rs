@@ -12,12 +12,12 @@ use super::dto::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::diff::{self, DiffError, DiffScope},
+    features::tasks::{TaskFailure, TaskSnapshot},
     features::{shelves, staging},
     repository::RepositoryManager,
     state::AppState,
     status,
     storage::{UndoOperation, UndoRecord},
-    tasks::{TaskFailure, TaskSnapshot},
 };
 #[derive(Clone)]
 struct PreparedShelfItem {

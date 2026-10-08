@@ -6,8 +6,10 @@ use std::{
 use serde::Serialize;
 
 use crate::{
-    cloning::CloneService, features::credentials, git::command::GitCommandService,
-    repository::RepositoryManager, tasks::TaskService,
+    cloning::CloneService,
+    features::{credentials, tasks::TaskService},
+    git::command::GitCommandService,
+    repository::RepositoryManager,
 };
 
 #[derive(Clone)]

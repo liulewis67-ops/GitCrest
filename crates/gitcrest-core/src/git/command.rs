@@ -18,7 +18,7 @@ use tokio::{
 use std::os::unix::process::CommandExt;
 
 use crate::features::staging::StagingCommand;
-use crate::tasks::{TaskContext, TaskFailure};
+use crate::features::tasks::{TaskContext, TaskFailure};
 use crate::{
     domain::{
         error::WorkflowError,
@@ -1973,7 +1973,7 @@ mod tests {
     use std::{process::Command as StdCommand, time::Duration};
 
     use super::*;
-    use crate::tasks::{TaskService, TaskStatus};
+    use crate::features::tasks::{TaskService, TaskStatus};
 
     fn git(path: &Path, args: &[&str]) {
         let output = StdCommand::new("git")
@@ -2234,7 +2234,7 @@ mod tests {
         assert_eq!(failed.status, TaskStatus::Failed);
         assert_eq!(
             failed.error_category,
-            Some(crate::tasks::TaskErrorCategory::PushRejected)
+            Some(crate::features::tasks::TaskErrorCategory::PushRejected)
         );
         assert_eq!(
             git_output(&bare, &["rev-parse", &format!("refs/heads/{branch}")]),

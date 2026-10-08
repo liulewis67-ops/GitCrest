@@ -22,14 +22,14 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::repositories::{cloning, repository};
-pub(crate) use features::{status, tasks};
+pub(crate) use features::status;
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
+use features::tasks::{TaskFailure, TaskSnapshot};
 use git::command::{BranchCommand, GitOperation, RemoteCommand};
 use repository::{Repository, RepositoryError};
 use state::{AppState, EventBus};
-use tasks::{TaskFailure, TaskSnapshot};
 
 #[cfg(test)]
 use api::error::ApiError;
@@ -41,11 +41,11 @@ use api::{
 #[cfg(test)]
 use cloning::CloneService;
 #[cfg(test)]
+use features::tasks::TaskService;
+#[cfg(test)]
 use git::command::GitCommandService;
 #[cfg(test)]
 use repository::RepositoryManager;
-#[cfg(test)]
-use tasks::TaskService;
 
 pub async fn run() -> i32 {
     bootstrap::run().await
@@ -2575,7 +2575,7 @@ mod tests {
                         .progress("Waiting for a safe stop point", Some(35))
                         .await;
                     context.cancelled().await;
-                    Err(tasks::TaskFailure::Cancelled)
+                    Err(features::tasks::TaskFailure::Cancelled)
                 },
             )
             .await
@@ -2645,7 +2645,9 @@ mod tests {
 
         tokio::time::timeout(std::time::Duration::from_secs(1), async {
             loop {
-                if tasks.get(&task.task_id).await.unwrap().status == tasks::TaskStatus::Cancelled {
+                if tasks.get(&task.task_id).await.unwrap().status
+                    == features::tasks::TaskStatus::Cancelled
+                {
                     break;
                 }
                 tokio::task::yield_now().await;
@@ -2746,7 +2748,7 @@ mod tests {
                 if tasks
                     .get(task_id)
                     .await
-                    .is_some_and(|task| task.status == tasks::TaskStatus::Succeeded)
+                    .is_some_and(|task| task.status == features::tasks::TaskStatus::Succeeded)
                 {
                     break;
                 }
@@ -2756,7 +2758,7 @@ mod tests {
         .await
         .unwrap();
         let completed = tasks.get(task_id).await.unwrap();
-        assert_eq!(completed.status, tasks::TaskStatus::Succeeded);
+        assert_eq!(completed.status, features::tasks::TaskStatus::Succeeded);
         assert!(completed
             .logs
             .iter()

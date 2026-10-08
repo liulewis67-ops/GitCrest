@@ -1,6 +1,6 @@
 use axum::{extract::Path, extract::State, Json};
 
-use crate::{api::error::ApiError, tasks::TaskSnapshot, AppState};
+use crate::{api::error::ApiError, features::tasks::TaskSnapshot, AppState};
 
 pub(super) async fn list_tasks(State(state): State<AppState>) -> Json<Vec<TaskSnapshot>> {
     Json(state.tasks.list().await)
