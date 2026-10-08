@@ -10,6 +10,38 @@ pub(crate) enum WorkflowOperationDto {
     ShelfApply,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum WorkflowActionDto {
+    Merge,
+    CherryPick,
+    Revert,
+}
+
+impl From<crate::domain::workflow::WorkflowAction> for WorkflowActionDto {
+    fn from(action: crate::domain::workflow::WorkflowAction) -> Self {
+        use crate::domain::workflow::WorkflowAction;
+
+        match action {
+            WorkflowAction::Merge => Self::Merge,
+            WorkflowAction::CherryPick => Self::CherryPick,
+            WorkflowAction::Revert => Self::Revert,
+        }
+    }
+}
+
+impl From<WorkflowActionDto> for crate::domain::workflow::WorkflowAction {
+    fn from(action: WorkflowActionDto) -> Self {
+        use crate::domain::workflow::WorkflowAction;
+
+        match action {
+            WorkflowActionDto::Merge => WorkflowAction::Merge,
+            WorkflowActionDto::CherryPick => WorkflowAction::CherryPick,
+            WorkflowActionDto::Revert => WorkflowAction::Revert,
+        }
+    }
+}
+
 impl From<crate::domain::workflow::WorkflowOperation> for WorkflowOperationDto {
     fn from(operation: crate::domain::workflow::WorkflowOperation) -> Self {
         use crate::domain::workflow::WorkflowOperation;
