@@ -510,12 +510,12 @@ impl GitCommandService {
     pub async fn execute_workflow(
         &self,
         repository_path: &Path,
-        action: crate::workflows::WorkflowAction,
+        action: crate::domain::workflow::WorkflowAction,
         target_oid: &str,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match action {
-            crate::workflows::WorkflowAction::Merge => (
+            crate::domain::workflow::WorkflowAction::Merge => (
                 vec![
                     "merge".into(),
                     "--no-edit".into(),
@@ -524,11 +524,11 @@ impl GitCommandService {
                 ],
                 "Merge commit",
             ),
-            crate::workflows::WorkflowAction::CherryPick => (
+            crate::domain::workflow::WorkflowAction::CherryPick => (
                 vec!["cherry-pick".into(), "--no-edit".into(), target_oid.into()],
                 "Cherry-pick commit",
             ),
-            crate::workflows::WorkflowAction::Revert => (
+            crate::domain::workflow::WorkflowAction::Revert => (
                 vec!["revert".into(), "--no-edit".into(), target_oid.into()],
                 "Revert commit",
             ),

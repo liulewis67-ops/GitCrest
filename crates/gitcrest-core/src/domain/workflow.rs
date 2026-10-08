@@ -15,6 +15,13 @@ pub(crate) enum WorkflowRecoveryAction {
     Abort,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WorkflowAction {
+    Merge,
+    CherryPick,
+    Revert,
+}
+
 impl RebaseAction {
     pub(crate) fn git_keyword(self) -> &'static str {
         match self {

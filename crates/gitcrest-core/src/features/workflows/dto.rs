@@ -1,21 +1,87 @@
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::reset;
-use super::service::WorkflowAction;
-
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct WorkflowPreflightQuery {
-    pub(super) action: WorkflowAction,
+    pub(super) action: WorkflowActionDto,
     pub(super) target_oid: String,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct WorkflowRequest {
-    pub(super) action: WorkflowAction,
+    pub(super) action: WorkflowActionDto,
     pub(super) target_oid: String,
     pub(super) expected_head_oid: String,
+}
+
+#[derive(Clone, Copy, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum WorkflowActionDto {
+    Merge,
+    CherryPick,
+    Revert,
+}
+
+impl From<WorkflowActionDto> for crate::domain::workflow::WorkflowAction {
+    fn from(action: WorkflowActionDto) -> Self {
+        use crate::domain::workflow::WorkflowAction;
+
+        match action {
+            WorkflowActionDto::Merge => WorkflowAction::Merge,
+            WorkflowActionDto::CherryPick => WorkflowAction::CherryPick,
+            WorkflowActionDto::Revert => WorkflowAction::Revert,
+        }
+    }
+}
+
+impl From<crate::domain::workflow::WorkflowAction> for WorkflowActionDto {
+    fn from(action: crate::domain::workflow::WorkflowAction) -> Self {
+        use crate::domain::workflow::WorkflowAction;
+
+        match action {
+            WorkflowAction::Merge => Self::Merge,
+            WorkflowAction::CherryPick => Self::CherryPick,
+            WorkflowAction::Revert => Self::Revert,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WorkflowPreflightDto {
+    pub(super) repo_id: String,
+    pub(super) action: WorkflowActionDto,
+    pub(super) head_oid: Option<String>,
+    pub(super) target_oid: String,
+    pub(super) target_subject: String,
+    pub(super) operation_in_progress: Option<super::service::WorkflowOperation>,
+    pub(super) is_clean: bool,
+    pub(super) dirty_paths: Vec<String>,
+    pub(super) omitted_dirty_path_count: u32,
+    pub(super) conflicted_paths: Vec<String>,
+    pub(super) omitted_conflicted_path_count: u32,
+    pub(super) can_start: bool,
+}
+
+impl From<super::service::WorkflowPreflight> for WorkflowPreflightDto {
+    fn from(preflight: super::service::WorkflowPreflight) -> Self {
+        Self {
+            repo_id: preflight.repo_id,
+            action: preflight.action.into(),
+            head_oid: preflight.head_oid,
+            target_oid: preflight.target_oid,
+            target_subject: preflight.target_subject,
+            operation_in_progress: preflight.operation_in_progress,
+            is_clean: preflight.is_clean,
+            dirty_paths: preflight.dirty_paths,
+            omitted_dirty_path_count: preflight.omitted_dirty_path_count,
+            conflicted_paths: preflight.conflicted_paths,
+            omitted_conflicted_path_count: preflight.omitted_conflicted_path_count,
+            can_start: preflight.can_start,
+        }
+    }
 }
 
 #[derive(Deserialize)]

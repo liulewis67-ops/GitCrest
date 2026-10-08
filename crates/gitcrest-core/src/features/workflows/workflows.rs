@@ -6,19 +6,11 @@ use tokio::{
     process::Command,
 };
 
-use crate::domain::error::WorkflowError;
+use crate::domain::{error::WorkflowError, workflow::WorkflowAction};
 
 const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PATHS: usize = 200;
 const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum WorkflowAction {
-    Merge,
-    CherryPick,
-    Revert,
-}
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -30,8 +22,7 @@ pub enum WorkflowOperation {
     ShelfApply,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct WorkflowPreflight {
     pub repo_id: String,
     pub action: WorkflowAction,
@@ -428,7 +419,8 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{parse_status, read_preflight, WorkflowAction, WorkflowOperation};
+    use super::{parse_status, read_preflight, WorkflowOperation};
+    use crate::domain::workflow::WorkflowAction;
 
     #[test]
     fn parses_worktree_and_conflict_paths_with_a_bounded_list() {

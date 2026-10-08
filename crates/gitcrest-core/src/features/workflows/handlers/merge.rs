@@ -5,11 +5,12 @@ use axum::{
 };
 
 use super::super::{
-    dto::{WorkflowPreflightQuery, WorkflowRequest},
+    dto::{WorkflowPreflightDto, WorkflowPreflightQuery, WorkflowRequest},
     service as workflows,
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    domain::workflow::WorkflowAction,
     state::AppState,
     tasks::{TaskFailure, TaskSnapshot},
 };
@@ -18,7 +19,7 @@ pub(in crate::workflows) async fn preflight_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowPreflightQuery>, QueryRejection>,
-) -> Result<Json<workflows::WorkflowPreflight>, ApiError> {
+) -> Result<Json<WorkflowPreflightDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -31,15 +32,12 @@ pub(in crate::workflows) async fn preflight_repository_workflow(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    workflows::read_preflight(
-        repo_id,
-        &target.repository_path,
-        query.action,
-        &query.target_oid,
-    )
-    .await
-    .map(Json)
-    .map_err(ApiError::from_workflow_error)
+    let action = WorkflowAction::from(query.action);
+    workflows::read_preflight(repo_id, &target.repository_path, action, &query.target_oid)
+        .await
+        .map(WorkflowPreflightDto::from)
+        .map(Json)
+        .map_err(ApiError::from_workflow_error)
 }
 
 pub(in crate::workflows) async fn start_repository_workflow(
@@ -54,6 +52,7 @@ pub(in crate::workflows) async fn start_repository_workflow(
             "A workflow action, targetOid, and expectedHeadOid are required.",
         )
     })?;
+    let action = WorkflowAction::from(request.action);
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -62,7 +61,7 @@ pub(in crate::workflows) async fn start_repository_workflow(
     let preview = workflows::read_preflight(
         repo_id.clone(),
         &target.repository_path,
-        request.action,
+        action,
         &request.target_oid,
     )
     .await
@@ -88,13 +87,12 @@ pub(in crate::workflows) async fn start_repository_workflow(
     let task_repo_id = repo_id.clone();
     let path = target.repository_path;
     let resource_key = target.resource_key;
-    let action = request.action;
     let target_oid = request.target_oid;
     let expected_head_oid = request.expected_head_oid;
     let operation = match action {
-        workflows::WorkflowAction::Merge => "merge",
-        workflows::WorkflowAction::CherryPick => "cherryPick",
-        workflows::WorkflowAction::Revert => "revert",
+        WorkflowAction::Merge => "merge",
+        WorkflowAction::CherryPick => "cherryPick",
+        WorkflowAction::Revert => "revert",
     };
     let task = state
         .tasks
