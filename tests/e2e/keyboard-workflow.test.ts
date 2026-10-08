@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { _electron as electron, type ElectronApplication } from "playwright";
+import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { expect, it } from "vitest";
 import { createTempGitRepository } from "../fixtures/temp-repo";
 
@@ -44,19 +44,20 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
       return repositories.find((repository) => repository.path === repositoryPath)?.repoId;
     }, fixture.path);
     if (!repoId) throw new Error("The keyboard-opened repository was not registered.");
-    await window.getByRole("button", { name: "Workspace", exact: true }).click();
+    await enterButtonByTab(window, "Workspace");
 
     await writeFile(resolve(fixture.path, "keyboard.ts"), "export const keyboardWorkflow = true;\n");
-    await window.getByRole("button", { name: "Refresh working tree status" }).click();
+    await enterButtonByTab(window, "Refresh working tree status");
     await window.getByText("keyboard.ts", { exact: true }).waitFor();
     expect(await window.getByRole("button", { name: "Stage all", exact: true }).isDisabled()).toBe(false);
     await window.keyboard.press("Control+Shift+a");
     await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("keyboard.ts").waitFor();
 
     const taskDialog = window.getByRole("dialog", { name: "Tasks" });
-    if (await taskDialog.count()) await taskDialog.getByRole("button", { name: "Close tasks" }).click();
+    if (await taskDialog.count()) await enterButtonByTab(window, "Close tasks");
     const message = window.getByRole("textbox", { name: "Commit message", exact: true });
-    await message.fill("keyboard stage and commit");
+    await message.focus();
+    await window.keyboard.type("keyboard stage and commit");
     await message.press("Control+Enter");
     await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim(), { timeout: 15_000 }).toBe("keyboard stage and commit");
     expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain"])).stdout.trim()).toBe("");
@@ -75,17 +76,13 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
     expect(branchCreation).toBe(202);
     await window.locator(".branchItemName").filter({ hasText: "keyboard-target" }).waitFor();
     const branchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    if (await branchTasksDialog.count()) await branchTasksDialog.getByRole("button", { name: "Close tasks" }).click();
+    if (await branchTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
     await window.keyboard.press("Control+b");
     const switchDialog = window.getByRole("dialog", { name: "Switch branch" });
     await switchDialog.waitFor();
-    const targetChoice = switchDialog.getByRole("button", { name: /keyboard-target/ });
-    await targetChoice.focus();
-    await targetChoice.press("Enter");
+    await enterButtonByTab(window, "keyboard-target");
     await switchDialog.getByText("The working tree is clean.").waitFor();
-    const switchButton = switchDialog.getByRole("button", { name: "Switch to keyboard-target" });
-    await switchButton.focus();
-    await switchButton.press("Enter");
+    await enterButtonByTab(window, "Switch to keyboard-target");
     await expect.poll(async () => await window.evaluate(async (repoId) => {
       const connection = await (globalThis.window as unknown as Window & {
         gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
@@ -120,37 +117,27 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
       return { status: response.status, task: await response.json() as { taskId: string; createdAtMs: number } };
     }, { repoId, targetOid: sourceOid, headOid: expectedHeadOid });
     expect(cherryPick.status).toBe(202);
-    const tasksButton = window.getByRole("button", { name: /^Background tasks/ });
-    await tasksButton.focus();
-    await tasksButton.press("Enter");
+    await enterButtonByTab(window, "Background tasks");
     const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
     const cherryPickTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "cherryPick" }) });
     await cherryPickTask.getByRole("button", { name: "Open conflict resolver" }).waitFor();
     const conflictWindowPromise = app.waitForEvent("window");
-    const openResolver = cherryPickTask.getByRole("button", { name: "Open conflict resolver" });
-    await openResolver.focus();
-    await openResolver.press("Enter");
+    await enterButtonByTab(window, "Open conflict resolver");
     const conflictWindow = await conflictWindowPromise;
     await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
-    await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).focus();
-    await conflictWindow.keyboard.press("Enter");
-    const saveResult = conflictWindow.getByRole("button", { name: "Save result" });
-    await saveResult.focus();
-    await saveResult.press("Enter");
+    await conflictWindow.bringToFront();
+    await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).waitFor();
+    await enterButtonByTab(conflictWindow, "Use theirs for conflict 1");
+    await enterButtonByTab(conflictWindow, "Save result");
     await conflictWindow.getByText(/Saved to the working tree/).waitFor();
-    const markResolved = conflictWindow.getByRole("button", { name: "Mark resolved" });
-    await markResolved.focus();
-    await markResolved.press("Enter");
+    await enterButtonByTab(conflictWindow, "Mark resolved");
     await conflictWindow.getByText("0 unresolved").waitFor();
     await conflictWindow.close();
 
-    const refreshRecovery = cherryPickTask.getByRole("button", { name: "Refresh preview" });
-    await refreshRecovery.focus();
-    await refreshRecovery.press("Enter");
+    await enterButtonByTab(window, "Refresh preview");
     const continueWorkflow = cherryPickTask.getByRole("button", { name: "Continue" });
     await expect.poll(() => continueWorkflow.isDisabled(), { timeout: 15_000 }).toBe(false);
-    await continueWorkflow.focus();
-    await continueWorkflow.press("Enter");
+    await enterButtonByTab(window, "Continue");
     await expect.poll(async () => await window.evaluate(async ({ repoId, startTime }) => {
       const connection = await (globalThis.window as unknown as Window & {
         gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
@@ -177,4 +164,21 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
     await fixture.cleanup();
     await rm(appDataPath, { recursive: true, force: true });
   }
-}, 45_000);
+}, 75_000);
+
+async function enterButtonByTab(page: Page, label: string) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const focusedButton = await page.evaluate(() => {
+      const active = document.activeElement;
+      return active instanceof HTMLButtonElement
+        ? `${active.getAttribute("aria-label") || ""} ${active.innerText}`.trim()
+        : "";
+    });
+    if (focusedButton.includes(label)) {
+      await page.keyboard.press("Enter");
+      return;
+    }
+    await page.keyboard.press("Tab");
+  }
+  throw new Error(`Could not reach the ${label} button by pressing Tab.`);
+}
