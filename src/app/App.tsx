@@ -13,6 +13,7 @@ import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { useCommitDraft, useCommitSubmission } from "../features/commits";
+import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
@@ -30,7 +31,7 @@ const WorkflowDialog = lazy(() => import("../features/workflows/WorkflowDialog")
 const RebaseDialog = lazy(() => import("../features/workflows/RebaseDialog").then(({ RebaseDialog }) => ({ default: RebaseDialog })));
 const ResetDialog = lazy(() => import("../features/workflows/ResetDialog").then(({ ResetDialog }) => ({ default: ResetDialog })));
 const RemoteBranchDeleteDialog = lazy(() => import("../features/branches/RemoteBranchDeleteDialog").then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
-const CloneDialog = lazy(() => import("../features/cloning/CloneDialog").then(({ CloneDialog }) => ({ default: CloneDialog })));
+const CloneDialog = lazy(() => loadCloneDialog().then(({ CloneDialog }) => ({ default: CloneDialog })));
 const WorkspaceMainPanel = lazy(() => import("../pages/workspace/WorkspaceMainPanel").then(({ WorkspaceMainPanel }) => ({ default: WorkspaceMainPanel })));
 const PushDialog = lazy(() => import("../features/remotes/PushDialog").then(({ PushDialog }) => ({ default: PushDialog })));
 const PullDialog = lazy(() => import("../features/remotes/PullDialog").then(({ PullDialog }) => ({ default: PullDialog })));
@@ -88,9 +89,6 @@ function App() {
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [remoteBranchDeleteTarget, setRemoteBranchDeleteTarget] = useState<string>();
   const [cloneOpen, setCloneOpen] = useState(false);
-  const [cloneBusy, setCloneBusy] = useState(false);
-  const [cloneError, setCloneError] = useState("");
-  const [cloneDraft, setCloneDraft] = useState({ remoteUrl: "", parentPath: "", directoryName: "" });
   const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
   const [diffRetry, setDiffRetry] = useState(0);
   const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
@@ -404,6 +402,16 @@ function App() {
     onError: (message) => {
       setTasksError(message);
       setTasksOpen(true);
+    },
+  });
+  const cloneSubmission = useCloneSubmission({
+    getApi: () => apiRef.current,
+    onTaskAccepted: (task) => {
+      cloneTaskIds.current.add(task.taskId);
+      appendTask(task);
+      setCloneOpen(false);
+      setTasksOpen(true);
+      setTasksError("");
     },
   });
   const {
@@ -724,27 +732,6 @@ function App() {
     else setCommitMessage("");
   }
 
-  async function startClone(remoteUrl: string, parentPath: string, directoryName: string) {
-    const api = apiRef.current;
-    if (!api) return;
-    setCloneBusy(true);
-    setCloneError("");
-    setCloneDraft({ remoteUrl, parentPath, directoryName });
-    try {
-      const task = await api.cloneRepository(remoteUrl, parentPath, directoryName);
-      cloneTaskIds.current.add(task.taskId);
-      appendTask(task);
-      setCloneOpen(false);
-      setTasksOpen(true);
-      setTasksError("");
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setCloneError(message || (error instanceof Error ? error.message : "Could not start the clone task."));
-    } finally {
-      setCloneBusy(false);
-    }
-  }
-
   async function openClonedRepository(task: TaskSnapshotResponse) {
     if (!cloneTaskIds.current.has(task.taskId) || task.operation !== "clone" || task.status !== "succeeded" || !task.resultRepoId || openedCloneTasks.current.has(task.taskId)) return;
     openedCloneTasks.current.add(task.taskId);
@@ -765,11 +752,7 @@ function App() {
   }
 
   function retryClone(task: TaskSnapshotResponse) {
-    if (task.targetPath) {
-      const separator = Math.max(task.targetPath.lastIndexOf("/"), task.targetPath.lastIndexOf("\\"));
-      setCloneDraft((current) => ({ ...current, parentPath: task.targetPath!.slice(0, separator), directoryName: task.targetPath!.slice(separator + 1) }));
-    }
-    setCloneError("");
+    cloneSubmission.prepareRetry(task.targetPath);
     setTasksOpen(false);
     setCloneOpen(true);
   }
@@ -1116,7 +1099,7 @@ function App() {
     hasActiveBranches: Boolean(activeBranches),
   }, {
     openRepository: () => { void openLocalRepository(); },
-    cloneRepository: () => { setCloneError(""); setCloneOpen(true); },
+    cloneRepository: () => { cloneSubmission.clearError(); setCloneOpen(true); },
     initializeRepository: () => { void initializeLocalRepository(); },
     stageAll: () => { void stageChanges("stageAll"); },
     undoRecentOperation: () => { void undoRecentOperation(); },
@@ -1165,7 +1148,7 @@ function App() {
     { id: "reset", label: "Reset current branch", detail: "Review commit and file impact before moving HEAD", available: Boolean(selectedRepository && activeBranches && connected), run: () => setResetDialogOpen(true) },
     { id: "push", label: "Push current branch", detail: "Review commits, target, and overwrite scope before pushing", available: Boolean(selectedRepository), run: () => openPushDialog() },
     { id: "ai-commit-message", label: "Generate commit message suggestion", detail: `Review staged diffs and ask the configured AI provider (${displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)})`, available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
-    { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { setCloneError(""); setCloneOpen(true); } },
+    { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { cloneSubmission.clearError(); setCloneOpen(true); } },
     { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
   const filteredCommands = commands.filter((command) => `${command.label} ${command.detail}`.toLowerCase().includes(paletteQuery.toLowerCase()));
@@ -1223,7 +1206,7 @@ function App() {
           openError={openError}
           version={version}
           onOpenLocalRepository={() => void openLocalRepository()}
-          onCloneRepository={() => { setCloneError(""); setCloneOpen(true); }}
+          onCloneRepository={() => { cloneSubmission.clearError(); setCloneOpen(true); }}
           onNavigateWorkspace={() => setPage("workspace")}
           onInitializeRepository={() => void initializeLocalRepository()}
           onOpenRepository={(repository) => void openRecentRepository(repository)}
@@ -1508,7 +1491,7 @@ function App() {
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}
       {resetDialogOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setResetDialogOpen(false)} onStarted={(task) => { setResetDialogOpen(false); void startWorkflowTask(task); }} />}
       {remoteBranchDeleteTarget && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDeleteTarget} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRemoteBranchDeleteTarget(undefined)} onStarted={(task) => { setRemoteBranchDeleteTarget(undefined); void startWorkflowTask(task); }} />}
-      {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
+      {cloneOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} api={apiRef.current} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>
   );
