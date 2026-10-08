@@ -21,11 +21,10 @@ mod ports;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
+pub(crate) use features::repositories::{cloning, repository};
 pub(crate) use features::{
-    branches, credentials, diff, history, remotes, repositories, shelves, staging, status, tasks,
-    workflows,
+    branches, credentials, diff, history, remotes, shelves, staging, status, tasks, workflows,
 };
-pub(crate) use repositories::{cloning, repository};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
