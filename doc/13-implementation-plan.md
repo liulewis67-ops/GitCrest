@@ -810,3 +810,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/repositories/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`f970c65`
 
+
+### 后端 remotes pull/push 模块归属整理 — 小阶段 25
+- 状态：已完成（pull/push 实现由 remotes feature 声明和持有）
+- 日期：2026-10-09
+- 交付：将 pull.rs 与 push.rs 从 main.rs 根级 path module 声明调整为 `features/remotes/mod.rs` 的子模块；统一 Git command 执行/取消恢复逻辑、DTO、handlers 和 API 错误映射对 `remotes::{pull,push}` 的引用，行为和公共 API 路径不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；pull/push service、Git command 和 API 集成用例通过。
+- 限制/后续：应用仍以单一二进制 crate 和 main.rs 根模块承载启动、共享状态及其他 feature；继续按规范拆分 bootstrap/state 与剩余 feature。
+- 证据：`crates/gitcrest-core/src/features/remotes/{mod,pull,push,dto,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/git/git_command.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`c463f8a`
+
