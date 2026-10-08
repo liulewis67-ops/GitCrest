@@ -1220,3 +1220,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Git adapter 的 rebase 方法仍接收 feature `RebasePreview`，而 reset 方法仍接收 feature `ResetPreview`；需继续将 adapter 所需输入收敛为领域执行参数，并将 `WorkflowOperation` 的 API DTO 边界分开。
 - 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers/rebase.rs,rebase.rs}`、`crates/gitcrest-core/src/git/git_command.rs`。
 - 实施 commit：`8d2800c`
+
+### 后端 workflows Git adapter 输入边界 — 小阶段 69
+- 状态：已完成（rebase/reset Git adapter 不再接收 feature preview）
+- 日期：2026-10-09
+- 交付：新增领域 `RebaseExecutionPlan` 与 `RebaseCommitSubject`，workflows handler 在复核实时 preview 与 todo 后组装执行计划；Git adapter 只接收该领域计划，不再依赖 feature `RebasePreview`。reset adapter 改为接收经 handler 复核后的 expected HEAD、目标 OID 与闭合枚举映射出的 Git 参数。删除 crate 根 rebase/reset 兼容导出，并将集成测试引用改为 feature 路径；具体 Git 参数、安全引用和任务副作用顺序保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：Git adapter 仍依赖 workflows feature 定义的 `WorkflowOperation`/`WorkflowAction`/`WorkflowRecoveryAction` 及 recovery 状态识别函数；下一步将其转换到 domain/API DTO 边界，并评估 recovery Git 能力是否应通过中立端口暴露。
+- 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/features/workflows/handlers/{rebase.rs,reset.rs}`、`crates/gitcrest-core/src/git/git_command.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`1bf562a`
