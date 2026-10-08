@@ -67,7 +67,7 @@ async function processTreeIds(pid) {
 
 async function processTreeMemoryBreakdown(pid) {
   if (process.platform === "win32") {
-    const command = `$rootPid=${pid}; $processes=Get-CimInstance Win32_Process; $ids=@([uint32]$rootPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $items=@($ids | ForEach-Object { $id=$_; $process=$processes | Where-Object { $_.ProcessId -eq $id } | Select-Object -First 1; $memory=Get-Process -Id $id -ErrorAction SilentlyContinue; $role=if ($process.Name -like 'gitcrest-core*') { 'rust-sidecar' } elseif ($process.CommandLine -match '--type=renderer') { 'renderer' } elseif ($process.CommandLine -match '--type=gpu-process') { 'gpu' } elseif ($process.CommandLine -match '--type=utility') { 'utility' } elseif ($process.Name -ieq 'electron.exe') { 'electron-main' } elseif ($id -eq $rootPid) { 'harness-wrapper' } else { 'electron-child' }; [pscustomobject]@{ pid=$id; role=$role; image=$process.Name; workingSetBytes=[int64]$memory.WorkingSet64; privateBytes=[int64]$memory.PrivateMemorySize64 } }); ConvertTo-Json -InputObject $items -Compress`;
+    const command = `$rootPid=${pid}; $processes=Get-CimInstance Win32_Process; $perf=Get-CimInstance Win32_PerfFormattedData_PerfProc_Process; $ids=@([uint32]$rootPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $items=@($ids | ForEach-Object { $id=$_; $process=$processes | Where-Object { $_.ProcessId -eq $id } | Select-Object -First 1; $memory=Get-Process -Id $id -ErrorAction SilentlyContinue; $perfProcess=$perf | Where-Object { $_.IDProcess -eq $id } | Select-Object -First 1; $role=if ($process.Name -like 'gitcrest-core*') { 'rust-sidecar' } elseif ($process.CommandLine -match '--type=renderer') { 'renderer' } elseif ($process.CommandLine -match '--type=gpu-process') { 'gpu' } elseif ($process.CommandLine -match '--type=utility') { 'utility' } elseif ($process.Name -ieq 'electron.exe') { 'electron-main' } elseif ($id -eq $rootPid) { 'harness-wrapper' } else { 'electron-child' }; [pscustomobject]@{ pid=$id; role=$role; image=$process.Name; workingSetBytes=[int64]$memory.WorkingSet64; privateWorkingSetBytes=if ($perfProcess) { [int64]$perfProcess.WorkingSetPrivate } else { $null }; privateBytes=[int64]$memory.PrivateMemorySize64 } }); ConvertTo-Json -InputObject $items -Compress`;
     const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", command]);
     const parsed = JSON.parse(stdout.trim());
     return (Array.isArray(parsed) ? parsed : [parsed]).sort((left, right) => right.workingSetBytes - left.workingSetBytes);
@@ -75,7 +75,7 @@ async function processTreeMemoryBreakdown(pid) {
   const { stdout } = await execFileAsync("ps", ["-eo", "pid=,ppid=,rss=,comm="]);
   const rows = stdout.trim().split(/\r?\n/).map((line) => line.trim().split(/\s+/, 4));
   const treeIds = new Set(await processTreeIds(pid));
-  return rows.filter(([id]) => treeIds.has(Number(id))).map(([id, , rss, image]) => ({ pid: Number(id), role: Number(id) === pid ? "electron-main" : image, image, workingSetBytes: Number(rss) * 1024 })).sort((left, right) => right.workingSetBytes - left.workingSetBytes);
+  return rows.filter(([id]) => treeIds.has(Number(id))).map(([id, , rss, image]) => ({ pid: Number(id), role: Number(id) === pid ? "electron-main" : image, image, workingSetBytes: Number(rss) * 1024, privateWorkingSetBytes: null })).sort((left, right) => right.workingSetBytes - left.workingSetBytes);
 }
 
 async function startProcessTreeMemorySampler(pid, intervalMs = 250) {
@@ -208,6 +208,9 @@ async function runMemorySnapshot() {
     const loaded = await processTreeMemoryBreakdown(app.process().pid);
     const total = (processes) => ({
       workingSetBytes: processes.reduce((sum, process) => sum + process.workingSetBytes, 0),
+      privateWorkingSetBytes: processes.every((process) => Number.isFinite(process.privateWorkingSetBytes))
+        ? processes.reduce((sum, process) => sum + process.privateWorkingSetBytes, 0)
+        : null,
       privateBytes: processes.every((process) => Number.isFinite(process.privateBytes))
         ? processes.reduce((sum, process) => sum + process.privateBytes, 0)
         : null,
