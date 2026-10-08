@@ -189,4 +189,98 @@ describe("remote sync E2E", () => {
       await rm(appDataPath, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("keeps a rejected push local and allows a reviewed retry after the remote is restored", async () => {
+    const fixture = await createTempGitRepository();
+    const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-retry-remote-"));
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-push-retry-e2e-app-data-"));
+    const filePath = resolve(fixture.path, "src/push-retry.ts");
+
+    try {
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(filePath, "export const retry = 'base';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/push-retry.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add retry fixture"]);
+      await execFileAsync("git", ["init", "--bare", "--quiet", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", "--set-upstream", "origin", "HEAD"]);
+      const branch = (await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim();
+      const originalRemoteHead = (await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim();
+      await writeFile(filePath, "export const retry = 'pending push';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/push-retry.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "commit retained after failed push"]);
+      const localHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+      const unavailableRemotePath = resolve(bareRemotePath, "temporarily-unavailable.git");
+      await execFileAsync("git", ["-C", fixture.path, "remote", "set-url", "origin", unavailableRemotePath]);
+
+      app = await electron.launch({
+        args: ["."],
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+      });
+      const window = await app.firstWindow();
+      await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${connection.token}`,
+            "X-GitCrest-API-Version": "1",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return response.status;
+      }, fixture.path);
+      expect(opened).toBe(200);
+
+      await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      await window.locator(".repositoryRowOpen").click();
+      await window.locator(".workspaceCrumb").waitFor();
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Push", exact: true }).click();
+      const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
+      await pushDialog.getByText(`origin/${branch}`, { exact: true }).waitFor();
+      await pushDialog.getByRole("button", { name: "Push", exact: true }).click();
+
+      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const failedPush = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).last();
+      await failedPush.waitFor({ state: "visible" });
+      await window.waitForFunction(() => {
+        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "push");
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+      }, undefined, { timeout: 20_000 });
+      await failedPush.getByText("failed", { exact: true }).waitFor();
+      expect((await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim()).toBe(originalRemoteHead);
+
+      await execFileAsync("git", ["init", "--bare", "--quiet", unavailableRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", unavailableRemotePath, `${originalRemoteHead}:refs/heads/${branch}`]);
+
+      const priorPushCount = await tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).count();
+      await failedPush.getByRole("button", { name: "Review and retry push" }).click();
+      const retryDialog = window.getByRole("dialog", { name: "Push current branch" });
+      await retryDialog.getByRole("button", { name: "Push", exact: true }).click();
+      const retriedPush = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).first();
+      await window.waitForFunction((previousCount) => {
+        const cards = [...document.querySelectorAll(".taskCard")].filter((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "push");
+        const card = cards[0];
+        return Boolean(cards.length > previousCount && card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+      }, priorPushCount, { timeout: 20_000 });
+      await retriedPush.locator(".taskLogs summary").click();
+      const retryTaskBodies = await tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).allInnerTexts();
+      if (!retryTaskBodies.some((body) => body.includes("Succeeded"))) throw new Error(`Reviewed push retry did not succeed: ${JSON.stringify(retryTaskBodies)}`);
+      expect((await execFileAsync("git", ["-C", unavailableRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim()).toBe(localHead);
+      expect((await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim()).toBe(originalRemoteHead);
+    } finally {
+      await app?.close();
+      app = undefined;
+      await fixture.cleanup();
+      await rm(bareRemotePath, { recursive: true, force: true });
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 60_000);
 });
