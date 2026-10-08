@@ -1,4 +1,3 @@
-#[path = "staging.rs"]
 mod service;
 
 mod dto;
