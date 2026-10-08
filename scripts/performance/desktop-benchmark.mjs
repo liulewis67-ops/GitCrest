@@ -205,6 +205,143 @@ async function runMemorySnapshot() {
   }
 }
 
+async function createCacheLifecycleRepositories(rootPath, repositoryCount, filesPerRepository) {
+  const repositoryPaths = [];
+  for (let repositoryIndex = 0; repositoryIndex < repositoryCount; repositoryIndex += 1) {
+    const repositoryPath = join(rootPath, `repository-${String(repositoryIndex).padStart(2, "0")}`);
+    await mkdir(repositoryPath, { recursive: true });
+    await execFileAsync("git", ["init", "--quiet", "-b", "main", repositoryPath]);
+    await execFileAsync("git", ["-C", repositoryPath, "-c", "user.name=GitCrest Benchmark", "-c", "user.email=benchmark@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "benchmark fixture"]);
+    for (let fileIndex = 0; fileIndex < filesPerRepository; fileIndex += 1) {
+      const fileName = `untracked-${String(fileIndex).padStart(4, "0")}.txt`;
+      await writeFile(join(repositoryPath, fileName), `repository ${repositoryIndex} file ${fileIndex}\n`);
+    }
+    repositoryPaths.push(repositoryPath);
+  }
+  return repositoryPaths;
+}
+
+async function registerRepositoriesFromWindow(page, paths) {
+  const result = await page.evaluate(async (repositoryPaths) => {
+    const connection = await window.gitcrest.getSidecarConnection();
+    const repositories = [];
+    for (const path of repositoryPaths) {
+      const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${connection.token}`,
+          "X-GitCrest-API-Version": "1",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ path }),
+      });
+      const body = await response.json();
+      if (response.status !== 200) throw new Error(`Could not register cache fixture: ${JSON.stringify(body)}`);
+      repositories.push(body);
+    }
+    return repositories;
+  }, paths);
+  if (result.length !== paths.length) throw new Error("Not all cache lifecycle repositories were registered.");
+  return result;
+}
+
+async function rendererHeapUsage(page) {
+  const session = await page.context().newCDPSession(page);
+  try {
+    await session.send("Performance.enable");
+    await session.send("HeapProfiler.enable");
+    await session.send("HeapProfiler.collectGarbage");
+    const { metrics } = await session.send("Performance.getMetrics");
+    return metrics.find(({ name }) => name === "JSHeapUsedSize")?.value ?? null;
+  } finally {
+    await session.detach();
+  }
+}
+
+async function runCacheLifecycle() {
+  const repositoryCount = Number(process.env.GITCREST_BENCH_CACHE_REPOSITORIES || 32);
+  const filesPerRepository = Number(process.env.GITCREST_BENCH_CACHE_FILES || 1_000);
+  if (!Number.isInteger(repositoryCount) || repositoryCount < 2 || repositoryCount > 100) {
+    throw new Error("GITCREST_BENCH_CACHE_REPOSITORIES must be an integer from 2 to 100.");
+  }
+  if (!Number.isInteger(filesPerRepository) || filesPerRepository < 1 || filesPerRepository > 10_000) {
+    throw new Error("GITCREST_BENCH_CACHE_FILES must be an integer from 1 to 10000.");
+  }
+
+  const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-cache-lifecycle-"));
+  let app;
+  try {
+    const repositoryPaths = await createCacheLifecycleRepositories(
+      join(dataDir, "repositories"),
+      repositoryCount,
+      filesPerRepository,
+    );
+    app = await electron.launch({ args: ["."], cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+    const page = await app.firstWindow();
+    await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
+    await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
+    const repositories = await registerRepositoriesFromWindow(page, repositoryPaths);
+    await page.reload();
+    await page.getByRole("heading", { name: "Recent repositories" }).waitFor({ timeout: 15_000 });
+
+    for (let index = 0; index < repositories.length; index += 1) {
+      const name = `repository-${String(index).padStart(2, "0")}`;
+      await page.getByRole("button", { name: "Welcome", exact: true }).click();
+      await page.locator(".repositoryRowOpen").filter({ hasText: name }).click();
+      await page.waitForFunction(
+        (expectedFiles) => document.querySelectorAll(".statusFileRow").length === expectedFiles,
+        filesPerRepository,
+        { timeout: 20_000 },
+      );
+    }
+
+    const activeName = "repository-00";
+    await page.getByRole("tab", { name: activeName }).click();
+    await new Promise((resolveSleep) => setTimeout(resolveSleep, 2_000));
+    const openState = {
+      rendererJsHeapBytes: await rendererHeapUsage(page),
+      processes: await processTreeMemoryBreakdown(app.process().pid),
+      visibleStatusRows: await page.locator(".statusFileRow").count(),
+      openRepositoryTabs: await page.getByRole("tab").count(),
+    };
+
+    for (let index = repositories.length - 1; index > 0; index -= 1) {
+      const name = `repository-${String(index).padStart(2, "0")}`;
+      await page.getByRole("button", { name: `Close ${name} tab` }).evaluate((button) => button.click());
+    }
+    await page.waitForFunction(
+      () => document.querySelectorAll('[role="tab"]').length === 1,
+      undefined,
+      { timeout: 10_000 },
+    );
+    await new Promise((resolveSleep) => setTimeout(resolveSleep, 2_000));
+    const closedState = {
+      rendererJsHeapBytes: await rendererHeapUsage(page),
+      processes: await processTreeMemoryBreakdown(app.process().pid),
+      visibleStatusRows: await page.locator(".statusFileRow").count(),
+      openRepositoryTabs: await page.getByRole("tab").count(),
+    };
+    const workingSetTotal = (state) => state.processes.reduce((sum, process) => sum + process.workingSetBytes, 0);
+    return {
+      repositories: repositoryCount,
+      untrackedFilesPerRepository: filesPerRepository,
+      totalCachedStatusFilesBeforeClose: repositoryCount * filesPerRepository,
+      openState,
+      afterCloseState: closedState,
+      deltaAfterClose: {
+        rendererJsHeapBytes: closedState.rendererJsHeapBytes !== null && openState.rendererJsHeapBytes !== null
+          ? closedState.rendererJsHeapBytes - openState.rendererJsHeapBytes
+          : null,
+        processTreeWorkingSetBytes: workingSetTotal(closedState) - workingSetTotal(openState),
+      },
+      method: "Renderer heap is garbage-collected through CDP before sampling. Process Working Set is sampled once after a 2-second settle interval.",
+    };
+  } finally {
+    await app?.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+}
+
 async function runScroll() {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-scroll-"));
   let app;
@@ -274,29 +411,33 @@ async function runScroll() {
 const startedAt = new Date().toISOString();
 const scrollOnly = process.env.GITCREST_BENCH_MODE === "scroll";
 const memoryOnly = process.env.GITCREST_BENCH_MODE === "memory";
-if (!scrollOnly && !memoryOnly && iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
+const cacheLifecycleOnly = process.env.GITCREST_BENCH_MODE === "cache-lifecycle";
+if (!scrollOnly && !memoryOnly && !cacheLifecycleOnly && iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
 const memorySnapshot = memoryOnly ? await runMemorySnapshot() : null;
+const repositoryCacheLifecycle = cacheLifecycleOnly ? await runCacheLifecycle() : null;
 const cold = scrollOnly
   || memoryOnly
+  || cacheLifecycleOnly
   ? { startupMs: [], firstHistoryFrameMs: [], idleMemorySamplesBytes: [], repositoryMemorySamplesBytes: [] }
   : await runColdLaunch();
-const scroll = memoryOnly ? null : await runScroll();
+const scroll = memoryOnly || cacheLifecycleOnly ? null : await runScroll();
 const installerPath = join(root, "dist", "GitCrest Setup 0.1.0.exe");
 let installerBytes = null;
 try { installerBytes = (await stat(installerPath)).size; } catch {}
 const report = {
-  mode: scrollOnly ? "scroll-only" : memoryOnly ? "memory-only" : "full",
+  mode: scrollOnly ? "scroll-only" : memoryOnly ? "memory-only" : cacheLifecycleOnly ? "cache-lifecycle" : "full",
   generatedAt: new Date().toISOString(),
   host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown", logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
   software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", gpuDisabled: process.env.GITCREST_BENCH_DISABLE_GPU === "1" },
   fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath },
-  iterations: scrollOnly || memoryOnly ? 1 : iterations,
+  iterations: scrollOnly || memoryOnly || cacheLifecycleOnly ? 1 : iterations,
   startedAt,
   startup: summarize(cold.startupMs),
   firstHistoryFrame: summarize(cold.firstHistoryFrameMs),
   idleProcessTreeMemory: { sampleCount: cold.idleMemorySamplesBytes.length, peakBytes: cold.idleMemorySamplesBytes.length ? Math.max(...cold.idleMemorySamplesBytes) : null, samplesBytes: cold.idleMemorySamplesBytes },
   loadedRepositoryIdleProcessTreeMemory: { sampleCount: cold.repositoryMemorySamplesBytes.length, peakBytes: cold.repositoryMemorySamplesBytes.length ? Math.max(...cold.repositoryMemorySamplesBytes) : null, samplesBytes: cold.repositoryMemorySamplesBytes },
   processMemoryBreakdown: memorySnapshot,
+  repositoryCacheLifecycle,
   work: scroll,
   installer: { path: installerBytes === null ? null : installerPath, bytes: installerBytes, mebibytes: installerBytes === null ? null : Number((installerBytes / (1024 * 1024)).toFixed(2)) },
   limitations: installerBytes === null ? ["Installer size is unavailable because electron-builder did not produce an installer."] : [],
