@@ -78,6 +78,22 @@ async function processTreeMemoryBreakdown(pid) {
   return rows.filter(([id]) => treeIds.has(Number(id))).map(([id, , rss, image]) => ({ pid: Number(id), role: Number(id) === pid ? "electron-main" : image, image, workingSetBytes: Number(rss) * 1024, privateWorkingSetBytes: null })).sort((left, right) => right.workingSetBytes - left.workingSetBytes);
 }
 
+async function privateWorkingSetWindowSamples(pid, sampleCount = 3, intervalMs = 300) {
+  if (process.platform !== "win32") return [];
+  const ids = await processTreeIds(pid);
+  const powershellIds = ids.join(",");
+  const command = `$ids=@(${powershellIds}); $filter=(($ids | ForEach-Object { "IDProcess = $_" }) -join ' OR '); $samples=@(); for ($index=0; $index -lt ${sampleCount}; $index++) { $rows=Get-CimInstance -ClassName Win32_PerfFormattedData_PerfProc_Process -Filter $filter; $value=($rows | Measure-Object -Property WorkingSetPrivate -Sum).Sum; $bytes=if ($null -ne $value) { [int64]$value } else { 0 }; $samples += [pscustomobject]@{ sampledAtUtc=[DateTime]::UtcNow.ToString('o'); privateWorkingSetBytes=$bytes }; if ($index -lt ${sampleCount - 1}) { Start-Sleep -Milliseconds ${intervalMs} } }; ConvertTo-Json -InputObject $samples -Compress`;
+  try {
+    const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", command]);
+    const parsed = JSON.parse(stdout.trim());
+    return (Array.isArray(parsed) ? parsed : [parsed])
+      .filter((sample) => sample && Number.isFinite(Number(sample.privateWorkingSetBytes)) && typeof sample.sampledAtUtc === "string")
+      .map((sample) => ({ sampledAtUtc: sample.sampledAtUtc, privateWorkingSetBytes: Number(sample.privateWorkingSetBytes) }));
+  } catch {
+    return [];
+  }
+}
+
 async function startProcessTreeMemorySampler(pid, intervalMs = 250) {
   const ids = await processTreeIds(pid);
   if (process.platform === "win32") {
@@ -199,6 +215,7 @@ async function runMemorySnapshot() {
     await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
     const idle = await processTreeMemoryBreakdown(app.process().pid);
+    const idlePrivateWorkingSetSamplesBytes = await privateWorkingSetWindowSamples(app.process().pid);
     await openFixtureFromWindow(page);
     await page.reload();
     await page.getByRole("heading", { name: "Recent repositories" }).waitFor({ timeout: 15_000 });
@@ -206,6 +223,7 @@ async function runMemorySnapshot() {
     await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
     const loaded = await processTreeMemoryBreakdown(app.process().pid);
+    const loadedPrivateWorkingSetSamplesBytes = await privateWorkingSetWindowSamples(app.process().pid);
     const total = (processes) => ({
       workingSetBytes: processes.reduce((sum, process) => sum + process.workingSetBytes, 0),
       privateWorkingSetBytes: processes.every((process) => Number.isFinite(process.privateWorkingSetBytes))
@@ -215,7 +233,19 @@ async function runMemorySnapshot() {
         ? processes.reduce((sum, process) => sum + process.privateBytes, 0)
         : null,
     });
-    return { idle, loaded, idleTotals: total(idle), loadedTotals: total(loaded) };
+    return {
+      idle,
+      loaded,
+      idleTotals: total(idle),
+      loadedTotals: total(loaded),
+      privateWorkingSetWindow: {
+        requestedSleepBetweenSamplesMs: 300,
+        idleSamples: idlePrivateWorkingSetSamplesBytes,
+        idlePeakBytes: idlePrivateWorkingSetSamplesBytes.length ? Math.max(...idlePrivateWorkingSetSamplesBytes.map((sample) => sample.privateWorkingSetBytes)) : null,
+        loadedSamples: loadedPrivateWorkingSetSamplesBytes,
+        loadedPeakBytes: loadedPrivateWorkingSetSamplesBytes.length ? Math.max(...loadedPrivateWorkingSetSamplesBytes.map((sample) => sample.privateWorkingSetBytes)) : null,
+      },
+    };
   } finally {
     await app?.close();
     await rm(dataDir, { recursive: true, force: true });

@@ -1,0 +1,228 @@
+{
+  "mode": "memory-only",
+  "generatedAt": "2026-10-08T11:35:06.577Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         ",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "rendererBuild": "production electron-vite build",
+    "rustProfile": "release",
+    "launchFlags": [],
+    "electronUserDataProfileIsolatedPerRun": true
+  },
+  "fixture": {
+    "commits": 100000,
+    "diffFileLines": 1000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-scoped-cache"
+  },
+  "iterations": 1,
+  "startedAt": "2026-10-08T11:34:41.748Z",
+  "startup": {
+    "samples": 0,
+    "p50Ms": null,
+    "p95Ms": null,
+    "maxMs": null,
+    "samplesMs": []
+  },
+  "firstHistoryFrame": {
+    "samples": 0,
+    "p50Ms": null,
+    "p95Ms": null,
+    "maxMs": null,
+    "samplesMs": []
+  },
+  "idleProcessTreeMemory": {
+    "sampleCount": 0,
+    "peakBytes": null,
+    "samplesBytes": []
+  },
+  "loadedRepositoryIdleProcessTreeMemory": {
+    "sampleCount": 0,
+    "peakBytes": null,
+    "samplesBytes": []
+  },
+  "processMemoryBreakdown": {
+    "idle": [
+      {
+        "pid": 536,
+        "role": "gpu",
+        "image": "electron.exe",
+        "workingSetBytes": 133210112,
+        "privateWorkingSetBytes": 29773824,
+        "privateBytes": 108974080
+      },
+      {
+        "pid": 20260,
+        "role": "electron-main",
+        "image": "electron.exe",
+        "workingSetBytes": 124788736,
+        "privateWorkingSetBytes": 29597696,
+        "privateBytes": 73961472
+      },
+      {
+        "pid": 11784,
+        "role": "renderer",
+        "image": "electron.exe",
+        "workingSetBytes": 115023872,
+        "privateWorkingSetBytes": 33038336,
+        "privateBytes": 79114240
+      },
+      {
+        "pid": 2224,
+        "role": "utility",
+        "image": "electron.exe",
+        "workingSetBytes": 85889024,
+        "privateWorkingSetBytes": 7880704,
+        "privateBytes": 14614528
+      },
+      {
+        "pid": 29824,
+        "role": "rust-sidecar",
+        "image": "gitcrest-core.exe",
+        "workingSetBytes": 16904192,
+        "privateWorkingSetBytes": 2580480,
+        "privateBytes": 3751936
+      },
+      {
+        "pid": 37060,
+        "role": "harness-wrapper",
+        "image": "cmd.exe",
+        "workingSetBytes": 8990720,
+        "privateWorkingSetBytes": 2883584,
+        "privateBytes": 7446528
+      },
+      {
+        "pid": 14484,
+        "role": "electron-child",
+        "image": "conhost.exe",
+        "workingSetBytes": 7823360,
+        "privateWorkingSetBytes": 892928,
+        "privateBytes": 1318912
+      }
+    ],
+    "loaded": [
+      {
+        "pid": 536,
+        "role": "gpu",
+        "image": "electron.exe",
+        "workingSetBytes": 138719232,
+        "privateWorkingSetBytes": 35090432,
+        "privateBytes": 114057216
+      },
+      {
+        "pid": 11784,
+        "role": "renderer",
+        "image": "electron.exe",
+        "workingSetBytes": 138383360,
+        "privateWorkingSetBytes": 51077120,
+        "privateBytes": 97140736
+      },
+      {
+        "pid": 20260,
+        "role": "electron-main",
+        "image": "electron.exe",
+        "workingSetBytes": 127361024,
+        "privateWorkingSetBytes": 31232000,
+        "privateBytes": 75845632
+      },
+      {
+        "pid": 2224,
+        "role": "utility",
+        "image": "electron.exe",
+        "workingSetBytes": 86138880,
+        "privateWorkingSetBytes": 8073216,
+        "privateBytes": 14815232
+      },
+      {
+        "pid": 29824,
+        "role": "rust-sidecar",
+        "image": "gitcrest-core.exe",
+        "workingSetBytes": 24096768,
+        "privateWorkingSetBytes": 5255168,
+        "privateBytes": 6926336
+      },
+      {
+        "pid": 37060,
+        "role": "harness-wrapper",
+        "image": "cmd.exe",
+        "workingSetBytes": 8990720,
+        "privateWorkingSetBytes": 2883584,
+        "privateBytes": 7446528
+      },
+      {
+        "pid": 14484,
+        "role": "electron-child",
+        "image": "conhost.exe",
+        "workingSetBytes": 7823360,
+        "privateWorkingSetBytes": 892928,
+        "privateBytes": 1318912
+      }
+    ],
+    "idleTotals": {
+      "workingSetBytes": 492630016,
+      "privateWorkingSetBytes": 106647552,
+      "privateBytes": 289181696
+    },
+    "loadedTotals": {
+      "workingSetBytes": 531513344,
+      "privateWorkingSetBytes": 134504448,
+      "privateBytes": 317550592
+    },
+    "privateWorkingSetWindow": {
+      "requestedSleepBetweenSamplesMs": 300,
+      "idleSamples": [
+        {
+          "sampledAtUtc": "2026-10-08T11:34:52.2466421Z",
+          "privateWorkingSetBytes": 106807296
+        },
+        {
+          "sampledAtUtc": "2026-10-08T11:34:53.2223257Z",
+          "privateWorkingSetBytes": 106807296
+        },
+        {
+          "sampledAtUtc": "2026-10-08T11:34:54.1227353Z",
+          "privateWorkingSetBytes": 106807296
+        }
+      ],
+      "idlePeakBytes": 106807296,
+      "loadedSamples": [
+        {
+          "sampledAtUtc": "2026-10-08T11:35:04.2713094Z",
+          "privateWorkingSetBytes": 134225920
+        },
+        {
+          "sampledAtUtc": "2026-10-08T11:35:05.3411389Z",
+          "privateWorkingSetBytes": 134230016
+        },
+        {
+          "sampledAtUtc": "2026-10-08T11:35:06.2509568Z",
+          "privateWorkingSetBytes": 134230016
+        }
+      ],
+      "loadedPeakBytes": 134230016
+    }
+  },
+  "repositoryCacheLifecycle": null,
+  "work": null,
+  "installer": {
+    "path": "E:\\personal_projects\\GitCrest\\dist\\GitCrest Setup 0.1.0.exe",
+    "bytes": 108567076,
+    "mebibytes": 103.54
+  },
+  "limitations": []
+}
