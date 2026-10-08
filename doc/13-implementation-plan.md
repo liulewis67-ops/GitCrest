@@ -1535,3 +1535,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Commit details/repository facts 面板、详情分隔条与工作区尺寸状态仍由 App 组合；还需继续迁出并按 feature 边界收敛数据/动作协调。S7.2、S7.4、S7.5 尚未完成验收。
 - 证据：`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/features/history/index.ts`、`src/features/diff/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`09295ec`
+
+### Workspace commit details/repository facts 面板迁入页面组件 — 小阶段 104
+- 状态：已完成（CommitDetails 与仓库事实/空状态展示由 WorkspaceDetailsPanel 负责）
+- 日期：2026-10-09
+- 交付：新增 `src/pages/workspace/WorkspaceDetailsPanel.tsx`，通过 props 接收仓库/commit/API/工作流可用状态和文件、Diff 窗口、Tag、workflow 回调；本地仓库事实和无选中提交空状态也在组件中呈现。CommitDetails 继续懒加载，App 移除对应组件加载声明并仅组合选中状态与回调；workflow 禁用原因和 shortcuts 在 details 组件边界内生成。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。既有 tree-sitter `eval` 与 Monaco contribution chunk 警告仍存在。
+- 限制/后续：App 仍管理 commit selection、Tag/workflow 请求与工作区布局尺寸状态；后续继续将这些流程和主区其它 UI 按 feature/model 边界迁出。S7.2、S7.4、S7.5 仍待整体验收。
+- 证据：`src/pages/workspace/WorkspaceDetailsPanel.tsx`、`src/app/App.tsx`、`src/features/history/index.ts`。
+- 实施 commit：`14e904c`
