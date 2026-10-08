@@ -305,6 +305,11 @@ button:disabled { cursor: not-allowed; }
 .rebaseTargetField select, .rebaseTodoRow select, .rebaseMessage { min-width: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; font: inherit; }
 .rebasePreviewFacts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .rebasePreviewFacts .repositoryFact { border-top: 1px solid var(--line); padding-top: 7px; }
+.operationImpactNotice { display: grid; gap: 7px; padding: 12px 14px; border: 1px solid var(--line); border-left: 3px solid var(--amber); border-radius: 9px; background: var(--surface-raised); color: var(--text-secondary); font-size: 12px; line-height: 1.55; }
+.operationImpactNotice h3 { margin: 0; color: var(--text); font-size: 13px; }
+.operationImpactNotice p { margin: 0; }
+.operationImpactNotice strong, .operationImpactNotice code { color: var(--text); }
+.operationImpactNotice code { font-family: var(--font-mono); }
 .rebaseTodoList { display: flex; flex-direction: column; gap: 6px; max-height: min(42vh, 440px); overflow: auto; margin: 0; padding: 2px 4px 2px 28px; }
 .rebaseTodoList li { min-width: 0; padding: 5px 0; }
 .rebaseTodoRow { display: grid; grid-template-columns: 76px 90px minmax(80px, 1fr) 28px 28px; align-items: center; gap: 6px; min-width: 0; }

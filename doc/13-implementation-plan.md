@@ -114,7 +114,7 @@
 |---|---|---|---|
 | S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 已完成 |
 | S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 已完成 |
-| S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 进行中 |
+| S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 已完成 |
 
 ## 11. 大阶段 7：性能、安全、跨平台发布
 
@@ -467,3 +467,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`src/features/workflows/ConflictWindow.tsx`、`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/api-client.test.ts`、`tests/unit/conflict-suggestion-panel.test.tsx`。
 - 限制：此阶段不自动应用建议；实际云端/Ollama 服务与跨平台 Keychain 验证按 S7.4 验收。
 - 完成 commit：`2209f4f`。
+
+### S6.3 — 子阶段 B：危险操作影响范围解释（已完成；S6.3 整体已完成）
+- 状态：已完成。
+- 日期：2026-10-08
+- 交付：Reset 解释当前分支、HEAD/目标 OID、提交变化数量、soft/mixed/hard 对 index 和 tracked files 的影响以及 hard 模式的 changed path 数；Rebase 解释 onto、用户编辑后的 todo 数量/order、drop 项、已发布提交和 rollback ref；远程分支删除解释目标 ref、reviewed lease OID、remote-only commits、与 HEAD 的路径差异及列表省略数。所有动态值均直接取自当前 preview/todo，不让 AI 推测实际影响范围。
+- 降级行为：以上确定性安全文案随预览同步显示，不依赖 provider 设置、请求或响应；AI provider 不可用或失败时，危险操作仍有实际影响范围说明。
+- 测试：pnpm test（108 tests）、pnpm build、git diff --check 通过。UI 用例覆盖 Reset 模式/本地改动影响、Rebase 编辑 todo/已发布提交/drop 与远程删除 OID/remote-only commits/遗漏路径数量。
+- 证据：src/features/workflows/ResetDialog.tsx、src/features/workflows/RebaseDialog.tsx、src/features/branches/RemoteBranchDeleteDialog.tsx、src/App.css、tests/unit/reset-dialog.test.tsx、tests/unit/rebase-dialog.test.tsx、tests/unit/remote-branch-delete-dialog.test.tsx。
+- 限制：解释覆盖已由现有预检返回的提交计数和最多 200 条路径；不会把未返回的路径猜测为完整列表。
+- 完成 commit：待提交后补记。

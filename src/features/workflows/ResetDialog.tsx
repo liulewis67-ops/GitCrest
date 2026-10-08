@@ -132,6 +132,15 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
             <div className="repositoryFact"><span>COMMITS</span><strong>{preview.commitsRemoved} removed · {preview.commitsAdded} added</strong></div>
             <div className="repositoryFact"><span>TARGET</span><strong className="monoText">{preview.targetOid.slice(0, 12)}</strong></div>
           </div>
+          <section className="operationImpactNotice" aria-label="Reset impact explanation">
+            <h3>What this reset will change</h3>
+            <p><strong>{preview.currentBranch}</strong> moves from <code>{preview.expectedHeadOid.slice(0, 12)}</code> to <code>{preview.targetOid.slice(0, 12)}</code>, removing {preview.commitsRemoved} commit(s) from the current branch history and adding {preview.commitsAdded} target commit(s).</p>
+            {preview.mode === "soft" && <p>Soft reset keeps the index and checked-out files as they are.</p>}
+            {preview.mode === "mixed" && <p>Mixed reset replaces the index with the target tree and keeps checked-out files as they are.</p>}
+            {preview.mode === "hard" && <p>Hard reset replaces tracked checked-out files with the target tree. The preview reports {preview.affectedPaths.length} changed path(s){preview.omittedPathCount ? ` and omits ${preview.omittedPathCount} more` : ""}.</p>}
+            {preview.dirtyPaths.length > 0 && <p>{preview.dirtyPaths.length} local changed path(s) are present; this preview does not permit hard reset over them.</p>}
+            <p className="cloneHelp">This explanation is generated from the current reset preview and remains available without an AI provider.</p>
+          </section>
           {!preview.canStart && <p className="taskCenterError" role="alert">This reset cannot start. The target may already be HEAD, a Git operation may be active, or hard reset may overwrite local changes.</p>}
           <div className="resetAffectedPaths"><strong>Affected paths ({preview.affectedPaths.length}{preview.omittedPathCount ? ` + ${preview.omittedPathCount} omitted` : ""})</strong>
             {preview.affectedPaths.length ? <ul>{preview.affectedPaths.map((path) => <li key={path} className="monoText">{path}</li>)}</ul> : <p className="cloneHelp">No tracked paths differ between HEAD and the target.</p>}

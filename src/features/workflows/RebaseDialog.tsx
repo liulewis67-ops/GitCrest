@@ -174,6 +174,14 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
             <div className="repositoryFact"><span>ONTO</span><strong className="monoText">{preview.ontoOid.slice(0, 12)}</strong></div>
             <div className="repositoryFact"><span>COMMITS</span><strong>{preview.commits.length}{preview.omittedCommitCount ? ` + ${preview.omittedCommitCount} omitted` : ""}</strong></div>
           </div>
+          <section className="operationImpactNotice" aria-label="Rebase impact explanation">
+            <h3>What this rebase will change</h3>
+            <p><strong>{preview.currentBranch || "Detached HEAD"}</strong> will replay the reviewed todo onto <code>{preview.ontoOid.slice(0, 12)}</code>. Review the action and order shown below; the todo currently contains {todo.length} commit(s){preview.omittedCommitCount ? ` and ${preview.omittedCommitCount} additional commit(s) were omitted from this bounded preview` : ""}.</p>
+            {dropCount > 0 && <p>{dropCount} commit(s) marked drop will not be replayed.</p>}
+            {preview.publishedCommitOids.length > 0 && <p>{preview.publishedCommitOids.length} previewed commit(s) are already reachable from remote-tracking refs and may receive new OIDs when rewritten.</p>}
+            {preview.dirtyPaths.length > 0 && <p>{preview.dirtyPaths.length} local changed path(s) are present; the rebase is not available until the worktree is clean.</p>}
+            <p>A rollback ref is created before execution. This deterministic summary uses the current preview and edited todo, even when an AI provider is unavailable.</p>
+          </section>
           {!preview.canStart && <p className="taskCenterError" role="alert">This branch cannot be rebased in its current state. Check for a dirty worktree, active operation, detached HEAD, or an oversized commit range.</p>}
           {preview.publishedCommitOids.length > 0 && <label className="rebaseConfirm"><input type="checkbox" checked={confirmPublishedRewrite} onChange={(event) => setConfirmPublishedRewrite(event.target.checked)} />I understand this rewrites {preview.publishedCommitOids.length} commit(s) already reachable from a remote-tracking branch.</label>}
           <ol className="rebaseTodoList" aria-label="Rebase todo">

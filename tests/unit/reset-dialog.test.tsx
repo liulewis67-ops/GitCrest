@@ -38,6 +38,8 @@ it("previews reset impact and requires explicit confirmation before starting", a
   fireEvent.change(screen.getByLabelText(/Move feature to/), { target: { value: preview.targetOid } });
   fireEvent.click(screen.getByRole("button", { name: "Review impact" }));
   expect(await screen.findByText("src/file.ts")).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Reset impact explanation" }).textContent).toContain("2 commit(s) from the current branch history");
+  expect(screen.getByRole("region", { name: "Reset impact explanation" }).textContent).toContain("Mixed reset replaces the index");
   const reset = screen.getByRole("button", { name: "Reset mixed" }) as HTMLButtonElement;
   expect(reset.disabled).toBe(true);
   fireEvent.click(screen.getByLabelText(/I reviewed the commit and path impact/));
@@ -65,6 +67,8 @@ it("does not enable hard reset over local modifications", async () => {
   fireEvent.change(screen.getByLabelText("Reset mode"), { target: { value: "hard" } });
   fireEvent.click(screen.getByRole("button", { name: "Review impact" }));
   expect(await screen.findByText(/This reset cannot start/)).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Reset impact explanation" }).textContent).toContain("Hard reset replaces tracked checked-out files");
+  expect(screen.getByRole("region", { name: "Reset impact explanation" }).textContent).toContain("1 local changed path(s)");
   expect(await screen.findByText(/hard reset is disabled/)).toBeTruthy();
   expect((screen.getByRole("button", { name: "Reset hard" }) as HTMLButtonElement).disabled).toBe(true);
 });

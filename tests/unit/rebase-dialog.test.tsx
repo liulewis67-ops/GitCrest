@@ -51,8 +51,11 @@ it("reviews an editable todo and requires confirmation for drops and published r
   expect((screen.getByLabelText("Rebase current branch onto") as HTMLSelectElement).value).toBe("b".repeat(40));
   fireEvent.click(screen.getByRole("button", { name: "Refresh preview" }));
   expect(await screen.findByText("first feature")).toBeTruthy();
+  expect(screen.getByRole("region", { name: "Rebase impact explanation" }).textContent).toContain("feature will replay the reviewed todo");
+  expect(screen.getByRole("region", { name: "Rebase impact explanation" }).textContent).toContain("1 previewed commit(s) are already reachable");
   fireEvent.change(screen.getByLabelText(`Action for ${preview.commits[0]!.oid.slice(0, 9)}`), { target: { value: "reword" } });
   fireEvent.change(screen.getByLabelText(`Action for ${preview.commits[1]!.oid.slice(0, 9)}`), { target: { value: "drop" } });
+  expect(screen.getByRole("region", { name: "Rebase impact explanation" }).textContent).toContain("1 commit(s) marked drop will not be replayed");
   expect((screen.getByLabelText(/Replacement message/) as HTMLTextAreaElement).value).toBe("first feature");
   expect((screen.getByRole("button", { name: "Start rebase" }) as HTMLButtonElement).disabled).toBe(true);
 

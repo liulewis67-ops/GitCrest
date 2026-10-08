@@ -80,6 +80,13 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
             <div className="repositoryFact"><span>COMMITS ONLY THERE</span><strong>{preview.commitsOnlyOnRemote}</strong></div>
             <div className="repositoryFact"><span>FILES DIFFER FROM HEAD</span><strong>{preview.affectedPaths.length}{preview.omittedPathCount ? ` + ${preview.omittedPathCount} omitted` : ""}</strong></div>
           </div>
+          <section className="operationImpactNotice" aria-label="Remote branch deletion impact explanation">
+            <h3>What this deletion will change</h3>
+            <p>GitCrest will delete <strong>{preview.remoteName}/{preview.remoteBranch}</strong> from the remote, using the reviewed OID <code>{preview.expectedRemoteOid.slice(0, 12)}</code> as a lease.</p>
+            <p>The preview finds {preview.commitsOnlyOnRemote} commit(s) reachable only from that remote branch and {preview.affectedPaths.length} path(s) that differ from the current HEAD{preview.omittedPathCount ? `; ${preview.omittedPathCount} additional path(s) are omitted from this list` : ""}. Deleting the ref can make those commits harder to reach; it does not rewrite the current local branch.</p>
+            {preview.operationInProgress && <p>A {preview.operationInProgress} operation is active, so deletion is blocked until it finishes.</p>}
+            <p className="cloneHelp">This safety summary is based on the reviewed remote preview and remains available without an AI provider.</p>
+          </section>
           {preview.affectedPaths.length > 0 && <ul className="resetAffectedPaths">{preview.affectedPaths.map((path) => <li key={path} className="monoText">{path}</li>)}</ul>}
           {!preview.canDelete && <p className="taskCenterError" role="alert">Finish the active Git operation before deleting a remote branch.</p>}
           <p className="cloneHelp">Deletion uses a force-with-lease check against this reviewed OID. If the remote branch moved since your last fetch, Git will refuse and the branch will remain.</p>
