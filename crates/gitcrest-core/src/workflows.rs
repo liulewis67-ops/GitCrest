@@ -241,7 +241,7 @@ pub async fn read_shelf_apply_preflight(
     })
 }
 
-async fn read_worktree_state(
+pub(crate) async fn read_worktree_state(
     repository_path: &Path,
 ) -> Result<
     (

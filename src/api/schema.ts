@@ -879,6 +879,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/workflows/rebase-preview": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Inspect a clean branch and bounded commit todo before rebase */
+        get: operations["preflightRepositoryRebase"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/workflows": {
         parameters: {
             query?: never;
@@ -1327,6 +1348,24 @@ export interface components {
             omittedDirtyPathCount: number;
             conflictedPaths: string[];
             omittedConflictedPathCount: number;
+            canStart: boolean;
+        };
+        RebaseCommit: {
+            oid: string;
+            subject: string;
+        };
+        RebasePreview: {
+            repoId: components["schemas"]["RepoId"];
+            headOid: string | null;
+            ontoOid: string;
+            currentBranch: string | null;
+            commits: components["schemas"]["RebaseCommit"][];
+            omittedCommitCount: number;
+            dirtyPaths: string[];
+            omittedDirtyPathCount: number;
+            /** @enum {string|null} */
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            previewRevision: string;
             canStart: boolean;
         };
         WorkflowRequest: {
@@ -4313,6 +4352,63 @@ export interface operations {
             };
             406: components["responses"]["UnsupportedVersion"];
             /** @description Git could not complete the bounded workflow preflight. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    preflightRepositoryRebase: {
+        parameters: {
+            query: {
+                ontoOid: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snapshot-bound rebase target, ordered commits, worktree state, and start eligibility. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebasePreview"];
+                };
+            };
+            /** @description The target commit is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is not available. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Git could not complete the bounded rebase preview. */
             503: {
                 headers: {
                     [name: string]: unknown;

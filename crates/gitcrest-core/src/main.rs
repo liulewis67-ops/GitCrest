@@ -40,6 +40,7 @@ mod git_command;
 mod history;
 mod pull;
 mod push;
+mod rebase;
 mod remotes;
 mod repository;
 mod shelves;
@@ -1024,6 +1025,10 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/workflows/preflight",
             get(preflight_repository_workflow),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/rebase-preview",
+            get(preflight_repository_rebase),
         )
         .route(
             "/v1/repositories/:repo_id/workflows",
@@ -3737,6 +3742,35 @@ async fn preflight_repository_workflow(
     .await
     .map(Json)
     .map_err(ApiError::from_workflow_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RebasePreviewQuery {
+    onto_oid: String,
+}
+
+async fn preflight_repository_rebase(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<RebasePreviewQuery>, QueryRejection>,
+) -> Result<Json<rebase::RebasePreview>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Rebase preview requires an ontoOid commit.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    rebase::read_preview(repo_id, &target.repository_path, &query.onto_oid)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_workflow_error)
 }
 
 #[derive(Deserialize)]
@@ -6645,6 +6679,96 @@ mod tests {
             std::fs::read_to_string(repository_path.join("local.txt")).unwrap(),
             "local edit\n"
         );
+    }
+
+    #[tokio::test]
+    async fn rebase_preview_lists_ordered_commits_and_disables_dirty_worktrees() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("rebase-preview-repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            output.stdout
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["config", "user.name", "Rebase Preview Test"]);
+        git(&["config", "user.email", "rebase-preview@example.invalid"]);
+        std::fs::write(repository_path.join("base.txt"), "base\n").unwrap();
+        git(&["add", "base.txt"]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        let onto_oid = String::from_utf8(git(&["rev-parse", "HEAD"]))
+            .unwrap()
+            .trim()
+            .to_owned();
+        for (name, content) in [("first", "first\n"), ("second", "second\n")] {
+            std::fs::write(repository_path.join("change.txt"), content).unwrap();
+            git(&["add", "change.txt"]);
+            git(&["commit", "--quiet", "-m", name]);
+        }
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let direct_preview = rebase::read_preview(repo_id.to_owned(), &repository_path, &onto_oid)
+            .await
+            .unwrap();
+        assert_eq!(direct_preview.commits.len(), 2);
+        let preview_path =
+            format!("/api/v1/repositories/{repo_id}/workflows/rebase-preview?ontoOid={onto_oid}");
+        let response = app
+            .clone()
+            .oneshot(request(&preview_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "{}",
+            String::from_utf8_lossy(&bytes)
+        );
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(preview["ontoOid"], onto_oid);
+        assert_eq!(preview["currentBranch"], "main");
+        assert_eq!(preview["commits"].as_array().unwrap().len(), 2);
+        assert_eq!(preview["commits"][0]["subject"], "first");
+        assert_eq!(preview["commits"][1]["subject"], "second");
+        assert_eq!(preview["canStart"], true);
+        assert!(preview["previewRevision"]
+            .as_str()
+            .unwrap()
+            .starts_with("sha256:"));
+
+        std::fs::write(repository_path.join("dirty.txt"), "uncommitted\n").unwrap();
+        let dirty = app
+            .oneshot(request(&preview_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(dirty.into_body(), usize::MAX).await.unwrap();
+        let dirty: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(dirty["canStart"], false);
+        assert_eq!(dirty["dirtyPaths"], serde_json::json!(["dirty.txt"]));
     }
 
     #[tokio::test]

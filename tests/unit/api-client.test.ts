@@ -377,6 +377,25 @@ describe("GitCrestApiClient", () => {
     expect(url.searchParams.get("targetOid")).toBe("b".repeat(40));
   });
 
+  it("requests an ordered rebase todo preview for the selected onto commit", async () => {
+    const preview = {
+      repoId: "repo_fixture", headOid: "a".repeat(40), ontoOid: "b".repeat(40), currentBranch: "feature",
+      commits: [{ oid: "c".repeat(40), subject: "feature change" }], omittedCommitCount: 0,
+      dirtyPaths: [], omittedDirtyPathCount: 0, operationInProgress: null,
+      previewRevision: `sha256:${"d".repeat(64)}`, canStart: true,
+    };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(preview), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.preflightRepositoryRebase("repo/fixture", "b".repeat(40))).resolves.toEqual(preview);
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.pathname).toBe("/api/v1/repositories/repo%2Ffixture/workflows/rebase-preview");
+    expect(url.searchParams.get("ontoOid")).toBe("b".repeat(40));
+  });
+
   it("queues a snapshot-bound cherry-pick using a typed workflow request", async () => {
     const task = { taskId: "task-cherry-pick", repoId: "repo_fixture", operation: "cherryPick", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {

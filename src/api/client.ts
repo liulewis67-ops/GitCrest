@@ -22,6 +22,7 @@ export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
+export type RebasePreviewResponse = components["schemas"]["RebasePreview"];
 export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
 export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
 export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowConflictMutationRequest"];
@@ -359,6 +360,13 @@ export class GitCrestApiClient {
   ): Promise<WorkflowPreflightResponse> {
     const query = new URLSearchParams({ action, targetOid });
     return this.request<WorkflowPreflightResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/preflight?${query}`);
+  }
+
+  preflightRepositoryRebase(repoId: RepoId, ontoOid: string): Promise<RebasePreviewResponse> {
+    const query = new URLSearchParams({ ontoOid });
+    return this.request<RebasePreviewResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/rebase-preview?${query}`,
+    );
   }
 
   startRepositoryWorkflow(
