@@ -1490,3 +1490,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Workspace 页面仍占据 App 大部分 JSX 和交互组合；下一小阶段继续按规范创建 `pages/workspace/WorkspacePage.tsx` 并逐步收敛根组件。S7.2、S7.4、S7.5 仍需按主计划验收。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/app/App.tsx`。
 - 实施 commit：`3ed1051`
+
+### Settings feature 公开入口与跨层导入收敛 — 小阶段 99
+- 状态：已完成（Welcome 页面、App 与 DiffWindow 通过 settings feature 公开 API 访问快捷键能力）
+- 日期：2026-10-09
+- 交付：新增 `features/settings/index.ts`，仅公开快捷键展示、匹配、读取能力及偏好类型；App、WelcomePage 与 DiffWindow 改从 feature 入口导入，避免跨层直接依赖 `shortcut-preferences.ts` 内部路径。SettingsDialog 等 feature 内部模块继续使用相对内部导入。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建仍提示 tree-sitter `eval` 和大型 Monaco contribution chunk 的既有警告。
+- 限制/后续：其他 feature 尚未系统补齐公开入口；后续在实际跨 feature 组合时继续按规范显式导出最小 API。
+- 证据：`src/features/settings/index.ts`、`src/pages/welcome/WelcomePage.tsx`、`src/app/App.tsx`、`src/features/diff/DiffWindow.tsx`。
+- 实施 commit：`9ddcd7c`
