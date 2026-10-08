@@ -23,6 +23,10 @@
 | `09-wireframes.md` | 主窗口、Diff、冲突解决、设置和欢迎页低保真线框 |
 | `10-electron-rust-architecture.md` | Electron + Rust sidecar 架构、进程模型、本地鉴权和打包策略 |
 | `11-technology-stack.md` | React 18、shadcn/ui、Tailwind CSS、Rust axum 和 Git 库技术栈方案 |
+| `12-git-engine-architecture.md` | GitCrest Git 引擎架构、仓库状态缓存、dirty scope、任务编排和 Git 操作安全边界 |
+| `13-implementation-plan.md` | MVP 分阶段实施台账：小阶段交付、验收标准、状态与逐阶段提交规则 |
+| `14-backend-development-guidelines.md` | Rust 后端目录与依赖、API 分组、并发控制、任务恢复、可用性目标及验收规范 |
+| [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) | pnpm、React、Tailwind 前端规范，目录分层、状态与通信、现代化设计及交付验收 |
 
 ## 产品一句话
 
