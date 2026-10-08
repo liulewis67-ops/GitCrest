@@ -19,7 +19,7 @@ import { useRepositoryRefs } from "../features/branches/model/use-repository-ref
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
 import { TaskRefreshPlanner } from "../features/tasks/model/task-refresh-planner";
-import { useRemoteMutations, useRepositoryFetch } from "../features/remotes";
+import { useRemoteMutations, useRepositoryFetch, useRepositoryPull } from "../features/remotes";
 import { getRepositoryEventRefreshPlan } from "../features/repositories/model/repository-event-refresh-plan";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
@@ -72,11 +72,6 @@ function App() {
   const [pushForceOnly, setPushForceOnly] = useState(false);
   const [pushTarget, setPushTarget] = useState<PushTarget>();
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
-  const [pullOpen, setPullOpen] = useState(false);
-  const [pullPreflight, setPullPreflight] = useState<components["schemas"]["PullPreflight"]>();
-  const [pullLoading, setPullLoading] = useState(false);
-  const [pullBusy, setPullBusy] = useState(false);
-  const [pullError, setPullError] = useState("");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [historySearchFocusRequest, setHistorySearchFocusRequest] = useState<{ repoId: string; sequence: number }>();
   const [tagEditorRequest, setTagEditorRequest] = useState<{ repoId: string; oid: string; sequence: number }>();
@@ -388,6 +383,32 @@ function App() {
       setTasksOpen(true);
     },
   });
+  const {
+    open: pullOpen,
+    setOpen: setPullOpen,
+    preflight: pullPreflight,
+    loading: pullLoading,
+    busy: pullBusy,
+    error: pullError,
+    refreshPreflight: refreshPullPreflight,
+    openDialog: openPullDialog,
+    submit: submitPull,
+  } = useRepositoryPull({
+    getApi: () => apiRef.current,
+    repoId: selectedRepository?.repoId,
+    onSelectRepository: (repoId) => {
+      if (repoId !== selectedRepository?.repoId) {
+        const repository = repositories.find((entry) => entry.repoId === repoId);
+        if (repository) activateRepository(repository);
+      }
+    },
+    onTaskAccepted: (task) => {
+      prependTask(task);
+      setTasksError("");
+      setTasksOpen(true);
+    },
+    refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
+  });
 
   function openBranchSwitcher() {
     if (!selectedRepository || selectedRepository.availability !== "available") return;
@@ -590,61 +611,6 @@ function App() {
       setTasksError(error instanceof Error ? error.message : "Could not request task cancellation.");
     } finally {
       setTaskActionId("");
-    }
-  }
-
-  async function refreshPullPreflight(repoId = selectedRepository?.repoId) {
-    const api = apiRef.current;
-    if (!api || !repoId) return;
-    setPullLoading(true);
-    setPullError("");
-    try {
-      setPullPreflight(await api.preflightRepositoryPull(repoId));
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setPullPreflight(undefined);
-      setPullError(message || (error instanceof Error ? error.message : "Could not preview the pull."));
-    } finally {
-      setPullLoading(false);
-    }
-  }
-
-  function openPullDialog(repoId = selectedRepository?.repoId) {
-    if (!repoId) return;
-    if (repoId !== selectedRepository?.repoId) {
-      const repository = repositories.find((entry) => entry.repoId === repoId);
-      if (repository) activateRepository(repository);
-    }
-    setPullOpen(true);
-    void refreshPullPreflight(repoId);
-  }
-
-  async function submitPull(strategy: components["schemas"]["PullRequest"]["strategy"]) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    const preview = pullPreflight;
-    if (!api || !repoId || !preview || preview.repoId !== repoId || !preview.isClean || pullBusy) return;
-    setPullBusy(true);
-    setPullError("");
-    try {
-      const task = await api.pullRepository(repoId, {
-        expectedLocalOid: preview.localOid,
-        expectedTrackingOid: preview.trackingOid,
-        strategy,
-      });
-      prependTask(task);
-      setTasksError("");
-      setPullOpen(false);
-      setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setPullError(message || (error instanceof Error ? error.message : "Could not start the pull task."));
-      if (error instanceof GitCrestApiError && ["PULL_PREFLIGHT_STALE", "PULL_REQUIRES_CLEAN"].includes(error.body.error.code)) {
-        void refreshPullPreflight(repoId);
-        void refreshRepositoryStatus(repoId);
-      }
-    } finally {
-      setPullBusy(false);
     }
   }
 
