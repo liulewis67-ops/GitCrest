@@ -1508,3 +1508,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Workspace 内部导航、历史/差异及提交工作台 JSX 仍由 App 组合；后续按页面组合边界分块迁出到 workspace 页面或对应 feature UI。S7.2、S7.4、S7.5 尚未完成验收。
 - 证据：`src/pages/workspace/WorkspacePage.tsx`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`dee73ad`
+
+### Workspace 仓库导航迁入页面组件 — 小阶段 101
+- 状态：已完成（Changes、Branches、Remotes、Shelves 导航组合由 WorkspaceNavigation 呈现）
+- 日期：2026-10-09
+- 交付：新增 `src/pages/workspace/WorkspaceNavigation.tsx`，接收状态/refs 快照、加载与错误状态、选择状态及明确的操作回调，负责 Changes 文件分组和暂存、Branches 收藏/远端分支删除、RemoteManager 与 ShelfCenter 组合。status/refs 查询、远端任务提交及 shelf 后续切换副作用仍由 App 组合。RemoteManager 与 ShelfCenter 改从各自 feature 的公开入口懒加载；删除 App 中专用于导航的局部 `changeCode` 与懒加载声明。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。既有 tree-sitter `eval` 与 Monaco contribution chunk 体积警告仍出现。
+- 限制/后续：WorkspaceNavigation 当前承载完整导航组件的 props 模型；App 仍保留主区 history/diff/details 与 commit workbench JSX 和操作编排，后续继续拆分页面区域并收敛根组件。S7.2、S7.4、S7.5 仍待整体验收。
+- 证据：`src/pages/workspace/WorkspaceNavigation.tsx`、`src/features/remotes/index.ts`、`src/features/shelves/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`452f116`
