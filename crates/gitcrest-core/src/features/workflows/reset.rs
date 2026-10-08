@@ -113,23 +113,15 @@ pub async fn read_preview<G: WorkflowGitPort>(
     if !(4..=64).contains(&target.len()) || !target.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(WorkflowError::InvalidTarget);
     }
-    let target_oid = run_git(
-        repository_path,
-        &[
-            "rev-parse",
-            "--verify",
-            "--end-of-options",
-            &format!("{target}^{{commit}}"),
-        ],
-    )
-    .await?;
-    let expected_head_oid =
-        run_git(repository_path, &["rev-parse", "--verify", "HEAD^{commit}"]).await?;
-    let current_branch = run_git(
-        repository_path,
-        &["symbolic-ref", "--quiet", "--short", "HEAD"],
-    )
-    .await?;
+    let target_oid = git.resolve_commit_target(repository_path, target).await?;
+    let expected_head_oid = git
+        .read_head_oid(repository_path)
+        .await?
+        .ok_or(WorkflowError::GitFailed)?;
+    let current_branch = git
+        .read_current_branch(repository_path)
+        .await?
+        .ok_or(WorkflowError::GitFailed)?;
     let counts = run_git(
         repository_path,
         &[

@@ -171,39 +171,9 @@ pub async fn read_preview<G: WorkflowGitPort>(
     if !(4..=64).contains(&onto.len()) || !onto.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(WorkflowError::InvalidTarget);
     }
-    let onto_oid = run_git(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "--end-of-options".into(),
-            format!("{onto}^{{commit}}").into(),
-        ],
-    )
-    .await?
-    .trim()
-    .to_owned();
-    let head = run_git_optional(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "HEAD^{commit}".into(),
-        ],
-    )
-    .await?;
-    let head_oid = head.map(|value| String::from_utf8_lossy(&value).trim().to_owned());
-    let branch = run_git_optional(
-        repository_path,
-        &[
-            "symbolic-ref".into(),
-            "--quiet".into(),
-            "--short".into(),
-            "HEAD".into(),
-        ],
-    )
-    .await?;
-    let current_branch = branch.map(|value| String::from_utf8_lossy(&value).trim().to_owned());
+    let onto_oid = git.resolve_commit_target(repository_path, onto).await?;
+    let head_oid = git.read_head_oid(repository_path).await?;
+    let current_branch = git.read_current_branch(repository_path).await?;
 
     let mut commits = Vec::new();
     let mut omitted_commit_count = 0;
@@ -319,24 +289,14 @@ async fn run_git(
     repository_path: &Path,
     arguments: &[std::ffi::OsString],
 ) -> Result<String, WorkflowError> {
-    run_git_inner(repository_path, arguments, false)
-        .await?
-        .ok_or(WorkflowError::GitFailed)
-        .and_then(|bytes| String::from_utf8(bytes).map_err(|_| WorkflowError::GitFailed))
-}
-
-async fn run_git_optional(
-    repository_path: &Path,
-    arguments: &[std::ffi::OsString],
-) -> Result<Option<Vec<u8>>, WorkflowError> {
-    run_git_inner(repository_path, arguments, true).await
+    String::from_utf8(run_git_inner(repository_path, arguments).await?)
+        .map_err(|_| WorkflowError::GitFailed)
 }
 
 async fn run_git_inner(
     repository_path: &Path,
     arguments: &[std::ffi::OsString],
-    allow_nonzero: bool,
-) -> Result<Option<Vec<u8>>, WorkflowError> {
+) -> Result<Vec<u8>, WorkflowError> {
     let mut command = Command::new("git");
     command
         .current_dir(repository_path)
@@ -370,9 +330,7 @@ async fn run_git_inner(
         return Err(WorkflowError::TooLarge);
     }
     if status.success() {
-        Ok(Some(output))
-    } else if allow_nonzero {
-        Ok(None)
+        Ok(output)
     } else {
         Err(WorkflowError::GitFailed)
     }
