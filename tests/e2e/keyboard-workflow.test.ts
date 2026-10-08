@@ -9,7 +9,7 @@ import { createTempGitRepository } from "../fixtures/temp-repo";
 
 const execFileAsync = promisify(execFile);
 
-it("stages and commits through the registered keyboard shortcuts", async () => {
+it("opens a repository, stages, commits, and switches branches through keyboard actions", async () => {
   const fixture = await createTempGitRepository();
   const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-keyboard-app-data-"));
   let app: ElectronApplication | undefined;
@@ -26,23 +26,24 @@ it("stages and commits through the registered keyboard shortcuts", async () => {
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await window.getByText("Core connected").waitFor({ timeout: 15_000 });
 
-    const opened = await window.evaluate(async (repositoryPath) => {
+    await app.evaluate(({ dialog }, repositoryPath) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [repositoryPath] });
+    }, fixture.path);
+    await window.keyboard.press("Control+o");
+    await window.locator(".workspaceCrumb").waitFor();
+    expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
+
+    const repoId = await window.evaluate(async (repositoryPath) => {
       const connection = await (globalThis.window as unknown as Window & {
         gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
       }).gitcrest.getSidecarConnection();
       const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
-        method: "POST",
-        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
-        body: JSON.stringify({ path: repositoryPath }),
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
       });
-      return { status: response.status, repository: await response.json() as { repoId: string } };
+      const repositories = await response.json() as Array<{ repoId: string; path: string }>;
+      return repositories.find((repository) => repository.path === repositoryPath)?.repoId;
     }, fixture.path);
-    expect(opened.status).toBe(200);
-
-    await window.reload();
-    await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
-    await window.locator(".repositoryRowOpen").click();
-    await window.locator(".workspaceCrumb").waitFor();
+    if (!repoId) throw new Error("The keyboard-opened repository was not registered.");
     await window.getByRole("button", { name: "Workspace", exact: true }).click();
 
     await writeFile(resolve(fixture.path, "keyboard.ts"), "export const keyboardWorkflow = true;\n");
@@ -70,9 +71,9 @@ it("stages and commits through the registered keyboard shortcuts", async () => {
         body: JSON.stringify({ name }),
       });
       return response.status;
-    }, { repoId: opened.repository.repoId, name: "keyboard-target" });
+    }, { repoId, name: "keyboard-target" });
     expect(branchCreation).toBe(202);
-    await window.getByText("keyboard-target", { exact: true }).waitFor();
+    await window.locator(".branchItemName").filter({ hasText: "keyboard-target" }).waitFor();
     const branchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
     if (await branchTasksDialog.count()) await branchTasksDialog.getByRole("button", { name: "Close tasks" }).click();
     await window.keyboard.press("Control+b");
@@ -93,7 +94,7 @@ it("stages and commits through the registered keyboard shortcuts", async () => {
         headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
       });
       return (await response.json() as { branch: string }).branch;
-    }, opened.repository.repoId), { timeout: 15_000 }).toBe("keyboard-target");
+    }, repoId), { timeout: 15_000 }).toBe("keyboard-target");
   } finally {
     await app?.close();
     await fixture.cleanup();
