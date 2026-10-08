@@ -679,3 +679,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff handlers 仍直接协调仓库状态、history 和 service；后续可提取用例 service 并明确注入边界。Blame handler 应随 history feature 路由迁移。
 - 证据：`crates/gitcrest-core/src/features/diff/{dto,handlers,mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`2acab3e`
+
+### 后端 history feature 路由与服务模块拆分 — 小阶段 11
+- 状态：已完成（history 查询路由进入 feature；handlers 与 DTO 后续迁移）
+- 日期：2026-10-09
+- 交付：将 history 服务模块从单文件 `history.rs` 调整为 `features/history/{mod,service}.rs`，通过模块 re-export 保留现有 service 调用路径；将 blame、提交详情和 refs 查询路由迁至 `features/history/routes.rs`，顶层 API router 合并 history router。路由路径、方法及公共 middleware 不变；提交列表 GET 与 commit POST 暂留顶层同一路由绑定。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；history service 单测及历史 API 集成回归通过。
+- 限制/后续：history HTTP handlers 和 DTO 仍在 `main.rs`；提交列表 GET 与 commit POST 当前共用顶层路由绑定，后续 commits/history router 组合时需一并归属并验证方法合并行为。
+- 证据：`crates/gitcrest-core/src/features/history/{mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`fe3ee5a`
