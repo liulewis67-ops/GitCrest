@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
@@ -8,6 +8,7 @@ import { _electron as electron } from "playwright";
 const root = process.cwd();
 const output = join(root, "dist");
 const executable = await findPackagedExecutable(output);
+await assertReleaseArtifactSizes(output);
 const appData = await mkdtemp(join(tmpdir(), "gitcrest-package-smoke-"));
 let app;
 let sidecarUrl;
@@ -56,6 +57,18 @@ if (sidecarUrl) {
 }
 
 console.log(`Packaged startup and sidecar shutdown passed: ${executable}`);
+
+async function assertReleaseArtifactSizes(distPath) {
+  const entries = await readdir(distPath, { withFileTypes: true });
+  const extension = process.platform === "win32" ? ".exe" : process.platform === "darwin" ? undefined : ".AppImage";
+  const artifacts = entries.filter((entry) => entry.isFile() && (extension ? entry.name.endsWith(extension) : /\.(dmg|zip)$/i.test(entry.name)));
+  assert.ok(artifacts.length > 0, `release artifacts should exist in ${distPath}`);
+  const maxBytes = 150 * 1024 * 1024;
+  for (const artifact of artifacts) {
+    const bytes = (await stat(join(distPath, artifact.name))).size;
+    assert.ok(bytes < maxBytes, `${artifact.name} is ${bytes} bytes, above the 150 MiB package limit`);
+  }
+}
 
 async function findPackagedExecutable(distPath) {
   if (process.platform === "win32") return join(distPath, "win-unpacked", "GitCrest.exe");
