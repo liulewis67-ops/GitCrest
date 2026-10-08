@@ -1940,3 +1940,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：所有 feature 子模块现已从 crate root 解耦；`lib.rs` 仍承载大量内联测试，可按实施计划和规范继续拆分测试边界。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/{bootstrap.rs,state.rs,api/error.rs,lib.rs}`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`2756046`
+
+### 将 crate 级测试移出 lib.rs — 小阶段 149
+- 状态：已完成（lib.rs 聚焦模块声明、运行入口及最小测试探针）
+- 日期：2026-10-09
+- 交付：将原有 crate 级测试模块整体移入 `src/tests.rs`，由 `lib.rs` 通过 `#[cfg(test)]` 路径声明加载；测试逻辑、断言和依赖保持不变。API router 测试探针保留在 crate root，以维持 router 的测试构造接口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：`tests.rs` 仍含多个跨 feature API 场景；可根据规范逐步将测试放回相应 feature 或测试支持模块。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/{lib.rs,tests.rs}`、`doc/14-backend-development-guidelines.md` 第 3、13.2、14 节。
+- 实施 commit：`51e8f24`
