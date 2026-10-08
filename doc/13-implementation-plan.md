@@ -1274,3 +1274,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Git 子进程逻辑目前只是从 feature service 拆入其子模块，尚未通过 port 与 Git adapter 解耦；下一阶段继续梳理 Git 状态读取能力的适配器归属与调用方向。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod.rs,service.rs,service/git_state.rs}`。
 - 实施 commit：`60e2a03`
+
+### 后端 workflows Git 状态端口 — 小阶段 75
+- 状态：已完成（workflow 预检通过 Git port 读取 Git 状态）
+- 日期：2026-10-09
+- 交付：新增 `ports::workflow_git::WorkflowGitPort`，由 `GitCommandService` 适配并承接 commit target/subject、HEAD、工作区状态与活动操作读取。将 porcelain status 解析、活动操作识别及限时/有界 Git 只读子进程从 workflows service 移入 `git/workflow_state.rs`；workflow merge/recovery、rebase/reset preview 与 backup 检查、remote branch delete preview 和 conflict/recovery handlers 改为注入 Git port。将聚合 service 的旧 crate 根兼容导出移除。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：rebase/reset/remote feature 内用于构建 preview 的其他 Git 查询仍自行启动 Git 子进程；后续继续收敛其只读查询能力到 port/adapter，之后核对 Git adapter 的可配置 Git executable 与只读查询边界。
+- 证据：`crates/gitcrest-core/src/{ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs,domain/workflow.rs}`、`crates/gitcrest-core/src/features/{workflows,remotes}`。
+- 实施 commit：`96bd3fb`
