@@ -15,6 +15,7 @@ import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type Wor
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
+import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
@@ -434,10 +435,17 @@ function App() {
     : activeCommitAction === "commit" ? "Commit" : activeCommitAction === "commitAndPushTo" ? "Commit and Push to…" : activeCommitAction === "commitAndPushForce" ? "Commit and Push (force-with-lease)" : "Commit and Push";
   const commitActionIsDanger = activeCommitAction === "commitAndPushForce" || (amendCommit && activeCommitAction !== "commit");
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
-  const hasActiveTasksRef = useRef(false);
-  hasActiveTasksRef.current = hasActiveTasks;
   const selectedRepositoryRef = useRef(selectedRepository);
   selectedRepositoryRef.current = selectedRepository;
+  useTaskRefreshLifecycle({
+    taskCenterOpen: tasksOpen,
+    hasActiveTasks,
+    activeRepositoryId: selectedRepository?.repoId,
+    refreshTasks,
+    refreshRepositoryStatus,
+    refreshRepositoryBranches,
+    refreshHistory: () => setHistoryRefreshKey((current) => current + 1),
+  });
 
   async function submitRemoteTask(repoId: string, action: () => Promise<TaskSnapshotResponse>) {
     const requestGeneration = beginRepositoryCacheRequest(repoId);
@@ -1440,27 +1448,6 @@ function App() {
       unsubscribeFromEvents?.();
     };
   }, []);
-
-  useEffect(() => {
-    if (tasksOpen) void refreshTasks();
-    const timer = window.setInterval(() => {
-      if (tasksOpen || hasActiveTasksRef.current) void refreshTasks();
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [tasksOpen]);
-
-  useEffect(() => {
-    const refreshAfterChildWindow = () => {
-      void refreshTasks();
-      const repoId = selectedRepository?.repoId;
-      if (!repoId) return;
-      void refreshRepositoryStatus(repoId);
-      void refreshRepositoryBranches(repoId);
-      setHistoryRefreshKey((current) => current + 1);
-    };
-    window.addEventListener("focus", refreshAfterChildWindow);
-    return () => window.removeEventListener("focus", refreshAfterChildWindow);
-  }, [selectedRepository?.repoId]);
 
   useEffect(() => {
     if (mode !== "diff" || !selectedRepository || !selectedFilePath || !selectedFileScope) {
