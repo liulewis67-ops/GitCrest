@@ -535,6 +535,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - S7.3 总体验收：`pnpm build`、`pnpm test`（134/134）、`pnpm test:e2e`（2/2，82.09 秒）、`git diff --check` 通过。核心与危险工作流键盘路径、弹窗焦点、动态状态读屏语义、减少动效、非颜色状态及安全负例均有代码和自动化证据；实机屏幕阅读器/高对比度体验作为发布前人工检查保留。
 
 ### S7.4 — Windows/macOS/Linux 构建、签名与自动更新（进行中）
-- 状态：进行中；本阶段已开始平台 sidecar 解析和 Windows 打包验收，三平台 CI、签名验证更新与发布凭证流程尚待完成。
+- 状态：进行中；平台 sidecar 解析和 Windows 打包验收已完成首轮，三平台 CI 已配置但尚未有原生 runner 结果，签名验证更新与发布凭证流程尚待完成。
 - 平台 sidecar 子阶段：新增纯函数按目标平台选择 `gitcrest-core.exe` 或 `gitcrest-core`，开发目录和安装资源目录都由同一解析逻辑生成；electron-builder 为 Windows NSIS、macOS DMG、Linux AppImage 分别配置对应 release sidecar 资源。未知运行平台在启动时给出明确错误，不退回错误的 Windows 路径。验证：sidecar 路径单测 5/5、`pnpm build`、`pnpm electron:package`（Windows x64 release sidecar + NSIS）通过；`pnpm test:packaged` 启动 unpacked Windows 应用，确认 UI 连接及 `/health` 返回 204，退出 Electron 后 sidecar 端口不可连接。安装包 108,147,751 bytes（103.1 MiB），资源中的 sidecar 17,211,392 bytes。此主机产物 `Get-AuthenticodeSignature` 为 `NotSigned`，未读取或注入任何签名密钥；仅为本机构建验证，不是可发布签名。
-- 限制/后续：Windows 打包与 sidecar 启停已实测；macOS/Linux 资源配置尚未在原生 runner 构建，CI 仍只运行 Windows。未实现更新包签名校验/拒绝路径及自动更新流程，真实代码签名凭证需后续仅从 CI 密钥环境接入。当前已忽略的 `dist/` 工件不纳入提交。
+- 三平台 smoke CI 子阶段：在 `ci.yml` 新增 windows-latest、macos-latest、ubuntu-latest 矩阵，逐平台执行 `pnpm electron:package` 与 `pnpm test:packaged`，Linux 使用 Xvfb；上传 NSIS、DMG 或 AppImage 安装包作为 job artifact。验证：使用仓库锁定的 `js-yaml` 解析 workflow 成功；本机只有 Windows runner，新增 macOS/Linux job 需推送后由 GitHub Actions 提供原生构建结果。
+- 限制/后续：Windows 打包与 sidecar 启停已实测；macOS/Linux 原生打包 smoke 已加入 CI 矩阵但尚无 runner 结果。未实现更新包签名校验/拒绝路径及自动更新流程，真实代码签名凭证需后续仅从 CI 密钥环境接入。当前已忽略的 `dist/` 工件不纳入提交。

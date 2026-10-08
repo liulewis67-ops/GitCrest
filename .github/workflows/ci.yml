@@ -26,3 +26,50 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm check
+
+  package-smoke:
+    name: Package smoke (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/gitcrest-core -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm electron:package
+
+      - name: Launch the packaged app and check sidecar shutdown
+        if: runner.os != 'Linux'
+        run: pnpm test:packaged
+
+      - name: Launch the packaged app and check sidecar shutdown under Xvfb
+        if: runner.os == 'Linux'
+        run: xvfb-run -a pnpm test:packaged
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitcrest-package-${{ runner.os }}-${{ runner.arch }}
+          path: |
+            dist/*.exe
+            dist/*.dmg
+            dist/*.AppImage
+          if-no-files-found: warn
