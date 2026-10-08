@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use super::service::WorkflowAction;
-use crate::rebase;
+use crate::{rebase, reset};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -42,4 +42,30 @@ pub(super) struct RebaseRollbackRequest {
     pub(super) backup_reference: String,
     pub(super) backup_oid: String,
     pub(super) confirm_rollback: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ResetPreviewQuery {
+    pub(super) target_oid: String,
+    pub(super) mode: reset::ResetMode,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ResetRequest {
+    pub(super) expected_head_oid: String,
+    pub(super) target_oid: String,
+    pub(super) mode: reset::ResetMode,
+    pub(super) preview_revision: String,
+    pub(super) confirm_reset: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ResetRestoreRequest {
+    pub(super) expected_head_oid: String,
+    pub(super) backup_reference: String,
+    pub(super) backup_oid: String,
+    pub(super) confirm_restore: bool,
 }
