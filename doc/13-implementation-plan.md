@@ -742,3 +742,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：远端分支删除 preview/execute 及 remotes feature 的 handlers/DTO 仍在 `main.rs`；继续迁移并明确 remotes 与 branches 的职责边界。
 - 证据：`crates/gitcrest-core/src/features/branches/{dto,handlers,mod,routes}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`864e79a`
+
+### 后端 remotes feature 路由与远端分支删除 handler 拆分 — 小阶段 18
+- 状态：已完成（远端分支删除查询/执行进入 remotes feature）
+- 日期：2026-10-09
+- 交付：将远端分支删除预览与执行 handlers/DTO 从 `main.rs` 移至 `features/remotes/{handlers,dto}.rs`，路由移至 `features/remotes/routes.rs` 并由顶层 router 合并。remotes 读取服务从 `remotes.rs` 组织为 `service.rs`，通过模块 re-export 保持既有调用路径；branches router 不再持有远端分支操作。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；远端删除确认/OID 复核 API 用例通过。
+- 限制/后续：remote 管理、fetch/pull/push 与 clone handlers/routes 仍需归入 remotes feature；`pull.rs`、`push.rs` 的模块层次也待标准化。
+- 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,mod,routes,service}.rs`、`crates/gitcrest-core/src/features/branches/routes.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`c7e18c1`
