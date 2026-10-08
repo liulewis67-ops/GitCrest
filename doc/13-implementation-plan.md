@@ -1966,3 +1966,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：命令 `GITCREST_BENCH_MODE=memory node scripts/performance/desktop-benchmark.mjs <100k-fixture> <report>` 正常退出并生成 JSON；该单样本没有启动/首帧/20 次稳定峰值/滚动测量，不用于判定门槛。
 - 限制/后续：结果显示本次单样本 Working Set 低于先前 20 轮稳定峰值，但仍高于 idle <250MB 门槛；Private Working Set 不能替代计划指定的 Working Set。继续定位能降低真实总 Working Set 且不损害 ≥60fps 的实现路径，S7.2 保持待验收。
 - 证据：`doc/evidence/S7.2/desktop-win32-memory-current-diagnostic.json`、`scripts/performance/desktop-benchmark.mjs`。
+
+### branches feature 收藏 mutation 迁入 repository refs model — 小阶段 152
+- 状态：已完成（branch favorite API 写入与缓存更新由 branches model 管理）
+- 日期：2026-10-09
+- 交付：将 App 中分支收藏写入、缓存代次复核、branch snapshot 更新及错误状态处理迁入 `useRepositoryRefs`；移除仅供收藏写操作使用的外部 snapshot/error setter。仓库 tab 关闭或请求过期时仍丢弃响应，API 与用户反馈行为未变。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。
+- 限制/后续：App 仍负责分支切换及 Shelf 恢复跨 feature 编排；后续按功能 use case 边界继续拆分。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/branches/model/use-repository-refs.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`30abcd8`
