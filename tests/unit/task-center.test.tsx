@@ -30,6 +30,16 @@ it("provides a recovery action for an authentication-failed fetch", () => {
   expect(onConfigureCredentials).toHaveBeenCalledWith(failedFetch);
 });
 
+it("moves focus into the task center and closes it with Escape", async () => {
+  const onClose = vi.fn();
+  render(<TaskCenter tasks={[]} error="" actionId="" onClose={onClose} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  const dialog = screen.getByRole("dialog", { name: "Tasks" });
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Refresh" })));
+
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledOnce();
+});
+
 it("does not show credential recovery for unrelated task failures", () => {
   const unrelated = { ...failedFetch, operation: "commit", errorCategory: "commandFailed" as const, logs: ["hook rejected commit"] };
   render(<TaskCenter tasks={[unrelated]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);

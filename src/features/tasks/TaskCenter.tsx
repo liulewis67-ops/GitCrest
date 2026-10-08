@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../api/client";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 interface TaskCenterProps {
   tasks: TaskSnapshotResponse[];
@@ -30,6 +31,7 @@ function isFailedPush(task: TaskSnapshotResponse): boolean {
 export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow }: TaskCenterProps) {
   const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: string }>>({});
   const [confirmAbortId, setConfirmAbortId] = useState("");
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
   const queriedRecoveryTasks = useRef(new Set<string>());
   const waitingTaskIds = useRef(new Set<string>());
   const tasksRef = useRef(tasks);
@@ -64,7 +66,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
   }, [api, recoveryKey]);
   return (
     <div className="paletteBackdrop taskBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="taskCenter" role="dialog" aria-modal="true" aria-labelledby="task-center-title">
+      <section ref={dialogRef} className="taskCenter" role="dialog" aria-modal="true" aria-labelledby="task-center-title" onKeyDown={onKeyDown}>
         <div className="taskCenterHeader">
           <div><p className="sectionEyebrow">BACKGROUND WORK</p><h2 id="task-center-title">Tasks</h2></div>
           <div className="taskCenterActions">

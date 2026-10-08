@@ -284,6 +284,8 @@ describe("desktop startup E2E", () => {
       }, { repoId: opened.body.repoId as string, ontoOid: mainOid });
       expect(rebaseApiPreview.status).toBe(200);
       expect(rebaseApiPreview.body.commits.map((commit: { subject: string }) => commit.subject)).toContain("change feature branch");
+      const tasksDialogBeforeRebase = window.getByRole("dialog", { name: "Tasks" });
+      if (await tasksDialogBeforeRebase.count()) await tasksDialogBeforeRebase.getByRole("button", { name: "Close tasks" }).click();
       await window.keyboard.press("Control+i");
       const rebaseDialog = window.getByRole("dialog", { name: "Interactive rebase" });
       await rebaseDialog.waitFor();
