@@ -1931,3 +1931,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`repository` 根兼容出口仍供启动、状态、存储与各 feature 使用；下一步盘点并逐层迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/repositories/cloning.rs`、`crates/gitcrest-core/src/{bootstrap.rs,state.rs,api/error.rs,lib.rs}`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`1f489e4`
+
+### repository module crate-root alias 收敛 — 小阶段 148
+- 状态：已完成（Repository model/manager 通过 repositories feature 路径访问）
+- 日期：2026-10-09
+- 交付：将 bootstrap/AppState/API error/storage/RepositoryWatcher 及各 feature 对 repository model/manager/error/task-target 的依赖切换到 `features::repositories::repository`；crate-level tests 改用规范路径。从 `lib.rs` 移除 repositories repository module root re-export，未改变仓库打开、状态、读写或持久化行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：所有 feature 子模块现已从 crate root 解耦；`lib.rs` 仍承载大量内联测试，可按实施计划和规范继续拆分测试边界。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/{bootstrap.rs,state.rs,api/error.rs,lib.rs}`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`2756046`
