@@ -30,6 +30,13 @@ try {
   const window = await app.firstWindow();
   await window.waitForLoadState("domcontentloaded", { timeout: 15_000 });
   await window.getByText("Core connected").waitFor({ timeout: 20_000 });
+  const updateStatus = await window.evaluate(async () => window.gitcrest.getUpdateStatus());
+  const hasUpdateConfig = existsSync(join(runtime.resourcesPath, "app-update.yml"));
+  assert.equal(
+    updateStatus.state,
+    hasUpdateConfig ? "idle" : "notConfigured",
+    "packaged update state should reflect valid update metadata and Windows publisher trust configuration",
+  );
   sidecarUrl = await window.evaluate(async () => {
     const connection = await window.gitcrest.getSidecarConnection();
     return connection.baseUrl;
