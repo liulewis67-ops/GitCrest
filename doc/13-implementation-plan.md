@@ -977,3 +977,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：feature handlers/routes 与 service 已形成分层；继续按后端规范整理 shelves/workflows 的目录结构及 API handlers。
 - 证据：`crates/gitcrest-core/src/features/staging/{mod,dto,service,handlers,routes}.rs`。
 - 实施 commit：`4c04894`
+
+### 后端 shelves feature 路由归属 — 小阶段 42
+- 状态：已完成（shelves API 路由进入 feature router）
+- 日期：2026-10-09
+- 交付：新增 `features/shelves/mod.rs` 与 `routes.rs`，将 list/create/get/delete shelf、apply preview 和 apply 六个端点从顶层 API router 迁入 shelves feature。handlers 暂时仍在 `main.rs` 并仅调整为 crate 内可见；HTTP 路径、方法、middleware 和响应行为保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；shelf API 集成用例通过。
+- 限制/后续：本阶段只迁移路由归属；下一阶段将 shelf handlers 迁入 feature，再拆 DTO/service 命名结构。
+- 证据：`crates/gitcrest-core/src/features/shelves/{mod,routes,shelves}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`449f808`
