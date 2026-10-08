@@ -6,6 +6,14 @@ import { ConflictWindow } from "../../src/features/workflows/ConflictWindow";
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  delete window.gitcrest;
+});
+
+it("shows a desktop-app requirement when the preload bridge is missing", async () => {
+  const repoId = `repo_${"a".repeat(64)}`;
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-123-1`);
+  render(<ConflictWindow />);
+  expect(await screen.findByText("GitCrest desktop bridge is unavailable. Open this feature in the GitCrest desktop app.")).toBeTruthy();
 });
 
 it("edits, saves, and marks a conflict resolved using conflict-scoped window access", async () => {

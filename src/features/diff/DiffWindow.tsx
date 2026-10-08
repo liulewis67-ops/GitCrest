@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../api/client";
+import { getGitCrestBridge } from "../../api/bridge";
 import { SplitDiff } from "./SplitDiff";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../settings/shortcut-preferences";
 import "../../App.css";
@@ -67,7 +68,12 @@ export function DiffWindow() {
       setError("This Diff window request is invalid. Reopen the file from GitCrest.");
       return () => { active = false; };
     }
-    void window.gitcrest.getSidecarConnection().then(async (connection) => {
+    const bridge = getGitCrestBridge();
+    if (!bridge) {
+      setError("GitCrest desktop bridge is unavailable. Open this feature in the GitCrest desktop app.");
+      return () => { active = false; };
+    }
+    void bridge.getSidecarConnection().then(async (connection) => {
       if (connection.windowAccess !== "readOnly") throw new Error("Diff windows must use read-only access.");
       const client = new GitCrestApiClient(connection.baseUrl, connection.token);
       const initial: DiffTab = {

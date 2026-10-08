@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
+import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { mergeStatusScope } from "../api/status-snapshot";
 import { CommitDetails, CommitGraph } from "../features/history/CommitGraph";
 import { RemoteManager } from "../features/remotes/RemoteManager";
@@ -277,8 +278,9 @@ function App() {
   const [workbenchHeight, setWorkbenchHeight] = useState(() => readStoredNumber("gitcrest-workbench-height", 204, 144, 360));
   const [layoutLoadedFor, setLayoutLoadedFor] = useState<string>();
   useEffect(() => {
-    const getStatus = window.gitcrest.getUpdateStatus;
-    const subscribe = window.gitcrest.subscribeToUpdateStatus;
+    const bridge = getGitCrestBridge();
+    const getStatus = bridge?.getUpdateStatus;
+    const subscribe = bridge?.subscribeToUpdateStatus;
     if (!getStatus || !subscribe) return;
 
     let active = true;
@@ -773,7 +775,7 @@ function App() {
   async function openWorkflowConflictWindow(task: TaskSnapshotResponse) {
     if (!task.repoId) return;
     try {
-      await window.gitcrest.openConflictWindow({ repoId: task.repoId, taskId: task.taskId });
+      await requireGitCrestBridge().openConflictWindow({ repoId: task.repoId, taskId: task.taskId });
       setTasksError("");
     } catch (reason) {
       setTasksError(reason instanceof Error ? reason.message : "Could not open the conflict window.");
@@ -1295,7 +1297,7 @@ function App() {
     const repoId = selectedRepository?.repoId;
     if (!repoId) return;
     try {
-      await window.gitcrest.openDiffWindow({ repoId, path, scope, ...(commitOid ? { commitOid } : {}) });
+      await requireGitCrestBridge().openDiffWindow({ repoId, path, scope, ...(commitOid ? { commitOid } : {}) });
     } catch (error) {
       setDiffState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Could not open the Diff window." }));
     }
@@ -1352,7 +1354,7 @@ function App() {
   async function openLocalRepository() {
     setOpenError("");
     try {
-      const path = await window.gitcrest.chooseRepository();
+      const path = await requireGitCrestBridge().chooseRepository();
       if (!path) return;
       const api = apiRef.current;
       if (!api) throw new Error("The Git engine is still starting. Try again in a moment.");
@@ -1371,7 +1373,7 @@ function App() {
   async function initializeLocalRepository() {
     setOpenError("");
     try {
-      const path = await window.gitcrest.chooseRepository();
+      const path = await requireGitCrestBridge().chooseRepository();
       if (!path) return;
       const api = apiRef.current;
       if (!api) throw new Error("The Git engine is still starting. Try again in a moment.");
@@ -1457,7 +1459,8 @@ function App() {
 
     async function connect() {
       try {
-        const connection = await window.gitcrest.getSidecarConnection();
+        const bridge = requireGitCrestBridge();
+        const connection = await bridge.getSidecarConnection();
         const api = new GitCrestApiClient(connection.baseUrl, connection.token);
         apiRef.current = api;
         const body = await api.getVersion();
@@ -1467,7 +1470,7 @@ function App() {
         }
         await refreshRepositories(api, true);
 
-        const unsubscribe = await window.gitcrest.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
+        const unsubscribe = await bridge.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
           const eventSequence = Number(event.eventId);
           const previousEventSequence = eventSequenceRef.current;
           const sequenceGap = Number.isSafeInteger(eventSequence)
@@ -2313,12 +2316,12 @@ function App() {
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, preview, action) => void recoverWorkflowTask(task, preview, action)} onOpenConflictWindow={(task) => void openWorkflowConflictWindow(task)} />}
       {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={async () => {
-        const check = window.gitcrest.checkForUpdates;
+        const check = getGitCrestBridge()?.checkForUpdates;
         if (!check) return;
         try { setUpdateStatus(await check()); }
         catch { setUpdateStatus({ state: "error", message: "The update check failed. Try again later." }); }
       }} onInstallUpdate={() => {
-        const install = window.gitcrest.installUpdate;
+        const install = getGitCrestBridge()?.installUpdate;
         if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
       }} />}
       {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
@@ -2326,7 +2329,7 @@ function App() {
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}
       {resetDialogOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setResetDialogOpen(false)} onStarted={(task) => { setResetDialogOpen(false); void startWorkflowTask(task); }} />}
       {remoteBranchDeleteTarget && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDeleteTarget} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRemoteBranchDeleteTarget(undefined)} onStarted={(task) => { setRemoteBranchDeleteTarget(undefined); void startWorkflowTask(task); }} />}
-      {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
+      {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>
   );

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../api/client";
+import { getGitCrestBridge } from "../../api/bridge";
 import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
 import "../../App.css";
 
@@ -34,7 +35,16 @@ export function ConflictWindow() {
       return () => { active = false; };
     }
     setSession({ key: sessionKey, loading: true });
-    void window.gitcrest.getSidecarConnection().then(async (connection) => {
+    const bridge = getGitCrestBridge();
+    if (!bridge) {
+      setSession({
+        key: sessionKey,
+        loading: false,
+        error: "GitCrest desktop bridge is unavailable. Open this feature in the GitCrest desktop app.",
+      });
+      return () => { active = false; };
+    }
+    void bridge.getSidecarConnection().then(async (connection) => {
       if (connection.windowAccess !== "conflictResolution") throw new Error("Conflict review requires its restricted write capability.");
       const client = new GitCrestApiClient(connection.baseUrl, connection.token);
       const preview = await client.preflightRepositoryWorkflowRecovery(repoId, taskId);
