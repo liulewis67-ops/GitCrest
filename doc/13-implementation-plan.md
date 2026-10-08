@@ -1859,3 +1859,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：history/remotes/shelves/staging/status/tasks/workflows aliases 仍有调用点；按跨层依赖关系继续收敛。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{settings,shelves,staging,workflows}/`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`a7f78f5`
+
+### history feature 调用切换并移除 crate-root alias — 小阶段 140
+- 状态：已完成（history feature consumers 使用规范路径）
+- 日期：2026-10-09
+- 交付：将 diff handler 的历史提交查询依赖改为 `features::history`；API router 与 error mapper 已使用 features 入口，确认其余 `history` 名称属于 git adapter 自身模块后，从 `lib.rs` 移除 history crate-root re-export。历史与差异 API 行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：remotes/shelves/staging/status/tasks/workflows aliases 仍被基础设施或 features 使用；继续逐项收敛。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/diff/handlers.rs`、`crates/gitcrest-core/src/api/{router.rs,error.rs}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`eb44f20`
