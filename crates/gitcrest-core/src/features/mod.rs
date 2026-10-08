@@ -5,6 +5,7 @@ pub(crate) mod history;
 pub(crate) mod remotes;
 pub(crate) mod settings;
 pub(crate) mod shelves;
+pub(crate) mod staging;
 pub(crate) mod status;
 pub(crate) mod system;
 pub(crate) mod tags;

@@ -26,13 +26,12 @@ mod ports;
 mod repositories;
 #[path = "features/repositories/repository.rs"]
 mod repository;
-#[path = "features/staging/mod.rs"]
-mod staging;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::{
-    branches, credentials, diff, history, remotes, settings, shelves, status, system, tags, tasks,
+    branches, credentials, diff, history, remotes, settings, shelves, staging, status, system,
+    tags, tasks,
 };
 #[path = "refresh/watcher.rs"]
 mod watcher;
