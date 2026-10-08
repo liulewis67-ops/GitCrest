@@ -1076,3 +1076,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：commit service 文件仍为 `commits.rs`；下一小阶段重命名为 `service.rs`，随后继续迁移 workflows feature handlers。
 - 证据：`crates/gitcrest-core/src/features/commits/{mod,dto,handlers,routes,commits}.rs`。
 - 实施 commit：`ae3c76e`
+
+### 后端 commits service 文件命名对齐 — 小阶段 53
+- 状态：已完成（service 模块采用 feature 规范文件名）
+- 日期：2026-10-09
+- 交付：将 `features/commits/commits.rs` 重命名为 `features/commits/service.rs`，并由 feature `mod.rs` 直接声明；commit 校验规则与 service API 通过 feature 根 re-export，现有 handlers 与其他调用方保持兼容，运行逻辑不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过。
+- 限制/后续：commits feature 已具备 DTO/handlers/routes/service 分层；继续按 workflows feature 规范拆分剩余 merge/rebase/reset/conflict handlers 与路由。
+- 证据：`crates/gitcrest-core/src/features/commits/{mod,dto,handlers,routes,service}.rs`。
+- 实施 commit：`22d9e8a`
