@@ -6,17 +6,17 @@ use axum::{
 use serde::Serialize;
 
 use crate::{
-    branches,
     cloning::CloneError,
-    commits, credentials,
-    diff::DiffError,
     domain::error::{ConflictError, WorkflowError},
-    features::tags,
-    history, remotes,
-    remotes::{pull, push},
+    features::{
+        branches, commits, credentials,
+        diff::DiffError,
+        history,
+        remotes::{self, pull, push},
+        shelves, staging, tags,
+        tasks::TaskSubmitError,
+    },
     repository::RepositoryError,
-    shelves, staging,
-    tasks::TaskSubmitError,
 };
 
 #[derive(Clone, Copy, Serialize)]
