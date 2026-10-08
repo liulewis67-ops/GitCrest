@@ -115,6 +115,25 @@ pub(crate) async fn read_head_oid(repository_path: &Path) -> Result<Option<Strin
     .map(|head| head.map(str::to_owned))
 }
 
+pub(crate) async fn read_current_branch(
+    repository_path: &Path,
+) -> Result<Option<String>, WorkflowError> {
+    run_git_optional(
+        repository_path,
+        &[
+            "symbolic-ref".into(),
+            "--quiet".into(),
+            "--short".into(),
+            "HEAD".into(),
+        ],
+    )
+    .await?
+    .as_deref()
+    .map(text)
+    .transpose()
+    .map(|branch| branch.map(str::to_owned))
+}
+
 pub(crate) fn parse_status(
     output: &[u8],
 ) -> Result<(Vec<String>, u32, Vec<String>, u32), WorkflowError> {

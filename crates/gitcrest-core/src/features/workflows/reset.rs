@@ -70,22 +70,8 @@ pub async fn read_backup_snapshot<G: WorkflowGitPort>(
     git: &G,
     repository_path: &Path,
 ) -> Result<ResetBackupSnapshot, WorkflowError> {
-    let head_oid = match run_git(repository_path, &["rev-parse", "--verify", "HEAD^{commit}"]).await
-    {
-        Ok(value) => Some(value),
-        Err(WorkflowError::GitFailed) => None,
-        Err(error) => return Err(error),
-    };
-    let current_branch = match run_git(
-        repository_path,
-        &["symbolic-ref", "--quiet", "--short", "HEAD"],
-    )
-    .await
-    {
-        Ok(value) => Some(value),
-        Err(WorkflowError::GitFailed) => None,
-        Err(error) => return Err(error),
-    };
+    let head_oid = git.read_head_oid(repository_path).await?;
+    let current_branch = git.read_current_branch(repository_path).await?;
     let state = git.read_worktree_state(repository_path).await?;
     let operation_in_progress = state.operation;
     let backup_output = run_git(

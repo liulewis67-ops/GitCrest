@@ -124,27 +124,8 @@ pub async fn read_backup_snapshot<G: WorkflowGitPort>(
     git: &G,
     repository_path: &Path,
 ) -> Result<RebaseBackupSnapshot, WorkflowError> {
-    let head_oid = run_git_optional(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "HEAD^{commit}".into(),
-        ],
-    )
-    .await?
-    .map(|value| String::from_utf8_lossy(&value).trim().to_owned());
-    let branch = run_git_optional(
-        repository_path,
-        &[
-            "symbolic-ref".into(),
-            "--quiet".into(),
-            "--short".into(),
-            "HEAD".into(),
-        ],
-    )
-    .await?
-    .map(|value| String::from_utf8_lossy(&value).trim().to_owned());
+    let head_oid = git.read_head_oid(repository_path).await?;
+    let branch = git.read_current_branch(repository_path).await?;
     let state = git.read_worktree_state(repository_path).await?;
     let operation_in_progress = state.operation;
     let backups = list_backups(repository_path).await?;

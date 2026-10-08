@@ -17,6 +17,11 @@ pub(crate) trait WorkflowGitPort: Send + Sync {
 
     async fn read_head_oid(&self, repository_path: &Path) -> Result<Option<String>, WorkflowError>;
 
+    async fn read_current_branch(
+        &self,
+        repository_path: &Path,
+    ) -> Result<Option<String>, WorkflowError>;
+
     async fn read_worktree_state(
         &self,
         repository_path: &Path,

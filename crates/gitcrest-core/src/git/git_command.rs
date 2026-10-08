@@ -121,6 +121,13 @@ impl WorkflowGitPort for GitCommandService {
         workflow_state::read_head_oid(repository_path).await
     }
 
+    async fn read_current_branch(
+        &self,
+        repository_path: &Path,
+    ) -> Result<Option<String>, WorkflowError> {
+        workflow_state::read_current_branch(repository_path).await
+    }
+
     async fn read_worktree_state(
         &self,
         repository_path: &Path,
