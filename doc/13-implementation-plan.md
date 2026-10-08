@@ -930,3 +930,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/app/bootstrap.ts`、`src/app/App.tsx`、`tests/unit/app-bootstrap.test.ts`。
 - 实施 commit：`20b6e12`
 
+
+### 后端 tags feature API 分层 — 小阶段 37
+- 状态：已完成（create-tag API 纳入 feature DTO/handler/routes/service 结构）
+- 日期：2026-10-09
+- 交付：将 tag service 文件规范为 `features/tags/service.rs`，新增 `mod.rs`、DTO、handler 和 feature router；`POST /v1/repositories/:repo_id/commits/:oid/tags` 从 `main.rs` 与顶层 router 移入 tags feature。请求字段与未知字段拒绝、响应 JSON、CREATED 状态、tag 校验和 API 错误映射保持不变；feature router 仍由共享 auth/version middleware 包裹。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（120/120）及 `git diff --check` 通过；tag service 临时 Git 仓库测试及完整 API 回归通过。
+- 限制/后续：tags feature 已具备独立路由与请求边界，但 service 仍直接适配外部 Git 命令；其余 `main.rs` handlers 及 staging/shelves/workflows 等 feature 文件组织仍按小阶段继续收敛。
+- 证据：`crates/gitcrest-core/src/features/tags/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`cd8d630`
+
