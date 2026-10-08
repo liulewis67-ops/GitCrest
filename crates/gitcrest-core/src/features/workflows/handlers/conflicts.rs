@@ -46,7 +46,9 @@ pub(in crate::workflows) async fn read_workflow_conflict_file(
             "The workflow task is no longer available.",
         )
     })?;
-    let Some(task_operation) = crate::workflow_operation_for_task(&task.operation) else {
+    let Some(task_operation) =
+        crate::workflows::recovery::workflow_operation_for_task(&task.operation)
+    else {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::WorkflowNoActiveOperation,
@@ -67,7 +69,7 @@ pub(in crate::workflows) async fn read_workflow_conflict_file(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::read_task_recovery_preflight(
+    let preview = crate::workflows::recovery::read_task_recovery_preflight(
         &repo_id,
         &query.task_id,
         &task.operation,
@@ -147,7 +149,9 @@ async fn read_reviewed_conflict_for_suggestion(
             "The workflow task is no longer available.",
         )
     })?;
-    let Some(task_operation) = crate::workflow_operation_for_task(&task.operation) else {
+    let Some(task_operation) =
+        crate::workflows::recovery::workflow_operation_for_task(&task.operation)
+    else {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::WorkflowNoActiveOperation,
@@ -169,7 +173,7 @@ async fn read_reviewed_conflict_for_suggestion(
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::read_task_recovery_preflight(
+    let preview = crate::workflows::recovery::read_task_recovery_preflight(
         repo_id,
         &request.task_id,
         &task.operation,
@@ -522,7 +526,8 @@ async fn inspect_waiting_conflict(
             "The waiting workflow task is unavailable.",
         )
     })?;
-    let task_operation = crate::workflow_operation_for_task(&task.operation).ok_or_else(|| {
+    let task_operation = crate::workflows::recovery::workflow_operation_for_task(&task.operation)
+        .ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::WorkflowNoActiveOperation,
@@ -540,7 +545,7 @@ async fn inspect_waiting_conflict(
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::read_task_recovery_preflight(
+    let preview = crate::workflows::recovery::read_task_recovery_preflight(
         repo_id,
         task_id,
         &task.operation,

@@ -78,7 +78,7 @@ pub(super) async fn preflight_repository_workflow_recovery(
     })?;
     if task.repo_id.as_deref() != Some(repo_id.as_str())
         || task.status != crate::tasks::TaskStatus::WaitingForInput
-        || crate::workflow_operation_for_task(&task.operation).is_none()
+        || crate::workflows::recovery::workflow_operation_for_task(&task.operation).is_none()
     {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -91,14 +91,16 @@ pub(super) async fn preflight_repository_workflow_recovery(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::read_task_recovery_preflight(
+    let preview = crate::workflows::recovery::read_task_recovery_preflight(
         &repo_id,
         &query.task_id,
         &task.operation,
         &target.repository_path,
     )
     .await?;
-    if crate::workflow_operation_for_task(&task.operation) != Some(preview.operation) {
+    if crate::workflows::recovery::workflow_operation_for_task(&task.operation)
+        != Some(preview.operation)
+    {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::WorkflowNoActiveOperation,
@@ -762,7 +764,7 @@ pub(super) async fn recover_repository_workflow(
     })?;
     if waiting_task.repo_id.as_deref() != Some(repo_id.as_str())
         || waiting_task.status != tasks::TaskStatus::WaitingForInput
-        || crate::workflow_operation_for_task(&waiting_task.operation)
+        || crate::workflows::recovery::workflow_operation_for_task(&waiting_task.operation)
             != Some(request.expected_operation)
     {
         return Err(ApiError::new(
@@ -776,7 +778,7 @@ pub(super) async fn recover_repository_workflow(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = crate::read_task_recovery_preflight(
+    let preview = crate::workflows::recovery::read_task_recovery_preflight(
         &repo_id,
         &request.task_id,
         &waiting_task.operation,
@@ -793,7 +795,7 @@ pub(super) async fn recover_repository_workflow(
             "The Git operation or conflict set changed after recovery review. Refresh the preview.",
         ));
     }
-    if !crate::workflow_recovery_action_allowed(&preview, request.action) {
+    if !crate::workflows::recovery::workflow_recovery_action_allowed(&preview, request.action) {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::WorkflowRecoveryNotAllowed,
@@ -826,7 +828,7 @@ pub(super) async fn recover_repository_workflow(
             resource_key,
             operation,
             move |context| async move {
-                let current = crate::read_task_recovery_preflight(
+                let current = crate::workflows::recovery::read_task_recovery_preflight(
                     &task_repo_id,
                     &waiting_task_id,
                     &waiting_task_operation,
@@ -837,7 +839,7 @@ pub(super) async fn recover_repository_workflow(
                 if current.operation != expected_operation
                     || current.head_oid.as_deref() != Some(expected_head_oid.as_str())
                     || current.conflicted_paths != expected_conflicted_paths
-                    || !crate::workflow_recovery_action_allowed(&current, action)
+                    || !crate::workflows::recovery::workflow_recovery_action_allowed(&current, action)
                 {
                     return Err(TaskFailure::Failed(
                         "The Git operation changed before recovery could start. Review its current state.".into(),
@@ -845,9 +847,9 @@ pub(super) async fn recover_repository_workflow(
                 }
                 let task_context = context.clone();
                 if expected_operation == workflows::WorkflowOperation::ShelfApply {
-                    let shelf_id = crate::shelf_apply_shelf_id(&waiting_task_operation)
+                    let shelf_id = crate::workflows::recovery::shelf_apply_shelf_id(&waiting_task_operation)
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task no longer identifies its saved patch.".into()))?;
-                    let before_tree = crate::shelf_apply_before_tree(&waiting_task_operation)
+                    let before_tree = crate::workflows::recovery::shelf_apply_before_tree(&waiting_task_operation)
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task has no safe pre-apply index snapshot. The shelf was retained.".into()))?;
                     let shelf = shelves::load_shelf_record(&repositories, &task_repo_id, shelf_id)
                         .await

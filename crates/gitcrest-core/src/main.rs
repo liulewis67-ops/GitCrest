@@ -98,66 +98,6 @@ fn test_ai_credentials() -> credentials::AiCredentialManager {
     ))
 }
 
-pub(crate) fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOperation> {
-    match operation {
-        "merge" | "pullMerge" => Some(workflows::WorkflowOperation::Merge),
-        "cherryPick" => Some(workflows::WorkflowOperation::CherryPick),
-        "revert" => Some(workflows::WorkflowOperation::Revert),
-        "rebase" | "pullRebase" => Some(workflows::WorkflowOperation::Rebase),
-        value if shelf_apply_shelf_id(value).is_some() => {
-            Some(workflows::WorkflowOperation::ShelfApply)
-        }
-        _ => None,
-    }
-}
-
-pub(crate) fn shelf_apply_shelf_id(operation: &str) -> Option<&str> {
-    let value = operation.strip_prefix("shelfApply:")?;
-    let shelf_id = value
-        .split_once(':')
-        .map_or(value, |(shelf_id, _)| shelf_id);
-    (!shelf_id.is_empty()).then_some(shelf_id)
-}
-
-pub(crate) fn shelf_apply_before_tree(operation: &str) -> Option<&str> {
-    let (_, tree) = operation.strip_prefix("shelfApply:")?.split_once(':')?;
-    (matches!(tree.len(), 40 | 64) && tree.bytes().all(|byte| byte.is_ascii_hexdigit()))
-        .then_some(tree)
-}
-
-pub(crate) async fn read_task_recovery_preflight(
-    repo_id: &str,
-    task_id: &str,
-    task_operation: &str,
-    repository_path: &std::path::Path,
-) -> Result<workflows::WorkflowRecoveryPreflight, ApiError> {
-    let preflight = if workflow_operation_for_task(task_operation)
-        == Some(workflows::WorkflowOperation::ShelfApply)
-    {
-        workflows::read_shelf_apply_preflight(
-            repo_id.to_owned(),
-            task_id.to_owned(),
-            repository_path,
-        )
-        .await
-    } else {
-        workflows::read_recovery_preflight(repo_id.to_owned(), task_id.to_owned(), repository_path)
-            .await
-    };
-    preflight.map_err(ApiError::from_workflow_error)
-}
-
-pub(crate) fn workflow_recovery_action_allowed(
-    preview: &workflows::WorkflowRecoveryPreflight,
-    action: workflows::WorkflowRecoveryAction,
-) -> bool {
-    match action {
-        workflows::WorkflowRecoveryAction::Continue => preview.can_continue,
-        workflows::WorkflowRecoveryAction::Skip => preview.can_skip,
-        workflows::WorkflowRecoveryAction::Abort => preview.can_abort,
-    }
-}
-
 async fn api_not_found() -> ApiError {
     ApiError::route_not_found()
 }
@@ -302,14 +242,17 @@ mod tests {
     #[test]
     fn maps_pull_waiting_tasks_to_their_git_recovery_operations() {
         assert_eq!(
-            workflow_operation_for_task("pullMerge"),
+            workflows::recovery::workflow_operation_for_task("pullMerge"),
             Some(workflows::WorkflowOperation::Merge)
         );
         assert_eq!(
-            workflow_operation_for_task("pullRebase"),
+            workflows::recovery::workflow_operation_for_task("pullRebase"),
             Some(workflows::WorkflowOperation::Rebase)
         );
-        assert_eq!(workflow_operation_for_task("fetch"), None);
+        assert_eq!(
+            workflows::recovery::workflow_operation_for_task("fetch"),
+            None
+        );
     }
 
     fn test_credentials() -> credentials::CredentialManager {
