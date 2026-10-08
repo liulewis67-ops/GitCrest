@@ -1463,3 +1463,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：连接生命周期已从 App 移出，仓库列表恢复规则仍由 App callback 实现；任务完成副作用和 workspace UI 仍在 App，S7.2、S7.4、S7.5 仍需按主计划继续验收。
 - 证据：`src/app/use-core-connection.ts`、`src/app/bootstrap.ts`、`src/app/App.tsx`。
 - 实施 commit：`d47ba61`
+
+### 前端任务完成后的 repository refresh planning 迁入 tasks feature — 小阶段 96
+- 状态：已完成（按任务类型去重并计算需刷新的仓库资源由 tasks model 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/tasks/model/task-refresh-planner.ts`，统一识别 workflow waiting 状态及终态 staging/commit/branch/remote/push/pull/fetch/workflow 任务，按 taskId 去重并返回 repository/status/refs/history 刷新计划。App 按计划执行请求，保留 commit 草稿清理与 commit-and-push、shelf 自动续作等依赖界面/操作状态的副作用。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）及 `git diff --check` 通过；未运行测试。
+- 限制/后续：App 仍执行任务完成后的刷新请求和多步骤 shelf/commit 副作用；后续继续把 feature 操作编排迁入 model/hooks，并按主计划验收 S7.2、S7.4、S7.5。
+- 证据：`src/features/tasks/model/task-refresh-planner.ts`、`src/app/App.tsx`。
+- 实施 commit：`a856ac7`
