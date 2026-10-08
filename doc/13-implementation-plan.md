@@ -1436,3 +1436,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：任务操作和任务完成后的仓库刷新协调仍在 App；后续将任务事件副作用/操作编排按职责迁移，并继续拆解 App workspace composition。
 - 证据：`src/features/tasks/model/use-task-center.ts`、`src/app/App.tsx`。
 - 实施 commit：`16d0cea`
+
+### 前端 task 刷新轮询和窗口聚焦生命周期迁入 feature — 小阶段 93
+- 状态：已完成（tasks feature 管理任务轮询与子窗口返回后的仓库刷新订阅）
+- 日期：2026-10-09
+- 交付：新增 `features/tasks/model/use-task-refresh-lifecycle.ts`，负责任务中心打开/活跃任务时的 1 秒轮询，以及窗口 focus 后刷新任务、当前仓库 status/branches 和 history；回调引用保持最新，Effect 成对清理 interval 与 focus listener。`App.tsx` 仅组合 lifecycle 与 feature 查询函数。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）及 `git diff --check` 通过；未运行测试。
+- 限制/后续：任务完成副作用和 Git event subscription 仍在 `App.tsx`；后续继续迁移这些业务协调逻辑，避免根组件承载完整 event handler。
+- 证据：`src/features/tasks/model/use-task-refresh-lifecycle.ts`、`src/app/App.tsx`。
+- 实施 commit：`4f6c03b`
