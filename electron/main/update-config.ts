@@ -16,7 +16,12 @@ export function hasWindowsUpdatePublisherName(updateConfig: string): boolean {
 }
 
 export function isUpdateFeedConfigured(isPackaged: boolean, platform: string, updateConfig: string | undefined): boolean {
-  return isPackaged && updateConfig !== undefined && (platform !== "win32" || hasWindowsUpdatePublisherName(updateConfig));
+  if (!isPackaged || updateConfig === undefined) return false;
+  if (platform === "win32") return hasWindowsUpdatePublisherName(updateConfig);
+  // electron-updater 6.8.10's AppImage path validates the downloaded SHA-512,
+  // but does not authenticate the update metadata with a signed manifest.
+  if (platform === "linux") return false;
+  return platform === "darwin";
 }
 
 function isNonEmptyYamlValue(value: string): boolean {

@@ -28,7 +28,7 @@ GitCrest 是一款面向专业开发者的本地优先 Git 桌面客户端。当
 
 ## 分发与验收限制
 
-- 当前 Windows 安装包为未签名的本机 smoke 产物；没有配置公开更新源或发布凭证，更新功能保持未配置，应用不会自动检查或下载更新。
+- 当前 Windows 安装包为未签名的本机 smoke 产物；没有配置公开更新源或发布凭证，更新功能保持未配置，应用不会自动检查或下载更新。Linux 更新器在 signed-manifest 支持落地前保持禁用，即使包中存在 `app-update.yml` 也不会加载 updater。
 - Windows 更新器只有在配置可信 `publisherName` 后才会启用。锁定的 Linux AppImage 更新器只校验更新元数据中的 SHA-512，尚无清单来源签名验证链，因此不能作为已验证的 Linux 更新能力发布。
 - macOS/Linux 原生 runner 尚未提供本机验收结果；需由对应 CI runner 完成构建与 packaged smoke 后再确认平台就绪。
 - Windows S7.2 目标仍未达标：最新隔离 profile 的 20 轮基准中，idle / loaded Working Set 峰值约为 492.7 / 531.6 MiB，30 秒滚动帧率 P5 为 55.25 fps。这里是当前开发主机测量，不代表其他硬件，但不能据此宣称目标通过。

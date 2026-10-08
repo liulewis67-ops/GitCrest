@@ -11,10 +11,13 @@ it("requires a non-empty publisher name for Windows update metadata", () => {
   expect(hasWindowsUpdatePublisherName("publisherName:\n  - CN=GitCrest, O=Example\n  - CN=GitCrest Beta, O=Example")).toBe(true);
 });
 
-it("enables updates only for packaged builds with trusted Windows publisher metadata", () => {
+it("fails closed for Linux and requires trusted Windows publisher metadata", () => {
   expect(isUpdateFeedConfigured(false, "win32", "publisherName: CN=GitCrest")).toBe(false);
   expect(isUpdateFeedConfigured(true, "win32", undefined)).toBe(false);
   expect(isUpdateFeedConfigured(true, "win32", "provider: generic\nurl: https://updates.example.test")).toBe(false);
   expect(isUpdateFeedConfigured(true, "win32", "publisherName: CN=GitCrest")).toBe(true);
+  expect(isUpdateFeedConfigured(true, "linux", "provider: generic\nurl: https://updates.example.test")).toBe(false);
+  expect(isUpdateFeedConfigured(true, "linux", "provider: generic\nurl: https://updates.example.test\nsha512: is-not-a-signature")).toBe(false);
   expect(isUpdateFeedConfigured(true, "darwin", "provider: generic\nurl: https://updates.example.test")).toBe(true);
+  expect(isUpdateFeedConfigured(true, "freebsd", "provider: generic\nurl: https://updates.example.test")).toBe(false);
 });
