@@ -93,6 +93,38 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
       return (await response.json() as { branch: string }).branch;
     }, repoId), { timeout: 15_000 }).toBe("keyboard-target");
 
+    const resetBaseOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+    await execFileAsync("git", ["-C", fixture.path, "branch", "keyboard-reset-base", resetBaseOid]);
+    await writeFile(resolve(fixture.path, "reset-trigger.ts"), "export const reviewedReset = true;\n");
+    await enterButtonByTab(window, "Refresh working tree status");
+    await window.getByText("reset-trigger.ts", { exact: true }).waitFor();
+    await window.keyboard.press("Control+Shift+a");
+    await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("reset-trigger.ts").waitFor();
+    await window.getByRole("textbox", { name: "Commit message", exact: true }).focus();
+    await window.keyboard.type("keyboard reset review");
+    await window.keyboard.press("Control+Enter");
+    await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim(), { timeout: 15_000 }).toBe("keyboard reset review");
+    await window.keyboard.press("Control+k");
+    await window.keyboard.type("Reset current branch");
+    await enterButtonByTab(window, "Reset current branch");
+    const resetDialog = window.getByRole("dialog", { name: "Reset current branch" });
+    await resetDialog.waitFor();
+    const resetTarget = resetDialog.locator("#reset-target");
+    await expect.poll(() => resetTarget.isDisabled(), { timeout: 15_000 }).toBe(false);
+    await focusControlByTab(window, "reset-target");
+    const resetTargetIndex = await resetTarget.locator("option").evaluateAll((options, targetOid) => options.findIndex((option) => option.textContent?.includes("keyboard-reset-base") && option.getAttribute("value") === targetOid), resetBaseOid);
+    if (resetTargetIndex < 1) throw new Error("The keyboard reset target was not available in the branch commit list.");
+    await window.keyboard.press("Home");
+    for (let index = 0; index < resetTargetIndex; index += 1) await window.keyboard.press("ArrowDown");
+    await window.keyboard.press("Enter");
+    await enterButtonByTab(window, "Review impact");
+    await resetDialog.getByText(/Affected paths/).waitFor();
+    await focusControlByTab(window, "I reviewed the commit and path impact");
+    await window.keyboard.press("Space");
+    await enterButtonByTab(window, "Reset mixed");
+    await expect.poll(async () => await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"]).then(({ stdout }) => stdout.trim()), { timeout: 15_000 }).toBe(resetBaseOid);
+    await execFileAsync("git", ["-C", fixture.path, "clean", "--quiet", "-f", "--", "reset-trigger.ts"]);
+
     const seedOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD~1"])).stdout.trim();
     await execFileAsync("git", ["-C", fixture.path, "branch", "keyboard-conflict-source", seedOid]);
     await execFileAsync("git", ["-C", fixture.path, "switch", "keyboard-conflict-source"]);
@@ -181,4 +213,17 @@ async function enterButtonByTab(page: Page, label: string) {
     await page.keyboard.press("Tab");
   }
   throw new Error(`Could not reach the ${label} button by pressing Tab.`);
+}
+
+async function focusControlByTab(page: Page, label: string) {
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const isFocused = await page.evaluate((expected) => {
+      const active = document.activeElement;
+      const labels = active instanceof HTMLInputElement ? Array.from(active.labels || []).map((item) => item.innerText).join(" ") : "";
+      return active instanceof HTMLElement && `${active.id} ${active.getAttribute("aria-label") || ""} ${labels}`.includes(expected);
+    }, label);
+    if (isFocused) return;
+    await page.keyboard.press("Tab");
+  }
+  throw new Error(`Could not reach the ${label} control by pressing Tab.`);
 }
