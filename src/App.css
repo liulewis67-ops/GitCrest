@@ -296,6 +296,21 @@ button:disabled { cursor: not-allowed; }
 .workflowDialogBody { display: flex; flex-direction: column; gap: 12px; padding: 14px 16px 16px; overflow: auto; }
 .workflowDialogBody .repositoryFact { padding: 0; }
 .workflowDialogBody .repositoryFact strong { max-width: 70%; overflow-wrap: anywhere; }
+.rebaseDialog { width: min(880px, 100%); max-height: min(86vh, 900px); }
+.rebaseTargetField { display: grid; gap: 6px; color: var(--text-secondary); font-size: 11px; }
+.rebaseTargetField select, .rebaseTodoRow select, .rebaseMessage { min-width: 0; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 4px; padding: 7px 9px; font: inherit; }
+.rebasePreviewFacts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.rebasePreviewFacts .repositoryFact { border-top: 1px solid var(--line); padding-top: 7px; }
+.rebaseTodoList { display: flex; flex-direction: column; gap: 6px; max-height: min(42vh, 440px); overflow: auto; margin: 0; padding: 2px 4px 2px 28px; }
+.rebaseTodoList li { min-width: 0; padding: 5px 0; }
+.rebaseTodoRow { display: grid; grid-template-columns: 76px 90px minmax(80px, 1fr) 28px 28px; align-items: center; gap: 6px; min-width: 0; }
+.rebaseTodoOid { color: var(--text-muted); font-size: 10px; }
+.rebaseTodoSubject { overflow: hidden; color: var(--text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.rebaseTodoRow select { width: 90px; padding: 5px 6px; font-size: 10px; }
+.rebaseTodoRow .quietButton { width: 28px; min-width: 28px; padding: 0; }
+.rebaseMessage { width: calc(100% - 6px); margin: 6px 0 0; resize: vertical; font-size: 11px; }
+.rebaseConfirm { display: flex; align-items: flex-start; gap: 8px; color: var(--text-secondary); font-size: 11px; line-height: 1.45; }
+.rebaseConfirm input { margin-top: 1px; }
 .workflowPathList { max-height: 160px; overflow: auto; margin: 0; padding: 7px 9px 7px 26px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); font: 11px/1.55 var(--font-mono); }
 .workflowPathList li { overflow-wrap: anywhere; }
 .workflowRecovery { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }

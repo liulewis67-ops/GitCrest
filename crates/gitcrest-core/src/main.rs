@@ -3779,6 +3779,9 @@ struct RebaseRequest {
     expected_head_oid: String,
     expected_onto_oid: String,
     preview_revision: String,
+    todo: Vec<rebase::RebaseTodoItem>,
+    confirm_drop: bool,
+    confirm_published_rewrite: bool,
 }
 
 async fn start_repository_rebase(
@@ -3822,6 +3825,41 @@ async fn start_repository_rebase(
             "Rebase requires a clean branch, a non-empty bounded commit list, and no Git operation in progress.",
         ));
     }
+    rebase::validate_todo(
+        &preview,
+        &request.todo,
+        request.confirm_drop,
+        request.confirm_published_rewrite,
+    )
+    .map_err(|error| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            match error {
+                rebase::RebaseTodoError::StaleCommit => {
+                    "The todo must contain each reviewed commit exactly once."
+                }
+                rebase::RebaseTodoError::EmptySequence => {
+                    "A rebase todo must keep at least one commit."
+                }
+                rebase::RebaseTodoError::InvalidActionOrder => {
+                    "Squash and fixup require an earlier non-dropped commit."
+                }
+                rebase::RebaseTodoError::DropConfirmationRequired => {
+                    "Dropping commits requires explicit confirmation."
+                }
+                rebase::RebaseTodoError::PublishedConfirmationRequired => {
+                    "Rewriting commits already present on a remote requires explicit confirmation."
+                }
+                rebase::RebaseTodoError::MessageRequired => {
+                    "Every reword action requires a non-empty replacement message."
+                }
+                rebase::RebaseTodoError::UnexpectedMessage => {
+                    "Replacement messages are only accepted for reword actions."
+                }
+            },
+        )
+    })?;
     let command = state.git_commands.clone();
     let repositories = state.repositories.clone();
     let task_repo_id = repo_id.clone();
@@ -3830,6 +3868,9 @@ async fn start_repository_rebase(
     let expected_head_oid = request.expected_head_oid;
     let onto_oid = request.expected_onto_oid;
     let expected_preview_revision = request.preview_revision;
+    let todo = request.todo;
+    let confirm_drop = request.confirm_drop;
+    let confirm_published_rewrite = request.confirm_published_rewrite;
     let task = state
         .tasks
         .submit(
@@ -3854,9 +3895,20 @@ async fn start_repository_rebase(
                         "Rebase preconditions changed before Git could start. Review the current repository state.".into(),
                     ));
                 }
+                rebase::validate_todo(
+                    &current,
+                    &todo,
+                    confirm_drop,
+                    confirm_published_rewrite,
+                )
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "The reviewed rebase todo is no longer valid. Review the current commit sequence.".into(),
+                    )
+                })?;
                 let task_context = context.clone();
                 let result = command
-                    .execute_rebase(&path, &expected_head_oid, &onto_oid, context)
+                    .execute_rebase(&path, &expected_head_oid, &onto_oid, &current, &todo, context)
                     .await;
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context
@@ -6871,7 +6923,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn rebase_task_creates_visible_backup_and_replays_commits_onto_target() {
+    async fn interactive_rebase_applies_edit_squash_drop_and_keeps_backup() {
         let directory = tempfile::tempdir().unwrap();
         let repository_path = directory.path().join("rebase-task-repo");
         std::fs::create_dir(&repository_path).unwrap();
@@ -6902,7 +6954,11 @@ mod tests {
         std::fs::write(repository_path.join("second.txt"), "second\n").unwrap();
         git(&["add", "second.txt"]);
         git(&["commit", "--quiet", "-m", "second feature"]);
+        std::fs::write(repository_path.join("third.txt"), "third\n").unwrap();
+        git(&["add", "third.txt"]);
+        git(&["commit", "--quiet", "-m", "third feature"]);
         let old_head = git(&["rev-parse", "HEAD"]);
+        git(&["update-ref", "refs/remotes/origin/feature", &old_head]);
         git(&["checkout", "--quiet", "main"]);
         std::fs::write(repository_path.join("target.txt"), "target\n").unwrap();
         git(&["add", "target.txt"]);
@@ -6937,8 +6993,36 @@ mod tests {
             .await
             .unwrap();
         let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let mut todo = preview["commits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|commit| serde_json::json!({ "oid": commit["oid"], "action": "pick", "message": null }))
+            .collect::<Vec<_>>();
+        todo[0]["action"] = serde_json::json!("edit");
+        todo[1]["action"] = serde_json::json!("squash");
+        todo[2]["action"] = serde_json::json!("drop");
         assert_eq!(preview["canStart"], true);
-        assert_eq!(preview["commits"].as_array().unwrap().len(), 2);
+        assert_eq!(preview["commits"].as_array().unwrap().len(), 3);
+        assert_eq!(preview["publishedCommitOids"].as_array().unwrap().len(), 3);
+        let missing_confirmation = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": old_head,
+                    "expectedOntoOid": onto_oid,
+                    "previewRevision": preview["previewRevision"],
+                    "todo": todo,
+                    "confirmDrop": true,
+                    "confirmPublishedRewrite": false
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(missing_confirmation.status(), StatusCode::BAD_REQUEST);
         let accepted = app
             .clone()
             .oneshot(json_request(
@@ -6947,7 +7031,10 @@ mod tests {
                 &serde_json::json!({
                     "expectedHeadOid": old_head,
                     "expectedOntoOid": onto_oid,
-                    "previewRevision": preview["previewRevision"]
+                    "previewRevision": preview["previewRevision"],
+                    "todo": todo,
+                    "confirmDrop": true,
+                    "confirmPublishedRewrite": true
                 })
                 .to_string(),
             ))
@@ -6956,15 +7043,64 @@ mod tests {
         assert_eq!(accepted.status(), StatusCode::ACCEPTED);
         let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
         let accepted: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-        let completed = wait_for_task(&app, accepted["taskId"].as_str().unwrap()).await;
+        let waiting = wait_for_task_status(
+            &app,
+            accepted["taskId"].as_str().unwrap(),
+            "waitingForInput",
+        )
+        .await;
+        git(&["commit", "--amend", "--quiet", "-m", "Edited feature"]);
+        let recovery_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={}",
+            waiting["taskId"].as_str().unwrap()
+        );
+        let recovery_response = app
+            .clone()
+            .oneshot(request(&recovery_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(recovery_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recovery["operation"], "rebase");
+        assert_eq!(recovery["canContinue"], true);
+        let continued = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+                &serde_json::json!({
+                    "taskId": waiting["taskId"],
+                    "action": "continue",
+                    "expectedOperation": "rebase",
+                    "expectedHeadOid": recovery["headOid"],
+                    "expectedConflictedPaths": []
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(continued.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(continued.into_body(), usize::MAX).await.unwrap();
+        let continued: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, continued["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let completed = wait_for_task(&app, waiting["taskId"].as_str().unwrap()).await;
         assert_eq!(completed["status"], "succeeded");
         let log = completed["logs"].to_string();
         assert!(log.contains("refs/gitcrest/rebase-backups/"));
-        assert_eq!(git(&["rev-parse", "HEAD~2"]), onto_oid);
+        assert_eq!(git(&["rev-parse", "HEAD~1"]), onto_oid);
         assert_eq!(
             git(&["rev-list", "--count", &format!("{onto_oid}..HEAD")]),
-            "2"
+            "1"
         );
+        assert_eq!(git(&["log", "-1", "--format=%s"]), "Edited feature");
+        assert!(repository_path.join("first.txt").exists());
+        assert!(repository_path.join("second.txt").exists());
+        assert!(!repository_path.join("third.txt").exists());
         assert_eq!(
             git(&[
                 "rev-parse",
@@ -7048,6 +7184,12 @@ mod tests {
             .await
             .unwrap();
         let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let todo = preview["commits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|commit| serde_json::json!({ "oid": commit["oid"], "action": "pick", "message": null }))
+            .collect::<Vec<_>>();
         let accepted = app
             .clone()
             .oneshot(json_request(
@@ -7056,7 +7198,10 @@ mod tests {
                 &serde_json::json!({
                     "expectedHeadOid": original_head,
                     "expectedOntoOid": onto_oid,
-                    "previewRevision": preview["previewRevision"]
+                    "previewRevision": preview["previewRevision"],
+                    "todo": todo,
+                    "confirmDrop": false,
+                    "confirmPublishedRewrite": false
                 })
                 .to_string(),
             ))

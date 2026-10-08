@@ -1362,6 +1362,7 @@ export interface components {
             currentBranch: string | null;
             commits: components["schemas"]["RebaseCommit"][];
             omittedCommitCount: number;
+            publishedCommitOids: string[];
             dirtyPaths: string[];
             omittedDirtyPathCount: number;
             /** @enum {string|null} */
@@ -1373,6 +1374,18 @@ export interface components {
             expectedHeadOid: string;
             expectedOntoOid: string;
             previewRevision: string;
+            todo: components["schemas"]["RebaseTodoItem"][];
+            /** @description Required when any commit uses the drop action. */
+            confirmDrop: boolean;
+            /** @description Required when any commit is reachable from a remote-tracking ref. */
+            confirmPublishedRewrite: boolean;
+        };
+        RebaseTodoItem: {
+            oid: string;
+            /** @enum {string} */
+            action: "pick" | "reword" | "edit" | "squash" | "fixup" | "drop";
+            /** @description Replacement commit message for reword. */
+            message?: string | null;
         };
         WorkflowRequest: {
             /** @enum {string} */

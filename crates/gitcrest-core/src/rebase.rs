@@ -1,8 +1,13 @@
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{collections::HashSet, path::Path, process::Stdio, time::Duration};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use tokio::{io::AsyncReadExt, process::Command};
+use tokio::{
+    io::AsyncReadExt,
+    process::Command,
+    sync::{OwnedSemaphorePermit, Semaphore},
+    task::JoinSet,
+};
 
 use crate::workflows::{read_worktree_state, WorkflowError, WorkflowOperation};
 
@@ -16,6 +21,98 @@ pub struct RebaseCommit {
     pub subject: String,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RebaseAction {
+    Pick,
+    Reword,
+    Edit,
+    Squash,
+    Fixup,
+    Drop,
+}
+
+impl RebaseAction {
+    pub fn git_keyword(self) -> &'static str {
+        match self {
+            Self::Pick | Self::Reword => "pick",
+            Self::Edit => "edit",
+            Self::Squash => "squash",
+            Self::Fixup => "fixup",
+            Self::Drop => "drop",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RebaseTodoItem {
+    pub oid: String,
+    pub action: RebaseAction,
+    pub message: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RebaseTodoError {
+    StaleCommit,
+    EmptySequence,
+    InvalidActionOrder,
+    DropConfirmationRequired,
+    PublishedConfirmationRequired,
+    MessageRequired,
+    UnexpectedMessage,
+}
+
+pub fn validate_todo(
+    preview: &RebasePreview,
+    todo: &[RebaseTodoItem],
+    confirm_drop: bool,
+    confirm_published_rewrite: bool,
+) -> Result<(), RebaseTodoError> {
+    let expected = preview
+        .commits
+        .iter()
+        .map(|commit| commit.oid.as_str())
+        .collect::<HashSet<_>>();
+    let submitted = todo
+        .iter()
+        .map(|item| item.oid.as_str())
+        .collect::<HashSet<_>>();
+    if todo.len() != preview.commits.len() || submitted.len() != todo.len() || submitted != expected
+    {
+        return Err(RebaseTodoError::StaleCommit);
+    }
+    if todo.iter().all(|item| item.action == RebaseAction::Drop) {
+        return Err(RebaseTodoError::EmptySequence);
+    }
+    if todo.iter().any(|item| item.action == RebaseAction::Drop) && !confirm_drop {
+        return Err(RebaseTodoError::DropConfirmationRequired);
+    }
+    if !preview.published_commit_oids.is_empty() && !confirm_published_rewrite {
+        return Err(RebaseTodoError::PublishedConfirmationRequired);
+    }
+    let mut has_previous_commit = false;
+    for item in todo {
+        if matches!(item.action, RebaseAction::Squash | RebaseAction::Fixup) && !has_previous_commit
+        {
+            return Err(RebaseTodoError::InvalidActionOrder);
+        }
+        if item.action != RebaseAction::Drop {
+            has_previous_commit = true;
+        }
+        match (item.action, item.message.as_deref()) {
+            (RebaseAction::Reword, Some(message))
+                if !message.trim().is_empty()
+                    && message.len() <= 4096
+                    && !message.contains('\0') => {}
+            (RebaseAction::Reword, _) => return Err(RebaseTodoError::MessageRequired),
+            (_, Some(_)) => return Err(RebaseTodoError::UnexpectedMessage),
+            (_, None) => {}
+        }
+    }
+    Ok(())
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RebasePreview {
@@ -25,6 +122,7 @@ pub struct RebasePreview {
     pub current_branch: Option<String>,
     pub commits: Vec<RebaseCommit>,
     pub omitted_commit_count: u32,
+    pub published_commit_oids: Vec<String>,
     pub dirty_paths: Vec<String>,
     pub omitted_dirty_path_count: u32,
     pub operation_in_progress: Option<WorkflowOperation>,
@@ -106,6 +204,40 @@ pub async fn read_preview(
     }
     let (dirty_paths, omitted_dirty_path_count, _, _, operation_in_progress) =
         read_worktree_state(repository_path).await?;
+    let mut published_commit_oids = Vec::new();
+    let mut published_checks = JoinSet::new();
+    let semaphore = std::sync::Arc::new(Semaphore::new(8));
+    for commit in &commits {
+        let oid = commit.oid.clone();
+        let path = repository_path.to_path_buf();
+        let permits = semaphore.clone();
+        published_checks.spawn(async move {
+            let permit: OwnedSemaphorePermit = permits
+                .acquire_owned()
+                .await
+                .map_err(|_| WorkflowError::GitFailed)?;
+            let result = run_git(
+                &path,
+                &[
+                    "for-each-ref".into(),
+                    "--format=%(refname)".into(),
+                    "--contains".into(),
+                    oid.clone().into(),
+                    "refs/remotes".into(),
+                ],
+            )
+            .await;
+            drop(permit);
+            result.map(|refs| (oid, !refs.trim().is_empty()))
+        });
+    }
+    while let Some(result) = published_checks.join_next().await {
+        let (oid, is_published) = result.map_err(|_| WorkflowError::GitFailed)??;
+        if is_published {
+            published_commit_oids.push(oid);
+        }
+    }
+    published_commit_oids.sort();
     let can_start = head_oid.is_some()
         && current_branch.is_some()
         && onto_oid != head_oid.as_deref().unwrap_or_default()
@@ -130,6 +262,10 @@ pub async fn read_preview(
         digest.update(path.as_bytes());
         digest.update([0]);
     }
+    for oid in &published_commit_oids {
+        digest.update(oid.as_bytes());
+        digest.update([0]);
+    }
     Ok(RebasePreview {
         repo_id,
         head_oid,
@@ -137,6 +273,7 @@ pub async fn read_preview(
         current_branch,
         commits,
         omitted_commit_count,
+        published_commit_oids,
         dirty_paths,
         omitted_dirty_path_count,
         operation_in_progress,
@@ -205,5 +342,88 @@ async fn run_git_inner(
         Ok(None)
     } else {
         Err(WorkflowError::GitFailed)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn preview() -> RebasePreview {
+        RebasePreview {
+            repo_id: "repo_fixture".into(),
+            head_oid: Some("a".repeat(40)),
+            onto_oid: "b".repeat(40),
+            current_branch: Some("feature".into()),
+            commits: ["first", "second", "third"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, subject)| RebaseCommit {
+                    oid: format!("{}{}", "c".repeat(39), index + 1),
+                    subject: subject.into(),
+                })
+                .collect(),
+            omitted_commit_count: 0,
+            published_commit_oids: Vec::new(),
+            dirty_paths: Vec::new(),
+            omitted_dirty_path_count: 0,
+            operation_in_progress: None,
+            preview_revision: format!("sha256:{}", "d".repeat(64)),
+            can_start: true,
+        }
+    }
+
+    #[test]
+    fn rebase_todo_validates_exact_commits_drop_confirmation_and_action_order() {
+        let preview = preview();
+        let todo = vec![
+            RebaseTodoItem {
+                oid: preview.commits[0].oid.clone(),
+                action: RebaseAction::Pick,
+                message: None,
+            },
+            RebaseTodoItem {
+                oid: preview.commits[1].oid.clone(),
+                action: RebaseAction::Fixup,
+                message: None,
+            },
+            RebaseTodoItem {
+                oid: preview.commits[2].oid.clone(),
+                action: RebaseAction::Reword,
+                message: Some("replacement subject\n\nBody".into()),
+            },
+        ];
+        assert_eq!(validate_todo(&preview, &todo, false, false), Ok(()));
+
+        let mut dropped = todo.clone();
+        dropped[2].action = RebaseAction::Drop;
+        dropped[2].message = None;
+        assert_eq!(
+            validate_todo(&preview, &dropped, false, false),
+            Err(RebaseTodoError::DropConfirmationRequired)
+        );
+        assert_eq!(validate_todo(&preview, &dropped, true, false), Ok(()));
+
+        let mut published = preview.clone();
+        published
+            .published_commit_oids
+            .push(preview.commits[0].oid.clone());
+        assert_eq!(
+            validate_todo(&published, &todo, false, false),
+            Err(RebaseTodoError::PublishedConfirmationRequired)
+        );
+        assert_eq!(validate_todo(&published, &todo, false, true), Ok(()));
+
+        let mut invalid_order = todo.clone();
+        invalid_order.swap(0, 1);
+        assert_eq!(
+            validate_todo(&preview, &invalid_order, false, false),
+            Err(RebaseTodoError::InvalidActionOrder)
+        );
+        let incomplete = &todo[..2];
+        assert_eq!(
+            validate_todo(&preview, incomplete, false, false),
+            Err(RebaseTodoError::StaleCommit)
+        );
     }
 }

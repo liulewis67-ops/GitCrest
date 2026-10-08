@@ -18,6 +18,7 @@ use crate::tasks::{TaskContext, TaskFailure};
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
 static NEXT_TEMP_INDEX: AtomicU64 = AtomicU64::new(1);
+static NEXT_TEMP_REBASE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GitOperation {
@@ -231,8 +232,11 @@ impl GitCommandService {
         repository_path: &Path,
         expected_head_oid: &str,
         onto_oid: &str,
+        preview: &crate::rebase::RebasePreview,
+        todo: &[crate::rebase::RebaseTodoItem],
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
+        let todo_plan = TemporaryRebasePlan::create(preview, todo)?;
         let backup_ref = format!("refs/gitcrest/rebase-backups/{}", task.task_id());
         run_command(
             &self.git_program,
@@ -252,10 +256,23 @@ impl GitCommandService {
         .await?;
         task.log(format!("Created rollback reference {backup_ref}."))
             .await;
+        let editor = "sh -c 'cat \"$GITCREST_REBASE_TODO_FILE\" > \"$1\"' --";
+        let environment = vec![
+            (
+                OsString::from("GIT_SEQUENCE_EDITOR"),
+                OsString::from(editor),
+            ),
+            (
+                OsString::from("GITCREST_REBASE_TODO_FILE"),
+                todo_plan.todo_file.as_os_str().to_owned(),
+            ),
+            (OsString::from("GIT_EDITOR"), OsString::from("true")),
+        ];
         let result = run_command(
             &self.git_program,
             vec![
                 "rebase".into(),
+                "--interactive".into(),
                 "--onto".into(),
                 onto_oid.into(),
                 onto_oid.into(),
@@ -266,12 +283,22 @@ impl GitCommandService {
             )),
             None,
             Vec::new(),
-            Vec::new(),
+            environment,
             Some(repository_path),
             "Rebase branch",
             task,
         )
         .await;
+        if result.is_ok()
+            && matches!(
+                crate::workflows::read_operation(repository_path).await,
+                Ok(Some(crate::workflows::WorkflowOperation::Rebase))
+            )
+        {
+            return Err(TaskFailure::WaitingForInput(
+                "Rebase paused at an edit step. Amend the current commit if needed, then continue or abort from Task Center.".into(),
+            ));
+        }
         workflow_command_result(repository_path, result).await
     }
 
@@ -823,6 +850,101 @@ impl Drop for TemporaryIndex {
         }
         let _ = std::fs::remove_dir(&self.directory);
     }
+}
+
+struct TemporaryRebasePlan {
+    directory: std::path::PathBuf,
+    todo_file: std::path::PathBuf,
+}
+
+impl TemporaryRebasePlan {
+    fn create(
+        preview: &crate::rebase::RebasePreview,
+        todo: &[crate::rebase::RebaseTodoItem],
+    ) -> Result<Self, TaskFailure> {
+        let parent = std::env::temp_dir();
+        let directory = (0..10)
+            .find_map(|_| {
+                let directory = parent.join(format!(
+                    "gitcrest-rebase-todo-{}-{}",
+                    std::process::id(),
+                    NEXT_TEMP_REBASE.fetch_add(1, Ordering::Relaxed)
+                ));
+                match std::fs::create_dir(&directory) {
+                    Ok(()) => Some(directory),
+                    Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => None,
+                    Err(_) => None,
+                }
+            })
+            .ok_or_else(|| {
+                TaskFailure::Failed("A temporary rebase plan could not be created".into())
+            })?;
+        let plan = Self {
+            todo_file: directory.join("todo"),
+            directory,
+        };
+        let subjects = preview
+            .commits
+            .iter()
+            .map(|commit| (commit.oid.as_str(), commit.subject.as_str()))
+            .collect::<std::collections::HashMap<_, _>>();
+        let mut lines = Vec::new();
+        for (index, item) in todo.iter().enumerate() {
+            let subject = subjects.get(item.oid.as_str()).ok_or_else(|| {
+                TaskFailure::Failed("The reviewed rebase todo no longer matches its preview".into())
+            })?;
+            if item.action == crate::rebase::RebaseAction::Reword {
+                let message_path = plan.directory.join(format!("message-{index}"));
+                std::fs::write(
+                    &message_path,
+                    item.message.as_deref().unwrap_or_default().as_bytes(),
+                )
+                .map_err(|_| {
+                    TaskFailure::Failed("A reword message could not be prepared".into())
+                })?;
+                lines.push(format!("pick {} {}", item.oid, subject));
+                lines.push(format!(
+                    "exec git commit --amend --file {}",
+                    shell_quote_path(&message_path)?
+                ));
+            } else {
+                lines.push(format!(
+                    "{} {} {}",
+                    item.action.git_keyword(),
+                    item.oid,
+                    subject
+                ));
+            }
+        }
+        std::fs::write(&plan.todo_file, lines.join("\n") + "\n").map_err(|_| {
+            TaskFailure::Failed("The reviewed rebase todo could not be prepared".into())
+        })?;
+        Ok(plan)
+    }
+}
+
+impl Drop for TemporaryRebasePlan {
+    fn drop(&mut self) {
+        if let Ok(entries) = std::fs::read_dir(&self.directory) {
+            for entry in entries.flatten() {
+                if entry
+                    .file_type()
+                    .is_ok_and(|kind| kind.is_file() || kind.is_symlink())
+                {
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+        let _ = std::fs::remove_dir(&self.directory);
+    }
+}
+
+fn shell_quote_path(path: &Path) -> Result<String, TaskFailure> {
+    let path = path
+        .to_str()
+        .ok_or_else(|| TaskFailure::Failed("A temporary rebase path could not be encoded".into()))?
+        .replace('\\', "/");
+    Ok(format!("'{}'", path.replace('\'', "'\\''")))
 }
 
 // Git command execution carries process, logging, cancellation, and repository context together.

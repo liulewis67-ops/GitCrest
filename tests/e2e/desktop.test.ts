@@ -157,6 +157,39 @@ describe("desktop startup E2E", () => {
       expect(await window.locator(".commitSection").isVisible()).toBe(false);
       await window.setViewportSize({ width: 1280, height: 820 });
 
+      const mainOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", originalBranch])).stdout.trim();
+      const rebaseApiPreview = await window.evaluate(async ({ repoId, ontoOid }) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const url = new URL(`/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/rebase-preview`, connection.baseUrl);
+        url.searchParams.set("ontoOid", ontoOid);
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" } });
+        return { status: response.status, body: await response.json() };
+      }, { repoId: opened.body.repoId as string, ontoOid: mainOid });
+      expect(rebaseApiPreview.status).toBe(200);
+      expect(rebaseApiPreview.body.commits.map((commit: { subject: string }) => commit.subject)).toContain("change feature branch");
+      await window.keyboard.press("Control+i");
+      const rebaseDialog = window.getByRole("dialog", { name: "Interactive rebase" });
+      await rebaseDialog.waitFor();
+      await rebaseDialog.getByLabel("Rebase current branch onto").selectOption(mainOid);
+      await rebaseDialog.getByRole("button", { name: "Refresh preview" }).click();
+      try {
+        await rebaseDialog.getByText("change feature branch").waitFor({ timeout: 10_000 });
+      } catch {
+        throw new Error(`Rebase preview did not load the expected commit: ${await rebaseDialog.innerText()}`);
+      }
+      const rebaseAction = rebaseDialog.locator("select[aria-label^='Action for']").first();
+      await rebaseAction.selectOption("reword");
+      await rebaseDialog.getByLabel(/Replacement message/).fill("Interactive rebase E2E message");
+      await rebaseDialog.getByRole("button", { name: "Start rebase" }).click();
+      const rebaseTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "rebase" }) });
+      await rebaseTaskCard.waitFor({ state: "visible" });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "rebase" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      await rebaseTaskCard.locator(".taskLogs summary").click();
+      expect(await rebaseTaskCard.innerText()).toContain("refs/gitcrest/rebase-backups/");
+      expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("Interactive rebase E2E message");
+
       const forgotten = await window.evaluate(async (repoId) => {
         const connection = await (globalThis.window as unknown as Window & {
           gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
@@ -191,5 +224,5 @@ describe("desktop startup E2E", () => {
       await fixture.cleanup();
       await rm(appDataPath, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 });

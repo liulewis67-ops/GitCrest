@@ -379,7 +379,7 @@ describe("GitCrestApiClient", () => {
 
   it("requests an ordered rebase todo preview for the selected onto commit", async () => {
     const preview = {
-      repoId: "repo_fixture", headOid: "a".repeat(40), ontoOid: "b".repeat(40), currentBranch: "feature",
+      repoId: "repo_fixture", headOid: "a".repeat(40), ontoOid: "b".repeat(40), currentBranch: "feature", publishedCommitOids: [],
       commits: [{ oid: "c".repeat(40), subject: "feature change" }], omittedCommitCount: 0,
       dirtyPaths: [], omittedDirtyPathCount: 0, operationInProgress: null,
       previewRevision: `sha256:${"d".repeat(64)}`, canStart: true,
@@ -406,6 +406,7 @@ describe("GitCrestApiClient", () => {
     const request = {
       expectedHeadOid: "a".repeat(40), expectedOntoOid: "b".repeat(40),
       previewRevision: `sha256:${"c".repeat(64)}`,
+      todo: [{ oid: "c".repeat(40), action: "pick" as const, message: null }], confirmDrop: false, confirmPublishedRewrite: false,
     };
 
     await expect(client.startRepositoryRebase("repo/fixture", request)).resolves.toEqual(task);
