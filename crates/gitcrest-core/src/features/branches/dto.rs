@@ -29,3 +29,9 @@ pub(super) struct BranchNameQuery {
 pub(super) struct SwitchBranchRequest {
     pub(super) name: String,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct CreateBranchRequest {
+    pub(super) name: String,
+}
