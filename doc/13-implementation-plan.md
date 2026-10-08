@@ -518,4 +518,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm build`、`pnpm test`（122 tests）、`pnpm test:e2e`（1 test）及 `git diff --check` 通过；快捷键单测覆盖配置恢复、交换绑定、跨平台匹配与显示、冲突/保留键检查和输入法组合态，设置 UI 单测覆盖重新绑定、冲突提示、焦点移入/循环和关闭后恢复；App 单测验证 `Ctrl+O` 打开仓库选择器以及对话框内不触发窗口快捷键；CommitGraph 单测验证搜索焦点与 Tag 表单快捷入口。桌面 E2E 的任务中心在触发下一个全局快捷键前先关闭，符合模态对话框隔离行为。
 - 证据：`src/features/settings/shortcut-preferences.ts`、`src/features/settings/SettingsDialog.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/shortcut-preferences.test.ts`、`tests/unit/settings-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。
 - 进度 commits：`c8df08c`（快捷键配置基础能力）、`40ce5b0`（核心工作流快捷键）、`675865c`（历史搜索、Cherry-pick 与 Tag 快捷键）、`953a884`（限制全局快捷键作用域）、`12907de`（设置对话框焦点管理）。
-- 限制/后续：尚未实现 `07` 中撤销最近操作和 Split/Unified 切换快捷键；当前主视图没有 Unified 模式，也没有统一的可撤销操作入口，需先落实对应功能与安全语义。还需完成打开仓库、暂存、分支及冲突流程的全键盘操作验证，并检查焦点管理、屏幕阅读、减少动效、非颜色状态提示和计划要求的安全负例。上述项目通过前 S7.3 保持进行中。
+- 限制/后续：尚未实现 `07` 中撤销最近操作和 Split/Unified 切换快捷键；当前主视图没有 Unified 模式，也没有统一的可撤销操作入口，需先落实对应功能与安全语义。焦点移入/循环/恢复目前只在设置对话框落地；克隆、分支切换、工作流、任务中心和危险操作等弹窗仍需逐一验收。还需完成打开仓库、暂存、分支及冲突流程的全键盘操作验证，并检查屏幕阅读、减少动效、非颜色状态提示和计划要求的安全负例。上述项目通过前 S7.3 保持进行中。
