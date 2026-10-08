@@ -190,6 +190,109 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
+  it("keeps remote tracking refs unchanged after a failed fetch and succeeds after retry", async () => {
+    const fixture = await createTempGitRepository();
+    const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-fetch-retry-"));
+    const bareRemotePath = resolve(remoteRoot, "origin.git");
+    const sourceRemotePath = resolve(remoteRoot, "source.git");
+    const peerPath = resolve(remoteRoot, "peer");
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-fetch-retry-app-data-"));
+    const filePath = resolve(fixture.path, "src/fetch-retry.ts");
+
+    try {
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(filePath, "export const fetched = 'base';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/fetch-retry.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add fetch retry fixture"]);
+      await execFileAsync("git", ["init", "--bare", "--quiet", sourceRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", sourceRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", "--set-upstream", "origin", "HEAD"]);
+      const branch = (await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim();
+      const baselineHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+      await execFileAsync("git", ["clone", "--quiet", sourceRemotePath, peerPath]);
+      await execFileAsync("git", ["-C", peerPath, "config", "user.name", "GitCrest Peer Test"]);
+      await execFileAsync("git", ["-C", peerPath, "config", "user.email", "gitcrest-peer@example.invalid"]);
+      await writeFile(resolve(peerPath, "src/fetch-retry.ts"), "export const fetched = 'remote after retry';\n");
+      await execFileAsync("git", ["-C", peerPath, "add", "src/fetch-retry.ts"]);
+      await execFileAsync("git", ["-C", peerPath, "commit", "--quiet", "-m", "remote change for fetch retry"]);
+      await execFileAsync("git", ["-C", peerPath, "push", "--quiet", "origin", "HEAD"]);
+      const remoteHead = (await execFileAsync("git", ["-C", peerPath, "rev-parse", "HEAD"])).stdout.trim();
+      await execFileAsync("git", ["-C", fixture.path, "remote", "set-url", "origin", bareRemotePath]);
+
+      app = await electron.launch({
+        args: ["."],
+        env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+      });
+      const window = await app.firstWindow();
+      await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return response.status;
+      }, fixture.path);
+      expect(opened).toBe(200);
+
+      await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      await window.locator(".repositoryRowOpen").click();
+      await window.locator(".workspaceCrumb").waitFor();
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Fetch", exact: true }).click();
+
+      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) }).last();
+      await fetchTask.waitFor({ state: "visible" });
+      await window.waitForFunction(() => {
+        const cards = [...document.querySelectorAll(".taskCard")];
+        const card = cards.find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent?.startsWith("fetch"));
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+      }, undefined, { timeout: 20_000 });
+      await fetchTask.getByText("failed", { exact: true }).waitFor();
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim()).toBe(baselineHead);
+
+      const previousFetchTaskIds = await window.evaluate(async () => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+        });
+        const tasks = await response.json() as Array<{ taskId: string; operation: string }>;
+        return tasks.filter((task) => task.operation === "fetch").map((task) => task.taskId);
+      });
+      await tasksDialog.getByRole("button", { name: "Close tasks" }).click();
+      await execFileAsync("git", ["clone", "--quiet", "--bare", sourceRemotePath, bareRemotePath]);
+
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Fetch", exact: true }).click();
+      await expect.poll(async () => await window.evaluate(async (previousTaskIds) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+        });
+        const tasks = await response.json() as Array<{ taskId: string; operation: string; status: string }>;
+        return tasks.find((task) => task.operation === "fetch" && !previousTaskIds.includes(task.taskId))?.status;
+      }, previousFetchTaskIds), { timeout: 20_000 }).toBe("succeeded");
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim()).toBe(remoteHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(baselineHead);
+    } finally {
+      await app?.close();
+      app = undefined;
+      await fixture.cleanup();
+      await rm(remoteRoot, { recursive: true, force: true });
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("resolves a pull merge conflict from the waiting task and completes the merge", async () => runPullConflictRecovery("merge"), 90_000);
 
   it("resolves a pull rebase conflict from the waiting task and completes the rebase", async () => runPullConflictRecovery("rebase"), 90_000);
