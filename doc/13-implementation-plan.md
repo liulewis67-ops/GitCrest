@@ -642,3 +642,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；状态解析与 status API 集成用例通过。
 - 限制/后续：status HTTP handler 仍在 `main.rs`；下一阶段继续迁移其 handler/DTO，并将 diff、staging 等功能路由从 `api/router.rs` 拆到各自 feature。
 - 证据：`crates/gitcrest-core/src/features/status/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`f12ee12`
