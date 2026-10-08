@@ -1049,3 +1049,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：repository-scoped `/ai/request` handler 及 provider orchestration helper 仍在 `main.rs`；后续迁入 settings/AI feature，继续减少进程入口文件职责。
 - 证据：`crates/gitcrest-core/src/features/settings/{mod,dto,handlers,routes,ai}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`ab54682`
+
+### 后端 settings/AI request API 归属 — 小阶段 50
+- 状态：已完成（仓库 AI request 路由与处理逻辑迁入 settings feature）
+- 日期：2026-10-09
+- 交付：将 `POST /v1/repositories/:repo_id/ai/request` route、请求 handler、provider 加载与不可用错误 helper 从顶层 router/`main.rs` 迁入 `features/settings`。workflow conflict AI suggestion 改为经 settings feature 导出的 provider helper 调用；AI 请求仍只读取用户确认的当前 diff 并执行原 revision/范围校验。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；AI 请求 stale revision/文件范围和 workflow conflict suggestion 用例通过。
+- 限制/后续：settings feature 下 AI settings 与 repository AI request 仍共用 `ai.rs` service 文件；`main.rs` 仍保留 commit/workflow handlers 和冲突 AI suggestion 流程，后续继续按业务边界拆分。
+- 证据：`crates/gitcrest-core/src/features/settings/{mod,dto,handlers,routes,ai}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`1ff0a09`
