@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{features::diff, features::diff::DiffScope, shelves};
+use crate::{features::diff, features::diff::DiffScope, features::shelves};
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
