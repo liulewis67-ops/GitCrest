@@ -282,6 +282,11 @@ pub(crate) async fn read_operation(
     } else {
         repository_path.join(git_dir)
     };
+    for marker in ["rebase-merge", "rebase-apply"] {
+        if tokio::fs::metadata(git_dir.join(marker)).await.is_ok() {
+            return Ok(Some(WorkflowOperation::Rebase));
+        }
+    }
     for (marker, operation) in [
         ("MERGE_HEAD", WorkflowOperation::Merge),
         ("CHERRY_PICK_HEAD", WorkflowOperation::CherryPick),
@@ -289,11 +294,6 @@ pub(crate) async fn read_operation(
     ] {
         if tokio::fs::metadata(git_dir.join(marker)).await.is_ok() {
             return Ok(Some(operation));
-        }
-    }
-    for marker in ["rebase-merge", "rebase-apply"] {
-        if tokio::fs::metadata(git_dir.join(marker)).await.is_ok() {
-            return Ok(Some(WorkflowOperation::Rebase));
         }
     }
     Ok(None)
