@@ -1355,3 +1355,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Git command adapter 仍以 crate 根模块方式声明，workflow 只读实现集中在 `git/workflow_state.rs`；后续继续按指南的 `git/mod.rs` 和 status/refs/history/workflows 能力分组整理模块。
 - 证据：`crates/gitcrest-core/src/ports/{mod.rs,git.rs}`、`crates/gitcrest-core/src/features/{workflows,remotes}`、`crates/gitcrest-core/src/git/git_command.rs`。
 - 实施 commit：`1bb1a3b`
+
+### 后端 Git adapter 模块入口 — 小阶段 84
+- 状态：已完成（Git adapter 使用规范模块入口和 command 文件名）
+- 日期：2026-10-09
+- 交付：新增指南要求的 `git/mod.rs`，将 `git/git_command.rs` 规范命名为 `git/command.rs` 并由 Git 模块入口声明；crate 根保留最小 `git_command` 兼容导出，避免一次性改动所有既有调用路径。命令行为与 port 注入保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：`workflow_state.rs` 尚未按指南拆到 `status.rs`、`refs.rs` 与 `history.rs`；后续逐类移动解析和 Git 查询实现，并在完成后移除兼容导出。
+- 证据：`crates/gitcrest-core/src/{main.rs,git/mod.rs,git/command.rs}`。
+- 实施 commit：`13ef455`
