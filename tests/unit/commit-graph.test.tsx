@@ -31,6 +31,23 @@ describe("CommitGraph", () => {
     await waitFor(() => expect(container.querySelector(".commitGraphEdges path")).not.toBeNull());
   });
 
+  it("persists the graph scroll position after scrolling ends", async () => {
+    const oid = "a".repeat(40);
+    const api = {
+      getRepositoryCommits: vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null })),
+      getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: oid, branch: "main", detached: false, refs: [] })),
+    } as unknown as GitCrestApiClient;
+    const onScrollPosition = vi.fn();
+    render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} onScrollPosition={onScrollPosition} onSelect={vi.fn()} />);
+
+    const viewport = await screen.findByRole("region", { name: "Commit graph view" });
+    viewport.scrollTop = 84;
+    fireEvent.scroll(viewport);
+    expect(onScrollPosition).not.toHaveBeenCalled();
+    fireEvent(viewport, new Event("scrollend"));
+    expect(onScrollPosition).toHaveBeenCalledWith(84);
+  });
+
   it("virtualizes rows, pages older commits, and supports keyboard selection", async () => {
     const entries = Array.from({ length: 120 }, (_, index) => commit(index));
     const getRepositoryCommits = vi.fn(async (_repoId: string, offset = 0, limit = 50) => ({

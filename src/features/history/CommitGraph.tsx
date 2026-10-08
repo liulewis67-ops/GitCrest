@@ -131,6 +131,14 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     setViewport({ top: node.scrollTop, height });
   }, [initialScrollTop, loading, repoId]);
 
+  useEffect(() => {
+    const node = viewportRef.current;
+    if (!node) return;
+    const persistScrollPosition = () => onScrollPosition(node.scrollTop);
+    node.addEventListener("scrollend", persistScrollPosition);
+    return () => node.removeEventListener("scrollend", persistScrollPosition);
+  }, [onScrollPosition]);
+
   const laneLayout = useMemo(() => {
     const laneByOid = new Map<string, number>();
     const indexByOid = new Map(commits.map((commit, index) => [commit.oid, index]));
@@ -169,7 +177,6 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
       renderedWindowRef.current = { first, height };
       setViewport({ top, height });
     }
-    onScrollPosition(top);
     if (nextOffset !== null && !loadingMore && node.scrollHeight - node.scrollTop - node.clientHeight < ROW_HEIGHT * 10) {
       await readPage(nextOffset, requestGeneration.current);
     }
