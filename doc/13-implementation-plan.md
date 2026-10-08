@@ -106,7 +106,7 @@
 | S5.2 | 独立三路冲突解决窗口与 resolved 校验。 | ours/base/theirs、结果预览和逐块/手工编辑可用；只能写当前冲突文件，不能执行一般 Git 写操作；有未解决标记时禁止 resolved；关闭再开保留已保存的解决进度；resolved 后主窗口状态刷新。 | 已完成 |
 | S5.3 | Shelve：选中文件/hunk、命名、预览、应用、删除。 | 搁置前后及跨分支恢复时只影响选中内容；应用前必须预览；冲突进入 S5.2；应用失败保留条目与原 patch；删除显示范围并确认；条目重启后存在。 | 已完成 |
 | S5.4 | Rebase 与交互式 Rebase：todo 编辑、预览、备份、continue/abort/回滚。 | pick/reword/edit/squash/fixup/drop 均有测试；执行前创建并展示备份 ref；drop 和已发布分支改写明确确认；冲突可进入解决器并继续；abort 后恢复至操作前，备份 ref 可用于回滚。 | 已完成 |
-| S5.5 | Reset、丢弃工作区变更、删除远程分支等危险操作安全网。 | 后端返回影响文件/提交/目标 ref；UI 展示后果和恢复方式，破坏性操作要求强确认；取消不改变仓库；可恢复操作先创建备份；日志记录动作与结果但不记录凭证；无确认票据的直接 API 调用被拒绝。 | 未开始 |
+| S5.5 | Reset、丢弃工作区变更、删除远程分支等危险操作安全网。 | 后端返回影响文件/提交/目标 ref；UI 展示后果和恢复方式，破坏性操作要求强确认；取消不改变仓库；可恢复操作先创建备份；日志记录动作与结果但不记录凭证；无确认票据的直接 API 调用被拒绝。 | 进行中 |
 
 ## 10. 大阶段 6：AI 辅助
 
@@ -387,3 +387,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 子阶段 C：交互式 todo 支持精确覆盖每个预览提交一次、排序及 pick/reword/edit/squash/fixup/drop；reword 可编辑消息，edit 任务暂停后可在冲突/任务中心流程中修改并继续。预览检查提交是否已存在于 remote-tracking refs，删 commit 与改写已发布提交均要求显式确认。新增 `RebaseDialog`，通过 Ctrl/Cmd+I 和命令面板入口启动，提供 onto 选择、序列编辑、reword 文本、影响预览及确认门控。临时 sequence editor 执行用户审核后的动作序列，创建和记录回滚 ref 的行为沿用子阶段 B。验收：`cargo test --manifest-path crates/gitcrest-core/Cargo.toml rebase -- --nocapture`（4 tests）、`pnpm test`（85 tests）、`pnpm build`、`pnpm test:e2e`（1 test，先构建 sidecar）、`pnpm api:types`、Rust fmt/clippy、`git diff --check` 均通过。证据：`crates/gitcrest-core/src/rebase.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`src/features/workflows/RebaseDialog.tsx`、`src/App.tsx`、`tests/unit/rebase-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。完成 commit：`6bf09b3`。
 - 子阶段 D：新增 rebase 备份列表快照与回滚任务。回滚只接受 `refs/gitcrest/rebase-backups/<taskId>` 空间内的本仓库引用，用户须二次确认；请求绑定当前 HEAD、备份引用及 OID，提交前和仓库写锁内均复核 HEAD、分支、工作区干净状态、无进行中 Git 操作和备份 OID。执行前将当前 HEAD 另存为 `-before-rollback` 安全引用，再 reset 到审核的备份 OID；任务日志展示来源与安全引用，成功后刷新仓库状态。RebaseDialog 提供备份选择和影响确认。验收：Rust rebase 集成组 4 tests（含成功恢复旧提交、拒绝未确认/伪造引用、rebase 冲突 abort 后 HEAD 与内容恢复）；`pnpm test`（87 tests）、`pnpm build`、`pnpm test:e2e`（1 test，含 UI 回滚）、`pnpm api:types`、Clippy、Rust fmt、`git diff --check` 通过。完成 commit：`cd3315a`。
 - 完成说明：S5.4 包含只读范围预览、snapshot-bound Rebase、rollback ref、冲突 continue/skip/abort、交互式 todo 确认与编辑，以及受限备份回滚。abort 集成测试确认 HEAD 与工作树内容回到本次 rebase 前；回滚测试确认先留安全引用后恢复已选备份。证据：`crates/gitcrest-core/src/rebase.rs`、`crates/gitcrest-core/src/git_command.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/features/workflows/RebaseDialog.tsx`、`src/App.tsx`、`tests/unit/rebase-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。S5.4 实现 commits：`394a6d2`、`d1b39a7`、`9043836`、`6bf09b3`、`cd3315a`；计划与验收记录分别见 `a0a5d00`、`b424a69` 及本次计划提交。
+
+### S5.5 — Reset、丢弃与远程分支删除安全网（进行中）
+- 拆分实施：先完成 snapshot-bound Reset（soft/mixed/hard）预览、确认、备份与恢复，再处理指定范围的工作区丢弃和远程分支删除；所有破坏性动作需在 API 中拒绝缺少确认的请求。
+- 当前后续：实现 Reset 范围预览与 task，约束 dirty 工作树下的 hard reset，并提供可见的备份恢复入口；逐项补充取消、失败和 stale review 用例。
