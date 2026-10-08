@@ -15,22 +15,17 @@ mod bootstrap;
 mod config;
 mod features;
 
-#[path = "features/repositories/cloning.rs"]
-mod cloning;
 mod domain;
 mod git;
 mod ports;
-#[path = "features/repositories/mod.rs"]
-mod repositories;
-#[path = "features/repositories/repository.rs"]
-mod repository;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::{
-    branches, commits, credentials, diff, history, remotes, settings, shelves, staging, status,
-    system, tags, tasks,
+    branches, commits, credentials, diff, history, remotes, repositories, settings, shelves,
+    staging, status, system, tags, tasks,
 };
+pub(crate) use repositories::{cloning, repository};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 #[path = "features/workflows/mod.rs"]
