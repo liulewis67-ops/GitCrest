@@ -6,7 +6,8 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    history, status, AppState,
+    features::{history, status},
+    AppState,
 };
 
 use super::{
