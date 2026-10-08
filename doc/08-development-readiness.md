@@ -141,7 +141,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 | Diff 浏览 | `05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
 | 冲突解决 | `04-user-flows.md`、`07-interaction-accessibility.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
 | 分支切换 | `04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
-| 远程同步 | `04-user-flows.md` | 是 | `tests/e2e/remote-sync.test.ts`（Push、Fetch 成功/失败恢复/活动取消、Pull fast-forward/merge/rebase 冲突恢复/排队取消、Push 失败后审阅重试） |
+| 远程同步 | `04-user-flows.md` | 是 | `tests/e2e/remote-sync.test.ts`（Push、Fetch 成功/失败恢复/活动取消、Pull fast-forward/活动 merge 取消与安全回滚/merge-rebase 冲突恢复/排队取消、Push 失败后审阅重试） |
 | Shelve | `04-user-flows.md` | 是 | `tests/e2e/shelf-workflow.test.ts`（创建、预览和应用） |
 | AI message | `02-prd.md`、`07-interaction-accessibility.md` | 是 | `tests/e2e/desktop.test.ts` |
 | 设置快捷键 | `07-interaction-accessibility.md` | 是 | `tests/e2e/shortcut-settings.test.ts` |
