@@ -9,13 +9,22 @@ use axum::{
 };
 use tower_http::cors::CorsLayer;
 
+use super::{
+    error::ApiError,
+    middleware::{
+        auth::require_auth,
+        version::{add_api_version_header, require_api_version},
+    },
+};
+
 #[cfg(test)]
 use crate::write_probe;
 
-use crate::{
-    add_api_version_header, api_not_found, repositories, require_api_version, require_auth, status,
-    system, AppState,
-};
+use crate::{repositories, status, system, AppState};
+
+async fn api_not_found() -> ApiError {
+    ApiError::route_not_found()
+}
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
     let api = system::routes::api_router()

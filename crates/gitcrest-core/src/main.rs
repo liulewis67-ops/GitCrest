@@ -1,13 +1,11 @@
-use axum::{
-    body::Body,
-    extract::State,
-    http::{header::AUTHORIZATION, HeaderValue, Method, Request},
-    middleware::Next,
-    response::{IntoResponse, Response},
-};
 #[cfg(test)]
 use axum::{
-    http::{header::CONTENT_TYPE, StatusCode},
+    body::Body,
+    http::{
+        header::{AUTHORIZATION, CONTENT_TYPE},
+        Method, StatusCode,
+    },
+    response::{IntoResponse, Response},
     Router,
 };
 #[cfg(test)]
@@ -59,24 +57,26 @@ mod watcher;
 #[path = "features/workflows/mod.rs"]
 mod workflows;
 
+use git::command::{BranchCommand, GitOperation, RemoteCommand};
+use repository::{Repository, RepositoryError};
+use state::{AppState, EventBus};
+use tasks::{TaskFailure, TaskSnapshot};
+
+#[cfg(test)]
 use api::error::ApiError;
 #[cfg(test)]
-use api::router::app_router;
-#[cfg(test)]
+use api::{
+    middleware::{auth::conflict_capability_allows, version::API_VERSION},
+    router::app_router,
+};
 #[cfg(test)]
 use cloning::CloneService;
 #[cfg(test)]
 use git::command::GitCommandService;
-use git::command::{BranchCommand, GitOperation, RemoteCommand};
 #[cfg(test)]
 use repository::RepositoryManager;
-use repository::{Repository, RepositoryError};
-use state::{AppState, EventBus};
 #[cfg(test)]
 use tasks::TaskService;
-use tasks::{TaskFailure, TaskSnapshot};
-
-const API_VERSION: &str = "1";
 
 #[tokio::main]
 async fn main() {
@@ -91,116 +91,6 @@ fn test_ai_credentials() -> credentials::AiCredentialManager {
     credentials::AiCredentialManager::with_store(Arc::new(
         credentials::MemoryAiCredentialStore::default(),
     ))
-}
-
-async fn api_not_found() -> ApiError {
-    ApiError::route_not_found()
-}
-
-async fn require_api_version(request: Request<Body>, next: Next) -> Response {
-    let is_bootstrap_version = matches!(request.uri().path(), "/api/version" | "/version");
-    if !is_bootstrap_version {
-        let requested = request
-            .headers()
-            .get("X-GitCrest-API-Version")
-            .and_then(|value| value.to_str().ok());
-        if requested != Some(API_VERSION) {
-            return ApiError::unsupported_version().into_response();
-        }
-    }
-
-    next.run(request).await
-}
-
-async fn add_api_version_header(request: Request<Body>, next: Next) -> Response {
-    let mut response = next.run(request).await;
-    response.headers_mut().insert(
-        "X-GitCrest-API-Version",
-        HeaderValue::from_static(API_VERSION),
-    );
-    response
-}
-
-async fn require_auth(
-    State(state): State<AppState>,
-    request: Request<Body>,
-    next: Next,
-) -> Response {
-    let requires_write = !matches!(
-        request.method(),
-        &Method::GET | &Method::HEAD | &Method::OPTIONS
-    );
-    let token = request
-        .headers()
-        .get(AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "));
-    match token {
-        Some(token) if token == state.read_write_token.as_str() => {}
-        Some(token)
-            if state
-                .conflict_token
-                .as_deref()
-                .is_some_and(|capability| token == capability.as_str()) =>
-        {
-            if !conflict_capability_allows(request.method(), request.uri().path()) {
-                return ApiError::forbidden().into_response();
-            }
-        }
-        Some(token)
-            if state
-                .read_only_token
-                .as_deref()
-                .is_some_and(|readonly| token == readonly.as_str()) =>
-        {
-            if requires_write {
-                return ApiError::forbidden().into_response();
-            }
-        }
-        _ => return ApiError::unauthorized().into_response(),
-    }
-    next.run(request).await
-}
-
-fn conflict_capability_allows(method: &Method, path: &str) -> bool {
-    let path = path.strip_prefix("/api").unwrap_or(path);
-    let Some((repo_id, suffix)) = path
-        .strip_prefix("/v1/repositories/")
-        .and_then(|value| value.split_once('/'))
-    else {
-        return false;
-    };
-    if !repo_id.strip_prefix("repo_").is_some_and(|value| {
-        value.len() == 64 && value.bytes().all(|byte| byte.is_ascii_hexdigit())
-    }) {
-        return false;
-    }
-    let allowed_suffix = matches!(
-        suffix,
-        "workflows/recovery-preflight"
-            | "workflows/conflicts/file"
-            | "workflows/conflicts/resolved"
-            | "workflows/conflicts/suggestion"
-            | "workflows/conflicts/ai-settings"
-    );
-    if !allowed_suffix {
-        return false;
-    }
-    match *method {
-        Method::GET => matches!(
-            suffix,
-            "workflows/recovery-preflight"
-                | "workflows/conflicts/file"
-                | "workflows/conflicts/ai-settings"
-        ),
-        Method::PUT => suffix == "workflows/conflicts/file",
-        Method::POST => matches!(
-            suffix,
-            "workflows/conflicts/resolved" | "workflows/conflicts/suggestion"
-        ),
-        Method::OPTIONS => true,
-        _ => false,
-    }
 }
 
 #[cfg(test)]
