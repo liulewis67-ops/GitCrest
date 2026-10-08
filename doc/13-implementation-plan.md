@@ -1310,3 +1310,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：rebase commit 列表/远端发布检查、reset 变更计数/路径枚举，以及 remote delete preview 查询仍从 feature 直接执行 Git；后续按查询职责继续收敛到 adapter。
 - 证据：`crates/gitcrest-core/src/features/workflows/{rebase.rs,reset.rs}`、`crates/gitcrest-core/src/ports/workflow_git.rs`。
 - 实施 commit：`69a42c3`
+
+### 后端 reset comparison 只读查询迁入 adapter — 小阶段 79
+- 状态：已完成（reset 提交差异与受影响路径通过 Git port 查询）
+- 日期：2026-10-09
+- 交付：新增领域 `WorkflowResetComparison` 与 `WorkflowGitPort::compare_for_reset`；Git adapter 执行 rev-list 计数和 diff 路径枚举，并解析为领域结果。reset feature 删除本地 Git 子进程实现，继续负责路径排序/去重/200 条截断、preview revision 与可执行性判断。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：rebase commit 列表与远端发布检查、remote branch delete 的目标/比较/路径查询仍在 feature 内执行；继续将稳定的只读 Git 查询迁入 adapter。
+- 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/workflows/reset.rs`。
+- 实施 commit：`bd8d425`
