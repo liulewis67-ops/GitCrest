@@ -1877,3 +1877,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：shelves/staging/status/tasks/workflows aliases 仍有消费者；按 feature 与 adapter 边界继续迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/remotes/`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`d3089c6`
+
+### shelves feature 调用切换并移除 crate-root alias — 小阶段 142
+- 状态：已完成（shelf 数据与操作 consumers 通过 feature 路径访问）
+- 日期：2026-10-09
+- 交付：将 storage、staging handler、workflow recovery 与 shelves 自身 DTO/handler 中的 shelf service/model 引用切换到 `features::shelves`。API router/error mapper 已使用 feature 路径；从 `lib.rs` 移除 shelves crate-root re-export。持久化格式、恢复流程与 shelf API 行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：staging/status/tasks/workflows aliases 仍有消费者；按依赖方向继续迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{shelves,staging,workflows}/`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`584fec8`
