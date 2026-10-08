@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type K
 import { GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
+import { WelcomePage } from "../pages/welcome/WelcomePage";
 import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings/shortcut-preferences";
@@ -1683,66 +1684,22 @@ function App() {
       </header>
 
       {page === "welcome" ? (
-        <section className="welcomePage" aria-labelledby="welcome-title">
-          <div className="welcomeIntro">
-            <p className="sectionEyebrow">LOCAL GIT WORKSPACE</p>
-            <h1 id="welcome-title">Your repositories,<br /><span>in good order.</span></h1>
-            <p className="welcomeSummary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
-            <div className="welcomeActions">
-              <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()}>
-                <span aria-hidden="true">＋</span> {openingRepository ? "Opening repository…" : "Open a repository"}
-              </button>
-              <button className="secondaryButton" type="button" disabled={!connected} onClick={() => { setCloneError(""); setCloneOpen(true); }} aria-keyshortcuts={ariaShortcut(shortcuts.cloneRepository, isMacPlatform)} title={`Clone repository (${displayShortcut(shortcuts.cloneRepository, isMacPlatform)})`}>Clone repository</button>
-              <button className="textButton" type="button" onClick={() => setPage("workspace")}>Preview workspace</button>
-            </div>
-          </div>
-          {openError && <div className="openRepositoryError" role="alert">{openError}</div>}
-          <div className="welcomeColumns">
-            <section className="recentSection" aria-labelledby="recent-heading">
-              <div className="sectionHeading">
-                <div><p className="sectionEyebrow">YOUR LIBRARY</p><h2 id="recent-heading">Recent repositories</h2></div>
-                <span className="quietButton compact" aria-label="Favorites first, then most recently opened">Favorites first</span>
-              </div>
-              {repositories.length === 0 ? (
-                <div className="emptyRepositories">
-                  <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
-                  <h3>No repositories yet</h3>
-                  <p>Open a local Git repository to see its changes, branches, and history here.</p>
-                  <button className="inlineAction" type="button" onClick={() => void openLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
-                </div>
-              ) : (
-                <div className="repositoryList">
-                  {repositories.map((repository) => (
-                    <div key={repository.repoId} className={`repositoryRow ${repository.availability === "missing" ? "repositoryMissing" : ""}`}>
-                      <span className="repoStatusGlyph" aria-hidden="true">{repository.availability === "missing" ? "!" : "●"}</span>
-                      <button className="repositoryRowOpen" type="button" disabled={openingRepository || repository.availability === "missing"} onClick={() => void openRecentRepository(repository)}>
-                        <span className="repositoryRowText"><strong>{repositoryName(repository.path)}{repository.isFavorite ? " · Favorite" : ""}</strong><small>{repository.availability === "missing" ? `Unavailable · ${repository.path}` : repository.path}</small></span>
-                        <span className="repositoryBranch">{repository.availability === "missing" ? "Missing" : repository.detached ? "Detached" : repository.branch || "Unborn"}</span>
-                      </button>
-                      <button className="repositoryRowAction" type="button" aria-label={repository.isFavorite ? `Remove ${repositoryName(repository.path)} from favorites` : `Favorite ${repositoryName(repository.path)}`} onClick={() => void toggleFavorite(repository)}>{repository.isFavorite ? "★" : "☆"}</button>
-                      {repository.availability === "missing" && <button className="repositoryRowAction" type="button" onClick={() => void openLocalRepository()}>Locate</button>}
-                      <button className="repositoryRowAction" type="button" aria-label={`Remove ${repositoryName(repository.path)} from recent repositories`} onClick={() => void forgetRepository(repository)}>Remove</button>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-            <aside className="quickActions" aria-labelledby="quick-heading">
-              <div className="sectionHeading"><div><p className="sectionEyebrow">GET STARTED</p><h2 id="quick-heading">Quick actions</h2></div></div>
-                <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void openLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={`Open local repository (${displayShortcut(shortcuts.openRepository, isMacPlatform)})`}>
-                <span className="actionIcon" aria-hidden="true">↗</span><span><strong>Open local repository</strong><small>Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
-              </button>
-              <button className="actionRow" type="button" disabled={!connected} onClick={() => { setCloneError(""); setCloneOpen(true); }}>
-                <span className="actionIcon" aria-hidden="true">⇣</span><span><strong>Clone a repository</strong><small>Bring a remote project here</small></span><span className="actionArrow" aria-hidden="true">→</span>
-              </button>
-              <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void initializeLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.initializeRepository, isMacPlatform)} title={`Initialize a repository (${displayShortcut(shortcuts.initializeRepository, isMacPlatform)})`}>
-                <span className="actionIcon" aria-hidden="true">＋</span><span><strong>Initialize a repository</strong><small>Start tracking a new project</small></span><span className="actionArrow" aria-hidden="true">→</span>
-              </button>
-              <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Initialize creates Git metadata only in the folder you select and keeps its files.</div>
-            </aside>
-          </div>
-          <footer className="welcomeFooter"><span>Private by default</span><span className="footerDivider" /><span>Your repositories stay on this device</span><span className="footerSpacer" /><span>{version || "Local engine"}</span><button type="button" className="textButton" onClick={() => setPage("workspace")}>Explore the workspace <span aria-hidden="true">→</span></button></footer>
-        </section>
+        <WelcomePage
+          repositories={repositories}
+          openingRepository={openingRepository}
+          connected={connected}
+          shortcuts={shortcuts}
+          isMacPlatform={isMacPlatform}
+          openError={openError}
+          version={version}
+          onOpenLocalRepository={() => void openLocalRepository()}
+          onCloneRepository={() => { setCloneError(""); setCloneOpen(true); }}
+          onNavigateWorkspace={() => setPage("workspace")}
+          onInitializeRepository={() => void initializeLocalRepository()}
+          onOpenRepository={(repository) => void openRecentRepository(repository)}
+          onToggleFavorite={(repository) => void toggleFavorite(repository)}
+          onForgetRepository={(repository) => void forgetRepository(repository)}
+        />
       ) : (
         <section className="workspacePage" aria-label="Git workspace">
           <div className="workspaceToolbar">
