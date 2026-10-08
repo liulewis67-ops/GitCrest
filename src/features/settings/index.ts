@@ -10,3 +10,4 @@ export {
   SHORTCUT_PREFERENCES_KEY,
 } from "./model/shortcut-preferences";
 export type { ShortcutPreferences } from "./model/shortcut-preferences";
+export const loadSettingsDialog = () => import("./SettingsDialog");

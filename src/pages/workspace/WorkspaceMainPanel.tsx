@@ -2,9 +2,10 @@ import { lazy, Suspense, useEffect, type RefObject } from "react";
 import type { DiffDocumentResponse, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../api/client";
 import type { WorkspaceSession } from "../../features/repositories";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
+import { loadSplitDiff } from "../../features/diff";
 
 const CommitGraph = lazy(() => import("../../features/history").then(({ CommitGraph }) => ({ default: CommitGraph })));
-const SplitDiff = lazy(() => import("../../features/diff").then(({ SplitDiff }) => ({ default: SplitDiff })));
+const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));
 
 interface WorkspaceMainPanelProps {
   mode: "graph" | "diff";
