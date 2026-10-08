@@ -2,7 +2,7 @@ use axum::{routing::get, routing::post, Router};
 
 use crate::state::AppState;
 
-use crate::{
+use super::handlers::{
     apply_repository_shelf, create_repository_shelf, delete_repository_shelf, get_repository_shelf,
     list_repository_shelves, preflight_repository_shelf_apply,
 };
