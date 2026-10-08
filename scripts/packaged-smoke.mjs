@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
+import { isUpdateFeedConfigured } from "../electron/main/update-config-policy.mjs";
 
 const root = process.cwd();
-const output = join(root, "dist");
+const output = resolve(process.env.GITCREST_PACKAGED_OUTPUT ?? join(root, "dist"));
 const executable = await findPackagedExecutable(output);
 await assertReleaseArtifactSizes(output);
 const appData = await mkdtemp(join(tmpdir(), "gitcrest-package-smoke-"));
@@ -31,11 +32,13 @@ try {
   await window.waitForLoadState("domcontentloaded", { timeout: 15_000 });
   await window.getByText("Core connected").waitFor({ timeout: 20_000 });
   const updateStatus = await window.evaluate(async () => window.gitcrest.getUpdateStatus());
-  const hasUpdateConfig = existsSync(join(runtime.resourcesPath, "app-update.yml"));
+  const updateConfigPath = join(runtime.resourcesPath, "app-update.yml");
+  const updateConfig = existsSync(updateConfigPath) ? await readFile(updateConfigPath, "utf8") : undefined;
+  const expectedUpdateState = isUpdateFeedConfigured(true, runtime.platform, updateConfig) ? "idle" : "notConfigured";
   assert.equal(
     updateStatus.state,
-    hasUpdateConfig ? "idle" : "notConfigured",
-    "packaged update state should reflect valid update metadata and Windows publisher trust configuration",
+    expectedUpdateState,
+    "packaged update state should match the platform-specific updater trust policy",
   );
   sidecarUrl = await window.evaluate(async () => {
     const connection = await window.gitcrest.getSidecarConnection();
