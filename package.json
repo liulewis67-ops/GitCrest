@@ -67,7 +67,7 @@
       ]
     },
     "mac": {
-      "target": "dmg",
+      "target": ["dmg", "zip"],
       "extraResources": [
         {
           "from": "crates/gitcrest-core/target/release/gitcrest-core",
