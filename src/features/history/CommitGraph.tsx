@@ -249,7 +249,8 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
                 const x2 = edge.toLane * 20 + 22;
                 const y1 = edge.from * ROW_HEIGHT + ROW_HEIGHT / 2;
                 const y2 = edge.to * ROW_HEIGHT + ROW_HEIGHT / 2;
-                return <path key={`${edge.from}-${edge.to}-${edge.fromLane}-${edge.toLane}`} d={`M ${x1} ${y1} C ${x1} ${y1 + ROW_HEIGHT / 2}, ${x2} ${y2 - ROW_HEIGHT / 2}, ${x2} ${y2}`} />;
+                const direction = edge.to >= edge.from ? 1 : -1;
+                return <path key={`${edge.from}-${edge.to}-${edge.fromLane}-${edge.toLane}`} d={`M ${x1} ${y1} C ${x1} ${y1 + direction * ROW_HEIGHT / 2}, ${x2} ${y2 - direction * ROW_HEIGHT / 2}, ${x2} ${y2}`} />;
               })}
             </svg>
             <div className="commitGraphList" role="list" aria-label="Commit history">

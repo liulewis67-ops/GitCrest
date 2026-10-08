@@ -1,0 +1,156 @@
+{
+  "generatedAt": "2026-10-08T04:03:30.794Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         ",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "rendererBuild": "production electron-vite build",
+    "rustProfile": "release"
+  },
+  "fixture": {
+    "commits": 100000,
+    "diffFileLines": 1000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-v2"
+  },
+  "iterations": 20,
+  "startedAt": "2026-10-08T04:00:54.262Z",
+  "startup": {
+    "samples": 20,
+    "p50Ms": 1226.022,
+    "p95Ms": 1376.342,
+    "maxMs": 1401.95,
+    "samplesMs": [
+      1401.95,
+      1208.337,
+      1241.413,
+      1106.446,
+      1304.837,
+      1240.808,
+      1179.099,
+      1300.49,
+      1233.693,
+      1226.022,
+      1197.098,
+      1150.328,
+      1194.335,
+      1168.966,
+      1250.867,
+      1197.272,
+      1376.342,
+      1247.965,
+      1202.678,
+      1251.706
+    ]
+  },
+  "firstHistoryFrame": {
+    "samples": 20,
+    "p50Ms": 915.654,
+    "p95Ms": 979.202,
+    "maxMs": 987.749,
+    "samplesMs": [
+      911.414,
+      942.022,
+      919.184,
+      966.263,
+      910.383,
+      913.829,
+      920.854,
+      921.842,
+      899.535,
+      907.889,
+      918.893,
+      915.654,
+      987.749,
+      921.283,
+      901.01,
+      924.889,
+      894.416,
+      907.908,
+      913.195,
+      979.202
+    ]
+  },
+  "idleProcessTreeMemory": {
+    "sampleCount": 20,
+    "peakBytes": 410791936,
+    "samplesBytes": [
+      410468352,
+      410693632,
+      410759168,
+      410771456,
+      410779648,
+      410779648,
+      410779648,
+      410779648,
+      410779648,
+      410791936,
+      410791936,
+      410791936,
+      410791936,
+      410791936,
+      410791936,
+      410750976,
+      407015424,
+      407015424,
+      407015424,
+      407019520
+    ]
+  },
+  "loadedRepositoryIdleProcessTreeMemory": {
+    "sampleCount": 20,
+    "peakBytes": 462942208,
+    "samplesBytes": [
+      462942208,
+      462942208,
+      462376960,
+      461230080,
+      461230080,
+      461053952,
+      461053952,
+      461053952,
+      461053952,
+      461053952,
+      461053952,
+      459964416,
+      459198464,
+      459198464,
+      459112448,
+      459112448,
+      441028608,
+      439951360,
+      439955456,
+      439951360
+    ]
+  },
+  "work": {
+    "scroll": {
+      "durationMs": 30000,
+      "frameSamples": 1687,
+      "p95FrameMs": 18.100000000000364,
+      "p5Fps": 55.24861878452928
+    },
+    "workMemorySampleCount": 17,
+    "workMemoryPeakBytes": 543703040
+  },
+  "installer": {
+    "path": "E:\\personal_projects\\GitCrest\\dist\\GitCrest Setup 0.1.0.exe",
+    "bytes": 107488213,
+    "mebibytes": 102.51
+  },
+  "limitations": []
+}

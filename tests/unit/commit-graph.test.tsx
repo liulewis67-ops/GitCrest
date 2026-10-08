@@ -18,6 +18,19 @@ function commit(index: number) {
 }
 
 describe("CommitGraph", () => {
+  it("draws commit parent edges when timestamp order places the parent first", async () => {
+    const parent = { ...commit(3), parents: [] };
+    const child = { ...commit(2), parents: [parent.oid] };
+    const api = {
+      getRepositoryCommits: vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [parent, child], nextOffset: null })),
+      getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: child.oid, branch: "main", detached: false, refs: [] })),
+    } as unknown as GitCrestApiClient;
+    const { container } = render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
+
+    await screen.findByRole("list", { name: "Commit history" });
+    await waitFor(() => expect(container.querySelector(".commitGraphEdges path")).not.toBeNull());
+  });
+
   it("virtualizes rows, pages older commits, and supports keyboard selection", async () => {
     const entries = Array.from({ length: 120 }, (_, index) => commit(index));
     const getRepositoryCommits = vi.fn(async (_repoId: string, offset = 0, limit = 50) => ({
