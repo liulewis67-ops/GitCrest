@@ -1598,3 +1598,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workspace 主面板组件仍从 App 接收较多状态与操作回调；继续按页面组合和 feature 业务边界减小根组件职责。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/app/App.tsx`。
 - 实施 commit：`4dfbe47`
+
+### 全局快捷键分派集中到 app hook — 小阶段 111
+- 状态：已完成（全局键盘监听、输入/对话框作用域过滤和快捷键判定集中注册）
+- 日期：2026-10-09
+- 交付：新增 `src/app/use-global-shortcuts.ts`，统一监听生命周期、IME composition 与可编辑控件/对话框避让、偏好匹配、动作可用条件和回调分派。App 注入当前页面、RepoId/提交状态、任务与工作区能力标志及现有动作回调；Git 操作实现仍由原业务函数执行。监听器只注册一次，通过最新渲染上下文读取偏好和回调，避免闭包陈旧及每次状态变化重绑。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。既有 tree-sitter `eval`、commits 模块动态/静态导入提示及 Monaco contribution 大 chunk 警告仍存在。
+- 限制/后续：命令面板和菜单仍各自组合命令可用状态及回调；后续可继续统一命令动作模型与快捷键可用性来源，避免入口条件漂移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/app/use-global-shortcuts.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 4.1、8 节。
+- 实施 commit：`3cb7f9f`
