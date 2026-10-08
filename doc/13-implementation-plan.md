@@ -1265,3 +1265,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：DTO 目录现按传输方向分层，workflows service 本身仍包含多个预检/恢复用例；后续按规范继续拆分 use case service，并检查 `features/remotes/service.rs` 等是否混有传输模型。
 - 证据：`crates/gitcrest-core/src/api/workflow.rs`、`crates/gitcrest-core/src/features/workflows/{dto.rs,dto/requests.rs,dto/responses.rs}`。
 - 实施 commit：`4d2a796`
+
+### 后端 workflows service 与 Git 状态读取拆分 — 小阶段 74
+- 状态：已完成（service 命名规范化，状态读取逻辑独立模块）
+- 日期：2026-10-09
+- 交付：将 workflows feature service 主模块规范命名为 `service.rs`，保留 `features/workflows/mod.rs` 的内部聚合出口；把 porcelain status 解析、活动 Git 操作识别、限时有界 Git 子进程读取提取至 `service/git_state.rs`。service 显式组合预检用例与状态读取模块，现有 handler/adapter 调用路径通过 feature 聚合接口保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与 `git diff --check` 通过；Clippy 全 target 编译了测试目标但按当前任务约束未运行测试。
+- 限制/后续：Git 子进程逻辑目前只是从 feature service 拆入其子模块，尚未通过 port 与 Git adapter 解耦；下一阶段继续梳理 Git 状态读取能力的适配器归属与调用方向。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod.rs,service.rs,service/git_state.rs}`。
+- 实施 commit：`60e2a03`
