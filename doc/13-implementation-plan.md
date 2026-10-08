@@ -760,3 +760,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：remote 管理 handlers/DTO 仍在 `main.rs`；后续迁移并继续统一 clone、fetch、pull、push 的 remotes feature 边界。
 - 证据：`crates/gitcrest-core/src/features/remotes/routes.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`8130a34`
+
+### 后端 remote 管理 handlers 与 DTO 拆分 — 小阶段 20
+- 状态：已完成（remote 管理 HTTP 边界进入 remotes feature）
+- 日期：2026-10-09
+- 交付：将远端列表、添加、URL 更新、删除、默认 remote 设置和 branch upstream 设置 handlers 与对应请求 DTO 从 `main.rs` 迁至 `features/remotes/{handlers,dto}.rs`，由 remotes feature routes 绑定；既有命令提交、URL 校验与脱敏、默认值及 API 错误语义保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；remote 管理 API 集成用例通过。
+- 限制/后续：clone、fetch、pull、push handlers/routes 仍待按 feature 归属整理；handler 目前仍直接协调 AppState 与 service，后续继续按规范提取用例层。
+- 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,routes,service}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`b158803`
+
