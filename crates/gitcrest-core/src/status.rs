@@ -100,6 +100,7 @@ async fn read_scope(
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
+        .env("GIT_OPTIONAL_LOCKS", "0")
         .kill_on_drop(true);
     if !paths.is_empty() {
         command.arg("--").args(paths);
