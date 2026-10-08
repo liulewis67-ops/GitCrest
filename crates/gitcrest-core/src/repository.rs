@@ -287,6 +287,30 @@ impl RepositoryManager {
                 _ => RepositoryError::StatusFailed,
             })
     }
+
+    pub async fn status_snapshot_paths(
+        &self,
+        repo_id: &str,
+        paths: &[String],
+    ) -> Result<StatusSnapshot, RepositoryError> {
+        let store = self.store.clone();
+        let repo_id_owned = repo_id.to_owned();
+        let repository = task::spawn_blocking(move || store.get(&repo_id_owned))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .ok_or(RepositoryError::RepositoryNotFound)?;
+        let path = PathBuf::from(&repository.path);
+        fs::metadata(&path).await.map_err(map_path_error)?;
+        crate::status::read_paths(repository.repo_id, &path, paths)
+            .await
+            .map_err(|error| match error.kind() {
+                std::io::ErrorKind::InvalidInput => RepositoryError::InvalidPath,
+                std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
+                std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
+                _ => RepositoryError::StatusFailed,
+            })
+    }
 }
 
 fn now_ms() -> i64 {

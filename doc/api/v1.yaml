@@ -212,10 +212,23 @@ paths:
           $ref: "#/components/schemas/RepoId"
     get:
       operationId: getRepositoryStatus
-      summary: Refresh and read the complete working tree status snapshot
+      summary: Read the working tree status snapshot or a bounded path scope
+      description: Omitting paths returns the complete current snapshot. Repeating paths returns only status records matching those literal relative paths; use this form only for a reviewed watcher dirty scope and merge it into the previously read complete snapshot.
+      parameters:
+        - name: paths
+          in: query
+          required: false
+          description: Repeated literal repository-relative path scopes. Up to 256 paths and 64 KiB combined; omitted for a complete snapshot.
+          schema:
+            type: array
+            maxItems: 256
+            items:
+              type: string
+              minLength: 1
+              maxLength: 4096
       responses:
         "200":
-          description: Current staged, unstaged, untracked, ignored, and conflicted file status.
+          description: Current status snapshot or the changed records within the requested path scope.
           headers:
             X-GitCrest-API-Version:
               $ref: "#/components/headers/ApiVersion"
@@ -4406,7 +4419,7 @@ components:
       properties:
         eventId:
           type: string
-          description: Monotonic within a sidecar session; not a durable cursor.
+          description: Starts at 1 and increases for events delivered on this connection; gaps require a full resync and are not durable cursors.
         protocolVersion:
           type: integer
           const: 1

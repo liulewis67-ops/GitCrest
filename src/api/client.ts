@@ -112,6 +112,14 @@ export class GitCrestApiClient {
     return this.request<StatusSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/status`);
   }
 
+  getRepositoryStatusPaths(repoId: RepoId, paths: string[]): Promise<StatusSnapshotResponse> {
+    const query = new URLSearchParams();
+    for (const path of paths) query.append("paths", path);
+    return this.request<StatusSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/status?${query}`,
+    );
+  }
+
   getFileDiff(repoId: RepoId, path: string, scope: "workingTree" | "index"): Promise<DiffDocumentResponse> {
     const query = new URLSearchParams({ path, scope });
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/diff?${query}`);

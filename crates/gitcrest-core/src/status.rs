@@ -49,8 +49,45 @@ pub enum ChangeCategory {
 }
 
 pub async fn read(repo_id: String, path: &Path) -> Result<StatusSnapshot, std::io::Error> {
+    read_scope(repo_id, path, &[]).await
+}
+
+pub async fn read_paths(
+    repo_id: String,
+    path: &Path,
+    paths: &[String],
+) -> Result<StatusSnapshot, std::io::Error> {
+    if paths.is_empty()
+        || paths.len() > 256
+        || paths.iter().any(|path| {
+            path.is_empty()
+                || path.len() > 4096
+                || Path::new(path).is_absolute()
+                || Path::new(path).components().any(|component| {
+                    matches!(
+                        component,
+                        std::path::Component::ParentDir | std::path::Component::RootDir
+                    )
+                })
+        })
+        || paths.iter().map(String::len).sum::<usize>() > 64 * 1024
+    {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "The status path scope is invalid or too large",
+        ));
+    }
+    read_scope(repo_id, path, paths).await
+}
+
+async fn read_scope(
+    repo_id: String,
+    path: &Path,
+    paths: &[String],
+) -> Result<StatusSnapshot, std::io::Error> {
     let mut command = Command::new("git");
     command
+        .arg("--literal-pathspecs")
         .arg("-C")
         .arg(path)
         .args([
@@ -64,6 +101,9 @@ pub async fn read(repo_id: String, path: &Path) -> Result<StatusSnapshot, std::i
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
+    if !paths.is_empty() {
+        command.arg("--").args(paths);
+    }
     let output = tokio::time::timeout(std::time::Duration::from_secs(30), command.output())
         .await
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "Git status timed out"))??;

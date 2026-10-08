@@ -112,7 +112,10 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** Refresh and read the complete working tree status snapshot */
+        /**
+         * Read the working tree status snapshot or a bounded path scope
+         * @description Omitting paths returns the complete current snapshot. Repeating paths returns only status records matching those literal relative paths; use this form only for a reviewed watcher dirty scope and merge it into the previously read complete snapshot.
+         */
         get: operations["getRepositoryStatus"];
         put?: never;
         post?: never;
@@ -2057,7 +2060,7 @@ export interface components {
             cancelRequested: boolean;
         };
         EventEnvelope: {
-            /** @description Monotonic within a sidecar session; not a durable cursor. */
+            /** @description Starts at 1 and increases for events delivered on this connection; gaps require a full resync and are not durable cursors. */
             eventId: string;
             /** @constant */
             protocolVersion: 1;
@@ -2444,7 +2447,10 @@ export interface operations {
     };
     getRepositoryStatus: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Repeated literal repository-relative path scopes. Up to 256 paths and 64 KiB combined; omitted for a complete snapshot. */
+                paths?: string[];
+            };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
             };
@@ -2455,7 +2461,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Current staged, unstaged, untracked, ignored, and conflicted file status. */
+            /** @description Current status snapshot or the changed records within the requested path scope. */
             200: {
                 headers: {
                     "X-GitCrest-API-Version": components["headers"]["ApiVersion"];

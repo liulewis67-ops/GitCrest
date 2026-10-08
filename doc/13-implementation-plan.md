@@ -44,7 +44,7 @@
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 已完成 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 进行中 |
 | 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 进行中 |
-| 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–6 | 未开始 |
+| 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–6 | 进行中 |
 
 阶段 2 完成加上阶段 3 的 3.1、3.2 是 Alpha 功能门槛；阶段 0–6 完成是 Beta 功能门槛；阶段 7 完成是 GA 门槛。阶段间可并行做准备工作，但不得跳过依赖验收或提前标完成。
 
@@ -120,7 +120,7 @@
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S7.1 | RepositoryWatcher、dirty scope 合并与增量 StatusSnapshot。 | 工作树、HEAD、index、refs、config、忽略规则变化触发正确刷新；刷新期间新 dirty path 不丢失；rename/规则变更可升级全量刷新；外部 Git 操作和 WS 重连后与 `git status` 一致。 | 未开始 |
+| S7.1 | RepositoryWatcher、dirty scope 合并与增量 StatusSnapshot。 | 工作树、HEAD、index、refs、config、忽略规则变化触发正确刷新；刷新期间新 dirty path 不丢失；rename/规则变更可升级全量刷新；外部 Git 操作和 WS 重连后与 `git status` 一致。 | 已完成 |
 | S7.2 | 性能基准与瓶颈修复。 | 记录硬件、OS、仓库 fixture、测量脚本及 20 次运行分布；冷启动 <1.5s、空闲内存 <250MB、工作中 <500MB、安装包 <150MB；100k 提交首屏 <1s、滚动目标 ≥60fps、1k 行 Diff <200ms、状态刷新 <100ms、搜索 <200ms。任何未达标项保留待验收并附复测数据。 | 未开始 |
 | S7.3 | 键盘、可访问性与安全回归。 | `07` 的 P0 快捷键可用且可自定义/检测冲突；全程键盘能完成打开仓库、暂存、提交、分支和冲突流程；焦点/屏幕阅读、减少动效和状态非仅颜色表达通过检查；窗口越权、无 token、确认绕过、日志泄密用自动化负例验证。 | 未开始 |
 | S7.4 | Windows/macOS/Linux 构建、签名与自动更新。 | 三平台均能安装、启动、找到对应 sidecar、关闭时退出子进程；更新包签名验证失败时拒绝安装；真实签名凭证仅来自 CI 密钥环境；安装包和升级流程留有构建/测试证据。 | 未开始 |
@@ -477,3 +477,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：src/features/workflows/ResetDialog.tsx、src/features/workflows/RebaseDialog.tsx、src/features/branches/RemoteBranchDeleteDialog.tsx、src/App.css、tests/unit/reset-dialog.test.tsx、tests/unit/rebase-dialog.test.tsx、tests/unit/remote-branch-delete-dialog.test.tsx。
 - 限制：解释覆盖已由现有预检返回的提交计数和最多 200 条路径；不会把未返回的路径猜测为完整列表。
 - 完成 commit：1c1f73f。
+
+### S7.1 — RepositoryWatcher 与增量 StatusSnapshot
+- 状态：已完成
+- 日期：2026-10-08
+- 交付：新增跨平台 RepositoryWatcher，按注册仓库监听工作树与 Git 元数据；100 ms 合并事件，dirty path 上限 256、事件队列上限 4096，超限/rename/HEAD/index/ignore/config/操作标记触发全量刷新或对应 metadata/ref 事件。watcher 不可用时以有界轮询刷新并退避重试。Status API 增加重复 `paths` 查询，仅重算请求路径；前端合并增量快照、串行合并刷新期间到达的 scopes，WS 新连接、明确 resync 或事件序列缺口刷新完整当前状态。
+- 测试：`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（99 tests）；`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`pnpm api:types`、`pnpm test`（111 tests）、`pnpm build`、`git diff --check` 均通过。临时仓库 watcher 集成测试覆盖外部文件编辑及 path scope、外部 `git add`/index、`.gitignore`、Git config 和 commit refs；API 测试覆盖带空格的增量路径，单测覆盖 scope 合并上限、rename 升级及 Windows 路径分隔符。
+- 手工验证：未单独操作桌面窗口；真实 `notify` 文件系统 watcher 和外部 Git 命令由 Windows 临时仓库集成测试验证。WS resync 和前端增量合并由自动化测试与构建覆盖。
+- 证据：`crates/gitcrest-core/src/watcher.rs`、`crates/gitcrest-core/src/status.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`doc/api/events-v1.md`、`src/App.tsx`、`src/api/status-snapshot.ts`、`src/api/client.ts`、`tests/unit/status-snapshot.test.ts`、`tests/unit/api-client.test.ts`。
+- 完成 commit：待补记。
+- 限制/后续：Windows 实际 watcher 集成已验证；macOS/Linux 文件系统通知实现和 S7.4 平台包验证待跨平台阶段。高事件量、轮询 fallback 及 100k 历史性能按 S7.2 测量。

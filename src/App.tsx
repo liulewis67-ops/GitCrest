@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "./api/client";
+import { mergeStatusScope } from "./api/status-snapshot";
 import { CommitDetails, CommitGraph } from "./features/history/CommitGraph";
 import { TaskCenter } from "./features/tasks/TaskCenter";
 import { WorkflowDialog, type WorkflowAction } from "./features/workflows/WorkflowDialog";
@@ -178,6 +179,11 @@ function App() {
   const [statusSnapshots, setStatusSnapshots] = useState<Record<string, StatusSnapshotResponse>>({});
   const [statusErrors, setStatusErrors] = useState<Record<string, string>>({});
   const [statusLoadingByRepo, setStatusLoadingByRepo] = useState<Record<string, boolean>>({});
+  const statusSnapshotsRef = useRef(statusSnapshots);
+  statusSnapshotsRef.current = statusSnapshots;
+  const statusRefreshPendingRef = useRef(new Map<string, { full: boolean; paths: Set<string> }>());
+  const statusRefreshActiveRef = useRef(new Set<string>());
+  const eventSequenceRef = useRef<number>();
   const [branchSnapshots, setBranchSnapshots] = useState<Record<string, BranchSnapshotResponse>>({});
   const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
   const [branchLoadingByRepo, setBranchLoadingByRepo] = useState<Record<string, boolean>>({});
@@ -346,21 +352,58 @@ function App() {
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
   const hasActiveTasksRef = useRef(false);
   hasActiveTasksRef.current = hasActiveTasks;
+  const selectedRepositoryRef = useRef(selectedRepository);
+  selectedRepositoryRef.current = selectedRepository;
 
-  async function refreshRepositoryStatus(repoId: string) {
+  async function refreshRepositoryStatusScope(repoId: string, full: boolean, paths: string[] = []) {
+    const pending = statusRefreshPendingRef.current.get(repoId) || { full: false, paths: new Set<string>() };
+    if (full || paths.length === 0) {
+      pending.full = true;
+      pending.paths.clear();
+    } else if (!pending.full) {
+      for (const path of paths) pending.paths.add(path);
+      if (pending.paths.size > 256) {
+        pending.full = true;
+        pending.paths.clear();
+      }
+    }
+    statusRefreshPendingRef.current.set(repoId, pending);
+    if (statusRefreshActiveRef.current.has(repoId)) return;
+
     const api = apiRef.current;
     if (!api) return;
+    statusRefreshActiveRef.current.add(repoId);
     setStatusLoadingByRepo((current) => ({ ...current, [repoId]: true }));
     setStatusErrors((current) => ({ ...current, [repoId]: "" }));
     try {
-      const snapshot = await api.getRepositoryStatus(repoId);
-      setStatusSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+      while (statusRefreshPendingRef.current.has(repoId)) {
+        const requested = statusRefreshPendingRef.current.get(repoId)!;
+        statusRefreshPendingRef.current.delete(repoId);
+        const useFull = requested.full || !statusSnapshotsRef.current[repoId] || requested.paths.size === 0;
+        const snapshot = useFull
+          ? await api.getRepositoryStatus(repoId)
+          : await api.getRepositoryStatusPaths(repoId, [...requested.paths]);
+        const next = !useFull && statusSnapshotsRef.current[repoId]
+          ? mergeStatusScope(statusSnapshotsRef.current[repoId]!, snapshot, [...requested.paths])
+          : snapshot;
+        statusSnapshotsRef.current = { ...statusSnapshotsRef.current, [repoId]: next };
+        setStatusSnapshots((current) => ({ ...current, [repoId]: next }));
+      }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setStatusErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
     } finally {
+      statusRefreshActiveRef.current.delete(repoId);
       setStatusLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+      if (statusRefreshPendingRef.current.has(repoId)) {
+        const next = statusRefreshPendingRef.current.get(repoId)!;
+        void refreshRepositoryStatusScope(repoId, next.full, [...next.paths]);
+      }
     }
+  }
+
+  async function refreshRepositoryStatus(repoId: string) {
+    await refreshRepositoryStatusScope(repoId, true);
   }
 
   async function refreshRepositoryBranches(repoId: string) {
@@ -1185,12 +1228,67 @@ function App() {
         await refreshRepositories(api, true);
 
         const unsubscribe = await window.gitcrest.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
+          const eventSequence = Number(event.eventId);
+          const previousEventSequence = eventSequenceRef.current;
+          const sequenceGap = Number.isSafeInteger(eventSequence)
+            && previousEventSequence !== undefined
+            && event.type !== "connection.resyncRequired"
+            && eventSequence !== previousEventSequence + 1;
+          if (Number.isSafeInteger(eventSequence)) eventSequenceRef.current = eventSequence;
+          if (sequenceGap) {
+            void refreshRepositories(api).catch(() => undefined);
+            const repoId = selectedRepositoryRef.current?.repoId;
+            if (repoId) {
+              void refreshRepositoryStatusScope(repoId, true);
+              void refreshRepositoryBranches(repoId);
+              void refreshRepositoryRemotes(repoId);
+              setHistoryRefreshKey((current) => current + 1);
+            }
+            return;
+          }
           if (event.type === "connection.resyncRequired") {
             void refreshRepositories(api).catch((syncError: unknown) => {
               if (!cancelled) {
                 setStatus(syncError instanceof Error ? syncError.message : "Failed to refresh repository state");
               }
             });
+            const repoId = selectedRepositoryRef.current?.repoId;
+            if (repoId) {
+              void refreshRepositoryStatusScope(repoId, true);
+              void refreshRepositoryBranches(repoId);
+              void refreshRepositoryRemotes(repoId);
+              setHistoryRefreshKey((current) => current + 1);
+            }
+          } else if (event.repoId && event.type === "status.changed") {
+            const payload = event.payload;
+            const paths = Array.isArray(payload.paths) ? payload.paths.filter((path): path is string => typeof path === "string") : [];
+            void refreshRepositoryStatusScope(event.repoId, payload.full === true || paths.length === 0, paths);
+          } else if (event.repoId && event.type === "repository.updated") {
+            void refreshRepositories(api).catch(() => undefined);
+            void refreshRepositoryStatusScope(event.repoId, true);
+            void refreshRepositoryBranches(event.repoId);
+            void refreshRepositoryRemotes(event.repoId);
+          } else if (event.repoId && event.type === "log.refsChanged") {
+            void refreshRepositoryBranches(event.repoId);
+            setHistoryRefreshKey((current) => current + 1);
+          } else if (![
+            "repository.updated",
+            "status.changed",
+            "log.refsChanged",
+            "task.started",
+            "task.progress",
+            "task.completed",
+            "task.failed",
+            "connection.resyncRequired",
+          ].includes(event.type)) {
+            void refreshRepositories(api).catch(() => undefined);
+            const repoId = event.repoId || selectedRepositoryRef.current?.repoId;
+            if (repoId) {
+              void refreshRepositoryStatusScope(repoId, true);
+              void refreshRepositoryBranches(repoId);
+              void refreshRepositoryRemotes(repoId);
+              setHistoryRefreshKey((current) => current + 1);
+            }
           }
         });
         if (cancelled) unsubscribe();

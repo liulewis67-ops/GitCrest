@@ -92,6 +92,20 @@ describe("GitCrestApiClient", () => {
     expect(new URL(String(url)).searchParams.get("scope")).toBe("workingTree");
   });
 
+  it("encodes repeated literal path scopes for incremental status refresh", async () => {
+    const snapshot = { repoId: "repo_fixture", refreshedAtMs: 1, files: [] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(snapshot), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryStatusPaths("repo_fixture", ["src/a file.ts", "notes.txt"])).resolves.toEqual(snapshot);
+    const url = new URL(String(fetcher.mock.calls[0][0]));
+    expect(url.pathname).toBe("/api/v1/repositories/repo_fixture/status");
+    expect(url.searchParams.getAll("paths")).toEqual(["src/a file.ts", "notes.txt"]);
+  });
+
   it("encodes the path and optional historical revision for blame", async () => {
     const response = { repoId: "repo_fixture", path: "folder/source file.ts", revision: "a".repeat(40), lines: [] };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(response), {

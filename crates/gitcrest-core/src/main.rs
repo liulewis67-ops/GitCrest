@@ -1,10 +1,7 @@
 use std::{
     env,
     net::SocketAddr,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -14,7 +11,7 @@ use axum::{
         rejection::JsonRejection,
         rejection::QueryRejection,
         ws::{Message, WebSocket, WebSocketUpgrade},
-        Path, Query, State,
+        Path, Query, RawQuery, State,
     },
     http::{
         header::{AUTHORIZATION, CONTENT_TYPE, SEC_WEBSOCKET_PROTOCOL},
@@ -51,6 +48,7 @@ mod status;
 mod storage;
 mod tags;
 mod tasks;
+mod watcher;
 mod workflows;
 
 use cloning::{CloneError, CloneService};
@@ -60,7 +58,6 @@ use repository::{Repository, RepositoryError, RepositoryManager};
 use tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError};
 
 const API_VERSION: &str = "1";
-static NEXT_EVENT_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 struct AppState {
@@ -73,6 +70,28 @@ struct AppState {
     clones: CloneService,
     credentials: credentials::CredentialManager,
     ai_credentials: credentials::AiCredentialManager,
+    events: EventBus,
+}
+
+#[derive(Clone)]
+struct EventBus(tokio::sync::broadcast::Sender<EventEnvelope>);
+
+impl Default for EventBus {
+    fn default() -> Self {
+        let (sender, _) = tokio::sync::broadcast::channel(512);
+        Self(sender)
+    }
+}
+
+impl EventBus {
+    fn subscribe(&self) -> tokio::sync::broadcast::Receiver<EventEnvelope> {
+        self.0.subscribe()
+    }
+
+    fn publish(&self, repo_id: Option<String>, event_type: &str, payload: serde_json::Value) {
+        let event = EventEnvelope::new(repo_id, event_type, payload);
+        let _ = self.0.send(event);
+    }
 }
 
 #[derive(Serialize)]
@@ -812,15 +831,33 @@ impl IntoResponse for ApiError {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-struct EventEnvelope<'a> {
+struct EventEnvelope {
     event_id: String,
     protocol_version: u8,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repo_id: Option<String>,
     #[serde(rename = "type")]
-    event_type: &'a str,
+    event_type: String,
     occurred_at_ms: u128,
     payload: serde_json::Value,
+}
+
+impl EventEnvelope {
+    fn new(repo_id: Option<String>, event_type: &str, payload: serde_json::Value) -> Self {
+        Self {
+            event_id: String::new(),
+            protocol_version: 1,
+            repo_id,
+            event_type: event_type.to_owned(),
+            occurred_at_ms: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis(),
+            payload,
+        }
+    }
 }
 
 #[tokio::main]
@@ -889,6 +926,8 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "Could not recover background task history")?;
     let git_commands = GitCommandService::default();
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
+    let events = EventBus::default();
+    tokio::spawn(watcher::run(repositories.clone(), events.clone()));
     let state = AppState {
         read_write_token: Arc::new(write_token),
         read_only_token: read_only_token.map(Arc::new),
@@ -899,6 +938,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         clones,
         credentials: credentials::CredentialManager::system(),
         ai_credentials: credentials::AiCredentialManager::system(),
+        events,
     };
     let cors_origin = env::var("GITCREST_CORS_ORIGIN")
         .ok()
@@ -1308,13 +1348,43 @@ async fn forget_repository(
 async fn repository_status(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
+    RawQuery(raw_query): RawQuery,
 ) -> Result<Json<status::StatusSnapshot>, ApiError> {
-    state
-        .repositories
-        .status_snapshot(&repo_id)
-        .await
-        .map(Json)
-        .map_err(ApiError::from_repository_error)
+    let mut paths = Vec::new();
+    if let Some(raw_query) = raw_query {
+        for (name, value) in url::form_urlencoded::parse(raw_query.as_bytes()) {
+            if name != "paths" {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    ApiErrorCode::RequestInvalid,
+                    "The status path scope is invalid.",
+                ));
+            }
+            paths.push(value.into_owned());
+            if paths.len() > 256 {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    ApiErrorCode::RequestInvalid,
+                    "The status path scope is invalid or too large.",
+                ));
+            }
+        }
+    }
+    if paths.is_empty() {
+        state
+            .repositories
+            .status_snapshot(&repo_id)
+            .await
+            .map(Json)
+            .map_err(ApiError::from_repository_error)
+    } else {
+        state
+            .repositories
+            .status_snapshot_paths(&repo_id, &paths)
+            .await
+            .map(Json)
+            .map_err(ApiError::from_repository_error)
+    }
 }
 
 #[derive(Deserialize)]
@@ -6273,7 +6343,11 @@ async fn api_not_found() -> ApiError {
     ApiError::route_not_found()
 }
 
-async fn events(headers: HeaderMap, ws: WebSocketUpgrade) -> Result<Response, ApiError> {
+async fn events(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    ws: WebSocketUpgrade,
+) -> Result<Response, ApiError> {
     let protocols = headers
         .get(SEC_WEBSOCKET_PROTOCOL)
         .and_then(|value| value.to_str().ok())
@@ -6291,41 +6365,68 @@ async fn events(headers: HeaderMap, ws: WebSocketUpgrade) -> Result<Response, Ap
 
     Ok(ws
         .protocols(["gitcrest.events.v1"])
-        .on_upgrade(event_socket)
+        .on_upgrade(move |socket| event_socket(socket, state.events.subscribe()))
         .into_response())
 }
 
 // Sending the owned ping payload in the guard avoids cloning it before the async send.
 #[allow(clippy::collapsible_match)]
-async fn event_socket(mut socket: WebSocket) {
-    let event_id = NEXT_EVENT_ID.fetch_add(1, Ordering::Relaxed);
-    let occurred_at_ms = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    let event = EventEnvelope {
-        event_id: event_id.to_string(),
-        protocol_version: 1,
-        event_type: "connection.resyncRequired",
-        occurred_at_ms,
-        payload: serde_json::json!({ "reason": "newConnection" }),
-    };
-    if let Ok(message) = serde_json::to_string(&event) {
-        if socket.send(Message::Text(message)).await.is_err() {
-            return;
-        }
+async fn event_socket(
+    mut socket: WebSocket,
+    mut events: tokio::sync::broadcast::Receiver<EventEnvelope>,
+) {
+    let mut event_sequence = 1_u64;
+    if send_event(
+        &mut socket,
+        EventEnvelope::new(
+            None,
+            "connection.resyncRequired",
+            serde_json::json!({ "reason": "newConnection" }),
+        ),
+        &mut event_sequence,
+    )
+    .await
+    .is_err()
+    {
+        return;
     }
 
-    while let Some(Ok(message)) = socket.recv().await {
-        match message {
-            Message::Ping(payload) => {
-                if socket.send(Message::Pong(payload)).await.is_err() {
-                    break;
+    loop {
+        tokio::select! {
+            event = events.recv() => match event {
+                Ok(event) => if send_event(&mut socket, event, &mut event_sequence).await.is_err() { break; },
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    let event = EventEnvelope::new(
+                        None,
+                        "connection.resyncRequired",
+                        serde_json::json!({ "reason": "eventBacklogExceeded" }),
+                    );
+                    if send_event(&mut socket, event, &mut event_sequence).await.is_err() { break; }
                 }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            },
+            message = socket.recv() => match message {
+                Some(Ok(Message::Ping(payload))) => {
+                    if socket.send(Message::Pong(payload)).await.is_err() { break; }
+                }
+                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break,
+                _ => {}
             }
-            Message::Close(_) => break,
-            _ => {}
         }
+    }
+}
+
+async fn send_event(
+    socket: &mut WebSocket,
+    mut event: EventEnvelope,
+    event_sequence: &mut u64,
+) -> Result<(), axum::Error> {
+    event.event_id = event_sequence.to_string();
+    *event_sequence = event_sequence.saturating_add(1);
+    if let Ok(message) = serde_json::to_string(&event) {
+        socket.send(Message::Text(message)).await
+    } else {
+        Ok(())
     }
 }
 
@@ -6482,6 +6583,7 @@ mod tests {
             conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
+            events: EventBus::default(),
             clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
             repositories,
             tasks,
@@ -6629,6 +6731,7 @@ mod tests {
                 conflict_token: None,
                 credentials: test_credentials(),
                 ai_credentials: test_ai_credentials(),
+                events: EventBus::default(),
                 repositories,
                 tasks: tasks.clone(),
                 git_commands: commands.clone(),
@@ -7018,6 +7121,7 @@ mod tests {
                 clones: CloneService::new(tasks, commands, repositories.clone()),
                 credentials: test_credentials(),
                 ai_credentials: test_ai_credentials(),
+                events: EventBus::default(),
             },
             None,
         );
@@ -7290,6 +7394,27 @@ mod tests {
             .iter()
             .any(|file| file["path"] == "new file.txt"
                 && file["categories"] == serde_json::json!(["untracked"])));
+
+        let partial = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/status?paths=new%20file.txt"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        if partial.status() != StatusCode::OK {
+            let status = partial.status();
+            let body = to_bytes(partial.into_body(), usize::MAX).await.unwrap();
+            panic!(
+                "unexpected partial status response {status}: {}",
+                String::from_utf8_lossy(&body)
+            );
+        }
+        let body = to_bytes(partial.into_body(), usize::MAX).await.unwrap();
+        let partial: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(partial["files"].as_array().unwrap().len(), 1);
+        assert_eq!(partial["files"][0]["path"], "new file.txt");
 
         let response = app
             .clone()
@@ -7714,6 +7839,7 @@ mod tests {
                 conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
                 credentials: test_credentials(),
                 ai_credentials: test_ai_credentials(),
+                events: EventBus::default(),
                 clones: CloneService::new(
                     tasks.clone(),
                     git_commands.clone(),
@@ -8509,6 +8635,7 @@ mod tests {
                 conflict_token: None,
                 credentials: test_credentials(),
                 ai_credentials: test_ai_credentials(),
+                events: EventBus::default(),
                 repositories: RepositoryManager::default(),
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),
@@ -8632,6 +8759,7 @@ mod tests {
                 conflict_token: None,
                 credentials: test_credentials(),
                 ai_credentials: test_ai_credentials(),
+                events: EventBus::default(),
                 repositories,
                 tasks: tasks.clone(),
                 git_commands: GitCommandService::default(),
@@ -11054,6 +11182,7 @@ mod tests {
         let payload: serde_json::Value = serde_json::from_str(message.to_text().unwrap()).unwrap();
         assert_eq!(payload["type"], "connection.resyncRequired");
         assert_eq!(payload["protocolVersion"], 1);
+        assert_eq!(payload["eventId"], "1");
         socket.send(ClientMessage::Close(None)).await.unwrap();
         server.abort();
     }
