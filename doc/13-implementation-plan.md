@@ -1984,3 +1984,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Pull/Push preflight 与任务执行仍由 App 协调；后续继续评估 remotes feature 与应用 UI 状态边界。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/remotes/model/use-repository-fetch.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`476bdbb`
+
+### remotes feature Pull 预检与提交迁入 model — 小阶段 154
+- 状态：已完成（Pull 对话框预检与任务受理由 remotes feature 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/remotes/model/use-repository-pull.ts`，管理 Pull 对话框、预检请求、clean/snapshot-bound 提交、busy/error 状态和 stale/clean-required 后刷新；App 注入仓库切换、任务列表和状态刷新回调。API 请求、预览门控、任务流程及界面反馈保持不变。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。
+- 限制/后续：Push 预检/提交及 commit-and-push 编排仍由 App 管理；下一步继续按 remotes feature 与 app UI 装配边界迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/remotes/model/use-repository-pull.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`d250d85`
