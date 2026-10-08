@@ -3,7 +3,8 @@ use std::path::Path;
 use crate::domain::{
     error::WorkflowError,
     workflow::{
-        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowResetComparison, WorkflowState,
+        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
+        WorkflowResetComparison, WorkflowState,
     },
 };
 
@@ -49,4 +50,11 @@ pub(crate) trait WorkflowGitPort: Send + Sync {
         head_oid: &str,
         target_oid: &str,
     ) -> Result<WorkflowResetComparison, WorkflowError>;
+
+    async fn list_rebase_commits(
+        &self,
+        repository_path: &Path,
+        onto_oid: &str,
+        head_oid: &str,
+    ) -> Result<WorkflowRebaseCommitList, WorkflowError>;
 }

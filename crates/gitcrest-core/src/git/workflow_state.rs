@@ -8,14 +8,16 @@ use tokio::{
 use crate::domain::{
     error::WorkflowError,
     workflow::{
-        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowOperation,
-        WorkflowResetComparison, WorkflowState,
+        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowCommitSubject, WorkflowOperation,
+        WorkflowRebaseCommitList, WorkflowResetComparison, WorkflowState,
     },
 };
+use tokio::{sync::Semaphore, task::JoinSet};
 
 const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PATHS: usize = 200;
 const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
+const MAX_REBASE_COMMITS: usize = 200;
 
 pub(crate) async fn list_backup_references(
     repository_path: &Path,
@@ -85,6 +87,81 @@ pub(crate) async fn compare_for_reset(
         commits_removed,
         commits_added,
         changed_paths,
+    })
+}
+
+pub(crate) async fn list_rebase_commits(
+    repository_path: &Path,
+    onto_oid: &str,
+    head_oid: &str,
+) -> Result<WorkflowRebaseCommitList, WorkflowError> {
+    let range = format!("{onto_oid}..{head_oid}");
+    let output = run_git(
+        repository_path,
+        &[
+            "log".into(),
+            "--reverse".into(),
+            "--topo-order".into(),
+            "--format=%H%x00%s".into(),
+            "-n".into(),
+            (MAX_REBASE_COMMITS + 1).to_string().into(),
+            "--no-show-signature".into(),
+            range.into(),
+        ],
+    )
+    .await?;
+    let mut commits = Vec::new();
+    let mut omitted_commit_count = 0;
+    for line in text(&output)?.lines().filter(|line| !line.is_empty()) {
+        let (oid, subject) = line.split_once('\0').ok_or(WorkflowError::GitFailed)?;
+        if commits.len() == MAX_REBASE_COMMITS {
+            omitted_commit_count += 1;
+            continue;
+        }
+        commits.push(WorkflowCommitSubject {
+            oid: oid.trim().to_owned(),
+            subject: subject.trim().to_owned(),
+        });
+    }
+
+    let mut checks = JoinSet::new();
+    let semaphore = std::sync::Arc::new(Semaphore::new(8));
+    for commit in &commits {
+        let oid = commit.oid.clone();
+        let path = repository_path.to_path_buf();
+        let semaphore = semaphore.clone();
+        checks.spawn(async move {
+            let permit = semaphore
+                .acquire_owned()
+                .await
+                .map_err(|_| WorkflowError::GitFailed)?;
+            let refs = run_git(
+                &path,
+                &[
+                    "for-each-ref".into(),
+                    "--format=%(refname)".into(),
+                    "--contains".into(),
+                    oid.clone().into(),
+                    "refs/remotes".into(),
+                ],
+            )
+            .await;
+            drop(permit);
+            refs.and_then(|refs| text(&refs).map(|refs| (oid, !refs.is_empty())))
+        });
+    }
+    let mut published_commit_oids = Vec::new();
+    while let Some(result) = checks.join_next().await {
+        let (oid, is_published) = result.map_err(|_| WorkflowError::GitFailed)??;
+        if is_published {
+            published_commit_oids.push(oid);
+        }
+    }
+    published_commit_oids.sort();
+    Ok(WorkflowRebaseCommitList {
+        commits,
+        omitted_commit_count,
+        published_commit_oids,
     })
 }
 pub(crate) async fn read_worktree_state(

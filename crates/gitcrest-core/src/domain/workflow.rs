@@ -60,6 +60,19 @@ pub(crate) struct WorkflowResetComparison {
     pub(crate) changed_paths: Vec<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkflowCommitSubject {
+    pub(crate) oid: String,
+    pub(crate) subject: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkflowRebaseCommitList {
+    pub(crate) commits: Vec<WorkflowCommitSubject>,
+    pub(crate) omitted_commit_count: u32,
+    pub(crate) published_commit_oids: Vec<String>,
+}
+
 impl RebaseAction {
     pub(crate) fn git_keyword(self) -> &'static str {
         match self {

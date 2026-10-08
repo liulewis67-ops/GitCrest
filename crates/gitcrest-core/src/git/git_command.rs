@@ -23,8 +23,8 @@ use crate::{
     domain::{
         error::WorkflowError,
         workflow::{
-            WorkflowBackupNamespace, WorkflowBackupReference, WorkflowResetComparison,
-            WorkflowState,
+            WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
+            WorkflowResetComparison, WorkflowState,
         },
     },
     ports::workflow_git::WorkflowGitPort,
@@ -163,6 +163,15 @@ impl WorkflowGitPort for GitCommandService {
         target_oid: &str,
     ) -> Result<WorkflowResetComparison, WorkflowError> {
         workflow_state::compare_for_reset(repository_path, head_oid, target_oid).await
+    }
+
+    async fn list_rebase_commits(
+        &self,
+        repository_path: &Path,
+        onto_oid: &str,
+        head_oid: &str,
+    ) -> Result<WorkflowRebaseCommitList, WorkflowError> {
+        workflow_state::list_rebase_commits(repository_path, onto_oid, head_oid).await
     }
 }
 

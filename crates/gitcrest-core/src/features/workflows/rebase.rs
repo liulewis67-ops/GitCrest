@@ -1,22 +1,12 @@
-use std::{collections::HashSet, path::Path, process::Stdio, time::Duration};
-
-use serde::Serialize;
-use sha2::{Digest, Sha256};
-use tokio::{
-    io::AsyncReadExt,
-    process::Command,
-    sync::{OwnedSemaphorePermit, Semaphore},
-    task::JoinSet,
-};
+use std::{collections::HashSet, path::Path};
 
 use crate::{
     domain::error::WorkflowError,
     domain::workflow::{RebaseAction, RebaseTodoItem, WorkflowBackupNamespace, WorkflowOperation},
     ports::workflow_git::WorkflowGitPort,
 };
-
-const MAX_COMMITS: usize = 200;
-const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
+use serde::Serialize;
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -175,72 +165,28 @@ pub async fn read_preview<G: WorkflowGitPort>(
     let head_oid = git.read_head_oid(repository_path).await?;
     let current_branch = git.read_current_branch(repository_path).await?;
 
-    let mut commits = Vec::new();
-    let mut omitted_commit_count = 0;
-    if head_oid.is_some() {
-        let range = format!("{onto_oid}..HEAD");
-        let output = run_git(
-            repository_path,
-            &[
-                "log".into(),
-                "--reverse".into(),
-                "--topo-order".into(),
-                "--format=%H%x00%s".into(),
-                "-n".into(),
-                (MAX_COMMITS + 1).to_string().into(),
-                "--no-show-signature".into(),
-                range.into(),
-            ],
-        )
-        .await?;
-        for line in output.lines().filter(|line| !line.is_empty()) {
-            let (oid, subject) = line.split_once('\0').ok_or(WorkflowError::GitFailed)?;
-            if commits.len() == MAX_COMMITS {
-                omitted_commit_count += 1;
-                continue;
-            }
-            commits.push(RebaseCommit {
-                oid: oid.trim().to_owned(),
-                subject: subject.trim().to_owned(),
-            });
+    let commit_list = if let Some(head_oid) = &head_oid {
+        git.list_rebase_commits(repository_path, &onto_oid, head_oid)
+            .await?
+    } else {
+        crate::domain::workflow::WorkflowRebaseCommitList {
+            commits: Vec::new(),
+            omitted_commit_count: 0,
+            published_commit_oids: Vec::new(),
         }
-    }
+    };
+    let commits = commit_list
+        .commits
+        .into_iter()
+        .map(|commit| RebaseCommit {
+            oid: commit.oid,
+            subject: commit.subject,
+        })
+        .collect::<Vec<_>>();
+    let omitted_commit_count = commit_list.omitted_commit_count;
     let state = git.read_worktree_state(repository_path).await?;
     let operation_in_progress = state.operation;
-    let mut published_commit_oids = Vec::new();
-    let mut published_checks = JoinSet::new();
-    let semaphore = std::sync::Arc::new(Semaphore::new(8));
-    for commit in &commits {
-        let oid = commit.oid.clone();
-        let path = repository_path.to_path_buf();
-        let permits = semaphore.clone();
-        published_checks.spawn(async move {
-            let permit: OwnedSemaphorePermit = permits
-                .acquire_owned()
-                .await
-                .map_err(|_| WorkflowError::GitFailed)?;
-            let result = run_git(
-                &path,
-                &[
-                    "for-each-ref".into(),
-                    "--format=%(refname)".into(),
-                    "--contains".into(),
-                    oid.clone().into(),
-                    "refs/remotes".into(),
-                ],
-            )
-            .await;
-            drop(permit);
-            result.map(|refs| (oid, !refs.trim().is_empty()))
-        });
-    }
-    while let Some(result) = published_checks.join_next().await {
-        let (oid, is_published) = result.map_err(|_| WorkflowError::GitFailed)??;
-        if is_published {
-            published_commit_oids.push(oid);
-        }
-    }
-    published_commit_oids.sort();
+    let published_commit_oids = commit_list.published_commit_oids;
     let can_start = head_oid.is_some()
         && current_branch.is_some()
         && onto_oid != head_oid.as_deref().unwrap_or_default()
@@ -283,57 +229,6 @@ pub async fn read_preview<G: WorkflowGitPort>(
         preview_revision: format!("sha256:{:x}", digest.finalize()),
         can_start,
     })
-}
-
-async fn run_git(
-    repository_path: &Path,
-    arguments: &[std::ffi::OsString],
-) -> Result<String, WorkflowError> {
-    String::from_utf8(run_git_inner(repository_path, arguments).await?)
-        .map_err(|_| WorkflowError::GitFailed)
-}
-
-async fn run_git_inner(
-    repository_path: &Path,
-    arguments: &[std::ffi::OsString],
-) -> Result<Vec<u8>, WorkflowError> {
-    let mut command = Command::new("git");
-    command
-        .current_dir(repository_path)
-        .args(arguments)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-    let mut child = command.spawn().map_err(|_| WorkflowError::GitUnavailable)?;
-    let stdout = child.stdout.take().ok_or(WorkflowError::GitFailed)?;
-    let read = tokio::spawn(async move {
-        let mut output = Vec::new();
-        stdout
-            .take(2 * 1024 * 1024 + 1)
-            .read_to_end(&mut output)
-            .await
-            .map(|_| output)
-    });
-    let status = match tokio::time::timeout(PREFLIGHT_DEADLINE, child.wait()).await {
-        Ok(Ok(status)) => status,
-        Ok(Err(_)) | Err(_) => {
-            let _ = child.kill().await;
-            return Err(WorkflowError::TimedOut);
-        }
-    };
-    let output = read
-        .await
-        .map_err(|_| WorkflowError::GitFailed)?
-        .map_err(|_| WorkflowError::GitFailed)?;
-    if output.len() > 2 * 1024 * 1024 {
-        return Err(WorkflowError::TooLarge);
-    }
-    if status.success() {
-        Ok(output)
-    } else {
-        Err(WorkflowError::GitFailed)
-    }
 }
 
 #[cfg(test)]
