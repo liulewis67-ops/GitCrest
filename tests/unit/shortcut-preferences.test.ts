@@ -8,7 +8,7 @@ import {
   readShortcutPreferences,
   shortcutConflict,
   shortcutFromEvent,
-} from "../../src/features/settings/shortcut-preferences";
+} from "../../src/features/settings/model/shortcut-preferences";
 
 function keyEvent(key: string, init: Partial<KeyboardEvent> = {}): KeyboardEvent {
   return {

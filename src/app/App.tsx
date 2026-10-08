@@ -19,6 +19,7 @@ import { useRepositoryRefs } from "../features/branches/model/use-repository-ref
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
 import { TaskRefreshPlanner } from "../features/tasks/model/task-refresh-planner";
+import { useRemoteMutations } from "../features/remotes";
 import { getRepositoryEventRefreshPlan } from "../features/repositories/model/repository-event-refresh-plan";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
@@ -62,7 +63,6 @@ function App() {
   const commandKey = isMacPlatform ? "⌘" : "Ctrl";
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
-  const [remoteActionBusy, setRemoteActionBusy] = useState(false);
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [pushOpen, setPushOpen] = useState(false);
   const [pushPreflight, setPushPreflight] = useState<components["schemas"]["PushPreflight"]>();
@@ -363,55 +363,19 @@ function App() {
     refreshRepositoryBranches,
     refreshHistory: () => setHistoryRefreshKey((current) => current + 1),
   });
-
-  async function submitRemoteTask(repoId: string, action: () => Promise<TaskSnapshotResponse>) {
-    const requestGeneration = beginRepositoryCacheRequest(repoId);
-    setRemoteActionBusy(true);
-    setRemoteError(repoId, "");
-    try {
-      const task = await action();
+  const remoteMutations = useRemoteMutations({
+    getApi: () => apiRef.current,
+    repoId: selectedRepository?.repoId,
+    isRepositoryOpen: isRepositoryTabOpen,
+    getCacheGeneration: repositoryCacheGeneration,
+    beginCacheRequest: beginRepositoryCacheRequest,
+    finishCacheRequest: finishRepositoryCacheRequest,
+    setRemoteError,
+    onTaskAccepted: (task) => {
       prependTask(task);
       setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
-        setRemoteError(repoId, message || (error instanceof Error ? error.message : "Could not update repository remotes."));
-      }
-    } finally {
-      setRemoteActionBusy(false);
-      finishRepositoryCacheRequest(repoId);
-    }
-  }
-
-  function addRepositoryRemote(name: string, url: string) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (api && repoId) void submitRemoteTask(repoId, () => api.addRepositoryRemote(repoId, name, url));
-  }
-
-  function setRepositoryRemoteUrl(name: string, url: string) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (api && repoId) void submitRemoteTask(repoId, () => api.setRepositoryRemoteUrl(repoId, name, url));
-  }
-
-  function deleteRepositoryRemote(name: string) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (api && repoId) void submitRemoteTask(repoId, () => api.deleteRepositoryRemote(repoId, name));
-  }
-
-  function setRepositoryDefaultRemote(name: string | null) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (api && repoId) void submitRemoteTask(repoId, () => api.setRepositoryDefaultRemote(repoId, name));
-  }
-
-  function setRepositoryBranchUpstream(localBranch: string, remoteName: string, remoteBranch: string) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (api && repoId) void submitRemoteTask(repoId, () => api.setRepositoryBranchUpstream(repoId, localBranch, remoteName, remoteBranch));
-  }
+    },
+  });
 
   async function toggleBranchFavorite(fullName: string, favorite: boolean) {
     const api = apiRef.current;
@@ -1521,7 +1485,7 @@ function App() {
               activeRemotes={activeRemotes}
               activeRemoteError={activeRemoteError}
               activeRemotesLoading={activeRemotesLoading}
-              remoteActionBusy={remoteActionBusy}
+              remoteActionBusy={remoteMutations.busy}
               remoteDisabledReason={remoteDisabledReason}
               api={apiRef.current}
               credentialManagerOpenRequest={credentialManagerOpenRequest}
@@ -1541,11 +1505,11 @@ function App() {
               onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(fullName, favorite)}
               onFetchRepository={() => void fetchRepository()}
               onRefreshRepositoryRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}
-              onAddRepositoryRemote={addRepositoryRemote}
-              onSetRepositoryRemoteUrl={setRepositoryRemoteUrl}
-              onDeleteRepositoryRemote={deleteRepositoryRemote}
-              onSetRepositoryDefaultRemote={setRepositoryDefaultRemote}
-              onSetRepositoryBranchUpstream={setRepositoryBranchUpstream}
+              onAddRepositoryRemote={remoteMutations.addRepositoryRemote}
+              onSetRepositoryRemoteUrl={remoteMutations.setRepositoryRemoteUrl}
+              onDeleteRepositoryRemote={remoteMutations.deleteRepositoryRemote}
+              onSetRepositoryDefaultRemote={remoteMutations.setRepositoryDefaultRemote}
+              onSetRepositoryBranchUpstream={remoteMutations.setRepositoryBranchUpstream}
               onShelfTaskSubmitted={(task, switchTarget) => {
                 if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId);
                 if (task) {
