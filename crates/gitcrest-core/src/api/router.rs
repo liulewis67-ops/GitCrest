@@ -40,6 +40,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::diff::routes::router())
         .merge(crate::history::routes::router())
         .merge(crate::branches::routes::router())
+        .merge(crate::remotes::routes::router())
         .route(
             "/v1/repositories/:repo_id/remotes",
             get(repository_remotes).post(add_repository_remote),
