@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../api/client";
 import { SplitDiff } from "./SplitDiff";
+import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../settings/shortcut-preferences";
 import "../../App.css";
 
 type View = "split" | "unified" | "blame";
@@ -27,10 +28,38 @@ export function DiffWindow() {
   const [loading, setLoading] = useState(false);
   const [tabsTruncated, setTabsTruncated] = useState(false);
   const [view, setView] = useState<View>("split");
+  const [shortcuts, setShortcuts] = useState<ShortcutPreferences>(() => {
+    try {
+      return readShortcutPreferences(window.localStorage.getItem(SHORTCUT_PREFERENCES_KEY));
+    } catch {
+      return readShortcutPreferences(null);
+    }
+  });
+  const isMac = navigator.platform.toLowerCase().includes("mac");
   const activeTabKeyRef = useRef(activeTabKey);
   activeTabKeyRef.current = activeTabKey;
   const activeTab = tabs.find((tab) => tab.key === activeTabKey);
   const blameDisabled = document?.status !== "text" || ["added", "untracked", "deleted", "ignored", "conflicted"].includes(document.changeKind);
+
+  useEffect(() => {
+    const onStorage = (event: StorageEvent) => {
+      if (event.key === SHORTCUT_PREFERENCES_KEY) setShortcuts(readShortcutPreferences(event.newValue));
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement && (target.isContentEditable || target.closest("input, textarea, select, [role=dialog]"))) return;
+      if (!matchesShortcut(event, shortcuts.toggleDiffView, isMac)) return;
+      event.preventDefault();
+      setView((current) => current === "unified" ? "split" : "unified");
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isMac, shortcuts.toggleDiffView]);
 
   useEffect(() => {
     let active = true;
@@ -118,8 +147,8 @@ export function DiffWindow() {
       <header className="diffWindowHeader">
         <div><span className="sectionEyebrow">READ ONLY DIFF</span><strong title={activeTab?.path || initialPath}>{activeTab?.path || initialPath || "File diff"}</strong></div>
         <div className="diffWindowViewToggle" role="group" aria-label="Diff layout">
-          <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>Split</button>
-          <button type="button" aria-pressed={view === "unified"} onClick={() => setView("unified")}>Unified</button>
+          <button type="button" aria-pressed={view === "split"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={`Toggle Split/Unified (${displayShortcut(shortcuts.toggleDiffView, isMac)})`} onClick={() => setView("split")}>Split</button>
+          <button type="button" aria-pressed={view === "unified"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={`Toggle Split/Unified (${displayShortcut(shortcuts.toggleDiffView, isMac)})`} onClick={() => setView("unified")}>Unified</button>
           <button type="button" aria-pressed={view === "blame"} disabled={blameDisabled} title={blameDisabled ? "Blame requires a text file with committed history." : "Show Git line blame"} onClick={() => void openBlame()}>Blame</button>
         </div>
       </header>

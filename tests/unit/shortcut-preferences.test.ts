@@ -41,6 +41,7 @@ describe("keyboard shortcut preferences", () => {
     expect(shortcutFromEvent(keyEvent("Process", { ctrlKey: true, isComposing: true }))).toBeUndefined();
     expect(shortcutFromEvent(keyEvent("Enter", { ctrlKey: true, isComposing: true }))).toBeUndefined();
     expect(shortcutFromEvent(keyEvent("k"))).toBeUndefined();
+    expect(shortcutFromEvent(keyEvent("\\", { ctrlKey: true }))).toBe("Mod+\\");
   });
 
   it("matches the platform modifier and requires the exact modifier set", () => {
@@ -48,6 +49,7 @@ describe("keyboard shortcut preferences", () => {
     expect(matchesShortcut(keyEvent("k", { metaKey: true }), "Mod+K", true)).toBe(true);
     expect(matchesShortcut(keyEvent("k", { ctrlKey: true, shiftKey: true }), "Mod+K", false)).toBe(false);
     expect(matchesShortcut(keyEvent("k", { ctrlKey: true, isComposing: true }), "Mod+K", false)).toBe(false);
+    expect(matchesShortcut(keyEvent("\\", { ctrlKey: true }), defaultShortcutPreferences.toggleDiffView, false)).toBe(true);
   });
 
   it("rejects duplicate and reserved shortcuts and formats labels by platform", () => {
