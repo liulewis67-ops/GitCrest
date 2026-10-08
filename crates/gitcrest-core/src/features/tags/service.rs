@@ -1,6 +1,5 @@
 use std::{path::Path, process::Stdio, time::Duration};
 
-use serde::Serialize;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     process::Command,
@@ -10,14 +9,7 @@ const TAG_COMMAND_TIMEOUT: Duration = Duration::from_secs(10);
 const TAG_OUTPUT_LIMIT: usize = 16 * 1024;
 const MAX_TAG_MESSAGE_BYTES: usize = 8 * 1024;
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CreatedTag {
-    pub repo_id: String,
-    pub name: String,
-    pub full_name: String,
-    pub oid: String,
-}
+use super::dto::CreatedTag;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TagError {

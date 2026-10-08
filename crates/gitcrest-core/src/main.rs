@@ -57,7 +57,7 @@ mod status;
 mod storage;
 #[path = "features/system/mod.rs"]
 mod system;
-#[path = "features/tags/tags.rs"]
+#[path = "features/tags/mod.rs"]
 mod tags;
 #[path = "features/tasks/mod.rs"]
 mod tasks;
@@ -1345,44 +1345,6 @@ async fn prepare_shelf_items(
         });
     }
     Ok(prepared)
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct CreateTagBody {
-    name: String,
-    message: String,
-}
-
-async fn repository_commit_create_tag(
-    State(state): State<AppState>,
-    Path((repo_id, oid)): Path<(String, String)>,
-    request: Result<Json<CreateTagBody>, JsonRejection>,
-) -> Result<(StatusCode, Json<tags::CreatedTag>), ApiError> {
-    let Json(request) = request.map_err(|_| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            ApiErrorCode::RequestInvalid,
-            "A tag name and optional annotation message are required.",
-        )
-    })?;
-    let target = state
-        .repositories
-        .task_target(&repo_id)
-        .await
-        .map_err(ApiError::from_repository_error)?;
-    let created = tags::create(
-        repo_id,
-        &target.repository_path,
-        tags::CreateTagRequest {
-            name: request.name,
-            oid,
-            message: request.message,
-        },
-    )
-    .await
-    .map_err(ApiError::from_tag_error)?;
-    Ok((StatusCode::CREATED, Json(created)))
 }
 
 #[derive(Deserialize)]

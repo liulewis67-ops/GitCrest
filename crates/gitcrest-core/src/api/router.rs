@@ -20,12 +20,12 @@ use crate::{
     list_repository_reset_backups, list_repository_shelves, mark_workflow_conflict_resolved,
     preflight_repository_rebase, preflight_repository_reset, preflight_repository_shelf_apply,
     preflight_repository_workflow, preflight_repository_workflow_recovery,
-    read_workflow_conflict_file, recover_repository_workflow, repositories,
-    repository_commit_create_tag, request_ai, request_workflow_conflict_suggestion,
-    require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
-    save_workflow_conflict_file, set_ai_credential, set_ai_settings, set_credential,
-    stage_repository, stage_repository_patch, start_repository_rebase, start_repository_reset,
-    start_repository_workflow, status, system, undo_recent_operation, AppState,
+    read_workflow_conflict_file, recover_repository_workflow, repositories, request_ai,
+    request_workflow_conflict_suggestion, require_api_version, require_auth,
+    restore_repository_reset, rollback_repository_rebase, save_workflow_conflict_file,
+    set_ai_credential, set_ai_settings, set_credential, stage_repository, stage_repository_patch,
+    start_repository_rebase, start_repository_reset, start_repository_workflow, status, system,
+    undo_recent_operation, AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
@@ -36,6 +36,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::history::routes::router())
         .merge(crate::branches::routes::router())
         .merge(crate::remotes::routes::router())
+        .merge(crate::tags::routes::router())
         .merge(crate::tasks::routes::router())
         .route(
             "/v1/credentials",
@@ -81,10 +82,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .route(
             "/v1/repositories/:repo_id/commits",
             crate::history::routes::commits_get_route().post(commit_repository),
-        )
-        .route(
-            "/v1/repositories/:repo_id/commits/:oid/tags",
-            post(repository_commit_create_tag),
         )
         .route(
             "/v1/repositories/:repo_id/workflows/preflight",
