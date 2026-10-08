@@ -135,7 +135,8 @@ async function runColdLaunch() {
     dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-desktop-"));
     const start = performance.now();
     try {
-      app = await electron.launch({ args: ["."], cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+      const args = process.env.GITCREST_BENCH_DISABLE_GPU === "1" ? ["--disable-gpu", "."] : ["."];
+      app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
       page = await app.firstWindow();
       await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
       await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
@@ -208,7 +209,8 @@ async function runScroll() {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-scroll-"));
   let app;
   try {
-    app = await electron.launch({ args: ["."], cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+    const args = process.env.GITCREST_BENCH_DISABLE_GPU === "1" ? ["--disable-gpu", "."] : ["."];
+    app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded");
     await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
@@ -278,7 +280,7 @@ const cold = scrollOnly
   || memoryOnly
   ? { startupMs: [], firstHistoryFrameMs: [], idleMemorySamplesBytes: [], repositoryMemorySamplesBytes: [] }
   : await runColdLaunch();
-const scroll = scrollOnly || memoryOnly ? null : await runScroll();
+const scroll = memoryOnly ? null : await runScroll();
 const installerPath = join(root, "dist", "GitCrest Setup 0.1.0.exe");
 let installerBytes = null;
 try { installerBytes = (await stat(installerPath)).size; } catch {}
