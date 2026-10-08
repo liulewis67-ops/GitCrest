@@ -105,7 +105,7 @@
 | S5.1 | Merge/Cherry-pick/Revert 工作流与冲突检测。 | 成功时 refs/status/log 更新；冲突时任务转入“等待解决”且逐文件展示；已存在 merge/rebase 状态时拒绝不兼容操作；取消/失败给出明确继续、跳过或中止路径，不清除用户修改。 | 已完成 |
 | S5.2 | 独立三路冲突解决窗口与 resolved 校验。 | ours/base/theirs、结果预览和逐块/手工编辑可用；只能写当前冲突文件，不能执行一般 Git 写操作；有未解决标记时禁止 resolved；关闭再开保留已保存的解决进度；resolved 后主窗口状态刷新。 | 已完成 |
 | S5.3 | Shelve：选中文件/hunk、命名、预览、应用、删除。 | 搁置前后及跨分支恢复时只影响选中内容；应用前必须预览；冲突进入 S5.2；应用失败保留条目与原 patch；删除显示范围并确认；条目重启后存在。 | 已完成 |
-| S5.4 | Rebase 与交互式 Rebase：todo 编辑、预览、备份、continue/abort/回滚。 | pick/reword/edit/squash/fixup/drop 均有测试；执行前创建并展示备份 ref；drop 和已发布分支改写明确确认；冲突可进入解决器并继续；abort 后恢复至操作前，备份 ref 可用于回滚。 | 未开始 |
+| S5.4 | Rebase 与交互式 Rebase：todo 编辑、预览、备份、continue/abort/回滚。 | pick/reword/edit/squash/fixup/drop 均有测试；执行前创建并展示备份 ref；drop 和已发布分支改写明确确认；冲突可进入解决器并继续；abort 后恢复至操作前，备份 ref 可用于回滚。 | 进行中 |
 | S5.5 | Reset、丢弃工作区变更、删除远程分支等危险操作安全网。 | 后端返回影响文件/提交/目标 ref；UI 展示后果和恢复方式，破坏性操作要求强确认；取消不改变仓库；可恢复操作先创建备份；日志记录动作与结果但不记录凭证；无确认票据的直接 API 调用被拒绝。 | 未开始 |
 
 ## 10. 大阶段 6：AI 辅助
@@ -380,3 +380,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 子阶段 C（Shelf Center）：工作区可按 Index/WorkingTree 选择文件或 hunk、命名并创建 shelf；列表展示条目，详情预览存储 patch；应用前要求读取当前 HEAD 与目标 diff 的 apply preview，再由用户确认应用；删除前展示覆盖路径并二次确认。任务提交后刷新任务/状态并轮询更新列表。验收：`pnpm build` 通过。证据：`src/features/shelves/ShelfCenter.tsx`、`src/App.tsx`、`src/App.css`。完成 commit：`881cadd`。
 - 子阶段 D：不可干净应用的 patch 通过 `git apply --3way --index` 进入 S5.2 冲突任务/解决窗口；ShelfApply recovery preflight 暴露冲突路径，继续恢复时保留 shelf 原有 Index/WorkingTree 语义并在成功后删除条目。WorkingTree 冲突恢复后的结果保持 unstaged。脏工作区分支切换预检的 Shelve 操作打开 Shelf Center composer。验收：跨分支冲突 API 集成用例覆盖三方内容、窄权限保存与 resolved、recovery continue、unstaged 结果和 shelf 清理；`cargo test shelf_ -- --nocapture`（5 tests）、`pnpm test`（81 tests）、`pnpm test:e2e`（1 test）、`pnpm build`、`pnpm api:types`、`cargo check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`git diff --check` 均通过。证据：`crates/gitcrest-core/src/main.rs`、`src/features/shelves/ShelfCenter.tsx`、`src/features/branches/BranchSwitcher.tsx`、`tests/unit/app.test.tsx`、`tests/e2e/desktop.test.ts`。实现 commits：`b819ff0`、`86c67bf`、`bb9a672`。
 - 完成说明：Shelf Center 支持 Index/WorkingTree 文件或 hunk 选择、命名、持久化、patch 预览、强制 apply-preview、确认应用和删除确认；应用前按 HEAD、saved patch、scope 与受影响 diff revision 复核。存储重开后保留条目。未干净应用时使用现有 S5.2 冲突工作流，工作区 scope 恢复后保持未暂存。S5.3 已完成；历史子阶段与验收记录见以上 commits `a4ceff6`、`d016d04`、`4e12710`、`881cadd`、`b819ff0`、`86c67bf`、`bb9a672`。
+
+### S5.4 — Rebase 与交互式 Rebase（进行中）
+- 子阶段 A：新增只读 rebase preview API，目标以解析后的 commit OID 绑定；返回当前 HEAD/分支、onto OID、按拓扑顺序正向排列的提交 todo（最多 200 条）、省略数量、脏路径/活动操作、preview revision 与 `canStart`。脏工作区、detached HEAD、空提交范围、超过上限及已有 Git 操作均不可开始；revision 覆盖 HEAD、onto、提交序列和脏路径，供后续写操作复核。API 契约、生成类型和客户端方法同步。验收：Rust 临时仓库 HTTP 集成用例验证两条提交顺序与脏工作区拒绝；API client 定向用例 33 tests、`pnpm build`、`pnpm api:types`、Rust fmt/clippy、`git diff --check` 通过。证据：`crates/gitcrest-core/src/rebase.rs`、`crates/gitcrest-core/src/workflows.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。完成 commit：`394a6d2`。
+- 当前后续：交互式 todo 编辑与动作校验；确定 `onto` 与当前分支的可发布状态；队列写任务在执行前复核 preview revision，并先创建/展示可恢复备份 ref，再执行 rebase。继续/跳过/abort 复用 S5.2 冲突入口并验证恢复前后 refs、HEAD 与工作区。
