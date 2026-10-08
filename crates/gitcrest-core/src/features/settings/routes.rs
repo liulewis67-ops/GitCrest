@@ -1,8 +1,8 @@
 use axum::{routing::get, Router};
 
-use crate::{
-    delete_ai_credential, get_ai_settings, set_ai_credential, set_ai_settings, state::AppState,
-};
+use crate::state::AppState;
+
+use super::handlers::{delete_ai_credential, get_ai_settings, set_ai_credential, set_ai_settings};
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
