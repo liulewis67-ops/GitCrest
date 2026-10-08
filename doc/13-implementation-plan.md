@@ -1895,3 +1895,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：status/tasks/workflows aliases 仍被多个模块消费；继续逐项迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{staging,shelves}/`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`d014fcc`
+
+### workflows feature 调用切换并移除 crate-root alias — 小阶段 144
+- 状态：已完成（workflows consumers 通过 feature 模块路径访问）
+- 日期：2026-10-09
+- 交付：将 workflows conflict/recovery handlers 和 crate-level workflow tests 中的跨路径引用改为 `features::workflows`；API router 已直接依赖 feature routes。移除 `lib.rs` 的 workflows crate-root re-export，工作流恢复、冲突和 rebase 行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：status 与 tasks 是剩余的主要 feature aliases，仍被多处基础设施/业务模块使用；继续沿 feature 边界迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/workflows/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`e49d644`
