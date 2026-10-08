@@ -1922,3 +1922,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：业务 feature 的 crate-root re-export 已全部清除；`cloning`/`repository` 根兼容出口及大型 `lib.rs` 测试归属仍可继续按规范收敛。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{status,diff,repositories,settings,shelves,staging,workflows}/`、`crates/gitcrest-core/src/refresh/watcher.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`20ff8cb`
+
+### cloning module crate-root alias 收敛 — 小阶段 147
+- 状态：已完成（cloning service/error 从 repositories feature 显式访问）
+- 日期：2026-10-09
+- 交付：将 bootstrap、AppState、API error mapping、remotes URL validation 与 crate-level CloneService helper 的 cloning 依赖改为 `features::repositories::cloning`；从 `lib.rs` 的 repositories re-export 中移除 `cloning`。克隆启动、远端 URL 校验与错误映射行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：`repository` 根兼容出口仍供启动、状态、存储与各 feature 使用；下一步盘点并逐层迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/repositories/cloning.rs`、`crates/gitcrest-core/src/{bootstrap.rs,state.rs,api/error.rs,lib.rs}`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`1f489e4`
