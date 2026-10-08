@@ -13,6 +13,8 @@ export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
 export type ShelfResponse = components["schemas"]["Shelf"];
 export type ShelfDetailResponse = components["schemas"]["ShelfDetail"];
 export type ShelfCreateRequest = components["schemas"]["ShelfCreateRequest"];
+export type ShelfApplyPreviewResponse = components["schemas"]["ShelfApplyPreview"];
+export type ShelfApplyRequest = components["schemas"]["ShelfApplyRequest"];
 export type CommitRequest = components["schemas"]["CommitRequest"];
 export type CommitPageResponse = components["schemas"]["CommitPage"];
 export type CommitDetailResponse = components["schemas"]["CommitDetail"];
@@ -294,6 +296,18 @@ export class GitCrestApiClient {
   deleteRepositoryShelf(repoId: RepoId, shelfId: string): Promise<void> {
     return this.request<void>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}`, true, {
       method: "DELETE",
+    });
+  }
+
+  preflightRepositoryShelfApply(repoId: RepoId, shelfId: string): Promise<ShelfApplyPreviewResponse> {
+    return this.request<ShelfApplyPreviewResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}/apply-preview`);
+  }
+
+  applyRepositoryShelf(repoId: RepoId, shelfId: string, request: ShelfApplyRequest): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/shelves/${encodeURIComponent(shelfId)}/apply`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
     });
   }
 

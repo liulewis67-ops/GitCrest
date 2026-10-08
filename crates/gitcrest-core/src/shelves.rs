@@ -1,13 +1,18 @@
 use std::{
     ffi::OsString,
+    path::Path,
+    process::Stdio,
     sync::atomic::{AtomicU64, Ordering},
+    time::Duration,
 };
 
 use serde::Serialize;
+use tokio::{io::AsyncWriteExt, process::Command};
 
 use crate::{diff::DiffScope, staging::StagingCommand};
 
 pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
+const APPLY_CHECK_DEADLINE: Duration = Duration::from_secs(10);
 static NEXT_SHELF_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -36,6 +41,8 @@ pub enum ShelfError {
     EmptySelection,
     PatchTooLarge,
     MixedScopes,
+    GitUnavailable,
+    GitTimedOut,
 }
 
 pub fn new_shelf_id() -> String {
@@ -141,6 +148,53 @@ pub fn check_commands(patch: Vec<u8>, scope: DiffScope) -> Vec<(DiffScope, Stagi
 
 pub fn rollback_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
     apply_command(patch, scope, false, false)
+}
+
+pub fn restore_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
+    let mut arguments = vec![OsString::from("apply")];
+    if scope == DiffScope::Index {
+        arguments.push("--index".into());
+    }
+    StagingCommand {
+        arguments,
+        input: Some(patch),
+        label: "Apply saved shelf",
+        log_label: "git apply <shelf patch>",
+    }
+}
+
+pub async fn check_apply(
+    repository_path: &Path,
+    patch: &[u8],
+    scope: DiffScope,
+) -> Result<bool, ShelfError> {
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(repository_path)
+        .args(["apply", "--check"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .kill_on_drop(true);
+    if scope == DiffScope::Index {
+        command.arg("--index");
+    }
+    let mut child = command.spawn().map_err(|_| ShelfError::GitUnavailable)?;
+    if let Some(mut stdin) = child.stdin.take() {
+        stdin
+            .write_all(patch)
+            .await
+            .map_err(|_| ShelfError::GitUnavailable)?;
+    }
+    match tokio::time::timeout(APPLY_CHECK_DEADLINE, child.wait()).await {
+        Ok(Ok(status)) => Ok(status.success()),
+        Ok(Err(_)) => Err(ShelfError::GitUnavailable),
+        Err(_) => {
+            let _ = child.kill().await;
+            Err(ShelfError::GitTimedOut)
+        }
+    }
 }
 
 #[cfg(test)]

@@ -1344,6 +1344,124 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/shelves/{shelfId}/apply-preview:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: shelfId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    get:
+      operationId: preflightRepositoryShelfApply
+      summary: Preview a saved shelf against the current working tree
+      description: Returns a revision binding the saved patch, HEAD and current diffs of every affected path. A false canApplyCleanly means the patch must be reviewed after the target branch or affected files change; no changes are made by preview.
+      responses:
+        "200":
+          description: Current shelf apply preview.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ShelfApplyPreview"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or shelf is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: An affected path is conflicted or the shelf predates scope metadata.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git or shelf storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/shelves/{shelfId}/apply:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+      - name: shelfId
+        in: path
+        required: true
+        schema:
+          type: string
+          minLength: 1
+          maxLength: 128
+    post:
+      operationId: applyRepositoryShelf
+      summary: Queue application of a previously reviewed shelf
+      description: The task rechecks HEAD, affected diff revisions and Git apply preflight under repository serialization. Stale or non-applicable shelves are preserved.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ShelfApplyRequest"
+      responses:
+        "202":
+          description: Shelf application task accepted.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The reviewed apply request is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or shelf is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "409":
+          description: The reviewed HEAD or affected diffs are stale, or the shelf cannot be restored safely.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Git, task capacity or shelf storage is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/commits:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3258,6 +3376,33 @@ components:
         patch:
           type: string
           description: Unified diff patch stored with this shelf; reading it never applies it.
+    ShelfApplyRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedHeadOid, previewRevision]
+      properties:
+        expectedHeadOid:
+          type: string
+          nullable: true
+          pattern: "^(?:[a-fA-F0-9]{40}|[a-fA-F0-9]{64})$"
+        previewRevision:
+          type: string
+          minLength: 1
+    ShelfApplyPreview:
+      type: object
+      additionalProperties: false
+      required: [shelf, expectedHeadOid, previewRevision, canApplyCleanly]
+      properties:
+        shelf:
+          $ref: "#/components/schemas/Shelf"
+        expectedHeadOid:
+          type: string
+          nullable: true
+        previewRevision:
+          type: string
+          minLength: 1
+        canApplyCleanly:
+          type: boolean
     OpenRepositoryRequest:
       type: object
       additionalProperties: false

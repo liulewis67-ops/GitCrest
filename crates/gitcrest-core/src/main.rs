@@ -26,6 +26,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use tower_http::cors::CorsLayer;
 
@@ -473,6 +474,16 @@ impl ApiError {
                 StatusCode::BAD_REQUEST,
                 ApiErrorCode::RequestInvalid,
                 "One shelf must contain changes from a single index or working-tree scope.",
+            ),
+            shelves::ShelfError::GitUnavailable => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not check whether the shelf applies to this working tree.",
+            ),
+            shelves::ShelfError::GitTimedOut => Self::new(
+                StatusCode::GATEWAY_TIMEOUT,
+                ApiErrorCode::DiffUnavailable,
+                "Checking this shelf against the working tree timed out.",
             ),
         }
     }
@@ -978,6 +989,14 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/shelves/:shelf_id",
             get(get_repository_shelf).delete(delete_repository_shelf),
+        )
+        .route(
+            "/v1/repositories/:repo_id/shelves/:shelf_id/apply-preview",
+            get(preflight_repository_shelf_apply),
+        )
+        .route(
+            "/v1/repositories/:repo_id/shelves/:shelf_id/apply",
+            post(apply_repository_shelf),
         )
         .route(
             "/v1/repositories/:repo_id/commits",
@@ -1578,6 +1597,244 @@ async fn delete_repository_shelf(
         ));
     }
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ShelfApplyPreviewResponse {
+    shelf: shelves::ShelfSnapshot,
+    expected_head_oid: Option<String>,
+    preview_revision: String,
+    can_apply_cleanly: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ShelfApplyRequest {
+    expected_head_oid: Option<String>,
+    preview_revision: String,
+}
+
+async fn preflight_repository_shelf_apply(
+    State(state): State<AppState>,
+    Path((repo_id, shelf_id)): Path<(String, String)>,
+) -> Result<Json<ShelfApplyPreviewResponse>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let repository = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let shelf = load_shelf_record(&state.repositories, &repo_id, &shelf_id).await?;
+    let scope = shelf.snapshot.scope.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::ResourceVersionStale,
+            "This shelf predates scope metadata and cannot be applied automatically.",
+        )
+    })?;
+    let preview_revision = shelf_apply_revision(
+        &state.repositories,
+        &repo_id,
+        &target.repository_path,
+        &shelf,
+        repository.head.as_deref(),
+    )
+    .await?;
+    let can_apply_cleanly = shelves::check_apply(&target.repository_path, &shelf.patch, scope)
+        .await
+        .map_err(ApiError::from_shelf_error)?;
+    Ok(Json(ShelfApplyPreviewResponse {
+        shelf: shelf.snapshot,
+        expected_head_oid: repository.head,
+        preview_revision,
+        can_apply_cleanly,
+    }))
+}
+
+async fn apply_repository_shelf(
+    State(state): State<AppState>,
+    Path((repo_id, shelf_id)): Path<(String, String)>,
+    request: Result<Json<ShelfApplyRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Applying a shelf requires the reviewed HEAD and preview revision.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let repository = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    if repository.head != request.expected_head_oid {
+        return Err(ApiError::from_staging_error(
+            staging::StagingError::StaleSelection,
+        ));
+    }
+    let shelf = load_shelf_record(&state.repositories, &repo_id, &shelf_id).await?;
+    let scope = shelf.snapshot.scope.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::ResourceVersionStale,
+            "This shelf predates scope metadata and cannot be applied automatically.",
+        )
+    })?;
+    let current_revision = shelf_apply_revision(
+        &state.repositories,
+        &repo_id,
+        &target.repository_path,
+        &shelf,
+        repository.head.as_deref(),
+    )
+    .await?;
+    if current_revision != request.preview_revision {
+        return Err(ApiError::from_staging_error(
+            staging::StagingError::StaleSelection,
+        ));
+    }
+
+    let repositories = state.repositories.clone();
+    let commands = state.git_commands.clone();
+    let task_repo_id = repo_id.clone();
+    let task_shelf_id = shelf_id;
+    let task_path = target.repository_path;
+    let resource_key = target.resource_key;
+    let expected_head_oid = request.expected_head_oid;
+    let expected_scope = scope;
+    let preview_revision = request.preview_revision;
+    let patch = shelf.patch;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            "shelfApply",
+            move |context| async move {
+                let current_repository = repositories
+                    .refresh_metadata(&task_repo_id)
+                    .await
+                    .map_err(|_| TaskFailure::Failed("Could not recheck repository HEAD before applying the shelf.".into()))?;
+                if current_repository.head != expected_head_oid {
+                    return Err(TaskFailure::Failed("Repository HEAD changed after shelf preview. Preview the shelf again.".into()));
+                }
+                let current_shelf = load_shelf_record(&repositories, &task_repo_id, &task_shelf_id)
+                    .await
+                    .map_err(|_| TaskFailure::Failed("The reviewed shelf is no longer available.".into()))?;
+                let current_scope = current_shelf.snapshot.scope.ok_or_else(|| TaskFailure::Failed("This shelf has no safe restore scope.".into()))?;
+                if current_scope != expected_scope {
+                    return Err(TaskFailure::Failed("The shelf restore scope changed after preview. Preview it again.".into()));
+                }
+                let current_revision = shelf_apply_revision(
+                    &repositories,
+                    &task_repo_id,
+                    &task_path,
+                    &current_shelf,
+                    current_repository.head.as_deref(),
+                )
+                .await
+                .map_err(|_| TaskFailure::Failed("Could not recheck the shelf target state. Preview it again.".into()))?;
+                if current_revision != preview_revision {
+                    return Err(TaskFailure::Failed("The working tree changed after shelf preview. Preview the shelf again.".into()));
+                }
+                let can_apply = shelves::check_apply(&task_path, &patch, current_scope)
+                    .await
+                    .map_err(|_| TaskFailure::Failed("Git could not recheck the reviewed shelf patch.".into()))?;
+                if !can_apply {
+                    return Err(TaskFailure::Failed("The shelf conflicts with the current branch. No changes were applied; the shelf is still available.".into()));
+                }
+                commands
+                    .execute_staging(&task_path, shelves::restore_command(patch, current_scope), context)
+                    .await?;
+                let store = repositories.store();
+                tokio::task::spawn_blocking(move || store.delete_shelf(&task_repo_id, &task_shelf_id))
+                    .await
+                    .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?
+                    .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?;
+                Ok(Some("The reviewed shelf was applied and removed from the saved shelf list.".into()))
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn load_shelf_record(
+    repositories: &RepositoryManager,
+    repo_id: &str,
+    shelf_id: &str,
+) -> Result<shelves::ShelfRecord, ApiError> {
+    let store = repositories.store();
+    let repo_id = repo_id.to_owned();
+    let shelf_id = shelf_id.to_owned();
+    tokio::task::spawn_blocking(move || store.get_shelf(&repo_id, &shelf_id))
+        .await
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .map_err(|_| ApiError::task_storage_unavailable())?
+        .ok_or_else(|| {
+            ApiError::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::ShelfNotFound,
+                "This shelf is no longer available.",
+            )
+        })
+}
+
+async fn shelf_apply_revision(
+    repositories: &RepositoryManager,
+    repo_id: &str,
+    repository_path: &std::path::Path,
+    shelf: &shelves::ShelfRecord,
+    head_oid: Option<&str>,
+) -> Result<String, ApiError> {
+    let status = repositories
+        .status_snapshot(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let mut digest = Sha256::new();
+    digest.update(head_oid.unwrap_or("<unborn>").as_bytes());
+    digest.update(
+        shelf
+            .snapshot
+            .scope
+            .map(|scope| format!("{scope:?}"))
+            .unwrap_or_default(),
+    );
+    digest.update(&shelf.patch);
+    for path in &shelf.snapshot.paths {
+        digest.update(path.as_bytes());
+        digest.update([0]);
+        if let Some(file) = status.files.iter().find(|file| file.path == *path) {
+            if file.kind == status::ChangeKind::Conflicted {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    ApiErrorCode::WorkflowNoActiveOperation,
+                    "Resolve existing conflicts before previewing a shelf for this file.",
+                ));
+            }
+            for scope in [DiffScope::Index, DiffScope::WorkingTree] {
+                let diff = diff::read_with_patch(repo_id.to_owned(), repository_path, file, scope)
+                    .await
+                    .map_err(ApiError::from_diff_error)?;
+                digest.update(diff.document.revision.as_bytes());
+            }
+        } else {
+            digest.update(b"clean\0");
+        }
+    }
+    Ok(format!("sha256:{:x}", digest.finalize()))
 }
 
 async fn create_repository_shelf(
