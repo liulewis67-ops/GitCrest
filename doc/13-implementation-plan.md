@@ -751,3 +751,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：remote 管理、fetch/pull/push 与 clone handlers/routes 仍需归入 remotes feature；`pull.rs`、`push.rs` 的模块层次也待标准化。
 - 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,mod,routes,service}.rs`、`crates/gitcrest-core/src/features/branches/routes.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`c7e18c1`
+
+### 后端 remotes 管理路由拆分 — 小阶段 19
+- 状态：已完成（remote 管理路由进入 remotes feature；handlers/DTO 后续迁移）
+- 日期：2026-10-09
+- 交付：将 remote 列表/新增、URL 更新、删除、默认 remote 设置及 branch upstream 设置的 5 组路由绑定从 `api/router.rs` 迁至 `features/remotes/routes.rs`。顶层 router 统一合并 remotes feature；路径、HTTP methods 和 middleware 保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；remote 管理 API 集成用例通过。
+- 限制/后续：remote 管理 handlers/DTO 仍在 `main.rs`；后续迁移并继续统一 clone、fetch、pull、push 的 remotes feature 边界。
+- 证据：`crates/gitcrest-core/src/features/remotes/routes.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`8130a34`
