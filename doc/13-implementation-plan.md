@@ -1175,3 +1175,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：generic workflow 与 recovery task handlers 仍在 `handlers.rs`；下一阶段继续将它们拆入 merge/recovery 子模块，保留 handlers 根模块作为聚合出口。
 - 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/reset.rs,routes.rs}`。
 - 实施 commit：`f7e7f75`
+
+### 后端 workflows merge handlers 子模块 — 小阶段 64
+- 状态：已完成（merge/cherry-pick/revert 预检与启动 handlers 独立分组）
+- 日期：2026-10-09
+- 交付：将 workflow preflight 与 merge/cherry-pick/revert start handlers 从通用 `handlers.rs` 移入 `handlers/merge.rs`；对应 DTO 保持在 `dto.rs`，聚合模块继续导出给现有 routes。API 路径、方法、任务操作标识、stale 检查及 clean worktree 前置条件未改变，子模块依赖显式声明。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；workflow preflight 与 merge/cherry-pick/revert 任务集成用例通过。
+- 限制/后续：recovery preflight 与执行 handler 仍在 `handlers.rs`；下一阶段将其归并到 `handlers/recovery.rs`，随后检查通用 handlers 文件是否仅承担聚合职责。
+- 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/merge.rs,routes.rs}`。
+- 实施 commit：`288ca3a`
