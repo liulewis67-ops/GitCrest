@@ -1319,3 +1319,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：rebase commit 列表与远端发布检查、remote branch delete 的目标/比较/路径查询仍在 feature 内执行；继续将稳定的只读 Git 查询迁入 adapter。
 - 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/workflows/reset.rs`。
 - 实施 commit：`bd8d425`
+
+### 后端 rebase 提交列表读取迁入 adapter — 小阶段 80
+- 状态：已完成（有界 rebase commit list 与发布状态检查经过 Git port）
+- 日期：2026-10-09
+- 交付：新增领域 `WorkflowRebaseCommitList`/`WorkflowCommitSubject` 与 `WorkflowGitPort::list_rebase_commits`；Git adapter 读取拓扑顺序提交主题、计算超出上限数量并并发检查提交是否包含于远端 refs。rebase feature 继续组合 HEAD/worktree 状态、可执行性和 preview revision；删除 feature 内重复的 Git 子进程 runner。保持 200 条提交上限、最多 8 路并发与发布 OID 排序。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：remote branch delete preview 的 Git 目标、差异计数和路径查询仍在 remotes feature 执行；接下来继续收敛该只读路径，随后审视 port 查询与现有 Git executable 配置的统一。
+- 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/workflows/rebase.rs`。
+- 实施 commit：`6065cce`
