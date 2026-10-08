@@ -1247,3 +1247,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`WorkflowOperation` 仍由 feature 定义并带 serde，且直接出现在多个预检/冲突/重置/变基响应；后续需将 operation 领域语义与 API DTO 映射拆开，再移除 adapter 对 feature operation 的引用。
 - 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/features/workflows/{dto.rs,workflows.rs,handlers/merge.rs}`、`crates/gitcrest-core/src/git/git_command.rs`。
 - 实施 commit：`8e2c82a`
+
+### 后端 WorkflowOperation 领域模型与传输 DTO — 小阶段 72
+- 状态：已完成（workflow operation 归入 domain，响应与请求通过 API DTO 映射）
+- 日期：2026-10-09
+- 交付：将 `WorkflowOperation` 移入不依赖 serde 的 `domain/workflow.rs`，Git adapter、workflows、conflicts、rebase、reset 与 remotes service 使用同一领域枚举。新增共享 `api::workflow::WorkflowOperationDto`，在 workflows/remotes 响应 DTO 中显式映射预检、恢复预检、冲突文件、rebase/reset preview 与 remote branch delete preview；相关请求 DTO 将 API enum 转换为领域类型。保留原有 camelCase wire 值和响应字段名。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与 `git diff --check` 通过；源码搜索确认 Git adapter 与其他 feature 不再导入 workflows feature 的 `WorkflowOperation`；按当前任务约束未运行测试。
+- 限制/后续：领域 operation 和 API 序列化策略已分离，但多组 feature response DTO 仍集中在较大的 workflows `dto.rs`；下一阶段按后端目录规范拆分 response DTO 文件，并审视 API shared enum 的契约测试覆盖。
+- 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/api/workflow.rs`、`crates/gitcrest-core/src/features/{workflows,remotes}/{dto.rs,handlers,service.rs}`、`crates/gitcrest-core/src/git/git_command.rs`。
+- 实施 commit：`a073f0a`
