@@ -26,9 +26,8 @@ const RebaseDialog = lazy(() => import("../features/workflows/RebaseDialog").the
 const ResetDialog = lazy(() => import("../features/workflows/ResetDialog").then(({ ResetDialog }) => ({ default: ResetDialog })));
 const RemoteBranchDeleteDialog = lazy(() => import("../features/branches/RemoteBranchDeleteDialog").then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
 const CloneDialog = lazy(() => import("../features/cloning/CloneDialog").then(({ CloneDialog }) => ({ default: CloneDialog })));
-const CommitGraph = lazy(() => import("../features/history/CommitGraph").then(({ CommitGraph }) => ({ default: CommitGraph })));
-const CommitDetails = lazy(() => import("../features/history/CommitGraph").then(({ CommitDetails }) => ({ default: CommitDetails })));
-const SplitDiff = lazy(() => import("../features/diff/SplitDiff").then(({ SplitDiff }) => ({ default: SplitDiff })));
+const CommitDetails = lazy(() => import("../features/history").then(({ CommitDetails }) => ({ default: CommitDetails })));
+const WorkspaceMainPanel = lazy(() => import("../pages/workspace/WorkspaceMainPanel").then(({ WorkspaceMainPanel }) => ({ default: WorkspaceMainPanel })));
 const PushDialog = lazy(() => import("../features/remotes/PushDialog").then(({ PushDialog }) => ({ default: PushDialog })));
 const PullDialog = lazy(() => import("../features/remotes/PullDialog").then(({ PullDialog }) => ({ default: PullDialog })));
 const PushTargetDialog = lazy(() => import("../features/remotes/PushTargetDialog").then(({ PushTargetDialog }) => ({ default: PushTargetDialog })));
@@ -1790,34 +1789,42 @@ function App() {
             />
             <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />
 
-            <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
-              <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : `Refresh working tree status (${displayShortcut(shortcuts.refreshStatus, isMacPlatform)})`}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
-              {mode === "graph" ? selectedRepository && apiRef.current && isFullObjectId(selectedRepository.head) ? <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">Loading commit history…</div>}><CommitGraph
-                key={selectedRepository.repoId}
+            <Suspense fallback={<section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}><div className="graphViewport" role="status" aria-live="polite">Loading workspace view…</div></section>}>
+              <WorkspaceMainPanel
+                mode={mode}
+                repository={selectedRepository}
                 api={apiRef.current}
-                repoId={selectedRepository.repoId}
-                selectedOid={selectedCommit}
-                initialScrollTop={workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0}
-                refreshKey={historyRefreshKey}
-                focusSearchRequest={historySearchFocusRequest}
-                searchShortcut={ariaShortcut(shortcuts.searchCommits, isMacPlatform)}
+                statusLoading={activeStatusLoading}
+                shortcuts={shortcuts}
+                isMacPlatform={isMacPlatform}
+                selectedCommit={selectedCommit}
+                workspaceSession={workspaceSession}
+                historyRefreshKey={historyRefreshKey}
+                historySearchFocusRequest={historySearchFocusRequest}
+                graphViewportRef={graphViewportRef}
+                openingRepository={openingRepository}
+                selectedFilePath={selectedFilePath}
+                selectedFileScope={selectedFileScope}
+                selectedDiffCommitOid={selectedDiffCommitOid}
+                activeDiffKey={activeDiffKey}
+                diffState={diffState}
+                selectedDiffFile={selectedDiffFile}
+                stagingBusy={stagingBusy}
+                hasActiveStagingTask={hasActiveStagingTask}
+                commitBusy={commitBusy}
+                version={version}
+                onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
                 onFocusSearchHandled={(sequence) => setHistorySearchFocusRequest((request) => request?.sequence === sequence ? undefined : request)}
-                onScrollPosition={rememberGraphScroll}
-                onSelect={selectCommit}
-              /></Suspense> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)} role="region" aria-label="Commit graph view"><div className="graphEmpty">
-                <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
-                <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
-                <h2>{selectedRepository ? selectedRepository.head ? "Connecting to history…" : "No commits yet" : "Your commit graph starts here"}</h2>
-                <p>{selectedRepository ? `${selectedRepository.path}${selectedRepository.branch ? ` · ${selectedRepository.branch}` : selectedRepository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
-                {!selectedRepository && <button className="secondaryButton" type="button" onClick={() => void openLocalRepository()} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
-              </div></div>
-                : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div></div>
-                  : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
-                  : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">Loading diff viewer…</div>}><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => { setTasksError(""); setDiscardSelection({ path: diffState.document!.path, revision: diffState.document!.revision, selections }); } : undefined} onCommitSelection={addDiffSelectionToCommit} onOpenWindow={() => void openDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></Suspense></div>
-                  : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div></div>}
-              <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
-            </section>
+                onGraphScrollPosition={rememberGraphScroll}
+                onSelectCommit={selectCommit}
+                onOpenRepository={() => void openLocalRepository()}
+                onRetryDiff={() => setDiffRetry((current) => current + 1)}
+                onStageSelection={stageSelectedChanges}
+                onDiscardSelection={(document, selections) => { setTasksError(""); setDiscardSelection({ path: document.path, revision: document.revision, selections }); }}
+                onCommitSelection={addDiffSelectionToCommit}
+                onOpenDiffWindow={(path, scope, oid) => void openDiffWindow(path, scope, oid)}
+              />
+            </Suspense>
             {mode === "graph" && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />}
 
             {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
