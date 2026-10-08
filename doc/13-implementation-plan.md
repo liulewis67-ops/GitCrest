@@ -770,3 +770,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,routes,service}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`b158803`
 
+
+### 后端 fetch handler 与 DTO 拆分 — 小阶段 21
+- 状态：已完成（fetch HTTP 边界进入 remotes feature）
+- 日期：2026-10-09
+- 交付：将 fetch 请求 DTO、任务 handler 与 `/v1/repositories/:repo_id/fetch` 路由从 `main.rs`/顶层 API router 迁至 `features/remotes/{dto,handlers,routes}.rs`。保留 prune 与普通 fetch 的 Git 操作选择、任务名称、repository resource key 及 202 响应。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；fetch API 和 Git command 用例通过。
+- 限制/后续：pull、push preflight/execute handlers 与 DTO 尚在 `main.rs`，后续继续按远端操作边界迁移。
+- 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`dfb3dae`
+
