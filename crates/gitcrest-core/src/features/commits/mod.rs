@@ -1,4 +1,3 @@
-#[path = "commits.rs"]
 mod service;
 
 mod dto;
