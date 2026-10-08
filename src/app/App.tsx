@@ -14,6 +14,7 @@ import { supportsWorkflowRecovery } from "../features/tasks/task-operations";
 import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories/model/workspace-session";
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
+import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
@@ -178,7 +179,6 @@ function App() {
   const [switchError, setSwitchError] = useState("");
   const [switchBusy, setSwitchBusy] = useState(false);
   const { dialogRef: branchSwitcherRef, onKeyDown: onBranchSwitcherKeyDown } = useDialogFocus<HTMLElement>(() => setBranchSwitcherOpen(false), switchBusy, undefined, branchSwitcherOpen);
-  const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
@@ -202,7 +202,6 @@ function App() {
   const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
   const openedCloneTasks = useRef(new Set<string>());
   const cloneTaskIds = useRef(new Set<string>());
-  const [tasksError, setTasksError] = useState("");
   const [stagingBusy, setStagingBusy] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
   const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
@@ -231,6 +230,14 @@ function App() {
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
   const apiRef = useRef<GitCrestApiClient>();
+  const {
+    tasks,
+    error: tasksError,
+    setError: setTasksError,
+    refresh: refreshTasks,
+    prependTask,
+    appendTask,
+  } = useTaskCenter(() => apiRef.current);
   const [page, setPage] = useState<Page>("welcome");
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession>(loadWorkspaceSession);
   const workspaceSessionRef = useRef(workspaceSession);
@@ -438,7 +445,7 @@ function App() {
     setRemoteError(repoId, "");
     try {
       const task = await action();
-      setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+      prependTask(task);
       setTasksOpen(true);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
@@ -534,7 +541,7 @@ function App() {
       setSwitchPreflight(preflight);
       if (preflight.potentiallyOverwrittenPaths.length > 0) return;
       const task = await api.switchRepositoryBranch(repository.repoId, switchTargetName);
-      setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+      prependTask(task);
       setBranchSwitcherOpen(false);
       setTasksOpen(true);
     } catch (error) {
@@ -562,7 +569,7 @@ function App() {
       }
       const task = await api.switchRepositoryBranch(repoId, target);
       autoApplyAfterSwitchRef.current.set(task.taskId, { repoId, target, existingShelfIds });
-      setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+      prependTask(task);
       setTasksOpen(true);
     } catch (error) {
       setTasksError(error instanceof GitCrestApiError ? error.body.error.message : error instanceof Error ? error.message : "The shelf was created, but GitCrest could not continue the branch switch.");
@@ -609,11 +616,11 @@ function App() {
         previewRevision: preview.previewRevision,
       });
       if (task.status === "succeeded") {
-        setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+        prependTask(task);
         if (remainingShelfIds.length > 0) void applyNextAutoShelf(repoId, remainingShelfIds);
       } else {
         autoRestoreAfterShelfRef.current.set(task.taskId, { repoId, remainingShelfIds });
-        setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+        prependTask(task);
       }
       setTasksOpen(true);
     } catch (error) {
@@ -650,19 +657,8 @@ function App() {
     }
   }
 
-  async function refreshTasks() {
-    const api = apiRef.current;
-    if (!api) return;
-    try {
-      setTasks(await api.listTasks());
-      setTasksError("");
-    } catch (error) {
-      setTasksError(error instanceof Error ? error.message : "Could not read task history.");
-    }
-  }
-
   async function startWorkflowTask(task: TaskSnapshotResponse) {
-    setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+    prependTask(task);
     setWorkflowDialog(undefined);
     setTasksError("");
     setTasksOpen(true);
@@ -722,7 +718,7 @@ function App() {
     if (!api || !repoId) return;
     try {
       const task = await api.fetchRepository(repoId);
-      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      appendTask(task);
       setTasksError("");
       setTasksOpen(true);
     } catch (error) {
@@ -770,7 +766,7 @@ function App() {
         expectedTrackingOid: preview.trackingOid,
         strategy,
       });
-      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      prependTask(task);
       setTasksError("");
       setPullOpen(false);
       setTasksOpen(true);
@@ -830,7 +826,7 @@ function App() {
         remoteBranch: preview.remoteBranch,
       });
       pushTargetsByTask.current.set(task.taskId, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch });
-      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      prependTask(task);
       setTasksError("");
       setPushOpen(false);
       setTasksOpen(true);
@@ -877,7 +873,7 @@ function App() {
         remoteBranch: preview.remoteBranch,
       });
       pushTargetsByTask.current.set(task.taskId, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch });
-      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      prependTask(task);
       setPushOpen(false);
       setTasksOpen(true);
     } catch (error) {
@@ -898,7 +894,7 @@ function App() {
     try {
       const request: StagingRequest = { action, ...(path ? { path } : {}) };
       const task = await api.stageRepositoryChanges(repoId, request);
-      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      appendTask(task);
       setTasksOpen(true);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
@@ -916,7 +912,7 @@ function App() {
     setTasksError("");
     try {
       const task = await api.undoRecentOperation(repository.repoId);
-      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      prependTask(task);
       setTasksOpen(true);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
@@ -941,7 +937,7 @@ function App() {
         selections,
       };
       const task = await api.stageSelectedDiffHunks(repository.repoId, request);
-      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      appendTask(task);
       setTasksOpen(true);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
@@ -960,7 +956,7 @@ function App() {
     setTasksError("");
     try {
       const task = await api.discardSelectedDiffChanges(repository.repoId, { ...discardSelection, confirmDiscard: true });
-      setTasks((current) => [task, ...current.filter((entry) => entry.taskId !== task.taskId)]);
+      prependTask(task);
       setTasksOpen(true);
       setDiscardSelection(undefined);
     } catch (error) {
@@ -1012,7 +1008,7 @@ function App() {
     setTasksError("");
     try {
       const task = await api.commitRepository(repoId, commitMessage, { amend: amendCommit, signOff: signOffCommit, sign: signCommit, ...(commitSelections.length > 0 ? { selections: commitSelections } : {}) });
-      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      appendTask(task);
       commitSelectionsByTask.current.set(task.taskId, JSON.stringify(commitSelections));
       commitMessagesByTask.current.set(task.taskId, commitMessage);
       commitIntentsByTask.current.set(task.taskId, {
@@ -1059,7 +1055,7 @@ function App() {
     try {
       const task = await api.cloneRepository(remoteUrl, parentPath, directoryName);
       cloneTaskIds.current.add(task.taskId);
-      setTasks((current) => [...current.filter((entry) => entry.taskId !== task.taskId), task]);
+      appendTask(task);
       setCloneOpen(false);
       setTasksOpen(true);
       setTasksError("");
@@ -2004,7 +2000,7 @@ function App() {
                 onTaskSubmitted={(task, switchTarget) => {
                   if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId);
                   if (task) {
-                    setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
+                    prependTask(task);
                     if (switchTarget) {
                       const repoId = shelfComposerAfterSwitch?.repoId;
                       if (repoId) {
