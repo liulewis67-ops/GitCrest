@@ -47,9 +47,7 @@ mod state;
 mod status;
 #[path = "storage/storage.rs"]
 mod storage;
-pub(crate) use features::system;
-#[path = "features/tags/mod.rs"]
-mod tags;
+pub(crate) use features::{system, tags};
 #[path = "features/tasks/mod.rs"]
 mod tasks;
 #[path = "refresh/watcher.rs"]
