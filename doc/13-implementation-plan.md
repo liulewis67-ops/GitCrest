@@ -1112,3 +1112,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：reset、merge-backup recovery、conflict file/AI suggestion handlers 仍留在 `main.rs`；下一阶段按 reset/recovery 与 conflict 两组继续迁移。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`cad9333`
+
+### 后端 workflows reset handlers 迁移 — 小阶段 57
+- 状态：已完成（reset 预览、执行、备份列表与恢复 handlers 进入 workflows feature）
+- 日期：2026-10-09
+- 交付：将 reset preview/start、backup listing、restore handlers 及 backup reference 校验 helper 从 `main.rs` 迁入 `features/workflows/handlers.rs`；新增 reset preview/start/restore request DTO，并由 feature routes 绑定本地 handlers。原有 HEAD 与 preview revision 检查、执行确认、备份引用校验及恢复流程保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；reset 预览/确认/恢复 API 集成用例通过。
+- 限制/后续：workflow recovery、conflict file/AI suggestion handlers 仍留在 `main.rs`；继续迁移这些处理器，并审视 feature handler 文件拆分边界。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`0745557`
