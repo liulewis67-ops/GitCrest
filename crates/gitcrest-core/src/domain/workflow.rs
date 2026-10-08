@@ -53,6 +53,13 @@ pub(crate) struct WorkflowBackupReference {
     pub(crate) subject: String,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkflowResetComparison {
+    pub(crate) commits_removed: u32,
+    pub(crate) commits_added: u32,
+    pub(crate) changed_paths: Vec<String>,
+}
+
 impl RebaseAction {
     pub(crate) fn git_keyword(self) -> &'static str {
         match self {

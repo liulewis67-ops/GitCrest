@@ -1,8 +1,4 @@
-use std::{path::Path, process::Stdio, time::Duration};
-
-use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use tokio::{io::AsyncReadExt, process::Command, time::timeout};
+use std::path::Path;
 
 use crate::{
     domain::{
@@ -11,10 +7,10 @@ use crate::{
     },
     ports::workflow_git::WorkflowGitPort,
 };
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 const MAX_RESET_PATHS: usize = 200;
-const MAX_GIT_OUTPUT: usize = 2 * 1024 * 1024;
-const GIT_TIMEOUT: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -122,38 +118,12 @@ pub async fn read_preview<G: WorkflowGitPort>(
         .read_current_branch(repository_path)
         .await?
         .ok_or(WorkflowError::GitFailed)?;
-    let counts = run_git(
-        repository_path,
-        &[
-            "rev-list",
-            "--left-right",
-            "--count",
-            &format!("{expected_head_oid}...{target_oid}"),
-        ],
-    )
-    .await?;
-    let (commits_removed, commits_added) = counts
-        .split_once('\t')
-        .and_then(|(left, right)| Some((left.parse().ok()?, right.parse().ok()?)))
-        .ok_or(WorkflowError::GitFailed)?;
+    let comparison = git
+        .compare_for_reset(repository_path, &expected_head_oid, &target_oid)
+        .await?;
     let state = git.read_worktree_state(repository_path).await?;
     let operation_in_progress = state.operation;
-    let path_output = run_git(
-        repository_path,
-        &[
-            "diff",
-            "--name-only",
-            "--no-renames",
-            &format!("{expected_head_oid}..{target_oid}"),
-            "--",
-        ],
-    )
-    .await?;
-    let mut affected_paths = path_output
-        .lines()
-        .filter(|path| !path.is_empty())
-        .map(str::to_owned)
-        .collect::<Vec<_>>();
+    let mut affected_paths = comparison.changed_paths;
     affected_paths.sort();
     affected_paths.dedup();
     let omitted_path_count = affected_paths.len().saturating_sub(MAX_RESET_PATHS) as u32;
@@ -188,8 +158,8 @@ pub async fn read_preview<G: WorkflowGitPort>(
         target_oid,
         current_branch,
         mode,
-        commits_removed,
-        commits_added,
+        commits_removed: comparison.commits_removed,
+        commits_added: comparison.commits_added,
         affected_paths,
         omitted_path_count,
         dirty_paths: state.dirty_paths,
@@ -197,40 +167,4 @@ pub async fn read_preview<G: WorkflowGitPort>(
         preview_revision: format!("sha256:{:x}", digest.finalize()),
         can_start,
     })
-}
-
-async fn run_git(repository_path: &Path, arguments: &[&str]) -> Result<String, WorkflowError> {
-    let mut command = Command::new("git");
-    command
-        .current_dir(repository_path)
-        .args(arguments)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-    let mut child = command.spawn().map_err(|_| WorkflowError::GitUnavailable)?;
-    let stdout = child.stdout.take().ok_or(WorkflowError::GitFailed)?;
-    let read = tokio::spawn(async move {
-        let mut output = Vec::new();
-        stdout
-            .take(MAX_GIT_OUTPUT as u64 + 1)
-            .read_to_end(&mut output)
-            .await
-            .map_err(|_| WorkflowError::GitFailed)?;
-        if output.len() > MAX_GIT_OUTPUT {
-            return Err(WorkflowError::TooLarge);
-        }
-        Ok(output)
-    });
-    let status = timeout(GIT_TIMEOUT, child.wait())
-        .await
-        .map_err(|_| WorkflowError::TimedOut)?
-        .map_err(|_| WorkflowError::GitFailed)?;
-    let output = read.await.map_err(|_| WorkflowError::GitFailed)??;
-    if !status.success() {
-        return Err(WorkflowError::GitFailed);
-    }
-    String::from_utf8(output)
-        .map(|value| value.trim().to_owned())
-        .map_err(|_| WorkflowError::GitFailed)
 }

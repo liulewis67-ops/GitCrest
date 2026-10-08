@@ -2,7 +2,9 @@ use std::path::Path;
 
 use crate::domain::{
     error::WorkflowError,
-    workflow::{WorkflowBackupNamespace, WorkflowBackupReference, WorkflowState},
+    workflow::{
+        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowResetComparison, WorkflowState,
+    },
 };
 
 pub(crate) trait WorkflowGitPort: Send + Sync {
@@ -40,4 +42,11 @@ pub(crate) trait WorkflowGitPort: Send + Sync {
         repository_path: &Path,
         namespace: WorkflowBackupNamespace,
     ) -> Result<Vec<WorkflowBackupReference>, WorkflowError>;
+
+    async fn compare_for_reset(
+        &self,
+        repository_path: &Path,
+        head_oid: &str,
+        target_oid: &str,
+    ) -> Result<WorkflowResetComparison, WorkflowError>;
 }

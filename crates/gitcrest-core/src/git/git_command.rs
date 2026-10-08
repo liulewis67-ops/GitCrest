@@ -22,7 +22,10 @@ use crate::tasks::{TaskContext, TaskFailure};
 use crate::{
     domain::{
         error::WorkflowError,
-        workflow::{WorkflowBackupNamespace, WorkflowBackupReference, WorkflowState},
+        workflow::{
+            WorkflowBackupNamespace, WorkflowBackupReference, WorkflowResetComparison,
+            WorkflowState,
+        },
     },
     ports::workflow_git::WorkflowGitPort,
 };
@@ -151,6 +154,15 @@ impl WorkflowGitPort for GitCommandService {
         namespace: WorkflowBackupNamespace,
     ) -> Result<Vec<WorkflowBackupReference>, WorkflowError> {
         workflow_state::list_backup_references(repository_path, namespace).await
+    }
+
+    async fn compare_for_reset(
+        &self,
+        repository_path: &Path,
+        head_oid: &str,
+        target_oid: &str,
+    ) -> Result<WorkflowResetComparison, WorkflowError> {
+        workflow_state::compare_for_reset(repository_path, head_oid, target_oid).await
     }
 }
 

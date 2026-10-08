@@ -8,7 +8,8 @@ use tokio::{
 use crate::domain::{
     error::WorkflowError,
     workflow::{
-        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowOperation, WorkflowState,
+        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowOperation,
+        WorkflowResetComparison, WorkflowState,
     },
 };
 
@@ -43,6 +44,48 @@ pub(crate) async fn list_backup_references(
             })
         })
         .collect()
+}
+
+pub(crate) async fn compare_for_reset(
+    repository_path: &Path,
+    head_oid: &str,
+    target_oid: &str,
+) -> Result<WorkflowResetComparison, WorkflowError> {
+    let counts = run_git(
+        repository_path,
+        &[
+            "rev-list".into(),
+            "--left-right".into(),
+            "--count".into(),
+            format!("{head_oid}...{target_oid}").into(),
+        ],
+    )
+    .await?;
+    let (commits_removed, commits_added) = text(&counts)?
+        .split_once('\t')
+        .and_then(|(left, right)| Some((left.parse().ok()?, right.parse().ok()?)))
+        .ok_or(WorkflowError::GitFailed)?;
+    let paths = run_git(
+        repository_path,
+        &[
+            "diff".into(),
+            "--name-only".into(),
+            "--no-renames".into(),
+            format!("{head_oid}..{target_oid}").into(),
+            "--".into(),
+        ],
+    )
+    .await?;
+    let changed_paths = text(&paths)?
+        .lines()
+        .filter(|path| !path.is_empty())
+        .map(str::to_owned)
+        .collect();
+    Ok(WorkflowResetComparison {
+        commits_removed,
+        commits_added,
+        changed_paths,
+    })
 }
 pub(crate) async fn read_worktree_state(
     repository_path: &Path,
