@@ -1769,3 +1769,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：除 `workflows` 外，既有 API features 均已由统一 features 父模块声明；workflows 模块仍待按其内部限定可见性单独迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,repositories/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`8f5535d`
+
+### 后端 workflows feature 纳入 features 父模块 — 小阶段 130
+- 状态：已完成（merge/rebase/reset/recovery/conflict workflows 由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `workflows` 加入 `src/features/mod.rs`，删除 `lib.rs` 的独立路径声明，并通过 crate 内重导出兼容既有 `crate::workflows` 引用。将 workflows DTO 与 handlers 中原指向 crate-root 模块的 `pub(in crate::workflows)` 收窄路径限定改为 `pub(in crate::features::workflows)`，其有效封装边界仍限于该 feature；API 路由及行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：所有 API feature 均已由 `features/mod.rs` 统一声明；crate root 暂保留兼容重导出，后续可按计划逐步收敛直接跨 feature 路径。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,workflows/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`39f1cdb`
