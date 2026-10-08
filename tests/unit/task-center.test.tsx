@@ -76,3 +76,19 @@ it("lists workflow conflicts and offers safe recovery actions", async () => {
   await waitFor(() => expect(onRecoverWorkflow).toHaveBeenCalledWith(waiting, resolvedPreflight, "abort"));
   expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
 });
+
+it("offers rebase recovery and skip while a rebase waits for input", async () => {
+  const waiting = { ...failedFetch, taskId: "task-rebase", operation: "rebase", status: "waitingForInput" as const, message: "Resolve rebase conflicts" };
+  const preview = {
+    repoId: "repo_fixture", taskId: waiting.taskId, operation: "rebase" as const, headOid: "a".repeat(40),
+    dirtyPaths: ["notes.txt"], omittedDirtyPathCount: 0, conflictedPaths: ["notes.txt"], omittedConflictedPathCount: 0,
+    canContinue: false, canSkip: true, canAbort: true,
+  };
+  const api = { preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValue(preview) } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const onRecoverWorkflow = vi.fn();
+  render(<TaskCenter api={api} tasks={[waiting]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={onRecoverWorkflow} onOpenConflictWindow={vi.fn()} />);
+  expect(await screen.findByText("notes.txt")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Skip" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Skip" }));
+  expect(onRecoverWorkflow).toHaveBeenCalledWith(waiting, preview, "skip");
+});

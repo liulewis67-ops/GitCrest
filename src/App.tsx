@@ -1228,7 +1228,7 @@ function App() {
 
   useEffect(() => {
     for (const task of tasks) {
-      if (task.status === "waitingForInput" && (["merge", "cherryPick", "revert"].includes(task.operation) || task.operation.startsWith("shelfApply:")) && task.repoId && !refreshedWaitingWorkflowTasks.current.has(task.taskId)) {
+      if (task.status === "waitingForInput" && (["merge", "cherryPick", "revert", "rebase"].includes(task.operation) || task.operation.startsWith("shelfApply:")) && task.repoId && !refreshedWaitingWorkflowTasks.current.has(task.taskId)) {
         refreshedWaitingWorkflowTasks.current.add(task.taskId);
         void refreshRepositoryStatus(task.repoId);
       }
@@ -1314,7 +1314,7 @@ function App() {
           setHistoryRefreshKey((current) => current + 1);
         }
       }
-      if ((task.operation.startsWith("workflow") || task.operation.startsWith("shelfApply:") || ["merge", "cherryPick", "revert"].includes(task.operation)) && !refreshedWorkflowTasks.current.has(task.taskId)) {
+      if ((task.operation.startsWith("workflow") || task.operation.startsWith("shelfApply:") || ["merge", "cherryPick", "revert", "rebase"].includes(task.operation)) && !refreshedWorkflowTasks.current.has(task.taskId)) {
         refreshedWorkflowTasks.current.add(task.taskId);
         if (!task.repoId) continue;
         void refreshRepositoryStatus(task.repoId);
