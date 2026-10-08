@@ -11,5 +11,3 @@ pub(crate) mod recovery;
 #[path = "reset.rs"]
 pub(crate) mod reset;
 pub(crate) mod routes;
-
-pub(crate) use service::*;

@@ -33,11 +33,17 @@ pub(in crate::workflows) async fn preflight_repository_workflow(
         .await
         .map_err(ApiError::from_repository_error)?;
     let action = WorkflowAction::from(query.action);
-    workflows::read_preflight(repo_id, &target.repository_path, action, &query.target_oid)
-        .await
-        .map(WorkflowPreflightDto::from)
-        .map(Json)
-        .map_err(ApiError::from_workflow_error)
+    workflows::read_preflight(
+        &state.git_commands,
+        repo_id,
+        &target.repository_path,
+        action,
+        &query.target_oid,
+    )
+    .await
+    .map(WorkflowPreflightDto::from)
+    .map(Json)
+    .map_err(ApiError::from_workflow_error)
 }
 
 pub(in crate::workflows) async fn start_repository_workflow(
@@ -59,6 +65,7 @@ pub(in crate::workflows) async fn start_repository_workflow(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = workflows::read_preflight(
+        &state.git_commands,
         repo_id.clone(),
         &target.repository_path,
         action,
@@ -103,6 +110,7 @@ pub(in crate::workflows) async fn start_repository_workflow(
             operation,
             move |context| async move {
                 let current = workflows::read_preflight(
+                    &command,
                     task_repo_id.clone(),
                     &path,
                     action,

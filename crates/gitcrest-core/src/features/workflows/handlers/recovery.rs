@@ -4,14 +4,14 @@ use axum::{
     Json,
 };
 
-use super::super::{
-    dto::{WorkflowRecoveryPreflightDto, WorkflowRecoveryQuery, WorkflowRecoveryRequest},
-    service as workflows,
+use super::super::dto::{
+    WorkflowRecoveryPreflightDto, WorkflowRecoveryQuery, WorkflowRecoveryRequest,
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     diff::DiffScope,
     domain::workflow::WorkflowRecoveryAction,
+    ports::workflow_git::WorkflowGitPort,
     shelves,
     state::AppState,
     status,
@@ -55,6 +55,7 @@ pub(in crate::workflows) async fn preflight_repository_workflow_recovery(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = crate::workflows::recovery::read_task_recovery_preflight(
+        &state.git_commands,
         &repo_id,
         &query.task_id,
         &task.operation,
@@ -117,6 +118,7 @@ pub(in crate::workflows) async fn recover_repository_workflow(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = crate::workflows::recovery::read_task_recovery_preflight(
+        &state.git_commands,
         &repo_id,
         &request.task_id,
         &waiting_task.operation,
@@ -166,6 +168,7 @@ pub(in crate::workflows) async fn recover_repository_workflow(
             operation,
             move |context| async move {
                 let current = crate::workflows::recovery::read_task_recovery_preflight(
+                    &command,
                     &task_repo_id,
                     &waiting_task_id,
                     &waiting_task_operation,
@@ -290,7 +293,7 @@ pub(in crate::workflows) async fn recover_repository_workflow(
                     .execute_workflow_recovery(&path, expected_operation, action, context)
                     .await;
                 if result.is_ok() {
-                    if !matches!(workflows::read_operation(&path).await, Ok(None)) {
+                    if !matches!(command.read_operation(&path).await, Ok(None)) {
                         return Err(TaskFailure::WaitingForInput(
                             "The Git operation is still active. Review repository state and choose a recovery action.".into(),
                         ));

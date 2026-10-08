@@ -7,7 +7,7 @@ use tokio::{
     process::Command,
 };
 
-use crate::domain::workflow::WorkflowOperation;
+use crate::{domain::workflow::WorkflowOperation, ports::workflow_git::WorkflowGitPort};
 
 const MAX_REMOTE_OUTPUT: usize = 8 * 1024 * 1024;
 const REMOTE_READ_DEADLINE: Duration = Duration::from_secs(20);
@@ -56,7 +56,8 @@ pub enum RemoteError {
     GitFailed,
 }
 
-pub async fn read_remote_branch_delete_preview(
+pub async fn read_remote_branch_delete_preview<G: WorkflowGitPort>(
+    git: &G,
     repo_id: String,
     repository_path: &Path,
     remote_name: &str,
@@ -145,10 +146,11 @@ pub async fn read_remote_branch_delete_preview(
     affected_paths.dedup();
     let omitted_path_count = affected_paths.len().saturating_sub(200) as u32;
     affected_paths.truncate(200);
-    let (_, _, _, _, operation_in_progress) =
-        crate::workflows::read_worktree_state(repository_path)
-            .await
-            .map_err(|_| RemoteError::GitFailed)?;
+    let operation_in_progress = git
+        .read_worktree_state(repository_path)
+        .await
+        .map_err(|_| RemoteError::GitFailed)?
+        .operation;
     let can_delete = operation_in_progress.is_none();
     let mut digest = Sha256::new();
     digest.update(repo_id.as_bytes());

@@ -31,6 +31,15 @@ pub(crate) enum WorkflowOperation {
     ShelfApply,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkflowState {
+    pub(crate) dirty_paths: Vec<String>,
+    pub(crate) omitted_dirty_path_count: u32,
+    pub(crate) conflicted_paths: Vec<String>,
+    pub(crate) omitted_conflicted_path_count: u32,
+    pub(crate) operation: Option<WorkflowOperation>,
+}
+
 impl RebaseAction {
     pub(crate) fn git_keyword(self) -> &'static str {
         match self {

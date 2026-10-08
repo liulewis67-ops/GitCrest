@@ -3,7 +3,10 @@ use std::path::Path;
 use crate::api::error::ApiError;
 
 use super::service as workflows;
-use crate::domain::workflow::{WorkflowOperation, WorkflowRecoveryAction};
+use crate::{
+    domain::workflow::{WorkflowOperation, WorkflowRecoveryAction},
+    ports::workflow_git::WorkflowGitPort,
+};
 
 pub(crate) fn workflow_operation_for_task(operation: &str) -> Option<WorkflowOperation> {
     match operation {
@@ -30,25 +33,31 @@ pub(crate) fn shelf_apply_before_tree(operation: &str) -> Option<&str> {
         .then_some(tree)
 }
 
-pub(crate) async fn read_task_recovery_preflight(
+pub(crate) async fn read_task_recovery_preflight<G: WorkflowGitPort>(
+    git: &G,
     repo_id: &str,
     task_id: &str,
     task_operation: &str,
     repository_path: &Path,
 ) -> Result<workflows::WorkflowRecoveryPreflight, ApiError> {
-    let preflight = if workflow_operation_for_task(task_operation)
-        == Some(WorkflowOperation::ShelfApply)
-    {
-        workflows::read_shelf_apply_preflight(
-            repo_id.to_owned(),
-            task_id.to_owned(),
-            repository_path,
-        )
-        .await
-    } else {
-        workflows::read_recovery_preflight(repo_id.to_owned(), task_id.to_owned(), repository_path)
+    let preflight =
+        if workflow_operation_for_task(task_operation) == Some(WorkflowOperation::ShelfApply) {
+            workflows::read_shelf_apply_preflight(
+                git,
+                repo_id.to_owned(),
+                task_id.to_owned(),
+                repository_path,
+            )
             .await
-    };
+        } else {
+            workflows::read_recovery_preflight(
+                git,
+                repo_id.to_owned(),
+                task_id.to_owned(),
+                repository_path,
+            )
+            .await
+        };
     preflight.map_err(ApiError::from_workflow_error)
 }
 

@@ -5,23 +5,17 @@ use tokio::{
     process::Command,
 };
 
-use crate::domain::{error::WorkflowError, workflow::WorkflowOperation};
+use crate::domain::{
+    error::WorkflowError,
+    workflow::{WorkflowOperation, WorkflowState},
+};
 
 const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PATHS: usize = 200;
 const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
 pub(crate) async fn read_worktree_state(
     repository_path: &Path,
-) -> Result<
-    (
-        Vec<String>,
-        u32,
-        Vec<String>,
-        u32,
-        Option<WorkflowOperation>,
-    ),
-    WorkflowError,
-> {
+) -> Result<WorkflowState, WorkflowError> {
     let status = run_git(
         repository_path,
         &[
@@ -35,13 +29,13 @@ pub(crate) async fn read_worktree_state(
     let (dirty_paths, omitted_dirty_path_count, conflicted_paths, omitted_conflicted_path_count) =
         parse_status(&status)?;
     let operation = read_operation(repository_path).await?;
-    Ok((
+    Ok(WorkflowState {
         dirty_paths,
         omitted_dirty_path_count,
         conflicted_paths,
         omitted_conflicted_path_count,
         operation,
-    ))
+    })
 }
 
 pub(crate) async fn read_operation(
@@ -71,7 +65,57 @@ pub(crate) async fn read_operation(
     Ok(None)
 }
 
-pub(super) fn parse_status(
+pub(crate) async fn resolve_commit_target(
+    repository_path: &Path,
+    target: &str,
+) -> Result<String, WorkflowError> {
+    let output = run_git(
+        repository_path,
+        &[
+            "rev-parse".into(),
+            "--verify".into(),
+            "--end-of-options".into(),
+            format!("{target}^{{commit}}").into(),
+        ],
+    )
+    .await?;
+    Ok(text(&output)?.to_owned())
+}
+
+pub(crate) async fn read_commit_subject(
+    repository_path: &Path,
+    target_oid: &str,
+) -> Result<String, WorkflowError> {
+    let output = run_git(
+        repository_path,
+        &[
+            "show".into(),
+            "-s".into(),
+            "--format=%s".into(),
+            target_oid.into(),
+        ],
+    )
+    .await?;
+    Ok(text(&output)?.to_owned())
+}
+
+pub(crate) async fn read_head_oid(repository_path: &Path) -> Result<Option<String>, WorkflowError> {
+    run_git_optional(
+        repository_path,
+        &[
+            "rev-parse".into(),
+            "--verify".into(),
+            "HEAD^{commit}".into(),
+        ],
+    )
+    .await?
+    .as_deref()
+    .map(text)
+    .transpose()
+    .map(|head| head.map(str::to_owned))
+}
+
+pub(crate) fn parse_status(
     output: &[u8],
 ) -> Result<(Vec<String>, u32, Vec<String>, u32), WorkflowError> {
     let mut records = output

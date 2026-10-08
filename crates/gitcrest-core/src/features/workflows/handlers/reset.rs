@@ -32,6 +32,7 @@ pub(in crate::workflows) async fn preflight_repository_reset(
         .await
         .map_err(ApiError::from_repository_error)?;
     reset::read_preview(
+        &state.git_commands,
         repo_id,
         &target.repository_path,
         &query.target_oid,
@@ -68,6 +69,7 @@ pub(in crate::workflows) async fn start_repository_reset(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = reset::read_preview(
+        &state.git_commands,
         repo_id.clone(),
         &target.repository_path,
         &request.target_oid,
@@ -110,6 +112,7 @@ pub(in crate::workflows) async fn start_repository_reset(
             "reset",
             move |context| async move {
                 let current = reset::read_preview(
+                    &command,
                     task_repo_id.clone(),
                     &path,
                     &target_oid,
@@ -161,7 +164,7 @@ pub(in crate::workflows) async fn list_repository_reset_backups(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    reset::read_backup_snapshot(&target.repository_path)
+    reset::read_backup_snapshot(&state.git_commands, &target.repository_path)
         .await
         .map(ResetBackupSnapshotDto::from)
         .map(Json)
@@ -202,7 +205,7 @@ pub(in crate::workflows) async fn restore_repository_reset(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let snapshot = reset::read_backup_snapshot(&target.repository_path)
+    let snapshot = reset::read_backup_snapshot(&state.git_commands, &target.repository_path)
         .await
         .map_err(ApiError::from_workflow_error)?;
     if snapshot.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
@@ -233,7 +236,7 @@ pub(in crate::workflows) async fn restore_repository_reset(
             resource_key,
             "resetRestore",
             move |context| async move {
-                let current = reset::read_backup_snapshot(&path).await.map_err(|_| {
+                let current = reset::read_backup_snapshot(&command, &path).await.map_err(|_| {
                     TaskFailure::Failed(
                         "Reset restore preconditions could not be rechecked. Refresh repository state.".into(),
                     )

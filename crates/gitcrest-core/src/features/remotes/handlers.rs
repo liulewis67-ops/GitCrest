@@ -663,6 +663,7 @@ pub(super) async fn preview_repository_remote_branch_delete(
         .await
         .map_err(ApiError::from_repository_error)?;
     remote_service::read_remote_branch_delete_preview(
+        &state.git_commands,
         repo_id,
         &target.repository_path,
         &query.remote_name,
@@ -699,6 +700,7 @@ pub(super) async fn delete_repository_remote_branch(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = remote_service::read_remote_branch_delete_preview(
+        &state.git_commands,
         repo_id.clone(),
         &target.repository_path,
         &request.remote_name,
@@ -740,6 +742,7 @@ pub(super) async fn delete_repository_remote_branch(
             "remoteBranchDelete",
             move |context| async move {
                 let current = remote_service::read_remote_branch_delete_preview(
+                    &command,
                     task_repo_id.clone(),
                     &path,
                     &remote_name,

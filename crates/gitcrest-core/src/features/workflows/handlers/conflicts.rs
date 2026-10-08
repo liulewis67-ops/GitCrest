@@ -70,6 +70,7 @@ pub(in crate::workflows) async fn read_workflow_conflict_file(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = crate::workflows::recovery::read_task_recovery_preflight(
+        &state.git_commands,
         &repo_id,
         &query.task_id,
         &task.operation,
@@ -175,6 +176,7 @@ async fn read_reviewed_conflict_for_suggestion(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = crate::workflows::recovery::read_task_recovery_preflight(
+        &state.git_commands,
         repo_id,
         &request.task_id,
         &task.operation,
@@ -292,6 +294,7 @@ pub(in crate::workflows) async fn save_workflow_conflict_file(
         ));
     }
     let (target, preview) = inspect_waiting_conflict(
+        &state.git_commands,
         &state.tasks,
         &state.repositories,
         &repo_id,
@@ -322,6 +325,7 @@ pub(in crate::workflows) async fn save_workflow_conflict_file(
     let resource_key = target.resource_key;
     let tasks = state.tasks.clone();
     let repositories = state.repositories.clone();
+    let git_commands = state.git_commands.clone();
     let task_id = request.mutation.task_id;
     let path = request.mutation.path;
     let operation = request.mutation.expected_operation;
@@ -336,10 +340,16 @@ pub(in crate::workflows) async fn save_workflow_conflict_file(
             resource_key,
             "workflowConflictSave",
             move |_context| async move {
-                let (_target, preview) =
-                    inspect_waiting_conflict(&tasks, &repositories, &repo_id, &task_id, &path)
-                        .await
-                        .map_err(|error| TaskFailure::Failed(error.message))?;
+                let (_target, preview) = inspect_waiting_conflict(
+                    &git_commands,
+                    &tasks,
+                    &repositories,
+                    &repo_id,
+                    &task_id,
+                    &path,
+                )
+                .await
+                .map_err(|error| TaskFailure::Failed(error.message))?;
                 if preview.operation != operation || preview.head_oid.as_deref() != Some(&head_oid)
                 {
                     return Err(TaskFailure::Failed(
@@ -390,6 +400,7 @@ pub(in crate::workflows) async fn mark_workflow_conflict_resolved(
     })?;
     validate_conflict_mutation(&request)?;
     let (target, preview) = inspect_waiting_conflict(
+        &state.git_commands,
         &state.tasks,
         &state.repositories,
         &repo_id,
@@ -431,6 +442,7 @@ pub(in crate::workflows) async fn mark_workflow_conflict_resolved(
     let resource_key = target.resource_key;
     let tasks = state.tasks.clone();
     let repositories = state.repositories.clone();
+    let git_commands = state.git_commands.clone();
     let task_id = request.task_id;
     let path = request.path;
     let operation = request.expected_operation;
@@ -444,10 +456,16 @@ pub(in crate::workflows) async fn mark_workflow_conflict_resolved(
             resource_key,
             "workflowConflictResolved",
             move |_context| async move {
-                let (_target, preview) =
-                    inspect_waiting_conflict(&tasks, &repositories, &repo_id, &task_id, &path)
-                        .await
-                        .map_err(|error| TaskFailure::Failed(error.message))?;
+                let (_target, preview) = inspect_waiting_conflict(
+                    &git_commands,
+                    &tasks,
+                    &repositories,
+                    &repo_id,
+                    &task_id,
+                    &path,
+                )
+                .await
+                .map_err(|error| TaskFailure::Failed(error.message))?;
                 if preview.operation != operation || preview.head_oid.as_deref() != Some(&head_oid)
                 {
                     return Err(TaskFailure::Failed(
@@ -508,6 +526,7 @@ fn validate_conflict_mutation(request: &WorkflowConflictMutationRequest) -> Resu
 }
 
 async fn inspect_waiting_conflict(
+    git: &crate::git_command::GitCommandService,
     tasks: &TaskService,
     repositories: &RepositoryManager,
     repo_id: &str,
@@ -547,6 +566,7 @@ async fn inspect_waiting_conflict(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = crate::workflows::recovery::read_task_recovery_preflight(
+        git,
         repo_id,
         task_id,
         &task.operation,

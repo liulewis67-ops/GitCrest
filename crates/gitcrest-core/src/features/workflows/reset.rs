@@ -6,7 +6,7 @@ use tokio::{io::AsyncReadExt, process::Command, time::timeout};
 
 use crate::{
     domain::{error::WorkflowError, workflow::WorkflowOperation},
-    workflows::read_worktree_state,
+    ports::workflow_git::WorkflowGitPort,
 };
 
 const MAX_RESET_PATHS: usize = 200;
@@ -66,15 +66,17 @@ pub struct ResetBackupSnapshot {
     pub can_restore: bool,
 }
 
-pub async fn read_backup_snapshot(
+pub async fn read_backup_snapshot<G: WorkflowGitPort>(
+    git: &G,
     repository_path: &Path,
 ) -> Result<ResetBackupSnapshot, WorkflowError> {
-    let head_oid = match git(repository_path, &["rev-parse", "--verify", "HEAD^{commit}"]).await {
+    let head_oid = match run_git(repository_path, &["rev-parse", "--verify", "HEAD^{commit}"]).await
+    {
         Ok(value) => Some(value),
         Err(WorkflowError::GitFailed) => None,
         Err(error) => return Err(error),
     };
-    let current_branch = match git(
+    let current_branch = match run_git(
         repository_path,
         &["symbolic-ref", "--quiet", "--short", "HEAD"],
     )
@@ -84,9 +86,9 @@ pub async fn read_backup_snapshot(
         Err(WorkflowError::GitFailed) => None,
         Err(error) => return Err(error),
     };
-    let (dirty_paths, _, _, _, operation_in_progress) =
-        read_worktree_state(repository_path).await?;
-    let backup_output = git(
+    let state = git.read_worktree_state(repository_path).await?;
+    let operation_in_progress = state.operation;
+    let backup_output = run_git(
         repository_path,
         &[
             "for-each-ref",
@@ -110,20 +112,21 @@ pub async fn read_backup_snapshot(
     backups.sort_by(|left, right| right.reference.cmp(&left.reference));
     let can_restore = head_oid.is_some()
         && current_branch.is_some()
-        && dirty_paths.is_empty()
+        && state.dirty_paths.is_empty()
         && operation_in_progress.is_none()
         && !backups.is_empty();
     Ok(ResetBackupSnapshot {
         head_oid,
         current_branch,
-        dirty_paths,
+        dirty_paths: state.dirty_paths,
         operation_in_progress,
         backups,
         can_restore,
     })
 }
 
-pub async fn read_preview(
+pub async fn read_preview<G: WorkflowGitPort>(
+    git: &G,
     repo_id: String,
     repository_path: &Path,
     target: &str,
@@ -132,7 +135,7 @@ pub async fn read_preview(
     if !(4..=64).contains(&target.len()) || !target.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(WorkflowError::InvalidTarget);
     }
-    let target_oid = git(
+    let target_oid = run_git(
         repository_path,
         &[
             "rev-parse",
@@ -143,13 +146,13 @@ pub async fn read_preview(
     )
     .await?;
     let expected_head_oid =
-        git(repository_path, &["rev-parse", "--verify", "HEAD^{commit}"]).await?;
-    let current_branch = git(
+        run_git(repository_path, &["rev-parse", "--verify", "HEAD^{commit}"]).await?;
+    let current_branch = run_git(
         repository_path,
         &["symbolic-ref", "--quiet", "--short", "HEAD"],
     )
     .await?;
-    let counts = git(
+    let counts = run_git(
         repository_path,
         &[
             "rev-list",
@@ -163,9 +166,9 @@ pub async fn read_preview(
         .split_once('\t')
         .and_then(|(left, right)| Some((left.parse().ok()?, right.parse().ok()?)))
         .ok_or(WorkflowError::GitFailed)?;
-    let (dirty_paths, _, _, _, operation_in_progress) =
-        read_worktree_state(repository_path).await?;
-    let path_output = git(
+    let state = git.read_worktree_state(repository_path).await?;
+    let operation_in_progress = state.operation;
+    let path_output = run_git(
         repository_path,
         &[
             "diff",
@@ -187,7 +190,7 @@ pub async fn read_preview(
     affected_paths.truncate(MAX_RESET_PATHS);
     let can_start = expected_head_oid != target_oid
         && operation_in_progress.is_none()
-        && (mode != ResetMode::Hard || dirty_paths.is_empty());
+        && (mode != ResetMode::Hard || state.dirty_paths.is_empty());
     let mut digest = Sha256::new();
     digest.update(repo_id.as_bytes());
     digest.update([0]);
@@ -205,7 +208,7 @@ pub async fn read_preview(
         digest.update(path.as_bytes());
         digest.update([0]);
     }
-    for path in &dirty_paths {
+    for path in &state.dirty_paths {
         digest.update(path.as_bytes());
         digest.update([0]);
     }
@@ -219,14 +222,14 @@ pub async fn read_preview(
         commits_added,
         affected_paths,
         omitted_path_count,
-        dirty_paths,
+        dirty_paths: state.dirty_paths,
         operation_in_progress,
         preview_revision: format!("sha256:{:x}", digest.finalize()),
         can_start,
     })
 }
 
-async fn git(repository_path: &Path, arguments: &[&str]) -> Result<String, WorkflowError> {
+async fn run_git(repository_path: &Path, arguments: &[&str]) -> Result<String, WorkflowError> {
     let mut command = Command::new("git");
     command
         .current_dir(repository_path)

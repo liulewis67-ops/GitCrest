@@ -32,11 +32,16 @@ pub(in crate::workflows) async fn preflight_repository_rebase(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    rebase::read_preview(repo_id, &target.repository_path, &query.onto_oid)
-        .await
-        .map(RebasePreviewDto::from)
-        .map(Json)
-        .map_err(ApiError::from_workflow_error)
+    rebase::read_preview(
+        &state.git_commands,
+        repo_id,
+        &target.repository_path,
+        &query.onto_oid,
+    )
+    .await
+    .map(RebasePreviewDto::from)
+    .map(Json)
+    .map_err(ApiError::from_workflow_error)
 }
 
 pub(in crate::workflows) async fn start_repository_rebase(
@@ -57,6 +62,7 @@ pub(in crate::workflows) async fn start_repository_rebase(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = rebase::read_preview(
+        &state.git_commands,
         repo_id.clone(),
         &target.repository_path,
         &request.expected_onto_oid,
@@ -138,7 +144,7 @@ pub(in crate::workflows) async fn start_repository_rebase(
             resource_key,
             "rebase",
             move |context| async move {
-                let current = rebase::read_preview(task_repo_id.clone(), &path, &onto_oid)
+                let current = rebase::read_preview(&command, task_repo_id.clone(), &path, &onto_oid)
                     .await
                     .map_err(|_| {
                         TaskFailure::Failed(
@@ -208,7 +214,7 @@ pub(in crate::workflows) async fn list_repository_rebase_backups(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    rebase::read_backup_snapshot(&target.repository_path)
+    rebase::read_backup_snapshot(&state.git_commands, &target.repository_path)
         .await
         .map(RebaseBackupSnapshotDto::from)
         .map(Json)
@@ -249,7 +255,7 @@ pub(in crate::workflows) async fn rollback_repository_rebase(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let snapshot = rebase::read_backup_snapshot(&target.repository_path)
+    let snapshot = rebase::read_backup_snapshot(&state.git_commands, &target.repository_path)
         .await
         .map_err(ApiError::from_workflow_error)?;
     if snapshot.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
@@ -280,7 +286,7 @@ pub(in crate::workflows) async fn rollback_repository_rebase(
             resource_key,
             "rebaseRollback",
             move |context| async move {
-                let current = rebase::read_backup_snapshot(&path).await.map_err(|_| {
+                let current = rebase::read_backup_snapshot(&command, &path).await.map_err(|_| {
                     TaskFailure::Failed(
                         "Rollback preconditions could not be rechecked. Refresh repository state.".into(),
                     )

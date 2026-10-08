@@ -12,7 +12,7 @@ use tokio::{
 use crate::{
     domain::error::WorkflowError,
     domain::workflow::{RebaseAction, RebaseTodoItem, WorkflowOperation},
-    workflows::read_worktree_state,
+    ports::workflow_git::WorkflowGitPort,
 };
 
 const MAX_COMMITS: usize = 200;
@@ -120,7 +120,8 @@ pub struct RebaseBackupSnapshot {
     pub can_rollback: bool,
 }
 
-pub async fn read_backup_snapshot(
+pub async fn read_backup_snapshot<G: WorkflowGitPort>(
+    git: &G,
     repository_path: &Path,
 ) -> Result<RebaseBackupSnapshot, WorkflowError> {
     let head_oid = run_git_optional(
@@ -144,18 +145,18 @@ pub async fn read_backup_snapshot(
     )
     .await?
     .map(|value| String::from_utf8_lossy(&value).trim().to_owned());
-    let (dirty_paths, _, _, _, operation_in_progress) =
-        read_worktree_state(repository_path).await?;
+    let state = git.read_worktree_state(repository_path).await?;
+    let operation_in_progress = state.operation;
     let backups = list_backups(repository_path).await?;
     let can_rollback = head_oid.is_some()
         && branch.is_some()
-        && dirty_paths.is_empty()
+        && state.dirty_paths.is_empty()
         && operation_in_progress.is_none()
         && !backups.is_empty();
     Ok(RebaseBackupSnapshot {
         head_oid,
         current_branch: branch,
-        dirty_paths,
+        dirty_paths: state.dirty_paths,
         operation_in_progress,
         backups,
         can_rollback,
@@ -187,7 +188,8 @@ pub async fn list_backups(repository_path: &Path) -> Result<Vec<RebaseBackup>, W
     Ok(backups)
 }
 
-pub async fn read_preview(
+pub async fn read_preview<G: WorkflowGitPort>(
+    git: &G,
     repo_id: String,
     repository_path: &Path,
     onto: &str,
@@ -259,8 +261,8 @@ pub async fn read_preview(
             });
         }
     }
-    let (dirty_paths, omitted_dirty_path_count, _, _, operation_in_progress) =
-        read_worktree_state(repository_path).await?;
+    let state = git.read_worktree_state(repository_path).await?;
+    let operation_in_progress = state.operation;
     let mut published_commit_oids = Vec::new();
     let mut published_checks = JoinSet::new();
     let semaphore = std::sync::Arc::new(Semaphore::new(8));
@@ -300,7 +302,7 @@ pub async fn read_preview(
         && onto_oid != head_oid.as_deref().unwrap_or_default()
         && !commits.is_empty()
         && omitted_commit_count == 0
-        && dirty_paths.is_empty()
+        && state.dirty_paths.is_empty()
         && operation_in_progress.is_none();
     let mut digest = Sha256::new();
     digest.update(repo_id.as_bytes());
@@ -315,7 +317,7 @@ pub async fn read_preview(
         digest.update(commit.subject.as_bytes());
         digest.update([0]);
     }
-    for path in &dirty_paths {
+    for path in &state.dirty_paths {
         digest.update(path.as_bytes());
         digest.update([0]);
     }
@@ -331,8 +333,8 @@ pub async fn read_preview(
         commits,
         omitted_commit_count,
         published_commit_oids,
-        dirty_paths,
-        omitted_dirty_path_count,
+        dirty_paths: state.dirty_paths,
+        omitted_dirty_path_count: state.omitted_dirty_path_count,
         operation_in_progress,
         preview_revision: format!("sha256:{:x}", digest.finalize()),
         can_start,

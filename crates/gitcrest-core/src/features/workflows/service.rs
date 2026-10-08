@@ -1,15 +1,12 @@
 use std::path::Path;
 
-use crate::domain::{
-    error::WorkflowError,
-    workflow::{WorkflowAction, WorkflowOperation},
+use crate::{
+    domain::{
+        error::WorkflowError,
+        workflow::{WorkflowAction, WorkflowOperation},
+    },
+    ports::workflow_git::WorkflowGitPort,
 };
-
-#[path = "service/git_state.rs"]
-mod git_state;
-
-pub(crate) use self::git_state::{read_operation, read_worktree_state};
-use self::git_state::{run_git, run_git_optional, text};
 
 #[derive(Clone, Debug)]
 pub struct WorkflowPreflight {
@@ -42,7 +39,8 @@ pub struct WorkflowRecoveryPreflight {
     pub can_abort: bool,
 }
 
-pub async fn read_preflight(
+pub async fn read_preflight<G: WorkflowGitPort>(
+    git: &G,
     repo_id: String,
     repository_path: &Path,
     action: WorkflowAction,
@@ -51,52 +49,20 @@ pub async fn read_preflight(
     if !(4..=64).contains(&target.len()) || !target.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(WorkflowError::InvalidTarget);
     }
-    let target_oid = run_git(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "--end-of-options".into(),
-            format!("{target}^{{commit}}").into(),
-        ],
-    )
-    .await
-    .map_err(|error| match error {
-        WorkflowError::GitFailed => WorkflowError::CommitNotFound,
-        other => other,
-    })?;
-    let target_oid = text(&target_oid)?.to_owned();
-    let target_subject = text(
-        &run_git(
-            repository_path,
-            &[
-                "show".into(),
-                "-s".into(),
-                "--format=%s".into(),
-                target_oid.clone().into(),
-            ],
-        )
-        .await?,
-    )?
-    .to_owned();
-    let head = run_git_optional(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "HEAD^{commit}".into(),
-        ],
-    )
-    .await?;
-    let head_oid = head.as_deref().map(text).transpose()?.map(str::to_owned);
-    let (
-        dirty_paths,
-        omitted_dirty_path_count,
-        conflicted_paths,
-        omitted_conflicted_path_count,
-        operation_in_progress,
-    ) = read_worktree_state(repository_path).await?;
-    let is_clean = dirty_paths.is_empty() && operation_in_progress.is_none();
+    let target_oid = git
+        .resolve_commit_target(repository_path, target)
+        .await
+        .map_err(|error| match error {
+            WorkflowError::GitFailed => WorkflowError::CommitNotFound,
+            other => other,
+        })?;
+    let target_subject = git
+        .read_commit_subject(repository_path, &target_oid)
+        .await?;
+    let head_oid = git.read_head_oid(repository_path).await?;
+    let state = git.read_worktree_state(repository_path).await?;
+    let operation_in_progress = state.operation;
+    let is_clean = state.dirty_paths.is_empty() && operation_in_progress.is_none();
     let can_start = head_oid.is_some() && is_clean;
     Ok(WorkflowPreflight {
         repo_id,
@@ -106,51 +72,39 @@ pub async fn read_preflight(
         target_subject,
         operation_in_progress,
         is_clean,
-        dirty_paths,
-        omitted_dirty_path_count,
-        conflicted_paths,
-        omitted_conflicted_path_count,
+        dirty_paths: state.dirty_paths,
+        omitted_dirty_path_count: state.omitted_dirty_path_count,
+        conflicted_paths: state.conflicted_paths,
+        omitted_conflicted_path_count: state.omitted_conflicted_path_count,
         can_start,
     })
 }
 
-pub async fn read_recovery_preflight(
+pub async fn read_recovery_preflight<G: WorkflowGitPort>(
+    git: &G,
     repo_id: String,
     task_id: String,
     repository_path: &Path,
 ) -> Result<WorkflowRecoveryPreflight, WorkflowError> {
-    let head = run_git_optional(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "HEAD^{commit}".into(),
-        ],
-    )
-    .await?;
-    let head_oid = head.as_deref().map(text).transpose()?.map(str::to_owned);
-    let (
-        dirty_paths,
-        omitted_dirty_path_count,
-        conflicted_paths,
-        omitted_conflicted_path_count,
-        operation,
-    ) = read_worktree_state(repository_path).await?;
-    let operation = operation.ok_or(WorkflowError::NoActiveOperation)?;
-    let only_conflicts_are_dirty = dirty_paths
-        .iter()
-        .all(|path| conflicted_paths.iter().any(|conflicted| conflicted == path))
-        && omitted_dirty_path_count == 0;
-    let can_continue = conflicted_paths.is_empty();
+    let head_oid = git.read_head_oid(repository_path).await?;
+    let state = git.read_worktree_state(repository_path).await?;
+    let operation = state.operation.ok_or(WorkflowError::NoActiveOperation)?;
+    let only_conflicts_are_dirty = state.dirty_paths.iter().all(|path| {
+        state
+            .conflicted_paths
+            .iter()
+            .any(|conflicted| conflicted == path)
+    }) && state.omitted_dirty_path_count == 0;
+    let can_continue = state.conflicted_paths.is_empty();
     Ok(WorkflowRecoveryPreflight {
         repo_id,
         task_id,
         operation,
         head_oid,
-        dirty_paths,
-        omitted_dirty_path_count,
-        conflicted_paths,
-        omitted_conflicted_path_count,
+        dirty_paths: state.dirty_paths,
+        omitted_dirty_path_count: state.omitted_dirty_path_count,
+        conflicted_paths: state.conflicted_paths,
+        omitted_conflicted_path_count: state.omitted_conflicted_path_count,
         can_continue,
         can_skip: matches!(
             operation,
@@ -160,29 +114,15 @@ pub async fn read_recovery_preflight(
     })
 }
 
-pub async fn read_shelf_apply_preflight(
+pub async fn read_shelf_apply_preflight<G: WorkflowGitPort>(
+    git: &G,
     repo_id: String,
     task_id: String,
     repository_path: &Path,
 ) -> Result<WorkflowRecoveryPreflight, WorkflowError> {
-    let head = run_git_optional(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "HEAD^{commit}".into(),
-        ],
-    )
-    .await?;
-    let head_oid = head.as_deref().map(text).transpose()?.map(str::to_owned);
-    let (
-        dirty_paths,
-        omitted_dirty_path_count,
-        conflicted_paths,
-        omitted_conflicted_path_count,
-        operation,
-    ) = read_worktree_state(repository_path).await?;
-    if operation.is_some() {
+    let head_oid = git.read_head_oid(repository_path).await?;
+    let state = git.read_worktree_state(repository_path).await?;
+    if state.operation.is_some() {
         return Err(WorkflowError::NoActiveOperation);
     }
     Ok(WorkflowRecoveryPreflight {
@@ -190,13 +130,13 @@ pub async fn read_shelf_apply_preflight(
         task_id,
         operation: WorkflowOperation::ShelfApply,
         head_oid,
-        dirty_paths,
-        omitted_dirty_path_count,
-        can_continue: conflicted_paths.is_empty() && omitted_conflicted_path_count == 0,
+        dirty_paths: state.dirty_paths,
+        omitted_dirty_path_count: state.omitted_dirty_path_count,
+        can_continue: state.conflicted_paths.is_empty() && state.omitted_conflicted_path_count == 0,
         can_skip: false,
         can_abort: false,
-        conflicted_paths,
-        omitted_conflicted_path_count,
+        conflicted_paths: state.conflicted_paths,
+        omitted_conflicted_path_count: state.omitted_conflicted_path_count,
     })
 }
 
@@ -206,8 +146,9 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{git_state::parse_status, read_preflight};
+    use super::read_preflight;
     use crate::domain::workflow::{WorkflowAction, WorkflowOperation};
+    use crate::git_command::workflow_state::parse_status;
 
     #[test]
     fn parses_worktree_and_conflict_paths_with_a_bounded_list() {
@@ -250,10 +191,17 @@ mod tests {
             .unwrap()
             .trim()
             .to_owned();
+        let git_service = crate::git_command::GitCommandService::default();
 
-        let clean = read_preflight("repo_fixture".into(), root, WorkflowAction::Merge, &oid)
-            .await
-            .unwrap();
+        let clean = read_preflight(
+            &git_service,
+            "repo_fixture".into(),
+            root,
+            WorkflowAction::Merge,
+            &oid,
+        )
+        .await
+        .unwrap();
         assert!(clean.can_start);
         assert_eq!(clean.head_oid.as_deref(), Some(oid.as_str()));
         assert_eq!(clean.target_oid, oid);
@@ -261,6 +209,7 @@ mod tests {
 
         std::fs::write(root.join("dirty.txt"), "local edit\n").unwrap();
         let dirty = read_preflight(
+            &git_service,
             "repo_fixture".into(),
             root,
             WorkflowAction::CherryPick,
@@ -290,6 +239,7 @@ mod tests {
             .trim()
             .to_owned();
         let active = read_preflight(
+            &git_service,
             "repo_fixture".into(),
             root,
             WorkflowAction::Revert,

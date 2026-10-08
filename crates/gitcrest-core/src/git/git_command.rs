@@ -19,6 +19,13 @@ use std::os::unix::process::CommandExt;
 
 use crate::staging::StagingCommand;
 use crate::tasks::{TaskContext, TaskFailure};
+use crate::{
+    domain::{error::WorkflowError, workflow::WorkflowState},
+    ports::workflow_git::WorkflowGitPort,
+};
+
+#[path = "workflow_state.rs"]
+pub(crate) mod workflow_state;
 
 const GIT_EXECUTION_DEADLINE: Duration = Duration::from_secs(2 * 60 * 60);
 const GIT_NETWORK_NO_PROGRESS_DEADLINE: Duration = Duration::from_secs(5 * 60);
@@ -90,6 +97,42 @@ impl Default for GitCommandService {
         Self {
             git_program: "git".into(),
         }
+    }
+}
+
+impl WorkflowGitPort for GitCommandService {
+    async fn resolve_commit_target(
+        &self,
+        repository_path: &Path,
+        target: &str,
+    ) -> Result<String, WorkflowError> {
+        workflow_state::resolve_commit_target(repository_path, target).await
+    }
+
+    async fn read_commit_subject(
+        &self,
+        repository_path: &Path,
+        target_oid: &str,
+    ) -> Result<String, WorkflowError> {
+        workflow_state::read_commit_subject(repository_path, target_oid).await
+    }
+
+    async fn read_head_oid(&self, repository_path: &Path) -> Result<Option<String>, WorkflowError> {
+        workflow_state::read_head_oid(repository_path).await
+    }
+
+    async fn read_worktree_state(
+        &self,
+        repository_path: &Path,
+    ) -> Result<WorkflowState, WorkflowError> {
+        workflow_state::read_worktree_state(repository_path).await
+    }
+
+    async fn read_operation(
+        &self,
+        repository_path: &Path,
+    ) -> Result<Option<crate::domain::workflow::WorkflowOperation>, WorkflowError> {
+        workflow_state::read_operation(repository_path).await
     }
 }
 
@@ -302,7 +345,7 @@ impl GitCommandService {
         repository_path: &Path,
         expected: &crate::remotes::pull::PullPreflight,
     ) -> Result<(), TaskFailure> {
-        match crate::workflows::read_operation(repository_path).await {
+        match workflow_state::read_operation(repository_path).await {
             Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
                 let rebase_apply = capture_git_output(
                     &self.git_program,
@@ -613,7 +656,7 @@ impl GitCommandService {
         .await;
         if result.is_ok()
             && matches!(
-                crate::workflows::read_operation(repository_path).await,
+                workflow_state::read_operation(repository_path).await,
                 Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase))
             )
         {
@@ -1391,7 +1434,7 @@ async fn workflow_command_result(
     if result.is_ok() {
         return result;
     }
-    match crate::workflows::read_operation(repository_path).await {
+    match workflow_state::read_operation(repository_path).await {
         Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
             "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
             match operation {
