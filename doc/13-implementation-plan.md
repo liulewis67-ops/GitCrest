@@ -1418,3 +1418,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：分支、remote、tasks 等 server state 与连接/事件生命周期仍由 `App.tsx` 管理；后续按功能继续迁出请求状态和事件协调，逐步将 App 收敛为 workspace composition。
 - 证据：`src/features/changes/model/use-repository-status.ts`、`src/app/App.tsx`。
 - 实施 commit：`138ffdb`
+
+### 前端 branches/remotes 查询状态迁入 feature model — 小阶段 91
+- 状态：已完成（branch/remotes 快照、读取错误/loading 状态与请求生命周期由 branches feature hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/branches/model/use-repository-refs.ts`，封装按仓库 keyed 的 branches/remotes 查询、缓存代次保护及清理；分支收藏等写操作仍由 App 发起，并通过 hook 更新缓存/错误。App 的 repository cache invalidation 统一委托 status 与 refs feature 清理对应快照。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）及 `git diff --check` 通过；未运行测试。
+- 限制/后续：remote mutation/task 提交、任务列表和连接事件仍由 `App.tsx` 管理；后续按 feature 拆分写操作和后台任务协调。
+- 证据：`src/features/branches/model/use-repository-refs.ts`、`src/app/App.tsx`。
+- 实施 commit：`36dbd5b`
