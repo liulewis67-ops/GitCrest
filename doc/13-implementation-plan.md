@@ -2128,3 +2128,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：仍需全面审查页面和 App 的 feature 私有路径引用，并继续完成实施计划的后端及 S7 验收项。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/{diff,settings,repositories}/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 实施 commit：`640d3e8`
+
+### repositories feature 最近仓库 mutations 迁入 model — 小阶段 170
+- 状态：已完成（收藏切换与移除最近仓库由 repositories model 编排）
+- 日期：2026-10-09
+- 交付：新增 `useRepositoryMutations`，迁入 favorite/forget API 请求、仓库列表排序与过滤、共享 open error 更新，以及忘记当前选中仓库时清除选择；App 通过回调注入仓库列表和选择状态，并经 repositories barrel 导出 hook。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：本地打开、初始化、重开仓库和最近仓库刷新仍由 App 编排；继续按 repositories feature 边界迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-repository-mutations.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`6e649fd`
