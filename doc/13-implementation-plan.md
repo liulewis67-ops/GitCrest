@@ -1202,3 +1202,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：crate 根兼容导出尚未移除，Git adapter/API error 仍直接依赖 feature service 的部分类型；后续将共享 workflow 模型迁入 domain 并调整错误边界，再移除兼容导出，避免仅通过移动 module declaration 宣称已满足依赖方向。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod.rs,dto.rs,handlers/conflicts.rs,handlers/rebase.rs,handlers/reset.rs}`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/git/git_command.rs`、`crates/gitcrest-core/src/api/error.rs`。
 - 实施 commit：`eb8846b`
+
+### 后端 workflows 错误类型归属 — 小阶段 67
+- 状态：已完成（WorkflowError 与 ConflictError 统一归入 domain/error）
+- 日期：2026-10-09
+- 交付：新增 `domain/error.rs`，迁移 workflows 与 conflict service 使用的类型化错误；API error 边界直接映射领域错误，workflows/rebase/reset/conflicts 服务从 domain 导入对应类型。移除 crate 根不再需要的 conflict service 兼容导出，保持错误码、HTTP 状态和响应内容不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：`WorkflowOperation`、rebase/reset preview 和 todo 模型仍由 workflows feature 定义，Git adapter 仍依赖 feature 类型；下一阶段梳理稳定领域类型和 adapter 输入边界，逐步解除 crate 根的 rebase/reset 兼容导出。
+- 证据：`crates/gitcrest-core/src/domain/{mod.rs,error.rs}`、`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/features/workflows/{workflows.rs,conflicts.rs,rebase.rs,reset.rs}`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`e0da448`
