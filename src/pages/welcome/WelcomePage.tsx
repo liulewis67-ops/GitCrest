@@ -1,5 +1,5 @@
 import type { RepositoryResponse } from "../../api/client";
-import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings/shortcut-preferences";
+import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 
 interface WelcomePageProps {
   repositories: RepositoryResponse[];
