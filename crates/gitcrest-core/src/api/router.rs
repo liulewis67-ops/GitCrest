@@ -4,7 +4,7 @@ use axum::{
         HeaderName, HeaderValue, Method,
     },
     middleware,
-    routing::{get, post},
+    routing::get,
     Router,
 };
 use tower_http::cors::CorsLayer;
@@ -13,14 +13,8 @@ use tower_http::cors::CorsLayer;
 use crate::write_probe;
 
 use crate::{
-    add_api_version_header, api_not_found, get_workflow_conflict_ai_settings,
-    list_repository_rebase_backups, list_repository_reset_backups, mark_workflow_conflict_resolved,
-    preflight_repository_rebase, preflight_repository_reset, preflight_repository_workflow,
-    preflight_repository_workflow_recovery, read_workflow_conflict_file,
-    recover_repository_workflow, repositories, request_workflow_conflict_suggestion,
-    require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
-    save_workflow_conflict_file, start_repository_rebase, start_repository_reset,
-    start_repository_workflow, status, system, AppState,
+    add_api_version_header, api_not_found, repositories, require_api_version, require_auth, status,
+    system, AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
@@ -38,62 +32,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::commits::routes::router())
         .merge(crate::tags::routes::router())
         .merge(crate::tasks::routes::router())
-        .route(
-            "/v1/repositories/:repo_id/workflows/preflight",
-            get(preflight_repository_workflow),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/rebase-preview",
-            get(preflight_repository_rebase).post(start_repository_rebase),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/rebase-backups",
-            get(list_repository_rebase_backups),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/rebase-rollback",
-            post(rollback_repository_rebase),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/reset-preview",
-            get(preflight_repository_reset).post(start_repository_reset),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/reset-backups",
-            get(list_repository_reset_backups),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/reset-restore",
-            post(restore_repository_reset),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows",
-            post(start_repository_workflow),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/recovery-preflight",
-            get(preflight_repository_workflow_recovery),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/recovery",
-            post(recover_repository_workflow),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/conflicts/file",
-            get(read_workflow_conflict_file).put(save_workflow_conflict_file),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/conflicts/resolved",
-            post(mark_workflow_conflict_resolved),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/conflicts/suggestion",
-            post(request_workflow_conflict_suggestion),
-        )
-        .route(
-            "/v1/repositories/:repo_id/workflows/conflicts/ai-settings",
-            get(get_workflow_conflict_ai_settings),
-        )
+        .merge(crate::workflows::routes::router())
         .route("/v1/events", get(crate::api::events::events))
         .fallback(api_not_found);
 

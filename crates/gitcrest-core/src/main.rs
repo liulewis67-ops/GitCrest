@@ -60,7 +60,7 @@ mod tags;
 mod tasks;
 #[path = "refresh/watcher.rs"]
 mod watcher;
-#[path = "features/workflows/workflows.rs"]
+#[path = "features/workflows/mod.rs"]
 mod workflows;
 
 use api::error::{ApiError, ApiErrorCode};
@@ -98,12 +98,12 @@ fn test_ai_credentials() -> credentials::AiCredentialManager {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkflowPreflightQuery {
+pub(crate) struct WorkflowPreflightQuery {
     action: workflows::WorkflowAction,
     target_oid: String,
 }
 
-async fn preflight_repository_workflow(
+pub(crate) async fn preflight_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowPreflightQuery>, QueryRejection>,
@@ -133,11 +133,11 @@ async fn preflight_repository_workflow(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct RebasePreviewQuery {
+pub(crate) struct RebasePreviewQuery {
     onto_oid: String,
 }
 
-async fn preflight_repository_rebase(
+pub(crate) async fn preflight_repository_rebase(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<RebasePreviewQuery>, QueryRejection>,
@@ -162,7 +162,7 @@ async fn preflight_repository_rebase(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct RebaseRequest {
+pub(crate) struct RebaseRequest {
     expected_head_oid: String,
     expected_onto_oid: String,
     preview_revision: String,
@@ -171,7 +171,7 @@ struct RebaseRequest {
     confirm_published_rewrite: bool,
 }
 
-async fn start_repository_rebase(
+pub(crate) async fn start_repository_rebase(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<RebaseRequest>, JsonRejection>,
@@ -310,7 +310,7 @@ async fn start_repository_rebase(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-async fn list_repository_rebase_backups(
+pub(crate) async fn list_repository_rebase_backups(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<rebase::RebaseBackupSnapshot>, ApiError> {
@@ -344,7 +344,7 @@ fn is_rebase_backup_reference(reference: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
-async fn rollback_repository_rebase(
+pub(crate) async fn rollback_repository_rebase(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<RebaseRollbackRequest>, JsonRejection>,
@@ -439,12 +439,12 @@ async fn rollback_repository_rebase(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ResetPreviewQuery {
+pub(crate) struct ResetPreviewQuery {
     target_oid: String,
     mode: reset::ResetMode,
 }
 
-async fn preflight_repository_reset(
+pub(crate) async fn preflight_repository_reset(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<ResetPreviewQuery>, QueryRejection>,
@@ -474,7 +474,7 @@ async fn preflight_repository_reset(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct ResetRequest {
+pub(crate) struct ResetRequest {
     expected_head_oid: String,
     target_oid: String,
     mode: reset::ResetMode,
@@ -482,7 +482,7 @@ struct ResetRequest {
     confirm_reset: bool,
 }
 
-async fn start_repository_reset(
+pub(crate) async fn start_repository_reset(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<ResetRequest>, JsonRejection>,
@@ -583,7 +583,7 @@ async fn start_repository_reset(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-async fn list_repository_reset_backups(
+pub(crate) async fn list_repository_reset_backups(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<reset::ResetBackupSnapshot>, ApiError> {
@@ -617,7 +617,7 @@ fn is_reset_backup_reference(reference: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
 }
 
-async fn restore_repository_reset(
+pub(crate) async fn restore_repository_reset(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<ResetRestoreRequest>, JsonRejection>,
@@ -718,7 +718,7 @@ struct WorkflowRequest {
     expected_head_oid: String,
 }
 
-async fn start_repository_workflow(
+pub(crate) async fn start_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowRequest>, JsonRejection>,
@@ -819,11 +819,11 @@ async fn start_repository_workflow(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkflowRecoveryQuery {
+pub(crate) struct WorkflowRecoveryQuery {
     task_id: String,
 }
 
-async fn preflight_repository_workflow_recovery(
+pub(crate) async fn preflight_repository_workflow_recovery(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowRecoveryQuery>, QueryRejection>,
@@ -876,12 +876,12 @@ async fn preflight_repository_workflow_recovery(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkflowConflictFileQuery {
+pub(crate) struct WorkflowConflictFileQuery {
     task_id: String,
     path: String,
 }
 
-async fn read_workflow_conflict_file(
+pub(crate) async fn read_workflow_conflict_file(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowConflictFileQuery>, QueryRejection>,
@@ -955,7 +955,7 @@ async fn read_workflow_conflict_file(
     .map_err(ApiError::from_conflict_error)
 }
 
-async fn get_workflow_conflict_ai_settings(
+pub(crate) async fn get_workflow_conflict_ai_settings(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<Json<ai::AiSettings>, ApiError> {
@@ -969,7 +969,7 @@ async fn get_workflow_conflict_ai_settings(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkflowConflictSuggestionRequest {
+pub(crate) struct WorkflowConflictSuggestionRequest {
     task_id: String,
     path: String,
     expected_operation: workflows::WorkflowOperation,
@@ -1077,7 +1077,7 @@ async fn read_reviewed_conflict_for_suggestion(
     Ok(file)
 }
 
-async fn request_workflow_conflict_suggestion(
+pub(crate) async fn request_workflow_conflict_suggestion(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowConflictSuggestionRequest>, JsonRejection>,
@@ -1139,7 +1139,7 @@ async fn request_workflow_conflict_suggestion(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkflowConflictMutationRequest {
+pub(crate) struct WorkflowConflictMutationRequest {
     task_id: String,
     path: String,
     expected_operation: workflows::WorkflowOperation,
@@ -1155,7 +1155,7 @@ struct WorkflowConflictSaveRequest {
     content: String,
 }
 
-async fn save_workflow_conflict_file(
+pub(crate) async fn save_workflow_conflict_file(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowConflictSaveRequest>, JsonRejection>,
@@ -1260,7 +1260,7 @@ async fn save_workflow_conflict_file(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-async fn mark_workflow_conflict_resolved(
+pub(crate) async fn mark_workflow_conflict_resolved(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowConflictMutationRequest>, JsonRejection>,
@@ -1457,7 +1457,7 @@ fn ensure_conflict_revision(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct WorkflowRecoveryRequest {
+pub(crate) struct WorkflowRecoveryRequest {
     task_id: String,
     action: workflows::WorkflowRecoveryAction,
     expected_operation: workflows::WorkflowOperation,
@@ -1465,7 +1465,7 @@ struct WorkflowRecoveryRequest {
     expected_conflicted_paths: Vec<String>,
 }
 
-async fn recover_repository_workflow(
+pub(crate) async fn recover_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     request: Result<Json<WorkflowRecoveryRequest>, JsonRejection>,
