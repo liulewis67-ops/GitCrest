@@ -88,7 +88,6 @@ function App() {
   const [rebaseDialogOpen, setRebaseDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [remoteBranchDeleteTarget, setRemoteBranchDeleteTarget] = useState<string>();
-  const [cloneOpen, setCloneOpen] = useState(false);
   const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
   const [diffRetry, setDiffRetry] = useState(0);
   const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
@@ -406,7 +405,6 @@ function App() {
     getApi: () => apiRef.current,
     onTaskAccepted: (task) => {
       appendTask(task);
-      setCloneOpen(false);
       setTasksOpen(true);
       setTasksError("");
     },
@@ -414,7 +412,6 @@ function App() {
       setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
       activateRepository(repository);
     },
-    closeCloneDialog: () => setCloneOpen(false),
     closeTaskCenter: () => setTasksOpen(false),
     clearTaskError: () => setTasksError(""),
     setTaskError: setTasksError,
@@ -741,7 +738,7 @@ function App() {
   function retryClone(task: TaskSnapshotResponse) {
     cloneSubmission.prepareRetry(task.targetPath);
     setTasksOpen(false);
-    setCloneOpen(true);
+    cloneSubmission.openDialog();
   }
 
   function configureTaskCredentials(task: TaskSnapshotResponse) {
@@ -1086,7 +1083,7 @@ function App() {
     hasActiveBranches: Boolean(activeBranches),
   }, {
     openRepository: () => { void openLocalRepository(); },
-    cloneRepository: () => { cloneSubmission.clearError(); setCloneOpen(true); },
+    cloneRepository: () => cloneSubmission.openDialog(),
     initializeRepository: () => { void initializeLocalRepository(); },
     stageAll: () => { void stageChanges("stageAll"); },
     undoRecentOperation: () => { void undoRecentOperation(); },
@@ -1135,7 +1132,7 @@ function App() {
     { id: "reset", label: "Reset current branch", detail: "Review commit and file impact before moving HEAD", available: Boolean(selectedRepository && activeBranches && connected), run: () => setResetDialogOpen(true) },
     { id: "push", label: "Push current branch", detail: "Review commits, target, and overwrite scope before pushing", available: Boolean(selectedRepository), run: () => openPushDialog() },
     { id: "ai-commit-message", label: "Generate commit message suggestion", detail: `Review staged diffs and ask the configured AI provider (${displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)})`, available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
-    { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { cloneSubmission.clearError(); setCloneOpen(true); } },
+    { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => cloneSubmission.openDialog() },
     { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
   const filteredCommands = commands.filter((command) => `${command.label} ${command.detail}`.toLowerCase().includes(paletteQuery.toLowerCase()));
@@ -1193,7 +1190,7 @@ function App() {
           openError={openError}
           version={version}
           onOpenLocalRepository={() => void openLocalRepository()}
-          onCloneRepository={() => { cloneSubmission.clearError(); setCloneOpen(true); }}
+          onCloneRepository={() => cloneSubmission.openDialog()}
           onNavigateWorkspace={() => setPage("workspace")}
           onInitializeRepository={() => void initializeLocalRepository()}
           onOpenRepository={(repository) => void openRecentRepository(repository)}
@@ -1478,7 +1475,7 @@ function App() {
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}
       {resetDialogOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setResetDialogOpen(false)} onStarted={(task) => { setResetDialogOpen(false); void startWorkflowTask(task); }} />}
       {remoteBranchDeleteTarget && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDeleteTarget} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRemoteBranchDeleteTarget(undefined)} onStarted={(task) => { setRemoteBranchDeleteTarget(undefined); void startWorkflowTask(task); }} />}
-      {cloneOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} api={apiRef.current} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
+      {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} api={apiRef.current} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>
   );
