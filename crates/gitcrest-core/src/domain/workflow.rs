@@ -40,6 +40,19 @@ pub(crate) struct WorkflowState {
     pub(crate) operation: Option<WorkflowOperation>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum WorkflowBackupNamespace {
+    Rebase,
+    Reset,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkflowBackupReference {
+    pub(crate) reference: String,
+    pub(crate) oid: String,
+    pub(crate) subject: String,
+}
+
 impl RebaseAction {
     pub(crate) fn git_keyword(self) -> &'static str {
         match self {

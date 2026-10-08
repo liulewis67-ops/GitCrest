@@ -7,12 +7,43 @@ use tokio::{
 
 use crate::domain::{
     error::WorkflowError,
-    workflow::{WorkflowOperation, WorkflowState},
+    workflow::{
+        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowOperation, WorkflowState,
+    },
 };
 
 const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PATHS: usize = 200;
 const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
+
+pub(crate) async fn list_backup_references(
+    repository_path: &Path,
+    namespace: WorkflowBackupNamespace,
+) -> Result<Vec<WorkflowBackupReference>, WorkflowError> {
+    let references = match namespace {
+        WorkflowBackupNamespace::Rebase => "refs/gitcrest/rebase-backups",
+        WorkflowBackupNamespace::Reset => "refs/gitcrest/reset-backups",
+    };
+    let mut arguments = vec!["for-each-ref".into()];
+    if namespace == WorkflowBackupNamespace::Reset {
+        arguments.push("--count=1000".into());
+    }
+    arguments.push("--format=%(refname)%00%(objectname)%00%(subject)".into());
+    arguments.push(references.into());
+    let output = run_git(repository_path, &arguments).await?;
+    let output = text(&output)?;
+    output
+        .lines()
+        .map(|line| {
+            let mut fields = line.splitn(3, '\0');
+            Ok(WorkflowBackupReference {
+                reference: fields.next().ok_or(WorkflowError::GitFailed)?.to_owned(),
+                oid: fields.next().ok_or(WorkflowError::GitFailed)?.to_owned(),
+                subject: fields.next().ok_or(WorkflowError::GitFailed)?.to_owned(),
+            })
+        })
+        .collect()
+}
 pub(crate) async fn read_worktree_state(
     repository_path: &Path,
 ) -> Result<WorkflowState, WorkflowError> {

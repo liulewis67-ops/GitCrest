@@ -5,7 +5,10 @@ use sha2::{Digest, Sha256};
 use tokio::{io::AsyncReadExt, process::Command, time::timeout};
 
 use crate::{
-    domain::{error::WorkflowError, workflow::WorkflowOperation},
+    domain::{
+        error::WorkflowError,
+        workflow::{WorkflowBackupNamespace, WorkflowOperation},
+    },
     ports::workflow_git::WorkflowGitPort,
 };
 
@@ -74,25 +77,14 @@ pub async fn read_backup_snapshot<G: WorkflowGitPort>(
     let current_branch = git.read_current_branch(repository_path).await?;
     let state = git.read_worktree_state(repository_path).await?;
     let operation_in_progress = state.operation;
-    let backup_output = run_git(
-        repository_path,
-        &[
-            "for-each-ref",
-            "--count=1000",
-            "--format=%(refname)%00%(objectname)%00%(subject)",
-            "refs/gitcrest/reset-backups",
-        ],
-    )
-    .await?;
-    let mut backups = backup_output
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.splitn(3, '\0');
-            Some(ResetBackup {
-                reference: fields.next()?.to_owned(),
-                oid: fields.next()?.to_owned(),
-                subject: fields.next()?.to_owned(),
-            })
+    let mut backups = git
+        .list_backup_references(repository_path, WorkflowBackupNamespace::Reset)
+        .await?
+        .into_iter()
+        .map(|backup| ResetBackup {
+            reference: backup.reference,
+            oid: backup.oid,
+            subject: backup.subject,
         })
         .collect::<Vec<_>>();
     backups.sort_by(|left, right| right.reference.cmp(&left.reference));

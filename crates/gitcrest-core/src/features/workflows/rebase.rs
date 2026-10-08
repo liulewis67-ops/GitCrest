@@ -11,7 +11,7 @@ use tokio::{
 
 use crate::{
     domain::error::WorkflowError,
-    domain::workflow::{RebaseAction, RebaseTodoItem, WorkflowOperation},
+    domain::workflow::{RebaseAction, RebaseTodoItem, WorkflowBackupNamespace, WorkflowOperation},
     ports::workflow_git::WorkflowGitPort,
 };
 
@@ -128,7 +128,7 @@ pub async fn read_backup_snapshot<G: WorkflowGitPort>(
     let branch = git.read_current_branch(repository_path).await?;
     let state = git.read_worktree_state(repository_path).await?;
     let operation_in_progress = state.operation;
-    let backups = list_backups(repository_path).await?;
+    let backups = list_backups(git, repository_path).await?;
     let can_rollback = head_oid.is_some()
         && branch.is_some()
         && state.dirty_paths.is_empty()
@@ -144,25 +144,18 @@ pub async fn read_backup_snapshot<G: WorkflowGitPort>(
     })
 }
 
-pub async fn list_backups(repository_path: &Path) -> Result<Vec<RebaseBackup>, WorkflowError> {
-    let output = run_git(
-        repository_path,
-        &[
-            "for-each-ref".into(),
-            "--format=%(refname)%00%(objectname)%00%(subject)".into(),
-            "refs/gitcrest/rebase-backups".into(),
-        ],
-    )
-    .await?;
-    let mut backups = output
-        .lines()
-        .filter_map(|line| {
-            let mut fields = line.splitn(3, '\0');
-            Some(RebaseBackup {
-                reference: fields.next()?.to_owned(),
-                oid: fields.next()?.to_owned(),
-                subject: fields.next()?.to_owned(),
-            })
+pub async fn list_backups<G: WorkflowGitPort>(
+    git: &G,
+    repository_path: &Path,
+) -> Result<Vec<RebaseBackup>, WorkflowError> {
+    let mut backups = git
+        .list_backup_references(repository_path, WorkflowBackupNamespace::Rebase)
+        .await?
+        .into_iter()
+        .map(|backup| RebaseBackup {
+            reference: backup.reference,
+            oid: backup.oid,
+            subject: backup.subject,
         })
         .collect::<Vec<_>>();
     backups.sort_by(|left, right| right.reference.cmp(&left.reference));

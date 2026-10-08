@@ -20,7 +20,10 @@ use std::os::unix::process::CommandExt;
 use crate::staging::StagingCommand;
 use crate::tasks::{TaskContext, TaskFailure};
 use crate::{
-    domain::{error::WorkflowError, workflow::WorkflowState},
+    domain::{
+        error::WorkflowError,
+        workflow::{WorkflowBackupNamespace, WorkflowBackupReference, WorkflowState},
+    },
     ports::workflow_git::WorkflowGitPort,
 };
 
@@ -140,6 +143,14 @@ impl WorkflowGitPort for GitCommandService {
         repository_path: &Path,
     ) -> Result<Option<crate::domain::workflow::WorkflowOperation>, WorkflowError> {
         workflow_state::read_operation(repository_path).await
+    }
+
+    async fn list_backup_references(
+        &self,
+        repository_path: &Path,
+        namespace: WorkflowBackupNamespace,
+    ) -> Result<Vec<WorkflowBackupReference>, WorkflowError> {
+        workflow_state::list_backup_references(repository_path, namespace).await
     }
 }
 
