@@ -1,27 +1,30 @@
-import { useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent } from "react";
 import { GitCrestApiClient, GitCrestApiError, type BranchSnapshotResponse, type CommitRequest, type DiffDocumentResponse, type RemoteSnapshotResponse, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "./api/client";
 import { mergeStatusScope } from "./api/status-snapshot";
 import { CommitDetails, CommitGraph } from "./features/history/CommitGraph";
-import { TaskCenter } from "./features/tasks/TaskCenter";
-import { WorkflowDialog, type WorkflowAction } from "./features/workflows/WorkflowDialog";
-import { RebaseDialog } from "./features/workflows/RebaseDialog";
-import { ResetDialog } from "./features/workflows/ResetDialog";
-import { RemoteBranchDeleteDialog } from "./features/branches/RemoteBranchDeleteDialog";
-import { CloneDialog } from "./features/cloning/CloneDialog";
 import { RemoteManager } from "./features/remotes/RemoteManager";
-import { PushDialog } from "./features/remotes/PushDialog";
-import { PullDialog } from "./features/remotes/PullDialog";
 import { ShelfCenter } from "./features/shelves/ShelfCenter";
-import { PushTargetDialog, type PushTarget } from "./features/remotes/PushTargetDialog";
+import type { WorkflowAction } from "./features/workflows/WorkflowDialog";
+import type { PushTarget } from "./features/remotes/PushTargetDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
-import { DiscardChangesDialog } from "./features/diff/DiscardChangesDialog";
-import { SettingsDialog } from "./features/settings/SettingsDialog";
-import { CommitMessageAssistant } from "./features/settings/CommitMessageAssistant";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "./features/settings/shortcut-preferences";
 import { useDialogFocus } from "./shared/use-dialog-focus";
 import type { components } from "./api/schema";
 import type { UpdateStatus } from "./api/update-status";
 import "./App.css";
+
+const TaskCenter = lazy(() => import("./features/tasks/TaskCenter").then(({ TaskCenter }) => ({ default: TaskCenter })));
+const WorkflowDialog = lazy(() => import("./features/workflows/WorkflowDialog").then(({ WorkflowDialog }) => ({ default: WorkflowDialog })));
+const RebaseDialog = lazy(() => import("./features/workflows/RebaseDialog").then(({ RebaseDialog }) => ({ default: RebaseDialog })));
+const ResetDialog = lazy(() => import("./features/workflows/ResetDialog").then(({ ResetDialog }) => ({ default: ResetDialog })));
+const RemoteBranchDeleteDialog = lazy(() => import("./features/branches/RemoteBranchDeleteDialog").then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
+const CloneDialog = lazy(() => import("./features/cloning/CloneDialog").then(({ CloneDialog }) => ({ default: CloneDialog })));
+const PushDialog = lazy(() => import("./features/remotes/PushDialog").then(({ PushDialog }) => ({ default: PushDialog })));
+const PullDialog = lazy(() => import("./features/remotes/PullDialog").then(({ PullDialog }) => ({ default: PullDialog })));
+const PushTargetDialog = lazy(() => import("./features/remotes/PushTargetDialog").then(({ PushTargetDialog }) => ({ default: PushTargetDialog })));
+const DiscardChangesDialog = lazy(() => import("./features/diff/DiscardChangesDialog").then(({ DiscardChangesDialog }) => ({ default: DiscardChangesDialog })));
+const SettingsDialog = lazy(() => import("./features/settings/SettingsDialog").then(({ SettingsDialog }) => ({ default: SettingsDialog })));
+const CommitMessageAssistant = lazy(() => import("./features/settings/CommitMessageAssistant").then(({ CommitMessageAssistant }) => ({ default: CommitMessageAssistant })));
 
 type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
@@ -2237,7 +2240,7 @@ function App() {
               </select>
               <textarea id="commit-message" aria-label="Commit message" aria-keyshortcuts={`${ariaShortcut(shortcuts.commit, isMacPlatform)} ${ariaShortcut(shortcuts.commitAndPush, isMacPlatform)}`} placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if (!event.nativeEvent.isComposing && matchesShortcut(event.nativeEvent, shortcuts.commit, isMacPlatform)) { event.preventDefault(); event.stopPropagation(); void commitChanges("commit"); } else if (!event.nativeEvent.isComposing && matchesShortcut(event.nativeEvent, shortcuts.commitAndPush, isMacPlatform)) { event.preventDefault(); event.stopPropagation(); void commitChanges("commitAndPush"); } }} />
               {commitSelections.length > 0 && <div className="commitSelectionNotice" role="status">{commitSelections.length} staged file selection{commitSelections.length === 1 ? "" : "s"} will be committed. Other staged changes stay in the index. <button type="button" onClick={() => setCommitSelections([])}>Clear selection</button></div>}
-              {commitAssistantOpen && selectedRepository && apiRef.current && <CommitMessageAssistant api={apiRef.current} repoId={selectedRepository.repoId} draftMessage={commitMessage} commitSelections={commitSelections} commitSelectionRepoId={commitSelectionRepoId} statusSnapshot={activeStatus} onUseSuggestion={(message) => { setCommitMessage(message); setCommitTemplate("plain"); setCommitAssistantOpen(false); }} onClose={() => setCommitAssistantOpen(false)} />}
+              {commitAssistantOpen && selectedRepository && apiRef.current && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading suggestion tools…</div>}><CommitMessageAssistant api={apiRef.current} repoId={selectedRepository.repoId} draftMessage={commitMessage} commitSelections={commitSelections} commitSelectionRepoId={commitSelectionRepoId} statusSnapshot={activeStatus} onUseSuggestion={(message) => { setCommitMessage(message); setCommitTemplate("plain"); setCommitAssistantOpen(false); }} onClose={() => setCommitAssistantOpen(false)} /></Suspense>}
               <div className="commitControls">
                 <div className="commitOptions">
                   <label className="disabledCheck"><input type="checkbox" checked={amendCommit} disabled={!selectedRepository?.head || commitBusy} onChange={(event) => setAmendCommit(event.target.checked)} /> Amend</label>
@@ -2348,6 +2351,7 @@ function App() {
         </div>
       )}
 
+      <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading dialog…</div>}>
       {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} forceWithLeaseOnly={pushForceOnly} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
@@ -2367,6 +2371,7 @@ function App() {
       {resetDialogOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setResetDialogOpen(false)} onStarted={(task) => { setResetDialogOpen(false); void startWorkflowTask(task); }} />}
       {remoteBranchDeleteTarget && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDeleteTarget} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRemoteBranchDeleteTarget(undefined)} onStarted={(task) => { setRemoteBranchDeleteTarget(undefined); void startWorkflowTask(task); }} />}
       {cloneOpen && <CloneDialog initialRemoteUrl={cloneDraft.remoteUrl} initialDirectoryName={cloneDraft.directoryName} parentPath={cloneDraft.parentPath} error={cloneError} busy={cloneBusy} api={apiRef.current} onChooseParent={() => window.gitcrest.chooseCloneParent()} onClose={() => setCloneOpen(false)} onSubmit={(remoteUrl, parentPath, directoryName) => void startClone(remoteUrl, parentPath, directoryName)} />}
+      </Suspense>
     </main>
   );
 }

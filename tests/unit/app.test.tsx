@@ -174,7 +174,7 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: /^Clone repository$/ }));
-    const dialog = screen.getByRole("dialog", { name: "Clone repository" });
+    const dialog = await screen.findByRole("dialog", { name: "Clone repository" });
     fireEvent.change(within(dialog).getByLabelText("Remote URL"), { target: { value: "https://github.com/octocat/Hello-World.git" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "Choose folder" }));
     await waitFor(() => expect(within(dialog).getByText("C:/projects")).toBeDefined());
