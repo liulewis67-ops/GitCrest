@@ -1796,3 +1796,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其他内部调用仍使用部分 crate-root feature 兼容路径，后续继续逐模块迁移；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/features/mod.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`ccf7281`
+
+### API 错误映射依赖 feature 导出的错误类型 — 小阶段 133
+- 状态：已完成（API error 边界直接依赖 feature 模块）
+- 日期：2026-10-09
+- 交付：`api/error.rs` 从 `features` 导入 branches/commits/credentials/diff/history/remotes/shelves/staging/tags/tasks 的错误类型与 pull/push 子模块，消除该 API 边界对相应 crate-root feature re-export 的依赖。HTTP 错误码、状态码和消息映射未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：其他业务模块仍引用 crate-root feature 兼容路径，后续继续迁移跨 feature 调用并按编译结果移除已无消费者的兼容导出。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/features/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`f44dc2b`
