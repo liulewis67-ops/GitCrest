@@ -2119,3 +2119,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍直接依赖 diff/settings 私有 UI 路径及 repositories 私有 model；继续检查并按 feature 公开 API 收口。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/remotes/index.ts`、`src/pages/workspace/WorkspaceNavigation.tsx`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 实施 commit：`9f8ffa2`
+
+### diff/settings UI 与 repositories refresh planner 经公开入口导出 — 小阶段 169
+- 状态：已完成（App/page 经 feature barrel 加载 diff/settings UI 并调用 repositories planner）
+- 日期：2026-10-09
+- 交付：diff feature barrel 公开 SplitDiff 与 DiscardChangesDialog loaders，settings barrel 公开 SettingsDialog loader，repositories barrel 公开 repository event refresh planner 与结果类型；App/Page 移除对应私有路径引用并维持懒加载。将 SplitDiff 改为 barrel loader 后，构建中的 diff 动态/静态导入警告消失。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：仍需全面审查页面和 App 的 feature 私有路径引用，并继续完成实施计划的后端及 S7 验收项。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/{diff,settings,repositories}/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 实施 commit：`640d3e8`
