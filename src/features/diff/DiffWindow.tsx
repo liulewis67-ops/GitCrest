@@ -1,7 +1,6 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../api/client";
 import { getGitCrestBridge } from "../../api/bridge";
-import { SplitDiff } from "./SplitDiff";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../settings/shortcut-preferences";
 import "../../App.css";
 
@@ -13,6 +12,7 @@ type DiffTab = {
   commitOid?: string;
 };
 const MAX_DIFF_TABS = 100;
+const SplitDiff = lazy(() => import("./SplitDiff").then(({ SplitDiff }) => ({ default: SplitDiff })));
 
 export function DiffWindow() {
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -182,7 +182,7 @@ export function DiffWindow() {
             : view === "blame" ? loading ? <div className="diffSpecialState" role="status">Loading line blame…</div> : blame ? <BlameView document={blame} /> : <div className="diffSpecialState" role="status">No blame data is available.</div>
               : !document ? <div className="diffSpecialState" role="status">Loading file diff…</div>
                 : view === "split"
-                  ? <SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly />
+                  ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">Loading diff viewer…</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly /></Suspense>
                   : <UnifiedDiff document={document} />}
       </section>
     </main>

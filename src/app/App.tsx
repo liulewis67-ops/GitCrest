@@ -2,12 +2,8 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type K
 import { GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
-import { CommitDetails, CommitGraph } from "../features/history/CommitGraph";
-import { RemoteManager } from "../features/remotes/RemoteManager";
-import { ShelfCenter } from "../features/shelves/ShelfCenter";
 import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
-import { SplitDiff } from "../features/diff/SplitDiff";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings/shortcut-preferences";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories/model/workspace-session";
@@ -27,6 +23,11 @@ const RebaseDialog = lazy(() => import("../features/workflows/RebaseDialog").the
 const ResetDialog = lazy(() => import("../features/workflows/ResetDialog").then(({ ResetDialog }) => ({ default: ResetDialog })));
 const RemoteBranchDeleteDialog = lazy(() => import("../features/branches/RemoteBranchDeleteDialog").then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
 const CloneDialog = lazy(() => import("../features/cloning/CloneDialog").then(({ CloneDialog }) => ({ default: CloneDialog })));
+const CommitGraph = lazy(() => import("../features/history/CommitGraph").then(({ CommitGraph }) => ({ default: CommitGraph })));
+const CommitDetails = lazy(() => import("../features/history/CommitGraph").then(({ CommitDetails }) => ({ default: CommitDetails })));
+const RemoteManager = lazy(() => import("../features/remotes/RemoteManager").then(({ RemoteManager }) => ({ default: RemoteManager })));
+const ShelfCenter = lazy(() => import("../features/shelves/ShelfCenter").then(({ ShelfCenter }) => ({ default: ShelfCenter })));
+const SplitDiff = lazy(() => import("../features/diff/SplitDiff").then(({ SplitDiff }) => ({ default: SplitDiff })));
 const PushDialog = lazy(() => import("../features/remotes/PushDialog").then(({ PushDialog }) => ({ default: PushDialog })));
 const PullDialog = lazy(() => import("../features/remotes/PullDialog").then(({ PullDialog }) => ({ default: PullDialog })));
 const PushTargetDialog = lazy(() => import("../features/remotes/PushTargetDialog").then(({ PushTargetDialog }) => ({ default: PushTargetDialog })));
@@ -1815,7 +1816,7 @@ function App() {
                 </ul>}
               </div>
               <div className="navDivider" />
-              <RemoteManager
+              <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">Loading remote controls…</div>}><RemoteManager
                 snapshot={activeRemotes}
                 branches={activeBranches}
                 api={apiRef.current}
@@ -1832,8 +1833,8 @@ function App() {
                 onDelete={deleteRepositoryRemote}
                 onSetDefault={setRepositoryDefaultRemote}
                 onSetUpstream={setRepositoryBranchUpstream}
-              />
-              {selectedRepository && apiRef.current ? <ShelfCenter
+              /></Suspense>
+              {selectedRepository && apiRef.current ? <Suspense fallback={<div className="navGroup"><div className="navGroupTitle">Shelves</div><div className="navEmpty" role="status" aria-live="polite">Loading shelves…</div></div>}><ShelfCenter
                 key={selectedRepository.repoId}
                 api={apiRef.current}
                 repoId={selectedRepository.repoId}
@@ -1870,14 +1871,14 @@ function App() {
                   }
                   setShelfComposerAfterSwitch(undefined);
                 }}
-              /> : <div className="navGroup"><div className="navGroupTitle">Shelves</div><div className="navEmpty">Open a repository to manage shelves</div></div>}
+              /></Suspense> : <div className="navGroup"><div className="navGroupTitle">Shelves</div><div className="navEmpty">Open a repository to manage shelves</div></div>}
               <div className="panelFooter"><span className="statusIcon" aria-hidden="true">●</span> {connected ? "Engine ready" : connecting ? "Connecting to engine" : "Engine unavailable"}</div>
             </aside>
             <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />
 
             <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
               <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!selectedRepository || activeStatusLoading} onClick={() => { if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={activeStatusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={activeStatusLoading ? "Refreshing working tree status" : `Refresh working tree status (${displayShortcut(shortcuts.refreshStatus, isMacPlatform)})`}>{activeStatusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
-              {mode === "graph" ? selectedRepository && apiRef.current && isFullObjectId(selectedRepository.head) ? <CommitGraph
+              {mode === "graph" ? selectedRepository && apiRef.current && isFullObjectId(selectedRepository.head) ? <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">Loading commit history…</div>}><CommitGraph
                 key={selectedRepository.repoId}
                 api={apiRef.current}
                 repoId={selectedRepository.repoId}
@@ -1889,7 +1890,7 @@ function App() {
                 onFocusSearchHandled={(sequence) => setHistorySearchFocusRequest((request) => request?.sequence === sequence ? undefined : request)}
                 onScrollPosition={rememberGraphScroll}
                 onSelect={selectCommit}
-              /> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)} role="region" aria-label="Commit graph view"><div className="graphEmpty">
+              /></Suspense> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)} role="region" aria-label="Commit graph view"><div className="graphEmpty">
                 <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
                 <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
                 <h2>{selectedRepository ? selectedRepository.head ? "Connecting to history…" : "No commits yet" : "Your commit graph starts here"}</h2>
@@ -1899,7 +1900,7 @@ function App() {
                 : !selectedRepository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div></div>
                   : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
                   : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={() => setDiffRetry((current) => current + 1)}>Retry diff</button></div>
-                  : diffState.document ? <div className="graphViewport"><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => { setTasksError(""); setDiscardSelection({ path: diffState.document!.path, revision: diffState.document!.revision, selections }); } : undefined} onCommitSelection={addDiffSelectionToCommit} onOpenWindow={() => void openDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></div>
+                  : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">Loading diff viewer…</div>}><SplitDiff document={diffState.document} onStageSelection={stageSelectedChanges} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => { setTasksError(""); setDiscardSelection({ path: diffState.document!.path, revision: diffState.document!.revision, selections }); } : undefined} onCommitSelection={addDiffSelectionToCommit} onOpenWindow={() => void openDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></Suspense></div>
                   : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div></div>}
               <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
             </section>
@@ -1907,7 +1908,7 @@ function App() {
 
             {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
               <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} workflowDisabledReason={!connected ? "Connect to the Git engine to start this operation." : selectedRepository.availability !== "available" ? "This repository is unavailable." : hasActiveRepositoryTask ? "Wait for the current repository task." : undefined} openTagRequest={tagEditorRequest} onTagRequestHandled={(sequence) => setTagEditorRequest((request) => request?.sequence === sequence ? undefined : request)} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={(action, oid) => setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action })} /> : selectedRepository ? (
+              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">Loading commit details…</div>}><CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} workflowDisabledReason={!connected ? "Connect to the Git engine to start this operation." : selectedRepository.availability !== "available" ? "This repository is unavailable." : hasActiveRepositoryTask ? "Wait for the current repository task." : undefined} openTagRequest={tagEditorRequest} onTagRequestHandled={(sequence) => setTagEditorRequest((request) => request?.sequence === sequence ? undefined : request)} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={(action, oid) => setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action })} /></Suspense> : selectedRepository ? (
                 <div className="repositoryDetails">
                   <span className="detailsGlyph" aria-hidden="true">G</span>
                   <h2>{repositoryName(selectedRepository.path)}</h2>
