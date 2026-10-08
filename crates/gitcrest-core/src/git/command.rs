@@ -17,7 +17,7 @@ use tokio::{
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use crate::staging::StagingCommand;
+use crate::features::staging::StagingCommand;
 use crate::tasks::{TaskContext, TaskFailure};
 use crate::{
     domain::{

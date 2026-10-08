@@ -9,9 +9,8 @@ use axum::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::diff::{self, DiffError, DiffScope},
-    features::shelves,
+    features::{shelves, staging},
     git::command::GitCommandService,
-    staging,
     state::AppState,
     storage::{RepositoryStore, UndoOperation, UndoRecord},
     tasks::{self, TaskFailure, TaskSnapshot},
