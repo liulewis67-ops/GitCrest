@@ -1166,3 +1166,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：reset 与 generic/recovery handlers 仍在通用 `handlers.rs`；继续拆入 reset/recovery 子模块，使 workflows 目录和规范职责结构对应。
 - 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/rebase.rs,routes.rs}`。
 - 实施 commit：`6caa5f7`
+
+### 后端 workflows reset handlers 子模块 — 小阶段 63
+- 状态：已完成（reset preview/start、备份与 restore handlers 独立分组）
+- 日期：2026-10-09
+- 交付：将 reset preview/start、backup listing、restore handlers 及备份引用校验 helper 从通用 `handlers.rs` 移入 `handlers/reset.rs`；reset DTO 保持在 `dto.rs`，通用 handlers 模块聚合导出，现有 routes 的 URL/method 与行为不变。子模块显式声明 Axum、DTO、reset service、state 和 task 依赖。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；reset 预览/确认/备份恢复集成用例通过。
+- 限制/后续：generic workflow 与 recovery task handlers 仍在 `handlers.rs`；下一阶段继续将它们拆入 merge/recovery 子模块，保留 handlers 根模块作为聚合出口。
+- 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/reset.rs,routes.rs}`。
+- 实施 commit：`f7e7f75`
