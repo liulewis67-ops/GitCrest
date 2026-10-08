@@ -1382,3 +1382,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：reset/rebase 提交历史查询仍在 `workflow_state.rs`；下一阶段迁入 `git/history.rs`，剩余 process runner 再单独归位。
 - 证据：`crates/gitcrest-core/src/git/{mod.rs,refs.rs,status.rs,workflow_state.rs,command.rs}`。
 - 实施 commit：`ae9634f`
+
+### 后端 Git history adapter 独立模块 — 小阶段 87
+- 状态：已完成（commit 与 reset/rebase 历史查询归入 git/history.rs）
+- 日期：2026-10-09
+- 交付：新增 `git/history.rs`，承接 commit target/subject、HEAD/current branch、reset comparison 与 bounded rebase commit list/发布检查；`GitCommandService` 的相应 port 实现改调用 history 模块。删除 `workflow_state.rs` 中的历史查询逻辑，使其仅保留只读子进程与输出辅助函数。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：通用 subprocess/output helper 仍暂存在名称不符的 `workflow_state.rs`；下一阶段将其迁移到指南列出的 `git/process.rs`，之后继续移除模块兼容出口。
+- 证据：`crates/gitcrest-core/src/git/{mod.rs,history.rs,refs.rs,status.rs,workflow_state.rs,command.rs}`。
+- 实施 commit：`d79d6b6`
