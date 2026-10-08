@@ -12,7 +12,7 @@ import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { useCommitDraft } from "../features/commits";
-import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
+import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
@@ -218,9 +218,8 @@ function App() {
     beginCacheRequest: beginRepositoryCacheRequest,
     finishCacheRequest: finishRepositoryCacheRequest,
   });
-  const pendingGraphScrollRef = useRef<{ repoId: string; scrollTop: number }>();
-  const graphScrollTimerRef = useRef<number>();
   const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
+  const rememberGraphScroll = useWorkspaceGraphScroll(selectedRepository?.repoId, mode, setWorkspaceSession);
   const selectedCommit = selectedRepository
     ? workspaceSession.tabs[selectedRepository.repoId]?.selectedCommit || selectedRepository.head || undefined
     : undefined;
@@ -1137,26 +1136,6 @@ function App() {
     } catch (error) {
       setDiffState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Could not open the Diff window." }));
     }
-  }
-
-  function rememberGraphScroll(scrollTop: number) {
-    const repoId = selectedRepository?.repoId;
-    if (!repoId || mode !== "graph" || !Number.isFinite(scrollTop)) return;
-    pendingGraphScrollRef.current = { repoId, scrollTop: Math.max(0, scrollTop) };
-    if (graphScrollTimerRef.current !== undefined) window.clearTimeout(graphScrollTimerRef.current);
-    graphScrollTimerRef.current = window.setTimeout(() => {
-      graphScrollTimerRef.current = undefined;
-      const latest = pendingGraphScrollRef.current;
-      pendingGraphScrollRef.current = undefined;
-      if (!latest) return;
-      setWorkspaceSession((current) => ({
-        ...current,
-        tabs: {
-          ...current.tabs,
-          [latest.repoId]: { ...(current.tabs[latest.repoId] || { mode: "graph", graphScrollTop: 0 }), graphScrollTop: latest.scrollTop },
-        },
-      }));
-    }, 120);
   }
 
   function selectCommit(oid: string) {
