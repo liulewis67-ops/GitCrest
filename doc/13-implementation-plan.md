@@ -880,3 +880,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/app/routing/{RendererRoot.tsx,renderer-view.ts}`、`src/main.tsx`、`tests/unit/renderer-view.test.ts`。
 - 实施 commit：`4297ad7`
 
+
+### 前端 repositories 工作区会话 model 拆分 — 小阶段 32
+- 状态：已完成（仓库标签/选择会话状态进入 repositories feature model）
+- 日期：2026-10-09
+- 交付：新增 `features/repositories/model/workspace-session.ts`，集中定义 RepoId 列表、活动仓库、逐仓库标签/选择状态，封装 localStorage 加载/保存和 JSON 运行时校验；`App.tsx` 改为调用 model 持久化接口，不再持有上述类型与解析实现。保留现有存储键、字段兼容、重复 RepoId 去重、非法字段默认值和存储不可用时的会话内回退行为。
+- 验证：workspace session 定向单测 3/3、完整 Vitest 单测 152/152、`pnpm build`（Electron）及 `pnpm frontend:build`（浏览器）、`git diff --check` 通过。构建有既有 tree-sitter `eval` 及浏览器大 bundle 警告。
+- 限制/后续：仓库 session model 仍通过 React state 由 App 组合，暂未引入 Zustand（当前前端规范要求按复杂度采用）；App 仍包含大量 workspace 页面状态与业务组合，后续继续拆分 feature model/UI 和查询通信。S7.2、S7.4、S7.5 验收仍未完成。
+- 证据：`src/features/repositories/model/workspace-session.ts`、`src/App.tsx`、`tests/unit/workspace-session.test.ts`。
+- 实施 commit：`9e1596f`
+
