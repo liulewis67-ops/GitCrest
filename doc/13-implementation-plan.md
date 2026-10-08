@@ -2011,3 +2011,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：remotes 读刷新、Push target 选择与 App 命令入口仍由 App 装配；后续可继续整理 feature API 与视图编排。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/remotes/model/use-repository-push.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`50f0abe`
+
+### changes feature 暂存/撤销/丢弃操作迁入 model — 小阶段 157
+- 状态：已完成（stage、部分 hunk、undo 与 discard 请求由 changes feature 编排）
+- 日期：2026-10-09
+- 交付：新增 `features/changes/model/use-staging-operations.ts`，将整文件 stage/unstage、Diff hunk 部分暂存/撤销暂存、撤销最近一次操作及已审阅 diff discard 的 API 请求、busy 状态、task/error 更新迁出 App；保留各路径既有 active task、仓库可用性、连接状态及 Diff scope 门控。新增 changes feature 公开入口，统一导出 repository status 与 staging operations hooks。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。
+- 限制/后续：Diff 查询、discard 审阅状态以及任务完成后的刷新仍由 App/page 协调；继续按 changes feature 的请求与页面组合边界迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/changes/{index.ts,model/use-staging-operations.ts,model/use-repository-status.ts}`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`3a40409`
