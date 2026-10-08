@@ -226,6 +226,55 @@ impl GitCommandService {
         workflow_command_result(repository_path, result).await
     }
 
+    pub async fn execute_rebase(
+        &self,
+        repository_path: &Path,
+        expected_head_oid: &str,
+        onto_oid: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let backup_ref = format!("refs/gitcrest/rebase-backups/{}", task.task_id());
+        run_command(
+            &self.git_program,
+            vec![
+                "update-ref".into(),
+                backup_ref.clone().into(),
+                expected_head_oid.into(),
+            ],
+            Some(format!("rebase backup {backup_ref}")),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Create rebase backup reference",
+            task.clone(),
+        )
+        .await?;
+        task.log(format!("Created rollback reference {backup_ref}."))
+            .await;
+        let result = run_command(
+            &self.git_program,
+            vec![
+                "rebase".into(),
+                "--onto".into(),
+                onto_oid.into(),
+                onto_oid.into(),
+            ],
+            Some(format!(
+                "rebase onto {}",
+                &onto_oid[..7.min(onto_oid.len())]
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Rebase branch",
+            task,
+        )
+        .await;
+        workflow_command_result(repository_path, result).await
+    }
+
     pub async fn execute_workflow_recovery(
         &self,
         repository_path: &Path,
@@ -234,12 +283,26 @@ impl GitCommandService {
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match (operation, action) {
-            (crate::workflows::WorkflowOperation::Rebase, _)
-            | (crate::workflows::WorkflowOperation::ShelfApply, _) => {
+            (crate::workflows::WorkflowOperation::ShelfApply, _) => {
                 return Err(TaskFailure::Failed(
                     "This recovery action is not a Git merge, cherry-pick, or revert.".into(),
                 ));
             }
+            (
+                crate::workflows::WorkflowOperation::Rebase,
+                crate::workflows::WorkflowRecoveryAction::Continue,
+            ) => (
+                vec!["rebase".into(), "--continue".into()],
+                "Continue rebase",
+            ),
+            (
+                crate::workflows::WorkflowOperation::Rebase,
+                crate::workflows::WorkflowRecoveryAction::Skip,
+            ) => (vec!["rebase".into(), "--skip".into()], "Skip rebase commit"),
+            (
+                crate::workflows::WorkflowOperation::Rebase,
+                crate::workflows::WorkflowRecoveryAction::Abort,
+            ) => (vec!["rebase".into(), "--abort".into()], "Abort rebase"),
             (_, crate::workflows::WorkflowRecoveryAction::Continue) => (
                 vec!["commit".into(), "--no-edit".into()],
                 "Continue Git operation",
@@ -279,13 +342,20 @@ impl GitCommandService {
                 ));
             }
         };
+        let environment = if operation == crate::workflows::WorkflowOperation::Rebase
+            && action == crate::workflows::WorkflowRecoveryAction::Continue
+        {
+            vec![(OsString::from("GIT_EDITOR"), OsString::from("true"))]
+        } else {
+            Vec::new()
+        };
         let result = run_command(
             &self.git_program,
             arguments,
             Some(label.to_lowercase()),
             None,
             Vec::new(),
-            Vec::new(),
+            environment,
             Some(repository_path),
             label,
             task,

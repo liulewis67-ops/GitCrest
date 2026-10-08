@@ -1028,7 +1028,7 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         )
         .route(
             "/v1/repositories/:repo_id/workflows/rebase-preview",
-            get(preflight_repository_rebase),
+            get(preflight_repository_rebase).post(start_repository_rebase),
         )
         .route(
             "/v1/repositories/:repo_id/workflows",
@@ -3775,6 +3775,104 @@ async fn preflight_repository_rebase(
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RebaseRequest {
+    expected_head_oid: String,
+    expected_onto_oid: String,
+    preview_revision: String,
+}
+
+async fn start_repository_rebase(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RebaseRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Starting a rebase requires the reviewed HEAD, onto commit, and preview revision.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = rebase::read_preview(
+        repo_id.clone(),
+        &target.repository_path,
+        &request.expected_onto_oid,
+    )
+    .await
+    .map_err(ApiError::from_workflow_error)?;
+    if preview.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
+        || preview.onto_oid != request.expected_onto_oid
+        || preview.preview_revision != request.preview_revision
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowPreflightStale,
+            "HEAD, target, or commit list changed after review. Refresh the rebase preview.",
+        ));
+    }
+    if !preview.can_start {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowRequiresClean,
+            "Rebase requires a clean branch, a non-empty bounded commit list, and no Git operation in progress.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let repositories = state.repositories.clone();
+    let task_repo_id = repo_id.clone();
+    let path = target.repository_path;
+    let resource_key = target.resource_key;
+    let expected_head_oid = request.expected_head_oid;
+    let onto_oid = request.expected_onto_oid;
+    let expected_preview_revision = request.preview_revision;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            "rebase",
+            move |context| async move {
+                let current = rebase::read_preview(task_repo_id.clone(), &path, &onto_oid)
+                    .await
+                    .map_err(|_| {
+                        TaskFailure::Failed(
+                            "Rebase preconditions could not be rechecked. Refresh repository state.".into(),
+                        )
+                    })?;
+                if current.head_oid.as_deref() != Some(expected_head_oid.as_str())
+                    || current.onto_oid != onto_oid
+                    || current.preview_revision != expected_preview_revision
+                    || !current.can_start
+                {
+                    return Err(TaskFailure::Failed(
+                        "Rebase preconditions changed before Git could start. Review the current repository state.".into(),
+                    ));
+                }
+                let task_context = context.clone();
+                let result = command
+                    .execute_rebase(&path, &expected_head_oid, &onto_oid, context)
+                    .await;
+                if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                    task_context
+                        .log("Repository metadata refresh failed after rebase; refresh the repository before the next write.")
+                        .await;
+                }
+                result.map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct WorkflowRequest {
     action: workflows::WorkflowAction,
     target_oid: String,
@@ -4543,6 +4641,7 @@ fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOpe
         "merge" => Some(workflows::WorkflowOperation::Merge),
         "cherryPick" => Some(workflows::WorkflowOperation::CherryPick),
         "revert" => Some(workflows::WorkflowOperation::Revert),
+        "rebase" => Some(workflows::WorkflowOperation::Rebase),
         value if shelf_apply_shelf_id(value).is_some() => {
             Some(workflows::WorkflowOperation::ShelfApply)
         }
@@ -6769,6 +6868,341 @@ mod tests {
         let dirty: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert_eq!(dirty["canStart"], false);
         assert_eq!(dirty["dirtyPaths"], serde_json::json!(["dirty.txt"]));
+    }
+
+    #[tokio::test]
+    async fn rebase_task_creates_visible_backup_and_replays_commits_onto_target() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("rebase-task-repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["config", "user.name", "Rebase Task Test"]);
+        git(&["config", "user.email", "rebase-task@example.invalid"]);
+        std::fs::write(repository_path.join("base.txt"), "base\n").unwrap();
+        git(&["add", "base.txt"]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        git(&["checkout", "--quiet", "-b", "feature"]);
+        std::fs::write(repository_path.join("first.txt"), "first\n").unwrap();
+        git(&["add", "first.txt"]);
+        git(&["commit", "--quiet", "-m", "first feature"]);
+        std::fs::write(repository_path.join("second.txt"), "second\n").unwrap();
+        git(&["add", "second.txt"]);
+        git(&["commit", "--quiet", "-m", "second feature"]);
+        let old_head = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+        std::fs::write(repository_path.join("target.txt"), "target\n").unwrap();
+        git(&["add", "target.txt"]);
+        git(&["commit", "--quiet", "-m", "onto target"]);
+        let onto_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "feature"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let preview_response = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/workflows/rebase-preview?ontoOid={onto_oid}"
+                ),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(preview["canStart"], true);
+        assert_eq!(preview["commits"].as_array().unwrap().len(), 2);
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": old_head,
+                    "expectedOntoOid": onto_oid,
+                    "previewRevision": preview["previewRevision"]
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let accepted: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let completed = wait_for_task(&app, accepted["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        let log = completed["logs"].to_string();
+        assert!(log.contains("refs/gitcrest/rebase-backups/"));
+        assert_eq!(git(&["rev-parse", "HEAD~2"]), onto_oid);
+        assert_eq!(
+            git(&["rev-list", "--count", &format!("{onto_oid}..HEAD")]),
+            "2"
+        );
+        assert_eq!(
+            git(&[
+                "rev-parse",
+                &format!(
+                    "refs/gitcrest/rebase-backups/{}",
+                    accepted["taskId"].as_str().unwrap()
+                )
+            ]),
+            old_head
+        );
+        assert_eq!(git(&["rev-parse", "--abbrev-ref", "HEAD"]), "feature");
+    }
+
+    #[tokio::test]
+    async fn rebase_conflict_uses_workflow_resolver_and_continues() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("rebase-conflict-repo");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout).unwrap().trim().to_owned()
+        };
+        git(&["init", "--quiet", "--initial-branch=main"]);
+        git(&["config", "user.name", "Rebase Conflict Test"]);
+        git(&["config", "user.email", "rebase-conflict@example.invalid"]);
+        std::fs::write(repository_path.join("notes.txt"), "base line\nkeep line\n").unwrap();
+        git(&["add", "notes.txt"]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        git(&["checkout", "--quiet", "-b", "feature"]);
+        std::fs::write(
+            repository_path.join("notes.txt"),
+            "feature line\nkeep line\n",
+        )
+        .unwrap();
+        git(&["commit", "--quiet", "-am", "feature edit"]);
+        let original_head = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+        std::fs::write(
+            repository_path.join("notes.txt"),
+            "target line\nkeep line\n",
+        )
+        .unwrap();
+        git(&["commit", "--quiet", "-am", "target edit"]);
+        let onto_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "feature"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let preview_response = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/workflows/rebase-preview?ontoOid={onto_oid}"
+                ),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": original_head,
+                    "expectedOntoOid": onto_oid,
+                    "previewRevision": preview["previewRevision"]
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let accepted: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let waiting = wait_for_task_status(
+            &app,
+            accepted["taskId"].as_str().unwrap(),
+            "waitingForInput",
+        )
+        .await;
+        let recovery_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={}",
+            waiting["taskId"].as_str().unwrap()
+        );
+        let recovery_response = app
+            .clone()
+            .oneshot(request(&recovery_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(recovery_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recovery["operation"], "rebase");
+        assert_eq!(
+            recovery["conflictedPaths"],
+            serde_json::json!(["notes.txt"])
+        );
+        assert!(recovery["canAbort"].as_bool().unwrap());
+
+        let conflict_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/conflicts/file?taskId={}&path=notes.txt",
+            waiting["taskId"].as_str().unwrap()
+        );
+        let conflict_response = app
+            .clone()
+            .oneshot(request(&conflict_path, Some(CONFLICT_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(conflict_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let conflict: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(conflict["operation"], "rebase");
+        let save_response = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::PUT,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/file"),
+                &serde_json::json!({
+                    "taskId": waiting["taskId"],
+                    "path": "notes.txt",
+                    "expectedOperation": "rebase",
+                    "expectedHeadOid": conflict["headOid"],
+                    "expectedResultRevision": conflict["resultRevision"],
+                    "content": "resolved feature line\nkeep line\n"
+                })
+                .to_string(),
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(save_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let saved: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, saved["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let fresh_conflict = app
+            .clone()
+            .oneshot(request(&conflict_path, Some(CONFLICT_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(fresh_conflict.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let fresh_conflict: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let resolved = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/resolved"),
+                &serde_json::json!({
+                    "taskId": waiting["taskId"],
+                    "path": "notes.txt",
+                    "expectedOperation": "rebase",
+                    "expectedHeadOid": fresh_conflict["headOid"],
+                    "expectedResultRevision": fresh_conflict["resultRevision"]
+                })
+                .to_string(),
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(resolved.into_body(), usize::MAX).await.unwrap();
+        let resolved: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, resolved["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let refreshed = app
+            .clone()
+            .oneshot(request(&recovery_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(refreshed.into_body(), usize::MAX).await.unwrap();
+        let refreshed: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(refreshed["canContinue"], true);
+        let continued = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+                &serde_json::json!({
+                    "taskId": waiting["taskId"],
+                    "action": "continue",
+                    "expectedOperation": "rebase",
+                    "expectedHeadOid": refreshed["headOid"],
+                    "expectedConflictedPaths": []
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(continued.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(continued.into_body(), usize::MAX).await.unwrap();
+        let continued: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, continued["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            wait_for_task(&app, waiting["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(git(&["rev-parse", "HEAD~1"]), onto_oid);
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("notes.txt")).unwrap(),
+            "resolved feature line\nkeep line\n"
+        );
     }
 
     #[tokio::test]

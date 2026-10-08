@@ -369,6 +369,21 @@ export class GitCrestApiClient {
     );
   }
 
+  startRepositoryRebase(
+    repoId: RepoId,
+    request: components["schemas"]["RebaseRequest"],
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/rebase-preview`,
+      true,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
   startRepositoryWorkflow(
     repoId: RepoId,
     request: components["schemas"]["WorkflowRequest"],

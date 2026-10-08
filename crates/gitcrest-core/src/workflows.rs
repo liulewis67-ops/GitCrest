@@ -175,9 +175,6 @@ pub async fn read_recovery_preflight(
         operation,
     ) = read_worktree_state(repository_path).await?;
     let operation = operation.ok_or(WorkflowError::NoActiveOperation)?;
-    if operation == WorkflowOperation::Rebase {
-        return Err(WorkflowError::NoActiveOperation);
-    }
     let only_conflicts_are_dirty = dirty_paths
         .iter()
         .all(|path| conflicted_paths.iter().any(|conflicted| conflicted == path))
@@ -195,7 +192,7 @@ pub async fn read_recovery_preflight(
         can_continue,
         can_skip: matches!(
             operation,
-            WorkflowOperation::CherryPick | WorkflowOperation::Revert
+            WorkflowOperation::CherryPick | WorkflowOperation::Revert | WorkflowOperation::Rebase
         ) && only_conflicts_are_dirty,
         can_abort: only_conflicts_are_dirty,
     })

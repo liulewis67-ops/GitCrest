@@ -893,7 +893,8 @@ export interface paths {
         /** Inspect a clean branch and bounded commit todo before rebase */
         get: operations["preflightRepositoryRebase"];
         put?: never;
-        post?: never;
+        /** Queue a snapshot-bound rebase after creating a rollback reference */
+        post: operations["startRepositoryRebase"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1368,6 +1369,11 @@ export interface components {
             previewRevision: string;
             canStart: boolean;
         };
+        RebaseRequest: {
+            expectedHeadOid: string;
+            expectedOntoOid: string;
+            previewRevision: string;
+        };
         WorkflowRequest: {
             /** @enum {string} */
             action: "merge" | "cherryPick" | "revert";
@@ -1378,7 +1384,7 @@ export interface components {
             repoId: components["schemas"]["RepoId"];
             taskId: string;
             /** @enum {string} */
-            operation: "merge" | "cherryPick" | "revert" | "shelfApply";
+            operation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
             headOid: string | null;
             dirtyPaths: string[];
             omittedDirtyPathCount: number;
@@ -1393,7 +1399,7 @@ export interface components {
             /** @enum {string} */
             action: "continue" | "skip" | "abort";
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
             expectedHeadOid: string;
             expectedConflictedPaths: string[];
         };
@@ -1402,7 +1408,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            operation: "merge" | "cherryPick" | "revert" | "shelfApply";
+            operation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
             headOid: string | null;
             baseContent: string | null;
             oursContent: string | null;
@@ -1415,7 +1421,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
             expectedHeadOid: string;
             expectedResultRevision: string;
         };
@@ -1423,7 +1429,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert" | "shelfApply";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
             expectedHeadOid: string;
             expectedResultRevision: string;
             content: string;
@@ -4409,6 +4415,74 @@ export interface operations {
             };
             406: components["responses"]["UnsupportedVersion"];
             /** @description Git could not complete the bounded rebase preview. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    startRepositoryRebase: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebaseRequest"];
+            };
+        };
+        responses: {
+            /** @description Rebase task accepted; its task log records the created rollback reference. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The request is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The branch is dirty or another Git operation is active. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The reviewed branch or commit sequence is stale. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git cannot be started. */
             503: {
                 headers: {
                     [name: string]: unknown;
