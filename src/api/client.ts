@@ -61,6 +61,12 @@ export class GitCrestApiClient {
     private readonly fetcher: typeof fetch = globalThis.fetch.bind(globalThis),
   ) {}
 
+  withSignal(signal: AbortSignal): GitCrestApiClient {
+    return new GitCrestApiClient(this.baseUrl, this.token, (input, init) =>
+      this.fetcher(input, { ...init, signal }),
+    );
+  }
+
   async getVersion(): Promise<VersionResponse> {
     const response = await this.request<paths["/api/version"]["get"]["responses"][200]["content"]["application/json"]>(
       "/api/version",

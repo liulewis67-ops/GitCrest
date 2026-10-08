@@ -64,6 +64,7 @@ export function DiffWindow() {
 
   useEffect(() => {
     let active = true;
+    const controller = new AbortController();
     if (!repoId || !initialPath || !["workingTree", "index", "commit"].includes(initialScope || "") || (initialScope === "commit" && !initialCommitOid)) {
       setError("This Diff window request is invalid. Reopen the file from GitCrest.");
       return () => { active = false; };
@@ -75,7 +76,7 @@ export function DiffWindow() {
     }
     void bridge.getSidecarConnection().then(async (connection) => {
       if (connection.windowAccess !== "readOnly") throw new Error("Diff windows must use read-only access.");
-      const client = new GitCrestApiClient(connection.baseUrl, connection.token);
+      const client = new GitCrestApiClient(connection.baseUrl, connection.token).withSignal(controller.signal);
       const initial: DiffTab = {
         key: tabKey(initialPath, initialScope as DiffTab["scope"], initialCommitOid),
         path: initialPath,
@@ -97,30 +98,38 @@ export function DiffWindow() {
     }).catch((reason: unknown) => {
       if (active) setError(reason instanceof Error ? reason.message : "Could not load repository files.");
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [initialCommitOid, initialPath, initialScope, repoId]);
 
   useEffect(() => {
     if (!api || !activeTab) return;
     let active = true;
+    const controller = new AbortController();
+    const requestClient = api.withSignal(controller.signal);
     setDocument(undefined);
     setBlame(undefined);
     setError("");
     setView("split");
     setLoading(true);
     const request = activeTab.scope === "commit" && activeTab.commitOid
-      ? api.getRepositoryCommitDiff(repoId, activeTab.commitOid, activeTab.path)
+      ? requestClient.getRepositoryCommitDiff(repoId, activeTab.commitOid, activeTab.path)
       : activeTab.scope === "workingTree" || activeTab.scope === "index"
-        ? api.getFileDiff(repoId, activeTab.path, activeTab.scope)
+        ? requestClient.getFileDiff(repoId, activeTab.path, activeTab.scope)
         : Promise.reject(new Error("This historical Diff has no commit ID."));
     void request.then((result) => {
       if (active) setDocument(result);
     }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : "Could not load this file diff.");
+      if (active && !controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load this file diff.");
     }).finally(() => {
       if (active) setLoading(false);
     });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, [activeTab?.key, api, repoId]);
 
   async function openBlame() {

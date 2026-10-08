@@ -5,6 +5,20 @@ const baseUrl = "http://127.0.0.1:43210";
 const token = "test-session-token";
 
 describe("GitCrestApiClient", () => {
+  it("passes an AbortSignal to fetch and aborts an in-flight request", async () => {
+    const fetcher = vi.fn<typeof fetch>((_input, init) => new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("The request was aborted.", "AbortError")));
+    }));
+    const controller = new AbortController();
+    const request = new GitCrestApiClient(baseUrl, token, fetcher)
+      .withSignal(controller.signal)
+      .listRepositories();
+
+    expect(fetcher.mock.calls[0]?.[1]?.signal).toBe(controller.signal);
+    controller.abort();
+    await expect(request).rejects.toMatchObject({ name: "AbortError" });
+  });
+
   it("stores AI provider settings and cloud credentials through separate versioned APIs", async () => {
     const settings = { provider: "openAiCompatible" as const, baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true };
     const fetcher = vi.fn<typeof fetch>()
