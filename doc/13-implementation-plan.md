@@ -476,4 +476,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：pnpm test（108 tests）、pnpm build、git diff --check 通过。UI 用例覆盖 Reset 模式/本地改动影响、Rebase 编辑 todo/已发布提交/drop 与远程删除 OID/remote-only commits/遗漏路径数量。
 - 证据：src/features/workflows/ResetDialog.tsx、src/features/workflows/RebaseDialog.tsx、src/features/branches/RemoteBranchDeleteDialog.tsx、src/App.css、tests/unit/reset-dialog.test.tsx、tests/unit/rebase-dialog.test.tsx、tests/unit/remote-branch-delete-dialog.test.tsx。
 - 限制：解释覆盖已由现有预检返回的提交计数和最多 200 条路径；不会把未返回的路径猜测为完整列表。
-- 完成 commit：待提交后补记。
+- 完成 commit：1c1f73f。
