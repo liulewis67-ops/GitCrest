@@ -7,6 +7,7 @@ import { CloneDialog } from "./features/cloning/CloneDialog";
 import { RemoteManager } from "./features/remotes/RemoteManager";
 import { PushDialog } from "./features/remotes/PushDialog";
 import { PullDialog } from "./features/remotes/PullDialog";
+import { ShelfCenter } from "./features/shelves/ShelfCenter";
 import { PushTargetDialog, type PushTarget } from "./features/remotes/PushTargetDialog";
 import { SplitDiff } from "./features/diff/SplitDiff";
 import type { components } from "./api/schema";
@@ -1638,7 +1639,19 @@ function App() {
                 onSetDefault={setRepositoryDefaultRemote}
                 onSetUpstream={setRepositoryBranchUpstream}
               />
-              <div className="navGroup"><div className="navGroupTitle">Shelves</div><button className="navEmpty navAction" type="button" disabled title="Shelves arrive with S5.3">No shelves</button></div>
+              {selectedRepository && apiRef.current ? <ShelfCenter
+                key={selectedRepository.repoId}
+                api={apiRef.current}
+                repoId={selectedRepository.repoId}
+                headOid={selectedRepository.head}
+                files={activeStatus?.files || []}
+                disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
+                refreshKey={historyRefreshKey}
+                onTaskSubmitted={() => {
+                  if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId);
+                  void refreshTasks();
+                }}
+              /> : <div className="navGroup"><div className="navGroupTitle">Shelves</div><div className="navEmpty">Open a repository to manage shelves</div></div>}
               <div className="panelFooter"><span className="statusIcon" aria-hidden="true">●</span> {connected ? "Engine ready" : connecting ? "Connecting to engine" : "Engine unavailable"}</div>
             </aside>
             <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />

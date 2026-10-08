@@ -551,6 +551,47 @@ button:disabled { cursor: not-allowed; }
 .branchSwitchOptions .secondaryButton, .dialogActions .secondaryButton, .dialogActions .primaryButton { min-height: 29px; font-size: 9px; }
 .dialogActions { display: flex; justify-content: flex-end; gap: 7px; }
 
+.shelfCenter { display: grid; gap: 7px; padding: 0 11px 13px; }
+.shelfCreateButton { display: flex; align-items: center; gap: 6px; min-height: 27px; padding: 0 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 9px; text-align: left; }
+.shelfCreateButton:hover:not(:disabled) { border-color: var(--line-strong); background: var(--accent-soft); color: var(--text); }
+.shelfCreateButton:disabled { cursor: not-allowed; opacity: .55; }
+.shelfListItem { display: flex; align-items: center; min-width: 0; gap: 3px; border-radius: 5px; }
+.shelfListItem.active { background: var(--accent-soft); }
+.shelfSelectButton { display: grid; flex: 1; min-width: 0; gap: 3px; padding: 6px 5px; border: 0; background: transparent; color: var(--text); cursor: pointer; text-align: left; }
+.shelfItemName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; font-weight: 600; }
+.shelfItemMeta { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
+.shelfDeleteButton { width: 24px; height: 24px; flex: 0 0 24px; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 15px; }
+.shelfDeleteButton:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); }
+.shelfDetail { display: grid; min-width: 0; gap: 7px; margin-top: 3px; padding: 9px 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.shelfDetailHeading { display: flex; justify-content: space-between; gap: 5px; font-size: 9px; }
+.shelfDetail > p { margin: 0; color: var(--text-muted); font-size: 8px; line-height: 1.45; }
+.shelfPathList { display: grid; max-height: 84px; overflow: auto; gap: 3px; }
+.shelfPathList code { overflow: hidden; color: var(--text-secondary); text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
+.shelfPatchPreview { max-height: 180px; overflow: auto; margin: 0; padding: 7px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text-secondary); font: 8px/1.45 var(--font-mono); white-space: pre; }
+.shelfApplyStatus { display: grid; gap: 3px; color: var(--danger); font-size: 8px; line-height: 1.45; }
+.shelfApplyStatus.ready { color: var(--green); }
+.shelfApplyStatus span { color: var(--text-muted); font-family: var(--font-mono); }
+.shelfActions { display: grid; gap: 5px; }
+.shelfActions .primaryButton, .shelfActions .secondaryButton { min-height: 27px; padding: 0 7px; font-size: 8px; }
+.shelfInlineError { overflow-wrap: anywhere; color: var(--danger); font-size: 8px; line-height: 1.45; }
+.shelfBackdrop { z-index: 20; align-items: center; padding: 18px; }
+.shelfComposer, .shelfDeleteDialog { display: grid; gap: 10px; width: min(620px, 100%); max-height: min(760px, 90vh); overflow: auto; padding: 16px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-raised); box-shadow: var(--shadow); }
+.shelfField { display: grid; gap: 5px; color: var(--text-secondary); font-size: 9px; font-weight: 600; }
+.shelfField input, .shelfField textarea, .shelfField select { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); color: var(--text); font-size: 10px; font-weight: 400; }
+.shelfField textarea { resize: vertical; }
+.shelfFilePicker { display: grid; max-height: 38vh; overflow: auto; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+.shelfFileChoice { display: grid; gap: 4px; padding: 5px; border-bottom: 1px solid var(--line); }
+.shelfFileChoice > label, .shelfHunkChoice { display: flex; align-items: center; min-width: 0; gap: 7px; color: var(--text-secondary); font-size: 9px; }
+.shelfFilePath { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); }
+.shelfFileState { color: var(--text-muted); font-size: 8px; }
+.shelfHunkPicker { display: grid; gap: 5px; padding: 5px 0 2px 21px; color: var(--text-muted); font-size: 8px; }
+.shelfHunkPicker summary { cursor: pointer; }
+.shelfHunkActions { display: flex; gap: 8px; }
+.shelfHunkChoice code { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; font-size: 8px; }
+.shelfDeleteDialog > p { margin: 0; color: var(--text-secondary); font-size: 10px; line-height: 1.5; }
+.dangerButton { min-height: 29px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--danger) 60%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); cursor: pointer; font-size: 9px; font-weight: 650; }
+.dangerButton:disabled { cursor: not-allowed; opacity: .55; }
+
 .taskCenterButton { display: inline-flex; align-items: center; gap: 7px; }
 .taskBackdrop { align-items: center; padding: 20px; }
 .taskCenter { display: flex; flex-direction: column; width: min(680px, 100%); max-height: min(680px, 84vh); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); box-shadow: var(--shadow); }
