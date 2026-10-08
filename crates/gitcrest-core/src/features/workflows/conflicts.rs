@@ -6,18 +6,16 @@ use std::{
     time::Duration,
 };
 
-use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, io::AsyncWriteExt, process::Command};
 
-use crate::{domain::error::ConflictError, workflows::WorkflowOperation};
+use crate::domain::{error::ConflictError, workflow::WorkflowOperation};
 
 const MAX_CONFLICT_FILE_BYTES: usize = 1024 * 1024;
 const MAX_STDERR_BYTES: usize = 16 * 1024;
 const GIT_DEADLINE: Duration = Duration::from_secs(10);
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConflictFile {
     pub repo_id: String,
     pub task_id: String,

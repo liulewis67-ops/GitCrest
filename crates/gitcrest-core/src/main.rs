@@ -238,11 +238,11 @@ mod tests {
     fn maps_pull_waiting_tasks_to_their_git_recovery_operations() {
         assert_eq!(
             workflows::recovery::workflow_operation_for_task("pullMerge"),
-            Some(workflows::WorkflowOperation::Merge)
+            Some(crate::domain::workflow::WorkflowOperation::Merge)
         );
         assert_eq!(
             workflows::recovery::workflow_operation_for_task("pullRebase"),
-            Some(workflows::WorkflowOperation::Rebase)
+            Some(crate::domain::workflow::WorkflowOperation::Rebase)
         );
         assert_eq!(
             workflows::recovery::workflow_operation_for_task("fetch"),

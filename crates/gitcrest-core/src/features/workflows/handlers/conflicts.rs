@@ -7,8 +7,8 @@ use axum::{
 use super::super::conflicts;
 use super::super::{
     dto::{
-        WorkflowConflictFileQuery, WorkflowConflictMutationRequest, WorkflowConflictSaveRequest,
-        WorkflowConflictSuggestionRequest,
+        ConflictFileDto, WorkflowConflictFileQuery, WorkflowConflictMutationRequest,
+        WorkflowConflictSaveRequest, WorkflowConflictSuggestionRequest,
     },
     service as workflows,
 };
@@ -24,7 +24,7 @@ pub(in crate::workflows) async fn read_workflow_conflict_file(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowConflictFileQuery>, QueryRejection>,
-) -> Result<Json<conflicts::ConflictFile>, ApiError> {
+) -> Result<Json<ConflictFileDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -92,6 +92,7 @@ pub(in crate::workflows) async fn read_workflow_conflict_file(
         &query.path,
     )
     .await
+    .map(ConflictFileDto::from)
     .map(Json)
     .map_err(ApiError::from_conflict_error)
 }

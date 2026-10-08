@@ -7,6 +7,8 @@ use tokio::{
     process::Command,
 };
 
+use crate::domain::workflow::WorkflowOperation;
+
 const MAX_REMOTE_OUTPUT: usize = 8 * 1024 * 1024;
 const REMOTE_READ_DEADLINE: Duration = Duration::from_secs(20);
 
@@ -18,8 +20,7 @@ pub struct RemoteSnapshot {
     pub remotes: Vec<RemoteRef>,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct RemoteBranchDeletePreview {
     pub repo_id: String,
     pub remote_name: String,
@@ -30,7 +31,7 @@ pub struct RemoteBranchDeletePreview {
     pub commits_only_on_remote: u32,
     pub affected_paths: Vec<String>,
     pub omitted_path_count: u32,
-    pub operation_in_progress: Option<crate::workflows::WorkflowOperation>,
+    pub operation_in_progress: Option<WorkflowOperation>,
     pub preview_revision: String,
     pub can_delete: bool,
 }

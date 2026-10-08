@@ -5,7 +5,7 @@ use axum::{
 };
 
 use super::super::{
-    dto::{WorkflowRecoveryQuery, WorkflowRecoveryRequest},
+    dto::{WorkflowRecoveryPreflightDto, WorkflowRecoveryQuery, WorkflowRecoveryRequest},
     service as workflows,
 };
 use crate::{
@@ -24,7 +24,7 @@ pub(in crate::workflows) async fn preflight_repository_workflow_recovery(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<WorkflowRecoveryQuery>, QueryRejection>,
-) -> Result<Json<workflows::WorkflowRecoveryPreflight>, ApiError> {
+) -> Result<Json<WorkflowRecoveryPreflightDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -70,7 +70,7 @@ pub(in crate::workflows) async fn preflight_repository_workflow_recovery(
             "The repository operation no longer matches the waiting task. Refresh task state.",
         ));
     }
-    Ok(Json(preview))
+    Ok(Json(preview.into()))
 }
 
 pub(in crate::workflows) async fn recover_repository_workflow(
@@ -183,7 +183,7 @@ pub(in crate::workflows) async fn recover_repository_workflow(
                     ));
                 }
                 let task_context = context.clone();
-                if expected_operation == workflows::WorkflowOperation::ShelfApply {
+                if expected_operation == crate::domain::workflow::WorkflowOperation::ShelfApply {
                     let shelf_id = crate::workflows::recovery::shelf_apply_shelf_id(&waiting_task_operation)
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task no longer identifies its saved patch.".into()))?;
                     let before_tree = crate::workflows::recovery::shelf_apply_before_tree(&waiting_task_operation)

@@ -12,8 +12,8 @@ use crate::{
 
 use super::dto::{
     BranchUpstreamRequest, DefaultRemoteRequest, FetchRequest, PullRequest, PushRequest,
-    PushTargetQuery, RemoteBranchDeleteQuery, RemoteBranchDeleteRequest, RemoteNameRequest,
-    RemoteRequest, RequiredNullableRemoteName,
+    PushTargetQuery, RemoteBranchDeletePreviewDto, RemoteBranchDeleteQuery,
+    RemoteBranchDeleteRequest, RemoteNameRequest, RemoteRequest, RequiredNullableRemoteName,
 };
 use super::{pull, push};
 
@@ -649,7 +649,7 @@ pub(super) async fn preview_repository_remote_branch_delete(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<RemoteBranchDeleteQuery>, QueryRejection>,
-) -> Result<Json<remote_service::RemoteBranchDeletePreview>, ApiError> {
+) -> Result<Json<RemoteBranchDeletePreviewDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -669,6 +669,7 @@ pub(super) async fn preview_repository_remote_branch_delete(
         &query.remote_branch,
     )
     .await
+    .map(RemoteBranchDeletePreviewDto::from)
     .map(Json)
     .map_err(ApiError::from_remote_error)
 }

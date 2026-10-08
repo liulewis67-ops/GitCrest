@@ -303,7 +303,7 @@ impl GitCommandService {
         expected: &crate::remotes::pull::PullPreflight,
     ) -> Result<(), TaskFailure> {
         match crate::workflows::read_operation(repository_path).await {
-            Ok(Some(crate::workflows::WorkflowOperation::Rebase)) => {
+            Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
                 let rebase_apply = capture_git_output(
                     &self.git_program,
                     repository_path,
@@ -614,7 +614,7 @@ impl GitCommandService {
         if result.is_ok()
             && matches!(
                 crate::workflows::read_operation(repository_path).await,
-                Ok(Some(crate::workflows::WorkflowOperation::Rebase))
+                Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase))
             )
         {
             return Err(TaskFailure::WaitingForInput(
@@ -769,29 +769,29 @@ impl GitCommandService {
     pub async fn execute_workflow_recovery(
         &self,
         repository_path: &Path,
-        operation: crate::workflows::WorkflowOperation,
+        operation: crate::domain::workflow::WorkflowOperation,
         action: crate::domain::workflow::WorkflowRecoveryAction,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match (operation, action) {
-            (crate::workflows::WorkflowOperation::ShelfApply, _) => {
+            (crate::domain::workflow::WorkflowOperation::ShelfApply, _) => {
                 return Err(TaskFailure::Failed(
                     "This recovery action is not a Git merge, cherry-pick, or revert.".into(),
                 ));
             }
             (
-                crate::workflows::WorkflowOperation::Rebase,
+                crate::domain::workflow::WorkflowOperation::Rebase,
                 crate::domain::workflow::WorkflowRecoveryAction::Continue,
             ) => (
                 vec!["rebase".into(), "--continue".into()],
                 "Continue rebase",
             ),
             (
-                crate::workflows::WorkflowOperation::Rebase,
+                crate::domain::workflow::WorkflowOperation::Rebase,
                 crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => (vec!["rebase".into(), "--skip".into()], "Skip rebase commit"),
             (
-                crate::workflows::WorkflowOperation::Rebase,
+                crate::domain::workflow::WorkflowOperation::Rebase,
                 crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (vec!["rebase".into(), "--abort".into()], "Abort rebase"),
             (_, crate::domain::workflow::WorkflowRecoveryAction::Continue) => (
@@ -799,33 +799,33 @@ impl GitCommandService {
                 "Continue Git operation",
             ),
             (
-                crate::workflows::WorkflowOperation::CherryPick,
+                crate::domain::workflow::WorkflowOperation::CherryPick,
                 crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => (
                 vec!["cherry-pick".into(), "--skip".into()],
                 "Skip cherry-pick commit",
             ),
             (
-                crate::workflows::WorkflowOperation::Revert,
+                crate::domain::workflow::WorkflowOperation::Revert,
                 crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => (vec!["revert".into(), "--skip".into()], "Skip revert commit"),
             (
-                crate::workflows::WorkflowOperation::Merge,
+                crate::domain::workflow::WorkflowOperation::Merge,
                 crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (vec!["merge".into(), "--abort".into()], "Abort merge"),
             (
-                crate::workflows::WorkflowOperation::CherryPick,
+                crate::domain::workflow::WorkflowOperation::CherryPick,
                 crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (
                 vec!["cherry-pick".into(), "--abort".into()],
                 "Abort cherry-pick",
             ),
             (
-                crate::workflows::WorkflowOperation::Revert,
+                crate::domain::workflow::WorkflowOperation::Revert,
                 crate::domain::workflow::WorkflowRecoveryAction::Abort,
             ) => (vec!["revert".into(), "--abort".into()], "Abort revert"),
             (
-                crate::workflows::WorkflowOperation::Merge,
+                crate::domain::workflow::WorkflowOperation::Merge,
                 crate::domain::workflow::WorkflowRecoveryAction::Skip,
             ) => {
                 return Err(TaskFailure::Failed(
@@ -833,7 +833,7 @@ impl GitCommandService {
                 ));
             }
         };
-        let environment = if operation == crate::workflows::WorkflowOperation::Rebase
+        let environment = if operation == crate::domain::workflow::WorkflowOperation::Rebase
             && action == crate::domain::workflow::WorkflowRecoveryAction::Continue
         {
             vec![(OsString::from("GIT_EDITOR"), OsString::from("true"))]
@@ -1395,11 +1395,11 @@ async fn workflow_command_result(
         Ok(Some(operation)) => Err(TaskFailure::WaitingForInput(format!(
             "{} stopped with an unresolved Git operation. Resolve the listed files, then continue or abort it.",
             match operation {
-                crate::workflows::WorkflowOperation::Merge => "Merge",
-                crate::workflows::WorkflowOperation::CherryPick => "Cherry-pick",
-                crate::workflows::WorkflowOperation::Revert => "Revert",
-                crate::workflows::WorkflowOperation::Rebase => "Rebase",
-                crate::workflows::WorkflowOperation::ShelfApply => "Shelf apply",
+                crate::domain::workflow::WorkflowOperation::Merge => "Merge",
+                crate::domain::workflow::WorkflowOperation::CherryPick => "Cherry-pick",
+                crate::domain::workflow::WorkflowOperation::Revert => "Revert",
+                crate::domain::workflow::WorkflowOperation::Rebase => "Rebase",
+                crate::domain::workflow::WorkflowOperation::ShelfApply => "Shelf apply",
             }
         ))),
         Ok(None) | Err(_) => result,

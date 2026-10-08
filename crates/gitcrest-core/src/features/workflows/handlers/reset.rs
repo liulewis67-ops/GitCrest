@@ -4,7 +4,9 @@ use axum::{
     Json,
 };
 
-use super::super::dto::{ResetPreviewQuery, ResetRequest, ResetRestoreRequest};
+use super::super::dto::{
+    ResetBackupSnapshotDto, ResetPreviewDto, ResetPreviewQuery, ResetRequest, ResetRestoreRequest,
+};
 use super::super::reset;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
@@ -16,7 +18,7 @@ pub(in crate::workflows) async fn preflight_repository_reset(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<ResetPreviewQuery>, QueryRejection>,
-) -> Result<Json<reset::ResetPreview>, ApiError> {
+) -> Result<Json<ResetPreviewDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -36,6 +38,7 @@ pub(in crate::workflows) async fn preflight_repository_reset(
         query.mode,
     )
     .await
+    .map(ResetPreviewDto::from)
     .map(Json)
     .map_err(ApiError::from_workflow_error)
 }
@@ -152,7 +155,7 @@ pub(in crate::workflows) async fn start_repository_reset(
 pub(in crate::workflows) async fn list_repository_reset_backups(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
-) -> Result<Json<reset::ResetBackupSnapshot>, ApiError> {
+) -> Result<Json<ResetBackupSnapshotDto>, ApiError> {
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -160,6 +163,7 @@ pub(in crate::workflows) async fn list_repository_reset_backups(
         .map_err(ApiError::from_repository_error)?;
     reset::read_backup_snapshot(&target.repository_path)
         .await
+        .map(ResetBackupSnapshotDto::from)
         .map(Json)
         .map_err(ApiError::from_workflow_error)
 }

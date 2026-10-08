@@ -5,8 +5,8 @@ use sha2::{Digest, Sha256};
 use tokio::{io::AsyncReadExt, process::Command, time::timeout};
 
 use crate::{
-    domain::error::WorkflowError,
-    workflows::{read_worktree_state, WorkflowOperation},
+    domain::{error::WorkflowError, workflow::WorkflowOperation},
+    workflows::read_worktree_state,
 };
 
 const MAX_RESET_PATHS: usize = 200;
@@ -31,8 +31,7 @@ impl ResetMode {
     }
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct ResetPreview {
     pub repo_id: String,
     pub expected_head_oid: String,
@@ -57,8 +56,7 @@ pub struct ResetBackup {
     pub subject: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct ResetBackupSnapshot {
     pub head_oid: Option<String>,
     pub current_branch: Option<String>,

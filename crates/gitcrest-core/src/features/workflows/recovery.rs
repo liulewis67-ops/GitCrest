@@ -2,8 +2,8 @@ use std::path::Path;
 
 use crate::api::error::ApiError;
 
-use super::{service as workflows, WorkflowOperation};
-use crate::domain::workflow::WorkflowRecoveryAction;
+use super::service as workflows;
+use crate::domain::workflow::{WorkflowOperation, WorkflowRecoveryAction};
 
 pub(crate) fn workflow_operation_for_task(operation: &str) -> Option<WorkflowOperation> {
     match operation {

@@ -11,8 +11,8 @@ use tokio::{
 
 use crate::{
     domain::error::WorkflowError,
-    domain::workflow::{RebaseAction, RebaseTodoItem},
-    workflows::{read_worktree_state, WorkflowOperation},
+    domain::workflow::{RebaseAction, RebaseTodoItem, WorkflowOperation},
+    workflows::read_worktree_state,
 };
 
 const MAX_COMMITS: usize = 200;
@@ -86,8 +86,7 @@ pub fn validate_todo(
     Ok(())
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct RebasePreview {
     pub repo_id: String,
     pub head_oid: Option<String>,
@@ -111,8 +110,7 @@ pub struct RebaseBackup {
     pub subject: String,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct RebaseBackupSnapshot {
     pub head_oid: Option<String>,
     pub current_branch: Option<String>,

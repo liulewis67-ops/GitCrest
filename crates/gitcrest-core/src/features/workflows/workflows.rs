@@ -1,26 +1,18 @@
 use std::{path::Path, process::Stdio, time::Duration};
 
-use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
 };
 
-use crate::domain::{error::WorkflowError, workflow::WorkflowAction};
+use crate::domain::{
+    error::WorkflowError,
+    workflow::{WorkflowAction, WorkflowOperation},
+};
 
 const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PATHS: usize = 200;
 const PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
-
-#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum WorkflowOperation {
-    Merge,
-    CherryPick,
-    Revert,
-    Rebase,
-    ShelfApply,
-}
 
 #[derive(Clone, Debug)]
 pub struct WorkflowPreflight {
@@ -38,8 +30,7 @@ pub struct WorkflowPreflight {
     pub can_start: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug)]
 pub struct WorkflowRecoveryPreflight {
     pub repo_id: String,
     pub task_id: String,
@@ -419,8 +410,8 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{parse_status, read_preflight, WorkflowOperation};
-    use crate::domain::workflow::WorkflowAction;
+    use super::{parse_status, read_preflight};
+    use crate::domain::workflow::{WorkflowAction, WorkflowOperation};
 
     #[test]
     fn parses_worktree_and_conflict_paths_with_a_bounded_list() {

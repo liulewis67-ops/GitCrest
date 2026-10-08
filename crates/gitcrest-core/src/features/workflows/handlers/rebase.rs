@@ -4,7 +4,10 @@ use axum::{
     Json,
 };
 
-use super::super::dto::{RebasePreviewQuery, RebaseRequest, RebaseRollbackRequest};
+use super::super::dto::{
+    RebaseBackupSnapshotDto, RebasePreviewDto, RebasePreviewQuery, RebaseRequest,
+    RebaseRollbackRequest,
+};
 use super::super::rebase;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
@@ -16,7 +19,7 @@ pub(in crate::workflows) async fn preflight_repository_rebase(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<RebasePreviewQuery>, QueryRejection>,
-) -> Result<Json<rebase::RebasePreview>, ApiError> {
+) -> Result<Json<RebasePreviewDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -31,6 +34,7 @@ pub(in crate::workflows) async fn preflight_repository_rebase(
         .map_err(ApiError::from_repository_error)?;
     rebase::read_preview(repo_id, &target.repository_path, &query.onto_oid)
         .await
+        .map(RebasePreviewDto::from)
         .map(Json)
         .map_err(ApiError::from_workflow_error)
 }
@@ -198,7 +202,7 @@ pub(in crate::workflows) async fn start_repository_rebase(
 pub(in crate::workflows) async fn list_repository_rebase_backups(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
-) -> Result<Json<rebase::RebaseBackupSnapshot>, ApiError> {
+) -> Result<Json<RebaseBackupSnapshotDto>, ApiError> {
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -206,6 +210,7 @@ pub(in crate::workflows) async fn list_repository_rebase_backups(
         .map_err(ApiError::from_repository_error)?;
     rebase::read_backup_snapshot(&target.repository_path)
         .await
+        .map(RebaseBackupSnapshotDto::from)
         .map(Json)
         .map_err(ApiError::from_workflow_error)
 }
