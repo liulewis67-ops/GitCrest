@@ -733,3 +733,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：分支重命名/删除与远端分支删除 handlers/DTO 尚在 `main.rs`；继续分组迁移并收拢共享分支验证 helper。
 - 证据：`crates/gitcrest-core/src/features/branches/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`76db697`
+
+### 后端 branch rename/delete handlers 与 DTO 拆分 — 小阶段 17
+- 状态：已完成（本地分支重命名、删除及删除预览进入 feature）
+- 日期：2026-10-09
+- 交付：将本地分支重命名、删除预览和删除 handlers 与 DTO 从 `main.rs` 迁至 `features/branches/{handlers,dto}.rs`；本地分支存在性验证 helper 收入 feature 并由重命名/删除/切换流程共享。保留当前分支保护、未合并提交确认、收藏名迁移/清理、任务语义和错误响应。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：远端分支删除 preview/execute 及 remotes feature 的 handlers/DTO 仍在 `main.rs`；继续迁移并明确 remotes 与 branches 的职责边界。
+- 证据：`crates/gitcrest-core/src/features/branches/{dto,handlers,mod,routes}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`864e79a`
