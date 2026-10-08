@@ -1607,3 +1607,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：命令面板和菜单仍各自组合命令可用状态及回调；后续可继续统一命令动作模型与快捷键可用性来源，避免入口条件漂移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/app/use-global-shortcuts.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 4.1、8 节。
 - 实施 commit：`3cb7f9f`
+
+### 主题偏好与系统主题同步迁入 settings feature — 小阶段 112
+- 状态：已完成（主题读取、持久化、系统变化订阅和循环切换由 settings model 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/settings/model/use-theme-preference.ts`，定义 system/light/dark 类型与循环顺序，安全读取 localStorage，订阅系统浅色偏好并同步根元素 `data-theme`，持久化用户选择且在存储不可用时保留会话状态。settings 公开入口导出 hook 和类型；App 移除主题初始化及系统主题副作用，只消费主题值和切换动作。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留 tree-sitter `eval`、commits 模块动态/静态导入提示及 Monaco contribution 大 chunk 警告。
+- 限制/后续：快捷键偏好仍由 App 读取与持久化，settings feature 可继续接管其用户偏好生命周期；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/features/settings/model/use-theme-preference.ts`、`src/features/settings/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 5.1 节。
+- 实施 commit：`457c5bd`
