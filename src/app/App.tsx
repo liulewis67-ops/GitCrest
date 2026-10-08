@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties, type K
 import { GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type StatusSnapshotResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { bootstrapApp } from "./bootstrap";
+import { createEventSequenceTracker } from "../api/events";
 import { CommitDetails, CommitGraph } from "../features/history/CommitGraph";
 import { RemoteManager } from "../features/remotes/RemoteManager";
 import { ShelfCenter } from "../features/shelves/ShelfCenter";
@@ -16,6 +17,7 @@ import { useRepositoryStatus } from "../features/changes/model/use-repository-st
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
+import { getRepositoryEventRefreshPlan } from "../features/repositories/model/repository-event-refresh-plan";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
@@ -148,7 +150,6 @@ function App() {
   const [version, setVersion] = useState("");
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
-  const eventSequenceRef = useRef<number>();
   const [remoteActionBusy, setRemoteActionBusy] = useState(false);
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [pushOpen, setPushOpen] = useState(false);
@@ -1356,6 +1357,7 @@ function App() {
   useEffect(() => {
     let cancelled = false;
     let unsubscribeFromEvents: (() => void) | undefined;
+    const isSequenceGap = createEventSequenceTracker();
 
     async function connect() {
       try {
@@ -1368,71 +1370,27 @@ function App() {
         }
         await refreshRepositories(api, true);
 
-        const unsubscribe = await bootstrap.subscribeToEvents((event: components["schemas"]["EventEnvelope"]) => {
-          const eventSequence = Number(event.eventId);
-          const previousEventSequence = eventSequenceRef.current;
-          const sequenceGap = Number.isSafeInteger(eventSequence)
-            && previousEventSequence !== undefined
-            && event.type !== "connection.resyncRequired"
-            && eventSequence !== previousEventSequence + 1;
-          if (Number.isSafeInteger(eventSequence)) eventSequenceRef.current = eventSequence;
-          if (sequenceGap) {
-            void refreshRepositories(api).catch(() => undefined);
-            const repoId = selectedRepositoryRef.current?.repoId;
-            if (repoId) {
-              void refreshRepositoryStatusScope(repoId, true);
-              void refreshRepositoryBranches(repoId);
-              void refreshRepositoryRemotes(repoId);
-              setHistoryRefreshKey((current) => current + 1);
-            }
-            return;
-          }
-          if (event.type === "connection.resyncRequired") {
+        const unsubscribe = await bootstrap.subscribeToEvents((event) => {
+          const plan = getRepositoryEventRefreshPlan(
+            event,
+            isSequenceGap(event),
+            selectedRepositoryRef.current?.repoId,
+            isRepositoryTabOpen,
+          );
+          if (!plan) return;
+          if (plan.refreshRepositories) {
             void refreshRepositories(api).catch((syncError: unknown) => {
-              if (!cancelled) {
+              if (plan.reportRepositoryRefreshError && !cancelled) {
                 setStatus(syncError instanceof Error ? syncError.message : "Failed to refresh repository state");
               }
             });
-            const repoId = selectedRepositoryRef.current?.repoId;
-            if (repoId) {
-              void refreshRepositoryStatusScope(repoId, true);
-              void refreshRepositoryBranches(repoId);
-              void refreshRepositoryRemotes(repoId);
-              setHistoryRefreshKey((current) => current + 1);
-            }
-          } else if (event.repoId && event.type === "status.changed") {
-            const payload = event.payload;
-            const paths = Array.isArray(payload.paths) ? payload.paths.filter((path): path is string => typeof path === "string") : [];
-            void refreshRepositoryStatusScope(event.repoId, payload.full === true || paths.length === 0, paths);
-          } else if (event.repoId && event.type === "repository.updated") {
-            void refreshRepositories(api).catch(() => undefined);
-            void refreshRepositoryStatusScope(event.repoId, true);
-            void refreshRepositoryBranches(event.repoId);
-            void refreshRepositoryRemotes(event.repoId);
-          } else if (event.repoId && event.type === "log.refsChanged") {
-            if (isRepositoryTabOpen(event.repoId)) {
-              void refreshRepositoryBranches(event.repoId);
-              setHistoryRefreshKey((current) => current + 1);
-            }
-          } else if (![
-            "repository.updated",
-            "status.changed",
-            "log.refsChanged",
-            "task.started",
-            "task.progress",
-            "task.completed",
-            "task.failed",
-            "connection.resyncRequired",
-          ].includes(event.type)) {
-            void refreshRepositories(api).catch(() => undefined);
-            const repoId = event.repoId || selectedRepositoryRef.current?.repoId;
-            if (repoId) {
-              void refreshRepositoryStatusScope(repoId, true);
-              void refreshRepositoryBranches(repoId);
-              void refreshRepositoryRemotes(repoId);
-              if (isRepositoryTabOpen(repoId)) setHistoryRefreshKey((current) => current + 1);
-            }
           }
+          if (plan.repoId && plan.status) {
+            void refreshRepositoryStatusScope(plan.repoId, plan.status.full, plan.status.paths);
+          }
+          if (plan.repoId && plan.refreshBranches) void refreshRepositoryBranches(plan.repoId);
+          if (plan.repoId && plan.refreshRemotes) void refreshRepositoryRemotes(plan.repoId);
+          if (plan.refreshHistory) setHistoryRefreshKey((current) => current + 1);
         });
         if (cancelled) unsubscribe();
         else unsubscribeFromEvents = unsubscribe;
