@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { components } from "../../src/api/schema";
-import App from "../../src/App";
+import App from "../../src/app/App";
 
 const resyncEvent: components["schemas"]["EventEnvelope"] = {
   eventId: "event-1",
