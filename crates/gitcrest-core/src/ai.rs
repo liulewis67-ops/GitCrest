@@ -2,7 +2,7 @@ use axum::http::Uri;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, net::IpAddr, time::Duration};
 
-use crate::diff::{DiffRowKind, DiffScope};
+use crate::diff::{DiffDocument, DiffRowKind, DiffScope, DiffSelection};
 
 pub const MAX_REQUEST_FILES: usize = 20;
 pub const MAX_REQUEST_DIFF_BYTES: usize = 1024 * 1024;
@@ -46,6 +46,8 @@ pub struct AiFileSelection {
     pub path: String,
     pub scope: DiffScope,
     pub revision: String,
+    #[serde(default)]
+    pub selections: Option<Vec<DiffSelection>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -90,6 +92,16 @@ pub fn validate_request(request: &AiRequest) -> Result<(), AiRequestError> {
             || file.revision.is_empty()
             || !matches!(file.scope, DiffScope::Index | DiffScope::WorkingTree)
             || !selected.insert((file.path.as_str(), file.scope))
+            || file.selections.as_ref().is_some_and(|selections| {
+                selections.is_empty()
+                    || selections.len() > 500
+                    || selections
+                        .iter()
+                        .map(|item| (item.hunk_index, item.row_index))
+                        .collect::<HashSet<_>>()
+                        .len()
+                        != selections.len()
+            })
         {
             return Err(AiRequestError::Invalid);
         }
@@ -97,7 +109,7 @@ pub fn validate_request(request: &AiRequest) -> Result<(), AiRequestError> {
     Ok(())
 }
 
-pub fn format_diff(document: &crate::diff::DiffDocument) -> String {
+pub fn format_diff(document: &DiffDocument) -> String {
     let mut output = String::new();
     for hunk in &document.hunks {
         output.push_str(&format!(
@@ -135,6 +147,79 @@ pub fn format_diff(document: &crate::diff::DiffDocument) -> String {
         }
     }
     output
+}
+
+pub fn format_selected_changes(
+    document: &DiffDocument,
+    selections: &[DiffSelection],
+) -> Result<String, AiRequestError> {
+    if selections.is_empty() || selections.len() > 500 {
+        return Err(AiRequestError::Invalid);
+    }
+    let mut selected = HashSet::new();
+    for selection in selections {
+        let hunk = document
+            .hunks
+            .get(selection.hunk_index)
+            .ok_or(AiRequestError::Invalid)?;
+        let rows = match selection.row_index {
+            Some(row_index) => {
+                let row = hunk.rows.get(row_index).ok_or(AiRequestError::Invalid)?;
+                if row.kind != DiffRowKind::Change {
+                    return Err(AiRequestError::Invalid);
+                }
+                vec![row_index]
+            }
+            None => hunk
+                .rows
+                .iter()
+                .enumerate()
+                .filter(|(_, row)| row.kind == DiffRowKind::Change)
+                .map(|(index, _)| index)
+                .collect(),
+        };
+        for row_index in rows {
+            if !selected.insert((selection.hunk_index, row_index)) {
+                return Err(AiRequestError::Invalid);
+            }
+        }
+    }
+    let mut output = String::new();
+    for hunk_index in 0..document.hunks.len() {
+        let hunk = &document.hunks[hunk_index];
+        let selected_rows = selected
+            .iter()
+            .filter(|(index, _)| *index == hunk_index)
+            .map(|(_, row)| *row)
+            .collect::<Vec<_>>();
+        if selected_rows.is_empty() {
+            continue;
+        }
+        output.push_str(&format!(
+            "@@ -{},{} +{},{} @@\n",
+            hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
+        ));
+        for row_index in selected_rows {
+            let row = &hunk.rows[row_index];
+            if let Some(text) = &row.old_text {
+                output.push('-');
+                output.push_str(text);
+                output.push('\n');
+            }
+            if let Some(text) = &row.new_text {
+                output.push('+');
+                output.push_str(text);
+                output.push('\n');
+            }
+            if output.len() > MAX_REQUEST_DIFF_BYTES {
+                return Err(AiRequestError::Invalid);
+            }
+        }
+    }
+    if output.is_empty() {
+        return Err(AiRequestError::Invalid);
+    }
+    Ok(output)
 }
 
 pub async fn request_provider(

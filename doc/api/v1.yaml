@@ -3958,6 +3958,10 @@ components:
         path: { type: string, minLength: 1, maxLength: 4096, description: Repository-relative path. }
         scope: { type: string, enum: [index, workingTree] }
         revision: { type: string, description: Exact revision returned by the local Diff API for this selected path/scope. }
+        selections:
+          type: array
+          maxItems: 500
+          items: { $ref: "#/components/schemas/DiffSelection" }
     AiReply:
       type: object
       additionalProperties: false

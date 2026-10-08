@@ -32,9 +32,9 @@ describe("GitCrestApiClient", () => {
     }));
     const client = new GitCrestApiClient(baseUrl, token, fetcher);
 
-    await expect(client.requestAiReview("repo/a", "summarize", [{ path: "src/only.ts", scope: "workingTree", revision: "sha256:reviewed" }])).resolves.toEqual(response);
+    await expect(client.requestAiReview("repo/a", "summarize", [{ path: "src/only.ts", scope: "index", revision: "sha256:reviewed", selections: [{ hunkIndex: 1, rowIndex: 2 }] }])).resolves.toEqual(response);
     expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Fa/ai/request`);
-    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prompt: "summarize", files: [{ path: "src/only.ts", scope: "workingTree", revision: "sha256:reviewed" }] }));
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prompt: "summarize", files: [{ path: "src/only.ts", scope: "index", revision: "sha256:reviewed", selections: [{ hunkIndex: 1, rowIndex: 2 }] }] }));
   });
 
   it("loads the authenticated bootstrap version without a v1 header", async () => {

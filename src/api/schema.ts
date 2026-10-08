@@ -1847,6 +1847,7 @@ export interface components {
             scope: "index" | "workingTree";
             /** @description Exact revision returned by the local Diff API for this selected path/scope. */
             revision: string;
+            selections?: components["schemas"]["DiffSelection"][];
         };
         AiReply: {
             /** @enum {string} */

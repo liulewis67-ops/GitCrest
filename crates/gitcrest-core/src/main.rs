@@ -3034,7 +3034,7 @@ async fn request_ai(
                 "A reviewed file scope is no longer eligible. Review the files again.",
             ));
         }
-        let document = diff::read(
+        let read = diff::read_with_patch(
             repo_id.clone(),
             &target.repository_path,
             file,
@@ -3042,8 +3042,8 @@ async fn request_ai(
         )
         .await
         .map_err(ApiError::from_diff_error)?;
-        if document.revision != selection.revision
-            || document.status != diff::DiffContentStatus::Text
+        if read.document.revision != selection.revision
+            || read.document.status != diff::DiffContentStatus::Text
         {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
@@ -3060,7 +3060,18 @@ async fn request_ai(
                 diff::DiffScope::Commit => "commit",
             }
         );
-        let text = ai::format_diff(&document);
+        let text = match selection.selections.as_deref() {
+            Some(selections) => {
+                ai::format_selected_changes(&read.document, selections).map_err(|_| {
+                    ApiError::new(
+                        StatusCode::BAD_REQUEST,
+                        ApiErrorCode::RequestInvalid,
+                        "The selected staged hunk or line range is invalid.",
+                    )
+                })?
+            }
+            None => ai::format_diff(&read.document),
+        };
         if text.is_empty() || text.len() > ai::MAX_REQUEST_DIFF_BYTES {
             return Err(ApiError::new(
                 StatusCode::BAD_REQUEST,
@@ -6691,13 +6702,17 @@ mod tests {
         git(&["init", "--quiet"]);
         git(&["config", "user.name", "GitCrest AI Test"]);
         git(&["config", "user.email", "ai-test@example.invalid"]);
-        std::fs::write(repository_path.join("selected.txt"), "base content\n").unwrap();
+        std::fs::write(
+            repository_path.join("selected.txt"),
+            "base content\nbase second line\n",
+        )
+        .unwrap();
         std::fs::write(repository_path.join("unselected-secret.txt"), "safe base\n").unwrap();
         git(&["add", "."]);
         git(&["commit", "--quiet", "-m", "seed"]);
         std::fs::write(
             repository_path.join("selected.txt"),
-            "selected review content\n",
+            "selected review content\nUNSELECTED_LINE_SECRET\n",
         )
         .unwrap();
         std::fs::write(
@@ -6728,6 +6743,11 @@ mod tests {
         )
         .await
         .unwrap();
+        let selected_row = preview.hunks[0]
+            .rows
+            .iter()
+            .position(|row| row.new_text.as_deref() == Some("selected review content"))
+            .unwrap();
 
         let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
             .await
@@ -6791,7 +6811,7 @@ mod tests {
         );
         let payload = serde_json::json!({
             "prompt": "Summarize only the selected change.",
-            "files": [{ "path": "selected.txt", "scope": "workingTree", "revision": preview.revision }]
+            "files": [{ "path": "selected.txt", "scope": "workingTree", "revision": preview.revision, "selections": [{ "hunkIndex": 0, "rowIndex": selected_row }] }]
         });
         let response = app
             .clone()
@@ -6812,6 +6832,7 @@ mod tests {
         assert!(headers.starts_with("POST /api/chat HTTP/1.1"));
         assert!(!headers.to_ascii_lowercase().contains("authorization:"));
         assert!(body.contains("selected review content"));
+        assert!(!body.contains("UNSELECTED_LINE_SECRET"));
         assert!(!body.contains("UNSELECTED_SECRET_NEVER_SEND"));
 
         std::fs::write(

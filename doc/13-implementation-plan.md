@@ -43,7 +43,7 @@
 | 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 已完成 |
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 已完成 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 进行中 |
-| 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 未开始 |
+| 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 进行中 |
 | 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–6 | 未开始 |
 
 阶段 2 完成加上阶段 3 的 3.1、3.2 是 Alpha 功能门槛；阶段 0–6 完成是 Beta 功能门槛；阶段 7 完成是 GA 门槛。阶段间可并行做准备工作，但不得跳过依赖验收或提前标完成。
@@ -113,7 +113,7 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 已完成 |
-| S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 未开始 |
+| S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 进行中 |
 | S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 未开始 |
 
 ## 11. 大阶段 7：性能、安全、跨平台发布
@@ -425,4 +425,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 安全验证：云端 host URL 验证要求 HTTPS 且拒绝 loopback、明文 HTTP、user-info/query；所有 provider 请求禁止 redirect，Ollama 不使用代理。服务端不信任 renderer 的 diff 内容，只根据路径/scope/revision 从当前仓库重建 payload；过期或大于限制时拒绝。密钥读取为 Zeroizing，仅用于 Authorization header；错误文本固定，不返回 provider body。
 - 证据：`crates/gitcrest-core/src/ai.rs`、`crates/gitcrest-core/src/credentials.rs`、`crates/gitcrest-core/src/diff.rs`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/Cargo.toml`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/features/settings/PrivacyScopePreview.tsx`、`tests/unit/api-client.test.ts`、`tests/unit/settings-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。
 - 限制：未对真实 OpenAI-compatible 云端账户发请求；当前仅使用 loopback mock 验证 Ollama 路径。Keychain 跨系统构建/运行验证属于 S7.4。
+- 完成 commit：`313bbdd`。
+
+### S6.2 — 子阶段 A：按已审核的 staged hunk/行生成请求（已完成；S6.2 整体进行中）
+- 状态：子阶段 A 已完成；S6.2 尚待 commit message 建议界面及过期/迟到响应处理验收。
+- 日期：2026-10-08
+- 交付：AI request API 的每个文件范围可选传递已审核的 hunk/变更行 selections，后端根据登记仓库中的当前 index Diff 和 revision 重建选中变更内容，不信任 renderer 提交的 diff 文本；校验空选择、重复项和最多 500 个选择。未指定 selections 时保留原有完整范围行为。
+- 测试：`pnpm test`（98 tests）、`pnpm build`、`cargo test -- --test-threads=1`（95 tests）、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`、`git diff --check` 均通过。首次并行全量 Rust 测试时一个无关 commit API 用例超过 10 秒 task 等待；单独重跑和随后 236.32 秒单线程全量复跑均通过。新增 API 集成测试验证请求只含选中行且不含同一文件未选行、其他文件和过期 revision；客户端单测验证 selections payload。
+- 证据：`crates/gitcrest-core/src/ai.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。
+- 限制：本子阶段只提供后端精确范围能力，不提供 commit message 生成界面；由 S6.2 子阶段 B 完成。
 - 完成 commit：待提交后补记。
