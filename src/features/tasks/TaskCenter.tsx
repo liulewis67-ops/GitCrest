@@ -34,12 +34,12 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
   const waitingTaskIds = useRef(new Set<string>());
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
-  const waitingTasks = tasks.filter((task) => task.status === "waitingForInput" && ["merge", "cherryPick", "revert"].includes(task.operation) && task.repoId);
+  const waitingTasks = tasks.filter((task) => task.status === "waitingForInput" && (["merge", "cherryPick", "revert"].includes(task.operation) || task.operation.startsWith("shelfApply:")) && task.repoId);
   const recoveryKey = waitingTasks.map((task) => `${task.taskId}:${task.repoId}`).sort().join("|");
   waitingTaskIds.current = new Set(waitingTasks.map((task) => task.taskId));
 
   useEffect(() => {
-    const currentWaitingTasks = tasksRef.current.filter((task) => task.status === "waitingForInput" && ["merge", "cherryPick", "revert"].includes(task.operation) && task.repoId);
+    const currentWaitingTasks = tasksRef.current.filter((task) => task.status === "waitingForInput" && (["merge", "cherryPick", "revert"].includes(task.operation) || task.operation.startsWith("shelfApply:")) && task.repoId);
     if (!api || currentWaitingTasks.length === 0) {
       setRecovery({});
       return;
@@ -84,7 +84,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
                 {task.operation === "clone" && (task.status === "failed" || task.status === "cancelled") && <><p className="cloneHelp">For HTTPS authentication failures, save a credential for the host in the clone dialog before retrying.</p><button className="textButton taskCancelButton" type="button" onClick={() => onRetryClone(task)}>Retry clone</button></>}
                 {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">Update the saved HTTPS credential for one of this repository’s remotes, then retry the fetch.</p><button className="secondaryButton" type="button" onClick={() => onConfigureCredentials(task)}>Configure credentials</button></div>}
                 {isFailedPush(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{task.errorCategory === "pushRejected" ? "The push was rejected. Fetch and review remote changes before retrying." : "The commit is still saved locally. Review the target and retry only the push when ready."} A force-with-lease action requires a fresh preview and explicit confirmation.</p><button className="secondaryButton" type="button" onClick={() => onReviewPush(task)}>Review and retry push</button></div>}
-                {task.status === "waitingForInput" && ["merge", "cherryPick", "revert"].includes(task.operation) && <div className="taskCredentialRecovery workflowRecovery"><p className="cloneHelp">Resolve the listed conflicts in the working tree, then refresh the recovery preview.</p>
+                {task.status === "waitingForInput" && (["merge", "cherryPick", "revert"].includes(task.operation) || task.operation.startsWith("shelfApply:")) && <div className="taskCredentialRecovery workflowRecovery"><p className="cloneHelp">Resolve the listed conflicts in the working tree, then refresh the recovery preview.</p>
                   {recovery[task.taskId]?.loading && <p role="status">Inspecting conflicts…</p>}
                   {recovery[task.taskId]?.error && <p className="taskCenterError" role="alert">{recovery[task.taskId]?.error}</p>}
                   {recovery[task.taskId]?.snapshot && <>

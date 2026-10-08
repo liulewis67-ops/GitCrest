@@ -163,6 +163,32 @@ pub fn restore_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
     }
 }
 
+pub fn restore_three_way_command(patch: Vec<u8>) -> StagingCommand {
+    StagingCommand {
+        arguments: ["apply", "--3way", "--index"]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+        input: Some(patch),
+        label: "Apply shelf with three-way conflict resolution",
+        log_label: "git apply --3way --index <shelf patch>",
+    }
+}
+
+pub fn unstage_paths_command(paths: &[String]) -> StagingCommand {
+    let mut arguments = ["reset", "-q", "HEAD", "--"]
+        .into_iter()
+        .map(OsString::from)
+        .collect::<Vec<_>>();
+    arguments.extend(paths.iter().map(OsString::from));
+    StagingCommand {
+        arguments,
+        input: None,
+        label: "Keep shelf changes unstaged",
+        log_label: "git reset -q HEAD -- <shelf paths>",
+    }
+}
+
 pub async fn check_apply(
     repository_path: &Path,
     patch: &[u8],

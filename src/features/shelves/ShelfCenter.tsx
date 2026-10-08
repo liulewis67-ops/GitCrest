@@ -274,12 +274,12 @@ export function ShelfCenter({
         <div className="shelfPathList">{detail.shelf.paths.map((path) => <code key={path}>{path}</code>)}</div>
         <pre className="shelfPatchPreview">{detail.patch}</pre>
         {applyPreview && <div className={`shelfApplyStatus${applyPreview.canApplyCleanly ? " ready" : " blocked"}`} role="status">
-          {applyPreview.canApplyCleanly ? "Patch applies cleanly to the current working tree." : "Patch does not apply cleanly. The shelf is preserved."}
+          {applyPreview.canApplyCleanly ? "Patch applies cleanly to the current working tree." : applyPreview.canApplyWithConflicts ? "This patch needs conflict review. Applying it will open the conflict resolver." : "Patch cannot be applied safely here. The shelf will be preserved."}
           <span>HEAD {applyPreview.expectedHeadOid?.slice(0, 10) || "(unborn)"}</span>
         </div>}
         <div className="shelfActions">
           <button className="secondaryButton" type="button" disabled={busy || disabled} onClick={() => void previewApply()}>{busy ? "Checking…" : "Preview apply"}</button>
-          {applyPreview && <button className="primaryButton" type="button" disabled={busy || disabled || !applyPreview.canApplyCleanly} onClick={() => void applyShelf()}>{busy ? "Applying…" : "Apply reviewed shelf"}</button>}
+          {applyPreview && <button className="primaryButton" type="button" disabled={busy || disabled || (!applyPreview.canApplyCleanly && !applyPreview.canApplyWithConflicts)} onClick={() => void applyShelf()}>{busy ? "Applying…" : "Apply reviewed shelf"}</button>}
         </div>
       </section>}
 

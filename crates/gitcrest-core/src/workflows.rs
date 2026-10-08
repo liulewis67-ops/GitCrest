@@ -25,6 +25,7 @@ pub enum WorkflowOperation {
     CherryPick,
     Revert,
     Rebase,
+    ShelfApply,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -197,6 +198,46 @@ pub async fn read_recovery_preflight(
             WorkflowOperation::CherryPick | WorkflowOperation::Revert
         ) && only_conflicts_are_dirty,
         can_abort: only_conflicts_are_dirty,
+    })
+}
+
+pub async fn read_shelf_apply_preflight(
+    repo_id: String,
+    task_id: String,
+    repository_path: &Path,
+) -> Result<WorkflowRecoveryPreflight, WorkflowError> {
+    let head = run_git_optional(
+        repository_path,
+        &[
+            "rev-parse".into(),
+            "--verify".into(),
+            "HEAD^{commit}".into(),
+        ],
+    )
+    .await?;
+    let head_oid = head.as_deref().map(text).transpose()?.map(str::to_owned);
+    let (
+        dirty_paths,
+        omitted_dirty_path_count,
+        conflicted_paths,
+        omitted_conflicted_path_count,
+        operation,
+    ) = read_worktree_state(repository_path).await?;
+    if operation.is_some() {
+        return Err(WorkflowError::NoActiveOperation);
+    }
+    Ok(WorkflowRecoveryPreflight {
+        repo_id,
+        task_id,
+        operation: WorkflowOperation::ShelfApply,
+        head_oid,
+        dirty_paths,
+        omitted_dirty_path_count,
+        can_continue: conflicted_paths.is_empty() && omitted_conflicted_path_count == 0,
+        can_skip: false,
+        can_abort: false,
+        conflicted_paths,
+        omitted_conflicted_path_count,
     })
 }
 

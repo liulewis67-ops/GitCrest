@@ -234,9 +234,10 @@ impl GitCommandService {
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match (operation, action) {
-            (crate::workflows::WorkflowOperation::Rebase, _) => {
+            (crate::workflows::WorkflowOperation::Rebase, _)
+            | (crate::workflows::WorkflowOperation::ShelfApply, _) => {
                 return Err(TaskFailure::Failed(
-                    "Rebase recovery is handled by the rebase workflow.".into(),
+                    "This recovery action is not a Git merge, cherry-pick, or revert.".into(),
                 ));
             }
             (_, crate::workflows::WorkflowRecoveryAction::Continue) => (
@@ -688,6 +689,7 @@ async fn workflow_command_result(
                 crate::workflows::WorkflowOperation::CherryPick => "Cherry-pick",
                 crate::workflows::WorkflowOperation::Revert => "Revert",
                 crate::workflows::WorkflowOperation::Rebase => "Rebase",
+                crate::workflows::WorkflowOperation::ShelfApply => "Shelf apply",
             }
         ))),
         Ok(None) | Err(_) => result,

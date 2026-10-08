@@ -1339,7 +1339,7 @@ export interface components {
             repoId: components["schemas"]["RepoId"];
             taskId: string;
             /** @enum {string} */
-            operation: "merge" | "cherryPick" | "revert";
+            operation: "merge" | "cherryPick" | "revert" | "shelfApply";
             headOid: string | null;
             dirtyPaths: string[];
             omittedDirtyPathCount: number;
@@ -1354,7 +1354,7 @@ export interface components {
             /** @enum {string} */
             action: "continue" | "skip" | "abort";
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "shelfApply";
             expectedHeadOid: string;
             expectedConflictedPaths: string[];
         };
@@ -1363,7 +1363,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            operation: "merge" | "cherryPick" | "revert";
+            operation: "merge" | "cherryPick" | "revert" | "shelfApply";
             headOid: string | null;
             baseContent: string | null;
             oursContent: string | null;
@@ -1376,7 +1376,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "shelfApply";
             expectedHeadOid: string;
             expectedResultRevision: string;
         };
@@ -1384,7 +1384,7 @@ export interface components {
             taskId: string;
             path: string;
             /** @enum {string} */
-            expectedOperation: "merge" | "cherryPick" | "revert";
+            expectedOperation: "merge" | "cherryPick" | "revert" | "shelfApply";
             expectedHeadOid: string;
             expectedResultRevision: string;
             content: string;
@@ -1544,6 +1544,7 @@ export interface components {
             expectedHeadOid: string | null;
             previewRevision: string;
             canApplyCleanly: boolean;
+            canApplyWithConflicts: boolean;
         };
         OpenRepositoryRequest: {
             /** @description Local folder explicitly selected by the user. */

@@ -1606,6 +1606,7 @@ struct ShelfApplyPreviewResponse {
     expected_head_oid: Option<String>,
     preview_revision: String,
     can_apply_cleanly: bool,
+    can_apply_with_conflicts: bool,
 }
 
 #[derive(Deserialize)]
@@ -1648,11 +1649,20 @@ async fn preflight_repository_shelf_apply(
     let can_apply_cleanly = shelves::check_apply(&target.repository_path, &shelf.patch, scope)
         .await
         .map_err(ApiError::from_shelf_error)?;
+    let can_apply_with_conflicts = !can_apply_cleanly
+        && can_shelf_apply_with_conflicts(
+            &state.repositories,
+            &repo_id,
+            &shelf,
+            repository.head.as_deref(),
+        )
+        .await?;
     Ok(Json(ShelfApplyPreviewResponse {
         shelf: shelf.snapshot,
         expected_head_oid: repository.head,
         preview_revision,
         can_apply_cleanly,
+        can_apply_with_conflicts,
     }))
 }
 
@@ -1715,13 +1725,14 @@ async fn apply_repository_shelf(
     let expected_scope = scope;
     let preview_revision = request.preview_revision;
     let patch = shelf.patch;
+    let task_operation = format!("shelfApply:{task_shelf_id}");
     let task = state
         .tasks
         .submit(
             Some(repo_id),
             None,
             resource_key,
-            "shelfApply",
+            &task_operation,
             move |context| async move {
                 let current_repository = repositories
                     .refresh_metadata(&task_repo_id)
@@ -1752,12 +1763,44 @@ async fn apply_repository_shelf(
                 let can_apply = shelves::check_apply(&task_path, &patch, current_scope)
                     .await
                     .map_err(|_| TaskFailure::Failed("Git could not recheck the reviewed shelf patch.".into()))?;
-                if !can_apply {
-                    return Err(TaskFailure::Failed("The shelf conflicts with the current branch. No changes were applied; the shelf is still available.".into()));
+                if can_apply {
+                    commands
+                        .execute_staging(&task_path, shelves::restore_command(patch.clone(), current_scope), context.clone())
+                        .await?;
+                } else {
+                    let can_resolve_conflicts = can_shelf_apply_with_conflicts(
+                        &repositories,
+                        &task_repo_id,
+                        &current_shelf,
+                        current_repository.head.as_deref(),
+                    )
+                    .await
+                    .map_err(|_| TaskFailure::Failed("Could not verify that the shelf can enter conflict review.".into()))?;
+                    if !can_resolve_conflicts {
+                        return Err(TaskFailure::Failed("The shelf conflicts with the current branch and cannot be merged safely. No changes were applied; the shelf is still available.".into()));
+                    }
+                    match commands
+                        .execute_staging(&task_path, shelves::restore_three_way_command(patch.clone()), context.clone())
+                        .await
+                    {
+                        Ok(()) => {
+                            commands
+                                .execute_staging(&task_path, shelves::unstage_paths_command(&current_shelf.snapshot.paths), context.clone())
+                                .await?;
+                        }
+                        Err(TaskFailure::Failed(message)) | Err(TaskFailure::WaitingForInput(message)) => {
+                            let status = repositories
+                                .status_snapshot(&task_repo_id)
+                                .await
+                                .map_err(|_| TaskFailure::Failed("Git reported an apply failure and conflict state could not be inspected. The shelf was retained.".into()))?;
+                            if status.files.iter().any(|file| file.kind == status::ChangeKind::Conflicted && current_shelf.snapshot.paths.contains(&file.path)) {
+                                return Err(TaskFailure::WaitingForInput("The shelf has conflicts. Resolve the affected files, then continue to keep the changes unstaged.".into()));
+                            }
+                            return Err(TaskFailure::Failed(format!("{message}. The shelf was retained.")));
+                        }
+                        Err(TaskFailure::Cancelled) => return Err(TaskFailure::Cancelled),
+                    }
                 }
-                commands
-                    .execute_staging(&task_path, shelves::restore_command(patch, current_scope), context)
-                    .await?;
                 let store = repositories.store();
                 tokio::task::spawn_blocking(move || store.delete_shelf(&task_repo_id, &task_shelf_id))
                     .await
@@ -1790,6 +1833,60 @@ async fn load_shelf_record(
                 "This shelf is no longer available.",
             )
         })
+}
+
+async fn can_shelf_apply_with_conflicts(
+    repositories: &RepositoryManager,
+    repo_id: &str,
+    shelf: &shelves::ShelfRecord,
+    head_oid: Option<&str>,
+) -> Result<bool, ApiError> {
+    let Some(scope @ (DiffScope::WorkingTree | DiffScope::Index)) = shelf.snapshot.scope else {
+        return Ok(false);
+    };
+    if head_oid.is_none() {
+        return Ok(false);
+    }
+    let Some(repository) = repositories
+        .get(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?
+    else {
+        return Ok(false);
+    };
+    if repository.state != "normal" {
+        return Ok(false);
+    }
+    let status = repositories
+        .status_snapshot(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    if status
+        .files
+        .iter()
+        .any(|file| file.kind == status::ChangeKind::Conflicted)
+    {
+        return Ok(false);
+    }
+    Ok(shelf.snapshot.paths.iter().all(|path| {
+        status
+            .files
+            .iter()
+            .find(|file| file.path == *path)
+            .is_none_or(|file| {
+                file.kind != status::ChangeKind::Conflicted
+                    && match scope {
+                        DiffScope::WorkingTree => {
+                            !file.categories.contains(&status::ChangeCategory::Staged)
+                        }
+                        DiffScope::Index => {
+                            !file.categories.contains(&status::ChangeCategory::Unstaged)
+                                && !file.categories.contains(&status::ChangeCategory::Untracked)
+                        }
+                        DiffScope::Commit => false,
+                    }
+            })
+    }))
 }
 
 async fn shelf_apply_revision(
@@ -3789,10 +3886,13 @@ async fn preflight_repository_workflow_recovery(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview =
-        workflows::read_recovery_preflight(repo_id, query.task_id, &target.repository_path)
-            .await
-            .map_err(ApiError::from_workflow_error)?;
+    let preview = read_task_recovery_preflight(
+        &repo_id,
+        &query.task_id,
+        &task.operation,
+        &target.repository_path,
+    )
+    .await?;
     if workflow_operation_for_task(&task.operation) != Some(preview.operation) {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -3857,13 +3957,13 @@ async fn read_workflow_conflict_file(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = workflows::read_recovery_preflight(
-        repo_id.clone(),
-        query.task_id.clone(),
+    let preview = read_task_recovery_preflight(
+        &repo_id,
+        &query.task_id,
+        &task.operation,
         &target.repository_path,
     )
-    .await
-    .map_err(ApiError::from_workflow_error)?;
+    .await?;
     if preview.operation != task_operation || !preview.conflicted_paths.contains(&query.path) {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -4171,13 +4271,9 @@ async fn inspect_waiting_conflict(
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = workflows::read_recovery_preflight(
-        repo_id.to_owned(),
-        task_id.to_owned(),
-        &target.repository_path,
-    )
-    .await
-    .map_err(ApiError::from_workflow_error)?;
+    let preview =
+        read_task_recovery_preflight(repo_id, task_id, &task.operation, &target.repository_path)
+            .await?;
     if preview.operation != task_operation
         || !preview.conflicted_paths.iter().any(|entry| entry == path)
     {
@@ -4257,13 +4353,13 @@ async fn recover_repository_workflow(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = workflows::read_recovery_preflight(
-        repo_id.clone(),
-        request.task_id.clone(),
+    let preview = read_task_recovery_preflight(
+        &repo_id,
+        &request.task_id,
+        &waiting_task.operation,
         &target.repository_path,
     )
-    .await
-    .map_err(ApiError::from_workflow_error)?;
+    .await?;
     if preview.operation != request.expected_operation
         || preview.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
         || preview.conflicted_paths != request.expected_conflicted_paths
@@ -4293,6 +4389,7 @@ async fn recover_repository_workflow(
     let expected_operation = request.expected_operation;
     let expected_head_oid = request.expected_head_oid;
     let expected_conflicted_paths = request.expected_conflicted_paths;
+    let waiting_task_operation = waiting_task.operation.clone();
     let operation = match action {
         workflows::WorkflowRecoveryAction::Continue => "workflowContinue",
         workflows::WorkflowRecoveryAction::Skip => "workflowSkip",
@@ -4306,17 +4403,14 @@ async fn recover_repository_workflow(
             resource_key,
             operation,
             move |context| async move {
-                let current = workflows::read_recovery_preflight(
-                    task_repo_id.clone(),
-                    waiting_task_id.clone(),
+                let current = read_task_recovery_preflight(
+                    &task_repo_id,
+                    &waiting_task_id,
+                    &waiting_task_operation,
                     &path,
                 )
                 .await
-                .map_err(|_| {
-                    TaskFailure::Failed(
-                        "The Git operation could not be rechecked. Refresh repository state before recovery.".into(),
-                    )
-                })?;
+                .map_err(|_| TaskFailure::Failed("The Git operation could not be rechecked. Refresh repository state before recovery.".into()))?;
                 if current.operation != expected_operation
                     || current.head_oid.as_deref() != Some(expected_head_oid.as_str())
                     || current.conflicted_paths != expected_conflicted_paths
@@ -4327,6 +4421,37 @@ async fn recover_repository_workflow(
                     ));
                 }
                 let task_context = context.clone();
+                if expected_operation == workflows::WorkflowOperation::ShelfApply {
+                    let shelf_id = shelf_apply_shelf_id(&waiting_task_operation)
+                        .ok_or_else(|| TaskFailure::Failed("The shelf apply task no longer identifies its saved patch.".into()))?;
+                    let shelf = load_shelf_record(&repositories, &task_repo_id, shelf_id)
+                        .await
+                        .map_err(|_| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?;
+                    if shelf.snapshot.scope == Some(DiffScope::WorkingTree) {
+                        command
+                            .execute_staging(&path, shelves::unstage_paths_command(&shelf.snapshot.paths), context.clone())
+                            .await?;
+                    }
+                    tasks
+                        .resolve_waiting_for_input(
+                            &waiting_task_id,
+                            tasks::TaskStatus::Succeeded,
+                            "The shelf changes were resolved and applied.",
+                        )
+                        .await
+                        .map_err(|_| TaskFailure::Failed("The shelf was resolved, but the waiting task state could not be saved.".into()))?;
+                    let store = repositories.store();
+                    let delete_repo_id = task_repo_id.clone();
+                    let delete_shelf_id = shelf_id.to_owned();
+                    tokio::task::spawn_blocking(move || store.delete_shelf(&delete_repo_id, &delete_shelf_id))
+                        .await
+                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?
+                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?;
+                    if repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                        task_context.log("Repository metadata refresh failed after shelf recovery; refresh the repository before the next write.").await;
+                    }
+                    return Ok(Some("The shelf conflicts were resolved, the saved changes were kept unstaged, and the shelf was removed.".into()));
+                }
                 let result = command
                     .execute_workflow_recovery(&path, expected_operation, action, context)
                     .await;
@@ -4384,8 +4509,39 @@ fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOpe
         "merge" => Some(workflows::WorkflowOperation::Merge),
         "cherryPick" => Some(workflows::WorkflowOperation::CherryPick),
         "revert" => Some(workflows::WorkflowOperation::Revert),
+        value if shelf_apply_shelf_id(value).is_some() => {
+            Some(workflows::WorkflowOperation::ShelfApply)
+        }
         _ => None,
     }
+}
+
+fn shelf_apply_shelf_id(operation: &str) -> Option<&str> {
+    operation
+        .strip_prefix("shelfApply:")
+        .filter(|shelf_id| !shelf_id.is_empty())
+}
+
+async fn read_task_recovery_preflight(
+    repo_id: &str,
+    task_id: &str,
+    task_operation: &str,
+    repository_path: &std::path::Path,
+) -> Result<workflows::WorkflowRecoveryPreflight, ApiError> {
+    let preflight = if workflow_operation_for_task(task_operation)
+        == Some(workflows::WorkflowOperation::ShelfApply)
+    {
+        workflows::read_shelf_apply_preflight(
+            repo_id.to_owned(),
+            task_id.to_owned(),
+            repository_path,
+        )
+        .await
+    } else {
+        workflows::read_recovery_preflight(repo_id.to_owned(), task_id.to_owned(), repository_path)
+            .await
+    };
+    preflight.map_err(ApiError::from_workflow_error)
 }
 
 fn workflow_recovery_action_allowed(
