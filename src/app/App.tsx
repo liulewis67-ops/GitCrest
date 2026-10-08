@@ -12,7 +12,7 @@ import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
-import { getRepositoryEventRefreshPlan, loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
+import { getRepositoryEventRefreshPlan, loadWorkspaceSession, saveWorkspaceSession, useRepositoryMutations, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { loadDiscardChangesDialog } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useRepositoryRefs } from "../features/branches";
@@ -111,6 +111,12 @@ function App() {
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const [openingRepository, setOpeningRepository] = useState(false);
+  const { toggleFavorite, forgetRepository } = useRepositoryMutations({
+    getApi: () => apiRef.current,
+    onRepositoriesChanged: (update) => setRepositories(update),
+    onRepositoryForgotten: (repoId) => setSelectedRepository((current) => current?.repoId === repoId ? undefined : current),
+    setError: setOpenError,
+  });
   const { apiRef, status, version, setStatus } = useCoreConnection({
     onConnected: (api) => refreshRepositories(api, true),
     onEvent: (api, event, sequenceGap, isActive) => {
@@ -865,32 +871,6 @@ function App() {
       setOpenError(message || (error instanceof Error ? error.message : "Could not initialize this folder."));
     } finally {
       setOpeningRepository(false);
-    }
-  }
-
-  async function toggleFavorite(repository: RepositoryResponse) {
-    const api = apiRef.current;
-    if (!api) return;
-    setOpenError("");
-    try {
-      const updated = await api.setRepositoryFavorite(repository.repoId, !repository.isFavorite);
-      setRepositories((current) => current.map((item) => item.repoId === updated.repoId ? updated : item)
-        .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt));
-    } catch (error) {
-      setOpenError(error instanceof Error ? error.message : "Could not update this favorite.");
-    }
-  }
-
-  async function forgetRepository(repository: RepositoryResponse) {
-    const api = apiRef.current;
-    if (!api) return;
-    setOpenError("");
-    try {
-      await api.forgetRepository(repository.repoId);
-      setRepositories((current) => current.filter((item) => item.repoId !== repository.repoId));
-      setSelectedRepository((current) => current?.repoId === repository.repoId ? undefined : current);
-    } catch (error) {
-      setOpenError(error instanceof Error ? error.message : "Could not remove this recent repository.");
     }
   }
 
