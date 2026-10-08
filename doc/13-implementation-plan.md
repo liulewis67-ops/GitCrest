@@ -2038,3 +2038,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：clone 成功后仓库注册、会话激活及任务状态去重仍由 App 协调；可继续将这段成功任务生命周期迁入 cloning model。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/cloning/{index.ts,model/use-clone-submission.ts,CloneDialog.tsx}`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`b59a455`
+
+### cloning feature clone 成功任务生命周期迁入 model — 小阶段 160
+- 状态：已完成（clone 成功后的 repository 加载、注册、激活及失败恢复由 cloning feature model 编排）
+- 日期：2026-10-09
+- 交付：将 clone task ID 注册与重复打开去重、成功 task 的 repository 查询、仓库列表回调、会话激活后的 dialog/task center 收起，以及查询失败时错误展示和重试入口迁入 `useCloneSubmission`。App 通过回调注入仓库列表更新、激活和 UI 状态操作；任务列表观察流程不变。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建报告既有 web-tree-sitter eval 和 commits 动态/静态导入警告。
+- 限制/后续：clone 页面/dialog 组合和 task 刷新仍由 App 协调；后续按 feature model 与应用装配边界继续迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/cloning/model/use-clone-submission.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`f1ca052`
