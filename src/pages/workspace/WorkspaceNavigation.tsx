@@ -1,8 +1,9 @@
 import { lazy, Suspense } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse, RepositoryResponse, StagingRequest, StatusSnapshotResponse, TaskSnapshotResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
+import { loadRemoteManager } from "../../features/remotes";
 
-const RemoteManager = lazy(() => import("../../features/remotes").then(({ RemoteManager }) => ({ default: RemoteManager })));
+const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
 const ShelfCenter = lazy(() => import("../../features/shelves").then(({ ShelfCenter }) => ({ default: ShelfCenter })));
 
 type StatusGroup = {
