@@ -2029,3 +2029,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff selection 写入 commit draft、模板/动作选择和终态后的 UI 协调仍在 App；继续沿 commits feature model 与页面组合边界迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/commits/{index.ts,model/use-commit-submission.ts,model/use-commit-draft.ts}`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`6b66729`
+
+### cloning feature clone task 与重试草稿迁入 model — 小阶段 159
+- 状态：已完成（Clone 请求、提交状态与重试路径草稿由 cloning feature 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/cloning/model/use-clone-submission.ts`，集中 Clone dialog 的 remote URL/目标目录草稿、busy/error 状态、clone API task 受理及从失败 task 目标路径恢复重试草稿；clone error 和任务中心/clone task 注册通过回调与 App 协作。新增 cloning feature 公开入口和延迟加载 dialog loader，App 不再直接依赖 CloneDialog 私有路径。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。
+- 限制/后续：clone 成功后仓库注册、会话激活及任务状态去重仍由 App 协调；可继续将这段成功任务生命周期迁入 cloning model。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/cloning/{index.ts,model/use-clone-submission.ts,CloneDialog.tsx}`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`b59a455`
