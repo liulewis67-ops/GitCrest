@@ -1292,3 +1292,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：rebase/reset preview 以及 backup refs 列举仍在 feature 内直接执行 Git 查询；下一阶段继续将一组稳定只读查询迁入 adapter，保持 feature 仅编排领域预检结果。
 - 证据：`crates/gitcrest-core/src/{ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/workflows/{rebase.rs,reset.rs}`。
 - 实施 commit：`8dfd4c4`
+
+### 后端备份 refs 查询迁入 Git adapter — 小阶段 77
+- 状态：已完成（rebase/reset 备份 refs 由 adapter 读取与解析）
+- 日期：2026-10-09
+- 交付：在 domain 表达 rebase/reset 备份命名空间与备份引用值，扩展 `WorkflowGitPort` 并由 Git adapter 执行 `for-each-ref`、解析输出。rebase/reset feature 仅将领域引用映射为对应 feature response model；保留 reset 最多 1000 条、rebase 无额外数量上限及原有排序行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：rebase/reset preview 和 remote branch delete preview 的其余只读 Git 查询仍由 feature 直接执行；后续继续将这些查询移至有明确语义的 port 方法。
+- 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/workflows/{rebase.rs,reset.rs}`。
+- 实施 commit：`78ab1c8`
