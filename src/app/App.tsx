@@ -8,7 +8,7 @@ import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
 import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
 import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
-import { ariaShortcut, displayShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
+import { ariaShortcut, displayShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, THEME_CYCLE, useThemePreference, type ShortcutPreferences } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
@@ -38,11 +38,9 @@ const DiscardChangesDialog = lazy(() => import("../features/diff/DiscardChangesD
 const SettingsDialog = lazy(() => import("../features/settings/SettingsDialog").then(({ SettingsDialog }) => ({ default: SettingsDialog })));
 const CommitWorkbench = lazy(() => import("../features/commits").then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
 
-type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
 type CommitIntent = { action: CommitAction; target?: PushTarget; forceWithLease: boolean };
 
-const themeCycle: Theme[] = ["system", "light", "dark"];
 const changeGroups = [
   { category: "staged", label: "Staged" },
   { category: "unstaged", label: "Unstaged" },
@@ -228,14 +226,7 @@ function App() {
     setWorkspaceSession,
   );
   const graphViewportRef = useRef<HTMLDivElement>(null);
-  const [theme, setTheme] = useState<Theme>(() => {
-    try {
-      const stored = window.localStorage.getItem("gitcrest-theme");
-      return stored === "light" || stored === "dark" ? stored : "system";
-    } catch {
-      return "system";
-    }
-  });
+  const { theme, nextTheme } = useThemePreference();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const { dialogRef: paletteRef, onKeyDown: onPaletteFocusKeyDown } = useDialogFocus<HTMLElement>(() => setPaletteOpen(false), false, undefined, paletteOpen);
@@ -1368,23 +1359,6 @@ function App() {
     }
   }, [selectedRepository?.repoId]);
 
-  useEffect(() => {
-    const systemTheme = typeof window.matchMedia === "function"
-      ? window.matchMedia("(prefers-color-scheme: light)")
-      : undefined;
-    const applyTheme = () => {
-      document.documentElement.dataset.theme = theme === "system" ? (systemTheme?.matches ? "light" : "dark") : theme;
-    };
-    applyTheme();
-    systemTheme?.addEventListener("change", applyTheme);
-    try {
-      window.localStorage.setItem("gitcrest-theme", theme);
-    } catch {
-      // The theme remains available for this session when storage is unavailable.
-    }
-    return () => systemTheme?.removeEventListener("change", applyTheme);
-  }, [theme]);
-
   useGlobalShortcuts({
     page,
     shortcuts,
@@ -1444,11 +1418,10 @@ function App() {
     "--workbench-height": `${workbenchHeight}px`,
   } as CSSProperties;
 
-  const nextTheme = () => setTheme(themeCycle[(themeCycle.indexOf(theme) + 1) % themeCycle.length]);
   const commands = [
     { id: "welcome", label: "Go to Welcome", detail: "Return to recent repositories and quick actions", available: true, run: () => setPage("welcome") },
     { id: "workspace", label: "Go to Workspace", detail: "Open the Changes, Graph, and Commit workspace", available: true, run: () => setPage("workspace") },
-    { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${themeCycle[(themeCycle.indexOf(theme) + 1) % themeCycle.length]}`, available: true, run: nextTheme },
+    { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`, available: true, run: nextTheme },
     { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
     { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
     { id: "pull", label: "Pull current branch", detail: "Review worktree state and choose merge or rebase", available: Boolean(selectedRepository), run: () => openPullDialog() },

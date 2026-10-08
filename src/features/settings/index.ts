@@ -1,4 +1,6 @@
 export { CommitMessageAssistant } from "./CommitMessageAssistant";
+export { THEME_CYCLE, useThemePreference } from "./model/use-theme-preference";
+export type { Theme } from "./model/use-theme-preference";
 export {
   ariaShortcut,
   displayShortcut,
