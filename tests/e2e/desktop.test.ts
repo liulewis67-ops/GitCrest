@@ -43,15 +43,19 @@ describe("desktop startup E2E", () => {
       expect(body).toContain("gitcrest-core 0.1.0 (API v1)");
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 
-      let providerBody: Record<string, unknown> | undefined;
+      const providerBodies: Array<Record<string, unknown>> = [];
       mockOllama = createServer((request, response) => {
         const chunks: Buffer[] = [];
         request.on("data", (chunk: Buffer) => chunks.push(chunk));
         request.on("end", () => {
-          providerBody = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
-          const body = JSON.stringify({ message: { content: "Mock local review response" } });
-          response.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
-          response.end(body);
+          const requestBody = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+          providerBodies.push(requestBody);
+          const content = providerBodies.length === 1 ? "Mock local review response" : "feat: describe reviewed staged change";
+          const body = JSON.stringify({ message: { content } });
+          setTimeout(() => {
+            response.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
+            response.end(body);
+          }, 250);
         });
       });
       await new Promise<void>((resolve) => mockOllama?.listen(0, "127.0.0.1", resolve));
@@ -134,11 +138,50 @@ describe("desktop startup E2E", () => {
       await privacyDialog.getByRole("checkbox", { name: /I reviewed the files and diffs above/ }).check();
       await privacyDialog.getByRole("button", { name: "Send these exact diffs" }).click();
       await privacyDialog.getByText("Mock local review response").waitFor();
-      const providerPrompt = String(providerBody?.messages && (providerBody.messages as Array<{ content?: string }>)[0]?.content);
-      expect(providerBody?.model).toBe("qwen2.5-coder:7b");
+      const providerPrompt = String(providerBodies[0]?.messages && (providerBodies[0].messages as Array<{ content?: string }>)[0]?.content);
+      expect(providerBodies[0]?.model).toBe("qwen2.5-coder:7b");
       expect(providerPrompt).toContain("export const greeting = 'welcome';");
       expect(providerPrompt).not.toContain("sibling = 'changed'");
       await privacyDialog.getByRole("button", { name: "Close settings" }).click();
+
+      await writeFile(resolve(fixture.path, "src/commit-ai.ts"), "export const reviewedTitle = 'staged';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/commit-ai.ts"]);
+      await writeFile(resolve(fixture.path, "src/commit-ai.ts"), "export const reviewedTitle = 'unstaged';\n");
+      await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("src/commit-ai.ts").waitFor();
+      await window.keyboard.press("Control+g");
+      const commitAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
+      await commitAssistant.locator(".privacyDiffPreview summary").waitFor({ timeout: 5000 }).catch(async () => { throw new Error(`Commit assistant did not prepare staged diffs: ${await commitAssistant.innerText()}`); });
+      await commitAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).toContain("+export const reviewedTitle = 'staged';");
+      expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).not.toContain("unstaged");
+      await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
+      await commitAssistant.getByRole("button", { name: "Send reviewed staged diff" }).click();
+      await commitAssistant.getByText("Waiting for provider…").waitFor();
+      await window.getByRole("textbox", { name: "Commit message", exact: true }).fill("my manual commit text");
+      expect(await window.getByRole("button", { name: "Commit", exact: true }).isEnabled()).toBe(true);
+      await commitAssistant.getByText("The commit draft changed while the provider was responding.").waitFor();
+      expect(await window.getByRole("textbox", { name: "Commit message", exact: true }).inputValue()).toBe("my manual commit text");
+      expect(await commitAssistant.getByRole("button", { name: "Use suggestion" }).isDisabled()).toBe(true);
+      expect(await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).toMatchObject({ stdout: "add source fixture\n" });
+
+      await commitAssistant.getByRole("button", { name: "Review current staged changes again" }).click();
+      await commitAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
+      await commitAssistant.getByRole("button", { name: "Send reviewed staged diff" }).click();
+      await commitAssistant.getByRole("textbox", { name: "Commit message suggestion" }).waitFor();
+      expect(await commitAssistant.getByRole("textbox", { name: "Commit message suggestion" }).inputValue()).toBe("feat: describe reviewed staged change");
+      await commitAssistant.getByRole("button", { name: "Use suggestion" }).click();
+      expect(await window.getByRole("textbox", { name: "Commit message", exact: true }).inputValue()).toBe("feat: describe reviewed staged change");
+      const commitPrompt = String(providerBodies[1]?.messages && (providerBodies[1].messages as Array<{ content?: string }>)[0]?.content);
+      expect(commitPrompt).toContain("reviewedTitle = 'staged'");
+      expect(commitPrompt).not.toContain("reviewedTitle = 'unstaged'");
+      expect(await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).toMatchObject({ stdout: "add source fixture\n" });
+      await execFileAsync("git", ["-C", fixture.path, "reset", "--quiet", "HEAD", "--", "src/commit-ai.ts"]);
+      await rm(resolve(fixture.path, "src/commit-ai.ts"));
+      await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.waitForFunction(() => !document.body.innerText.includes("src/commit-ai.ts"));
+
       await window.keyboard.press("Control+b");
       const dirtySwitchDialog = window.getByRole("dialog", { name: "Switch branch" });
       await dirtySwitchDialog.waitFor();

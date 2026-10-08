@@ -434,4 +434,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm test`（98 tests）、`pnpm build`、`cargo test -- --test-threads=1`（95 tests）、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`、`git diff --check` 均通过。首次并行全量 Rust 测试时一个无关 commit API 用例超过 10 秒 task 等待；单独重跑和随后 236.32 秒单线程全量复跑均通过。新增 API 集成测试验证请求只含选中行且不含同一文件未选行、其他文件和过期 revision；客户端单测验证 selections payload。
 - 证据：`crates/gitcrest-core/src/ai.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`tests/unit/api-client.test.ts`。
 - 限制：本子阶段只提供后端精确范围能力，不提供 commit message 生成界面；由 S6.2 子阶段 B 完成。
+- 完成 commit：`1af257a`。
+
+### S6.2 — 子阶段 B：commit message 建议与迟到响应保护（已完成；S6.2 整体进行中）
+- 状态：子阶段 B 已完成；S6.2 的变更摘要能力尚未实施。
+- 日期：2026-10-08
+- 交付：工作区提交区增加 `Cmd/Ctrl+G` 和命令面板入口，打开非模态 AI 建议面板。面板重新读取 staged status/Diff；普通提交发送所有 staged 文本 Diff，部分提交仅发送已选 hunk/变更行。发送前展示 endpoint、固定 Conventional Commit prompt、确切 staged Diff 和文件范围，并要求明确确认；请求前与返回后复核 status/Diff revision。生成内容独立显示且可编辑，只有用户选择“Use suggestion”才写入提交框；请求期间发生的草稿编辑会锁定旧建议，工作区变化会标记 stale。provider 错误可重新预览/重试，手动 commit 操作保持可用，不会自动 commit 或 push。
+- 测试：`pnpm test`（102 tests）、`pnpm build`、`pnpm test:e2e`（1 Electron test）、`git diff --check` 均通过。4 个组件用例覆盖仅发送选中 staged 行、明确确认、迟到响应不覆盖用户草稿、工作区变化标记 stale、错误后重试及显式应用。Electron E2E 使用 loopback Ollama mock，验证 staged 与同文件 unstaged 文本隔离、在 provider 响应期间可继续编辑且手动 Commit 保持启用、HEAD 未被自动改变，以及重新请求后用户明确应用建议。
+- 手工验证：未另行连接真实 provider；provider 边界及桌面工作流由临时 loopback Ollama mock 和 Electron E2E 验证。
+- 证据：`src/features/settings/CommitMessageAssistant.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/commit-message-assistant.test.tsx`、`tests/e2e/desktop.test.ts`。
+- 限制：本子阶段完成 commit message 建议；变更摘要 UI/工作流仍待 S6.2 后续子阶段完成。真实云端/Ollama 服务及 Keychain 运行验证按 S7.4 验收。
 - 完成 commit：待提交后补记。

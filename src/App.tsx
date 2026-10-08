@@ -15,6 +15,7 @@ import { PushTargetDialog, type PushTarget } from "./features/remotes/PushTarget
 import { SplitDiff } from "./features/diff/SplitDiff";
 import { DiscardChangesDialog } from "./features/diff/DiscardChangesDialog";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
+import { CommitMessageAssistant } from "./features/settings/CommitMessageAssistant";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -224,6 +225,7 @@ function App() {
   const [tasksError, setTasksError] = useState("");
   const [stagingBusy, setStagingBusy] = useState(false);
   const [commitMessage, setCommitMessage] = useState("");
+  const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
   const [commitTemplate, setCommitTemplate] = useState("plain");
   const [amendCommit, setAmendCommit] = useState(false);
   const [signOffCommit, setSignOffCommit] = useState(false);
@@ -1453,13 +1455,16 @@ function App() {
         event.preventDefault();
         setPaletteOpen((open) => !open);
         setPaletteQuery("");
+      } else if (page === "workspace" && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "g" && selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy) {
+        event.preventDefault();
+        setCommitAssistantOpen(true);
       } else if (event.key === "Escape") {
         setPaletteOpen(false);
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [page, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability, activeBranches]);
+  }, [page, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability, activeBranches, stagedCount, hasConflicts, commitBusy]);
 
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -1478,6 +1483,7 @@ function App() {
     { id: "rebase", label: "Interactive rebase", detail: "Review, reorder, and edit the current branch commit sequence (Ctrl/Cmd+I)", available: Boolean(selectedRepository && activeBranches && connected), run: () => setRebaseDialogOpen(true) },
     { id: "reset", label: "Reset current branch", detail: "Review commit and file impact before moving HEAD", available: Boolean(selectedRepository && activeBranches && connected), run: () => setResetDialogOpen(true) },
     { id: "push", label: "Push current branch", detail: "Review commits, target, and overwrite scope before pushing", available: Boolean(selectedRepository), run: () => openPushDialog() },
+    { id: "ai-commit-message", label: "Generate commit message suggestion", detail: "Review staged diffs and ask the configured AI provider (Ctrl/Cmd+G)", available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
     { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => { setCloneError(""); setCloneOpen(true); } },
     { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
@@ -1746,7 +1752,7 @@ function App() {
             <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">{activeStatus ? workingCount : "—"}</span></div><p>{!selectedRepository ? "No changed files" : activeStatusLoading && !activeStatus ? "Reading working tree…" : activeStatusError && !activeStatus ? activeStatusError : workingCount === 0 ? "Working tree clean" : "Unstaged changes"}</p><small>{selectedRepository && activeStatusLoading ? "Refreshing repository status…" : selectedRepository && !activeStatus && !activeStatusError ? "Waiting for the first status snapshot." : "Working tree changes are read from Git."}</small></div>
             <div className="workbenchSection stagedSection"><div className="workbenchTitle">Staged changes <span className="countBadge">{activeStatus ? stagedCount : "—"}</span></div><div className="stagedEmpty">{!activeStatus ? activeStatusError || "Waiting for repository status…" : stagedCount === 0 ? "Nothing staged" : `${stagedCount} staged file${stagedCount === 1 ? "" : "s"}`}</div><small>Review staged files before the commit workflow becomes available.</small></div>
             <div className="workbenchSection commitSection">
-              <label className="workbenchTitle" htmlFor="commit-message">Commit message</label>
+              <div className="commitMessageHeading"><label className="workbenchTitle" htmlFor="commit-message">Commit message</label><button type="button" className="textButton commitAiTrigger" disabled={!selectedRepository || stagedCount === 0 || hasConflicts || commitBusy} title={hasConflicts ? "Resolve conflicts before requesting a commit suggestion" : stagedCount === 0 ? "Stage changes before requesting a suggestion" : "Review staged diffs before sending (Ctrl/Cmd+G)"} onClick={() => setCommitAssistantOpen((open) => !open)}>AI suggestion · {commandKey} G</button></div>
               <label className="srOnly" htmlFor="commit-template">Message template</label>
               <select id="commit-template" aria-label="Message template" value={commitTemplate} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => chooseCommitTemplate(event.target.value)}>
                 <option value="plain">Plain message</option>
@@ -1755,6 +1761,7 @@ function App() {
               </select>
               <textarea id="commit-message" aria-label="Commit message" placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if ((event.ctrlKey || event.metaKey) && event.key === "Enter") { event.preventDefault(); event.stopPropagation(); void commitChanges(event.shiftKey ? "commitAndPush" : "commit"); } }} />
               {commitSelections.length > 0 && <div className="commitSelectionNotice" role="status">{commitSelections.length} staged file selection{commitSelections.length === 1 ? "" : "s"} will be committed. Other staged changes stay in the index. <button type="button" onClick={() => setCommitSelections([])}>Clear selection</button></div>}
+              {commitAssistantOpen && selectedRepository && apiRef.current && <CommitMessageAssistant api={apiRef.current} repoId={selectedRepository.repoId} draftMessage={commitMessage} commitSelections={commitSelections} commitSelectionRepoId={commitSelectionRepoId} statusSnapshot={activeStatus} onUseSuggestion={(message) => { setCommitMessage(message); setCommitTemplate("plain"); setCommitAssistantOpen(false); }} onClose={() => setCommitAssistantOpen(false)} />}
               <div className="commitControls">
                 <div className="commitOptions">
                   <label className="disabledCheck"><input type="checkbox" checked={amendCommit} disabled={!selectedRepository?.head || commitBusy} onChange={(event) => setAmendCommit(event.target.checked)} /> Amend</label>

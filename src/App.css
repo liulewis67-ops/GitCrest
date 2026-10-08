@@ -503,7 +503,21 @@ button:disabled { cursor: not-allowed; }
 .workbenchSection > p { margin: 17px 0 4px; color: var(--text); font-size: 10px; }
 .workbenchSection > small { display: block; color: var(--text-muted); font-size: 8px; line-height: 1.45; }
 .stagedEmpty { display: grid; min-height: 42px; place-items: center; margin: 8px 0 7px; border: 1px dashed var(--line-strong); border-radius: 5px; color: var(--text-muted); font-size: 9px; }
-.commitSection { display: flex; flex-direction: column; gap: 5px; }
+.commitSection { display: flex; flex-direction: column; gap: 5px; min-height: 0; overflow: auto; }
+.commitMessageHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.commitAiTrigger { flex: 0 0 auto; font-size: 10px; }
+.commitAiAssistant { display: grid; gap: 7px; max-height: 210px; overflow: auto; padding: 8px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); }
+.commitAiHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.commitAiHeader h4 { margin: 0; color: var(--text); font-size: 11px; }
+.commitAiAssistant > p, .commitAiRequestDetails p { margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.4; overflow-wrap: anywhere; }
+.commitAiRequestDetails { display: grid; gap: 4px; padding: 6px; border-radius: 4px; background: var(--surface); }
+.commitAiAssistant .privacyDiffPreview { margin: 0; max-height: 170px; }
+.commitAiAssistant .privacyDiffPreview pre { max-height: 120px; }
+.commitAiAssistant .aiRequestConsent { font-size: 10px; }
+.commitAiAssistant .commitAiSuggestion { display: grid; gap: 4px; color: var(--text-secondary); font-size: 10px; }
+.commitAiAssistant .commitAiSuggestion textarea { min-height: 46px; max-height: 100px; resize: vertical; padding: 6px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text); background: var(--surface); font: 11px var(--font-ui); }
+.commitAiActions, .commitAiError { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.commitAiError { justify-content: space-between; color: var(--danger); font-size: 10px; }
 .commitSection select { align-self: flex-start; max-width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: 11px; }
 .commitSection textarea { flex: 1; min-height: 36px; resize: none; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: 12px; line-height: 1.4; }
 .commitSection textarea::placeholder { color: var(--text-muted); }
