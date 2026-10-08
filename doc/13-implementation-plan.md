@@ -1517,3 +1517,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：WorkspaceNavigation 当前承载完整导航组件的 props 模型；App 仍保留主区 history/diff/details 与 commit workbench JSX 和操作编排，后续继续拆分页面区域并收敛根组件。S7.2、S7.4、S7.5 仍待整体验收。
 - 证据：`src/pages/workspace/WorkspaceNavigation.tsx`、`src/features/remotes/index.ts`、`src/features/shelves/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`452f116`
+
+### Commit workbench 迁入 commits feature — 小阶段 102
+- 状态：已完成（提交编辑器、状态摘要与提交动作菜单由 commits feature 呈现）
+- 日期：2026-10-09
+- 交付：新增 `features/commits/ui/CommitWorkbench.tsx` 与 `features/commits/index.ts`，以分组 props 接收 status/commit 草稿/快捷键/可用状态，并将消息编辑、模板选择、AI 建议、选区提交、amend/sign-off/sign 与提交动作菜单移出 App。App 继续执行 commit mutation 和后续 push 流程。将 `CommitAction` 领域类型迁入 `features/commits/model/commit-action.ts`，workspace session 和 repositories 入口从新归属转出/再公开；settings feature 入口公开其 CommitMessageAssistant，供 commits 按需加载。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留既有 tree-sitter `eval` 与 Monaco contribution chunk 体积警告。
+- 限制/后续：CommitWorkbench UI 已迁出，但提交草稿状态与 commit mutation orchestration 仍由 App 管理；后续按 commits feature model 边界迁移，并继续拆 Workspace 主区 History/Diff/Details JSX。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/features/commits/{index.ts,model/commit-action.ts,ui/CommitWorkbench.tsx}`、`src/features/repositories/model/workspace-session.ts`、`src/features/settings/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`7b3dbaf`
