@@ -85,3 +85,38 @@ pub(super) struct ResetRestoreRequest {
     pub(super) backup_oid: String,
     pub(super) confirm_restore: bool,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct WorkflowConflictFileQuery {
+    pub(super) task_id: String,
+    pub(super) path: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct WorkflowConflictSuggestionRequest {
+    pub(super) task_id: String,
+    pub(super) path: String,
+    pub(super) expected_operation: super::service::WorkflowOperation,
+    pub(super) expected_head_oid: Option<String>,
+    pub(super) expected_result_revision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct WorkflowConflictMutationRequest {
+    pub(super) task_id: String,
+    pub(super) path: String,
+    pub(super) expected_operation: super::service::WorkflowOperation,
+    pub(super) expected_head_oid: String,
+    pub(super) expected_result_revision: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct WorkflowConflictSaveRequest {
+    #[serde(flatten)]
+    pub(super) mutation: WorkflowConflictMutationRequest,
+    pub(super) content: String,
+}

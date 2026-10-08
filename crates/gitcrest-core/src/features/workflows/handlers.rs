@@ -22,6 +22,13 @@ use crate::{
     tasks,
     tasks::{TaskFailure, TaskSnapshot},
 };
+
+mod conflicts;
+
+pub(super) use conflicts::{
+    get_workflow_conflict_ai_settings, mark_workflow_conflict_resolved,
+    read_workflow_conflict_file, request_workflow_conflict_suggestion, save_workflow_conflict_file,
+};
 pub(super) async fn preflight_repository_workflow(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
