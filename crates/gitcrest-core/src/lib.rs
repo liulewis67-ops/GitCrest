@@ -13,6 +13,7 @@ use std::sync::Arc;
 mod api;
 mod bootstrap;
 mod config;
+mod features;
 
 #[path = "features/branches/mod.rs"]
 mod branches;
@@ -46,8 +47,7 @@ mod state;
 mod status;
 #[path = "storage/storage.rs"]
 mod storage;
-#[path = "features/system/mod.rs"]
-mod system;
+pub(crate) use features::system;
 #[path = "features/tags/mod.rs"]
 mod tags;
 #[path = "features/tasks/mod.rs"]
