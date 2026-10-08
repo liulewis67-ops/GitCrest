@@ -3,10 +3,11 @@ use axum::{
     Router,
 };
 
-use crate::{
+use super::handlers::{
     forget_repository, get_repository, initialize_repository, list_repositories, open_repository,
-    set_repository_favorite, AppState,
+    set_repository_favorite,
 };
+use crate::AppState;
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
