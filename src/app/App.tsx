@@ -15,7 +15,7 @@ import { loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../fea
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
-import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
+import { loadRemoteBranchDeleteDialog, useRepositoryRefs } from "../features/branches";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
 import { TaskRefreshPlanner } from "../features/tasks/model/task-refresh-planner";
@@ -30,7 +30,7 @@ const TaskCenter = lazy(() => import("../features/tasks/TaskCenter").then(({ Tas
 const WorkflowDialog = lazy(() => loadWorkflowDialog().then(({ WorkflowDialog }) => ({ default: WorkflowDialog })));
 const RebaseDialog = lazy(() => loadRebaseDialog().then(({ RebaseDialog }) => ({ default: RebaseDialog })));
 const ResetDialog = lazy(() => loadResetDialog().then(({ ResetDialog }) => ({ default: ResetDialog })));
-const RemoteBranchDeleteDialog = lazy(() => import("../features/branches/RemoteBranchDeleteDialog").then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
+const RemoteBranchDeleteDialog = lazy(() => loadRemoteBranchDeleteDialog().then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
 const CloneDialog = lazy(() => loadCloneDialog().then(({ CloneDialog }) => ({ default: CloneDialog })));
 const WorkspaceMainPanel = lazy(() => import("../pages/workspace/WorkspaceMainPanel").then(({ WorkspaceMainPanel }) => ({ default: WorkspaceMainPanel })));
 const PushDialog = lazy(() => import("../features/remotes/PushDialog").then(({ PushDialog }) => ({ default: PushDialog })));
