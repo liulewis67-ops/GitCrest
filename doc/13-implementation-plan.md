@@ -615,3 +615,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
 - 限制/后续：当前 `api/router.rs` 仍集中注册全部业务路由，handlers 仍在 `main.rs`；下一阶段按 system、repositories、status、staging、branches、remotes、history、diff、workflows、shelves、tasks 等 feature 子路由继续拆分。
 - 证据：`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/api/mod.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`0a99d5c`
