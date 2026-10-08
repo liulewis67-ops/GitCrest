@@ -1211,3 +1211,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`WorkflowOperation`、rebase/reset preview 和 todo 模型仍由 workflows feature 定义，Git adapter 仍依赖 feature 类型；下一阶段梳理稳定领域类型和 adapter 输入边界，逐步解除 crate 根的 rebase/reset 兼容导出。
 - 证据：`crates/gitcrest-core/src/domain/{mod.rs,error.rs}`、`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/features/workflows/{workflows.rs,conflicts.rs,rebase.rs,reset.rs}`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`e0da448`
+
+### 后端 rebase todo 领域模型 — 小阶段 68
+- 状态：已完成（rebase 执行指令进入 domain，API 请求经 DTO 转换）
+- 日期：2026-10-09
+- 交付：将 `RebaseAction` 与 `RebaseTodoItem` 从 rebase service 移入纯数据 `domain/workflow.rs`，移除领域类型上的 serde/API 策略；在 workflows DTO 定义对应的请求枚举与结构，并在 handler 边界显式转换。rebase 校验和 Git adapter 统一使用领域 todo 类型，Git adapter 不再引用 feature 的 todo/action 类型，JSON action 的小写格式保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：Git adapter 的 rebase 方法仍接收 feature `RebasePreview`，而 reset 方法仍接收 feature `ResetPreview`；需继续将 adapter 所需输入收敛为领域执行参数，并将 `WorkflowOperation` 的 API DTO 边界分开。
+- 证据：`crates/gitcrest-core/src/domain/workflow.rs`、`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers/rebase.rs,rebase.rs}`、`crates/gitcrest-core/src/git/git_command.rs`。
+- 实施 commit：`8d2800c`
