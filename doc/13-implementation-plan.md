@@ -1589,3 +1589,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：仓库 tab 的其它 session 更新、viewport 恢复与 commit task 编排仍由 App 协调；继续按 feature model/use case 边界拆分。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-workspace-commit-selection.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`44721e1`
+
+### Workspace 图视图滚动恢复归位页面组件 — 小阶段 110
+- 状态：已完成（图视图 DOM 的滚动恢复由 workspace 主面板生命周期管理）
+- 日期：2026-10-09
+- 交付：将 App 中通过 graph viewport ref 恢复当前仓库滚动位置的 effect 移入 `pages/workspace/WorkspaceMainPanel.tsx`。恢复仍仅在 graph 模式且存在仓库时执行，并依据该仓库 session 中保存的 graphScrollTop；App 不再负责图视图 DOM 的滚动恢复。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留既有 tree-sitter `eval`、commits 模块动态/静态导入提示与 Monaco contribution 大 chunk 警告。
+- 限制/后续：workspace 主面板组件仍从 App 接收较多状态与操作回调；继续按页面组合和 feature 业务边界减小根组件职责。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/app/App.tsx`。
+- 实施 commit：`4dfbe47`
