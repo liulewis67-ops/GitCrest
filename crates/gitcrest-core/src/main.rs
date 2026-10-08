@@ -55,6 +55,8 @@ mod push;
 mod rebase;
 #[path = "features/remotes/remotes.rs"]
 mod remotes;
+#[path = "features/repositories/mod.rs"]
+mod repositories;
 #[path = "features/repositories/repository.rs"]
 mod repository;
 #[path = "features/workflows/reset.rs"]

@@ -625,3 +625,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其他 feature handler 和路由仍未拆分；`api/router.rs` 当前保留它们的组合，按同样边界逐组迁移。
 - 证据：`crates/gitcrest-core/src/features/system/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`45071e6`
+
+### 后端 repositories feature 路由拆分 — 小阶段 5
+- 状态：已完成（仓库生命周期路由模块化；后端规范整体仍需继续对齐）
+- 日期：2026-10-09
+- 交付：将仓库集合查询/打开、初始化、单仓库查询/移除及收藏路由移至 `features/repositories/routes.rs`，顶层 API router 通过合并 feature router 组合这些端点。路径、HTTP method、handler 和公共 middleware 保持不变；clone 与 status/diff 等端点留在顶层，待各自 feature 路由阶段迁移。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：`api/router.rs` 仍包含 status、diff、branch、remote、history、workflow、task 等路由；仓库 handler/service 也仍在 `main.rs`，后续继续按 feature 边界迁移。
+- 证据：`crates/gitcrest-core/src/features/repositories/routes.rs`、`crates/gitcrest-core/src/features/repositories/mod.rs`、`crates/gitcrest-core/src/api/router.rs`。
