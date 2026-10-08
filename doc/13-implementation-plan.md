@@ -840,3 +840,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/config.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`99f7017`
 
+
+### 后端共享状态与事件协议拆分 — 小阶段 28
+- 状态：已完成（AppState、EventBus 与 EventEnvelope 进入 state 模块）
+- 日期：2026-10-09
+- 交付：新增 `src/state.rs`，集中定义共享服务句柄、权限 token、事件广播和事件 envelope；API handlers/bootstrap 从该模块获取 AppState，`main.rs` 不再持有共享状态和事件协议实现。保持事件 JSON 字段、广播容量 512、时间戳生成与既有状态字段不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（120/120）与 `git diff --check` 通过；事件 WebSocket、鉴权和 API 集成用例通过。
+- 限制/后续：main.rs 仍保留大量未迁移 handlers 和 module declarations；state 字段目前为 crate 可见以供各 feature handler 使用，下一步按最小依赖原则拆分 feature state views 与事件传输边界。
+- 证据：`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/api/router.rs`。
+- 实施 commit：`84e485e`
+
