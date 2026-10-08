@@ -968,3 +968,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：staging command service 仍位于兼容命名的 `staging.rs`；后续可整理为 `service.rs` 并继续拆分 shelves/workflows feature。
 - 证据：`crates/gitcrest-core/src/features/staging/{mod,dto,staging,handlers,routes}.rs`。
 - 实施 commit：`e7ce865`
+
+### 后端 staging service 文件命名对齐 — 小阶段 41
+- 状态：已完成（service 模块采用 feature 规范文件名）
+- 日期：2026-10-09
+- 交付：将 `features/staging/staging.rs` 重命名为 `features/staging/service.rs`，并由 feature `mod.rs` 直接声明 service 模块；公开于 feature 根的命令、错误和 DTO 引用保持兼容，运行逻辑无变化。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过。
+- 限制/后续：feature handlers/routes 与 service 已形成分层；继续按后端规范整理 shelves/workflows 的目录结构及 API handlers。
+- 证据：`crates/gitcrest-core/src/features/staging/{mod,dto,service,handlers,routes}.rs`。
+- 实施 commit：`4c04894`
