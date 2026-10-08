@@ -102,3 +102,17 @@ it("requires a separate confirmation before restoring a saved backup", async () 
   }));
   expect(onStarted).toHaveBeenCalledWith(task);
 });
+
+it("moves focus into the rebase dialog and closes it with Escape", async () => {
+  const onClose = vi.fn();
+  const api = {
+    getRepositoryRebaseBackups: vi.fn().mockResolvedValue({ ...backups, backups: [] }),
+  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  render(<RebaseDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={onClose} onStarted={vi.fn()} />);
+  const dialog = screen.getByRole("dialog", { name: "Interactive rebase" });
+  const close = screen.getByRole("button", { name: "Close" });
+  await waitFor(() => expect(document.activeElement).toBe(close));
+
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledOnce();
+});

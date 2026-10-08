@@ -8,6 +8,7 @@ import {
   type TaskSnapshotResponse,
 } from "../../api/client";
 import type { components } from "../../api/schema";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 type RebaseTodoItem = components["schemas"]["RebaseTodoItem"];
 
@@ -38,6 +39,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
   const [confirmPublishedRewrite, setConfirmPublishedRewrite] = useState(false);
   const [confirmRollback, setConfirmRollback] = useState(false);
   const [error, setError] = useState("");
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
     let active = true;
@@ -139,7 +141,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
   }
 
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="taskCenter rebaseDialog" role="dialog" aria-modal="true" aria-labelledby="rebase-dialog-title">
+    <section ref={dialogRef} className="taskCenter rebaseDialog" role="dialog" aria-modal="true" aria-labelledby="rebase-dialog-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
         <div><p className="sectionEyebrow">REVIEW HISTORY REWRITE</p><h2 id="rebase-dialog-title">Interactive rebase</h2></div>
         <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>

@@ -98,3 +98,17 @@ it("requires confirmation before restoring a reset backup", async () => {
   }));
   expect(onStarted).toHaveBeenCalledWith(task);
 });
+
+it("moves focus into the reset dialog and closes it with Escape", async () => {
+  const onClose = vi.fn();
+  const api = {
+    getRepositoryResetBackups: vi.fn().mockResolvedValue({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }),
+  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={onClose} onStarted={vi.fn()} />);
+  const dialog = screen.getByRole("dialog", { name: "Reset current branch" });
+  const close = screen.getByRole("button", { name: "Close" });
+  await waitFor(() => expect(document.activeElement).toBe(close));
+
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledOnce();
+});

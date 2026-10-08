@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type ResetBackupSnapshotResponse, type ResetPreviewResponse, type TaskSnapshotResponse } from "../../api/client";
 import type { components } from "../../api/schema";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 type ResetMode = components["schemas"]["ResetMode"];
 const MODES: ResetMode[] = ["soft", "mixed", "hard"];
@@ -25,6 +26,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
     let active = true;
@@ -92,7 +94,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
   }
 
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="taskCenter resetDialog" role="dialog" aria-modal="true" aria-labelledby="reset-dialog-title">
+    <section ref={dialogRef} className="taskCenter resetDialog" role="dialog" aria-modal="true" aria-labelledby="reset-dialog-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
         <div><p className="sectionEyebrow">REVIEW BRANCH MOVEMENT</p><h2 id="reset-dialog-title">Reset current branch</h2></div>
         <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>
