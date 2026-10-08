@@ -890,3 +890,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/workspace-session.ts`、`src/App.tsx`、`tests/unit/workspace-session.test.ts`。
 - 实施 commit：`9e1596f`
 
+
+### 前端 app 根组件目录对齐 — 小阶段 33
+- 状态：已完成（应用根组件进入规范目标 app 层）
+- 日期：2026-10-09
+- 交付：将 renderer 根 `App` 从 `src/App.tsx` 迁入 `src/app/App.tsx`，同步修正 `app/routing/RendererRoot`、单元测试及全部 API/feature/shared 样式导入路径；React 组件行为、入口 URL 解析和全局样式行为保持不变。
+- 验证：完整 Vitest 单测 152/152、`pnpm build`（Electron）及 `pnpm frontend:build`（浏览器）、`git diff --check` 通过。构建保留既有 tree-sitter `eval` 与浏览器 bundle 大块警告。
+- 限制/后续：组件目录与目标结构对齐不等于 App 已完成职责拆分；workspace 页面组合及其余 feature UI、查询层和 Tailwind v4 迁移仍需继续。S7.2、S7.4、S7.5 验收仍未完成。
+- 证据：`src/app/App.tsx`、`src/app/routing/RendererRoot.tsx`、`tests/unit/app.test.tsx`。
+- 实施 commit：`e933bf5`
+
