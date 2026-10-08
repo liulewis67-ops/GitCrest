@@ -1949,3 +1949,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`tests.rs` 仍含多个跨 feature API 场景；可根据规范逐步将测试放回相应 feature 或测试支持模块。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/{lib.rs,tests.rs}`、`doc/14-backend-development-guidelines.md` 第 3、13.2、14 节。
 - 实施 commit：`51e8f24`
+
+### remotes feature 远端配置 mutations 迁入 model — 小阶段 150
+- 状态：已完成（远端配置写操作由 remotes feature hook 编排）
+- 日期：2026-10-09
+- 交付：新增 `features/remotes/model/use-remote-mutations.ts`，集中提交远端新增/修改/删除、默认远端与 branch upstream 任务，并管理 busy、错误、仓库缓存代次和任务中心插入；通过 remotes feature 公开入口供 App 使用。将两处 settings 测试导入更新到当前 `model/` 目录，修复构建时暴露的旧路径引用。API 请求、错误文案和任务流程保持不变。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建保留已有 web-tree-sitter eval、超大 editor chunk 和 commits 动态/静态导入警告。
+- 限制/后续：remote 管理查询和跨 feature task 刷新仍由 App 协调；继续按 feature model 与应用装配边界逐步迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/remotes/model/use-remote-mutations.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`tests/unit/{settings-dialog,shortcut-preferences}.test.*`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`f9792e3`
