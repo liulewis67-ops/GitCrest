@@ -901,6 +901,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/workflows/rebase-backups": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** List GitCrest rebase backups and current rollback eligibility */
+        get: operations["listRepositoryRebaseBackups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/workflows/rebase-rollback": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue a confirmed rollback to a reviewed GitCrest rebase backup */
+        post: operations["rollbackRepositoryRebase"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/workflows": {
         parameters: {
             query?: never;
@@ -1386,6 +1428,27 @@ export interface components {
             action: "pick" | "reword" | "edit" | "squash" | "fixup" | "drop";
             /** @description Replacement commit message for reword. */
             message?: string | null;
+        };
+        RebaseBackup: {
+            reference: string;
+            oid: string;
+            subject: string;
+        };
+        RebaseBackupSnapshot: {
+            headOid: string | null;
+            currentBranch: string | null;
+            dirtyPaths: string[];
+            /** @enum {string|null} */
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            backups: components["schemas"]["RebaseBackup"][];
+            canRollback: boolean;
+        };
+        RebaseRollbackRequest: {
+            expectedHeadOid: string;
+            backupReference: string;
+            backupOid: string;
+            /** @description Must be true after explicit user confirmation. */
+            confirmRollback: boolean;
         };
         WorkflowRequest: {
             /** @enum {string} */
@@ -4487,6 +4550,102 @@ export interface operations {
                 };
             };
             /** @description The reviewed branch or commit sequence is stale. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git cannot be started. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    listRepositoryRebaseBackups: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current branch snapshot and the bounded GitCrest rollback references. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebaseBackupSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is not available. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    rollbackRepositoryRebase: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RebaseRollbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Rollback task accepted after snapshot revalidation. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The request is malformed or confirmation/reference is invalid. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The branch, worktree, or selected backup changed after review. */
             412: {
                 headers: {
                     [name: string]: unknown;

@@ -23,6 +23,7 @@ export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
 export type RebasePreviewResponse = components["schemas"]["RebasePreview"];
+export type RebaseBackupSnapshotResponse = components["schemas"]["RebaseBackupSnapshot"];
 export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
 export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
 export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowConflictMutationRequest"];
@@ -375,6 +376,27 @@ export class GitCrestApiClient {
   ): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(
       `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/rebase-preview`,
+      true,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
+  }
+
+  getRepositoryRebaseBackups(repoId: RepoId): Promise<RebaseBackupSnapshotResponse> {
+    return this.request<RebaseBackupSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/rebase-backups`,
+    );
+  }
+
+  rollbackRepositoryRebase(
+    repoId: RepoId,
+    request: components["schemas"]["RebaseRollbackRequest"],
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/rebase-rollback`,
       true,
       {
         method: "POST",

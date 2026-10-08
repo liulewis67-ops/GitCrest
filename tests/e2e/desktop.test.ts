@@ -190,6 +190,16 @@ describe("desktop startup E2E", () => {
       expect(await rebaseTaskCard.innerText()).toContain("refs/gitcrest/rebase-backups/");
       expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("Interactive rebase E2E message");
 
+      await window.keyboard.press("Control+i");
+      const rollbackDialog = window.getByRole("dialog", { name: "Interactive rebase" });
+      await rollbackDialog.waitFor();
+      await rollbackDialog.getByLabel(/moves the current branch/).check();
+      await rollbackDialog.getByRole("button", { name: "Restore selected backup" }).click();
+      const rollbackTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "rebaseRollback" }) });
+      await rollbackTaskCard.waitFor({ state: "visible" });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "rebaseRollback" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("change feature branch");
+
       const forgotten = await window.evaluate(async (repoId) => {
         const connection = await (globalThis.window as unknown as Window & {
           gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };

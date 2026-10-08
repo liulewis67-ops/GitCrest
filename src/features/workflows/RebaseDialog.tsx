@@ -4,6 +4,7 @@ import {
   type BranchSnapshotResponse,
   type GitCrestApiClient,
   type RebasePreviewResponse,
+  type RebaseBackupSnapshotResponse,
   type TaskSnapshotResponse,
 } from "../../api/client";
 import type { components } from "../../api/schema";
@@ -28,12 +29,27 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
   const defaultTarget = targets.find((branch) => branch.fullName === currentBranch?.upstream) || targets[0];
   const [ontoOid, setOntoOid] = useState("");
   const [preview, setPreview] = useState<RebasePreviewResponse>();
+  const [backupSnapshot, setBackupSnapshot] = useState<RebaseBackupSnapshotResponse>();
+  const [selectedBackup, setSelectedBackup] = useState("");
   const [todo, setTodo] = useState<RebaseTodoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [confirmDrop, setConfirmDrop] = useState(false);
   const [confirmPublishedRewrite, setConfirmPublishedRewrite] = useState(false);
+  const [confirmRollback, setConfirmRollback] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    void api.getRepositoryRebaseBackups(repoId).then((snapshot) => {
+      if (!active) return;
+      setBackupSnapshot(snapshot);
+      setSelectedBackup(snapshot.backups[0]?.reference || "");
+    }).catch((reason) => {
+      if (active) setError(reason instanceof GitCrestApiError ? reason.body.error.message : "Could not load rebase backups.");
+    });
+    return () => { active = false; };
+  }, [api, repoId]);
 
   useEffect(() => {
     if (!ontoOid && defaultTarget) setOntoOid(defaultTarget.oid);
@@ -103,6 +119,25 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
     }
   }
 
+  async function rollback() {
+    const backup = backupSnapshot?.backups.find((item) => item.reference === selectedBackup);
+    if (!backupSnapshot?.canRollback || !backupSnapshot.headOid || !backup || !confirmRollback || disabled || busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      onStarted(await api.rollbackRepositoryRebase(repoId, {
+        expectedHeadOid: backupSnapshot.headOid,
+        backupReference: backup.reference,
+        backupOid: backup.oid,
+        confirmRollback: true,
+      }));
+    } catch (reason) {
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start rollback.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section className="taskCenter rebaseDialog" role="dialog" aria-modal="true" aria-labelledby="rebase-dialog-title">
       <div className="taskCenterHeader">
@@ -118,6 +153,19 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
         {targets.length === 0 && <p className="cloneHelp">There is no other local or remote-tracking branch to use as a target.</p>}
         {disabled && <p className="cloneHelp">Wait for the current repository task to finish before starting a rebase.</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
+        <section className="rebaseRollbackPanel" aria-labelledby="rebase-rollback-heading">
+          <h3 id="rebase-rollback-heading">Restore a rebase backup</h3>
+          {backupSnapshot?.backups.length ? <>
+            <label className="rebaseTargetField" htmlFor="rebase-backup">Saved branch state
+              <select id="rebase-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRollback(false); }}>
+                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || "(no subject)"} · {backup.oid.slice(0, 9)}</option>)}
+              </select>
+            </label>
+            {!backupSnapshot.canRollback && <p className="cloneHelp">Rollback is available only on a clean attached branch with no Git operation in progress.</p>}
+            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRollback} onChange={(event) => setConfirmRollback(event.target.checked)} />I understand restoring this backup moves the current branch and replaces its checked-out files.</label>
+            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRollback || !confirmRollback || disabled || busy} onClick={() => void rollback()}>{busy ? "Starting…" : "Restore selected backup"}</button>
+          </> : <p className="cloneHelp">No GitCrest rebase backups are available in this repository.</p>}
+        </section>
         {loading && <p role="status">Reviewing the commit range…</p>}
         {preview && <>
           <div className="rebasePreviewFacts">

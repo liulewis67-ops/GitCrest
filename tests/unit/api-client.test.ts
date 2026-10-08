@@ -415,6 +415,32 @@ describe("GitCrestApiClient", () => {
     expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(request);
   });
 
+  it("lists rebase backups and queues rollback with explicit snapshot confirmation", async () => {
+    const snapshot = {
+      headOid: "a".repeat(40), currentBranch: "feature", dirtyPaths: [], operationInProgress: null,
+      backups: [{ reference: "refs/gitcrest/rebase-backups/task-1", oid: "b".repeat(40), subject: "before rewrite" }],
+      canRollback: true,
+    };
+    const task = { taskId: "task-rollback", repoId: "repo_fixture", operation: "rebaseRollback", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
+    const fetcher = vi.fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify(snapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(task), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryRebaseBackups("repo/fixture")).resolves.toEqual(snapshot);
+    const request = {
+      expectedHeadOid: snapshot.headOid,
+      backupReference: snapshot.backups[0]!.reference,
+      backupOid: snapshot.backups[0]!.oid,
+      confirmRollback: true,
+    };
+    await expect(client.rollbackRepositoryRebase("repo/fixture", request)).resolves.toEqual(task);
+    expect(String(fetcher.mock.calls[0]![0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/workflows/rebase-backups`);
+    expect(String(fetcher.mock.calls[1]![0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/workflows/rebase-rollback`);
+    expect(fetcher.mock.calls[1]![1]?.method).toBe("POST");
+    expect(JSON.parse(String(fetcher.mock.calls[1]![1]?.body))).toEqual(request);
+  });
+
   it("queues a snapshot-bound cherry-pick using a typed workflow request", async () => {
     const task = { taskId: "task-cherry-pick", repoId: "repo_fixture", operation: "cherryPick", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(task), {

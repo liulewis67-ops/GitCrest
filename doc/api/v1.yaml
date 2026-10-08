@@ -2142,6 +2142,90 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/rebase-backups:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: listRepositoryRebaseBackups
+      summary: List GitCrest rebase backups and current rollback eligibility
+      responses:
+        "200":
+          description: Current branch snapshot and the bounded GitCrest rollback references.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RebaseBackupSnapshot"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Repository is not available.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+  /api/v1/repositories/{repoId}/workflows/rebase-rollback:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: rollbackRepositoryRebase
+      summary: Queue a confirmed rollback to a reviewed GitCrest rebase backup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RebaseRollbackRequest"
+      responses:
+        "202":
+          description: Rollback task accepted after snapshot revalidation.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The request is malformed or confirmation/reference is invalid.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "406":
+          $ref: "#/components/responses/UnsupportedVersion"
+        "412":
+          description: The branch, worktree, or selected backup changed after review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git cannot be started.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/workflows:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3173,6 +3257,34 @@ components:
         oid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         action: { type: string, enum: [pick, reword, edit, squash, fixup, drop] }
         message: { type: [string, "null"], maxLength: 4096, description: Replacement commit message for reword. }
+    RebaseBackup:
+      type: object
+      additionalProperties: false
+      required: [reference, oid, subject]
+      properties:
+        reference: { type: string, pattern: "^refs/gitcrest/rebase-backups/[A-Za-z0-9-]+$" }
+        oid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        subject: { type: string, maxLength: 4096 }
+    RebaseBackupSnapshot:
+      type: object
+      additionalProperties: false
+      required: [headOid, currentBranch, dirtyPaths, operationInProgress, backups, canRollback]
+      properties:
+        headOid: { type: [string, "null"], minLength: 40, maxLength: 64 }
+        currentBranch: { type: [string, "null"], maxLength: 1024 }
+        dirtyPaths: { type: array, maxItems: 200, items: { type: string } }
+        operationInProgress: { type: [string, "null"], enum: [merge, cherryPick, revert, rebase, shelfApply, null] }
+        backups: { type: array, maxItems: 1000, items: { $ref: "#/components/schemas/RebaseBackup" } }
+        canRollback: { type: boolean }
+    RebaseRollbackRequest:
+      type: object
+      additionalProperties: false
+      required: [expectedHeadOid, backupReference, backupOid, confirmRollback]
+      properties:
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        backupReference: { type: string, pattern: "^refs/gitcrest/rebase-backups/[A-Za-z0-9-]+$" }
+        backupOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        confirmRollback: { type: boolean, description: Must be true after explicit user confirmation. }
     WorkflowRequest:
       type: object
       additionalProperties: false

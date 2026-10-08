@@ -33,8 +33,15 @@ const task: TaskSnapshotResponse = {
   createdAtMs: 1, updatedAtMs: 1, cancelRequested: false,
 };
 
+const backups = {
+  headOid: "a".repeat(40), currentBranch: "feature", dirtyPaths: [], operationInProgress: null,
+  backups: [{ reference: "refs/gitcrest/rebase-backups/task-1", oid: "b".repeat(40), subject: "before rewrite" }],
+  canRollback: true,
+};
+
 it("reviews an editable todo and requires confirmation for drops and published rewrites", async () => {
   const api = {
+    getRepositoryRebaseBackups: vi.fn().mockResolvedValue(backups),
     preflightRepositoryRebase: vi.fn().mockResolvedValue(preview),
     startRepositoryRebase: vi.fn().mockResolvedValue(task),
   } as unknown as import("../../src/api/client").GitCrestApiClient;
@@ -44,9 +51,8 @@ it("reviews an editable todo and requires confirmation for drops and published r
   expect((screen.getByLabelText("Rebase current branch onto") as HTMLSelectElement).value).toBe("b".repeat(40));
   fireEvent.click(screen.getByRole("button", { name: "Refresh preview" }));
   expect(await screen.findByText("first feature")).toBeTruthy();
-  const actions = screen.getAllByRole("combobox").slice(1);
-  fireEvent.change(actions[0]!, { target: { value: "reword" } });
-  fireEvent.change(actions[1]!, { target: { value: "drop" } });
+  fireEvent.change(screen.getByLabelText(`Action for ${preview.commits[0]!.oid.slice(0, 9)}`), { target: { value: "reword" } });
+  fireEvent.change(screen.getByLabelText(`Action for ${preview.commits[1]!.oid.slice(0, 9)}`), { target: { value: "drop" } });
   expect((screen.getByLabelText(/Replacement message/) as HTMLTextAreaElement).value).toBe("first feature");
   expect((screen.getByRole("button", { name: "Start rebase" }) as HTMLButtonElement).disabled).toBe(true);
 
@@ -67,6 +73,29 @@ it("reviews an editable todo and requires confirmation for drops and published r
       { oid: preview.commits[0]!.oid, action: "reword", message: "first feature" },
       { oid: preview.commits[1]!.oid, action: "drop", message: null },
     ],
+  }));
+  expect(onStarted).toHaveBeenCalledWith(task);
+});
+
+it("requires a separate confirmation before restoring a saved backup", async () => {
+  const api = {
+    getRepositoryRebaseBackups: vi.fn().mockResolvedValue(backups),
+    rollbackRepositoryRebase: vi.fn().mockResolvedValue(task),
+  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const onStarted = vi.fn();
+  render(<RebaseDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
+
+  const restore = await screen.findByRole("button", { name: "Restore selected backup" });
+  expect((restore as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByLabelText(/moves the current branch/));
+  expect((restore as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(restore);
+
+  await waitFor(() => expect(api.rollbackRepositoryRebase).toHaveBeenCalledWith("repo_fixture", {
+    expectedHeadOid: backups.headOid,
+    backupReference: backups.backups[0]!.reference,
+    backupOid: backups.backups[0]!.oid,
+    confirmRollback: true,
   }));
   expect(onStarted).toHaveBeenCalledWith(task);
 });

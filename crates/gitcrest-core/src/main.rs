@@ -1031,6 +1031,14 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
             get(preflight_repository_rebase).post(start_repository_rebase),
         )
         .route(
+            "/v1/repositories/:repo_id/workflows/rebase-backups",
+            get(list_repository_rebase_backups),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/rebase-rollback",
+            post(rollback_repository_rebase),
+        )
+        .route(
             "/v1/repositories/:repo_id/workflows",
             post(start_repository_workflow),
         )
@@ -3913,6 +3921,133 @@ async fn start_repository_rebase(
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context
                         .log("Repository metadata refresh failed after rebase; refresh the repository before the next write.")
+                        .await;
+                }
+                result.map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn list_repository_rebase_backups(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<rebase::RebaseBackupSnapshot>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    rebase::read_backup_snapshot(&target.repository_path)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_workflow_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RebaseRollbackRequest {
+    expected_head_oid: String,
+    backup_reference: String,
+    backup_oid: String,
+    confirm_rollback: bool,
+}
+
+fn is_rebase_backup_reference(reference: &str) -> bool {
+    let Some(suffix) = reference.strip_prefix("refs/gitcrest/rebase-backups/") else {
+        return false;
+    };
+    !suffix.is_empty()
+        && suffix
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+}
+
+async fn rollback_repository_rebase(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RebaseRollbackRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Rebase rollback requires the reviewed HEAD and a backup reference.",
+        )
+    })?;
+    if !request.confirm_rollback || !is_rebase_backup_reference(&request.backup_reference) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Rollback requires explicit confirmation and a GitCrest rebase backup reference.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = rebase::read_backup_snapshot(&target.repository_path)
+        .await
+        .map_err(ApiError::from_workflow_error)?;
+    if snapshot.head_oid.as_deref() != Some(request.expected_head_oid.as_str())
+        || !snapshot.can_rollback
+        || !snapshot.backups.iter().any(|backup| {
+            backup.reference == request.backup_reference && backup.oid == request.backup_oid
+        })
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowPreflightStale,
+            "The current branch, worktree, or selected backup changed. Refresh the rollback review.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let repositories = state.repositories.clone();
+    let task_repo_id = repo_id.clone();
+    let path = target.repository_path;
+    let resource_key = target.resource_key;
+    let expected_head_oid = request.expected_head_oid;
+    let backup_reference = request.backup_reference;
+    let backup_oid = request.backup_oid;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            "rebaseRollback",
+            move |context| async move {
+                let current = rebase::read_backup_snapshot(&path).await.map_err(|_| {
+                    TaskFailure::Failed(
+                        "Rollback preconditions could not be rechecked. Refresh repository state.".into(),
+                    )
+                })?;
+                if current.head_oid.as_deref() != Some(expected_head_oid.as_str())
+                    || !current.can_rollback
+                    || !current.backups.iter().any(|backup| {
+                        backup.reference == backup_reference && backup.oid == backup_oid
+                    })
+                {
+                    return Err(TaskFailure::Failed(
+                        "Rollback preconditions changed before Git could start. Review the current repository state.".into(),
+                    ));
+                }
+                let task_context = context.clone();
+                let result = command
+                    .execute_rebase_rollback(
+                        &path,
+                        &expected_head_oid,
+                        &backup_oid,
+                        &backup_reference,
+                        context,
+                    )
+                    .await;
+                if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                    task_context
+                        .log("Repository metadata refresh failed after rollback; refresh the repository before the next write.")
                         .await;
                 }
                 result.map(|()| None)
@@ -7112,6 +7247,80 @@ mod tests {
             old_head
         );
         assert_eq!(git(&["rev-parse", "--abbrev-ref", "HEAD"]), "feature");
+
+        let backups_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-backups"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(backups_response.status(), StatusCode::OK);
+        let bytes = to_bytes(backups_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let backups: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(backups["canRollback"], true);
+        let backup_reference = format!(
+            "refs/gitcrest/rebase-backups/{}",
+            accepted["taskId"].as_str().unwrap()
+        );
+        let missing_confirmation = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-rollback"),
+                &serde_json::json!({
+                    "expectedHeadOid": git(&["rev-parse", "HEAD"]),
+                    "backupReference": backup_reference,
+                    "backupOid": old_head,
+                    "confirmRollback": false
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(missing_confirmation.status(), StatusCode::BAD_REQUEST);
+        let invalid_reference = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-rollback"),
+                &serde_json::json!({
+                    "expectedHeadOid": git(&["rev-parse", "HEAD"]),
+                    "backupReference": "refs/heads/main",
+                    "backupOid": old_head,
+                    "confirmRollback": true
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(invalid_reference.status(), StatusCode::BAD_REQUEST);
+        let rollback = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-rollback"),
+                &serde_json::json!({
+                    "expectedHeadOid": git(&["rev-parse", "HEAD"]),
+                    "backupReference": backup_reference,
+                    "backupOid": old_head,
+                    "confirmRollback": true
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(rollback.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(rollback.into_body(), usize::MAX).await.unwrap();
+        let rollback: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let restored = wait_for_task(&app, rollback["taskId"].as_str().unwrap()).await;
+        assert_eq!(restored["status"], "succeeded");
+        assert_eq!(git(&["rev-parse", "HEAD"]), old_head);
+        assert_eq!(git(&["log", "-1", "--format=%s"]), "third feature");
+        assert!(restored["logs"].to_string().contains("before-rollback"));
     }
 
     #[tokio::test]
@@ -7345,7 +7554,116 @@ mod tests {
         );
         assert_eq!(git(&["rev-parse", "HEAD~1"]), onto_oid);
         assert_eq!(
-            std::fs::read_to_string(repository_path.join("notes.txt")).unwrap(),
+            std::fs::read_to_string(repository_path.join("notes.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "resolved feature line\nkeep line\n"
+        );
+
+        let pre_abort_head = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "main"]);
+        std::fs::write(
+            repository_path.join("notes.txt"),
+            "new target line\nkeep line\n",
+        )
+        .unwrap();
+        git(&["commit", "--quiet", "-am", "new target edit"]);
+        let abort_onto_oid = git(&["rev-parse", "HEAD"]);
+        git(&["checkout", "--quiet", "feature"]);
+        let abort_preview_response = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/workflows/rebase-preview?ontoOid={abort_onto_oid}"
+                ),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(abort_preview_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let abort_preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let abort_todo = abort_preview["commits"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|commit| serde_json::json!({ "oid": commit["oid"], "action": "pick", "message": null }))
+            .collect::<Vec<_>>();
+        let abort_accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/rebase-preview"),
+                &serde_json::json!({
+                    "expectedHeadOid": pre_abort_head,
+                    "expectedOntoOid": abort_onto_oid,
+                    "previewRevision": abort_preview["previewRevision"],
+                    "todo": abort_todo,
+                    "confirmDrop": false,
+                    "confirmPublishedRewrite": false
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(abort_accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(abort_accepted.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let abort_accepted: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let abort_waiting = wait_for_task_status(
+            &app,
+            abort_accepted["taskId"].as_str().unwrap(),
+            "waitingForInput",
+        )
+        .await;
+        let abort_recovery_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={}",
+            abort_waiting["taskId"].as_str().unwrap()
+        );
+        let abort_recovery_response = app
+            .clone()
+            .oneshot(request(&abort_recovery_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(abort_recovery_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let abort_recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(abort_recovery["canAbort"], true);
+        let aborted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+                &serde_json::json!({
+                    "taskId": abort_waiting["taskId"],
+                    "action": "abort",
+                    "expectedOperation": "rebase",
+                    "expectedHeadOid": abort_recovery["headOid"],
+                    "expectedConflictedPaths": abort_recovery["conflictedPaths"]
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(aborted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(aborted.into_body(), usize::MAX).await.unwrap();
+        let aborted: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, aborted["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            wait_for_task(&app, abort_waiting["taskId"].as_str().unwrap()).await["status"],
+            "cancelled"
+        );
+        assert_eq!(git(&["rev-parse", "HEAD"]), pre_abort_head);
+        assert_eq!(
+            std::fs::read_to_string(repository_path.join("notes.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
             "resolved feature line\nkeep line\n"
         );
     }

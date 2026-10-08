@@ -130,6 +130,92 @@ pub struct RebasePreview {
     pub can_start: bool,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebaseBackup {
+    pub reference: String,
+    pub oid: String,
+    pub subject: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RebaseBackupSnapshot {
+    pub head_oid: Option<String>,
+    pub current_branch: Option<String>,
+    pub dirty_paths: Vec<String>,
+    pub operation_in_progress: Option<WorkflowOperation>,
+    pub backups: Vec<RebaseBackup>,
+    pub can_rollback: bool,
+}
+
+pub async fn read_backup_snapshot(
+    repository_path: &Path,
+) -> Result<RebaseBackupSnapshot, WorkflowError> {
+    let head_oid = run_git_optional(
+        repository_path,
+        &[
+            "rev-parse".into(),
+            "--verify".into(),
+            "HEAD^{commit}".into(),
+        ],
+    )
+    .await?
+    .map(|value| String::from_utf8_lossy(&value).trim().to_owned());
+    let branch = run_git_optional(
+        repository_path,
+        &[
+            "symbolic-ref".into(),
+            "--quiet".into(),
+            "--short".into(),
+            "HEAD".into(),
+        ],
+    )
+    .await?
+    .map(|value| String::from_utf8_lossy(&value).trim().to_owned());
+    let (dirty_paths, _, _, _, operation_in_progress) =
+        read_worktree_state(repository_path).await?;
+    let backups = list_backups(repository_path).await?;
+    let can_rollback = head_oid.is_some()
+        && branch.is_some()
+        && dirty_paths.is_empty()
+        && operation_in_progress.is_none()
+        && !backups.is_empty();
+    Ok(RebaseBackupSnapshot {
+        head_oid,
+        current_branch: branch,
+        dirty_paths,
+        operation_in_progress,
+        backups,
+        can_rollback,
+    })
+}
+
+pub async fn list_backups(repository_path: &Path) -> Result<Vec<RebaseBackup>, WorkflowError> {
+    let output = run_git(
+        repository_path,
+        &[
+            "for-each-ref".into(),
+            "--format=%(refname)%00%(objectname)%00%(subject)".into(),
+            "refs/gitcrest/rebase-backups".into(),
+        ],
+    )
+    .await?;
+    let mut backups = output
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.splitn(3, '\0');
+            Some(RebaseBackup {
+                reference: fields.next()?.to_owned(),
+                oid: fields.next()?.to_owned(),
+                subject: fields.next()?.to_owned(),
+            })
+        })
+        .collect::<Vec<_>>();
+    backups.sort_by(|left, right| right.reference.cmp(&left.reference));
+    Ok(backups)
+}
+
 pub async fn read_preview(
     repo_id: String,
     repository_path: &Path,

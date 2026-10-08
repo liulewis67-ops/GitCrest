@@ -302,6 +302,55 @@ impl GitCommandService {
         workflow_command_result(repository_path, result).await
     }
 
+    pub async fn execute_rebase_rollback(
+        &self,
+        repository_path: &Path,
+        expected_head_oid: &str,
+        backup_oid: &str,
+        backup_ref: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let safety_ref = format!(
+            "refs/gitcrest/rebase-backups/{}-before-rollback",
+            task.task_id()
+        );
+        run_command(
+            &self.git_program,
+            vec![
+                "update-ref".into(),
+                safety_ref.clone().into(),
+                expected_head_oid.into(),
+            ],
+            Some(format!("rebase rollback safety backup {safety_ref}")),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Save current branch before rebase rollback",
+            task.clone(),
+        )
+        .await?;
+        task.log(format!("Created safety reference {safety_ref}."))
+            .await;
+        task.log(format!("Restoring reviewed rebase backup {backup_ref}."))
+            .await;
+        run_command(
+            &self.git_program,
+            vec!["reset".into(), "--hard".into(), backup_oid.into()],
+            Some(format!(
+                "reset --hard {}",
+                &backup_oid[..7.min(backup_oid.len())]
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Restore rebase backup",
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_workflow_recovery(
         &self,
         repository_path: &Path,
