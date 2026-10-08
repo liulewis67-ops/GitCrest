@@ -1,4 +1,3 @@
-#[path = "shelves.rs"]
 mod service;
 
 mod dto;
