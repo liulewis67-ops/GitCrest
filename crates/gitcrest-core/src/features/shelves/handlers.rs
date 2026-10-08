@@ -13,8 +13,7 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::diff::{self, DiffError, DiffScope},
     features::tasks::{TaskFailure, TaskSnapshot},
-    features::{shelves, staging, status},
-    repository::RepositoryManager,
+    features::{repositories::repository::RepositoryManager, shelves, staging, status},
     state::AppState,
     storage::{UndoOperation, UndoRecord},
 };

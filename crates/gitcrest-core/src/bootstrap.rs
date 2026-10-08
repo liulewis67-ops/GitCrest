@@ -6,9 +6,12 @@ use tokio::net::TcpListener;
 use crate::{
     api::router::app_router,
     config::AppConfig,
-    features::{credentials, repositories::cloning::CloneService, tasks::TaskService},
+    features::{
+        credentials,
+        repositories::{cloning::CloneService, repository::RepositoryManager},
+        tasks::TaskService,
+    },
     git::command::GitCommandService,
-    repository::RepositoryManager,
     state::{AppState, EventBus},
     watcher,
 };

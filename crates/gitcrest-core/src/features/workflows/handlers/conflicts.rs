@@ -15,8 +15,10 @@ use super::super::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::settings as ai,
-    features::tasks::{TaskFailure, TaskService, TaskSnapshot, TaskStatus},
-    repository::RepositoryManager,
+    features::{
+        repositories::repository::RepositoryManager,
+        tasks::{TaskFailure, TaskService, TaskSnapshot, TaskStatus},
+    },
     state::AppState,
 };
 
@@ -534,7 +536,7 @@ async fn inspect_waiting_conflict(
     path: &str,
 ) -> Result<
     (
-        crate::repository::TaskTarget,
+        crate::features::repositories::repository::TaskTarget,
         workflows::WorkflowRecoveryPreflight,
     ),
     ApiError,

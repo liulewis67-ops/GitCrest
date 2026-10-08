@@ -21,13 +21,11 @@ mod ports;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
-pub(crate) use features::repositories::repository;
 #[path = "refresh/watcher.rs"]
 mod watcher;
 
 use features::tasks::{TaskFailure, TaskSnapshot};
 use git::command::{BranchCommand, GitOperation, RemoteCommand};
-use repository::{Repository, RepositoryError};
 use state::{AppState, EventBus};
 
 #[cfg(test)]
@@ -40,11 +38,11 @@ use api::{
 #[cfg(test)]
 use features::repositories::cloning::CloneService;
 #[cfg(test)]
+use features::repositories::repository::RepositoryManager;
+#[cfg(test)]
 use features::tasks::TaskService;
 #[cfg(test)]
 use git::command::GitCommandService;
-#[cfg(test)]
-use repository::RepositoryManager;
 
 pub async fn run() -> i32 {
     bootstrap::run().await
@@ -4991,17 +4989,23 @@ mod tests {
 
     #[tokio::test]
     async fn repository_path_failures_have_distinct_api_errors() {
-        let missing = ApiError::from_repository_error(RepositoryError::PathNotFound);
+        let missing = ApiError::from_repository_error(
+            features::repositories::repository::RepositoryError::PathNotFound,
+        );
         let (status, code) = error_code(missing.into_response()).await;
         assert_eq!(status, StatusCode::NOT_FOUND);
         assert_eq!(code, "REPOSITORY_PATH_NOT_FOUND");
 
-        let permission = ApiError::from_repository_error(RepositoryError::PathPermissionDenied);
+        let permission = ApiError::from_repository_error(
+            features::repositories::repository::RepositoryError::PathPermissionDenied,
+        );
         let (status, code) = error_code(permission.into_response()).await;
         assert_eq!(status, StatusCode::FORBIDDEN);
         assert_eq!(code, "REPOSITORY_ACCESS_DENIED");
 
-        let invalid = ApiError::from_repository_error(RepositoryError::NotRepository);
+        let invalid = ApiError::from_repository_error(
+            features::repositories::repository::RepositoryError::NotRepository,
+        );
         let (status, code) = error_code(invalid.into_response()).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(code, "NOT_A_REPOSITORY");

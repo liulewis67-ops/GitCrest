@@ -982,7 +982,7 @@ where
 mod tests {
     use std::{path::Path, process::Command as StdCommand};
 
-    use crate::repository::RepositoryManager;
+    use crate::features::repositories::repository::RepositoryManager;
 
     use super::*;
 

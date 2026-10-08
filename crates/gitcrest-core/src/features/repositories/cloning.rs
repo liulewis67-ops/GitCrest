@@ -3,9 +3,11 @@ use std::path::{Component, Path, PathBuf};
 use tokio::fs;
 
 use crate::{
-    features::tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError},
+    features::{
+        repositories::repository::RepositoryManager,
+        tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError},
+    },
     git::command::GitCommandService,
-    repository::RepositoryManager,
 };
 
 #[derive(Debug, PartialEq, Eq)]

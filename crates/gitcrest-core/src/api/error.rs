@@ -13,10 +13,10 @@ use crate::{
         history,
         remotes::{self, pull, push},
         repositories::cloning::CloneError,
+        repositories::repository::RepositoryError,
         shelves, staging, tags,
         tasks::TaskSubmitError,
     },
-    repository::RepositoryError,
 };
 
 #[derive(Clone, Copy, Serialize)]

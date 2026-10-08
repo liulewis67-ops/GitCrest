@@ -310,7 +310,7 @@ pub(super) async fn repository_remotes(
 async fn submit_remote_command(
     state: &AppState,
     repo_id: String,
-    target: crate::repository::TaskTarget,
+    target: crate::features::repositories::repository::TaskTarget,
     operation_name: &'static str,
     operation: RemoteCommand,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {

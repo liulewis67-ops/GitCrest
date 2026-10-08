@@ -6,8 +6,8 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    features::{branches, status},
-    AppState, BranchCommand, RepositoryError, TaskFailure, TaskSnapshot,
+    features::{branches, repositories::repository::RepositoryError, status},
+    AppState, BranchCommand, TaskFailure, TaskSnapshot,
 };
 
 use super::dto::{
@@ -167,7 +167,13 @@ async fn branch_for_mutation(
     state: &AppState,
     repo_id: &str,
     name: &str,
-) -> Result<(crate::repository::TaskTarget, crate::Repository), ApiError> {
+) -> Result<
+    (
+        crate::features::repositories::repository::TaskTarget,
+        crate::features::repositories::repository::Repository,
+    ),
+    ApiError,
+> {
     let target = state
         .repositories
         .task_target(repo_id)

@@ -8,8 +8,8 @@ use std::{
 use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::features::diff::DiffScope;
+use crate::features::repositories::repository::Repository;
 use crate::features::shelves::{ShelfRecord, ShelfSnapshot};
-use crate::repository::Repository;
 
 const MAX_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
 const MAX_UNDO_RECORDS_PER_REPOSITORY: i64 = 100;

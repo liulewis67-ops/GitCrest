@@ -13,7 +13,7 @@ use notify::{Event, EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
 use tokio::{sync::mpsc, time::Instant};
 
-use crate::{repository::RepositoryManager, EventBus};
+use crate::{features::repositories::repository::RepositoryManager, EventBus};
 
 const EVENT_QUEUE_CAPACITY: usize = 4096;
 const MAX_DIRTY_PATHS: usize = 256;

@@ -6,7 +6,7 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    repository::Repository,
+    features::repositories::repository::Repository,
     AppState,
 };
 
