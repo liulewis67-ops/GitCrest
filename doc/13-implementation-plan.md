@@ -850,3 +850,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/src/api/router.rs`。
 - 实施 commit：`84e485e`
 
+
+### 后端 tasks feature service/API 模块拆分 — 小阶段 29
+- 状态：已完成（TaskService 与 Task API 进入 tasks feature 标准目录）
+- 日期：2026-10-09
+- 交付：将 `features/tasks/tasks.rs` 整理为 `features/tasks/{mod,service,handlers,routes}.rs`；通过 `mod.rs` re-export 保持现有 `crate::tasks` 服务调用兼容。将任务列表、详情、取消 handlers 与三条 `/v1/tasks` 路由从 `main.rs`/顶层 API router 迁入 tasks feature；路径、HTTP 方法、响应与错误映射保持不变。WebSocket `/events` 继续保留在共享事件传输入口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（120/120）与 `git diff --check` 通过；Task API 列表/详情/取消、事件鉴权集成用例通过。
+- 限制/后续：WebSocket events handler 与 task API 仍分别由 root 和 feature 管理；main.rs 仍包含其他 feature handlers 与大量 tests，继续逐组迁移并按规范拆分事件协议与最小状态依赖。
+- 证据：`crates/gitcrest-core/src/features/tasks/{mod,service,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`d96ff17`
+
