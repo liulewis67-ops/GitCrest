@@ -90,6 +90,8 @@ describe("App", () => {
     const openCommand = within(dialog).getByRole("button", { name: /Open local repository/ }) as HTMLButtonElement;
     expect(openCommand.disabled).toBe(false);
     expect(within(dialog).getByRole("button", { name: /Clone repository/ })).toBeDefined();
+    fireEvent.keyDown(openCommand, { key: "o", ctrlKey: true });
+    expect(chooseRepository).not.toHaveBeenCalled();
 
     fireEvent.keyDown(window, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Command palette" })).toBeNull());

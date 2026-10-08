@@ -1665,6 +1665,7 @@ function App() {
       if (event.isComposing) return;
       const target = event.target instanceof HTMLElement ? event.target : undefined;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      if (target?.closest('[role="dialog"], [role="alertdialog"]') && event.key !== "Escape") return;
       if (matchesShortcut(event, shortcuts.openRepository, isMacPlatform)) {
         event.preventDefault();
         void openLocalRepository();

@@ -305,6 +305,7 @@ describe("desktop startup E2E", () => {
       expect(await rebaseTaskCard.innerText()).toContain("refs/gitcrest/rebase-backups/");
       expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("Interactive rebase E2E message");
 
+      await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
       await window.keyboard.press("Control+i");
       const rollbackDialog = window.getByRole("dialog", { name: "Interactive rebase" });
       await rollbackDialog.waitFor();
