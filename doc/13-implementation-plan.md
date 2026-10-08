@@ -1337,3 +1337,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Git 状态 port 与其余 read-only Git port 方法目前复用 `workflow_state.rs`，可继续按端口职责细分 adapter 文件；port 当前尚未复用 `GitCommandService` 的可配置 Git executable。
 - 证据：`crates/gitcrest-core/src/{domain/workflow.rs,ports/workflow_git.rs,git/workflow_state.rs,git/git_command.rs}`、`crates/gitcrest-core/src/features/remotes/service.rs`。
 - 实施 commit：`396c247`
+
+### 后端 workflow Git port 复用配置的 Git executable — 小阶段 82
+- 状态：已完成（只读 adapter 查询使用 GitCommandService 配置）
+- 日期：2026-10-09
+- 交付：将 `GitCommandService::git_program` 传入 workflow 状态、commit/branch 查询、rebase/reset comparison、备份 refs 与 remote delete 查询的 adapter 实现；后台 workflow 操作后的活动状态检查同样复用该配置。`with_program` 不再只影响写操作，所有 port 查询共享相同 executable。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：workflow Git port 已覆盖预检与 preview 的只读查询；后续可按后端规范把多个 adapter 查询实现从 `git/workflow_state.rs` 拆到更聚焦的 adapter 模块，并继续核对其他 feature 的直接 Git 子进程边界。
+- 证据：`crates/gitcrest-core/src/git/{git_command.rs,workflow_state.rs}`。
+- 实施 commit：`32619c5`
