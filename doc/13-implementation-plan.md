@@ -661,3 +661,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：仓库 feature 的存储协调逻辑仍通过共享 `AppState` 调用；其他 feature handlers/DTO 与顶层路由仍待迁移，继续按规范逐个契约组推进。
 - 证据：`crates/gitcrest-core/src/features/repositories/{dto,handlers,routes,mod}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`870a768`
+
+### 后端 diff feature 路由与服务模块拆分 — 小阶段 9
+- 状态：已完成（Diff API 路由进入 feature；handler 与 DTO 后续继续迁移）
+- 日期：2026-10-09
+- 交付：将工作区 Diff 与提交文件 Diff 的路由绑定迁至 `features/diff/routes.rs`；原 Diff 解析/读取实现从 `diff.rs` 收敛到 `features/diff/service.rs`，通过 `mod.rs` re-export 保持已有服务调用和领域类型路径兼容。顶层 API router 合并 diff feature router，路由和 HTTP method 保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；Diff service 单测与现有 API 集成回归通过。
+- 限制/后续：Diff handlers 与请求/响应 DTO 仍在 `main.rs`；blame 仍注册在顶层 router，应归入 history feature。继续逐个迁移，避免扩大本阶段范围。
+- 证据：`crates/gitcrest-core/src/features/diff/{mod,routes,service}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`7374a77`
