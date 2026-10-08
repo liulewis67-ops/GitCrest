@@ -986,3 +986,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段只迁移路由归属；下一阶段将 shelf handlers 迁入 feature，再拆 DTO/service 命名结构。
 - 证据：`crates/gitcrest-core/src/features/shelves/{mod,routes,shelves}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`449f808`
+
+### 后端 shelves feature handlers 迁移 — 小阶段 43
+- 状态：已完成（shelf API handlers 与预检 helper 进入 feature handlers 模块）
+- 日期：2026-10-09
+- 交付：新增 `features/shelves/handlers.rs`，承接六个 shelf API handlers、请求/响应结构、预检 revision 与 shelf record 辅助逻辑；shelves feature routes 调用本 feature handlers。`main.rs` 删除上述实现，仅保留 workflow recovery 通过 shelves feature re-export 调用 shelf loader。API 路径、方法、响应与业务逻辑保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；shelf API 与冲突恢复集成用例通过。
+- 限制/后续：请求 DTO 和 service 仍与历史 `shelves.rs`/handlers 共处；下一阶段拆分 `dto.rs` 与规范命名的 `service.rs`，再评估 recovery helper 的 feature 边界。
+- 证据：`crates/gitcrest-core/src/features/shelves/{mod,routes,handlers,shelves}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`3485f0e`
