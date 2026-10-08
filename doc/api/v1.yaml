@@ -3001,6 +3001,112 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/conflicts/suggestion:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: requestWorkflowConflictSuggestion
+      summary: Request an AI suggestion for one reviewed text conflict
+      description: Requires the conflict-scoped window capability. The server rereads current conflict stages and sends them only after explicit renderer consent; the response is a suggestion and never writes the working result.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowConflictSuggestionRequest"
+      responses:
+        "200":
+          description: AI suggestion tied to the reviewed conflict source.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiReply"
+        "400":
+          description: The reviewed conflict selection is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository or waiting workflow task is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: The conflict task, path, HEAD or result revision changed after review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "413":
+          description: The selected conflict sources exceed the bounded request size.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "502":
+          description: The AI provider request failed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Provider settings, credentials or task state are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/conflicts/ai-settings:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    get:
+      operationId: readConflictWindowAiSettings
+      summary: Read sanitized AI provider settings in the conflict window
+      description: Requires the conflict-scoped window capability and returns provider metadata and credential presence only; never returns a key.
+      responses:
+        "200":
+          description: Provider metadata without credentials.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiSettings"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The repository is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: Provider settings or credential status are unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/push-preflight:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3808,6 +3914,16 @@ components:
         path: { type: string, minLength: 1, maxLength: 4096 }
         expectedOperation: { type: string, enum: [merge, cherryPick, revert, rebase, shelfApply] }
         expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        expectedResultRevision: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+    WorkflowConflictSuggestionRequest:
+      type: object
+      additionalProperties: false
+      required: [taskId, path, expectedOperation, expectedHeadOid, expectedResultRevision]
+      properties:
+        taskId: { type: string, minLength: 1, maxLength: 128 }
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedOperation: { type: string, enum: [merge, cherryPick, revert, rebase, shelfApply] }
+        expectedHeadOid: { type: [string, "null"], minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         expectedResultRevision: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
     WorkflowConflictSaveRequest:
       type: object

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../api/client";
+import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
 import "../../App.css";
 
 type RequestState<T> = { key: string; loading: boolean; data?: T; error?: string };
@@ -20,6 +21,7 @@ export function ConflictWindow() {
   const [draft, setDraft] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [action, setAction] = useState<ActionState>({});
+  const [suggestionOpen, setSuggestionOpen] = useState(false);
   const selectedPathRef = useRef(selectedPath);
   selectedPathRef.current = selectedPath;
   const sessionKey = `${repoId}:${taskId}`;
@@ -54,6 +56,7 @@ export function ConflictWindow() {
     }
     setFile({ key: fileKey, loading: true });
     setAction({});
+    setSuggestionOpen(false);
     setHasUnsavedChanges(false);
     void api.getRepositoryWorkflowConflictFile(repoId, taskId, selectedPath).then((response) => {
       if (active && selectedPathRef.current === selectedPath) {
@@ -202,6 +205,8 @@ export function ConflictWindow() {
         </>}
         {action.message && <p className="conflictActionStatus" role="status">{action.message}</p>}
         {action.error && <p className="taskCenterError" role="alert">{action.error}</p>}
+        {currentFile.data?.isText && <button type="button" className="secondaryButton" disabled={Boolean(action.busy) || hasUnsavedChanges} title={hasUnsavedChanges ? "Save the working result before reviewing an AI suggestion" : "Preview conflict sources and explicitly confirm before sending"} onClick={() => setSuggestionOpen((open) => !open)}>AI suggestion</button>}
+        {suggestionOpen && api && currentFile.data?.isText && <ConflictSuggestionPanel key={`${currentFile.data.path}:${currentFile.data.resultRevision}`} api={api} file={currentFile.data} hasUnsavedChanges={hasUnsavedChanges} onClose={() => setSuggestionOpen(false)} />}
       </section>
     </div>}
   </main>;

@@ -114,7 +114,7 @@
 |---|---|---|---|
 | S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 已完成 |
 | S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 已完成 |
-| S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 未开始 |
+| S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 进行中 |
 
 ## 11. 大阶段 7：性能、安全、跨平台发布
 
@@ -454,4 +454,16 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未连接真实 provider；loopback Ollama mock 覆盖本机传输与窗口交互。
 - 证据：`src/features/settings/CommitMessageAssistant.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/commit-message-assistant.test.tsx`、`tests/e2e/desktop.test.ts`。
 - 限制：provider 请求边界继续采用 S6.1 已记录的限制：未连接真实云端/Ollama；系统 Keychain 跨平台实际运行检查属于 S7.4。
+- 完成 commit：`08c58c2`。
+
+### S6.3 — 子阶段 A：冲突建议的来源与审阅边界（已完成；S6.3 整体进行中）
+- 状态：已完成。
+- 日期：2026-10-08
+- 范围：为受限 conflict-resolution 窗口新增按当前 workflow task、冲突路径、operation、HEAD 和 result revision 绑定的 AI 建议请求；建议独立预览 base/ours/theirs/result 来源，不自动写入编辑器或执行 Git 操作。
+- 交付：新增冲突专用 AI 设置读取和建议 API。conflict-only capability 仅开放这两个 AI 路由；后端校验 waiting workflow、仓库、operation、HEAD、冲突路径和 result revision，重新从 Git 冲突阶段读取 BASE/OURS/THEIRS 与当前结果，并在 provider 返回后再次核对 revision。建议固定为待审阅文本，不触碰工作区或 index。
+- 前端：冲突窗口展示 provider endpoint、提示词、来源阶段和 revision，用户明确同意后发送；建议单独展示并标记 awaiting review，不提供自动写回入口。provider 不可用、设置无效或本地编辑器有未保存变更时，AI 按钮禁用且手工解决保持可用；请求期间冲突变化时提示刷新。
+- 测试：`pnpm api:types`、`pnpm test`（107 tests）、`pnpm build`、Rust tests（95，串行）、`cargo clippy --all-targets -- -D warnings`、Rust fmt check、`git diff --check` 均通过。Rust HTTP 集成验证受限 capability 下冲突建议只发送 BASE/OURS/THEIRS/RESULT 阶段内容，返回建议且原工作区冲突标记不变；API/UI 单测覆盖绑定参数、来源预览、明确同意、独立结果与 provider/未保存编辑器禁用状态。
+- 手工验证：未连接真实云端/Ollama provider；loopback Ollama mock 覆盖 API 请求。
+- 证据：`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`src/features/workflows/ConflictWindow.tsx`、`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/api-client.test.ts`、`tests/unit/conflict-suggestion-panel.test.tsx`。
+- 限制：此阶段不自动应用建议；实际云端/Ollama 服务与跨平台 Keychain 验证按 S7.4 验收。
 - 完成 commit：待提交后补记。

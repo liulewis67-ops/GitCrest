@@ -32,6 +32,7 @@ export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowR
 export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
 export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowConflictMutationRequest"];
 export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflictSaveRequest"];
+export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowConflictSuggestionRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type AiSettingsResponse = components["schemas"]["AiSettings"];
@@ -251,6 +252,12 @@ export class GitCrestApiClient {
 
   getAiSettings(): Promise<AiSettingsResponse> {
     return this.request<AiSettingsResponse>("/api/v1/ai/settings");
+  }
+
+  getRepositoryWorkflowConflictAiSettings(repoId: RepoId): Promise<AiSettingsResponse> {
+    return this.request<AiSettingsResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/ai-settings`,
+    );
   }
 
   setAiSettings(provider: AiSettingsResponse["provider"], baseUrl: string, model: string): Promise<AiSettingsResponse> {
@@ -553,6 +560,17 @@ export class GitCrestApiClient {
     const query = new URLSearchParams({ taskId, path });
     return this.request<WorkflowConflictFileResponse>(
       `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/file?${query}`,
+    );
+  }
+
+  requestRepositoryWorkflowConflictSuggestion(
+    repoId: RepoId,
+    request: WorkflowConflictSuggestionRequest,
+  ): Promise<AiReplyResponse> {
+    return this.request<AiReplyResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/suggestion`,
+      true,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) },
     );
   }
 

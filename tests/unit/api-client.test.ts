@@ -37,6 +37,32 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prompt: "summarize", files: [{ path: "src/only.ts", scope: "index", revision: "sha256:reviewed", selections: [{ hunkIndex: 1, rowIndex: 2 }] }] }));
   });
 
+  it("binds conflict suggestions to the waiting task, operation, HEAD and result revision", async () => {
+    const response = { provider: "ollama", model: "qwen-local", response: "merged result", files: ["src/conflict.ts [base/ours/theirs/result]"] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+    const request = { taskId: "task-1-2", path: "src/conflict.ts", expectedOperation: "merge" as const, expectedHeadOid: "a".repeat(40), expectedResultRevision: "b".repeat(64) };
+
+    await expect(client.requestRepositoryWorkflowConflictSuggestion("repo/a", request)).resolves.toEqual(response);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Fa/workflows/conflicts/suggestion`);
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify(request));
+  });
+
+  it("loads AI settings through the conflict-scoped capability route", async () => {
+    const settings = { provider: "ollama" as const, baseUrl: "http://127.0.0.1:11434", model: "qwen-local", hasCloudCredential: false };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(settings), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.getRepositoryWorkflowConflictAiSettings("repo/a")).resolves.toEqual(settings);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Fa/workflows/conflicts/ai-settings`);
+  });
+
   it("loads the authenticated bootstrap version without a v1 header", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       name: "gitcrest-core",

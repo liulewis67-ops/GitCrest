@@ -367,6 +367,18 @@ button:disabled { cursor: not-allowed; }
 .conflictResultEditor small { color: var(--text-muted); font-family: var(--font-mono); }
 .conflictResultEditor textarea { flex: 1; min-height: 220px; width: 100%; resize: vertical; padding: 10px; border: 0; background: transparent; color: var(--text); font: 12px/1.55 var(--font-mono); tab-size: 4; }
 .conflictResultEditor footer { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; padding: 6px 9px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: 10px; }
+.conflictSuggestion { display: grid; gap: 8px; margin: 10px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); }
+.conflictSuggestion > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.conflictSuggestion h2, .conflictSuggestion h3 { margin: 0; color: var(--text); font-size: 12px; }
+.conflictSuggestion > header p, .conflictSuggestion > p, .conflictSuggestionReply > p { margin: 4px 0 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.conflictSuggestionDetails { display: grid; gap: 4px; padding: 7px; border-radius: 4px; background: var(--surface-soft); }
+.conflictSuggestionDetails p { margin: 0; color: var(--text-secondary); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.conflictSuggestionSources { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.conflictSuggestionSources details { min-width: 0; border: 1px solid var(--line); border-radius: 4px; }
+.conflictSuggestionSources summary { padding: 6px; color: var(--text-secondary); font-size: 10px; cursor: pointer; }
+.conflictSuggestionSources pre, .conflictSuggestionReply pre { max-height: 160px; margin: 0; padding: 7px; overflow: auto; color: var(--text); background: var(--surface-soft); font: 10px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.conflictSuggestionReply { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 4px; }
+.conflictSuggestionReply pre { max-height: 240px; }
 .conflictResultActions { display: flex; gap: 7px; }
 .conflictResultActions button { min-height: 28px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; cursor: pointer; }
 .conflictResultActions button:last-child:not(:disabled) { border-color: var(--accent); background: var(--accent); color: var(--canvas); font-weight: 650; }

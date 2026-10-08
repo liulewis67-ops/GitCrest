@@ -1249,6 +1249,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/workflows/conflicts/suggestion": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request an AI suggestion for one reviewed text conflict
+         * @description Requires the conflict-scoped window capability. The server rereads current conflict stages and sends them only after explicit renderer consent; the response is a suggestion and never writes the working result.
+         */
+        post: operations["requestWorkflowConflictSuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/workflows/conflicts/ai-settings": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read sanitized AI provider settings in the conflict window
+         * @description Requires the conflict-scoped window capability and returns provider metadata and credential presence only; never returns a key.
+         */
+        get: operations["readConflictWindowAiSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/push-preflight": {
         parameters: {
             query?: never;
@@ -1740,6 +1788,14 @@ export interface components {
             /** @enum {string} */
             expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
             expectedHeadOid: string;
+            expectedResultRevision: string;
+        };
+        WorkflowConflictSuggestionRequest: {
+            taskId: string;
+            path: string;
+            /** @enum {string} */
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            expectedHeadOid: string | null;
             expectedResultRevision: string;
         };
         WorkflowConflictSaveRequest: {
@@ -5984,6 +6040,136 @@ export interface operations {
                 };
             };
             /** @description The task queue is full or Git is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    requestWorkflowConflictSuggestion: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowConflictSuggestionRequest"];
+            };
+        };
+        responses: {
+            /** @description AI suggestion tied to the reviewed conflict source. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiReply"];
+                };
+            };
+            /** @description The reviewed conflict selection is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository or waiting workflow task is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The conflict task, path, HEAD or result revision changed after review. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The selected conflict sources exceed the bounded request size. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The AI provider request failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Provider settings, credentials or task state are unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    readConflictWindowAiSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Provider metadata without credentials. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Provider settings or credential status are unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;
