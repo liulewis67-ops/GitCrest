@@ -194,6 +194,7 @@ function App() {
   const [pullBusy, setPullBusy] = useState(false);
   const [pullError, setPullError] = useState("");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [switchTargetName, setSwitchTargetName] = useState("");
   const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
@@ -1647,6 +1648,7 @@ function App() {
                 files={activeStatus?.files || []}
                 disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
                 refreshKey={historyRefreshKey}
+                openComposerRequest={shelfComposerRequest}
                 onTaskSubmitted={() => {
                   if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId);
                   void refreshTasks();
@@ -1759,7 +1761,7 @@ function App() {
                   </div>
                   <div className="branchSwitchOptions">
                     <button className="secondaryButton" type="button" onClick={() => { setBranchSwitcherOpen(false); requestAnimationFrame(() => document.getElementById("commit-message")?.focus()); }}>Commit changes</button>
-                    <button className="secondaryButton" type="button" disabled title="Shelve is planned for S5.3 and will not change your files now">Shelve changes</button>
+                    <button className="secondaryButton" type="button" disabled={switchBusy || !connected || hasActiveRepositoryTask} title="Choose the changed files or hunks to save, then review the branch switch again" onClick={() => { setBranchSwitcherOpen(false); setShelfComposerRequest((request) => request + 1); }}>Shelve changes</button>
                     <button className="secondaryButton" type="button" disabled title="Commit or shelve the listed changes, then run preflight again">Continue</button>
                   </div>
                 </>}

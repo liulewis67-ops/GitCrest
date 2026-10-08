@@ -305,7 +305,7 @@ describe("App", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /feature\/test/ }));
     expect(await within(dialog).findByText("src/working.ts")).toBeDefined();
     expect(within(dialog).getByText("May be overwritten")).toBeDefined();
-    expect((within(dialog).getByRole("button", { name: "Shelve changes" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(dialog).getByRole("button", { name: "Shelve changes" }) as HTMLButtonElement).disabled).toBe(false);
     expect((within(dialog).getByRole("button", { name: "Continue" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());

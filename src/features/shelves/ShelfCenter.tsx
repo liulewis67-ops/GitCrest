@@ -18,6 +18,7 @@ export function ShelfCenter({
   files,
   disabled,
   refreshKey,
+  openComposerRequest,
   onTaskSubmitted,
 }: {
   api: GitCrestApiClient;
@@ -26,6 +27,7 @@ export function ShelfCenter({
   files: StatusSnapshotResponse["files"];
   disabled: boolean;
   refreshKey: number;
+  openComposerRequest: number;
   onTaskSubmitted: () => void;
 }) {
   const [shelves, setShelves] = useState<ShelfResponse[]>([]);
@@ -97,6 +99,13 @@ export function ShelfCenter({
   useEffect(() => {
     if (refreshKey > 0) void refreshShelves();
   }, [refreshKey]);
+
+  useEffect(() => {
+    if (openComposerRequest > 0) {
+      setComposerOpen(true);
+      setLoadError("");
+    }
+  }, [openComposerRequest]);
 
   async function readDiff(path: string): Promise<DiffDocumentResponse | undefined> {
     const cached = diffs[path];
