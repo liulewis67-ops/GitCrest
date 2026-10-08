@@ -1094,3 +1094,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段只归属路由；下一阶段将 merge/cherry-pick/revert handlers 迁入 workflows feature，再分组迁移 rebase/reset 与 conflict/recovery handlers。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod,routes,workflows}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`6406702`
+
+### 后端 workflows merge/cherry-pick/revert handlers 迁移 — 小阶段 55
+- 状态：已完成（通用 workflow 预检与启动 handlers 进入 feature）
+- 日期：2026-10-09
+- 交付：将 merge/cherry-pick/revert preflight 与启动 handlers 从 `main.rs` 迁入 `features/workflows/handlers.rs`；新增 `dto.rs` 承载 preflight query 与 workflow start request，并由 feature routes 调用本地 handlers。原有预检、HEAD/target stale 检查、clean worktree 约束及 task 执行流程不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；merge/cherry-pick/revert 与 workflow preflight API 用例通过。
+- 限制/后续：rebase、reset、recovery 与 conflict handlers 仍在 `main.rs`；继续按功能边界迁移并拆 DTO/service，避免 workflows feature 退化为单一大 handler 文件。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod,dto,handlers,routes,workflows}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`ee878e4`
