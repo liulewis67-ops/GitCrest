@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
-import { GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
+import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
@@ -11,6 +11,7 @@ import type { PushTarget } from "../features/remotes/PushTargetDialog";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
+import { useCommitDraft } from "../features/commits";
 import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
@@ -117,14 +118,23 @@ function App() {
   const openedCloneTasks = useRef(new Set<string>());
   const cloneTaskIds = useRef(new Set<string>());
   const [stagingBusy, setStagingBusy] = useState(false);
-  const [commitMessage, setCommitMessage] = useState("");
+  const {
+    message: commitMessage,
+    setMessage: setCommitMessage,
+    template: commitTemplate,
+    setTemplate: setCommitTemplate,
+    amend: amendCommit,
+    setAmend: setAmendCommit,
+    signOff: signOffCommit,
+    setSignOff: setSignOffCommit,
+    sign: signCommit,
+    setSign: setSignCommit,
+    selections: commitSelections,
+    setSelections: setCommitSelections,
+    selectionRepoId: commitSelectionRepoId,
+    setSelectionRepoId: setCommitSelectionRepoId,
+  } = useCommitDraft(selectedRepository?.repoId);
   const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
-  const [commitTemplate, setCommitTemplate] = useState("plain");
-  const [amendCommit, setAmendCommit] = useState(false);
-  const [signOffCommit, setSignOffCommit] = useState(false);
-  const [signCommit, setSignCommit] = useState(false);
-  const [commitSelections, setCommitSelections] = useState<NonNullable<CommitRequest["selections"]>>([]);
-  const [commitSelectionRepoId, setCommitSelectionRepoId] = useState<string>();
   const commitSelectionsByTask = useRef(new Map<string, string>());
   const commitMessagesByTask = useRef(new Map<string, string>());
   const commitIntentsByTask = useRef(new Map<string, CommitIntent>());
@@ -1385,16 +1395,6 @@ function App() {
       void refreshRepositoryBranches(selectedRepository.repoId);
       void refreshRepositoryRemotes(selectedRepository.repoId);
     }
-  }, [selectedRepository?.repoId]);
-
-  useEffect(() => {
-    setCommitSelections([]);
-    setCommitSelectionRepoId(selectedRepository?.repoId);
-    setCommitMessage("");
-    setCommitTemplate("plain");
-    setAmendCommit(false);
-    setSignOffCommit(false);
-    setSignCommit(false);
   }, [selectedRepository?.repoId]);
 
   useEffect(() => {
