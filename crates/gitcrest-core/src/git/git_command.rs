@@ -220,11 +220,11 @@ impl GitCommandService {
     pub async fn execute_pull(
         &self,
         repository_path: &Path,
-        expected: &crate::pull::PullPreflight,
-        strategy: crate::pull::PullStrategy,
+        expected: &crate::remotes::pull::PullPreflight,
+        strategy: crate::remotes::pull::PullStrategy,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let current = crate::pull::read_pull_preflight(
+        let current = crate::remotes::pull::read_pull_preflight(
             expected.repo_id.clone(),
             repository_path,
             Some(&expected.local_branch),
@@ -248,8 +248,8 @@ impl GitCommandService {
             ));
         }
         let strategy_flag = match strategy {
-            crate::pull::PullStrategy::Merge => "--no-rebase",
-            crate::pull::PullStrategy::Rebase => "--rebase",
+            crate::remotes::pull::PullStrategy::Merge => "--no-rebase",
+            crate::remotes::pull::PullStrategy::Rebase => "--rebase",
         };
         let result = run_command(
             &self.git_program,
@@ -263,10 +263,10 @@ impl GitCommandService {
                 expected.remote_branch.clone().into(),
             ],
             Some(match strategy {
-                crate::pull::PullStrategy::Merge => {
+                crate::remotes::pull::PullStrategy::Merge => {
                     format!("pull --no-rebase {}", expected.remote_name)
                 }
-                crate::pull::PullStrategy::Rebase => {
+                crate::remotes::pull::PullStrategy::Rebase => {
                     format!("pull --rebase {}", expected.remote_name)
                 }
             }),
@@ -275,13 +275,13 @@ impl GitCommandService {
             askpass_environment()?,
             Some(repository_path),
             match strategy {
-                crate::pull::PullStrategy::Merge => "Pull with merge",
-                crate::pull::PullStrategy::Rebase => "Pull with rebase",
+                crate::remotes::pull::PullStrategy::Merge => "Pull with merge",
+                crate::remotes::pull::PullStrategy::Rebase => "Pull with rebase",
             },
             task,
         )
         .await;
-        if strategy == crate::pull::PullStrategy::Rebase
+        if strategy == crate::remotes::pull::PullStrategy::Rebase
             && matches!(&result, Err(TaskFailure::Cancelled))
         {
             return self
@@ -300,7 +300,7 @@ impl GitCommandService {
     async fn reconcile_cancelled_pull_rebase(
         &self,
         repository_path: &Path,
-        expected: &crate::pull::PullPreflight,
+        expected: &crate::remotes::pull::PullPreflight,
     ) -> Result<(), TaskFailure> {
         match crate::workflows::read_operation(repository_path).await {
             Ok(Some(crate::workflows::WorkflowOperation::Rebase)) => {
@@ -390,7 +390,7 @@ impl GitCommandService {
                     .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
                 }
 
-                let restored = crate::pull::read_pull_preflight(
+                let restored = crate::remotes::pull::read_pull_preflight(
                     expected.repo_id.clone(),
                     repository_path,
                     Some(&expected.local_branch),
@@ -419,9 +419,9 @@ impl GitCommandService {
     async fn reconcile_cancelled_pull(
         &self,
         repository_path: &Path,
-        expected: &crate::pull::PullPreflight,
+        expected: &crate::remotes::pull::PullPreflight,
     ) -> Result<(), TaskFailure> {
-        let snapshot = crate::pull::read_pull_preflight(
+        let snapshot = crate::remotes::pull::read_pull_preflight(
             expected.repo_id.clone(),
             repository_path,
             Some(&expected.local_branch),
@@ -480,7 +480,7 @@ impl GitCommandService {
             return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
         }
 
-        let restored = crate::pull::read_pull_preflight(
+        let restored = crate::remotes::pull::read_pull_preflight(
             expected.repo_id.clone(),
             repository_path,
             Some(&expected.local_branch),
@@ -1024,11 +1024,11 @@ impl GitCommandService {
     pub async fn execute_push(
         &self,
         repository_path: &Path,
-        expected: &crate::push::PushPreflight,
+        expected: &crate::remotes::push::PushPreflight,
         force_with_lease: bool,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let current = crate::push::read_push_preflight_for_target(
+        let current = crate::remotes::push::read_push_preflight_for_target(
             expected.repo_id.clone(),
             repository_path,
             Some(&expected.local_branch),
@@ -2038,7 +2038,7 @@ mod tests {
         let tasks = TaskService::default();
         let command = GitCommandService::default();
         let preview =
-            crate::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
+            crate::remotes::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
                 .await
                 .unwrap();
         let path = source.clone();
@@ -2081,7 +2081,7 @@ mod tests {
         git(&source, &["add", "next.txt"]);
         git(&source, &["commit", "--quiet", "-m", "next local push"]);
         let stale_preview =
-            crate::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
+            crate::remotes::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
                 .await
                 .unwrap();
         git(
@@ -2145,7 +2145,7 @@ mod tests {
 
         git(&source, &["fetch", "--quiet", "origin"]);
         let force_preview =
-            crate::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
+            crate::remotes::push::read_push_preflight("repo".into(), &source, Some(&branch), false)
                 .await
                 .unwrap();
         assert_eq!((force_preview.ahead, force_preview.behind), (1, 1));

@@ -47,10 +47,6 @@ mod diff;
 mod git_command;
 #[path = "features/history/mod.rs"]
 mod history;
-#[path = "features/remotes/pull.rs"]
-mod pull;
-#[path = "features/remotes/push.rs"]
-mod push;
 #[path = "features/workflows/rebase.rs"]
 mod rebase;
 #[path = "features/remotes/mod.rs"]

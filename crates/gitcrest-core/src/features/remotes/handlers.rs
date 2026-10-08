@@ -6,8 +6,8 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    branches, pull, push, remotes as remote_service, AppState, GitOperation, RemoteCommand,
-    TaskFailure, TaskSnapshot,
+    branches, remotes as remote_service, AppState, GitOperation, RemoteCommand, TaskFailure,
+    TaskSnapshot,
 };
 
 use super::dto::{
@@ -15,6 +15,7 @@ use super::dto::{
     PushTargetQuery, RemoteBranchDeleteQuery, RemoteBranchDeleteRequest, RemoteNameRequest,
     RemoteRequest, RequiredNullableRemoteName,
 };
+use super::{pull, push};
 
 pub(super) async fn fetch_repository(
     State(state): State<AppState>,
