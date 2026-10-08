@@ -1391,3 +1391,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：通用 subprocess/output helper 仍暂存在名称不符的 `workflow_state.rs`；下一阶段将其迁移到指南列出的 `git/process.rs`，之后继续移除模块兼容出口。
 - 证据：`crates/gitcrest-core/src/git/{mod.rs,history.rs,refs.rs,status.rs,workflow_state.rs,command.rs}`。
 - 实施 commit：`d79d6b6`
+
+### 后端 Git process helper 归位 — 小阶段 88
+- 状态：已完成（通用只读子进程 helper 归入 git/process.rs）
+- 日期：2026-10-09
+- 交付：将已不含业务状态逻辑的 `git/workflow_state.rs` 改为 `git/process.rs`，由 history/refs/status modules 复用受限 Git 子进程、optional exit 与 UTF-8 输出 helper；删除旧模块声明和引用。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、旧模块名源码搜索与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：Git adapter 已按 command/history/refs/status/process 分组；仍保留 crate 根 `git_command` 兼容导出，后续核对并逐步切换调用方到 `git::command` 后移除兼容出口。
+- 证据：`crates/gitcrest-core/src/git/{mod.rs,command.rs,history.rs,refs.rs,status.rs,process.rs}`。
+- 实施 commit：`b65c70c`
