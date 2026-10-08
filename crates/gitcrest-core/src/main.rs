@@ -1788,9 +1788,12 @@ async fn undo_recent_operation(
                             &repository_path,
                             match record.operation {
                                 UndoOperation::Staging => staging::undo_command(undo_patch.clone()),
-                                UndoOperation::ShelfApply { scope } => {
-                                    shelves::undo_apply_command(undo_patch.clone(), scope)
-                                }
+                            UndoOperation::ShelfApply { scope } => {
+                                shelves::undo_apply_command(undo_patch.clone(), scope)
+                            }
+                            UndoOperation::WorkspaceDiscard => {
+                                staging::undo_discard_command(undo_patch.clone())
+                            }
                             },
                             context.clone(),
                         )
@@ -2000,11 +2003,28 @@ async fn discard_repository_patch(
                 commands
                     .execute_staging(
                         &repository_path,
-                        staging::discard_patch_command(patch),
-                        context,
+                        staging::discard_patch_command(patch.clone()),
+                        context.clone(),
                     )
                     .await
-                    .map(|()| None)
+                    ?;
+                let store = repositories.store();
+                if store
+                    .save_undo_record(&UndoRecord {
+                        operation_task_id: context.task_id().to_owned(),
+                        repo_id: task_repo_id.clone(),
+                        created_at_ms: shelves::now_ms(),
+                        reverse_patch: patch,
+                        operation: UndoOperation::WorkspaceDiscard,
+                        restore_shelf: None,
+                    })
+                    .is_err()
+                {
+                    context
+                        .log("The selected changes were discarded, but their undo data could not be saved.")
+                        .await;
+                }
+                Ok(None)
             },
         )
         .await
@@ -8121,7 +8141,9 @@ mod tests {
             .unwrap();
         assert_eq!(unconfirmed.status(), StatusCode::BAD_REQUEST);
         assert_eq!(
-            std::fs::read_to_string(root.join("tracked.txt")).unwrap(),
+            std::fs::read_to_string(root.join("tracked.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
             changed
         );
 
@@ -8151,6 +8173,52 @@ mod tests {
                 .unwrap()
                 .replace("\r\n", "\n"),
             after_partial_discard
+        );
+
+        let external_after_discard = after_partial_discard.replace("two\n", "external edit\n");
+        std::fs::write(root.join("tracked.txt"), &external_after_discard).unwrap();
+        let rejected_undo = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(rejected_undo.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let rejected_undo: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, rejected_undo["taskId"].as_str().unwrap()).await["status"],
+            "failed"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt")).unwrap(),
+            external_after_discard
+        );
+        std::fs::write(root.join("tracked.txt"), after_partial_discard).unwrap();
+        let retry_undo = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(retry_undo.into_body(), usize::MAX).await.unwrap();
+        let retry_undo: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, retry_undo["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            changed
         );
 
         let response = app

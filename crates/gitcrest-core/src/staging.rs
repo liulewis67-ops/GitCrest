@@ -116,6 +116,18 @@ pub fn discard_patch_command(patch: Vec<u8>) -> StagingCommand {
     }
 }
 
+pub fn undo_discard_command(patch: Vec<u8>) -> StagingCommand {
+    StagingCommand {
+        arguments: ["apply", "--unidiff-zero"]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
+        input: Some(patch),
+        label: "Undo selected working-tree discard",
+        log_label: "git apply <discard undo patch>",
+    }
+}
+
 pub fn validate_patch_request(
     request: &StagingPatchRequest,
     file: &StatusFile,

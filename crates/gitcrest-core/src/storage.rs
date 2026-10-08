@@ -28,6 +28,7 @@ pub struct UndoRecord {
 pub enum UndoOperation {
     Staging,
     ShelfApply { scope: DiffScope },
+    WorkspaceDiscard,
 }
 
 fn now_ms() -> i64 {
@@ -750,12 +751,14 @@ impl UndoOperation {
         match self {
             Self::Staging => "staging",
             Self::ShelfApply { .. } => "shelfApply",
+            Self::WorkspaceDiscard => "workspaceDiscard",
         }
     }
 
     fn scope(self) -> Option<&'static str> {
         match self {
             Self::Staging => None,
+            Self::WorkspaceDiscard => None,
             Self::ShelfApply {
                 scope: DiffScope::WorkingTree,
             } => Some("workingTree"),
@@ -771,6 +774,7 @@ impl UndoOperation {
     fn from_database(kind: &str, scope: Option<&str>) -> Option<Self> {
         match (kind, scope) {
             ("staging", None) => Some(Self::Staging),
+            ("workspaceDiscard", None) => Some(Self::WorkspaceDiscard),
             ("shelfApply", Some("workingTree")) => Some(Self::ShelfApply {
                 scope: DiffScope::WorkingTree,
             }),
@@ -921,7 +925,7 @@ mod tests {
             operation: UndoOperation::Staging,
             restore_shelf: None,
         };
-        let latest = UndoRecord {
+        let shelf_apply = UndoRecord {
             operation_task_id: "task-stage-10".into(),
             repo_id: "repo-1".into(),
             created_at_ms: 20,
@@ -940,12 +944,21 @@ mod tests {
                 created_at_ms: 10,
             }),
         };
+        let latest = UndoRecord {
+            operation_task_id: "task-discard-11".into(),
+            repo_id: "repo-1".into(),
+            created_at_ms: 21,
+            reverse_patch: b"discard patch".to_vec(),
+            operation: UndoOperation::WorkspaceDiscard,
+            restore_shelf: None,
+        };
         {
             let store = RepositoryStore::open(&database).unwrap();
             store
                 .save_opened(repository("repo-1", "/repo/one", 1))
                 .unwrap();
             store.save_undo_record(&first).unwrap();
+            store.save_undo_record(&shelf_apply).unwrap();
             store.save_undo_record(&latest).unwrap();
             assert_eq!(
                 store.latest_undo_record("repo-1").unwrap(),
@@ -959,11 +972,18 @@ mod tests {
             Some(latest.clone())
         );
         assert!(reopened
+            .delete_undo_record("repo-1", "task-discard-11")
+            .unwrap());
+        assert_eq!(
+            reopened.latest_undo_record("repo-1").unwrap(),
+            Some(shelf_apply)
+        );
+        assert!(reopened
             .delete_undo_record("repo-1", "task-stage-10")
             .unwrap());
         assert_eq!(reopened.latest_undo_record("repo-1").unwrap(), Some(first));
         assert!(!reopened
-            .delete_undo_record("repo-1", "task-stage-10")
+            .delete_undo_record("repo-1", "task-discard-11")
             .unwrap());
         assert!(reopened.forget("repo-1").unwrap());
         assert_eq!(reopened.latest_undo_record("repo-1").unwrap(), None);
