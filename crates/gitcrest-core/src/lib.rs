@@ -43,11 +43,9 @@ mod shelves;
 #[path = "features/staging/mod.rs"]
 mod staging;
 mod state;
-#[path = "features/status/mod.rs"]
-mod status;
 #[path = "storage/storage.rs"]
 mod storage;
-pub(crate) use features::{system, tags, tasks};
+pub(crate) use features::{status, system, tags, tasks};
 #[path = "refresh/watcher.rs"]
 mod watcher;
 #[path = "features/workflows/mod.rs"]
