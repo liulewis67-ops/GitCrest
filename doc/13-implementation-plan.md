@@ -1841,3 +1841,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：credentials/diff/history/remotes/shelves/staging/status/tasks/workflows aliases 仍有调用点；按实际模块依赖继续迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{branches,remotes}/`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`65bf1a8`
+
+### credentials feature 调用切换并移除 crate-root alias — 小阶段 138
+- 状态：已完成（credential consumers 通过 feature 模块导入）
+- 日期：2026-10-09
+- 交付：将 bootstrap、AppState、settings/credentials handlers 与 crate-level test helpers 的 credentials 依赖切换到 `features::credentials`；从 `lib.rs` 移除 `credentials` crate-root re-export。系统凭据、AI 凭据、askpass 和错误处理逻辑保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：diff/history/remotes/shelves/staging/status/tasks/workflows 等 aliases 仍有调用点；按依赖关系继续迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/{bootstrap.rs,state.rs,lib.rs}`、`crates/gitcrest-core/src/features/{credentials,settings}/`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`a7e779c`
