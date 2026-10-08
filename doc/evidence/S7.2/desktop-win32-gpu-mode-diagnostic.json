@@ -1,0 +1,55 @@
+{
+  "generatedAt": "2026-10-09",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         ",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "fixture": {
+    "commits": 100000,
+    "diffFileLines": 1000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-scoped-cache"
+  },
+  "method": "Same 100k-commit Electron production fixture. Existing default-GPU values are from the 20-run full benchmark; GPU flag comparisons are single scroll-mode runs. Memory-only values are one additional diagnostic run.",
+  "defaultGpu20Run": {
+    "launchFlags": [],
+    "idleP5Fps": 55.24861878453066,
+    "scrollP5Fps": 55.24861878452372,
+    "idleWorkingSetPeakBytes": 398716928,
+    "loadedWorkingSetPeakBytes": 437350400,
+    "scrollWorkingSetPeakBytes": 467894272
+  },
+  "disableGpu": {
+    "launchFlags": [
+      "--disable-gpu"
+    ],
+    "idleP5Fps": 59.88023952095548,
+    "scrollP5Fps": 59.88023952094243,
+    "idleWorkingSetPeakBytes": 391417856,
+    "loadedWorkingSetPeakBytes": 429436928,
+    "idlePrivateWorkingSetWindowPeakBytes": 92598272,
+    "loadedPrivateWorkingSetWindowPeakBytes": 115212288,
+    "scrollWorkingSetPeakBytes": 483991552
+  },
+  "inProcessGpu": {
+    "launchFlags": [
+      "--in-process-gpu"
+    ],
+    "idleP5Fps": 59.88023952095548,
+    "scrollP5Fps": 29.94011976047774,
+    "scrollFrameSamples": 968,
+    "scrollWorkingSetPeakBytes": 444694528
+  },
+  "interpretation": "Disabling GPU raised measured idle and scroll cadence close to 60 fps, but the one-run P5 remains 59.88 and Working Set remains above the idle memory target. In-process GPU kept idle cadence but cut scroll cadence to 29.94 fps. These diagnostics do not justify changing production GPU defaults; alternate modes were single-run only."
+}

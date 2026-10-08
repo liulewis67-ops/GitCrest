@@ -590,3 +590,10 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-memory-main-process-root.json`、`doc/evidence/S7.2/desktop-win32-main-process-root.json`。
 - 完成 commit：`1d63eed`
 - 限制/后续：修正的是测量边界，不是产品内存优化；旧进程树读数含约 17MB 测试包装进程，不能和本次值直接比较。本次 idle working set 仍高于 <250MB，30 秒滚动 P5 仍低于 ≥60fps；S7.2 不得据此标记完成。结果仅代表此 Windows 主机，其他平台尚待测量。
+
+### S7.2 — GPU 模式诊断小阶段
+- 状态：已完成（单机诊断；S7.2 整体仍待验收）
+- 日期：2026-10-09
+- 交付：使用同一 100k 提交生产 fixture 比较默认 GPU、`--disable-gpu` 与 `--in-process-gpu`。默认模式沿用 20 轮完整基准；两个参数对照各采 1 轮。禁用 GPU 时 idle/scroll P5 均为 59.88fps，单样本 idle/loaded Working Set 为 391,417,856/429,436,928 bytes；in-process GPU idle P5 为 59.88fps，但 scroll P5 降至 29.94fps。GPU 模式均未解决 idle <250MB；这些单轮参数对照不代替正式基准。
+- 限制/后续：当前默认 GPU 滚动 P5 为 55.249fps。禁用 GPU 仍低于 ≥60fps 且没有达到 idle 内存门槛；in-process GPU 明显恶化滚动，故不改变生产 GPU 启动参数。替代模式需在可复现的多轮正式基准和其他硬件上复核。
+- 证据：`doc/evidence/S7.2/desktop-win32-gpu-mode-diagnostic.json`。
