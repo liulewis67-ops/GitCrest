@@ -780,3 +780,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`dfb3dae`
 
+
+### 后端 pull preflight 与执行 handlers/DTO 拆分 — 小阶段 22
+- 状态：已完成（pull HTTP 边界进入 remotes feature）
+- 日期：2026-10-09
+- 交付：将 pull preflight 查询 handler、执行 handler 与 PullRequest DTO 从 `main.rs` 迁至 `features/remotes/{handlers,dto}.rs`，并将 pull-preflight GET 与 pull POST 路由迁入 remotes feature。保留 metadata 刷新、审阅 OID 复核、worktree clean/conflict/operation 检查、显式 merge/rebase 策略及任务提交行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；pull API 集成用例通过。
+- 限制/后续：push preflight/execute handlers 与 DTO、clone handler/DTO 与路由仍待迁移；handlers 暂时仍直接协调 AppState、Git command service 与业务模块。
+- 证据：`crates/gitcrest-core/src/features/remotes/{dto,handlers,routes}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`8b0b62a`
+
