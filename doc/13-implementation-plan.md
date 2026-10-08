@@ -1058,3 +1058,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：settings feature 下 AI settings 与 repository AI request 仍共用 `ai.rs` service 文件；`main.rs` 仍保留 commit/workflow handlers 和冲突 AI suggestion 流程，后续继续按业务边界拆分。
 - 证据：`crates/gitcrest-core/src/features/settings/{mod,dto,handlers,routes,ai}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`1ff0a09`
+
+### 后端 commits feature API 分层 — 小阶段 51
+- 状态：已完成（commit API handler 与 route 归入 commits feature）
+- 日期：2026-10-09
+- 交付：新增 `features/commits/{mod,routes,handlers}.rs`，将 commit 写入 handler、选区 patch 校验/错误映射和 POST route 从 `main.rs`/顶层 router 迁入 commits feature；该 feature route 与 history 提供的 GET commits route 合并，避免重复注册路径。Commit service/请求类型继续通过 feature 根 re-export。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；commit API 创建、message 校验、选区/stale precondition 集成用例通过。
+- 限制/后续：commit request DTO 仍定义于旧 `commits.rs` service 文件，service 文件命名尚未对齐；后续拆 `dto.rs`/`service.rs`，继续迁移 workflows handlers。
+- 证据：`crates/gitcrest-core/src/features/commits/{mod,routes,handlers,commits}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`3a1277a`
