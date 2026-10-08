@@ -112,7 +112,7 @@
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 进行中 |
+| S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 已完成 |
 | S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 未开始 |
 | S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 未开始 |
 
@@ -414,4 +414,15 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未另行手工操作；范围勾选与 Diff 预览由组件测试和 Electron E2E 覆盖。
 - 证据：`src/features/settings/PrivacyScopePreview.tsx`、`src/features/settings/SettingsDialog.tsx`、`src/App.tsx`、`src/App.css`、`tests/unit/settings-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。
 - 剩余限制：尚未实现任何 AI 模型请求或将已审核范围转换为请求 payload；S6.1 总验收还需要证明云端请求只包含选中 diff，并以网络测试证明 Ollama 模式不触达外网。
+- 完成 commit：`5381c93`。
+
+### S6.1 — 子阶段 C：确认发送与 provider 请求边界（已完成；S6.1 整体已完成）
+- 状态：已完成。
+- 日期：2026-10-08
+- 交付：设置窗在发送前重新读取所有选中 diff，并一次展示完整的待发文件、scope、Diff 内容、provider endpoint 和 prompt；必须勾选确认才发送。后端仅接受 repoId、path、Index/WorkingTree scope 和 reviewed revision，基于已登记仓库重读 Diff，拒绝过期、冲突、ignored、非文本和非选中范围。限制 20 个范围对、单请求 1 MiB Diff 和 2 KiB prompt；禁止流式回复、HTTP 重定向和过大响应。云端请求使用 HTTPS 与 Keychain API key；Ollama 仅接受 loopback HTTP、禁用系统代理。prompt/raw diff/provider error body 不写日志，响应只暂存于窗口内存。
+- 测试：`pnpm api:types`、`pnpm test`（98 tests）、`pnpm build`、`pnpm test:e2e`（1 Electron test）、`cargo build`、`cargo test`（95 Rust tests）、`cargo clippy --all-targets -- -D warnings`、`cargo fmt --check`、`git diff --check` 通过。Rust HTTP 测试接收 loopback Ollama 请求并确认 payload 只含选中 Diff；API 集成测试通过临时 Git 仓库与 loopback provider 验证未选文件唯一内容不会发送、过期 revision 在联网前返回 409。Electron E2E 覆盖查看完整 Diff、二次确认、调用 loopback mock provider 和展示响应。
+- 手工验证：未连接真实云端 provider 或真实 Ollama 实例；使用 loopback mock 验证请求边界和桌面交互。实际系统 Keychain 服务验证留待 S7.4 各平台安装包验收。
+- 安全验证：云端 host URL 验证要求 HTTPS 且拒绝 loopback、明文 HTTP、user-info/query；所有 provider 请求禁止 redirect，Ollama 不使用代理。服务端不信任 renderer 的 diff 内容，只根据路径/scope/revision 从当前仓库重建 payload；过期或大于限制时拒绝。密钥读取为 Zeroizing，仅用于 Authorization header；错误文本固定，不返回 provider body。
+- 证据：`crates/gitcrest-core/src/ai.rs`、`crates/gitcrest-core/src/credentials.rs`、`crates/gitcrest-core/src/diff.rs`、`crates/gitcrest-core/src/main.rs`、`crates/gitcrest-core/Cargo.toml`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/features/settings/PrivacyScopePreview.tsx`、`tests/unit/api-client.test.ts`、`tests/unit/settings-dialog.test.tsx`、`tests/e2e/desktop.test.ts`。
+- 限制：未对真实 OpenAI-compatible 云端账户发请求；当前仅使用 loopback mock 验证 Ollama 路径。Keychain 跨系统构建/运行验证属于 S7.4。
 - 完成 commit：待提交后补记。

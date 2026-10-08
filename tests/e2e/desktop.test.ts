@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -11,8 +12,11 @@ const execFileAsync = promisify(execFile);
 
 describe("desktop startup E2E", () => {
   let app: ElectronApplication | undefined;
+  let mockOllama: Server | undefined;
 
   afterEach(async () => {
+    await new Promise<void>((resolve) => mockOllama ? mockOllama.close(() => resolve()) : resolve());
+    mockOllama = undefined;
     await app?.close();
     app = undefined;
   });
@@ -39,10 +43,26 @@ describe("desktop startup E2E", () => {
       expect(body).toContain("gitcrest-core 0.1.0 (API v1)");
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 
+      let providerBody: Record<string, unknown> | undefined;
+      mockOllama = createServer((request, response) => {
+        const chunks: Buffer[] = [];
+        request.on("data", (chunk: Buffer) => chunks.push(chunk));
+        request.on("end", () => {
+          providerBody = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+          const body = JSON.stringify({ message: { content: "Mock local review response" } });
+          response.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
+          response.end(body);
+        });
+      });
+      await new Promise<void>((resolve) => mockOllama?.listen(0, "127.0.0.1", resolve));
+      const mockAddress = mockOllama.address();
+      if (!mockAddress || typeof mockAddress === "string") throw new Error("Could not bind the loopback AI test server.");
+
       await window.getByRole("button", { name: "Settings" }).click();
       const settingsDialog = window.getByRole("dialog", { name: "AI provider" });
       await settingsDialog.waitFor();
       await settingsDialog.getByRole("combobox", { name: "AI provider" }).selectOption("ollama");
+      await settingsDialog.getByRole("textbox", { name: "AI endpoint" }).fill(`http://127.0.0.1:${mockAddress.port}`);
       await settingsDialog.getByRole("textbox", { name: "Model" }).fill("qwen2.5-coder:7b");
       const settingsLoaded = await window.waitForFunction(() => {
         const button = [...document.querySelectorAll("button")].find((candidate) => candidate.textContent?.includes("Save provider settings"));
@@ -107,7 +127,17 @@ describe("desktop startup E2E", () => {
       await privacyDialog.getByRole("button", { name: "Preview diff" }).first().click();
       await privacyDialog.locator(".privacyDiffPreview pre").waitFor();
       expect(await privacyDialog.locator(".privacyDiffPreview pre").innerText()).toContain("+export const greeting = 'welcome';");
-      expect(await privacyDialog.innerText()).toContain("No provider request is made here.");
+      expect(await privacyDialog.innerText()).toContain("Inspect each diff before confirming.");
+      await privacyDialog.getByRole("button", { name: "Review all selected diffs before sending" }).click();
+      await privacyDialog.getByRole("heading", { name: "Confirm provider request" }).waitFor();
+      expect(await privacyDialog.locator(".aiRequestReview pre").innerText()).toContain("+export const greeting = 'welcome';");
+      await privacyDialog.getByRole("checkbox", { name: /I reviewed the files and diffs above/ }).check();
+      await privacyDialog.getByRole("button", { name: "Send these exact diffs" }).click();
+      await privacyDialog.getByText("Mock local review response").waitFor();
+      const providerPrompt = String(providerBody?.messages && (providerBody.messages as Array<{ content?: string }>)[0]?.content);
+      expect(providerBody?.model).toBe("qwen2.5-coder:7b");
+      expect(providerPrompt).toContain("export const greeting = 'welcome';");
+      expect(providerPrompt).not.toContain("sibling = 'changed'");
       await privacyDialog.getByRole("button", { name: "Close settings" }).click();
       await window.keyboard.press("Control+b");
       const dirtySwitchDialog = window.getByRole("dialog", { name: "Switch branch" });

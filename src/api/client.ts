@@ -35,6 +35,8 @@ export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflic
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type AiSettingsResponse = components["schemas"]["AiSettings"];
+export type AiReplyResponse = components["schemas"]["AiReply"];
+export type AiFileSelection = components["schemas"]["AiFileSelection"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
 export type CommitHistoryFilters = Pick<
   NonNullable<paths["/api/v1/repositories/{repoId}/commits"]["get"]["parameters"]["query"]>,
@@ -269,6 +271,14 @@ export class GitCrestApiClient {
 
   deleteAiCredential(): Promise<void> {
     return this.request<void>("/api/v1/ai/credential", true, { method: "DELETE" });
+  }
+
+  requestAiReview(repoId: RepoId, prompt: string, files: AiFileSelection[]): Promise<AiReplyResponse> {
+    return this.request<AiReplyResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/ai/request`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, files } satisfies components["schemas"]["AiRequest"]),
+    });
   }
 
   addRepositoryRemote(repoId: RepoId, name: string, url: string): Promise<TaskSnapshotResponse> {

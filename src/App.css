@@ -798,6 +798,16 @@ button:disabled { cursor: not-allowed; }
 .privacyDiffPreview header strong { overflow: hidden; color: var(--text); font-family: var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .privacyDiffPreview pre { max-height: 180px; margin: 0; padding: 8px; overflow: auto; color: var(--text-secondary); background: var(--surface-soft); font: 10px/1.5 var(--font-mono); white-space: pre; }
 .privacyDiffPreview > p { margin: 8px; color: var(--text-muted); font-size: 10px; }
+.privacyDiffPreview summary { padding: 7px 8px; color: var(--text-secondary); font: 10px var(--font-ui); cursor: pointer; }
+.privacyDiffPreview details[open] summary { border-bottom: 1px solid var(--line); }
+.aiRequestReview, .aiReply { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); }
+.aiRequestReview h4, .aiReply h4 { margin: 0; color: var(--text); font-size: 12px; }
+.aiRequestReview > p, .aiReply > p { margin: 0; color: var(--text-muted); font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+.aiRequestReview > label:not(.aiRequestConsent) { display: grid; gap: 5px; color: var(--text-secondary); font-size: 10px; }
+.aiRequestReview textarea { min-height: 56px; padding: 7px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text); background: var(--surface); font: 11px var(--font-ui); resize: vertical; }
+.aiRequestConsent { display: flex; align-items: start; gap: 7px; color: var(--text-secondary); font-size: 10px; line-height: 1.4; }
+.aiRequestConsent input { margin: 1px 0 0; accent-color: var(--accent); }
+.aiReply pre { max-height: 220px; margin: 0; padding: 8px; overflow: auto; border-radius: 4px; color: var(--text); background: var(--surface); font: 11px/1.5 var(--font-ui); white-space: pre-wrap; overflow-wrap: anywhere; }
 
 @media (max-width: 600px) {
   .remoteDialog { max-height: 92vh; }

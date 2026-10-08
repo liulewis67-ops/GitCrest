@@ -86,7 +86,7 @@ export function SettingsDialog({ api, repoId, onClose }: { api: GitCrestApiClien
             <label>API key<input aria-label="Cloud API key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" /></label>
             <div className="settingsActions"><button className="secondaryButton" type="submit" disabled={busy || settings?.provider !== "openAiCompatible" || !apiKey}>{busy ? "Saving…" : "Save API key"}</button>{settings?.hasCloudCredential && <button className="dangerTextButton" type="button" disabled={busy} onClick={() => void removeKey()}>Remove key</button>}</div>
           </form>}
-          <PrivacyScopePreview api={api} repoId={repoId} />
+          <PrivacyScopePreview api={api} repoId={repoId} settings={settings} />
           {error && <p className="formError" role="alert">{error}</p>}{notice && <p className="settingsNotice" role="status">{notice}</p>}
         </div>
       </section>

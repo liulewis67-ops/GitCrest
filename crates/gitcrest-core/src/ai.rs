@@ -1,6 +1,13 @@
 use axum::http::Uri;
 use serde::{Deserialize, Serialize};
-use std::net::IpAddr;
+use std::{collections::HashSet, net::IpAddr, time::Duration};
+
+use crate::diff::{DiffRowKind, DiffScope};
+
+pub const MAX_REQUEST_FILES: usize = 20;
+pub const MAX_REQUEST_DIFF_BYTES: usize = 1024 * 1024;
+pub const MAX_REQUEST_PROMPT_BYTES: usize = 2048;
+const MAX_PROVIDER_RESPONSE_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -31,6 +38,190 @@ pub struct AiSettingsRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AiCredentialRequest {
     pub api_key: zeroize::Zeroizing<String>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AiFileSelection {
+    pub path: String,
+    pub scope: DiffScope,
+    pub revision: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AiRequest {
+    pub prompt: String,
+    pub files: Vec<AiFileSelection>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiReply {
+    pub provider: AiProvider,
+    pub model: String,
+    pub response: String,
+    pub files: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AiRequestError {
+    Invalid,
+    ProviderUnavailable,
+}
+
+pub fn validate_request(request: &AiRequest) -> Result<(), AiRequestError> {
+    if request.files.is_empty()
+        || request.files.len() > MAX_REQUEST_FILES
+        || request.prompt.trim().is_empty()
+        || request.prompt.len() > MAX_REQUEST_PROMPT_BYTES
+        || request
+            .prompt
+            .chars()
+            .any(|character| character.is_control() && character != '\n' && character != '\t')
+    {
+        return Err(AiRequestError::Invalid);
+    }
+    let mut selected = HashSet::new();
+    for file in &request.files {
+        if file.path.is_empty()
+            || file.path.len() > 4096
+            || file.path.chars().any(char::is_control)
+            || file.revision.is_empty()
+            || !matches!(file.scope, DiffScope::Index | DiffScope::WorkingTree)
+            || !selected.insert((file.path.as_str(), file.scope))
+        {
+            return Err(AiRequestError::Invalid);
+        }
+    }
+    Ok(())
+}
+
+pub fn format_diff(document: &crate::diff::DiffDocument) -> String {
+    let mut output = String::new();
+    for hunk in &document.hunks {
+        output.push_str(&format!(
+            "@@ -{},{} +{},{} @@\n",
+            hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
+        ));
+        for row in &hunk.rows {
+            if row.kind == DiffRowKind::Context {
+                output.push(' ');
+                output.push_str(
+                    row.old_text
+                        .as_deref()
+                        .or(row.new_text.as_deref())
+                        .unwrap_or(""),
+                );
+                output.push('\n');
+            } else {
+                if let Some(text) = &row.old_text {
+                    output.push('-');
+                    output.push_str(text);
+                    output.push('\n');
+                }
+                if let Some(text) = &row.new_text {
+                    output.push('+');
+                    output.push_str(text);
+                    output.push('\n');
+                }
+            }
+            if output.len() > MAX_REQUEST_DIFF_BYTES {
+                break;
+            }
+        }
+        if output.len() > MAX_REQUEST_DIFF_BYTES {
+            break;
+        }
+    }
+    output
+}
+
+pub async fn request_provider(
+    provider: AiProvider,
+    base_url: &str,
+    model: &str,
+    api_key: Option<&str>,
+    prompt: &str,
+) -> Result<String, AiRequestError> {
+    if provider == AiProvider::None {
+        return Err(AiRequestError::Invalid);
+    }
+    if provider == AiProvider::OpenAiCompatible && api_key.is_none() {
+        return Err(AiRequestError::Invalid);
+    }
+    let settings = AiSettingsRequest {
+        provider,
+        base_url: base_url.to_owned(),
+        model: model.to_owned(),
+    };
+    validate_settings(&settings).map_err(|_| AiRequestError::Invalid)?;
+    let endpoint = match provider {
+        AiProvider::OpenAiCompatible => {
+            format!("{}/chat/completions", base_url.trim_end_matches('/'))
+        }
+        AiProvider::Ollama => format!("{}/api/chat", base_url.trim_end_matches('/')),
+        AiProvider::None => return Err(AiRequestError::Invalid),
+    };
+    let mut builder = reqwest::Client::builder()
+        .timeout(Duration::from_secs(45))
+        .connect_timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none());
+    if provider == AiProvider::Ollama {
+        builder = builder.no_proxy();
+    }
+    let client = builder
+        .build()
+        .map_err(|_| AiRequestError::ProviderUnavailable)?;
+    let payload = match provider {
+        AiProvider::OpenAiCompatible => serde_json::json!({
+            "model": model,
+            "messages": [{ "role": "user", "content": prompt }],
+            "stream": false
+        }),
+        AiProvider::Ollama => serde_json::json!({
+            "model": model,
+            "messages": [{ "role": "user", "content": prompt }],
+            "stream": false
+        }),
+        AiProvider::None => return Err(AiRequestError::Invalid),
+    };
+    let mut request = client.post(endpoint).json(&payload);
+    if let Some(api_key) = api_key {
+        request = request.bearer_auth(api_key);
+    }
+    let mut response = request
+        .send()
+        .await
+        .map_err(|_| AiRequestError::ProviderUnavailable)?;
+    if !response.status().is_success() {
+        return Err(AiRequestError::ProviderUnavailable);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response
+        .chunk()
+        .await
+        .map_err(|_| AiRequestError::ProviderUnavailable)?
+    {
+        if body.len().saturating_add(chunk.len()) > MAX_PROVIDER_RESPONSE_BYTES {
+            return Err(AiRequestError::ProviderUnavailable);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    let response: serde_json::Value =
+        serde_json::from_slice(&body).map_err(|_| AiRequestError::ProviderUnavailable)?;
+    let text = match provider {
+        AiProvider::OpenAiCompatible => response
+            .pointer("/choices/0/message/content")
+            .and_then(serde_json::Value::as_str),
+        AiProvider::Ollama => response
+            .pointer("/message/content")
+            .and_then(serde_json::Value::as_str),
+        AiProvider::None => None,
+    }
+    .filter(|text| !text.trim().is_empty())
+    .ok_or(AiRequestError::ProviderUnavailable)?;
+    Ok(text.to_owned())
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -119,6 +310,10 @@ fn validate_local_url(value: &str) -> Result<(), AiSettingsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::TcpListener,
+    };
 
     #[test]
     fn settings_keep_cloud_and_local_endpoint_boundaries_distinct() {
@@ -167,5 +362,65 @@ mod tests {
                 Err(AiSettingsError::Invalid)
             );
         }
+    }
+
+    #[tokio::test]
+    async fn ollama_requests_use_only_the_configured_loopback_endpoint() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let capture = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0_u8; 4096];
+            let (header_end, content_length) = loop {
+                let read = stream.read(&mut chunk).await.unwrap();
+                assert!(read > 0);
+                request.extend_from_slice(&chunk[..read]);
+                if let Some(header_end) =
+                    request.windows(4).position(|window| window == b"\r\n\r\n")
+                {
+                    let headers = String::from_utf8_lossy(&request[..header_end]);
+                    let content_length = headers
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.eq_ignore_ascii_case("content-length")
+                                .then(|| value.trim().parse::<usize>().ok())
+                                .flatten()
+                        })
+                        .unwrap();
+                    if request.len() >= header_end + 4 + content_length {
+                        break (header_end, content_length);
+                    }
+                }
+            };
+            let body_start = header_end + 4;
+            let body = String::from_utf8(request[body_start..body_start + content_length].to_vec())
+                .unwrap();
+            let response = r#"{"message":{"content":"local response"}}"#;
+            stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
+            (
+                String::from_utf8_lossy(&request[..header_end]).to_string(),
+                body,
+            )
+        });
+
+        let response = request_provider(
+            AiProvider::Ollama,
+            &format!("http://{address}"),
+            "qwen-local",
+            None,
+            "only this reviewed diff",
+        )
+        .await
+        .unwrap();
+        assert_eq!(response, "local response");
+        let (headers, body) = capture.await.unwrap();
+        assert!(headers.starts_with("POST /api/chat HTTP/1.1"));
+        assert!(!headers.to_ascii_lowercase().contains("authorization:"));
+        let request: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(request["model"], "qwen-local");
+        assert_eq!(request["messages"][0]["content"], "only this reviewed diff");
+        assert_eq!(request["stream"], false);
     }
 }

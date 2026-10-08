@@ -32,6 +32,7 @@ pub enum CredentialError {
 
 pub trait AiCredentialStore: Send + Sync {
     fn is_configured(&self) -> Result<bool, CredentialError>;
+    fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError>;
     fn set(&self, api_key: &str) -> Result<(), CredentialError>;
     fn delete(&self) -> Result<(), CredentialError>;
 }
@@ -55,6 +56,10 @@ impl AiCredentialManager {
 
     pub fn is_configured(&self) -> Result<bool, CredentialError> {
         self.store.is_configured()
+    }
+
+    pub fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError> {
+        self.store.get()
     }
 
     pub fn set(&self, api_key: &str) -> Result<(), CredentialError> {
@@ -203,6 +208,16 @@ impl AiCredentialStore for SystemAiCredentialStore {
         }
     }
 
+    fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError> {
+        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
+            .map_err(|_| CredentialError::Unavailable)?;
+        match entry.get_password() {
+            Ok(value) => Ok(Some(Zeroizing::new(value))),
+            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(_) => Err(CredentialError::Unavailable),
+        }
+    }
+
     fn set(&self, api_key: &str) -> Result<(), CredentialError> {
         let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
             .map_err(|_| CredentialError::Unavailable)?;
@@ -340,6 +355,15 @@ impl AiCredentialStore for MemoryAiCredentialStore {
             .lock()
             .map_err(|_| CredentialError::Unavailable)?
             .is_some())
+    }
+
+    fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError> {
+        Ok(self
+            .value
+            .lock()
+            .map_err(|_| CredentialError::Unavailable)?
+            .as_ref()
+            .map(|secret| Zeroizing::new(secret.to_string())))
     }
 
     fn set(&self, api_key: &str) -> Result<(), CredentialError> {

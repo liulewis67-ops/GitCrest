@@ -891,6 +891,34 @@ paths:
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/ai/request:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: requestAiReview
+      summary: Send only the selected, current text diff scopes to the configured provider
+      description: The core reloads each diff by repoId/path/scope, rejects stale revisions and never logs prompt or diff text. A direct user confirmation is required in the desktop UI.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AiRequest" }
+      responses:
+        "200":
+          description: Provider response and the selected file/scope labels.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/AiReply" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or selected path was not found., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409": { description: Provider is disabled or a reviewed diff revision is stale., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "502": { description: Provider request failed; response content and secret values are not returned in the error., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/branches/delete-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3911,6 +3939,34 @@ components:
       required: [apiKey]
       properties:
         apiKey: { type: string, minLength: 1, maxLength: 65536, writeOnly: true }
+    AiRequest:
+      type: object
+      additionalProperties: false
+      required: [prompt, files]
+      properties:
+        prompt: { type: string, minLength: 1, maxLength: 2048 }
+        files:
+          type: array
+          minItems: 1
+          maxItems: 20
+          items: { $ref: "#/components/schemas/AiFileSelection" }
+    AiFileSelection:
+      type: object
+      additionalProperties: false
+      required: [path, scope, revision]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 4096, description: Repository-relative path. }
+        scope: { type: string, enum: [index, workingTree] }
+        revision: { type: string, description: Exact revision returned by the local Diff API for this selected path/scope. }
+    AiReply:
+      type: object
+      additionalProperties: false
+      required: [provider, model, response, files]
+      properties:
+        provider: { type: string, enum: [openAiCompatible, ollama] }
+        model: { type: string }
+        response: { type: string, maxLength: 1048576 }
+        files: { type: array, items: { type: string } }
     DeleteBranchRequest:
       type: object
       additionalProperties: false

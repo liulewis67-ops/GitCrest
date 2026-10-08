@@ -24,6 +24,19 @@ describe("GitCrestApiClient", () => {
     expect(fetcher.mock.calls[2][1]?.method).toBe("DELETE");
   });
 
+  it("sends only the selected reviewed file scopes and revisions to the AI endpoint", async () => {
+    const response = { provider: "ollama", model: "qwen-local", response: "summary", files: ["src/only.ts [worktree]"] };
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(response), {
+      status: 200,
+      headers: { "X-GitCrest-API-Version": "1" },
+    }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await expect(client.requestAiReview("repo/a", "summarize", [{ path: "src/only.ts", scope: "workingTree", revision: "sha256:reviewed" }])).resolves.toEqual(response);
+    expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Fa/ai/request`);
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ prompt: "summarize", files: [{ path: "src/only.ts", scope: "workingTree", revision: "sha256:reviewed" }] }));
+  });
+
   it("loads the authenticated bootstrap version without a v1 header", async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({
       name: "gitcrest-core",

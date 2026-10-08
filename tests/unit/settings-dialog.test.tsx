@@ -62,3 +62,23 @@ it("shows reviewable staged and worktree scopes and previews selected local diff
   expect((screen.getByLabelText("Diff preview for src/staged.ts").querySelector("pre")?.textContent ?? "")).toContain("-old value\n+new value");
   expect(await screen.findByText("2 selected")).toBeTruthy();
 });
+
+it("requires reviewed diff display and an explicit confirmation before provider requests", async () => {
+  const document = { repoId: "repo_fixture", path: "src/only.ts", revision: "sha256:reviewed", originalPath: null, scope: "workingTree" as const, changeKind: "modified" as const, status: "text" as const, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change" as const, oldLine: 1, newLine: 1, oldText: "before", newText: "after" }] }] };
+  const api = {
+    getRepositoryStatus: vi.fn().mockResolvedValue({ repoId: "repo_fixture", refreshedAtMs: 1, files: [{ path: "src/only.ts", indexStatus: " ", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false }] }),
+    getFileDiff: vi.fn().mockResolvedValue(document),
+    requestAiReview: vi.fn().mockResolvedValue({ provider: "openAiCompatible", model: "model-a", response: "Reviewed response", files: ["src/only.ts [worktree]"] }),
+  } as unknown as GitCrestApiClient;
+  render(<PrivacyScopePreview api={api} repoId="repo_fixture" settings={{ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true }} />);
+  await screen.findByText("src/only.ts");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Review all selected diffs before sending" }));
+  const send = await screen.findByRole("button", { name: "Send these exact diffs" });
+  expect(screen.getByLabelText("Confirm provider request").querySelector("pre")?.textContent).toContain("-before\n+after");
+  expect(api.requestAiReview).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the files/ }));
+  fireEvent.click(send);
+  await waitFor(() => expect(api.requestAiReview).toHaveBeenCalledWith("repo_fixture", "Summarize the selected changes and note any risks.", [{ path: "src/only.ts", scope: "workingTree", revision: "sha256:reviewed" }]));
+  expect(await screen.findByText("Reviewed response")).toBeTruthy();
+});

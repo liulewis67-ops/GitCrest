@@ -17,7 +17,7 @@ const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ERROR_BYTES: usize = 16 * 1024;
 const DIFF_DEADLINE: Duration = Duration::from_secs(10);
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Hash, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum DiffScope {
     WorkingTree,

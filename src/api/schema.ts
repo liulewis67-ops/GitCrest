@@ -441,6 +441,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/ai/request": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send only the selected, current text diff scopes to the configured provider
+         * @description The core reloads each diff by repoId/path/scope, rejects stale revisions and never logs prompt or diff text. A direct user confirmation is required in the desktop UI.
+         */
+        post: operations["requestAiReview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/branches/delete-preview": {
         parameters: {
             query?: never;
@@ -1811,6 +1835,25 @@ export interface components {
         };
         AiCredentialRequest: {
             apiKey: string;
+        };
+        AiRequest: {
+            prompt: string;
+            files: components["schemas"]["AiFileSelection"][];
+        };
+        AiFileSelection: {
+            /** @description Repository-relative path. */
+            path: string;
+            /** @enum {string} */
+            scope: "index" | "workingTree";
+            /** @description Exact revision returned by the local Diff API for this selected path/scope. */
+            revision: string;
+        };
+        AiReply: {
+            /** @enum {string} */
+            provider: "openAiCompatible" | "ollama";
+            model: string;
+            response: string;
+            files: string[];
         };
         DeleteBranchRequest: {
             name: string;
@@ -3407,6 +3450,66 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    requestAiReview: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AiRequest"];
+            };
+        };
+        responses: {
+            /** @description Provider response and the selected file/scope labels. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AiReply"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository or selected path was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Provider is disabled or a reviewed diff revision is stale. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Provider request failed; response content and secret values are not returned in the error. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     previewRepositoryBranchDelete: {
