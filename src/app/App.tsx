@@ -1368,13 +1368,6 @@ function App() {
   }, [selectedRepository?.repoId]);
 
   useEffect(() => {
-    const viewport = graphViewportRef.current;
-    if (viewport && mode === "graph" && selectedRepository) {
-      viewport.scrollTop = workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0;
-    }
-  }, [selectedRepository?.repoId, mode, workspaceSession.tabs]);
-
-  useEffect(() => {
     const systemTheme = typeof window.matchMedia === "function"
       ? window.matchMedia("(prefers-color-scheme: light)")
       : undefined;

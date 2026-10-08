@@ -1,4 +1,4 @@
-import { lazy, Suspense, type RefObject } from "react";
+import { lazy, Suspense, useEffect, type RefObject } from "react";
 import type { DiffDocumentResponse, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../api/client";
 import type { WorkspaceSession } from "../../features/repositories";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
@@ -79,6 +79,13 @@ export function WorkspaceMainPanel({
   onCommitSelection,
   onOpenDiffWindow,
 }: WorkspaceMainPanelProps) {
+  useEffect(() => {
+    const viewport = graphViewportRef.current;
+    if (viewport && mode === "graph" && repository) {
+      viewport.scrollTop = workspaceSession.tabs[repository.repoId]?.graphScrollTop || 0;
+    }
+  }, [graphViewportRef, mode, repository?.repoId, workspaceSession.tabs]);
+
   return (
     <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
       <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!repository || statusLoading} onClick={() => { if (repository) onRefreshStatus(repository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={statusLoading ? "Refreshing working tree status" : `Refresh working tree status (${displayShortcut(shortcuts.refreshStatus, isMacPlatform)})`}>{statusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
