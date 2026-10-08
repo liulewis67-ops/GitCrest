@@ -1775,7 +1775,7 @@ async fn undo_recent_operation(
                         .map_err(|_| TaskFailure::Failed("Could not verify the saved shelf state before undo.".into()))?
                         .map_err(|_| TaskFailure::Failed("Could not verify the saved shelf state before undo.".into()))?;
                     match existing {
-                        Some(existing) if existing.snapshot == *snapshot && existing.patch == undo_patch => true,
+                        Some(existing) if existing.snapshot == *snapshot && existing.patch.as_slice() == record.restore_shelf_patch.as_deref().unwrap_or(undo_patch.as_slice()) => true,
                         Some(_) => return Err(TaskFailure::Failed("A different saved shelf already uses the identifier needed to undo this operation. Resolve the shelf list before retrying.".into())),
                         None => false,
                     }
@@ -1808,7 +1808,7 @@ async fn undo_recent_operation(
                     if !shelf_already_restored {
                     let shelf = shelves::ShelfRecord {
                         snapshot,
-                        patch: undo_patch,
+                        patch: record.restore_shelf_patch.unwrap_or(undo_patch),
                     };
                     let store = task_store.clone();
                     tokio::task::spawn_blocking(move || store.save_shelf(&shelf))
@@ -1863,6 +1863,7 @@ async fn persist_staging_undo(
                 reverse_patch,
                 operation: UndoOperation::Staging,
                 restore_shelf: None,
+                restore_shelf_patch: None,
             })
             .map_err(|_| TaskFailure::Failed("The undo snapshot could not be saved".into()))
     }
@@ -2017,6 +2018,7 @@ async fn discard_repository_patch(
                         reverse_patch: patch,
                         operation: UndoOperation::WorkspaceDiscard,
                         restore_shelf: None,
+                        restore_shelf_patch: None,
                     })
                     .is_err()
                 {
@@ -2255,6 +2257,17 @@ async fn apply_repository_shelf(
             staging::StagingError::StaleSelection,
         ));
     }
+    let before_index_tree = state
+        .git_commands
+        .read_index_tree(&target.repository_path)
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::WorkflowPreflightUnavailable,
+                "Git could not capture the index state for shelf recovery.",
+            )
+        })?;
 
     let repositories = state.repositories.clone();
     let commands = state.git_commands.clone();
@@ -2266,7 +2279,7 @@ async fn apply_repository_shelf(
     let expected_scope = scope;
     let preview_revision = request.preview_revision;
     let patch = shelf.patch;
-    let task_operation = format!("shelfApply:{task_shelf_id}");
+    let task_operation = format!("shelfApply:{task_shelf_id}:{before_index_tree}");
     let task = state
         .tasks
         .submit(
@@ -2354,6 +2367,7 @@ async fn apply_repository_shelf(
                             scope: current_scope,
                         },
                         restore_shelf: Some(current_shelf.snapshot.clone()),
+                        restore_shelf_patch: Some(current_shelf.patch.clone()),
                     };
                     let store = repositories.store();
                     tokio::task::spawn_blocking(move || store.save_undo_record(&undo_record))
@@ -6292,6 +6306,8 @@ async fn recover_repository_workflow(
                 if expected_operation == workflows::WorkflowOperation::ShelfApply {
                     let shelf_id = shelf_apply_shelf_id(&waiting_task_operation)
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task no longer identifies its saved patch.".into()))?;
+                    let before_tree = shelf_apply_before_tree(&waiting_task_operation)
+                        .ok_or_else(|| TaskFailure::Failed("The shelf apply task has no safe pre-apply index snapshot. The shelf was retained.".into()))?;
                     let shelf = load_shelf_record(&repositories, &task_repo_id, shelf_id)
                         .await
                         .map_err(|_| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?;
@@ -6300,25 +6316,95 @@ async fn recover_repository_workflow(
                             .execute_staging(&path, shelves::unstage_paths_command(&shelf.snapshot.paths), context.clone())
                             .await?;
                     }
+                    let undo_scope = match shelf.snapshot.scope {
+                        Some(scope @ (DiffScope::Index | DiffScope::WorkingTree)) => scope,
+                        Some(DiffScope::Commit) | None => {
+                            return Err(TaskFailure::Failed(
+                                "The saved shelf has no safe restore scope. The shelf was retained."
+                                    .into(),
+                            ));
+                        }
+                    };
+                    let after_tree = command.read_index_tree(&path).await?;
+                    let reverse_patch = match undo_scope {
+                        DiffScope::Index => command
+                            .diff_index_trees_for_paths(&path, before_tree, &after_tree, &shelf.snapshot.paths)
+                            .await?,
+                        DiffScope::WorkingTree => {
+                            let status = repositories
+                                .status_snapshot(&task_repo_id)
+                                .await
+                                .map_err(|_| TaskFailure::Failed("The shelf was resolved, but its result could not be checked. The shelf was retained.".into()))?;
+                            if status.files.iter().any(|file| {
+                                file.kind == status::ChangeKind::Untracked
+                                    && shelf.snapshot.paths.contains(&file.path)
+                            }) {
+                                Vec::new()
+                            } else {
+                                command
+                                    .diff_tree_to_worktree_paths(&path, before_tree, &shelf.snapshot.paths)
+                                    .await?
+                            }
+                        }
+                        DiffScope::Commit => {
+                            return Err(TaskFailure::Failed(
+                                "The saved shelf has no safe restore scope. The shelf was retained."
+                                    .into(),
+                            ));
+                        }
+                    };
+                    let undo_saved = if reverse_patch.is_empty() {
+                        false
+                    } else {
+                        let record = UndoRecord {
+                            operation_task_id: waiting_task_id.clone(),
+                            repo_id: task_repo_id.clone(),
+                            created_at_ms: shelves::now_ms(),
+                            reverse_patch,
+                            operation: UndoOperation::ShelfApply {
+                                scope: undo_scope,
+                            },
+                            restore_shelf: Some(shelf.snapshot.clone()),
+                            restore_shelf_patch: Some(shelf.patch.clone()),
+                        };
+                        let store = repositories.store();
+                        tokio::task::spawn_blocking(move || store.save_undo_record(&record))
+                            .await
+                            .is_ok_and(|result| result.is_ok())
+                    };
+                    if !undo_saved {
+                        task_context.log("The shelf was resolved, but no safe undo snapshot could be saved. The original shelf was retained.").await;
+                    } else {
+                        let store = repositories.store();
+                        let delete_repo_id = task_repo_id.clone();
+                        let delete_shelf_id = shelf_id.to_owned();
+                        let deleted = tokio::task::spawn_blocking(move || store.delete_shelf(&delete_repo_id, &delete_shelf_id))
+                            .await
+                            .is_ok_and(|result| result.is_ok_and(|deleted| deleted));
+                        if !deleted {
+                            task_context.log("The shelf was resolved and undo data was saved, but its shelf entry could not be removed. Undo remains available.").await;
+                        }
+                    }
                     tasks
                         .resolve_waiting_for_input(
                             &waiting_task_id,
                             tasks::TaskStatus::Succeeded,
-                            "The shelf changes were resolved and applied.",
+                            if undo_saved {
+                                "The shelf changes were resolved and applied."
+                            } else {
+                                "The shelf changes were resolved; the original shelf was retained because a safe undo snapshot was unavailable."
+                            },
                         )
                         .await
                         .map_err(|_| TaskFailure::Failed("The shelf was resolved, but the waiting task state could not be saved.".into()))?;
-                    let store = repositories.store();
-                    let delete_repo_id = task_repo_id.clone();
-                    let delete_shelf_id = shelf_id.to_owned();
-                    tokio::task::spawn_blocking(move || store.delete_shelf(&delete_repo_id, &delete_shelf_id))
-                        .await
-                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?
-                        .map_err(|_| TaskFailure::Failed("The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".into()))?;
                     if repositories.refresh_metadata(&task_repo_id).await.is_err() {
                         task_context.log("Repository metadata refresh failed after shelf recovery; refresh the repository before the next write.").await;
                     }
-                    return Ok(Some("The shelf conflicts were resolved, the saved changes were kept unstaged, and the shelf was removed.".into()));
+                    return Ok(Some(if undo_saved {
+                        "The shelf conflicts were resolved, the saved changes were kept unstaged, and undo was recorded.".into()
+                    } else {
+                        "The shelf conflicts were resolved and the original shelf was retained because no safe undo snapshot was available.".into()
+                    }));
                 }
                 let result = command
                     .execute_workflow_recovery(&path, expected_operation, action, context)
@@ -6386,9 +6472,17 @@ fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOpe
 }
 
 fn shelf_apply_shelf_id(operation: &str) -> Option<&str> {
-    operation
-        .strip_prefix("shelfApply:")
-        .filter(|shelf_id| !shelf_id.is_empty())
+    let value = operation.strip_prefix("shelfApply:")?;
+    let shelf_id = value
+        .split_once(':')
+        .map_or(value, |(shelf_id, _)| shelf_id);
+    (!shelf_id.is_empty()).then_some(shelf_id)
+}
+
+fn shelf_apply_before_tree(operation: &str) -> Option<&str> {
+    let (_, tree) = operation.strip_prefix("shelfApply:")?.split_once(':')?;
+    (matches!(tree.len(), 40 | 64) && tree.bytes().all(|byte| byte.is_ascii_hexdigit()))
+        .then_some(tree)
 }
 
 async fn read_task_recovery_preflight(
@@ -9284,6 +9378,41 @@ mod tests {
         let bytes = to_bytes(shelves.into_body(), usize::MAX).await.unwrap();
         let shelves: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
         assert!(shelves.as_array().unwrap().is_empty());
+
+        let undo = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/undo"),
+                "{}",
+            ))
+            .await
+            .unwrap();
+        assert_eq!(undo.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(undo.into_body(), usize::MAX).await.unwrap();
+        let undo: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, undo["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("notes.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            "branch value\nother line\n"
+        );
+        let shelves = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(shelves.into_body(), usize::MAX).await.unwrap();
+        let shelves: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(shelves.as_array().unwrap().len(), 1);
+        assert_eq!(shelves[0]["shelfId"], shelf_id);
     }
 
     #[tokio::test]

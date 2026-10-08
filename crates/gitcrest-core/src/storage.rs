@@ -22,6 +22,7 @@ pub struct UndoRecord {
     pub reverse_patch: Vec<u8>,
     pub operation: UndoOperation,
     pub restore_shelf: Option<ShelfSnapshot>,
+    pub restore_shelf_patch: Option<Vec<u8>>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -634,8 +635,8 @@ impl RepositoryStore {
             .map_err(|error| error.to_string())?;
         transaction
             .execute(
-                "INSERT INTO staging_undo_records (operation_task_id, repo_id, created_at_ms, reverse_patch, operation_kind, scope, restore_shelf_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                params![record.operation_task_id, record.repo_id, record.created_at_ms, record.reverse_patch, record.operation.kind(), record.operation.scope(), record.restore_shelf.as_ref().map(serde_json::to_string).transpose().map_err(|error| error.to_string())?],
+                "INSERT INTO staging_undo_records (operation_task_id, repo_id, created_at_ms, reverse_patch, operation_kind, scope, restore_shelf_json, restore_shelf_patch) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![record.operation_task_id, record.repo_id, record.created_at_ms, record.reverse_patch, record.operation.kind(), record.operation.scope(), record.restore_shelf.as_ref().map(serde_json::to_string).transpose().map_err(|error| error.to_string())?, record.restore_shelf_patch],
             )
             .map_err(|error| error.to_string())?;
         transaction
@@ -655,7 +656,7 @@ impl RepositoryStore {
             .map_err(|_| "repository database lock poisoned".to_string())?;
         connection
             .query_row(
-                "SELECT operation_task_id, repo_id, created_at_ms, reverse_patch, operation_kind, scope, restore_shelf_json FROM staging_undo_records WHERE repo_id=?1 ORDER BY record_id DESC LIMIT 1",
+                "SELECT operation_task_id, repo_id, created_at_ms, reverse_patch, operation_kind, scope, restore_shelf_json, restore_shelf_patch FROM staging_undo_records WHERE repo_id=?1 ORDER BY record_id DESC LIMIT 1",
                 [repo_id],
                 |row| {
                     let operation_kind: String = row.get(4)?;
@@ -672,6 +673,7 @@ impl RepositoryStore {
                         reverse_patch: row.get(3)?,
                         operation: UndoOperation::from_database(&operation_kind, scope.as_deref()).ok_or_else(|| rusqlite::Error::InvalidQuery)?,
                         restore_shelf,
+                        restore_shelf_patch: row.get(7)?,
                     })
                 },
             )
@@ -700,7 +702,7 @@ impl RepositoryStore {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 10 {
+    if version > 11 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -742,6 +744,10 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     if version < 10 {
         connection.execute_batch(include_str!("../migrations/0010_undo_shelf_restore.sql"))?;
         connection.pragma_update(None, "user_version", 10)?;
+    }
+    if version < 11 {
+        connection.execute_batch(include_str!("../migrations/0011_undo_shelf_patch.sql"))?;
+        connection.pragma_update(None, "user_version", 11)?;
     }
     Ok(())
 }
@@ -865,7 +871,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 11).unwrap();
+        connection.pragma_update(None, "user_version", 12).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -908,7 +914,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }
@@ -924,6 +930,7 @@ mod tests {
             reverse_patch: b"reverse patch one".to_vec(),
             operation: UndoOperation::Staging,
             restore_shelf: None,
+            restore_shelf_patch: None,
         };
         let shelf_apply = UndoRecord {
             operation_task_id: "task-stage-10".into(),
@@ -943,6 +950,7 @@ mod tests {
                 head_oid: Some("abc".into()),
                 created_at_ms: 10,
             }),
+            restore_shelf_patch: Some(b"original shelf patch".to_vec()),
         };
         let latest = UndoRecord {
             operation_task_id: "task-discard-11".into(),
@@ -951,6 +959,7 @@ mod tests {
             reverse_patch: b"discard patch".to_vec(),
             operation: UndoOperation::WorkspaceDiscard,
             restore_shelf: None,
+            restore_shelf_patch: None,
         };
         {
             let store = RepositoryStore::open(&database).unwrap();
@@ -1042,6 +1051,7 @@ mod tests {
             reverse_patch: Vec::new(),
             operation: UndoOperation::Staging,
             restore_shelf: None,
+            restore_shelf_patch: None,
         };
         assert!(store.save_undo_record(&record).is_err());
         record.reverse_patch = vec![0; MAX_UNDO_PATCH_BYTES + 1];

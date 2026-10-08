@@ -139,6 +139,58 @@ impl GitCommandService {
         .await
     }
 
+    pub async fn diff_index_trees_for_paths(
+        &self,
+        repository_path: &Path,
+        before_tree: &str,
+        after_tree: &str,
+        paths: &[String],
+    ) -> Result<Vec<u8>, TaskFailure> {
+        validate_tree_ids(&[before_tree, after_tree])?;
+        let mut arguments = vec![
+            "diff".into(),
+            "--binary".into(),
+            "--no-ext-diff".into(),
+            "--no-renames".into(),
+            before_tree.into(),
+            after_tree.into(),
+            "--".into(),
+        ];
+        arguments.extend(paths.iter().map(OsString::from));
+        capture_git_output_args(
+            &self.git_program,
+            repository_path,
+            arguments,
+            MAX_CAPTURED_STAGING_PATCH_BYTES,
+        )
+        .await
+    }
+
+    pub async fn diff_tree_to_worktree_paths(
+        &self,
+        repository_path: &Path,
+        before_tree: &str,
+        paths: &[String],
+    ) -> Result<Vec<u8>, TaskFailure> {
+        validate_tree_ids(&[before_tree])?;
+        let mut arguments = vec![
+            "diff".into(),
+            "--binary".into(),
+            "--no-ext-diff".into(),
+            "--no-renames".into(),
+            before_tree.into(),
+            "--".into(),
+        ];
+        arguments.extend(paths.iter().map(OsString::from));
+        capture_git_output_args(
+            &self.git_program,
+            repository_path,
+            arguments,
+            MAX_CAPTURED_STAGING_PATCH_BYTES,
+        )
+        .await
+    }
+
     pub async fn execute(
         &self,
         repository_path: &Path,
@@ -1024,6 +1076,32 @@ async fn capture_git_output<const N: usize>(
     git_program: &str,
     repository_path: &Path,
     arguments: [&str; N],
+    max_bytes: usize,
+) -> Result<Vec<u8>, TaskFailure> {
+    capture_git_output_args(
+        git_program,
+        repository_path,
+        arguments.into_iter().map(OsString::from).collect(),
+        max_bytes,
+    )
+    .await
+}
+
+fn validate_tree_ids(oids: &[&str]) -> Result<(), TaskFailure> {
+    if oids.iter().any(|oid| {
+        !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit())
+    }) {
+        return Err(TaskFailure::Failed(
+            "Git returned an invalid index tree ID".into(),
+        ));
+    }
+    Ok(())
+}
+
+async fn capture_git_output_args(
+    git_program: &str,
+    repository_path: &Path,
+    arguments: Vec<OsString>,
     max_bytes: usize,
 ) -> Result<Vec<u8>, TaskFailure> {
     let capture = async {
