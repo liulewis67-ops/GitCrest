@@ -10,7 +10,30 @@ use crate::{
     AppState,
 };
 
-use super::dto::{FavoriteRequest, OpenRepositoryRequest};
+use super::dto::{CloneRequest, FavoriteRequest, OpenRepositoryRequest};
+
+pub(super) async fn clone_repository(
+    State(state): State<AppState>,
+    request: Result<Json<CloneRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<crate::TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote URL, parent folder, and folder name are required.",
+        )
+    })?;
+    let task = state
+        .clones
+        .queue(
+            request.remote_url,
+            request.parent_path,
+            request.directory_name,
+        )
+        .await
+        .map_err(ApiError::from_clone_error)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
 
 pub(super) async fn get_repository(
     State(state): State<AppState>,

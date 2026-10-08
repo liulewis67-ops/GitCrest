@@ -3927,37 +3927,6 @@ fn workflow_recovery_action_allowed(
     }
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct CloneRequest {
-    remote_url: String,
-    parent_path: String,
-    directory_name: String,
-}
-
-async fn clone_repository(
-    State(state): State<AppState>,
-    request: Result<Json<CloneRequest>, JsonRejection>,
-) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
-    let Json(request) = request.map_err(|_| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            ApiErrorCode::RequestInvalid,
-            "A remote URL, parent folder, and folder name are required.",
-        )
-    })?;
-    let task = state
-        .clones
-        .queue(
-            request.remote_url,
-            request.parent_path,
-            request.directory_name,
-        )
-        .await
-        .map_err(ApiError::from_clone_error)?;
-    Ok((StatusCode::ACCEPTED, Json(task)))
-}
-
 async fn list_tasks(State(state): State<AppState>) -> Json<Vec<TaskSnapshot>> {
     Json(state.tasks.list().await)
 }

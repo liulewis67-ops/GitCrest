@@ -13,13 +13,13 @@ use tower_http::cors::CorsLayer;
 use crate::write_probe;
 
 use crate::{
-    add_api_version_header, api_not_found, apply_repository_shelf, cancel_task, clone_repository,
-    commit_repository, create_repository_shelf, delete_ai_credential, delete_credential,
-    delete_repository_shelf, discard_repository_patch, events, get_ai_settings,
-    get_credential_status, get_repository_shelf, get_task, get_workflow_conflict_ai_settings,
-    list_repository_rebase_backups, list_repository_reset_backups, list_repository_shelves,
-    list_tasks, mark_workflow_conflict_resolved, preflight_repository_rebase,
-    preflight_repository_reset, preflight_repository_shelf_apply, preflight_repository_workflow,
+    add_api_version_header, api_not_found, apply_repository_shelf, cancel_task, commit_repository,
+    create_repository_shelf, delete_ai_credential, delete_credential, delete_repository_shelf,
+    discard_repository_patch, events, get_ai_settings, get_credential_status, get_repository_shelf,
+    get_task, get_workflow_conflict_ai_settings, list_repository_rebase_backups,
+    list_repository_reset_backups, list_repository_shelves, list_tasks,
+    mark_workflow_conflict_resolved, preflight_repository_rebase, preflight_repository_reset,
+    preflight_repository_shelf_apply, preflight_repository_workflow,
     preflight_repository_workflow_recovery, read_workflow_conflict_file,
     recover_repository_workflow, repositories, repository_commit_create_tag, request_ai,
     request_workflow_conflict_suggestion, require_api_version, require_auth,
@@ -142,7 +142,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
             "/v1/repositories/:repo_id/workflows/conflicts/ai-settings",
             get(get_workflow_conflict_ai_settings),
         )
-        .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
         .route("/v1/tasks/:task_id", get(get_task))
         .route("/v1/tasks/:task_id/cancel", post(cancel_task))

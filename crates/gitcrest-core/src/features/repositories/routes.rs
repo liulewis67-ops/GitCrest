@@ -4,8 +4,8 @@ use axum::{
 };
 
 use super::handlers::{
-    forget_repository, get_repository, initialize_repository, list_repositories, open_repository,
-    set_repository_favorite,
+    clone_repository, forget_repository, get_repository, initialize_repository, list_repositories,
+    open_repository, set_repository_favorite,
 };
 use crate::AppState;
 
@@ -24,4 +24,5 @@ pub(crate) fn router() -> Router<AppState> {
             "/v1/repositories/:repo_id/favorite",
             put(set_repository_favorite),
         )
+        .route("/v1/clones", post(clone_repository))
 }
