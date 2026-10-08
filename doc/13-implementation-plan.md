@@ -1814,3 +1814,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其他 feature aliases 仍被 API、storage、git adapter 与 feature 实现消费；后续继续按依赖关系迁移并删除不再需要的 crate-root re-export。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/commits/`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`88d3fda`
+
+### settings feature 调用切换并移除 crate-root alias — 小阶段 135
+- 状态：已完成（所有 settings 消费者均通过 feature 路径访问）
+- 日期：2026-10-09
+- 交付：将 workflows conflict handler 的 AI/settings 依赖切换到 `features::settings`；确认 settings 的其余调用仅位于 API router 的 feature 导入后，从 `lib.rs` 移除 `settings` crate-root re-export。设置模型、AI 冲突建议与 API 行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：剩余 feature aliases 仍被基础设施模块和业务 features 消费，后续继续按跨层依赖关系迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/workflows/handlers/conflicts.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`2a83996`
