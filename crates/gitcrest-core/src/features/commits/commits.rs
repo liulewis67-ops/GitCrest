@@ -1,31 +1,7 @@
-use serde::Deserialize;
-
-use crate::diff::DiffSelection;
+use super::dto::CommitSelection;
 use crate::status::{ChangeCategory, StatusSnapshot};
 
 const MAX_COMMIT_MESSAGE_BYTES: usize = 64 * 1024;
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CommitRequest {
-    pub message: String,
-    #[serde(default)]
-    pub amend: bool,
-    #[serde(default)]
-    pub sign_off: bool,
-    #[serde(default)]
-    pub sign: bool,
-    #[serde(default)]
-    pub selections: Vec<CommitSelection>,
-}
-
-#[derive(Clone, Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct CommitSelection {
-    pub path: String,
-    pub revision: String,
-    pub selections: Vec<DiffSelection>,
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum CommitError {
