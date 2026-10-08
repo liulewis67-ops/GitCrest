@@ -940,3 +940,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/tags/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`cd8d630`
 
+
+### 后端 staging feature 路由归属 — 小阶段 38
+- 状态：已完成（staging、partial staging、discard 和 undo endpoints 归入 feature router）
+- 日期：2026-10-09
+- 交付：新增 `features/staging/mod.rs` 与 `routes.rs`，保留现有 staging service 模块并统一从 feature 根 re-export；将暂存、选区暂存、选区丢弃和最近操作撤销四条 API route 从顶层 router 移入 staging feature。Handler 目前仍在 `main.rs` 并仅提升为 crate 内可见，下一子阶段继续迁入 feature handlers。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy 与完整 Rust 测试（120/120）及 `git diff --check` 通过；现有 staging/undo API 集成用例通过。
+- 限制/后续：本阶段仅归属路由，不宣称 handlers/DTO/service 已完全分层；继续迁移 staging handlers 与请求 DTO，再处理 shelves/workflows 等剩余顶层路由和 handler。
+- 证据：`crates/gitcrest-core/src/features/staging/{mod,routes,staging}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`a5b6105`
+
