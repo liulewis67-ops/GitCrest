@@ -959,3 +959,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：staging DTO 和 service 仍在既有 `staging.rs`；本阶段只迁移 handlers。继续按 feature 规范拆分 DTO/service 并迁移 shelves/workflows 等剩余 API。
 - 证据：`crates/gitcrest-core/src/features/staging/{mod,routes,handlers,staging}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`ecf741b`
+
+### 后端 staging feature DTO 拆分 — 小阶段 40
+- 状态：已完成（staging API 请求 DTO 进入独立 dto 模块）
+- 日期：2026-10-09
+- 交付：新增 `features/staging/dto.rs`，集中定义 staging action、patch action、staging/partial staging/discard 请求结构；service 从 DTO 模块引用其命令输入类型，feature 根 re-export 保持 handlers/API 调用路径兼容。serde camelCase、未知字段拒绝及默认 path 行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过。
+- 限制/后续：staging command service 仍位于兼容命名的 `staging.rs`；后续可整理为 `service.rs` 并继续拆分 shelves/workflows feature。
+- 证据：`crates/gitcrest-core/src/features/staging/{mod,dto,staging,handlers,routes}.rs`。
+- 实施 commit：`e7ce865`
