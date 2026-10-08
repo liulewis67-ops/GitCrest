@@ -35,3 +35,32 @@ pub(super) struct SwitchBranchRequest {
 pub(super) struct CreateBranchRequest {
     pub(super) name: String,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct RenameBranchRequest {
+    pub(super) name: String,
+    pub(super) new_name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct BranchNameRequest {
+    pub(super) name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct DeleteBranchRequest {
+    pub(super) name: String,
+    pub(super) allow_unmerged: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct BranchDeletePreview {
+    pub(super) name: String,
+    pub(super) is_current: bool,
+    pub(super) unmerged_commit_count: u32,
+    pub(super) requires_confirmation: bool,
+}

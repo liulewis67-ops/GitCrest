@@ -3,14 +3,12 @@ use axum::{
     Router,
 };
 
-use crate::{
-    delete_repository_branch, delete_repository_remote_branch, preview_repository_branch_delete,
-    preview_repository_remote_branch_delete, rename_repository_branch, AppState,
-};
+use crate::{delete_repository_remote_branch, preview_repository_remote_branch_delete, AppState};
 
 use super::handlers::{
-    create_repository_branch, preflight_branch_switch, repository_branches, set_branch_favorite,
-    switch_repository_branch,
+    create_repository_branch, delete_repository_branch, preflight_branch_switch,
+    preview_repository_branch_delete, rename_repository_branch, repository_branches,
+    set_branch_favorite, switch_repository_branch,
 };
 
 pub(crate) fn router() -> Router<AppState> {
