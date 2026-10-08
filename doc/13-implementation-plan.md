@@ -1184,3 +1184,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：recovery preflight 与执行 handler 仍在 `handlers.rs`；下一阶段将其归并到 `handlers/recovery.rs`，随后检查通用 handlers 文件是否仅承担聚合职责。
 - 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/merge.rs,routes.rs}`。
 - 实施 commit：`288ca3a`
+
+### 后端 workflows recovery handlers 子模块 — 小阶段 65
+- 状态：已完成（recovery preflight 与执行 handlers 独立分组）
+- 日期：2026-10-09
+- 交付：将 recovery preflight 与 recovery task 执行 handlers 从通用 `handlers.rs` 移入 `handlers/recovery.rs`，由 workflows 聚合模块继续导出给 routes；handler 所需 DTO、状态、恢复 helper 和服务依赖在子模块显式声明。`handlers.rs` 现在仅负责声明 merge/rebase/reset/recovery/conflicts 子模块并聚合导出。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；recovery preflight、continue/skip/abort、conflict 和 shelf apply recovery 集成用例通过。
+- 限制/后续：workflows handlers 已按业务语义分组；后续需继续核对规范要求的 service/domain/ports 边界及 `main.rs` crate 根职责，避免仅完成路由层目录整理。
+- 证据：`crates/gitcrest-core/src/features/workflows/{handlers.rs,handlers/recovery.rs,handlers/merge.rs,handlers/rebase.rs,handlers/reset.rs,handlers/conflicts.rs,routes.rs}`。
+- 实施 commit：`e25977f`
