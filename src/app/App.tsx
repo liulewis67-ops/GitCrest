@@ -92,8 +92,6 @@ function App() {
   const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
   const [diffRetry, setDiffRetry] = useState(0);
   const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
-  const openedCloneTasks = useRef(new Set<string>());
-  const cloneTaskIds = useRef(new Set<string>());
   const {
     message: commitMessage,
     setMessage: setCommitMessage,
@@ -407,12 +405,20 @@ function App() {
   const cloneSubmission = useCloneSubmission({
     getApi: () => apiRef.current,
     onTaskAccepted: (task) => {
-      cloneTaskIds.current.add(task.taskId);
       appendTask(task);
       setCloneOpen(false);
       setTasksOpen(true);
       setTasksError("");
     },
+    onRepositoryOpened: (repository) => {
+      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
+      activateRepository(repository);
+    },
+    closeCloneDialog: () => setCloneOpen(false),
+    closeTaskCenter: () => setTasksOpen(false),
+    clearTaskError: () => setTasksError(""),
+    setTaskError: setTasksError,
+    openTaskCenter: () => setTasksOpen(true),
   });
   const {
     open: pullOpen,
@@ -732,25 +738,6 @@ function App() {
     else setCommitMessage("");
   }
 
-  async function openClonedRepository(task: TaskSnapshotResponse) {
-    if (!cloneTaskIds.current.has(task.taskId) || task.operation !== "clone" || task.status !== "succeeded" || !task.resultRepoId || openedCloneTasks.current.has(task.taskId)) return;
-    openedCloneTasks.current.add(task.taskId);
-    const api = apiRef.current;
-    if (!api) return;
-    try {
-      const repository = await api.getRepository(task.resultRepoId);
-      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
-      activateRepository(repository);
-      setCloneOpen(false);
-      setTasksOpen(false);
-      setTasksError("");
-    } catch (error) {
-      openedCloneTasks.current.delete(task.taskId);
-      setTasksError(error instanceof Error ? error.message : "Clone completed, but the repository could not be opened.");
-      setTasksOpen(true);
-    }
-  }
-
   function retryClone(task: TaskSnapshotResponse) {
     cloneSubmission.prepareRetry(task.targetPath);
     setTasksOpen(false);
@@ -999,7 +986,7 @@ function App() {
   }, [mode, selectedRepository?.repoId, selectedFilePath, selectedFileScope, selectedDiffCommitOid, diffRetry]);
 
   useEffect(() => {
-    for (const task of tasks) void openClonedRepository(task);
+    for (const task of tasks) void cloneSubmission.openClonedRepository(task);
   }, [tasks]);
 
   useEffect(() => {
