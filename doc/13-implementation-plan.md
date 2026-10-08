@@ -2110,3 +2110,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍直接依赖 remotes、diff、settings 等 feature 私有 UI 或类型路径；后续继续按 feature 公开 API 收口。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/tasks/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 实施 commit：`7874434`
+
+### remotes feature dialogs 与类型经公开入口导出 — 小阶段 168
+- 状态：已完成（App/page 使用 remotes feature 公开 API 加载 dialog、RemoteManager 并引用 PushTarget 类型）
+- 日期：2026-10-09
+- 交付：remotes barrel 公开 Push、Pull、PushTarget dialogs 与 RemoteManager loader，以及 `PushTarget` 类型；App 移除私有 dialog/type 路径引用，WorkspaceNavigation 改用公开 RemoteManager loader。保留各 UI 的独立懒加载 chunk，并消除 remotes barrel 动态/静态导入警告。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：App 仍直接依赖 diff/settings 私有 UI 路径及 repositories 私有 model；继续检查并按 feature 公开 API 收口。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/remotes/index.ts`、`src/pages/workspace/WorkspaceNavigation.tsx`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 实施 commit：`9f8ffa2`
