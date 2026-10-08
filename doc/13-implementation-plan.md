@@ -2092,3 +2092,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍直接引用其他 feature 的私有 UI 文件，后续按 feature 逐步增加公开 loader。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/workflows/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 实施 commit：`8d5389c`
+
+### branches feature 公开 UI loader 与 refs model — 小阶段 166
+- 状态：已完成（App 不再直接依赖 branches 私有 dialog/model 路径）
+- 日期：2026-10-09
+- 交付：新增 branches feature barrel，公开 RemoteBranchDeleteDialog 异步 loader 和 `useRepositoryRefs`；App 通过 feature 入口完成懒加载与 model 装配，保留 dialog chunk 和仓库 refs 行为。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：App 仍引用其他 feature 私有 UI/model 路径，继续逐 feature 梳理并经 barrel 暴露必要 API。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 实施 commit：`75fe2bf`
