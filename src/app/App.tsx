@@ -10,7 +10,7 @@ import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
 import { useDialogFocus } from "../shared/use-dialog-focus";
-import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
+import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
@@ -47,15 +47,6 @@ const changeGroups = [
   { category: "conflicted", label: "Conflicted" },
   { category: "ignored", label: "Ignored" },
 ] as const;
-
-function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
-  try {
-    const value = Number(window.localStorage.getItem(key));
-    return Number.isFinite(value) && value >= min && value <= max ? value : fallback;
-  } catch {
-    return fallback;
-  }
-}
 
 function repositoryName(path: string): string {
   return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
@@ -308,10 +299,7 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const { dialogRef: paletteRef, onKeyDown: onPaletteFocusKeyDown } = useDialogFocus<HTMLElement>(() => setPaletteOpen(false), false, undefined, paletteOpen);
-  const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber("gitcrest-sidebar-width", 236, 190, 340));
-  const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", 284, 220, 420));
-  const [workbenchHeight, setWorkbenchHeight] = useState(() => readStoredNumber("gitcrest-workbench-height", 204, 144, 360));
-  const [layoutLoadedFor, setLayoutLoadedFor] = useState<string>();
+  const { sidebarWidth, setSidebarWidth, detailsWidth, setDetailsWidth, workbenchHeight, setWorkbenchHeight } = useWorkspaceLayout(selectedRepository?.repoId);
   useEffect(() => {
     const bridge = getGitCrestBridge();
     const getStatus = bridge?.getUpdateStatus;
@@ -1505,31 +1493,6 @@ function App() {
     }
     return () => systemTheme?.removeEventListener("change", applyTheme);
   }, [theme]);
-
-  useEffect(() => {
-    const repoId = selectedRepository?.repoId;
-    if (!repoId) {
-      setLayoutLoadedFor(undefined);
-      return;
-    }
-    setLayoutLoadedFor(undefined);
-    setSidebarWidth(readStoredNumber(`gitcrest-layout-${repoId}-sidebar-width`, readStoredNumber("gitcrest-sidebar-width", 236, 190, 340), 190, 340));
-    setDetailsWidth(readStoredNumber(`gitcrest-layout-${repoId}-details-width`, readStoredNumber("gitcrest-details-width", 284, 220, 420), 220, 420));
-    setWorkbenchHeight(readStoredNumber(`gitcrest-layout-${repoId}-workbench-height`, readStoredNumber("gitcrest-workbench-height", 204, 144, 360), 144, 360));
-    setLayoutLoadedFor(repoId);
-  }, [selectedRepository?.repoId]);
-
-  useEffect(() => {
-    const repoId = selectedRepository?.repoId;
-    if (!repoId || layoutLoadedFor !== repoId) return;
-    try {
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-sidebar-width`, String(sidebarWidth));
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-details-width`, String(detailsWidth));
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-workbench-height`, String(workbenchHeight));
-    } catch {
-      // Layout resizing remains available for this session if storage is unavailable.
-    }
-  }, [layoutLoadedFor, selectedRepository?.repoId, sidebarWidth, detailsWidth, workbenchHeight]);
 
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
