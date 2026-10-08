@@ -1544,3 +1544,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍管理 commit selection、Tag/workflow 请求与工作区布局尺寸状态；后续继续将这些流程和主区其它 UI 按 feature/model 边界迁出。S7.2、S7.4、S7.5 仍待整体验收。
 - 证据：`src/pages/workspace/WorkspaceDetailsPanel.tsx`、`src/app/App.tsx`、`src/features/history/index.ts`。
 - 实施 commit：`14e904c`
+
+### Workspace 面板尺寸状态迁入 repositories hook — 小阶段 105
+- 状态：已完成（仓库级导航/详情/工作台尺寸读取、恢复与保存由 hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/repositories/model/use-workspace-layout.ts`，封装三类面板尺寸的边界校验、全局旧值 fallback、按 RepoId 恢复/保存和 storage 不可用时的会话内操作。通过 repositories feature 公开入口暴露该 hook；App 只使用尺寸值与 setter 渲染 CSS 变量及 ResizeSeparator。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留现有 tree-sitter `eval` 与 Monaco contribution chunk 警告。
+- 限制/后续：`ResizeSeparator` UI 本身及 keyboard shortcut、commit draft selection、history scroll 等生命周期仍在 App；后续继续按 shared UI 与 feature model 边界迁移。S7.2、S7.4、S7.5 尚待验收。
+- 证据：`src/features/repositories/model/use-workspace-layout.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`e2ea32c`
