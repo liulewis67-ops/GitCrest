@@ -8,7 +8,8 @@ import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
 import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
 import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
-import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
+import { ariaShortcut, displayShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
+import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { useCommitDraft } from "../features/commits";
@@ -1384,86 +1385,58 @@ function App() {
     return () => systemTheme?.removeEventListener("change", applyTheme);
   }, [theme]);
 
-  useEffect(() => {
-    function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.isComposing) return;
-      const target = event.target instanceof HTMLElement ? event.target : undefined;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      if (target?.closest('[role="dialog"], [role="alertdialog"]') && event.key !== "Escape") return;
-      if (matchesShortcut(event, shortcuts.openRepository, isMacPlatform)) {
-        event.preventDefault();
-        void openLocalRepository();
-      } else if (matchesShortcut(event, shortcuts.cloneRepository, isMacPlatform) && connected) {
-        event.preventDefault();
-        setCloneError("");
-        setCloneOpen(true);
-      } else if (matchesShortcut(event, shortcuts.initializeRepository, isMacPlatform)) {
-        event.preventDefault();
-        void initializeLocalRepository();
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.stageAll, isMacPlatform) && activeStatus && workingCount > 0 && !hasConflicts && !stagingBusy && !hasActiveStagingTask) {
-        event.preventDefault();
-        void stageChanges("stageAll");
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.undoRecentOperation, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
-        event.preventDefault();
-        void undoRecentOperation();
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.fetch, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
-        event.preventDefault();
-        void fetchRepository();
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.push, isMacPlatform) && selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
-        event.preventDefault();
-        openPushDialog();
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.refreshStatus, isMacPlatform) && selectedRepository && !activeStatusLoading) {
-        event.preventDefault();
-        void refreshRepositoryStatus(selectedRepository.repoId, true);
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.openDiff, isMacPlatform) && selectedFilePath) {
-        event.preventDefault();
-        changeWorkspaceMode("diff");
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.searchCommits, isMacPlatform) && selectedRepository && isFullObjectId(selectedRepository.head)) {
-        event.preventDefault();
-        changeWorkspaceMode("graph");
-        setHistorySearchFocusRequest((request) => ({ repoId: selectedRepository.repoId, sequence: (request?.sequence || 0) + 1 }));
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.shelve, isMacPlatform) && selectedRepository) {
-        event.preventDefault();
-        setShelfComposerRequest((request) => request + 1);
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.cherryPick, isMacPlatform) && selectedRepository && isFullObjectId(selectedCommit) && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
-        event.preventDefault();
-        setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: selectedCommit, action: "cherryPick" });
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.createTag, isMacPlatform) && selectedRepository && isFullObjectId(selectedCommit) && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
-        event.preventDefault();
-        changeWorkspaceMode("graph");
-        setTagEditorRequest((request) => ({ repoId: selectedRepository.repoId, oid: selectedCommit, sequence: (request?.sequence || 0) + 1 }));
-      } else if (matchesShortcut(event, shortcuts.settings, isMacPlatform)) {
-        event.preventDefault();
-        setSettingsOpen(true);
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.commit, isMacPlatform)) {
-        event.preventDefault();
-        void commitChanges("commit");
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.commitAndPush, isMacPlatform)) {
-        event.preventDefault();
-        void commitChanges("commitAndPush");
-      } else if (matchesShortcut(event, shortcuts.pull, isMacPlatform)) {
-        event.preventDefault();
-        openPullDialog();
-      } else if (matchesShortcut(event, shortcuts.rebase, isMacPlatform)) {
-        event.preventDefault();
-        if (selectedRepository && activeBranches) setRebaseDialogOpen(true);
-      } else if (matchesShortcut(event, shortcuts.branchSwitcher, isMacPlatform)) {
-        event.preventDefault();
-        openBranchSwitcher();
-      } else if (matchesShortcut(event, shortcuts.commandPalette, isMacPlatform)) {
-        event.preventDefault();
-        setPaletteOpen((open) => !open);
-        setPaletteQuery("");
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.aiCommitMessage, isMacPlatform) && selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy) {
-        event.preventDefault();
-        setCommitAssistantOpen(true);
-      } else if (event.key === "Escape") {
-        setPaletteOpen(false);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [page, connected, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.head, selectedRepository?.availability, selectedCommit, activeBranches, activeStatus, activeStatusLoading, workingCount, stagingBusy, hasActiveStagingTask, hasActiveRepositoryTask, selectedFilePath, stagedCount, hasConflicts, commitBusy, shortcuts, isMacPlatform]);
+  useGlobalShortcuts({
+    page,
+    shortcuts,
+    isMacPlatform,
+    connected,
+    repository: selectedRepository ? { repoId: selectedRepository.repoId, availability: selectedRepository.availability } : undefined,
+    selectedCommit,
+    repositoryHeadIsFull: isFullObjectId(selectedRepository?.head),
+    hasActiveStatus: Boolean(activeStatus),
+    workingCount,
+    hasConflicts,
+    stagingBusy,
+    hasActiveStagingTask,
+    hasActiveRepositoryTask,
+    activeStatusLoading,
+    hasSelectedFile: Boolean(selectedFilePath),
+    stagedCount,
+    commitBusy,
+    hasActiveBranches: Boolean(activeBranches),
+  }, {
+    openRepository: () => { void openLocalRepository(); },
+    cloneRepository: () => { setCloneError(""); setCloneOpen(true); },
+    initializeRepository: () => { void initializeLocalRepository(); },
+    stageAll: () => { void stageChanges("stageAll"); },
+    undoRecentOperation: () => { void undoRecentOperation(); },
+    fetch: () => { void fetchRepository(); },
+    push: openPushDialog,
+    refreshStatus: (repoId) => { void refreshRepositoryStatus(repoId, true); },
+    openDiff: () => changeWorkspaceMode("diff"),
+    searchCommits: (repoId) => {
+      changeWorkspaceMode("graph");
+      setHistorySearchFocusRequest((request) => ({ repoId, sequence: (request?.sequence || 0) + 1 }));
+    },
+    openShelfComposer: () => setShelfComposerRequest((request) => request + 1),
+    cherryPick: (repoId, targetOid) => setWorkflowDialog({ repoId, targetOid, action: "cherryPick" }),
+    createTag: (repoId, oid) => {
+      changeWorkspaceMode("graph");
+      setTagEditorRequest((request) => ({ repoId, oid, sequence: (request?.sequence || 0) + 1 }));
+    },
+    openSettings: () => setSettingsOpen(true),
+    commit: () => { void commitChanges("commit"); },
+    commitAndPush: () => { void commitChanges("commitAndPush"); },
+    pull: openPullDialog,
+    rebase: () => setRebaseDialogOpen(true),
+    openBranchSwitcher,
+    toggleCommandPalette: () => {
+      setPaletteOpen((open) => !open);
+      setPaletteQuery("");
+    },
+    openCommitAssistant: () => setCommitAssistantOpen(true),
+    closeCommandPalette: () => setPaletteOpen(false),
+  });
 
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
