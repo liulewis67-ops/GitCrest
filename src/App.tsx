@@ -1646,6 +1646,7 @@ function App() {
                 repoId={selectedRepository.repoId}
                 headOid={selectedRepository.head}
                 files={activeStatus?.files || []}
+                statusReady={Boolean(activeStatus)}
                 disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
                 refreshKey={historyRefreshKey}
                 openComposerRequest={shelfComposerRequest}

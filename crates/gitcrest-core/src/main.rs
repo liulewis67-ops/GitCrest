@@ -6000,6 +6000,307 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_unstaged() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("shelf-conflict-repo");
+        std::fs::create_dir(&root).unwrap();
+        let git_output = |arguments: &[&str]| {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&root)
+                .args(arguments)
+                .output()
+                .unwrap()
+        };
+        let git = |arguments: &[&str]| {
+            let output = git_output(arguments);
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        };
+        git(&["init", "--quiet"]);
+        git(&["config", "user.name", "Shelf Conflict Test"]);
+        git(&["config", "user.email", "shelf-conflict@example.invalid"]);
+        std::fs::write(root.join("notes.txt"), "base value\nother line\n").unwrap();
+        git(&["add", "."]);
+        git(&["commit", "--quiet", "-m", "base"]);
+        let base_head = git_output(&["rev-parse", "HEAD"]);
+        assert!(base_head.status.success());
+
+        std::fs::write(root.join("notes.txt"), "shelf value\nother line\n").unwrap();
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": root }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+        let diff = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/diff?path=notes.txt&scope=workingTree"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(diff.into_body(), usize::MAX).await.unwrap();
+        let diff: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let created = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                &serde_json::json!({
+                    "name": "shelf branch edit",
+                    "description": "Restore on another branch",
+                    "expectedHeadOid": repository["head"],
+                    "items": [{
+                        "path": "notes.txt",
+                        "scope": "workingTree",
+                        "revision": diff["revision"],
+                        "selections": []
+                    }]
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(created.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(created.into_body(), usize::MAX).await.unwrap();
+        let create_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, create_task["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let shelves = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(shelves.into_body(), usize::MAX).await.unwrap();
+        let shelves: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let shelf_id = shelves[0]["shelfId"].as_str().unwrap().to_owned();
+
+        git(&["checkout", "--quiet", "-b", "feature"]);
+        std::fs::write(root.join("notes.txt"), "branch value\nother line\n").unwrap();
+        git(&["commit", "--quiet", "-am", "branch edit"]);
+        let target_head = String::from_utf8(git_output(&["rev-parse", "HEAD"]).stdout)
+            .unwrap()
+            .trim()
+            .to_owned();
+        let preview_response = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply-preview"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview_response.status(), StatusCode::OK);
+        let bytes = to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(preview["expectedHeadOid"], target_head);
+        assert_eq!(preview["canApplyCleanly"], false);
+        assert_eq!(preview["canApplyWithConflicts"], true);
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/shelves/{shelf_id}/apply"),
+                &serde_json::json!({
+                    "expectedHeadOid": preview["expectedHeadOid"],
+                    "previewRevision": preview["previewRevision"]
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let apply_task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let waiting = wait_for_task_status(
+            &app,
+            apply_task["taskId"].as_str().unwrap(),
+            "waitingForInput",
+        )
+        .await;
+        assert!(waiting["operation"]
+            .as_str()
+            .unwrap()
+            .starts_with("shelfApply:"));
+
+        let recovery_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/recovery-preflight?taskId={}",
+            waiting["taskId"].as_str().unwrap()
+        );
+        let recovery = app
+            .clone()
+            .oneshot(request(&recovery_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
+        let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recovery["operation"], "shelfApply");
+        assert_eq!(
+            recovery["conflictedPaths"],
+            serde_json::json!(["notes.txt"])
+        );
+        assert!(!recovery["canContinue"].as_bool().unwrap());
+
+        let conflict_path = format!(
+            "/api/v1/repositories/{repo_id}/workflows/conflicts/file?taskId={}&path=notes.txt",
+            waiting["taskId"].as_str().unwrap()
+        );
+        let conflict = app
+            .clone()
+            .oneshot(request(&conflict_path, Some(CONFLICT_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(conflict.into_body(), usize::MAX).await.unwrap();
+        let conflict: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(conflict["operation"], "shelfApply");
+        assert_eq!(conflict["baseContent"], "base value\nother line\n");
+        assert_eq!(conflict["oursContent"], "branch value\nother line\n");
+        assert_eq!(conflict["theirsContent"], "shelf value\nother line\n");
+
+        let mutation = serde_json::json!({
+            "taskId": waiting["taskId"],
+            "path": "notes.txt",
+            "expectedOperation": "shelfApply",
+            "expectedHeadOid": target_head,
+            "expectedResultRevision": conflict["resultRevision"]
+        });
+        let saved = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::PUT,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/file"),
+                &serde_json::json!({
+                    "taskId": mutation["taskId"],
+                    "path": mutation["path"],
+                    "expectedOperation": mutation["expectedOperation"],
+                    "expectedHeadOid": mutation["expectedHeadOid"],
+                    "expectedResultRevision": mutation["expectedResultRevision"],
+                    "content": "resolved shelf value\nother line\n"
+                })
+                .to_string(),
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(saved.into_body(), usize::MAX).await.unwrap();
+        let saved: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, saved["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let resolved_file = app
+            .clone()
+            .oneshot(request(&conflict_path, Some(CONFLICT_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(resolved_file.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let resolved_file: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let marked = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/resolved"),
+                &serde_json::json!({
+                    "taskId": waiting["taskId"],
+                    "path": "notes.txt",
+                    "expectedOperation": "shelfApply",
+                    "expectedHeadOid": target_head,
+                    "expectedResultRevision": resolved_file["resultRevision"]
+                })
+                .to_string(),
+                CONFLICT_TOKEN,
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(marked.into_body(), usize::MAX).await.unwrap();
+        let marked: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, marked["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+
+        let recovery = app
+            .clone()
+            .oneshot(request(&recovery_path, Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        let bytes = to_bytes(recovery.into_body(), usize::MAX).await.unwrap();
+        let recovery: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(recovery["conflictedPaths"], serde_json::json!([]));
+        assert_eq!(recovery["canContinue"], true);
+        let continued = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/workflows/recovery"),
+                &serde_json::json!({
+                    "taskId": waiting["taskId"],
+                    "action": "continue",
+                    "expectedOperation": "shelfApply",
+                    "expectedHeadOid": recovery["headOid"],
+                    "expectedConflictedPaths": []
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(continued.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(continued.into_body(), usize::MAX).await.unwrap();
+        let continued: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(
+            wait_for_task(&app, continued["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            wait_for_task(&app, waiting["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        let content = std::fs::read_to_string(root.join("notes.txt")).unwrap();
+        assert_eq!(content, "resolved shelf value\nother line\n");
+        assert!(git_output(&["diff", "--cached", "--", "notes.txt"])
+            .stdout
+            .is_empty());
+        assert!(
+            String::from_utf8_lossy(&git_output(&["diff", "--", "notes.txt"]).stdout)
+                .contains("resolved shelf value")
+        );
+        let shelves = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/shelves"),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let bytes = to_bytes(shelves.into_body(), usize::MAX).await.unwrap();
+        let shelves: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert!(shelves.as_array().unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn task_api_lists_progress_and_cancels_with_write_capability() {
         let tasks = TaskService::default();
         let task = tasks

@@ -16,6 +16,7 @@ export function ShelfCenter({
   repoId,
   headOid,
   files,
+  statusReady,
   disabled,
   refreshKey,
   openComposerRequest,
@@ -25,6 +26,7 @@ export function ShelfCenter({
   repoId: string;
   headOid: string | null;
   files: StatusSnapshotResponse["files"];
+  statusReady: boolean;
   disabled: boolean;
   refreshKey: number;
   openComposerRequest: number;
@@ -56,6 +58,7 @@ export function ShelfCenter({
   async function refreshShelves() {
     try {
       const next = await api.listRepositoryShelves(repoId);
+      if (!Array.isArray(next)) throw new Error("The shelf list response was invalid.");
       setShelves(next);
       setLoadError("");
       if (selectedShelfId && !next.some((shelf) => shelf.shelfId === selectedShelfId)) {
@@ -73,8 +76,8 @@ export function ShelfCenter({
     setSelectedShelfId(undefined);
     setDetail(undefined);
     setApplyPreview(undefined);
-    void refreshShelves();
-  }, [api, repoId]);
+    if (statusReady) void refreshShelves();
+  }, [api, repoId, statusReady]);
 
   useEffect(() => {
     if (!taskPending || !pendingTaskId) return;
@@ -97,8 +100,8 @@ export function ShelfCenter({
   }, [api, onTaskSubmitted, pendingTaskId, repoId, taskPending]);
 
   useEffect(() => {
-    if (refreshKey > 0) void refreshShelves();
-  }, [refreshKey]);
+    if (refreshKey > 0 && statusReady) void refreshShelves();
+  }, [refreshKey, statusReady]);
 
   useEffect(() => {
     if (openComposerRequest > 0) {
