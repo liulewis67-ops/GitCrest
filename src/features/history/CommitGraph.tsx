@@ -39,6 +39,9 @@ type CommitGraphProps = {
   selectedOid?: string;
   initialScrollTop: number;
   refreshKey?: number;
+  focusSearchRequest?: { repoId: string; sequence: number };
+  searchShortcut?: string;
+  onFocusSearchHandled?: (sequence: number) => void;
   onScrollPosition: (scrollTop: number) => void;
   onSelect: (oid: string) => void;
 };
@@ -51,8 +54,9 @@ function describeRefs(refs: RefSnapshotResponse["refs"], oid: string): string[] 
   return refs.filter((ref) => ref.oid === oid).map((ref) => ref.name);
 }
 
-export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, onScrollPosition, onSelect }: CommitGraphProps) {
+export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, onScrollPosition, onSelect }: CommitGraphProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
+  const messageSearchRef = useRef<HTMLInputElement>(null);
   const [commits, setCommits] = useState<CommitSummary[]>([]);
   const [refs, setRefs] = useState<RefSnapshotResponse["refs"]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(0);
@@ -130,6 +134,12 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     renderedWindowRef.current = { first, height };
     setViewport({ top: node.scrollTop, height });
   }, [initialScrollTop, loading, repoId]);
+
+  useEffect(() => {
+    if (focusSearchRequest?.repoId !== repoId) return;
+    messageSearchRef.current?.focus();
+    onFocusSearchHandled?.(focusSearchRequest.sequence);
+  }, [focusSearchRequest, onFocusSearchHandled, repoId]);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -239,7 +249,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     <form className="historyFilters" aria-label="Commit history filters" onSubmit={submitFilters}>
       <label>SHA<input aria-label="Filter by SHA" value={draftFilters.sha || ""} onChange={(event) => setFilter("sha", event.target.value)} placeholder="Prefix or full object ID" /></label>
       <label>Author<input aria-label="Filter by author" value={draftFilters.author || ""} onChange={(event) => setFilter("author", event.target.value)} placeholder="Name or email" /></label>
-      <label>Message<input aria-label="Filter by message" value={draftFilters.message || ""} onChange={(event) => setFilter("message", event.target.value)} placeholder="Contains text" /></label>
+      <label>Message<input ref={messageSearchRef} aria-label="Filter by message" aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setFilter("message", event.target.value)} placeholder="Contains text" /></label>
       <label>Branch<select aria-label="Filter by branch" value={draftFilters.branch || ""} onChange={(event) => setFilter("branch", event.target.value)}><option value="">All branches</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
       <label>Path<input aria-label="Filter by path" value={draftFilters.path || ""} onChange={(event) => setFilter("path", event.target.value)} placeholder="Exact repository path" /></label>
       <label>Since<input aria-label="Filter since date" type="date" value={draftFilters.since || ""} onChange={(event) => setFilter("since", event.target.value)} /></label>
@@ -294,6 +304,10 @@ export function CommitDetails({
   onOpenDiffWindow,
   onWorkflow,
   workflowDisabledReason,
+  openTagRequest,
+  tagShortcut,
+  cherryPickShortcut,
+  onTagRequestHandled,
 }: {
   api: GitCrestApiClient;
   repoId: string;
@@ -302,6 +316,10 @@ export function CommitDetails({
   onOpenDiffWindow?: (path: string, oid: string) => void;
   onWorkflow?: (action: "merge" | "cherryPick" | "revert", oid: string) => void;
   workflowDisabledReason?: string;
+  openTagRequest?: { repoId: string; oid: string; sequence: number };
+  tagShortcut?: string;
+  cherryPickShortcut?: string;
+  onTagRequestHandled?: (sequence: number) => void;
 }) {
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
   const [copyMessage, setCopyMessage] = useState("");
@@ -335,6 +353,13 @@ export function CommitDetails({
     setTagError("");
     setCopyMessage("");
   }, [oid]);
+
+  useEffect(() => {
+    if (openTagRequest?.repoId !== repoId || openTagRequest.oid !== oid) return;
+    setTagError("");
+    setTagEditorOpen(true);
+    onTagRequestHandled?.(openTagRequest.sequence);
+  }, [oid, onTagRequestHandled, openTagRequest, repoId]);
 
   if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div>;
   if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">Loading commit details…</div>;
@@ -372,8 +397,8 @@ export function CommitDetails({
     <div className="repositoryFact"><span>COMMIT</span><strong className="monoText" title={detail.oid}>{detail.oid.slice(0, 12)}</strong></div>
     <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>Copy SHA</button>
     {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
-    <button className="textButton commitCopyButton" type="button" onClick={() => { setTagError(""); setTagEditorOpen((current) => !current); }}>{tagEditorOpen ? "Cancel tag" : "Create tag"}</button>
-    {onWorkflow && <div className="commitWorkflowActions" aria-label="Commit actions"><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>Merge</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>Cherry-pick</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>Revert</button></div>}
+    <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={() => { setTagError(""); setTagEditorOpen((current) => !current); }}>{tagEditorOpen ? "Cancel tag" : "Create tag"}</button>
+    {onWorkflow && <div className="commitWorkflowActions" aria-label="Commit actions"><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>Merge</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} aria-keyshortcuts={cherryPickShortcut} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>Cherry-pick</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>Revert</button></div>}
     {tagEditorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
       <label>Tag name<input aria-label="Tag name" value={tagName} maxLength={255} required onChange={(event) => setTagName(event.target.value)} placeholder="v1.0.0" /></label>
       <label>Annotation message<textarea aria-label="Tag annotation" value={tagMessage} maxLength={8192} onChange={(event) => setTagMessage(event.target.value)} placeholder="Describe this release" /></label>

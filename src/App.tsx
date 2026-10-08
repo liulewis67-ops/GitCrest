@@ -215,6 +215,8 @@ function App() {
   const [pullBusy, setPullBusy] = useState(false);
   const [pullError, setPullError] = useState("");
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
+  const [historySearchFocusRequest, setHistorySearchFocusRequest] = useState<{ repoId: string; sequence: number }>();
+  const [tagEditorRequest, setTagEditorRequest] = useState<{ repoId: string; oid: string; sequence: number }>();
   const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
   const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
   const [switchTargetName, setSwitchTargetName] = useState("");
@@ -1688,9 +1690,20 @@ function App() {
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.openDiff, isMacPlatform) && selectedFilePath) {
         event.preventDefault();
         changeWorkspaceMode("diff");
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.searchCommits, isMacPlatform) && selectedRepository && isFullObjectId(selectedRepository.head)) {
+        event.preventDefault();
+        changeWorkspaceMode("graph");
+        setHistorySearchFocusRequest((request) => ({ repoId: selectedRepository.repoId, sequence: (request?.sequence || 0) + 1 }));
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.shelve, isMacPlatform) && selectedRepository) {
         event.preventDefault();
         setShelfComposerRequest((request) => request + 1);
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.cherryPick, isMacPlatform) && selectedRepository && isFullObjectId(selectedCommit) && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
+        event.preventDefault();
+        setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: selectedCommit, action: "cherryPick" });
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.createTag, isMacPlatform) && selectedRepository && isFullObjectId(selectedCommit) && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask) {
+        event.preventDefault();
+        changeWorkspaceMode("graph");
+        setTagEditorRequest((request) => ({ repoId: selectedRepository.repoId, oid: selectedCommit, sequence: (request?.sequence || 0) + 1 }));
       } else if (matchesShortcut(event, shortcuts.settings, isMacPlatform)) {
         event.preventDefault();
         setSettingsOpen(true);
@@ -1722,7 +1735,7 @@ function App() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [page, connected, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.availability, activeBranches, activeStatus, activeStatusLoading, workingCount, stagingBusy, hasActiveStagingTask, hasActiveRepositoryTask, selectedFilePath, stagedCount, hasConflicts, commitBusy, shortcuts, isMacPlatform]);
+  }, [page, connected, canCommit, commitMessage, amendCommit, signOffCommit, signCommit, commitSelections, commitSelectionRepoId, activeCommitAction, selectedRepository?.repoId, selectedRepository?.head, selectedRepository?.availability, selectedCommit, activeBranches, activeStatus, activeStatusLoading, workingCount, stagingBusy, hasActiveStagingTask, hasActiveRepositoryTask, selectedFilePath, stagedCount, hasConflicts, commitBusy, shortcuts, isMacPlatform]);
 
   const layoutStyle = {
     "--sidebar-width": `${sidebarWidth}px`,
@@ -1970,6 +1983,9 @@ function App() {
                 selectedOid={selectedCommit}
                 initialScrollTop={workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0}
                 refreshKey={historyRefreshKey}
+                focusSearchRequest={historySearchFocusRequest}
+                searchShortcut={ariaShortcut(shortcuts.searchCommits, isMacPlatform)}
+                onFocusSearchHandled={(sequence) => setHistorySearchFocusRequest((request) => request?.sequence === sequence ? undefined : request)}
                 onScrollPosition={rememberGraphScroll}
                 onSelect={selectCommit}
               /> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => rememberGraphScroll(event.currentTarget.scrollTop)} role="region" aria-label="Commit graph view"><div className="graphEmpty">
@@ -1990,7 +2006,7 @@ function App() {
 
             {mode === "graph" && <aside className="detailsPanel" aria-label="Commit details">
               <div className="panelHeading">{selectedRepository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} workflowDisabledReason={!connected ? "Connect to the Git engine to start this operation." : selectedRepository.availability !== "available" ? "This repository is unavailable." : hasActiveRepositoryTask ? "Wait for the current repository task." : undefined} onWorkflow={(action, oid) => setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action })} /> : selectedRepository ? (
+              {selectedRepository && isFullObjectId(selectedCommit) && apiRef.current ? <CommitDetails api={apiRef.current} repoId={selectedRepository.repoId} oid={selectedCommit} onOpenFile={openCommitFileDiff} onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)} workflowDisabledReason={!connected ? "Connect to the Git engine to start this operation." : selectedRepository.availability !== "available" ? "This repository is unavailable." : hasActiveRepositoryTask ? "Wait for the current repository task." : undefined} openTagRequest={tagEditorRequest} onTagRequestHandled={(sequence) => setTagEditorRequest((request) => request?.sequence === sequence ? undefined : request)} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={(action, oid) => setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action })} /> : selectedRepository ? (
                 <div className="repositoryDetails">
                   <span className="detailsGlyph" aria-hidden="true">G</span>
                   <h2>{repositoryName(selectedRepository.path)}</h2>

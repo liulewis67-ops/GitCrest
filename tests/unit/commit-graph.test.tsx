@@ -48,6 +48,18 @@ describe("CommitGraph", () => {
     expect(onScrollPosition).toHaveBeenCalledWith(84);
   });
 
+  it("focuses the message filter when a search shortcut request arrives", async () => {
+    const api = {
+      getRepositoryCommits: vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null })),
+      getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: commit(0).oid, branch: "main", detached: false, refs: [] })),
+    } as unknown as GitCrestApiClient;
+    render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} focusSearchRequest={{ repoId: "repo_fixture", sequence: 1 }} searchShortcut="Control+F" onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
+
+    const messageFilter = await screen.findByRole("textbox", { name: "Filter by message" });
+    await waitFor(() => expect(document.activeElement).toBe(messageFilter));
+    expect(messageFilter.getAttribute("aria-keyshortcuts")).toBe("Control+F");
+  });
+
   it("virtualizes rows, pages older commits, and supports keyboard selection", async () => {
     const entries = Array.from({ length: 120 }, (_, index) => commit(index));
     const getRepositoryCommits = vi.fn(async (_repoId: string, offset = 0, limit = 50) => ({
@@ -112,5 +124,19 @@ describe("CommitGraph", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create annotated tag" }));
     expect(await screen.findByText(/Annotated tag v1.0.0 created/)).toBeDefined();
     expect(api.createRepositoryCommitTag).toHaveBeenCalledWith("repo_fixture", oid, "v1.0.0", "Release context");
+  });
+
+  it("opens the tag editor when the tag shortcut request arrives", async () => {
+    const oid = "a".repeat(40);
+    const api = {
+      getRepositoryCommit: vi.fn(async () => ({
+        repoId: "repo_fixture", oid, parents: [], authorName: "Author", authorEmail: "author@example.test",
+        committedAtMs: 1_791_386_400_000, message: "A commit message",
+        stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [],
+      })),
+    } as unknown as GitCrestApiClient;
+    render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} openTagRequest={{ repoId: "repo_fixture", oid, sequence: 1 }} />);
+
+    expect(await screen.findByRole("textbox", { name: "Tag name" })).toBeDefined();
   });
 });

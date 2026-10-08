@@ -13,10 +13,13 @@ export const shortcutActions = [
   { id: "pull", label: "Open pull review", defaultBinding: "Mod+Shift+L" },
   { id: "refreshStatus", label: "Refresh working tree status", defaultBinding: "Mod+R" },
   { id: "openDiff", label: "Open selected file diff", defaultBinding: "Mod+D" },
+  { id: "searchCommits", label: "Search commit history", defaultBinding: "Mod+F" },
   { id: "shelve", label: "Shelve changes", defaultBinding: "Mod+Shift+S" },
   { id: "settings", label: "Open settings", defaultBinding: "Mod+," },
   { id: "rebase", label: "Interactive rebase", defaultBinding: "Mod+I" },
   { id: "branchSwitcher", label: "Switch branch", defaultBinding: "Mod+B" },
+  { id: "cherryPick", label: "Cherry-pick selected commit", defaultBinding: "Mod+Shift+C" },
+  { id: "createTag", label: "Tag selected commit", defaultBinding: "Mod+T" },
   { id: "aiCommitMessage", label: "Generate commit message", defaultBinding: "Mod+G" },
 ] as const;
 
