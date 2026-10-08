@@ -1652,3 +1652,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其余 feature 暂仍由 lib.rs crate root 声明并通过兼容路径提供；继续逐个迁移时需检查每个模块的 `pub(super)` 和 `pub(in ...)` 边界。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,system/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 实施 commit：`8213492`
+
+### 后端 tags feature 纳入 features 父模块 — 小阶段 117
+- 状态：已完成（tags API feature 由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `tags` 加入 `src/features/mod.rs`，删除 `lib.rs` 中独立的 `#[path]` 声明，并通过 `pub(crate) use features::{system, tags}` 保留 `crate::tags` 调用兼容。TagError/router crate 可见性与 API 路径未改变，DTO 仍限制在 tags feature 内部。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：features 父模块当前包含 system/tags，其他 feature 仍从 crate root 声明；下一步继续逐个迁移并按编译证据调整兼容导出。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,tags/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 实施 commit：`f87f058`
