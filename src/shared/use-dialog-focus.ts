@@ -2,7 +2,7 @@ import { useEffect, useRef, type KeyboardEvent } from "react";
 
 const focusableSelector = "a[href], button:not([disabled]), input:not([disabled]):not([type='hidden']), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
-export function useDialogFocus<T extends HTMLElement>(onEscape?: () => void, closeBlocked = false, returnFocus?: () => HTMLElement | null) {
+export function useDialogFocus<T extends HTMLElement>(onEscape?: () => void, closeBlocked = false, returnFocus?: () => HTMLElement | null, active = true) {
   const dialogRef = useRef<T>(null);
   const onEscapeRef = useRef(onEscape);
   const closeBlockedRef = useRef(closeBlocked);
@@ -12,6 +12,7 @@ export function useDialogFocus<T extends HTMLElement>(onEscape?: () => void, clo
   returnFocusRef.current = returnFocus;
 
   useEffect(() => {
+    if (!active) return;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const dialog = dialogRef.current;
     const preferred = dialog?.querySelector<HTMLElement>("[data-dialog-initial-focus]");
@@ -29,7 +30,7 @@ export function useDialogFocus<T extends HTMLElement>(onEscape?: () => void, clo
       const target = returnFocusRef.current?.() ?? previousFocus;
       if (target?.isConnected) target.focus();
     };
-  }, []);
+  }, [active]);
 
   function onKeyDown(event: KeyboardEvent<T>) {
     if (event.key === "Escape") {

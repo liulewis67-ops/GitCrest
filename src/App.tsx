@@ -18,6 +18,7 @@ import { DiscardChangesDialog } from "./features/diff/DiscardChangesDialog";
 import { SettingsDialog } from "./features/settings/SettingsDialog";
 import { CommitMessageAssistant } from "./features/settings/CommitMessageAssistant";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "./features/settings/shortcut-preferences";
+import { useDialogFocus } from "./shared/use-dialog-focus";
 import type { components } from "./api/schema";
 import "./App.css";
 
@@ -223,6 +224,7 @@ function App() {
   const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
   const [switchError, setSwitchError] = useState("");
   const [switchBusy, setSwitchBusy] = useState(false);
+  const { dialogRef: branchSwitcherRef, onKeyDown: onBranchSwitcherKeyDown } = useDialogFocus<HTMLElement>(() => setBranchSwitcherOpen(false), switchBusy, undefined, branchSwitcherOpen);
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -2065,7 +2067,7 @@ function App() {
 
       {branchSwitcherOpen && selectedRepository && (
         <div className="paletteBackdrop branchSwitcherBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !switchBusy) setBranchSwitcherOpen(false); }}>
-          <section className="branchSwitcherDialog" role="dialog" aria-modal="true" aria-labelledby="branch-switcher-title">
+          <section ref={branchSwitcherRef} className="branchSwitcherDialog" role="dialog" aria-modal="true" aria-labelledby="branch-switcher-title" onKeyDown={onBranchSwitcherKeyDown}>
             <div className="dialogHeading"><div><span className="sectionEyebrow">BRANCHES · {repositoryName(selectedRepository.path)}</span><h2 id="branch-switcher-title">Switch branch</h2></div><button className="dialogClose" type="button" aria-label="Close branch switcher" disabled={switchBusy} onClick={() => setBranchSwitcherOpen(false)}>×</button></div>
             <p className="branchSwitcherCurrent">Current branch: <strong>{selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch"}</strong></p>
             {switchTargetName ? (
