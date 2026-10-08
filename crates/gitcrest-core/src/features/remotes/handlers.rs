@@ -6,14 +6,14 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    branches, pull, remotes as remote_service, AppState, GitOperation, RemoteCommand, TaskFailure,
-    TaskSnapshot,
+    branches, pull, push, remotes as remote_service, AppState, GitOperation, RemoteCommand,
+    TaskFailure, TaskSnapshot,
 };
 
 use super::dto::{
-    BranchUpstreamRequest, DefaultRemoteRequest, FetchRequest, PullRequest,
-    RemoteBranchDeleteQuery, RemoteBranchDeleteRequest, RemoteNameRequest, RemoteRequest,
-    RequiredNullableRemoteName,
+    BranchUpstreamRequest, DefaultRemoteRequest, FetchRequest, PullRequest, PushRequest,
+    PushTargetQuery, RemoteBranchDeleteQuery, RemoteBranchDeleteRequest, RemoteNameRequest,
+    RemoteRequest, RequiredNullableRemoteName,
 };
 
 pub(super) async fn fetch_repository(
@@ -148,6 +148,140 @@ pub(super) async fn pull_repository(
             move |context| async move {
                 command
                     .execute_pull(&path, &preflight_for_task, strategy, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+pub(super) async fn preflight_repository_push(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<PushTargetQuery>, QueryRejection>,
+) -> Result<Json<push::PushPreflight>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A push target must include both remoteName and remoteBranch.",
+        )
+    })?;
+    let target_ref = match (query.remote_name.as_deref(), query.remote_branch.as_deref()) {
+        (None, None) => None,
+        (Some(remote_name), Some(remote_branch)) => Some((remote_name, remote_branch)),
+        _ => {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "A push target must include both remoteName and remoteBranch.",
+            ));
+        }
+    };
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    push::read_push_preflight_for_target(
+        repo_id,
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+        target_ref,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_push_error)
+}
+
+pub(super) async fn push_repository(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<PushRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Push preflight OIDs and force-with-lease choice are required.",
+        )
+    })?;
+    let target_ref = Some((request.remote_name.as_str(), request.remote_branch.as_str()));
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preflight = push::read_push_preflight_for_target(
+        repo_id.clone(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+        target_ref,
+    )
+    .await
+    .map_err(ApiError::from_push_error)?;
+    if preflight.local_oid != request.expected_local_oid
+        || preflight.expected_remote_oid != request.expected_remote_oid
+        || preflight.remote_name != request.remote_name
+        || preflight.remote_branch != request.remote_branch
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PushPreflightStale,
+            "The local branch or tracked remote changed after preflight. Refresh the preview before pushing.",
+        ));
+    }
+    if preflight.ahead == 0 {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::NothingToPush,
+            "The current branch has no commits to push.",
+        ));
+    }
+    if preflight.behind > 0 && !request.force_with_lease {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PushRequiresFetch,
+            "The remote contains commits missing locally. Fetch and review before a normal push.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let path = target.repository_path;
+    let preflight_for_task = preflight.clone();
+    let operation = if request.force_with_lease {
+        "pushForceWithLease"
+    } else {
+        "push"
+    };
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation,
+            move |context| async move {
+                command
+                    .execute_push(
+                        &path,
+                        &preflight_for_task,
+                        request.force_with_lease,
+                        context,
+                    )
                     .await
                     .map(|()| None)
             },

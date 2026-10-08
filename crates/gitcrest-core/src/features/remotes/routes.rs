@@ -7,9 +7,9 @@ use crate::AppState;
 
 use super::handlers::{
     add_repository_remote, delete_repository_remote, delete_repository_remote_branch,
-    fetch_repository, preflight_repository_pull, preview_repository_remote_branch_delete,
-    pull_repository, repository_remotes, set_branch_upstream, set_default_remote,
-    set_repository_remote_url,
+    fetch_repository, preflight_repository_pull, preflight_repository_push,
+    preview_repository_remote_branch_delete, pull_repository, push_repository, repository_remotes,
+    set_branch_upstream, set_default_remote, set_repository_remote_url,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -40,6 +40,11 @@ pub(crate) fn router() -> Router<AppState> {
             get(preflight_repository_pull),
         )
         .route("/v1/repositories/:repo_id/pull", post(pull_repository))
+        .route(
+            "/v1/repositories/:repo_id/push-preflight",
+            get(preflight_repository_push),
+        )
+        .route("/v1/repositories/:repo_id/push", post(push_repository))
         .route(
             "/v1/repositories/:repo_id/branches/remote-delete-preview",
             get(preview_repository_remote_branch_delete),

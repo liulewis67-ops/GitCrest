@@ -65,3 +65,22 @@ pub(super) struct PullRequest {
     pub(super) expected_tracking_oid: String,
     pub(super) strategy: crate::pull::PullStrategy,
 }
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct PushTargetQuery {
+    #[serde(rename = "remoteName")]
+    pub(super) remote_name: Option<String>,
+    #[serde(rename = "remoteBranch")]
+    pub(super) remote_branch: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct PushRequest {
+    pub(super) expected_local_oid: String,
+    pub(super) expected_remote_oid: String,
+    pub(super) force_with_lease: bool,
+    pub(super) remote_name: String,
+    pub(super) remote_branch: String,
+}

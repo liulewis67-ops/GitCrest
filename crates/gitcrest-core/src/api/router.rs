@@ -18,15 +18,15 @@ use crate::{
     delete_repository_shelf, discard_repository_patch, events, get_ai_settings,
     get_credential_status, get_repository_shelf, get_task, get_workflow_conflict_ai_settings,
     list_repository_rebase_backups, list_repository_reset_backups, list_repository_shelves,
-    list_tasks, mark_workflow_conflict_resolved, preflight_repository_push,
-    preflight_repository_rebase, preflight_repository_reset, preflight_repository_shelf_apply,
-    preflight_repository_workflow, preflight_repository_workflow_recovery, push_repository,
-    read_workflow_conflict_file, recover_repository_workflow, repositories,
-    repository_commit_create_tag, request_ai, request_workflow_conflict_suggestion,
-    require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
-    save_workflow_conflict_file, set_ai_credential, set_ai_settings, set_credential,
-    stage_repository, stage_repository_patch, start_repository_rebase, start_repository_reset,
-    start_repository_workflow, status, system, undo_recent_operation, AppState,
+    list_tasks, mark_workflow_conflict_resolved, preflight_repository_rebase,
+    preflight_repository_reset, preflight_repository_shelf_apply, preflight_repository_workflow,
+    preflight_repository_workflow_recovery, read_workflow_conflict_file,
+    recover_repository_workflow, repositories, repository_commit_create_tag, request_ai,
+    request_workflow_conflict_suggestion, require_api_version, require_auth,
+    restore_repository_reset, rollback_repository_rebase, save_workflow_conflict_file,
+    set_ai_credential, set_ai_settings, set_credential, stage_repository, stage_repository_patch,
+    start_repository_rebase, start_repository_reset, start_repository_workflow, status, system,
+    undo_recent_operation, AppState,
 };
 
 pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
@@ -142,11 +142,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
             "/v1/repositories/:repo_id/workflows/conflicts/ai-settings",
             get(get_workflow_conflict_ai_settings),
         )
-        .route(
-            "/v1/repositories/:repo_id/push-preflight",
-            get(preflight_repository_push),
-        )
-        .route("/v1/repositories/:repo_id/push", post(push_repository))
         .route("/v1/clones", post(clone_repository))
         .route("/v1/tasks", get(list_tasks))
         .route("/v1/tasks/:task_id", get(get_task))
