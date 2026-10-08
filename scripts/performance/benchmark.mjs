@@ -231,6 +231,22 @@ async function runBenchmark(fixturePath, reportPath) {
       const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50`);
       if (page.commits.length !== 50) throw new Error(`Expected 50 history entries, got ${page.commits.length}`);
     });
+    const historySearchWarmupStarted = performance.now();
+    let historySearchWarmupAttempts = 0;
+    let historySearchWarmupMs = null;
+    let historySearchIndexReady = false;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      historySearchWarmupAttempts += 1;
+      const attemptStarted = performance.now();
+      const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`);
+      if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) throw new Error("History search did not return its matching commit.");
+      if (started.getStderr().includes("History message index ready")) {
+        historySearchIndexReady = true;
+        historySearchWarmupMs = Number((performance.now() - historySearchWarmupStarted).toFixed(3));
+        break;
+      }
+      await new Promise((resolveSleep) => setTimeout(resolveSleep, 500));
+    }
     const historySearch = await measure("historySearch100k", async () => {
       const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`);
       if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) throw new Error("History search did not return its matching commit.");
@@ -246,8 +262,9 @@ async function runBenchmark(fixturePath, reportPath) {
       generatedAt: new Date().toISOString(),
       host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: await cpuModel(), logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
       software: { node: process.version, git: (await execFileAsync("git", ["--version"])).stdout.trim(), rustProfile: "release", executable, executableBytes: (await stat(executable)).size },
-      fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath, historyQuery: "first page, 50 entries", searchQuery: "subject = benchmark commit 099999" },
+      fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath, historyQuery: "first page, 50 entries", searchQuery: "message contains benchmark commit 099999" },
       iterations,
+      searchIndexWarmup: { ready: historySearchIndexReady, attempts: historySearchWarmupAttempts, elapsedMs: historySearchWarmupMs },
       results: [startup, history, historySearch, fullStatus, partialStatus, diff],
       memory: { sidecarWorkingSetBytes: workingSetBytes, sampleCount: 1, note: "Sidecar only; Electron renderer and desktop process tree are not included." },
       limitations: ["This harness measures the Rust sidecar API and does not claim Electron cold start, desktop process-tree memory, 30-second scroll P5, or installer size."],

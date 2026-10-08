@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     path::Path,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
@@ -20,6 +21,19 @@ fn now_ms() -> i64 {
 #[derive(Clone)]
 pub struct RepositoryStore {
     connection: Arc<Mutex<Connection>>,
+    history_index_builds: Arc<Mutex<HashSet<String>>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct HistorySearchRow {
+    pub oid: String,
+    pub parents: Vec<String>,
+    pub author_name: String,
+    pub author_email: String,
+    pub committed_at_ms: i64,
+    pub subject: String,
+    pub message: String,
+    pub sort_order: usize,
 }
 
 impl Default for RepositoryStore {
@@ -31,6 +45,7 @@ impl Default for RepositoryStore {
         migrate(&connection).expect("in-memory repository schema migrates");
         Self {
             connection: Arc::new(Mutex::new(connection)),
+            history_index_builds: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 }
@@ -56,7 +71,163 @@ impl RepositoryStore {
         migrate(&connection).map_err(|error| error.to_string())?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
+            history_index_builds: Arc::new(Mutex::new(HashSet::new())),
         })
+    }
+
+    pub fn begin_history_index_build(&self, repo_id: &str) -> bool {
+        self.history_index_builds
+            .lock()
+            .is_ok_and(|mut builds| builds.insert(repo_id.to_owned()))
+    }
+
+    pub fn finish_history_index_build(&self, repo_id: &str) {
+        if let Ok(mut builds) = self.history_index_builds.lock() {
+            builds.remove(repo_id);
+        }
+    }
+
+    pub fn replace_history_search_index(
+        &self,
+        repo_id: &str,
+        refs_fingerprint: &str,
+        entries: &[HistorySearchRow],
+    ) -> Result<(), String> {
+        {
+            let mut connection = self
+                .connection
+                .lock()
+                .map_err(|_| "repository database lock poisoned".to_string())?;
+            let transaction = connection
+                .transaction()
+                .map_err(|error| error.to_string())?;
+            transaction
+                .execute(
+                    "DELETE FROM history_search_documents WHERE repo_id=?1",
+                    [repo_id],
+                )
+                .map_err(|error| error.to_string())?;
+            transaction
+                .execute(
+                    "DELETE FROM history_search_index_state WHERE repo_id=?1",
+                    [repo_id],
+                )
+                .map_err(|error| error.to_string())?;
+            transaction.commit().map_err(|error| error.to_string())?;
+        }
+
+        for batch in entries.chunks(500) {
+            let mut connection = self
+                .connection
+                .lock()
+                .map_err(|_| "repository database lock poisoned".to_string())?;
+            let transaction = connection
+                .transaction()
+                .map_err(|error| error.to_string())?;
+            {
+                let mut statement = transaction
+                    .prepare_cached(
+                        "INSERT INTO history_search_documents (repo_id, oid, sort_order, parents_json, author_name, author_email, committed_at_ms, subject, message) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                    )
+                    .map_err(|error| error.to_string())?;
+                for entry in batch {
+                    let parents =
+                        serde_json::to_string(&entry.parents).map_err(|error| error.to_string())?;
+                    let sort_order = i64::try_from(entry.sort_order).map_err(|_| {
+                        "history search index position exceeds SQLite limits".to_string()
+                    })?;
+                    statement
+                        .execute(params![
+                            repo_id,
+                            entry.oid,
+                            sort_order,
+                            parents,
+                            entry.author_name,
+                            entry.author_email,
+                            entry.committed_at_ms,
+                            entry.subject,
+                            entry.message,
+                        ])
+                        .map_err(|error| error.to_string())?;
+                }
+            }
+            transaction.commit().map_err(|error| error.to_string())?;
+        }
+
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO history_search_index_state (repo_id, refs_fingerprint, indexed_at_ms) VALUES (?1, ?2, ?3) ON CONFLICT(repo_id) DO UPDATE SET refs_fingerprint=excluded.refs_fingerprint, indexed_at_ms=excluded.indexed_at_ms",
+                params![repo_id, refs_fingerprint, now_ms()],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())
+    }
+
+    pub fn search_history_messages(
+        &self,
+        repo_id: &str,
+        refs_fingerprint: &str,
+        query: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Option<Vec<HistorySearchRow>>, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let fingerprint = connection
+            .query_row(
+                "SELECT refs_fingerprint FROM history_search_index_state WHERE repo_id=?1",
+                [repo_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|error| error.to_string())?;
+        if fingerprint.as_deref() != Some(refs_fingerprint) {
+            return Ok(None);
+        }
+        let match_query = format!("\"{}\"", query.replace('"', "\"\""));
+        let mut statement = connection
+            .prepare(
+                "SELECT d.oid, d.parents_json, d.author_name, d.author_email, d.committed_at_ms, d.subject, d.message, d.sort_order FROM history_search_fts f JOIN history_search_documents d ON d.id=f.rowid WHERE history_search_fts MATCH ?1 AND d.repo_id=?2 ORDER BY d.sort_order LIMIT ?3 OFFSET ?4",
+            )
+            .map_err(|error| error.to_string())?;
+        let rows = statement
+            .query_map(
+                params![match_query, repo_id, limit as i64, offset as i64],
+                |row| {
+                    let parents_json: String = row.get(1)?;
+                    let parents = serde_json::from_str(&parents_json).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            1,
+                            rusqlite::types::Type::Text,
+                            Box::new(error),
+                        )
+                    })?;
+                    let sort_order = row.get::<_, i64>(7)?.max(0) as usize;
+                    Ok(HistorySearchRow {
+                        oid: row.get(0)?,
+                        parents,
+                        author_name: row.get(2)?,
+                        author_email: row.get(3)?,
+                        committed_at_ms: row.get(4)?,
+                        subject: row.get(5)?,
+                        message: row.get(6)?,
+                        sort_order,
+                    })
+                },
+            )
+            .map_err(|error| error.to_string())?;
+        rows.collect::<Result<Vec<_>, _>>()
+            .map(Some)
+            .map_err(|error| error.to_string())
     }
 
     pub fn list(&self) -> Result<Vec<Repository>, String> {
@@ -432,7 +603,7 @@ impl RepositoryStore {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 6 {
+    if version > 7 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -458,6 +629,10 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     if version < 6 {
         connection.execute_batch(include_str!("../migrations/0006_ai_provider_settings.sql"))?;
         connection.pragma_update(None, "user_version", 6)?;
+    }
+    if version < 7 {
+        connection.execute_batch(include_str!("../migrations/0007_history_search.sql"))?;
+        connection.pragma_update(None, "user_version", 7)?;
     }
     Ok(())
 }
@@ -538,10 +713,87 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 7).unwrap();
+        connection.pragma_update(None, "user_version", 8).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
+    }
+
+    #[test]
+    fn migrates_schema_six_to_history_message_search_index() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let connection = Connection::open(&database).unwrap();
+        for migration in [
+            include_str!("../migrations/0001_repositories.sql"),
+            include_str!("../migrations/0002_tasks.sql"),
+            include_str!("../migrations/0003_branch_favorites.sql"),
+            include_str!("../migrations/0004_shelves.sql"),
+            include_str!("../migrations/0005_shelf_scope.sql"),
+            include_str!("../migrations/0006_ai_provider_settings.sql"),
+        ] {
+            connection.execute_batch(migration).unwrap();
+        }
+        connection.pragma_update(None, "user_version", 6).unwrap();
+        drop(connection);
+
+        let store = RepositoryStore::open(&database).unwrap();
+        let connection = store.connection.lock().unwrap();
+        let version: u32 = connection
+            .pragma_query_value(None, "user_version", |row| row.get(0))
+            .unwrap();
+        let index_table: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='history_search_fts'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(version, 7);
+        assert_eq!(index_table, 1);
+    }
+
+    #[test]
+    fn history_message_index_matches_case_insensitive_substrings_and_replaces_atomically() {
+        let store = RepositoryStore::default();
+        store
+            .save_opened(repository("repo-1", "/repo/1", 1))
+            .unwrap();
+        let entry = HistorySearchRow {
+            oid: "a".repeat(40),
+            parents: vec!["b".repeat(40)],
+            author_name: "GitCrest Author".into(),
+            author_email: "author@example.invalid".into(),
+            committed_at_ms: 123,
+            subject: "Fix C++ path".into(),
+            message: "Fix C++ path: \"Needle\" in HEAD".into(),
+            sort_order: 0,
+        };
+        store
+            .replace_history_search_index("repo-1", "refs-v1", std::slice::from_ref(&entry))
+            .unwrap();
+
+        let matches = store
+            .search_history_messages("repo-1", "refs-v1", "nEeDlE", 0, 10)
+            .unwrap()
+            .unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].oid, entry.oid);
+        assert_eq!(matches[0].parents, entry.parents);
+        assert!(matches[0].message.contains("Needle"));
+        assert!(store
+            .search_history_messages("repo-1", "refs-v2", "needle", 0, 10)
+            .unwrap()
+            .is_none());
+
+        store
+            .replace_history_search_index("repo-1", "refs-v2", &[])
+            .unwrap();
+        assert!(store
+            .search_history_messages("repo-1", "refs-v2", "needle", 0, 10)
+            .unwrap()
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

@@ -2467,20 +2467,15 @@ async fn repository_commits(
     })?;
     let target = state
         .repositories
-        .task_target(&repo_id)
+        .history_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let metadata = state
-        .repositories
-        .refresh_metadata(&repo_id)
-        .await
-        .map_err(ApiError::from_repository_error)?;
-    history::read_page(
+    history::read_page_indexed(
         repo_id,
         &target.repository_path,
         query.offset.unwrap_or(0),
         query.limit.unwrap_or(50),
-        metadata.head.as_deref(),
+        target.head.as_deref(),
         &history::HistoryFilters {
             sha: query.sha,
             author: query.author,
@@ -2490,6 +2485,7 @@ async fn repository_commits(
             since: query.since,
             until: query.until,
         },
+        state.repositories.store(),
     )
     .await
     .map(Json)
