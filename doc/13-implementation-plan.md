@@ -1616,3 +1616,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：快捷键偏好仍由 App 读取与持久化，settings feature 可继续接管其用户偏好生命周期；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/features/settings/model/use-theme-preference.ts`、`src/features/settings/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 5.1 节。
 - 实施 commit：`457c5bd`
+
+### 快捷键偏好生命周期迁入 settings model — 小阶段 113
+- 状态：已完成（快捷键配置读写和偏好模型归属 settings feature）
+- 日期：2026-10-09
+- 交付：将纯快捷键偏好解析模块移动到 `features/settings/model/shortcut-preferences.ts`，新增 `use-shortcut-preferences.ts` 封装安全初始化及 localStorage 持久化；settings barrel 公开 hook、类型与有限的匹配/解析 API。App 移除偏好读取和保存 effect，仅通过 hook 向 SettingsDialog 与全局快捷键 hook提供状态和 setter。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。构建保留 tree-sitter `eval`、commits 模块动态/静态导入提示与 Monaco contribution 大 chunk 警告。
+- 限制/后续：设置 UI、快捷键编辑冲突校验仍在 settings feature 组件；App 仍持有大量 Git/task 编排，继续逐项迁入对应 feature。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`src/features/settings/model/{shortcut-preferences.ts,use-shortcut-preferences.ts}`、`src/features/settings/index.ts`、`src/features/settings/SettingsDialog.tsx`、`src/app/App.tsx`。
+- 实施 commit：`9216952`
