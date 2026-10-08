@@ -1067,3 +1067,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：commit request DTO 仍定义于旧 `commits.rs` service 文件，service 文件命名尚未对齐；后续拆 `dto.rs`/`service.rs`，继续迁移 workflows handlers。
 - 证据：`crates/gitcrest-core/src/features/commits/{mod,routes,handlers,commits}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`3a1277a`
+
+### 后端 commits feature DTO 拆分 — 小阶段 52
+- 状态：已完成（commit 请求和选区 DTO 进入独立 dto 模块）
+- 日期：2026-10-09
+- 交付：新增 `features/commits/dto.rs`，承载 `CommitRequest` 与 `CommitSelection`；commit service 显式引用选择 DTO，feature 根 re-export 请求/选择和 service 类型，handlers 及其调用方路径不变。字段默认值、camelCase 与未知字段拒绝规则保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；commit message/selection 验证与 API 集成用例通过。
+- 限制/后续：commit service 文件仍为 `commits.rs`；下一小阶段重命名为 `service.rs`，随后继续迁移 workflows feature handlers。
+- 证据：`crates/gitcrest-core/src/features/commits/{mod,dto,handlers,routes,commits}.rs`。
+- 实施 commit：`ae3c76e`
