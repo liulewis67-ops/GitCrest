@@ -490,7 +490,7 @@ describe("App", () => {
     const graphViewport = screen.getByRole("region", { name: "Commit graph view" });
     Object.defineProperty(graphViewport, "scrollTop", { configurable: true, writable: true, value: 193 });
     fireEvent.scroll(graphViewport);
-    expect(JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}").tabs.repo_alpha.graphScrollTop).toBe(193);
+    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}").tabs.repo_alpha.graphScrollTop).toBe(193));
 
     fireEvent.click(screen.getByRole("tab", { name: "beta" }));
     expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();

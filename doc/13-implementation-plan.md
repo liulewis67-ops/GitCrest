@@ -121,7 +121,7 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S7.1 | RepositoryWatcher、dirty scope 合并与增量 StatusSnapshot。 | 工作树、HEAD、index、refs、config、忽略规则变化触发正确刷新；刷新期间新 dirty path 不丢失；rename/规则变更可升级全量刷新；外部 Git 操作和 WS 重连后与 `git status` 一致。 | 已完成 |
-| S7.2 | 性能基准与瓶颈修复。 | 记录硬件、OS、仓库 fixture、测量脚本及 20 次运行分布；冷启动 <1.5s、空闲内存 <250MB、工作中 <500MB、安装包 <150MB；100k 提交首屏 <1s、滚动目标 ≥60fps、1k 行 Diff <200ms、状态刷新 <100ms、搜索 <200ms。任何未达标项保留待验收并附复测数据。 | 未开始 |
+| S7.2 | 性能基准与瓶颈修复。 | 记录硬件、OS、仓库 fixture、测量脚本及 20 次运行分布；冷启动 <1.5s、空闲内存 <250MB、工作中 <500MB、安装包 <150MB；100k 提交首屏 <1s、滚动目标 ≥60fps、1k 行 Diff <200ms、状态刷新 <100ms、搜索 <200ms。任何未达标项保留待验收并附复测数据。 | 待验收 |
 | S7.3 | 键盘、可访问性与安全回归。 | `07` 的 P0 快捷键可用且可自定义/检测冲突；全程键盘能完成打开仓库、暂存、提交、分支和冲突流程；焦点/屏幕阅读、减少动效和状态非仅颜色表达通过检查；窗口越权、无 token、确认绕过、日志泄密用自动化负例验证。 | 未开始 |
 | S7.4 | Windows/macOS/Linux 构建、签名与自动更新。 | 三平台均能安装、启动、找到对应 sidecar、关闭时退出子进程；更新包签名验证失败时拒绝安装；真实签名凭证仅来自 CI 密钥环境；安装包和升级流程留有构建/测试证据。 | 未开始 |
 | S7.5 | 全量 P0 E2E、故障恢复、发布验收与文档收口。 | `08` 的 E2E 场景逐项通过；临时仓库覆盖失败/重试/回滚；无 P0 阻塞缺陷；Alpha/Beta/GA 范围与实际功能一致；所有小阶段状态、证据、限制和最终 commit 可追溯，发布说明写明尚未支持的 P1/P2 功能。 | 未开始 |
@@ -487,3 +487,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/watcher.rs`、`crates/gitcrest-core/src/status.rs`、`crates/gitcrest-core/src/repository.rs`、`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`doc/api/events-v1.md`、`src/App.tsx`、`src/api/status-snapshot.ts`、`src/api/client.ts`、`tests/unit/status-snapshot.test.ts`、`tests/unit/api-client.test.ts`。
 - 完成 commit：`16adc0a`；SHA 补记 commit：待补记。
 - 限制/后续：Windows 实际 watcher 集成已验证；macOS/Linux 文件系统通知实现和 S7.4 平台包验证待跨平台阶段。高事件量、轮询 fallback 及 100k 历史性能按 S7.2 测量。
+
+### S7.2 — Windows 性能基准与首轮优化
+- 状态：待验收；已建立可复现基准并完成首轮优化，多个正式指标尚未达标。
+- 日期：2026-10-08
+- 环境：Windows 11 10.0.26300 x64；AMD Ryzen 7 5800H，16 logical CPUs，16 GiB RAM；KINGSTON SA2000M81000G NVMe SSD；Node 22.19.0、Git for Windows 2.37.3、Electron 37.0.0、Rust release。基准 100k Git commits/1k 行工作树 Diff fixture 由脚本生成到系统 TEMP，不纳入提交。
+- 交付：新增 `scripts/performance/benchmark.mjs`（fixture、20 轮 sidecar/API P50/P95/max 与样本）和 `scripts/performance/desktop-benchmark.mjs`（20 轮 Electron 启动/历史首帧、空闲/仓库/工作进程树内存和 30 秒滚动 P5）。历史筛选请求避免无必要的 `--topo-order`；滚动状态在滚动结束后合并保存，历史虚拟窗口只在跨越行边界时更新。为修复已安装 electron-builder 依赖的运行时缺失枚举，`pnpm-workspace.yaml` 将符合 `^3.0.0` 的 `@electron/get` 固定到 3.1.0；`pnpm electron:package` 成功生成 Windows NSIS 包。
+- 测试：`pnpm test` 通过（111 tests）；`pnpm build` 通过；`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml history::tests -- --test-threads=1`（3 tests）、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml tests::history_api_pages_commits_and_reads_details_and_branch_refs -- --test-threads=1`（1 test）均通过；`pnpm electron:package` 通过。`node scripts/performance/benchmark.mjs prepare <temp-path>` 生成 100,000 commits，Diff 基线 `git diff --numstat` 为 1000/1000；两个 benchmark 脚本各按 20 轮运行。
+- 实测：Release sidecar ready P95 107ms；100k 历史 API 首页 P95 976ms；筛选搜索 P95 1,011ms；全量/增量 status P95 154/152ms；1k 行 Diff P95 366ms。Electron app process-launch P95 1,435ms（连续运行、文件系统缓存已热）；打开 100k 仓库到首个历史条目 P95 1,463ms。空闲 UI 进程树峰值 413MB、打开历史后的空闲峰值 451MB、滚动时峰值 612MB；30 秒滚动 P5 55.25fps。最终 Windows NSIS installer 107,497,378 bytes（102.52 MiB），低于 150 MiB。
+- 证据：`scripts/performance/benchmark.mjs`、`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/api-win32.json`、`doc/evidence/S7.2/desktop-win32.json`、`crates/gitcrest-core/src/history.rs`、`src/features/history/CommitGraph.tsx`、`src/App.tsx`、`pnpm-workspace.yaml`、`pnpm-lock.yaml`、`dist/GitCrest Setup 0.1.0.exe`（本地构建产物，不提交）。
+- 限制/后续：筛选搜索、status、Diff、桌面历史首帧、空闲/工作内存及滚动 P5 未达标；启动样本的操作系统文件缓存已热，不足以代表全新开机冷缓存。Sidecar API harness 的单样本内存只作参考。需要继续定位 Git 搜索索引、Windows status/进程开销、Diff 解析和 renderer 内存/滚动瓶颈，并在指标达到或剩余项有明确验收处置后再完成 S7.2；跨平台性能和发行包分别在 S7.4 验收。

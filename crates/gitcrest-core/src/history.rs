@@ -138,11 +138,18 @@ pub async fn read_page(
     if limit == 0 || limit > 100 || offset > 1_000_000 || !valid_filters(filters) {
         return Err(HistoryError::InvalidQuery);
     }
-    let mut arguments = vec![
-        "log".into(),
-        "--topo-order".into(),
-        "--format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%s".into(),
-    ];
+    let mut arguments = vec!["log".into()];
+    if filters.author.is_none()
+        && filters.message.is_none()
+        && filters.branch.is_none()
+        && filters.path.is_none()
+        && filters.since.is_none()
+        && filters.until.is_none()
+        && filters.sha.is_none()
+    {
+        arguments.push("--topo-order".into());
+    }
+    arguments.push("--format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%s".into());
     if let Some(sha) = &filters.sha {
         if offset > 0 {
             return Ok(CommitPage {

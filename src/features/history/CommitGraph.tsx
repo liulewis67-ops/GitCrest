@@ -62,6 +62,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const [draftFilters, setDraftFilters] = useState<CommitHistoryFilters>({});
   const [filters, setFilters] = useState<CommitHistoryFilters>({});
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
+  const renderedWindowRef = useRef({ first: 0, height: 520 });
   const requestGeneration = useRef(0);
   const offsetsInFlight = useRef(new Set<number>());
   const restoredRepo = useRef<string>();
@@ -123,7 +124,10 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     if (!node || loading || restoredRepo.current === repoId) return;
     node.scrollTop = initialScrollTop;
     restoredRepo.current = repoId;
-    setViewport({ top: node.scrollTop, height: node.clientHeight || 520 });
+    const height = node.clientHeight || 520;
+    const first = Math.max(0, Math.floor(node.scrollTop / ROW_HEIGHT) - OVERSCAN);
+    renderedWindowRef.current = { first, height };
+    setViewport({ top: node.scrollTop, height });
   }, [initialScrollTop, loading, repoId]);
 
   const laneLayout = useMemo(() => {
@@ -158,7 +162,12 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   async function onScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
     const top = node.scrollTop;
-    setViewport({ top, height: node.clientHeight || 520 });
+    const height = node.clientHeight || 520;
+    const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN);
+    if (first !== renderedWindowRef.current.first || height !== renderedWindowRef.current.height) {
+      renderedWindowRef.current = { first, height };
+      setViewport({ top, height });
+    }
     onScrollPosition(top);
     if (nextOffset !== null && !loadingMore && node.scrollHeight - node.scrollTop - node.clientHeight < ROW_HEIGHT * 10) {
       await readPage(nextOffset, requestGeneration.current);
@@ -176,7 +185,10 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     const node = viewportRef.current;
     if (node && (targetIndex * ROW_HEIGHT < node.scrollTop || (targetIndex + 1) * ROW_HEIGHT > node.scrollTop + node.clientHeight)) {
       node.scrollTop = Math.max(0, targetIndex * ROW_HEIGHT - node.clientHeight / 2);
-      setViewport({ top: node.scrollTop, height: node.clientHeight || 520 });
+      const height = node.clientHeight || 520;
+      const first = Math.max(0, Math.floor(node.scrollTop / ROW_HEIGHT) - OVERSCAN);
+      renderedWindowRef.current = { first, height };
+      setViewport({ top: node.scrollTop, height });
     }
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-commit-index="${targetIndex}"]`)?.focus());
   }

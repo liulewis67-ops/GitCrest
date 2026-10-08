@@ -261,6 +261,8 @@ function App() {
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession>(readWorkspaceSession);
   const workspaceSessionRef = useRef(workspaceSession);
   workspaceSessionRef.current = workspaceSession;
+  const pendingGraphScrollRef = useRef<{ repoId: string; scrollTop: number }>();
+  const graphScrollTimerRef = useRef<number>();
   const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
   const selectedCommit = selectedRepository
     ? workspaceSession.tabs[selectedRepository.repoId]?.selectedCommit || selectedRepository.head || undefined
@@ -1075,13 +1077,21 @@ function App() {
   function rememberGraphScroll(scrollTop: number) {
     const repoId = selectedRepository?.repoId;
     if (!repoId || mode !== "graph" || !Number.isFinite(scrollTop)) return;
-    setWorkspaceSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: { ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }), graphScrollTop: Math.max(0, scrollTop) },
-      },
-    }));
+    pendingGraphScrollRef.current = { repoId, scrollTop: Math.max(0, scrollTop) };
+    if (graphScrollTimerRef.current !== undefined) window.clearTimeout(graphScrollTimerRef.current);
+    graphScrollTimerRef.current = window.setTimeout(() => {
+      graphScrollTimerRef.current = undefined;
+      const latest = pendingGraphScrollRef.current;
+      pendingGraphScrollRef.current = undefined;
+      if (!latest) return;
+      setWorkspaceSession((current) => ({
+        ...current,
+        tabs: {
+          ...current.tabs,
+          [latest.repoId]: { ...(current.tabs[latest.repoId] || { mode: "graph", graphScrollTop: 0 }), graphScrollTop: latest.scrollTop },
+        },
+      }));
+    }, 120);
   }
 
   function selectCommit(oid: string) {
