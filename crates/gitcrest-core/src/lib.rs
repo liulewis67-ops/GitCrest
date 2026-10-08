@@ -17,8 +17,6 @@ mod features;
 
 #[path = "features/repositories/cloning.rs"]
 mod cloning;
-#[path = "features/commits/mod.rs"]
-mod commits;
 mod domain;
 mod git;
 mod ports;
@@ -30,8 +28,8 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 pub(crate) use features::{
-    branches, credentials, diff, history, remotes, settings, shelves, staging, status, system,
-    tags, tasks,
+    branches, commits, credentials, diff, history, remotes, settings, shelves, staging, status,
+    system, tags, tasks,
 };
 #[path = "refresh/watcher.rs"]
 mod watcher;
