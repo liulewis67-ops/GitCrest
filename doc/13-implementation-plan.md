@@ -1040,3 +1040,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：AI settings DTO 仍定义于 service 文件 `ai.rs`，AI request endpoint/helper 仍在 `main.rs`；下一阶段抽取 DTO，并把 AI request 用例迁入 settings/AI feature handlers。
 - 证据：`crates/gitcrest-core/src/features/settings/{mod,routes,handlers,ai}.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`fb73923`
+
+### 后端 settings feature DTO 拆分 — 小阶段 49
+- 状态：已完成（AI provider/settings/request/reply DTO 进入独立 dto 模块）
+- 日期：2026-10-09
+- 交付：新增 `features/settings/dto.rs`，承载 AI provider、设置读写、API credential、文件选择、AI request/reply DTO；`ai.rs` service 与 handlers 显式引用 DTO。feature 根继续 re-export DTO/service 类型，现有请求字段、serde 规则和调用路径保持兼容。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；AI provider 校验与请求相关测试通过。
+- 限制/后续：repository-scoped `/ai/request` handler 及 provider orchestration helper 仍在 `main.rs`；后续迁入 settings/AI feature，继续减少进程入口文件职责。
+- 证据：`crates/gitcrest-core/src/features/settings/{mod,dto,handlers,routes,ai}.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`ab54682`
