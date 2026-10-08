@@ -1742,3 +1742,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：features 父模块当前包含 branches/credentials/diff/history/remotes/settings/shelves/status/system/tags/tasks；repositories/staging/commits/workflows 仍待迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,shelves/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`dfe7bf1`
+
+### 后端 staging feature 纳入 features 父模块 — 小阶段 127
+- 状态：已完成（暂存、撤销暂存及相关 DTO/service 由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `staging` 加入 `src/features/mod.rs`，删除 `lib.rs` 中独立路径声明，并通过 crate 内重导出兼容现有 `crate::staging` 调用。DTO 与 service 原本已通过 `pub(crate)` 显式导出，迁移未改变可见范围；路由和 API 行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：features 父模块当前包含 branches/credentials/diff/history/remotes/settings/shelves/staging/status/system/tags/tasks；repositories/commits/workflows 仍待迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,staging/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`fb51123`
