@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { SettingsDialog } from "../../src/features/settings/SettingsDialog";
@@ -7,6 +8,35 @@ import { defaultShortcutPreferences } from "../../src/features/settings/shortcut
 import { PrivacyScopePreview } from "../../src/features/settings/PrivacyScopePreview";
 
 afterEach(cleanup);
+
+it("moves focus into settings, traps Tab, and restores the opener on close", async () => {
+  const api = {
+    getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
+  } as unknown as GitCrestApiClient;
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsDialog api={api} onClose={() => setOpen(false)} />}</>;
+  }
+  render(<Harness />);
+
+  const opener = screen.getByRole("button", { name: "Open settings" });
+  opener.focus();
+  fireEvent.click(opener);
+  const dialog = await screen.findByRole("dialog", { name: "Settings" });
+  const close = within(dialog).getByRole("button", { name: "Close settings" });
+  await waitFor(() => expect(document.activeElement).toBe(close));
+  const focusable = [...dialog.querySelectorAll<HTMLElement>(
+    'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  )];
+  const last = focusable[focusable.length - 1];
+  fireEvent.keyDown(close, { key: "Tab", shiftKey: true });
+  expect(document.activeElement).toBe(last);
+  fireEvent.keyDown(last, { key: "Tab" });
+  expect(document.activeElement).toBe(close);
+
+  fireEvent.click(close);
+  await waitFor(() => expect(document.activeElement).toBe(opener));
+});
 
 it("records a replacement shortcut and rejects an existing assignment", async () => {
   const api = {

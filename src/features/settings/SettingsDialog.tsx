@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { AiSettingsResponse, GitCrestApiClient } from "../../api/client";
 import {
   defaultShortcutPreferences,
@@ -34,7 +34,40 @@ export function SettingsDialog({
   const [notice, setNotice] = useState("");
   const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction>();
   const [shortcutError, setShortcutError] = useState("");
+  const dialogRef = useRef<HTMLElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   const isMac = navigator.platform.toLowerCase().includes("mac");
+
+  useEffect(() => {
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
+    closeButtonRef.current?.focus();
+    return () => {
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+
+  function handleDialogKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") {
+      if (!busy) onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const dialog = dialogRef.current;
+    if (!dialog) return;
+    const focusable = [...dialog.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    )].filter((element) => element.getAttribute("aria-hidden") !== "true");
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !dialog.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
 
   function captureShortcut(event: KeyboardEvent<HTMLButtonElement>, action: ShortcutAction) {
     if (recordingShortcut !== action) return;
@@ -115,8 +148,8 @@ export function SettingsDialog({
 
   return (
     <div className="paletteBackdrop cloneBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-      <section className="taskCenter workflowDialog settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <header className="taskCenterHeader"><div><p className="sectionEyebrow">PREFERENCES</p><h2 id="settings-title">Settings</h2></div><button className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label="Close settings">×</button></header>
+      <section ref={dialogRef} className="taskCenter workflowDialog settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onKeyDown={handleDialogKeyDown}>
+        <header className="taskCenterHeader"><div><p className="sectionEyebrow">PREFERENCES</p><h2 id="settings-title">Settings</h2></div><button ref={closeButtonRef} className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label="Close settings">×</button></header>
         <div className="workflowDialogBody">
           <section className="shortcutPreferences" aria-labelledby="shortcut-preferences-title">
             <div className="settingsSectionHeading"><h3 id="shortcut-preferences-title">Keyboard shortcuts</h3><button type="button" className="quietButton" onClick={() => { onShortcutsChange({ ...defaultShortcutPreferences }); setRecordingShortcut(undefined); setShortcutError(""); }}>Restore defaults</button></div>
