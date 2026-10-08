@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../api/client";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 export type PushTarget = { remoteName: string; remoteBranch: string };
 
@@ -13,6 +14,7 @@ interface PushTargetDialogProps {
 }
 
 export function PushTargetDialog({ remotes, branches, disabled, disabledReason, onChoose, onClose }: PushTargetDialogProps) {
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
   const remoteList = remotes?.remotes || [];
   const branchList = branches?.branches || [];
   const [remoteName, setRemoteName] = useState("");
@@ -31,7 +33,7 @@ export function PushTargetDialog({ remotes, branches, disabled, disabledReason, 
 
   return (
     <div className="paletteBackdrop pushBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className="cloneDialog pushTargetDialog" role="dialog" aria-modal="true" aria-labelledby="push-target-title">
+      <section ref={dialogRef} className="cloneDialog pushTargetDialog" role="dialog" aria-modal="true" aria-labelledby="push-target-title" onKeyDown={onKeyDown}>
         <header className="taskCenterHeader">
           <div><p className="sectionEyebrow">ONE-OFF DESTINATION</p><h2 id="push-target-title">Choose push target</h2></div>
           <button className="quietButton compact" type="button" onClick={onClose} aria-label="Close push target selection">Close</button>

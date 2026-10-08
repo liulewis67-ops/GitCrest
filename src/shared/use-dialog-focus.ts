@@ -2,26 +2,32 @@ import { useEffect, useRef, type KeyboardEvent } from "react";
 
 const focusableSelector = "a[href], button:not([disabled]), input:not([disabled]):not([type='hidden']), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
-export function useDialogFocus<T extends HTMLElement>(onEscape?: () => void, closeBlocked = false) {
+export function useDialogFocus<T extends HTMLElement>(onEscape?: () => void, closeBlocked = false, returnFocus?: () => HTMLElement | null) {
   const dialogRef = useRef<T>(null);
   const onEscapeRef = useRef(onEscape);
   const closeBlockedRef = useRef(closeBlocked);
+  const returnFocusRef = useRef(returnFocus);
   onEscapeRef.current = onEscape;
   closeBlockedRef.current = closeBlocked;
+  returnFocusRef.current = returnFocus;
 
   useEffect(() => {
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : undefined;
     const dialog = dialogRef.current;
+    const preferred = dialog?.querySelector<HTMLElement>("[data-dialog-initial-focus]");
     const autofocus = dialog?.querySelector<HTMLElement>("[autofocus]");
     const firstFocusable = dialog?.querySelector<HTMLElement>(focusableSelector);
-    const initialTarget = autofocus && !autofocus.matches(":disabled") ? autofocus : firstFocusable;
+    const initialTarget = preferred && !preferred.matches(":disabled")
+      ? preferred
+      : autofocus && !autofocus.matches(":disabled") ? autofocus : firstFocusable;
     if (initialTarget) initialTarget.focus();
     else if (dialog) {
       dialog.tabIndex = -1;
       dialog.focus();
     }
     return () => {
-      if (previousFocus?.isConnected) previousFocus.focus();
+      const target = returnFocusRef.current?.() ?? previousFocus;
+      if (target?.isConnected) target.focus();
     };
   }, []);
 

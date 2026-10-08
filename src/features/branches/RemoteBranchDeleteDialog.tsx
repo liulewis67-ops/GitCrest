@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type RemoteBranchDeletePreviewResponse, type RemoteSnapshotResponse, type TaskSnapshotResponse } from "../../api/client";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 function resolveTarget(branchRef: string, remotes?: RemoteSnapshotResponse) {
   const referencePrefix = "refs/remotes/";
@@ -28,6 +29,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   async function inspect() {
     if (!target || disabled || loading || busy) return;
@@ -63,7 +65,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
   }
 
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
-    <section className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-modal="true" aria-labelledby="remote-branch-delete-title">
+    <section ref={dialogRef} className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-modal="true" aria-labelledby="remote-branch-delete-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
         <div><p className="sectionEyebrow">DELETE REMOTE REF</p><h2 id="remote-branch-delete-title">Delete remote branch</h2></div>
         <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>

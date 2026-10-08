@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { components } from "../../src/api/schema";
 import { PushDialog } from "../../src/features/remotes/PushDialog";
@@ -29,7 +29,9 @@ it("shows the target and overwrite scope, then requires explicit force-with-leas
   expect(within(dialog).getByText("origin/feature/change")).toBeTruthy();
   expect(within(dialog).getByText("local change")).toBeTruthy();
   expect(within(dialog).getByText("src/file.ts")).toBeTruthy();
-  fireEvent.click(within(dialog).getByRole("button", { name: "Force with lease…" }));
+  const forceButton = within(dialog).getByRole("button", { name: "Force with lease…" });
+  forceButton.focus();
+  fireEvent.click(forceButton);
   expect(within(dialog).getByRole("alertdialog", { name: "Confirm force with lease" })).toBeTruthy();
   expect(onPush).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole("button", { name: "Confirm force-with-lease" }));
@@ -53,4 +55,26 @@ it("keeps a selected force action behind the lease confirmation even for a fast-
   expect(onPush).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Confirm force-with-lease" }));
   expect(onPush).toHaveBeenCalledWith(true);
+});
+
+it("focuses the push dialog and keeps Escape inside the nested lease confirmation", async () => {
+  const onClose = vi.fn();
+  const onPush = vi.fn();
+  render(<PushDialog snapshot={preview} loading={false} busy={false} error="" disabled={false} disabledReason="" onRefresh={vi.fn()} onFetch={vi.fn()} onPush={onPush} onClose={onClose} />);
+  const dialog = screen.getByRole("dialog", { name: "Push current branch" });
+  const close = within(dialog).getByRole("button", { name: "Close push dialog" });
+  const forceButton = within(dialog).getByRole("button", { name: "Force with lease…" });
+  await waitFor(() => expect(document.activeElement).toBe(close));
+
+  forceButton.focus();
+  fireEvent.click(forceButton);
+  const confirmation = within(dialog).getByRole("alertdialog", { name: "Confirm force with lease" });
+  const cancel = within(confirmation).getByRole("button", { name: "Cancel" });
+  await waitFor(() => expect(document.activeElement).toBe(cancel));
+  fireEvent.keyDown(confirmation, { key: "Escape" });
+  expect(within(dialog).queryByRole("alertdialog", { name: "Confirm force with lease" })).toBeNull();
+  expect(onClose).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Force with lease…" }));
+  fireEvent.keyDown(dialog, { key: "Escape" });
+  expect(onClose).toHaveBeenCalledOnce();
 });

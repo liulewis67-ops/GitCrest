@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 
 export function DiscardChangesDialog({ path, selectionCount, disabled, error, onCancel, onConfirm }: {
   path: string;
@@ -9,8 +10,9 @@ export function DiscardChangesDialog({ path, selectionCount, disabled, error, on
   onConfirm: () => void;
 }) {
   const [confirmed, setConfirmed] = useState(false);
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onCancel, disabled);
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !disabled) onCancel(); }}>
-    <section className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-modal="true" aria-labelledby="discard-changes-title">
+    <section ref={dialogRef} className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-modal="true" aria-labelledby="discard-changes-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
         <div><p className="sectionEyebrow">DISCARD WORKING-TREE CHANGES</p><h2 id="discard-changes-title">Discard selected changes?</h2></div>
         <button className="quietButton compact" type="button" disabled={disabled} onClick={onCancel}>Close</button>
