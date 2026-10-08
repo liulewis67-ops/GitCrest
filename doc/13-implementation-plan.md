@@ -1085,3 +1085,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：commits feature 已具备 DTO/handlers/routes/service 分层；继续按 workflows feature 规范拆分剩余 merge/rebase/reset/conflict handlers 与路由。
 - 证据：`crates/gitcrest-core/src/features/commits/{mod,dto,handlers,routes,service}.rs`。
 - 实施 commit：`22d9e8a`
+
+### 后端 workflows feature 路由归属 — 小阶段 54
+- 状态：已完成（merge/rebase/reset/conflict/recovery API 路由进入 workflows feature）
+- 日期：2026-10-09
+- 交付：新增 `features/workflows/{mod,routes}.rs` 并将 17 条 workflow API route 从顶层 router 迁入 feature router，涵盖 preflight、rebase、reset、merge/cherry-pick/revert、task recovery 与 conflict APIs。workflow service 通过 feature 根 re-export，handlers 暂留 `main.rs` 并调整 crate 可见性；路径、方法及共享 middleware 保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；merge/rebase/reset/recovery/conflict API 集成用例通过。
+- 限制/后续：本阶段只归属路由；下一阶段将 merge/cherry-pick/revert handlers 迁入 workflows feature，再分组迁移 rebase/reset 与 conflict/recovery handlers。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod,routes,workflows}.rs`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`6406702`
