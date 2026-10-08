@@ -2083,3 +2083,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其他 feature 的 lazy UI 入口可按需统一公开 loader；不影响现有功能门控。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/commits/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 实施 commit：`dcabdaa`
+
+### workflows feature dialogs 经公开 loader 懒加载 — 小阶段 165
+- 状态：已完成（App 通过 workflows feature 公开入口加载流程 dialogs）
+- 日期：2026-10-09
+- 交付：新增 workflows feature barrel，公开 Workflow、Rebase、Reset dialog 的异步 loader 及 `WorkflowAction` 类型；App 移除三个 dialog 的私有文件动态导入，保留原懒加载行为与交互属性。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。build 中 web-tree-sitter eval 警告仍存在。
+- 限制/后续：App 仍直接引用其他 feature 的私有 UI 文件，后续按 feature 逐步增加公开 loader。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/workflows/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 实施 commit：`8d5389c`
