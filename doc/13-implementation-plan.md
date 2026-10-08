@@ -2047,3 +2047,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：clone 页面/dialog 组合和 task 刷新仍由 App 协调；后续按 feature model 与应用装配边界继续迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/cloning/model/use-clone-submission.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`f1ca052`
+
+### cloning feature Clone dialog 开关状态迁入 model — 小阶段 161
+- 状态：已完成（Clone dialog 打开/关闭状态及入口动作由 cloning feature 管理）
+- 日期：2026-10-09
+- 交付：将 Clone dialog 可见状态、打开时清除错误、提交受理后收起及显式关闭迁入 `useCloneSubmission`；欢迎页、命令面板、任务重试和 dialog 渲染均调用 feature 暴露的 `openDialog`/`closeDialog`。App 不再持有独立 `cloneOpen` 状态。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建保留既有 web-tree-sitter eval 与 commits 动态/静态导入警告。
+- 限制/后续：CloneDialog 的表单输入及目录选择状态仍为 dialog 局部状态；App 继续负责渲染 feature dialog 和桌面桥接调用。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/cloning/model/use-clone-submission.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`4feaacb`
