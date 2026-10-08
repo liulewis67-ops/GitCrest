@@ -1157,3 +1157,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`main.rs` 仍保留兼任 crate 根模块和大量集成测试的现状；`handlers.rs` 仍含通用/rebase/reset/recovery 编排，后续按规范继续拆分这些职责并降低跨 feature 根导入耦合。
 - 证据：`crates/gitcrest-core/src/features/workflows/{mod.rs,recovery.rs,handlers.rs,handlers/conflicts.rs}`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`43dd220`
+
+### 后端 workflows rebase handlers 子模块 — 小阶段 62
+- 状态：已完成（rebase API handlers 按业务语义独立分组）
+- 日期：2026-10-09
+- 交付：将 rebase preview/start、backup listing、rollback handlers 及备份引用校验 helper 从通用 `handlers.rs` 移入 `handlers/rebase.rs`；DTO 继续归属 `dto.rs`，通用 handlers 模块聚合导出，routes 的 URL/method 与绑定保持一致。所有子模块现在显式声明所需依赖。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；rebase preview、rollback 与恢复冲突集成用例通过。
+- 限制/后续：reset 与 generic/recovery handlers 仍在通用 `handlers.rs`；继续拆入 reset/recovery 子模块，使 workflows 目录和规范职责结构对应。
+- 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/rebase.rs,routes.rs}`。
+- 实施 commit：`6caa5f7`
