@@ -1148,3 +1148,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：通用/rebase/reset/recovery handlers 仍在 `handlers.rs`，workflow operation 与 recovery preflight helpers 仍在 `main.rs`；继续按规范拆分 handler 子模块并将 helper 收归 workflows feature。
 - 证据：`crates/gitcrest-core/src/features/workflows/{dto.rs,handlers.rs,handlers/conflicts.rs,routes.rs}`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`7768ee3`
+
+### 后端 workflows recovery helper 归属 — 小阶段 61
+- 状态：已完成（workflow 操作识别与 recovery helper 进入 feature）
+- 日期：2026-10-09
+- 交付：新增规范目录 `features/workflows/recovery.rs`，承接 workflow task operation 识别、recovery preflight 选择与错误映射、continue/skip/abort 可用性判断，以及 shelf apply task 元数据解析。handlers、conflict 子模块和现有分类测试改为通过 workflows feature 调用；从 `main.rs` 移除上述业务 helper。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过；pull merge/rebase task 分类、workflow recovery 与 shelf apply recovery 集成用例通过。
+- 限制/后续：`main.rs` 仍保留兼任 crate 根模块和大量集成测试的现状；`handlers.rs` 仍含通用/rebase/reset/recovery 编排，后续按规范继续拆分这些职责并降低跨 feature 根导入耦合。
+- 证据：`crates/gitcrest-core/src/features/workflows/{mod.rs,recovery.rs,handlers.rs,handlers/conflicts.rs}`、`crates/gitcrest-core/src/main.rs`。
+- 实施 commit：`43dd220`
