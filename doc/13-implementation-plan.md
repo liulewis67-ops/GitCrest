@@ -1993,3 +1993,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Push 预检/提交及 commit-and-push 编排仍由 App 管理；下一步继续按 remotes feature 与 app UI 装配边界迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/remotes/model/use-repository-pull.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`d250d85`
+
+### remotes feature Push 预检与提交迁入 model — 小阶段 155
+- 状态：已完成（Push 对话框预检与普通 Push 任务受理由 remotes feature 管理）
+- 日期：2026-10-09
+- 交付：新增 `features/remotes/model/use-repository-push.ts`，迁入 Push 对话框/预检状态、目标分支和 force-only 流程、snapshot-bound Push 任务提交及 stale preflight 刷新。task 受理回调保留 task 与 remote target 的映射、任务列表更新和任务中心打开；App 仍持有 commit-and-push 后续编排所需的 model setters。Push API 和审阅门控未改变。
+- 验证：`pnpm build`（含 renderer/main/preload 构建及测试 TypeScript 检查）与 `git diff --check` 通过；未运行测试。
+- 限制/后续：commit-and-push 自动预检与条件提交仍在 App；remotes feature 的统一 task/错误收口可继续整理。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/remotes/model/use-repository-push.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`3e0fe6f`
