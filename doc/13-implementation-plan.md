@@ -1724,3 +1724,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：features 父模块当前包含 branches/credentials/diff/history/remotes/status/system/tags/tasks；repositories/settings/shelves/staging/commits/workflows 仍待迁移。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/{mod.rs,remotes/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`6b344a3`
+
+### 后端 settings feature 纳入 features 父模块 — 小阶段 125
+- 状态：已完成（AI/settings API DTO、服务与 handler 由统一 features 父模块声明）
+- 日期：2026-10-09
+- 交付：将 `settings` 加入 `src/features/mod.rs`，删除 `lib.rs` 中独立路径声明，并通过 crate 内 re-export 保留 `crate::settings` 调用。原 settings 根模块已通过 `pub(crate)` 导出 DTO、服务和指定 handler；迁移后这些 API 保持原 crate 可见范围，私有 handler 与内部 DTO 处理不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：features 父模块当前包含 branches/credentials/diff/history/remotes/settings/status/system/tags/tasks；repositories/shelves/staging/commits/workflows 仍待迁移。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/{mod.rs,settings/}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`85c756e`
