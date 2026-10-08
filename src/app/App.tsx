@@ -3,11 +3,12 @@ import { GitCrestApiError, type CommitRequest, type DiffDocumentResponse, type G
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
+import { WorkspacePage } from "../pages/workspace/WorkspacePage";
 import type { WorkflowAction } from "../features/workflows/WorkflowDialog";
 import type { PushTarget } from "../features/remotes/PushTargetDialog";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../features/settings";
 import { useDialogFocus } from "../shared/use-dialog-focus";
-import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories/model/workspace-session";
+import { loadWorkspaceSession, saveWorkspaceSession, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
@@ -1701,21 +1702,24 @@ function App() {
           onForgetRepository={(repository) => void forgetRepository(repository)}
         />
       ) : (
-        <section className="workspacePage" aria-label="Git workspace">
-          <div className="workspaceToolbar">
-            <div className="workspaceCrumb"><span className="crumbMark" aria-hidden="true">G</span><span>Workspace</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || "No repository open"}</span></div>
-            <div className="toolbarActions">
-              <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => changeWorkspaceMode("graph")}>Graph</button>
-              <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} aria-keyshortcuts={ariaShortcut(shortcuts.openDiff, isMacPlatform)} title={!selectedFilePath ? "Select a changed file to open Diff" : `Open the selected file diff (${displayShortcut(shortcuts.openDiff, isMacPlatform)})`} onClick={() => changeWorkspaceMode("diff")}>Diff</button>
-              <span className="toolbarDivider" />
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.push, isMacPlatform)} title={pushDisabledReason || `Preview the current branch push (${displayShortcut(shortcuts.push, isMacPlatform)})`} onClick={() => openPushDialog()}>Push</button>
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} title={pullDisabledReason || `Review worktree state, then pull with merge or rebase (${displayShortcut(shortcuts.pull, isMacPlatform)})`} onClick={() => openPullDialog()}>Pull</button>
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.fetch, isMacPlatform)} title={selectedRepository ? `Fetch from configured remotes (${displayShortcut(shortcuts.fetch, isMacPlatform)})` : "Open a repository to fetch"} onClick={() => void fetchRepository()}>Fetch</button>
-              <span className="toolbarDivider" />
-              <button className="quietButton compact" type="button" disabled={!selectedRepository || !connected || selectedRepository.availability !== "available"} title={selectedRepository ? `Switch branches (${displayShortcut(shortcuts.branchSwitcher, isMacPlatform)})` : "Open a repository to switch branches"} onClick={openBranchSwitcher}><span className="branchGlyph" aria-hidden="true">⑂</span> {selectedRepository ? selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch" : "No branch"}</button>
-            </div>
-          </div>
-
+        <WorkspacePage
+          selectedRepository={selectedRepository}
+          selectedFilePath={selectedFilePath}
+          mode={mode}
+          shortcuts={shortcuts}
+          isMacPlatform={isMacPlatform}
+          connected={connected}
+          connecting={connecting}
+          version={version}
+          hasActiveRepositoryTask={hasActiveRepositoryTask}
+          pushDisabledReason={pushDisabledReason}
+          pullDisabledReason={pullDisabledReason}
+          onChangeWorkspaceMode={changeWorkspaceMode}
+          onOpenPushDialog={openPushDialog}
+          onOpenPullDialog={openPullDialog}
+          onFetchRepository={() => void fetchRepository()}
+          onOpenBranchSwitcher={openBranchSwitcher}
+        >
           <div className={`workArea${mode === "diff" ? " diffMode" : ""}`}>
             <aside className="navigationPanel" aria-label="Repository navigation">
               <div className="panelHeading"><span>REPOSITORY</span><button className="panelMenu" type="button" disabled aria-label="Repository options">···</button></div>
@@ -1917,8 +1921,8 @@ function App() {
               <small>Use Ctrl+Enter to commit. Only staged changes are included.</small>
             </div>
           </section>
-          <footer className="statusbar"><span className="statusIcon" aria-hidden="true">●</span>{connected ? "Git engine ready" : connecting ? "Connecting to Git engine" : "Git engine unavailable"}<span className="statusbarDivider" /><span>{version || "API v1"}</span><span className="footerSpacer" /><span>Repository actions planned for S1</span></footer>
-        </section>
+
+        </WorkspacePage>
       )}
 
       {branchSwitcherOpen && selectedRepository && (
