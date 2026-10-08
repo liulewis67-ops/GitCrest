@@ -76,10 +76,10 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
         </div>
         {error && <p role="alert" className="taskCenterError">{error}</p>}
         {tasks.length === 0 ? <p className="taskCenterEmpty">No background tasks in this session.</p> : (
-          <div className="taskList" aria-live="polite">
+          <div className="taskList">
             {[...tasks].reverse().map((task) => (
               <article className="taskCard" key={task.taskId}>
-                <div className="taskCardHeading"><strong>{task.operation}</strong><span className={`taskStatus task-${task.status}`}>{task.status}</span></div>
+                <div className="taskCardHeading"><strong>{task.operation}</strong><span className={`taskStatus task-${task.status}`} role="status">{task.status}</span></div>
                 <div className="taskCardMeta"><span>{task.phase}</span>{task.progress !== null && <span>{task.progress}%</span>}<span>{task.repoId || task.targetPath || "Repository"}</span></div>
                 {task.progress !== null && <progress max={100} value={task.progress} aria-label={`${task.operation} progress`} />}
                 {task.message && <p className="taskMessage">{task.errorCategory && <strong>{task.errorCategory}: </strong>}{task.message}</p>}

@@ -30,6 +30,16 @@ it("provides a recovery action for an authentication-failed fetch", () => {
   expect(onConfigureCredentials).toHaveBeenCalledWith(failedFetch);
 });
 
+it("announces each task status without making the entire task list a live region", () => {
+  const { container, rerender } = render(<TaskCenter tasks={[failedFetch]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  const taskList = container.querySelector(".taskList");
+  expect(taskList?.hasAttribute("aria-live")).toBe(false);
+  expect(screen.getByRole("status").textContent).toBe("failed");
+
+  rerender(<TaskCenter tasks={[{ ...failedFetch, status: "succeeded", phase: "Completed", message: "Fetch completed" }]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  expect(screen.getByRole("status").textContent).toBe("succeeded");
+});
+
 it("moves focus into the task center and closes it with Escape", async () => {
   const onClose = vi.fn();
   render(<TaskCenter tasks={[]} error="" actionId="" onClose={onClose} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
