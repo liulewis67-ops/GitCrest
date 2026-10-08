@@ -7,7 +7,7 @@ use crate::domain::{
     workflow::{WorkflowCommitSubject, WorkflowRebaseCommitList, WorkflowResetComparison},
 };
 
-use super::workflow_state::{run_git, run_git_optional, text};
+use super::process::{run_git, run_git_optional, text};
 
 const MAX_REBASE_COMMITS: usize = 200;
 

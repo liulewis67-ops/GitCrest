@@ -5,7 +5,7 @@ use crate::domain::{
     workflow::{WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRemoteBranchComparison},
 };
 
-use super::workflow_state::{run_git, text};
+use super::process::{run_git, text};
 
 pub(crate) async fn list_backup_references(
     git_program: &str,

@@ -5,7 +5,7 @@ use crate::domain::{
     workflow::{WorkflowOperation, WorkflowState},
 };
 
-use super::workflow_state::{run_git, text};
+use super::process::{run_git, text};
 
 const MAX_PATHS: usize = 200;
 
