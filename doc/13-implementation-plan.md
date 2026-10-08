@@ -1400,3 +1400,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Git adapter 已按 command/history/refs/status/process 分组；仍保留 crate 根 `git_command` 兼容导出，后续核对并逐步切换调用方到 `git::command` 后移除兼容出口。
 - 证据：`crates/gitcrest-core/src/git/{mod.rs,command.rs,history.rs,refs.rs,status.rs,process.rs}`。
 - 实施 commit：`b65c70c`
+
+### 后端 Git command 兼容出口移除 — 小阶段 89
+- 状态：已完成（所有调用点使用 git::command，crate 根不再 re-export）
+- 日期：2026-10-09
+- 交付：bootstrap、AppState、cloning/staging features、workflow conflict helper 和 crate 根测试直接导入 `git::command`；删除根级 `git_command` 兼容出口，Git adapter 保持在规范的 `git` 模块树下。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、旧模块路径源码搜索与 `git diff --check` 通过；按当前任务约束未运行测试。
+- 限制/后续：Git adapter 目录边界已对齐指南列出的主要职责；接下来核对后端目录整体与模块可见性，结合实施计划后续未完成项持续迁移。
+- 证据：`crates/gitcrest-core/src/{main.rs,bootstrap.rs,state.rs,git/mod.rs,git/command.rs}`、受影响 feature imports。
+- 实施 commit：`929da3d`
