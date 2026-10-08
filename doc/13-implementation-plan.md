@@ -1472,3 +1472,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍执行任务完成后的刷新请求和多步骤 shelf/commit 副作用；后续继续把 feature 操作编排迁入 model/hooks，并按主计划验收 S7.2、S7.4、S7.5。
 - 证据：`src/features/tasks/model/task-refresh-planner.ts`、`src/app/App.tsx`。
 - 实施 commit：`a856ac7`
+
+### S7.2 renderer 首屏 workspace 分包 — 小阶段 97
+- 状态：已完成（首屏不再静态打包 Workspace 的 history/diff/remote/shelf 模块；不改变 S7.2 总体验收状态）
+- 日期：2026-10-09
+- 交付：将 CommitGraph/CommitDetails、RemoteManager、ShelfCenter、SplitDiff 改为带可访问加载态的 `React.lazy`；DiffWindow 也改为按需加载 SplitDiff，避免其静态导入阻止 Vite 拆分共享 chunk。生产构建主入口由此前 318.32 KB（gzip 91.74 KB）降至 272.65 KB（gzip 79.56 KB），减少 45.67 KB（gzip 12.18 KB）；独立模块 chunk 由构建输出确认。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；本阶段没有重跑 20 轮 Electron 内存/帧率基准，不能据此宣称 Working Set 或 S7.2 指标达标。
+- 限制/后续：S7.2 空闲/工作集内存与滚动帧率门槛仍待按既定 benchmark 复测；S7.4/S7.5 也仍未完成。
+- 证据：`src/app/App.tsx`、`src/features/diff/DiffWindow.tsx`、`doc/evidence/S7.2/renderer-lazy-workspace-bundle.md`。
+- 实施 commit：`ea0b449`
