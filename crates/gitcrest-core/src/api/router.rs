@@ -17,7 +17,7 @@ use crate::{
     list_repository_rebase_backups, list_repository_reset_backups, mark_workflow_conflict_resolved,
     preflight_repository_rebase, preflight_repository_reset, preflight_repository_workflow,
     preflight_repository_workflow_recovery, read_workflow_conflict_file,
-    recover_repository_workflow, repositories, request_ai, request_workflow_conflict_suggestion,
+    recover_repository_workflow, repositories, request_workflow_conflict_suggestion,
     require_api_version, require_auth, restore_repository_reset, rollback_repository_rebase,
     save_workflow_conflict_file, start_repository_rebase, start_repository_reset,
     start_repository_workflow, status, system, AppState,
@@ -37,7 +37,6 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(crate::settings::routes::router())
         .merge(crate::tags::routes::router())
         .merge(crate::tasks::routes::router())
-        .route("/v1/repositories/:repo_id/ai/request", post(request_ai))
         .route(
             "/v1/repositories/:repo_id/commits",
             crate::history::routes::commits_get_route().post(commit_repository),
