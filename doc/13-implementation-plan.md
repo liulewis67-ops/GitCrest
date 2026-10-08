@@ -607,3 +607,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`main.rs` 仍包含启动、路由注册、handlers 与集成测试；下一阶段继续按 `api/router.rs`、feature routes/handlers/service 等规范拆分，不把本次抽离视为整体架构收口。
 - 证据：`crates/gitcrest-core/src/api/error.rs`、`crates/gitcrest-core/src/api/mod.rs`、`crates/gitcrest-core/src/main.rs`。
 - 实施 commit：`40a154f`
+
+### 后端 API 顶层 Router 拆分 — 小阶段 3
+- 状态：已完成（顶层 router 组合模块化；后端规范整体仍需继续对齐）
+- 日期：2026-10-09
+- 交付：将版本路由、所有现有端点注册、API fallback、版本/鉴权中间件、可选 CORS 与 `/health` 组合从 `main.rs` 移至 `src/api/router.rs`，由 `api/mod.rs` 声明；入口和集成测试继续调用同一个 `app_router`。路由路径、HTTP 方法、middleware 顺序及测试专用 write probe 保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过。
+- 限制/后续：当前 `api/router.rs` 仍集中注册全部业务路由，handlers 仍在 `main.rs`；下一阶段按 system、repositories、status、staging、branches、remotes、history、diff、workflows、shelves、tasks 等 feature 子路由继续拆分。
+- 证据：`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/api/mod.rs`、`crates/gitcrest-core/src/main.rs`。
