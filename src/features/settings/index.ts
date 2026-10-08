@@ -1,3 +1,4 @@
+export { CommitMessageAssistant } from "./CommitMessageAssistant";
 export {
   ariaShortcut,
   displayShortcut,

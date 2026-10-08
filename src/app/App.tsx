@@ -34,7 +34,7 @@ const PullDialog = lazy(() => import("../features/remotes/PullDialog").then(({ P
 const PushTargetDialog = lazy(() => import("../features/remotes/PushTargetDialog").then(({ PushTargetDialog }) => ({ default: PushTargetDialog })));
 const DiscardChangesDialog = lazy(() => import("../features/diff/DiscardChangesDialog").then(({ DiscardChangesDialog }) => ({ default: DiscardChangesDialog })));
 const SettingsDialog = lazy(() => import("../features/settings/SettingsDialog").then(({ SettingsDialog }) => ({ default: SettingsDialog })));
-const CommitMessageAssistant = lazy(() => import("../features/settings/CommitMessageAssistant").then(({ CommitMessageAssistant }) => ({ default: CommitMessageAssistant })));
+const CommitWorkbench = lazy(() => import("../features/commits").then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
 
 type Theme = "system" | "light" | "dark";
 type Page = "welcome" | "workspace";
@@ -1838,42 +1838,28 @@ function App() {
           </div>
 
           <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label="Resize changes and commit area" onResize={setWorkbenchHeight} />
-          <section className="workbench" aria-label="Changes and commit">
-            <div className="workbenchSection"><div className="workbenchTitle">Working tree <span className="countBadge">{activeStatus ? workingCount : "—"}</span></div><p>{!selectedRepository ? "No changed files" : activeStatusLoading && !activeStatus ? "Reading working tree…" : activeStatusError && !activeStatus ? activeStatusError : workingCount === 0 ? "Working tree clean" : "Unstaged changes"}</p><small>{selectedRepository && activeStatusLoading ? "Refreshing repository status…" : selectedRepository && !activeStatus && !activeStatusError ? "Waiting for the first status snapshot." : "Working tree changes are read from Git."}</small></div>
-            <div className="workbenchSection stagedSection"><div className="workbenchTitle">Staged changes <span className="countBadge">{activeStatus ? stagedCount : "—"}</span></div><div className="stagedEmpty">{!activeStatus ? activeStatusError || "Waiting for repository status…" : stagedCount === 0 ? "Nothing staged" : `${stagedCount} staged file${stagedCount === 1 ? "" : "s"}`}</div><small>Review staged files before the commit workflow becomes available.</small></div>
-            <div className="workbenchSection commitSection">
-              <div className="commitMessageHeading"><label className="workbenchTitle" htmlFor="commit-message">Commit message</label><button type="button" className="textButton commitAiTrigger" disabled={!selectedRepository || stagedCount === 0 || hasConflicts || commitBusy} title={hasConflicts ? "Resolve conflicts before requesting a commit suggestion" : stagedCount === 0 ? "Stage changes before requesting a suggestion" : `Review staged diffs before sending (${displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)})`} onClick={() => setCommitAssistantOpen((open) => !open)}>AI suggestion · {displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)}</button></div>
-              <label className="srOnly" htmlFor="commit-template">Message template</label>
-              <select id="commit-template" aria-label="Message template" value={commitTemplate} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => chooseCommitTemplate(event.target.value)}>
-                <option value="plain">Plain message</option>
-                <option value="conventional">Conventional commit</option>
-                <option value="fix">Fix</option>
-              </select>
-              <textarea id="commit-message" aria-label="Commit message" aria-keyshortcuts={`${ariaShortcut(shortcuts.commit, isMacPlatform)} ${ariaShortcut(shortcuts.commitAndPush, isMacPlatform)}`} placeholder="Describe the changes you want to commit…" value={commitMessage} disabled={!selectedRepository || !connected || commitBusy} onChange={(event) => setCommitMessage(event.target.value)} onKeyDown={(event: KeyboardEvent<HTMLTextAreaElement>) => { if (!event.nativeEvent.isComposing && matchesShortcut(event.nativeEvent, shortcuts.commit, isMacPlatform)) { event.preventDefault(); event.stopPropagation(); void commitChanges("commit"); } else if (!event.nativeEvent.isComposing && matchesShortcut(event.nativeEvent, shortcuts.commitAndPush, isMacPlatform)) { event.preventDefault(); event.stopPropagation(); void commitChanges("commitAndPush"); } }} />
-              {commitSelections.length > 0 && <div className="commitSelectionNotice" role="status">{commitSelections.length} staged file selection{commitSelections.length === 1 ? "" : "s"} will be committed. Other staged changes stay in the index. <button type="button" onClick={() => setCommitSelections([])}>Clear selection</button></div>}
-              {commitAssistantOpen && selectedRepository && apiRef.current && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading suggestion tools…</div>}><CommitMessageAssistant api={apiRef.current} repoId={selectedRepository.repoId} draftMessage={commitMessage} commitSelections={commitSelections} commitSelectionRepoId={commitSelectionRepoId} statusSnapshot={activeStatus} onUseSuggestion={(message) => { setCommitMessage(message); setCommitTemplate("plain"); setCommitAssistantOpen(false); }} onClose={() => setCommitAssistantOpen(false)} /></Suspense>}
-              <div className="commitControls">
-                <div className="commitOptions">
-                  <label className="disabledCheck"><input type="checkbox" checked={amendCommit} disabled={!selectedRepository?.head || commitBusy} onChange={(event) => setAmendCommit(event.target.checked)} /> Amend</label>
-                  <label className="disabledCheck"><input type="checkbox" checked={signOffCommit} disabled={!selectedRepository || commitBusy} onChange={(event) => setSignOffCommit(event.target.checked)} /> Sign-off</label>
-                  <label className="disabledCheck"><input type="checkbox" checked={signCommit} disabled={!selectedRepository || commitBusy} onChange={(event) => setSignCommit(event.target.checked)} /> Sign</label>
-                </div>
-                <div className={`commitSplit${commitActionIsDanger ? " danger" : ""}`}>
-                  <button className="primaryButton commitButton" type="button" disabled={!canCommit} title={!connected ? "Connect to the Git engine to commit" : hasConflicts ? "Resolve conflicts before committing" : stagedCount === 0 ? "Stage changes before committing" : !commitMessage.trim() ? "Enter a commit message" : hasActiveRepositoryTask ? "Wait for the current repository task" : commitActionIsDanger ? "Commit, then review the force-with-lease target and overwrite scope" : "Run the selected commit action"} onClick={() => runCommitAction(activeCommitAction)}>{commitBusy ? "Submitting…" : commitActionLabel}</button>
-                  <button className="commitSplitMenuButton" type="button" disabled={!selectedRepository || commitBusy} aria-label="Choose commit action" aria-haspopup="menu" aria-expanded={commitActionMenuOpen} onClick={() => setCommitActionMenuOpen((open) => !open)}>▾</button>
-                  {commitActionMenuOpen && <div className="commitActionMenu" role="menu" aria-label="Commit actions">
-                    <button type="button" role="menuitemradio" aria-checked={activeCommitAction === "commit"} disabled={!canCommit} onClick={() => chooseCommitAction("commit")}>Commit</button>
-                    <button type="button" role="menuitemradio" aria-checked={activeCommitAction === "commitAndPush"} disabled={!canCommit} onClick={() => chooseCommitAction("commitAndPush")}>Commit and Push</button>
-                    <button type="button" role="menuitemradio" aria-checked={activeCommitAction === "commitAndPushTo"} disabled={!canCommit} onClick={() => chooseCommitAction("commitAndPushTo")}>Commit and Push to…</button>
-                    <button className="dangerMenuItem" type="button" role="menuitemradio" aria-checked={activeCommitAction === "commitAndPushForce"} disabled={!canCommit} onClick={() => chooseCommitAction("commitAndPushForce")}>Commit and Push (force-with-lease)…</button>
-                  </div>}
-                </div>
-              </div>
-              {amendCommit && <p className="amendAdvisory" role="status">Amend replaces the current HEAD commit and changes its ID.</p>}
-              {sensitiveStagedPaths.length > 0 && <p className="commitAdvisory" role="status">Review sensitive staged files before committing: {sensitiveStagedPaths.join(", ")}</p>}
-              <small>Use Ctrl+Enter to commit. Only staged changes are included.</small>
-            </div>
-          </section>
+          <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading commit controls…</div>}>
+            <CommitWorkbench
+              repository={selectedRepository}
+              status={{ snapshot: activeStatus, error: activeStatusError, loading: activeStatusLoading, workingCount, stagedCount, hasConflicts, sensitiveStagedPaths }}
+              commit={{ message: commitMessage, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
+              shortcuts={shortcuts}
+              isMacPlatform={isMacPlatform}
+              connected={connected}
+              hasActiveRepositoryTask={hasActiveRepositoryTask}
+              api={apiRef.current}
+              onChangeMessage={setCommitMessage}
+              onChangeTemplate={chooseCommitTemplate}
+              onClearSelections={() => setCommitSelections([])}
+              onAssistantOpenChange={setCommitAssistantOpen}
+              onSelectAmend={setAmendCommit}
+              onSelectSignOff={setSignOffCommit}
+              onSelectSign={setSignCommit}
+              onSubmit={runCommitAction}
+              onChooseAction={chooseCommitAction}
+              onToggleActionMenu={() => setCommitActionMenuOpen((open) => !open)}
+            />
+          </Suspense>
 
         </WorkspacePage>
       )}

@@ -1,5 +1,7 @@
+import type { CommitAction } from "../../commits/model/commit-action";
+
+export type { CommitAction } from "../../commits/model/commit-action";
 export type WorkspaceMode = "graph" | "diff";
-export type CommitAction = "commit" | "commitAndPush" | "commitAndPushTo" | "commitAndPushForce";
 
 export type RepositoryTabState = {
   mode: WorkspaceMode;
