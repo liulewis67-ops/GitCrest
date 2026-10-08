@@ -44,7 +44,7 @@ export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", 
       <section ref={dialogRef} className="cloneDialog" role="dialog" aria-modal="true" aria-labelledby="clone-title" onKeyDown={onKeyDown}>
         <div className="taskCenterHeader"><div><p className="sectionEyebrow">REMOTE REPOSITORY</p><h2 id="clone-title">Clone repository</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose} aria-label="Close clone dialog">Close</button></div>
         <div className="cloneFormBody">
-          <label className="cloneField">Remote URL<input autoFocus value={remoteUrl} onChange={(event) => { setRemoteUrl(event.target.value); if (!folderEdited) setDirectoryName(folderFromRemote(event.target.value)); }} placeholder="https://host/owner/repository.git" autoComplete="url" /></label>
+          <label className="cloneField">Remote URL<input autoFocus data-dialog-initial-focus value={remoteUrl} onChange={(event) => { setRemoteUrl(event.target.value); if (!folderEdited) setDirectoryName(folderFromRemote(event.target.value)); }} placeholder="https://host/owner/repository.git" autoComplete="url" /></label>
           <p className="cloneHelp">HTTPS credentials are stored in the system credential store; SSH uses your system SSH agent. Credentials in URLs are rejected.</p>
           {credentialHost && <CredentialEditor key={credentialHost} api={api} host={credentialHost} disabled={busy} />}
         </div>
