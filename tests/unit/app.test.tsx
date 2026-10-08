@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { components } from "../../src/api/schema";
 import App from "../../src/App";
@@ -451,11 +451,12 @@ describe("App", () => {
       { repoId: "repo_alpha", path: "C:/alpha", head: "abc123", branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 2, availability: "available" },
       { repoId: "repo_beta", path: "C:/beta", head: "def456", branch: "feature", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" },
     ];
+    let onEvent: ((event: components["schemas"]["EventEnvelope"]) => void) | undefined;
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
       value: {
         getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
-        subscribeToEvents: vi.fn(async () => vi.fn()),
+        subscribeToEvents: vi.fn(async (listener: typeof onEvent) => { onEvent = listener; return vi.fn(); }),
       },
     });
     const response = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
@@ -512,6 +513,20 @@ describe("App", () => {
     expect(screen.getByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270"));
     expect((screen.getByRole("region", { name: "Commit graph view" }) as HTMLDivElement).scrollTop).toBe(193);
+    const closedBetaRequests = ["/status", "/branches", "/remotes"].map((suffix) => fetcher.mock.calls.filter(([input]) => {
+      const url = new URL(String(input));
+      return url.pathname.includes("repo_beta") && url.pathname.endsWith(suffix);
+    }).length);
+    act(() => {
+      onEvent?.({ eventId: "event-4", protocolVersion: 1, repoId: "repo_beta", type: "status.changed", occurredAtMs: 4, payload: { full: false, paths: ["tracked.txt"] } });
+      onEvent?.({ eventId: "event-5", protocolVersion: 1, repoId: "repo_beta", type: "log.refsChanged", occurredAtMs: 5, payload: {} });
+      onEvent?.({ eventId: "event-6", protocolVersion: 1, repoId: "repo_beta", type: "repository.updated", occurredAtMs: 6, payload: {} });
+    });
+    await waitFor(() => expect(fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname === "/api/v1/repositories").length).toBeGreaterThan(2));
+    expect(["/status", "/branches", "/remotes"].map((suffix) => fetcher.mock.calls.filter(([input]) => {
+      const url = new URL(String(input));
+      return url.pathname.includes("repo_beta") && url.pathname.endsWith(suffix);
+    }).length)).toEqual(closedBetaRequests);
     fireEvent.click(screen.getByRole("button", { name: "Close alpha tab" }));
     expect(await screen.findByRole("heading", { name: "Recent repositories" })).toBeDefined();
     expect(screen.getByText("C:/alpha")).toBeDefined();

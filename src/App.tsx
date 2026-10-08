@@ -96,6 +96,13 @@ function isFullObjectId(value: string | null | undefined): value is string {
   return typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 }
 
+function withoutRecordKey<T>(record: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in record)) return record;
+  const next = { ...record };
+  delete next[key];
+  return next;
+}
+
 function ResizeSeparator({
   orientation,
   edge,
@@ -261,6 +268,8 @@ function App() {
   const [workspaceSession, setWorkspaceSession] = useState<WorkspaceSession>(readWorkspaceSession);
   const workspaceSessionRef = useRef(workspaceSession);
   workspaceSessionRef.current = workspaceSession;
+  const repositoryCacheGenerationRef = useRef(new Map<string, number>());
+  const repositoryCacheRequestCountRef = useRef(new Map<string, number>());
   const pendingGraphScrollRef = useRef<{ repoId: string; scrollTop: number }>();
   const graphScrollTimerRef = useRef<number>();
   const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
@@ -301,6 +310,52 @@ function App() {
     || Number(left.kind === "remote") - Number(right.kind === "remote")
     || left.name.localeCompare(right.name)) : [];
   const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
+
+  function isRepositoryTabOpen(repoId: string): boolean {
+    return workspaceSessionRef.current.openRepoIds.includes(repoId);
+  }
+
+  function repositoryCacheGeneration(repoId: string): number {
+    return repositoryCacheGenerationRef.current.get(repoId) || 0;
+  }
+
+  function beginRepositoryCacheRequest(repoId: string): number {
+    repositoryCacheRequestCountRef.current.set(
+      repoId,
+      (repositoryCacheRequestCountRef.current.get(repoId) || 0) + 1,
+    );
+    return repositoryCacheGeneration(repoId);
+  }
+
+  function finishRepositoryCacheRequest(repoId: string) {
+    const remaining = (repositoryCacheRequestCountRef.current.get(repoId) || 1) - 1;
+    if (remaining > 0) {
+      repositoryCacheRequestCountRef.current.set(repoId, remaining);
+    } else {
+      repositoryCacheRequestCountRef.current.delete(repoId);
+      if (!isRepositoryTabOpen(repoId)) repositoryCacheGenerationRef.current.delete(repoId);
+    }
+  }
+
+  function invalidateRepositoryUiCache(repoId: string) {
+    if (repositoryCacheRequestCountRef.current.has(repoId)) {
+      repositoryCacheGenerationRef.current.set(repoId, repositoryCacheGeneration(repoId) + 1);
+    } else {
+      repositoryCacheGenerationRef.current.delete(repoId);
+    }
+    statusSnapshotsRef.current = withoutRecordKey(statusSnapshotsRef.current, repoId);
+    statusRefreshPendingRef.current.delete(repoId);
+    setStatusSnapshots((current) => withoutRecordKey(current, repoId));
+    setStatusErrors((current) => withoutRecordKey(current, repoId));
+    setStatusLoadingByRepo((current) => withoutRecordKey(current, repoId));
+    setBranchSnapshots((current) => withoutRecordKey(current, repoId));
+    setBranchErrors((current) => withoutRecordKey(current, repoId));
+    setBranchLoadingByRepo((current) => withoutRecordKey(current, repoId));
+    setRemoteSnapshots((current) => withoutRecordKey(current, repoId));
+    setRemoteErrors((current) => withoutRecordKey(current, repoId));
+    setRemoteLoadingByRepo((current) => withoutRecordKey(current, repoId));
+  }
+
   const activeCommitAction: CommitAction = activeTabState?.commitAction || "commit";
   const selectedFilePath = activeTabState?.selectedFilePath;
   const selectedFileScope = activeTabState?.selectedFileScope;
@@ -358,6 +413,7 @@ function App() {
   selectedRepositoryRef.current = selectedRepository;
 
   async function refreshRepositoryStatusScope(repoId: string, full: boolean, paths: string[] = [], forceRefresh = false) {
+    if (!isRepositoryTabOpen(repoId)) return;
     const pending = statusRefreshPendingRef.current.get(repoId) || { full: false, forceRefresh: false, paths: new Set<string>() };
     pending.forceRefresh ||= forceRefresh;
     if (full || paths.length === 0) {
@@ -376,16 +432,19 @@ function App() {
     const api = apiRef.current;
     if (!api) return;
     statusRefreshActiveRef.current.add(repoId);
+    let requestGeneration = beginRepositoryCacheRequest(repoId);
     setStatusLoadingByRepo((current) => ({ ...current, [repoId]: true }));
     setStatusErrors((current) => ({ ...current, [repoId]: "" }));
     try {
       while (statusRefreshPendingRef.current.has(repoId)) {
         const requested = statusRefreshPendingRef.current.get(repoId)!;
         statusRefreshPendingRef.current.delete(repoId);
+        requestGeneration = repositoryCacheGeneration(repoId);
         const useFull = requested.full || !statusSnapshotsRef.current[repoId] || requested.paths.size === 0;
         const snapshot = useFull
           ? await api.getRepositoryStatus(repoId, requested.forceRefresh)
           : await api.getRepositoryStatusPaths(repoId, [...requested.paths]);
+        if (!isRepositoryTabOpen(repoId) || repositoryCacheGeneration(repoId) !== requestGeneration) continue;
         const next = !useFull && statusSnapshotsRef.current[repoId]
           ? mergeStatusScope(statusSnapshotsRef.current[repoId]!, snapshot, [...requested.paths])
           : snapshot;
@@ -394,10 +453,15 @@ function App() {
       }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setStatusErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
+      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
+        setStatusErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
+      }
     } finally {
       statusRefreshActiveRef.current.delete(repoId);
-      setStatusLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+      setStatusLoadingByRepo((current) => isRepositoryTabOpen(repoId)
+        ? { ...current, [repoId]: false }
+        : withoutRecordKey(current, repoId));
+      finishRepositoryCacheRequest(repoId);
       if (statusRefreshPendingRef.current.has(repoId)) {
         const next = statusRefreshPendingRef.current.get(repoId)!;
         void refreshRepositoryStatusScope(repoId, next.full, [...next.paths]);
@@ -410,38 +474,57 @@ function App() {
   }
 
   async function refreshRepositoryBranches(repoId: string) {
+    if (!isRepositoryTabOpen(repoId)) return;
     const api = apiRef.current;
     if (!api) return;
+    const requestGeneration = beginRepositoryCacheRequest(repoId);
     setBranchLoadingByRepo((current) => ({ ...current, [repoId]: true }));
     setBranchErrors((current) => ({ ...current, [repoId]: "" }));
     try {
       const snapshot = await api.getRepositoryBranches(repoId);
-      setBranchSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
+        setBranchSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+      }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setBranchErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository branches.") }));
+      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
+        setBranchErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository branches.") }));
+      }
     } finally {
-      setBranchLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+      setBranchLoadingByRepo((current) => isRepositoryTabOpen(repoId)
+        ? { ...current, [repoId]: false }
+        : withoutRecordKey(current, repoId));
+      finishRepositoryCacheRequest(repoId);
     }
   }
 
   async function refreshRepositoryRemotes(repoId: string) {
+    if (!isRepositoryTabOpen(repoId)) return;
     const api = apiRef.current;
     if (!api) return;
+    const requestGeneration = beginRepositoryCacheRequest(repoId);
     setRemoteLoadingByRepo((current) => ({ ...current, [repoId]: true }));
     setRemoteErrors((current) => ({ ...current, [repoId]: "" }));
     try {
       const snapshot = await api.getRepositoryRemotes(repoId);
-      setRemoteSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
+        setRemoteSnapshots((current) => ({ ...current, [repoId]: snapshot }));
+      }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository remotes.") }));
+      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
+        setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository remotes.") }));
+      }
     } finally {
-      setRemoteLoadingByRepo((current) => ({ ...current, [repoId]: false }));
+      setRemoteLoadingByRepo((current) => isRepositoryTabOpen(repoId)
+        ? { ...current, [repoId]: false }
+        : withoutRecordKey(current, repoId));
+      finishRepositoryCacheRequest(repoId);
     }
   }
 
   async function submitRemoteTask(repoId: string, action: () => Promise<TaskSnapshotResponse>) {
+    const requestGeneration = beginRepositoryCacheRequest(repoId);
     setRemoteActionBusy(true);
     setRemoteErrors((current) => ({ ...current, [repoId]: "" }));
     try {
@@ -450,9 +533,12 @@ function App() {
       setTasksOpen(true);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not update repository remotes.") }));
+      if (isRepositoryTabOpen(repoId) && repositoryCacheGeneration(repoId) === requestGeneration) {
+        setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not update repository remotes.") }));
+      }
     } finally {
       setRemoteActionBusy(false);
+      finishRepositoryCacheRequest(repoId);
     }
   }
 
@@ -490,12 +576,19 @@ function App() {
     const api = apiRef.current;
     const repository = selectedRepository;
     if (!api || !repository) return;
+    const requestGeneration = beginRepositoryCacheRequest(repository.repoId);
     try {
       const snapshot = await api.setRepositoryBranchFavorite(repository.repoId, fullName, !favorite);
-      setBranchSnapshots((current) => ({ ...current, [repository.repoId]: snapshot }));
+      if (isRepositoryTabOpen(repository.repoId) && repositoryCacheGeneration(repository.repoId) === requestGeneration) {
+        setBranchSnapshots((current) => ({ ...current, [repository.repoId]: snapshot }));
+      }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setBranchErrors((current) => ({ ...current, [repository.repoId]: message || (error instanceof Error ? error.message : "Could not update branch favorite.") }));
+      if (isRepositoryTabOpen(repository.repoId) && repositoryCacheGeneration(repository.repoId) === requestGeneration) {
+        setBranchErrors((current) => ({ ...current, [repository.repoId]: message || (error instanceof Error ? error.message : "Could not update branch favorite.") }));
+      }
+    } finally {
+      finishRepositoryCacheRequest(repository.repoId);
     }
   }
 
@@ -1115,7 +1208,10 @@ function App() {
       ? openRepoIds[openRepoIds.length - 1]
       : current.activeRepoId;
     const nextRepository = repositories.find((repository) => repository.repoId === nextActiveRepoId);
-    setWorkspaceSession({ ...current, openRepoIds, activeRepoId: nextActiveRepoId });
+    const nextSession = { ...current, openRepoIds, activeRepoId: nextActiveRepoId };
+    workspaceSessionRef.current = nextSession;
+    setWorkspaceSession(nextSession);
+    invalidateRepositoryUiCache(repoId);
     if (closingActive) setSelectedRepository(nextRepository);
     if (closingActive && page === "workspace") setPage(nextRepository ? "workspace" : "welcome");
   }
@@ -1280,8 +1376,10 @@ function App() {
             void refreshRepositoryBranches(event.repoId);
             void refreshRepositoryRemotes(event.repoId);
           } else if (event.repoId && event.type === "log.refsChanged") {
-            void refreshRepositoryBranches(event.repoId);
-            setHistoryRefreshKey((current) => current + 1);
+            if (isRepositoryTabOpen(event.repoId)) {
+              void refreshRepositoryBranches(event.repoId);
+              setHistoryRefreshKey((current) => current + 1);
+            }
           } else if (![
             "repository.updated",
             "status.changed",
@@ -1298,7 +1396,7 @@ function App() {
               void refreshRepositoryStatusScope(repoId, true);
               void refreshRepositoryBranches(repoId);
               void refreshRepositoryRemotes(repoId);
-              setHistoryRefreshKey((current) => current + 1);
+              if (isRepositoryTabOpen(repoId)) setHistoryRefreshKey((current) => current + 1);
             }
           }
         });
