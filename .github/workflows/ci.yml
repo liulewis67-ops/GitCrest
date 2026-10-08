@@ -54,7 +54,60 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - run: pnpm electron:package
+      - name: Package Windows app
+        if: runner.os == 'Windows'
+        run: pnpm electron:package
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          EXPECT_SIGNED_PACKAGE: ${{ secrets.WINDOWS_CSC_LINK != '' }}
+
+      - name: Verify Windows package signature when a certificate is configured
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          EXPECT_SIGNED_PACKAGE: ${{ secrets.WINDOWS_CSC_LINK != '' }}
+        run: |
+          if ($env:EXPECT_SIGNED_PACKAGE -ne 'true') {
+            Write-Host 'No Windows signing certificate secret is configured; this is an unsigned smoke build.'
+            exit 0
+          }
+          $installer = Get-ChildItem -LiteralPath dist -Filter 'GitCrest Setup *.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'The NSIS installer was not generated.' }
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer.FullName
+          if ($signature.Status -ne 'Valid') { throw "Expected a valid Authenticode signature, got $($signature.Status)." }
+
+      - name: Package macOS app
+        if: runner.os == 'macOS'
+        run: pnpm electron:package
+        env:
+          CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          EXPECT_SIGNED_PACKAGE: ${{ secrets.MACOS_CSC_LINK != '' }}
+
+      - name: Verify macOS app signature when a certificate is configured
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          EXPECT_SIGNED_PACKAGE: ${{ secrets.MACOS_CSC_LINK != '' }}
+        run: |
+          if [[ "$EXPECT_SIGNED_PACKAGE" != "true" ]]; then
+            echo 'No macOS signing certificate secret is configured; this is an unsigned smoke build.'
+            exit 0
+          fi
+          app_bundle=$(find dist -maxdepth 3 -path '*/GitCrest.app' -print -quit)
+          if [[ -z "$app_bundle" ]]; then
+            echo 'The packaged GitCrest.app was not generated.' >&2
+            exit 1
+          fi
+          codesign --verify --deep --strict "$app_bundle"
+
+      - name: Package Linux app
+        if: runner.os == 'Linux'
+        run: pnpm electron:package
 
       - name: Launch the packaged app and check sidecar shutdown
         if: runner.os != 'Linux'
