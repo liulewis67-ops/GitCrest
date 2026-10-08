@@ -1787,3 +1787,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：其他 feature 的兼容重导出仍供现有跨层引用使用，后续按单个 feature 梳理并切换到规范入口。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/api/{error.rs,router.rs}`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`ca6cb28`
+
+### API router 通过 features 公开路由入口组合路由 — 小阶段 132
+- 状态：已完成（API router 不再通过 crate-root feature 兼容重导出访问路由）
+- 日期：2026-10-09
+- 交付：`api/router.rs` 直接从 `features` 导入所有业务路由模块，并通过各 feature 的 `routes` 入口组合应用 router。移除因此不再使用的 `system` crate-root 重导出；端点集合与组合顺序保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --all-targets`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：其他内部调用仍使用部分 crate-root feature 兼容路径，后续继续逐模块迁移；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/features/mod.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`ccf7281`
