@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
-import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type StagingPatchRequest, type StagingRequest, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
+import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
@@ -14,7 +14,7 @@ import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { useCommitDraft } from "../features/commits";
 import { loadWorkspaceSession, saveWorkspaceSession, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
-import { useRepositoryStatus } from "../features/changes/model/use-repository-status";
+import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useRepositoryRefs } from "../features/branches/model/use-repository-refs";
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
@@ -98,7 +98,6 @@ function App() {
   const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
   const openedCloneTasks = useRef(new Set<string>());
   const cloneTaskIds = useRef(new Set<string>());
-  const [stagingBusy, setStagingBusy] = useState(false);
   const {
     message: commitMessage,
     setMessage: setCommitMessage,
@@ -339,6 +338,26 @@ function App() {
     : activeCommitAction === "commit" ? "Commit" : activeCommitAction === "commitAndPushTo" ? "Commit and Push to…" : activeCommitAction === "commitAndPushForce" ? "Commit and Push (force-with-lease)" : "Commit and Push";
   const commitActionIsDanger = activeCommitAction === "commitAndPushForce" || (amendCommit && activeCommitAction !== "commit");
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
+  const {
+    busy: stagingBusy,
+    stageChanges,
+    stageSelectedChanges,
+    undoRecentOperation,
+    discardSelectedChanges,
+  } = useStagingOperations({
+    getApi: () => apiRef.current,
+    repository: selectedRepository,
+    connected,
+    hasActiveRepositoryTask,
+    hasActiveStagingTask,
+    document: diffState.document,
+    discardSelection,
+    clearDiscardSelection: () => setDiscardSelection(undefined),
+    appendTask,
+    prependTask,
+    setTaskError: setTasksError,
+    openTaskCenter: () => setTasksOpen(true),
+  });
   const selectedRepositoryRef = useRef(selectedRepository);
   selectedRepositoryRef.current = selectedRepository;
   useTaskRefreshLifecycle({
@@ -644,88 +663,6 @@ function App() {
   function reviewTaskPush(task: TaskSnapshotResponse) {
     setTasksOpen(false);
     openPushDialog(task.repoId || selectedRepository?.repoId, pushTargetsByTask.current.get(task.taskId), task.operation.startsWith("pushForceWithLease"));
-  }
-
-  async function stageChanges(action: StagingRequest["action"], path?: string) {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (!api || !repoId || stagingBusy || hasActiveStagingTask) return;
-    setStagingBusy(true);
-    setTasksError("");
-    try {
-      const request: StagingRequest = { action, ...(path ? { path } : {}) };
-      const task = await api.stageRepositoryChanges(repoId, request);
-      appendTask(task);
-      setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTasksError(message || (error instanceof Error ? error.message : "Could not start the staging task."));
-      setTasksOpen(true);
-    } finally {
-      setStagingBusy(false);
-    }
-  }
-
-  async function undoRecentOperation() {
-    const api = apiRef.current;
-    const repository = selectedRepository;
-    if (!api || !repository || !connected || repository.availability !== "available" || hasActiveRepositoryTask) return;
-    setTasksError("");
-    try {
-      const task = await api.undoRecentOperation(repository.repoId);
-      prependTask(task);
-      setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTasksError(message || (error instanceof Error ? error.message : "Could not undo the recent staging operation."));
-      setTasksOpen(true);
-    }
-  }
-
-  async function stageSelectedChanges(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
-    const api = apiRef.current;
-    const repository = selectedRepository;
-    const document = diffState.document;
-    if (!api || !repository || !document || document.scope === "commit" || stagingBusy || hasActiveStagingTask) return;
-    setStagingBusy(true);
-    setTasksError("");
-    try {
-      const request: StagingPatchRequest = {
-        action: document.scope === "index" ? "unstage" : "stage",
-        path: document.path,
-        scope: document.scope,
-        revision: document.revision,
-        selections,
-      };
-      const task = await api.stageSelectedDiffHunks(repository.repoId, request);
-      appendTask(task);
-      setTasksOpen(true);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTasksError(message || (error instanceof Error ? error.message : "Could not start the partial staging task."));
-      setTasksOpen(true);
-    } finally {
-      setStagingBusy(false);
-    }
-  }
-
-  async function discardSelectedChanges() {
-    const api = apiRef.current;
-    const repository = selectedRepository;
-    if (!api || !repository || !discardSelection || stagingBusy || hasActiveRepositoryTask) return;
-    setStagingBusy(true);
-    setTasksError("");
-    try {
-      const task = await api.discardSelectedDiffChanges(repository.repoId, { ...discardSelection, confirmDiscard: true });
-      prependTask(task);
-      setTasksOpen(true);
-      setDiscardSelection(undefined);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTasksError(message || (error instanceof Error ? error.message : "Could not start the discard task."));
-    } finally {
-      setStagingBusy(false);
-    }
   }
 
   function rememberCommitAction(action: CommitAction) {
