@@ -1,6 +1,7 @@
 use std::{path::Path, process::Stdio, time::Duration};
 
 use serde::Serialize;
+use sha2::{Digest, Sha256};
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
@@ -19,6 +20,23 @@ pub struct RemoteSnapshot {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct RemoteBranchDeletePreview {
+    pub repo_id: String,
+    pub remote_name: String,
+    pub remote_branch: String,
+    pub target_ref: String,
+    pub expected_remote_oid: String,
+    pub current_head_oid: Option<String>,
+    pub commits_only_on_remote: u32,
+    pub affected_paths: Vec<String>,
+    pub omitted_path_count: u32,
+    pub operation_in_progress: Option<crate::workflows::WorkflowOperation>,
+    pub preview_revision: String,
+    pub can_delete: bool,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct RemoteRef {
     pub name: String,
     pub fetch_urls: Vec<String>,
@@ -30,10 +48,136 @@ pub struct RemoteRef {
 pub enum RemoteError {
     InvalidName,
     InvalidUrl,
+    BranchNotFound,
     GitUnavailable,
     TimedOut,
     TooLarge,
     GitFailed,
+}
+
+pub async fn read_remote_branch_delete_preview(
+    repo_id: String,
+    repository_path: &Path,
+    remote_name: &str,
+    remote_branch: &str,
+) -> Result<RemoteBranchDeletePreview, RemoteError> {
+    validate_remote_name(repository_path, remote_name).await?;
+    crate::branches::validate_branch_name(repository_path, remote_branch)
+        .await
+        .map_err(|_| RemoteError::InvalidName)?;
+    if !read_remotes(repo_id.clone(), repository_path)
+        .await?
+        .remotes
+        .iter()
+        .any(|remote| remote.name == remote_name)
+    {
+        return Err(RemoteError::InvalidName);
+    }
+    let target_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
+    if remote_branch == "HEAD" {
+        return Err(RemoteError::InvalidName);
+    }
+    let expected_remote_oid = match run_git(
+        repository_path,
+        &[
+            "rev-parse".into(),
+            "--verify".into(),
+            "--end-of-options".into(),
+            format!("{target_ref}^{{commit}}").into(),
+        ],
+    )
+    .await
+    {
+        Ok(value) => String::from_utf8_lossy(&value).trim().to_owned(),
+        Err(RemoteError::GitFailed) => return Err(RemoteError::BranchNotFound),
+        Err(error) => return Err(error),
+    };
+    let current_head_oid = match run_git(
+        repository_path,
+        &[
+            "rev-parse".into(),
+            "--verify".into(),
+            "HEAD^{commit}".into(),
+        ],
+    )
+    .await
+    {
+        Ok(value) => Some(String::from_utf8_lossy(&value).trim().to_owned()),
+        Err(RemoteError::GitFailed) => None,
+        Err(error) => return Err(error),
+    };
+    let mut commits_only_on_remote = 0;
+    let mut affected_paths = Vec::new();
+    if let Some(head_oid) = &current_head_oid {
+        let count = run_git(
+            repository_path,
+            &[
+                "rev-list".into(),
+                "--count".into(),
+                format!("{head_oid}..{expected_remote_oid}").into(),
+            ],
+        )
+        .await?;
+        commits_only_on_remote = String::from_utf8_lossy(&count)
+            .trim()
+            .parse()
+            .map_err(|_| RemoteError::GitFailed)?;
+        let paths = run_git(
+            repository_path,
+            &[
+                "diff".into(),
+                "--name-only".into(),
+                "--no-renames".into(),
+                "-z".into(),
+                head_oid.clone().into(),
+                expected_remote_oid.clone().into(),
+            ],
+        )
+        .await?;
+        affected_paths = paths
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| String::from_utf8_lossy(path).into_owned())
+            .collect();
+    }
+    affected_paths.sort();
+    affected_paths.dedup();
+    let omitted_path_count = affected_paths.len().saturating_sub(200) as u32;
+    affected_paths.truncate(200);
+    let (_, _, _, _, operation_in_progress) =
+        crate::workflows::read_worktree_state(repository_path)
+            .await
+            .map_err(|_| RemoteError::GitFailed)?;
+    let can_delete = operation_in_progress.is_none();
+    let mut digest = Sha256::new();
+    digest.update(repo_id.as_bytes());
+    digest.update([0]);
+    digest.update(target_ref.as_bytes());
+    digest.update([0]);
+    digest.update(expected_remote_oid.as_bytes());
+    digest.update([0]);
+    digest.update(current_head_oid.as_deref().unwrap_or_default().as_bytes());
+    digest.update([0]);
+    digest.update(format!("{operation_in_progress:?}").as_bytes());
+    digest.update([0]);
+    for path in &affected_paths {
+        digest.update(path.as_bytes());
+        digest.update([0]);
+    }
+    Ok(RemoteBranchDeletePreview {
+        repo_id,
+        remote_name: remote_name.to_owned(),
+        remote_branch: remote_branch.to_owned(),
+        target_ref,
+        expected_remote_oid,
+        current_head_oid,
+        commits_only_on_remote,
+        affected_paths,
+        omitted_path_count,
+        operation_in_progress,
+        preview_revision: format!("sha256:{:x}", digest.finalize()),
+        can_delete,
+    })
 }
 
 pub async fn read_remotes(

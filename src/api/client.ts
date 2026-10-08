@@ -20,6 +20,7 @@ export type CommitPageResponse = components["schemas"]["CommitPage"];
 export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
+export type RemoteBranchDeletePreviewResponse = components["schemas"]["RemoteBranchDeletePreview"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
 export type RebasePreviewResponse = components["schemas"]["RebasePreview"];
@@ -180,6 +181,25 @@ export class GitCrestApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, allowUnmerged } satisfies components["schemas"]["DeleteBranchRequest"]),
     });
+  }
+
+  previewRepositoryRemoteBranchDelete(repoId: RepoId, remoteName: string, remoteBranch: string): Promise<RemoteBranchDeletePreviewResponse> {
+    const query = new URLSearchParams({ remoteName, remoteBranch });
+    return this.request<RemoteBranchDeletePreviewResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/branches/remote-delete-preview?${query}`,
+    );
+  }
+
+  deleteRepositoryRemoteBranch(repoId: RepoId, request: components["schemas"]["RemoteBranchDeleteRequest"]): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/branches/remote-delete`,
+      true,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      },
+    );
   }
 
   setRepositoryBranchFavorite(repoId: RepoId, fullName: string, favorite: boolean): Promise<BranchSnapshotResponse> {

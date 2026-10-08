@@ -443,6 +443,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/branches/remote-delete-preview": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Review a remote branch ref, commits, and changed paths before deletion */
+        get: operations["previewRepositoryRemoteBranchDelete"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/branches/remote-delete": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Queue confirmed remote branch deletion with force-with-lease protection */
+        post: operations["deleteRepositoryRemoteBranch"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories": {
         parameters: {
             query?: never;
@@ -1698,6 +1740,29 @@ export interface components {
             isCurrent: boolean;
             unmergedCommitCount: number;
             requiresConfirmation: boolean;
+        };
+        RemoteBranchDeletePreview: {
+            repoId: components["schemas"]["RepoId"];
+            remoteName: string;
+            remoteBranch: string;
+            targetRef: string;
+            expectedRemoteOid: string;
+            currentHeadOid: string | null;
+            commitsOnlyOnRemote: number;
+            affectedPaths: string[];
+            omittedPathCount: number;
+            /** @enum {string|null} */
+            operationInProgress: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply" | null;
+            previewRevision: string;
+            canDelete: boolean;
+        };
+        RemoteBranchDeleteRequest: {
+            remoteName: string;
+            remoteBranch: string;
+            expectedRemoteOid: string;
+            previewRevision: string;
+            /** @description Must be true after explicit user confirmation. */
+            confirmDelete: boolean;
         };
         CommitRequest: {
             /** @description Commit message supplied to Git over standard input; its UTF-8 encoded size must not exceed 64 KiB. */
@@ -3226,6 +3291,116 @@ export interface operations {
             406: components["responses"]["UnsupportedVersion"];
             /** @description The branch is current, or unmerged commits need explicit confirmation. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    previewRepositoryRemoteBranchDelete: {
+        parameters: {
+            query: {
+                remoteName: string;
+                remoteBranch: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Snapshot-bound remote delete impact and lease OID. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RemoteBranchDeletePreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository or remote-tracking branch is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    deleteRepositoryRemoteBranch: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RemoteBranchDeleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Remote deletion task accepted after snapshot revalidation. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository or remote-tracking branch is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description A Git operation is active in the repository. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The reviewed tracking ref or impact changed. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git cannot be started. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

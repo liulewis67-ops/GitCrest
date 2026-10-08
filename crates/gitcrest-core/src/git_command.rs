@@ -776,6 +776,66 @@ impl GitCommandService {
         .await
     }
 
+    pub async fn execute_remote_branch_delete(
+        &self,
+        repository_path: &Path,
+        preview: &crate::remotes::RemoteBranchDeletePreview,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let remote_ref = format!("refs/heads/{}", preview.remote_branch);
+        let lease = format!(
+            "--force-with-lease={remote_ref}:{}",
+            preview.expected_remote_oid
+        );
+        run_command(
+            &self.git_program,
+            vec![
+                "push".into(),
+                "--progress".into(),
+                "--porcelain".into(),
+                lease.into(),
+                "--".into(),
+                preview.remote_name.clone().into(),
+                format!(":{remote_ref}").into(),
+            ],
+            Some(format!(
+                "git push --delete {} {} with lease {}",
+                preview.remote_name,
+                preview.remote_branch,
+                &preview.expected_remote_oid[..7.min(preview.expected_remote_oid.len())]
+            )),
+            None,
+            Vec::new(),
+            askpass_environment()?,
+            Some(repository_path),
+            "Delete remote branch",
+            task.clone(),
+        )
+        .await?;
+        if run_command(
+            &self.git_program,
+            vec![
+                "update-ref".into(),
+                "-d".into(),
+                preview.target_ref.clone().into(),
+                preview.expected_remote_oid.clone().into(),
+            ],
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            "Remove deleted remote-tracking reference",
+            task.clone(),
+        )
+        .await
+        .is_err()
+        {
+            task.log("Remote branch was deleted, but the local tracking ref changed and could not be removed safely. Fetch with prune to refresh it.").await;
+        }
+        Ok(())
+    }
+
     pub async fn execute_clone(
         &self,
         remote_url: &str,

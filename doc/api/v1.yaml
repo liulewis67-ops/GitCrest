@@ -900,6 +900,85 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+  /api/v1/repositories/{repoId}/branches/remote-delete-preview:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: previewRepositoryRemoteBranchDelete
+      summary: Review a remote branch ref, commits, and changed paths before deletion
+      parameters:
+        - name: remoteName
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+        - name: remoteBranch
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 255 }
+      responses:
+        "200":
+          description: Snapshot-bound remote delete impact and lease OID.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RemoteBranchDeletePreview" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or remote-tracking branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/branches/remote-delete:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: deleteRepositoryRemoteBranch
+      summary: Queue confirmed remote branch deletion with force-with-lease protection
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RemoteBranchDeleteRequest" }
+      responses:
+        "202":
+          description: Remote deletion task accepted after snapshot revalidation.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: The repository or remote-tracking branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: A Git operation is active in the repository.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "412":
+          description: The reviewed tracking ref or impact changed.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "503": { description: The task queue is full or Git cannot be started., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3708,6 +3787,33 @@ components:
         isCurrent: { type: boolean }
         unmergedCommitCount: { type: integer, minimum: 0 }
         requiresConfirmation: { type: boolean }
+    RemoteBranchDeletePreview:
+      type: object
+      additionalProperties: false
+      required: [repoId, remoteName, remoteBranch, targetRef, expectedRemoteOid, currentHeadOid, commitsOnlyOnRemote, affectedPaths, omittedPathCount, operationInProgress, previewRevision, canDelete]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        remoteName: { type: string, minLength: 1, maxLength: 255 }
+        remoteBranch: { type: string, minLength: 1, maxLength: 255 }
+        targetRef: { type: string, pattern: "^refs/remotes/.+$" }
+        expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        currentHeadOid: { type: [string, "null"], minLength: 40, maxLength: 64 }
+        commitsOnlyOnRemote: { type: integer, minimum: 0 }
+        affectedPaths: { type: array, maxItems: 200, items: { type: string } }
+        omittedPathCount: { type: integer, minimum: 0 }
+        operationInProgress: { type: [string, "null"], enum: [merge, cherryPick, revert, rebase, shelfApply, null] }
+        previewRevision: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
+        canDelete: { type: boolean }
+    RemoteBranchDeleteRequest:
+      type: object
+      additionalProperties: false
+      required: [remoteName, remoteBranch, expectedRemoteOid, previewRevision, confirmDelete]
+      properties:
+        remoteName: { type: string, minLength: 1, maxLength: 255 }
+        remoteBranch: { type: string, minLength: 1, maxLength: 255 }
+        expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        previewRevision: { type: string, pattern: "^sha256:[0-9a-f]{64}$" }
+        confirmDelete: { type: boolean, description: Must be true after explicit user confirmation. }
     CommitRequest:
       type: object
       additionalProperties: false

@@ -621,6 +621,11 @@ impl ApiError {
                 ApiErrorCode::RemotesUnavailable,
                 "Git could not read remote configuration.",
             ),
+            remotes::RemoteError::BranchNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::BranchNotFound,
+                "The remote-tracking branch is unavailable. Fetch and review branches again.",
+            ),
             remotes::RemoteError::InvalidName => Self::new(
                 StatusCode::BAD_REQUEST,
                 ApiErrorCode::RemoteNameInvalid,
@@ -940,6 +945,14 @@ fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> Router {
         .route(
             "/v1/repositories/:repo_id/branches/delete",
             post(delete_repository_branch),
+        )
+        .route(
+            "/v1/repositories/:repo_id/branches/remote-delete-preview",
+            get(preview_repository_remote_branch_delete),
+        )
+        .route(
+            "/v1/repositories/:repo_id/branches/remote-delete",
+            post(delete_repository_remote_branch),
         )
         .route(
             "/v1/repositories/:repo_id/branches/favorite",
@@ -3391,6 +3404,153 @@ async fn delete_repository_branch(
                     TaskFailure::Failed("Branch favorite storage is unavailable.".into())
                 })?;
                 Ok(None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RemoteBranchDeleteQuery {
+    remote_name: String,
+    remote_branch: String,
+}
+
+async fn preview_repository_remote_branch_delete(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<RemoteBranchDeleteQuery>, QueryRejection>,
+) -> Result<Json<remotes::RemoteBranchDeletePreview>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A configured remote and remote branch are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remotes::read_remote_branch_delete_preview(
+        repo_id,
+        &target.repository_path,
+        &query.remote_name,
+        &query.remote_branch,
+    )
+    .await
+    .map(Json)
+    .map_err(ApiError::from_remote_error)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RemoteBranchDeleteRequest {
+    remote_name: String,
+    remote_branch: String,
+    expected_remote_oid: String,
+    preview_revision: String,
+    confirm_delete: bool,
+}
+
+async fn delete_repository_remote_branch(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RemoteBranchDeleteRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Remote branch deletion requires the reviewed branch, target OID, and preview revision.",
+        )
+    })?;
+    if !request.confirm_delete {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Deleting a remote branch requires explicit confirmation after reviewing its impact.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = remotes::read_remote_branch_delete_preview(
+        repo_id.clone(),
+        &target.repository_path,
+        &request.remote_name,
+        &request.remote_branch,
+    )
+    .await
+    .map_err(ApiError::from_remote_error)?;
+    if preview.expected_remote_oid != request.expected_remote_oid
+        || preview.preview_revision != request.preview_revision
+    {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowPreflightStale,
+            "The remote-tracking OID or affected paths changed after review. Refresh the preview.",
+        ));
+    }
+    if !preview.can_delete {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Finish the active Git operation before deleting a remote branch.",
+        ));
+    }
+    let command = state.git_commands.clone();
+    let repositories = state.repositories.clone();
+    let task_repo_id = repo_id.clone();
+    let path = target.repository_path;
+    let resource_key = target.resource_key;
+    let remote_name = request.remote_name;
+    let remote_branch = request.remote_branch;
+    let expected_remote_oid = request.expected_remote_oid;
+    let expected_revision = request.preview_revision;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            resource_key,
+            "remoteBranchDelete",
+            move |context| async move {
+                let current = remotes::read_remote_branch_delete_preview(
+                    task_repo_id.clone(),
+                    &path,
+                    &remote_name,
+                    &remote_branch,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "Remote branch deletion preconditions could not be rechecked. Refresh the branch preview.".into(),
+                    )
+                })?;
+                if current.expected_remote_oid != expected_remote_oid
+                    || current.preview_revision != expected_revision
+                    || !current.can_delete
+                {
+                    return Err(TaskFailure::Failed(
+                        "The reviewed remote branch or affected path set changed. Review it again before deleting.".into(),
+                    ));
+                }
+                let task_context = context.clone();
+                let result = command
+                    .execute_remote_branch_delete(&path, &current, context)
+                    .await;
+                if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
+                    task_context
+                        .log("Repository metadata refresh failed after remote branch deletion; refresh repository state.")
+                        .await;
+                }
+                result.map(|()| None)
             },
         )
         .await
@@ -9157,6 +9317,168 @@ mod tests {
         assert_eq!(
             String::from_utf8_lossy(&backup_head.stdout).trim(),
             preview["localOid"].as_str().unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn remote_branch_delete_api_requires_confirmation_and_uses_reviewed_tracking_oid() {
+        let directory = tempfile::tempdir().unwrap();
+        let repository_path = directory.path().join("repo");
+        let bare_path = directory.path().join("remote.git");
+        std::fs::create_dir(&repository_path).unwrap();
+        let git = |path: &std::path::Path, args: &[&str]| {
+            let output = std::process::Command::new("git")
+                .arg("-C")
+                .arg(path)
+                .args(args)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8_lossy(&output.stdout).trim().to_owned()
+        };
+        git(&repository_path, &["init", "--quiet"]);
+        git(
+            &repository_path,
+            &["config", "user.name", "Remote Delete API Test"],
+        );
+        git(
+            &repository_path,
+            &["config", "user.email", "remote-delete@example.invalid"],
+        );
+        std::fs::write(repository_path.join("seed.txt"), "seed\n").unwrap();
+        git(&repository_path, &["add", "seed.txt"]);
+        git(&repository_path, &["commit", "--quiet", "-m", "seed"]);
+        let bare = std::process::Command::new("git")
+            .arg("init")
+            .arg("--bare")
+            .arg("--quiet")
+            .arg(&bare_path)
+            .output()
+            .unwrap();
+        assert!(bare.status.success());
+        git(
+            &repository_path,
+            &["remote", "add", "origin", bare_path.to_str().unwrap()],
+        );
+        git(
+            &repository_path,
+            &["push", "--quiet", "origin", "HEAD:refs/heads/delete-me"],
+        );
+        git(&repository_path, &["fetch", "--quiet", "origin"]);
+
+        let app = test_app(None);
+        let opened = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                "/api/v1/repositories",
+                &serde_json::json!({ "path": repository_path }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(opened.status(), StatusCode::OK);
+        let bytes = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+        let repository: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let repo_id = repository["repoId"].as_str().unwrap();
+
+        let preview_response = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/branches/remote-delete-preview?remoteName=origin&remoteBranch=delete-me"
+                ),
+                Some(WRITE_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(preview_response.status(), StatusCode::OK);
+        let bytes = to_bytes(preview_response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let preview: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        assert_eq!(preview["targetRef"], "refs/remotes/origin/delete-me");
+        assert_eq!(
+            preview["expectedRemoteOid"],
+            git(
+                &repository_path,
+                &["rev-parse", "refs/remotes/origin/delete-me"]
+            )
+        );
+        assert_eq!(preview["canDelete"], true);
+
+        let unconfirmed = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/branches/remote-delete"),
+                &serde_json::json!({
+                    "remoteName": "origin",
+                    "remoteBranch": "delete-me",
+                    "expectedRemoteOid": preview["expectedRemoteOid"],
+                    "previewRevision": preview["previewRevision"],
+                    "confirmDelete": false,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(unconfirmed.status(), StatusCode::BAD_REQUEST);
+        assert_eq!(
+            git(&bare_path, &["rev-parse", "refs/heads/delete-me"]),
+            preview["expectedRemoteOid"]
+        );
+
+        let accepted = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/branches/remote-delete"),
+                &serde_json::json!({
+                    "remoteName": "origin",
+                    "remoteBranch": "delete-me",
+                    "expectedRemoteOid": preview["expectedRemoteOid"],
+                    "previewRevision": preview["previewRevision"],
+                    "confirmDelete": true,
+                })
+                .to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+        let bytes = to_bytes(accepted.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded", "{completed}");
+        assert!(
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&bare_path)
+                .args(["show-ref", "--verify", "--quiet", "refs/heads/delete-me"])
+                .status()
+                .unwrap()
+                .code()
+                .unwrap()
+                != 0
+        );
+        assert!(
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(&repository_path)
+                .args([
+                    "show-ref",
+                    "--verify",
+                    "--quiet",
+                    "refs/remotes/origin/delete-me"
+                ])
+                .status()
+                .unwrap()
+                .code()
+                .unwrap()
+                != 0
         );
     }
 
