@@ -10,6 +10,22 @@ export function useCommitDraft(repoId?: string) {
   const [selections, setSelections] = useState<NonNullable<CommitRequest["selections"]>>([]);
   const [selectionRepoId, setSelectionRepoId] = useState<string>();
 
+  function addDiffSelection(path: string, revision: string, selectedHunks: Array<{ hunkIndex: number; rowIndex?: number }>) {
+    if (!repoId) return;
+    setSelectionRepoId(repoId);
+    setSelections((current) => [
+      ...current.filter((item) => item.path !== path),
+      { path, revision, selections: selectedHunks },
+    ]);
+  }
+
+  function chooseTemplate(nextTemplate: string) {
+    setTemplate(nextTemplate);
+    if (nextTemplate === "conventional") setMessage("feat: ");
+    else if (nextTemplate === "fix") setMessage("fix: ");
+    else setMessage("");
+  }
+
   useEffect(() => {
     setSelections([]);
     setSelectionRepoId(repoId);
@@ -34,6 +50,7 @@ export function useCommitDraft(repoId?: string) {
     selections,
     setSelections,
     selectionRepoId,
-    setSelectionRepoId,
+    addDiffSelection,
+    chooseTemplate,
   };
 }

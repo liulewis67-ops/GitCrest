@@ -95,7 +95,6 @@ function App() {
     message: commitMessage,
     setMessage: setCommitMessage,
     template: commitTemplate,
-    setTemplate: setCommitTemplate,
     amend: amendCommit,
     setAmend: setAmendCommit,
     signOff: signOffCommit,
@@ -105,7 +104,8 @@ function App() {
     selections: commitSelections,
     setSelections: setCommitSelections,
     selectionRepoId: commitSelectionRepoId,
-    setSelectionRepoId: setCommitSelectionRepoId,
+    addDiffSelection: addCommitDiffSelection,
+    chooseTemplate: chooseCommitTemplate,
   } = useCommitDraft(selectedRepository?.repoId);
   const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
   const pushTargetsByTask = useRef(new Map<string, PushTarget>());
@@ -723,16 +723,7 @@ function App() {
   function addDiffSelectionToCommit(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
     const document = diffState.document;
     if (!selectedRepository || !document || document.scope !== "index") return;
-    const next = { path: document.path, revision: document.revision, selections };
-    setCommitSelectionRepoId(selectedRepository.repoId);
-    setCommitSelections((current) => [...current.filter((item) => item.path !== document.path), next]);
-  }
-
-  function chooseCommitTemplate(template: string) {
-    setCommitTemplate(template);
-    if (template === "conventional") setCommitMessage("feat: ");
-    else if (template === "fix") setCommitMessage("fix: ");
-    else setCommitMessage("");
+    addCommitDiffSelection(document.path, document.revision, selections);
   }
 
   function retryClone(task: TaskSnapshotResponse) {
