@@ -920,3 +920,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/api/client.ts`、`src/features/diff/DiffWindow.tsx`、`tests/unit/api-client.test.ts`。
 - 实施 commit：`7093b98`
 
+
+### 前端 app bootstrap 装配拆分 — 小阶段 36
+- 状态：已完成（sidecar 连接、API client 和版本握手进入 app/bootstrap）
+- 日期：2026-10-09
+- 交付：新增 `src/app/bootstrap.ts`，从受控 bridge 获取 sidecar 连接，创建 API client 并完成版本握手，返回启动 API、版本结果与事件订阅入口。App 保留事件到仓库状态刷新的业务处理，并继续负责连接失败提示和取消订阅生命周期，避免 bootstrap 依赖页面 React state。
+- 验证：bootstrap/App 定向单测 15/15、完整 Vitest 单测 157/157、`pnpm build`（Electron）、`pnpm frontend:build`（浏览器）、`git diff --check` 通过。构建仍显示既有 tree-sitter `eval` 及浏览器 bundle 大块警告。
+- 限制/后续：首屏版本握手和 API 装配已隔离；事件恢复、仓库刷新和 React 状态仍由 App effect 组合，后续继续将工作区页面与 feature 请求职责拆开。S7.2、S7.4、S7.5 验收未完成。
+- 证据：`src/app/bootstrap.ts`、`src/app/App.tsx`、`tests/unit/app-bootstrap.test.ts`。
+- 实施 commit：`20b6e12`
+
