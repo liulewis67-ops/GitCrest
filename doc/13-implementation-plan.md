@@ -634,3 +634,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`api/router.rs` 仍包含 status、diff、branch、remote、history、workflow、task 等路由；仓库 handler/service 也仍在 `main.rs`，后续继续按 feature 边界迁移。
 - 证据：`crates/gitcrest-core/src/features/repositories/routes.rs`、`crates/gitcrest-core/src/features/repositories/mod.rs`、`crates/gitcrest-core/src/api/router.rs`。
 - 实施 commit：`5030f9c`
+
+### 后端 status feature 路由与服务分层 — 小阶段 6
+- 状态：已完成（status feature 基础模块结构；后端规范整体仍需继续对齐）
+- 日期：2026-10-09
+- 交付：将原 `features/status/status.rs` 调整为 `features/status/service.rs`，由 `features/status/mod.rs` 聚合 service 并声明路由模块；工作区状态 API 注册移至 `features/status/routes.rs`，顶层 router 合并该 feature router。现有 `status::read`、快照类型及 JSON 行为通过模块 re-export 保持兼容。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、全量 Rust 测试（116/116）与 `git diff --check` 通过；状态解析与 status API 集成用例通过。
+- 限制/后续：status HTTP handler 仍在 `main.rs`；下一阶段继续迁移其 handler/DTO，并将 diff、staging 等功能路由从 `api/router.rs` 拆到各自 feature。
+- 证据：`crates/gitcrest-core/src/features/status/`、`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/main.rs`。

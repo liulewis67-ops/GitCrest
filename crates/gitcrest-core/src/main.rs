@@ -65,7 +65,7 @@ mod reset;
 mod shelves;
 #[path = "features/staging/staging.rs"]
 mod staging;
-#[path = "features/status/status.rs"]
+#[path = "features/status/mod.rs"]
 mod status;
 #[path = "storage/storage.rs"]
 mod storage;
