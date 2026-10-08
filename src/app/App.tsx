@@ -19,7 +19,7 @@ import { useRepositoryRefs } from "../features/branches/model/use-repository-ref
 import { useTaskCenter } from "../features/tasks/model/use-task-center";
 import { useTaskRefreshLifecycle } from "../features/tasks/model/use-task-refresh-lifecycle";
 import { TaskRefreshPlanner } from "../features/tasks/model/task-refresh-planner";
-import { useRemoteMutations } from "../features/remotes";
+import { useRemoteMutations, useRepositoryFetch } from "../features/remotes";
 import { getRepositoryEventRefreshPlan } from "../features/repositories/model/repository-event-refresh-plan";
 import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
@@ -375,6 +375,19 @@ function App() {
       setTasksOpen(true);
     },
   });
+  const { fetchRepository } = useRepositoryFetch({
+    getApi: () => apiRef.current,
+    repoId: selectedRepository?.repoId,
+    onTaskAccepted: (task) => {
+      appendTask(task);
+      setTasksError("");
+      setTasksOpen(true);
+    },
+    onError: (message) => {
+      setTasksError(message);
+      setTasksOpen(true);
+    },
+  });
 
   function openBranchSwitcher() {
     if (!selectedRepository || selectedRepository.availability !== "available") return;
@@ -577,21 +590,6 @@ function App() {
       setTasksError(error instanceof Error ? error.message : "Could not request task cancellation.");
     } finally {
       setTaskActionId("");
-    }
-  }
-
-  async function fetchRepository() {
-    const api = apiRef.current;
-    const repoId = selectedRepository?.repoId;
-    if (!api || !repoId) return;
-    try {
-      const task = await api.fetchRepository(repoId);
-      appendTask(task);
-      setTasksError("");
-      setTasksOpen(true);
-    } catch (error) {
-      setTasksError(error instanceof Error ? error.message : "Could not start a fetch task.");
-      setTasksOpen(true);
     }
   }
 
