@@ -1454,3 +1454,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：订阅仍由 bootstrap 连接 Effect 建立，任务完成副作用仍在 App；继续迁移连接和任务操作编排，逐步收敛 App。
 - 证据：`src/api/events.ts`、`src/features/repositories/model/repository-event-refresh-plan.ts`、`src/app/App.tsx`。
 - 实施 commit：`e092e85`
+
+### 前端 core connection 生命周期迁入 app hook — 小阶段 95
+- 状态：已完成（sidecar bootstrap、API ref、版本/连接状态、事件订阅和卸载清理由 app hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `src/app/use-core-connection.ts`，组合 `bootstrapApp`、初始仓库恢复、事件订阅和 event sequence tracker；App 仅提供初始恢复与事件刷新回调。bootstrap/初始恢复/订阅任一步骤遇到卸载都会停止后续启动，订阅若在卸载后才完成则立即取消，避免遗留 API ref。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）及 `git diff --check` 通过；未运行测试。
+- 限制/后续：连接生命周期已从 App 移出，仓库列表恢复规则仍由 App callback 实现；任务完成副作用和 workspace UI 仍在 App，S7.2、S7.4、S7.5 仍需按主计划继续验收。
+- 证据：`src/app/use-core-connection.ts`、`src/app/bootstrap.ts`、`src/app/App.tsx`。
+- 实施 commit：`d47ba61`
