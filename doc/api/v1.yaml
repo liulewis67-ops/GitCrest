@@ -606,7 +606,7 @@ paths:
         schema: { $ref: "#/components/schemas/RepoId" }
     post:
       operationId: switchRepositoryBranch
-      summary: Queue a local branch switch when the worktree is clean
+      summary: Queue a local branch switch when local changes do not overlap the target branch
       requestBody:
         required: true
         content:
@@ -630,7 +630,7 @@ paths:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "409":
-          description: The target is current or the working tree has changes.
+          description: The target is current or local changes overlap paths changed by the target branch.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }

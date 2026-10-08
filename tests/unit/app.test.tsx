@@ -298,7 +298,7 @@ describe("App", () => {
         preflightCount += 1;
         return response(preflightCount <= 2
           ? { repoId: repository.repoId, current: "main", target: "feature/test", isClean: false, dirtyFiles: ["src/working.ts"], potentiallyOverwrittenPaths: ["src/working.ts"] }
-          : { repoId: repository.repoId, current: "main", target: "feature/test", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] });
+          : { repoId: repository.repoId, current: "main", target: "feature/test", isClean: false, dirtyFiles: ["docs/notes.md"], potentiallyOverwrittenPaths: [] });
       }
       if (url.pathname.endsWith("/branches/switch")) return response(task, 202);
       throw new Error(`Unexpected API request: ${url}`);
@@ -334,7 +334,10 @@ describe("App", () => {
     fireEvent.click(screen.getByTitle(/Switch branches/));
     const secondDialog = await screen.findByRole("dialog", { name: "Switch branch" });
     fireEvent.click(within(secondDialog).getByRole("button", { name: /feature\/test/ }));
-    fireEvent.click(await within(secondDialog).findByRole("button", { name: "Switch to feature/test" }));
+    await within(secondDialog).findByText("docs/notes.md");
+    const continueSwitch = within(secondDialog).getByRole("button", { name: "Continue" });
+    expect((continueSwitch as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(continueSwitch);
     expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();
     expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true);
   });

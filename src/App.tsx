@@ -644,7 +644,7 @@ function App() {
     try {
       const preflight = await api.preflightRepositoryBranchSwitch(repository.repoId, switchTargetName);
       setSwitchPreflight(preflight);
-      if (!preflight.isClean) return;
+      if (preflight.potentiallyOverwrittenPaths.length > 0) return;
       const task = await api.switchRepositoryBranch(repository.repoId, switchTargetName);
       setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
       setBranchSwitcherOpen(false);
@@ -2105,7 +2105,7 @@ function App() {
                   <div className="branchSwitchOptions">
                     <button className="secondaryButton" type="button" onClick={() => { setBranchSwitcherOpen(false); requestAnimationFrame(() => document.getElementById("commit-message")?.focus()); }}>Commit changes</button>
                     <button className="secondaryButton" type="button" disabled={switchBusy || !connected || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.shelve, isMacPlatform)} title={`Choose changes to shelve (${displayShortcut(shortcuts.shelve, isMacPlatform)})`} onClick={() => { setBranchSwitcherOpen(false); setShelfComposerRequest((request) => request + 1); }}>Shelve changes</button>
-                    <button className="secondaryButton" type="button" disabled title="Commit or shelve the listed changes, then run preflight again">Continue</button>
+                    <button className="secondaryButton" type="button" disabled={switchBusy || switchPreflight.potentiallyOverwrittenPaths.length > 0} title={switchPreflight.potentiallyOverwrittenPaths.length > 0 ? "The target branch changes one or more listed paths" : "Switch branches while keeping these non-overlapping changes"} onClick={() => void continueBranchSwitch()}>Continue</button>
                   </div>
                 </>}
               </div>

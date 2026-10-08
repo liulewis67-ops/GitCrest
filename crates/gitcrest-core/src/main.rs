@@ -3998,11 +3998,21 @@ async fn switch_repository_branch(
         })
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
-    if !dirty_files.is_empty() {
+    let expected_head = metadata.head.clone();
+    let expected_branch = metadata.branch.clone();
+    if dirty_paths_overlap_branch_target(
+        &target.repository_path,
+        metadata.head.as_deref(),
+        &request.name,
+        &dirty_files,
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?
+    {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::BranchWorktreeDirty,
-            "Commit or shelve local changes before switching branches.",
+            "The target branch changes paths with local edits. Commit or shelve those changes before switching.",
         ));
     }
     let path = target.repository_path;
@@ -4011,10 +4021,24 @@ async fn switch_repository_branch(
     let repositories = state.repositories.clone();
     let command = state.git_commands.clone();
     let task = state.tasks.submit(Some(repo_id), None, target.resource_key, "branchSwitch", move |context| async move {
+        let fresh_repository = repositories
+            .refresh_metadata(&repo_for_check)
+            .await
+            .map_err(|_| TaskFailure::Failed("Could not verify the current branch before switching.".into()))?;
+        if fresh_repository.head != expected_head || fresh_repository.branch != expected_branch {
+            return Err(TaskFailure::Failed("The current branch changed. Review branch state and retry the switch.".into()));
+        }
         let fresh_status = status::read(repo_for_check.clone(), &path).await
             .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
-        if fresh_status.files.iter().any(|file| !file.categories.iter().all(|category| matches!(category, status::ChangeCategory::Ignored))) {
-            return Err(TaskFailure::Failed("The working tree changed. Commit or shelve local changes before switching.".into()));
+        let fresh_dirty_paths = fresh_status.files.iter()
+            .filter(|file| !file.categories.iter().all(|category| matches!(category, status::ChangeCategory::Ignored)))
+            .map(|file| file.path.clone())
+            .collect::<Vec<_>>();
+        if dirty_paths_overlap_branch_target(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths)
+            .await
+            .map_err(|_| TaskFailure::Failed("Could not verify whether local edits overlap the target branch.".into()))?
+        {
+            return Err(TaskFailure::Failed("The working tree changed and now overlaps the target branch. Commit or shelve the listed changes before retrying.".into()));
         }
         command.execute_branch(&path, BranchCommand::Switch { name: target_name }, context).await?;
         repositories
@@ -4024,6 +4048,23 @@ async fn switch_repository_branch(
         Ok(None)
     }).await.map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+async fn dirty_paths_overlap_branch_target(
+    repository_path: &std::path::Path,
+    current_head: Option<&str>,
+    target: &str,
+    dirty_paths: &[String],
+) -> Result<bool, branches::BranchError> {
+    if dirty_paths.is_empty() {
+        return Ok(false);
+    }
+    let Some(current_head) = current_head else {
+        return Ok(false);
+    };
+    let changed_paths =
+        branches::paths_changed_between(repository_path, current_head, target).await?;
+    Ok(dirty_paths.iter().any(|path| changed_paths.contains(path)))
 }
 
 #[derive(Deserialize)]
@@ -12488,6 +12529,59 @@ mod tests {
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(code, "BRANCH_WORKTREE_DIRTY");
         std::fs::remove_file(root.join("unmerged.txt")).unwrap();
+        std::fs::write(
+            root.join("keep-local.txt"),
+            "preserve this untracked file\n",
+        )
+        .unwrap();
+        let non_overlapping_preflight = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches/switch-preflight?name=feature%2Frenamed"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(non_overlapping_preflight.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let non_overlapping_preflight: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(non_overlapping_preflight["isClean"], false);
+        assert_eq!(
+            non_overlapping_preflight["potentiallyOverwrittenPaths"],
+            serde_json::json!([])
+        );
+        let preserved_switch = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches/switch"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/renamed" }).to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(preserved_switch.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(preserved_switch.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        let preserved_switch: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(
+            wait_for_task(&app, preserved_switch["taskId"].as_str().unwrap()).await["status"],
+            "succeeded"
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.join("keep-local.txt")).unwrap(),
+            "preserve this untracked file\n"
+        );
+        git(&["checkout", "--quiet", &current_branch]);
+        std::fs::remove_file(root.join("keep-local.txt")).unwrap();
         let preview = app
             .clone()
             .oneshot(
