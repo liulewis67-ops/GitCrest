@@ -1,6 +1,14 @@
-use axum::{routing::get, Router};
+use axum::{routing::get, routing::MethodRouter, Router};
 
-use crate::{repository_blame, repository_commit_detail, repository_refs, AppState};
+use crate::AppState;
+
+use super::handlers::{
+    repository_blame, repository_commit_detail, repository_commits, repository_refs,
+};
+
+pub(crate) fn commits_get_route() -> MethodRouter<AppState> {
+    get(repository_commits)
+}
 
 pub(crate) fn router() -> Router<AppState> {
     Router::new()
