@@ -4,7 +4,7 @@ use crate::domain::{
     error::WorkflowError,
     workflow::{
         WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
-        WorkflowResetComparison, WorkflowState,
+        WorkflowRemoteBranchComparison, WorkflowResetComparison, WorkflowState,
     },
 };
 
@@ -57,4 +57,11 @@ pub(crate) trait WorkflowGitPort: Send + Sync {
         onto_oid: &str,
         head_oid: &str,
     ) -> Result<WorkflowRebaseCommitList, WorkflowError>;
+
+    async fn compare_remote_branch_delete(
+        &self,
+        repository_path: &Path,
+        current_head_oid: Option<&str>,
+        expected_remote_oid: &str,
+    ) -> Result<WorkflowRemoteBranchComparison, WorkflowError>;
 }

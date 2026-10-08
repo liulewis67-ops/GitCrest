@@ -9,7 +9,8 @@ use crate::domain::{
     error::WorkflowError,
     workflow::{
         WorkflowBackupNamespace, WorkflowBackupReference, WorkflowCommitSubject, WorkflowOperation,
-        WorkflowRebaseCommitList, WorkflowResetComparison, WorkflowState,
+        WorkflowRebaseCommitList, WorkflowRemoteBranchComparison, WorkflowResetComparison,
+        WorkflowState,
     },
 };
 use tokio::{sync::Semaphore, task::JoinSet};
@@ -162,6 +163,50 @@ pub(crate) async fn list_rebase_commits(
         commits,
         omitted_commit_count,
         published_commit_oids,
+    })
+}
+
+pub(crate) async fn compare_remote_branch_delete(
+    repository_path: &Path,
+    current_head_oid: Option<&str>,
+    expected_remote_oid: &str,
+) -> Result<WorkflowRemoteBranchComparison, WorkflowError> {
+    let mut commits_only_on_remote = 0;
+    let mut affected_paths = Vec::new();
+    if let Some(head_oid) = current_head_oid {
+        let count = run_git(
+            repository_path,
+            &[
+                "rev-list".into(),
+                "--count".into(),
+                format!("{head_oid}..{expected_remote_oid}").into(),
+            ],
+        )
+        .await?;
+        commits_only_on_remote = text(&count)?
+            .parse()
+            .map_err(|_| WorkflowError::GitFailed)?;
+        let paths = run_git(
+            repository_path,
+            &[
+                "diff".into(),
+                "--name-only".into(),
+                "--no-renames".into(),
+                "-z".into(),
+                head_oid.into(),
+                expected_remote_oid.into(),
+            ],
+        )
+        .await?;
+        affected_paths = paths
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| String::from_utf8_lossy(path).into_owned())
+            .collect();
+    }
+    Ok(WorkflowRemoteBranchComparison {
+        commits_only_on_remote,
+        affected_paths,
     })
 }
 pub(crate) async fn read_worktree_state(

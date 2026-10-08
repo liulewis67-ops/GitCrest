@@ -79,69 +79,27 @@ pub async fn read_remote_branch_delete_preview<G: WorkflowGitPort>(
     if remote_branch == "HEAD" {
         return Err(RemoteError::InvalidName);
     }
-    let expected_remote_oid = match run_git(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "--end-of-options".into(),
-            format!("{target_ref}^{{commit}}").into(),
-        ],
-    )
-    .await
-    {
-        Ok(value) => String::from_utf8_lossy(&value).trim().to_owned(),
-        Err(RemoteError::GitFailed) => return Err(RemoteError::BranchNotFound),
-        Err(error) => return Err(error),
-    };
-    let current_head_oid = match run_git(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            "HEAD^{commit}".into(),
-        ],
-    )
-    .await
-    {
-        Ok(value) => Some(String::from_utf8_lossy(&value).trim().to_owned()),
-        Err(RemoteError::GitFailed) => None,
-        Err(error) => return Err(error),
-    };
-    let mut commits_only_on_remote = 0;
-    let mut affected_paths = Vec::new();
-    if let Some(head_oid) = &current_head_oid {
-        let count = run_git(
+    let expected_remote_oid = git
+        .resolve_commit_target(repository_path, &target_ref)
+        .await
+        .map_err(|error| match error {
+            crate::domain::error::WorkflowError::GitFailed => RemoteError::BranchNotFound,
+            other => remote_workflow_error(other),
+        })?;
+    let current_head_oid = git
+        .read_head_oid(repository_path)
+        .await
+        .map_err(remote_workflow_error)?;
+    let comparison = git
+        .compare_remote_branch_delete(
             repository_path,
-            &[
-                "rev-list".into(),
-                "--count".into(),
-                format!("{head_oid}..{expected_remote_oid}").into(),
-            ],
+            current_head_oid.as_deref(),
+            &expected_remote_oid,
         )
-        .await?;
-        commits_only_on_remote = String::from_utf8_lossy(&count)
-            .trim()
-            .parse()
-            .map_err(|_| RemoteError::GitFailed)?;
-        let paths = run_git(
-            repository_path,
-            &[
-                "diff".into(),
-                "--name-only".into(),
-                "--no-renames".into(),
-                "-z".into(),
-                head_oid.clone().into(),
-                expected_remote_oid.clone().into(),
-            ],
-        )
-        .await?;
-        affected_paths = paths
-            .split(|byte| *byte == 0)
-            .filter(|path| !path.is_empty())
-            .map(|path| String::from_utf8_lossy(path).into_owned())
-            .collect();
-    }
+        .await
+        .map_err(remote_workflow_error)?;
+    let commits_only_on_remote = comparison.commits_only_on_remote;
+    let mut affected_paths = comparison.affected_paths;
     affected_paths.sort();
     affected_paths.dedup();
     let omitted_path_count = affected_paths.len().saturating_sub(200) as u32;
@@ -181,6 +139,18 @@ pub async fn read_remote_branch_delete_preview<G: WorkflowGitPort>(
         preview_revision: format!("sha256:{:x}", digest.finalize()),
         can_delete,
     })
+}
+
+fn remote_workflow_error(error: crate::domain::error::WorkflowError) -> RemoteError {
+    match error {
+        crate::domain::error::WorkflowError::GitUnavailable => RemoteError::GitUnavailable,
+        crate::domain::error::WorkflowError::TimedOut => RemoteError::TimedOut,
+        crate::domain::error::WorkflowError::TooLarge => RemoteError::TooLarge,
+        crate::domain::error::WorkflowError::InvalidTarget
+        | crate::domain::error::WorkflowError::CommitNotFound
+        | crate::domain::error::WorkflowError::NoActiveOperation
+        | crate::domain::error::WorkflowError::GitFailed => RemoteError::GitFailed,
+    }
 }
 
 pub async fn read_remotes(

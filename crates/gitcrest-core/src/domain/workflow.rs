@@ -73,6 +73,12 @@ pub(crate) struct WorkflowRebaseCommitList {
     pub(crate) published_commit_oids: Vec<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WorkflowRemoteBranchComparison {
+    pub(crate) commits_only_on_remote: u32,
+    pub(crate) affected_paths: Vec<String>,
+}
+
 impl RebaseAction {
     pub(crate) fn git_keyword(self) -> &'static str {
         match self {

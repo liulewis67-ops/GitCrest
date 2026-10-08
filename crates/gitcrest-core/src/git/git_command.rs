@@ -24,7 +24,7 @@ use crate::{
         error::WorkflowError,
         workflow::{
             WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
-            WorkflowResetComparison, WorkflowState,
+            WorkflowRemoteBranchComparison, WorkflowResetComparison, WorkflowState,
         },
     },
     ports::workflow_git::WorkflowGitPort,
@@ -172,6 +172,20 @@ impl WorkflowGitPort for GitCommandService {
         head_oid: &str,
     ) -> Result<WorkflowRebaseCommitList, WorkflowError> {
         workflow_state::list_rebase_commits(repository_path, onto_oid, head_oid).await
+    }
+
+    async fn compare_remote_branch_delete(
+        &self,
+        repository_path: &Path,
+        current_head_oid: Option<&str>,
+        expected_remote_oid: &str,
+    ) -> Result<WorkflowRemoteBranchComparison, WorkflowError> {
+        workflow_state::compare_remote_branch_delete(
+            repository_path,
+            current_head_oid,
+            expected_remote_oid,
+        )
+        .await
     }
 }
 
