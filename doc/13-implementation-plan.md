@@ -1004,3 +1004,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：shelves service 仍以 `shelves.rs` 命名；下一阶段重命名为 `service.rs` 并检查与 storage/workflow recovery 的依赖边界。
 - 证据：`crates/gitcrest-core/src/features/shelves/{mod,dto,handlers,routes,shelves}.rs`。
 - 实施 commit：`f198eda`
+
+### 后端 shelves service 文件命名对齐 — 小阶段 45
+- 状态：已完成（service 模块采用 feature 规范文件名）
+- 日期：2026-10-09
+- 交付：将 `features/shelves/shelves.rs` 重命名为 `features/shelves/service.rs`，并由 feature `mod.rs` 直接声明；service 的公开类型与命令经 feature 根 re-export，handlers/其他调用方保持兼容，运行逻辑不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、严格全 target Clippy、全量 Rust 测试（120/120）及 `git diff --check` 通过。
+- 限制/后续：shelves feature 已具备 dto/handlers/routes/service 分层；继续核对 recovery helper 与 workflows 的依赖归属，并推进其他尚未按规范分层的后端 feature。
+- 证据：`crates/gitcrest-core/src/features/shelves/{mod,dto,handlers,routes,service}.rs`。
+- 实施 commit：`917fefb`
