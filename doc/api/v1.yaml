@@ -3221,7 +3221,7 @@ components:
     Shelf:
       type: object
       additionalProperties: false
-      required: [shelfId, repoId, name, description, paths, headOid, createdAtMs]
+      required: [shelfId, repoId, name, description, paths, scope, headOid, createdAtMs]
       properties:
         shelfId:
           type: string
@@ -3237,6 +3237,11 @@ components:
           type: array
           items:
             type: string
+        scope:
+          type: string
+          nullable: true
+          enum: [workingTree, index]
+          description: Null only for shelves created before scope metadata was introduced; those entries cannot be applied automatically.
         headOid:
           type: string
           nullable: true

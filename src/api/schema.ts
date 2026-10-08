@@ -1471,6 +1471,11 @@ export interface components {
             name: string;
             description: string;
             paths: string[];
+            /**
+             * @description Null only for shelves created before scope metadata was introduced; those entries cannot be applied automatically.
+             * @enum {string|null}
+             */
+            scope: "workingTree" | "index" | null;
             headOid: string | null;
             /** Format: int64 */
             createdAtMs: number;

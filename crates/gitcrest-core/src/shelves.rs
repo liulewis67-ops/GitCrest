@@ -18,6 +18,7 @@ pub struct ShelfSnapshot {
     pub name: String,
     pub description: String,
     pub paths: Vec<String>,
+    pub scope: Option<DiffScope>,
     pub head_oid: Option<String>,
     pub created_at_ms: i64,
 }
@@ -34,6 +35,7 @@ pub enum ShelfError {
     InvalidDescription,
     EmptySelection,
     PatchTooLarge,
+    MixedScopes,
 }
 
 pub fn new_shelf_id() -> String {

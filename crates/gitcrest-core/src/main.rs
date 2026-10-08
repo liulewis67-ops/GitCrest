@@ -469,6 +469,11 @@ impl ApiError {
                 ApiErrorCode::DiffTooLarge,
                 "A shelf is limited to 10 MiB of selected text changes.",
             ),
+            shelves::ShelfError::MixedScopes => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "One shelf must contain changes from a single index or working-tree scope.",
+            ),
         }
     }
 
@@ -1594,6 +1599,10 @@ async fn create_repository_shelf(
             shelves::ShelfError::EmptySelection,
         ));
     }
+    let shelf_scope = request.items[0].scope;
+    if request.items.iter().any(|item| item.scope != shelf_scope) {
+        return Err(ApiError::from_shelf_error(shelves::ShelfError::MixedScopes));
+    }
     let repository = state
         .repositories
         .refresh_metadata(&repo_id)
@@ -1689,6 +1698,7 @@ async fn create_repository_shelf(
                         name,
                         description,
                         paths,
+                        scope: Some(shelf_scope),
                         head_oid: expected_head_oid,
                         created_at_ms: shelves::now_ms(),
                     },

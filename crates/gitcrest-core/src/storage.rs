@@ -230,7 +230,7 @@ impl RepositoryStore {
             serde_json::to_string(&shelf.snapshot.paths).map_err(|error| error.to_string())?;
         connection
             .execute(
-                "INSERT INTO shelves (shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, patch) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO shelves (shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, patch, scope) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     shelf.snapshot.shelf_id,
                     shelf.snapshot.repo_id,
@@ -240,6 +240,7 @@ impl RepositoryStore {
                     shelf.snapshot.head_oid,
                     shelf.snapshot.created_at_ms,
                     shelf.patch,
+                    shelf.snapshot.scope.map(|scope| format!("{scope:?}")),
                 ],
             )
             .map_err(|error| error.to_string())?;
@@ -252,7 +253,7 @@ impl RepositoryStore {
             .lock()
             .map_err(|_| "repository database lock poisoned".to_string())?;
         let mut statement = connection
-            .prepare("SELECT shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms FROM shelves WHERE repo_id=?1 ORDER BY created_at_ms DESC, shelf_id DESC")
+            .prepare("SELECT shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, scope FROM shelves WHERE repo_id=?1 ORDER BY created_at_ms DESC, shelf_id DESC")
             .map_err(|error| error.to_string())?;
         let rows = statement
             .query_map([repo_id], |row| {
@@ -272,6 +273,13 @@ impl RepositoryStore {
                     paths,
                     head_oid: row.get(5)?,
                     created_at_ms: row.get(6)?,
+                    scope: parse_shelf_scope(row.get(7)?).map_err(|error| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            7,
+                            rusqlite::types::Type::Text,
+                            Box::new(std::io::Error::other(error)),
+                        )
+                    })?,
                 })
             })
             .map_err(|error| error.to_string())?;
@@ -286,7 +294,7 @@ impl RepositoryStore {
             .map_err(|_| "repository database lock poisoned".to_string())?;
         connection
             .query_row(
-                "SELECT shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, patch FROM shelves WHERE repo_id=?1 AND shelf_id=?2",
+                "SELECT shelf_id, repo_id, name, description, paths_json, head_oid, created_at_ms, patch, scope FROM shelves WHERE repo_id=?1 AND shelf_id=?2",
                 params![repo_id, shelf_id],
                 |row| {
                     let paths_json: String = row.get(4)?;
@@ -306,6 +314,13 @@ impl RepositoryStore {
                             paths,
                             head_oid: row.get(5)?,
                             created_at_ms: row.get(6)?,
+                            scope: parse_shelf_scope(row.get(8)?).map_err(|error| {
+                                rusqlite::Error::FromSqlConversionFailure(
+                                    8,
+                                    rusqlite::types::Type::Text,
+                                    Box::new(std::io::Error::other(error)),
+                                )
+                            })?,
                         },
                         patch: row.get(7)?,
                     })
@@ -375,7 +390,7 @@ impl RepositoryStore {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 4 {
+    if version > 5 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -394,7 +409,20 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
         connection.execute_batch(include_str!("../migrations/0004_shelves.sql"))?;
         connection.pragma_update(None, "user_version", 4)?;
     }
+    if version < 5 {
+        connection.execute_batch(include_str!("../migrations/0005_shelf_scope.sql"))?;
+        connection.pragma_update(None, "user_version", 5)?;
+    }
     Ok(())
+}
+
+fn parse_shelf_scope(value: Option<String>) -> Result<Option<crate::diff::DiffScope>, String> {
+    match value.as_deref() {
+        None => Ok(None),
+        Some("Index") => Ok(Some(crate::diff::DiffScope::Index)),
+        Some("WorkingTree") => Ok(Some(crate::diff::DiffScope::WorkingTree)),
+        Some(_) => Err("invalid shelf scope".into()),
+    }
 }
 
 #[cfg(test)]
@@ -464,7 +492,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 5).unwrap();
+        connection.pragma_update(None, "user_version", 6).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -481,6 +509,7 @@ mod tests {
                 name: "before refactor".into(),
                 description: "unfinished function".into(),
                 paths: vec!["src/lib.rs".into(), "notes.md".into()],
+                scope: Some(crate::diff::DiffScope::WorkingTree),
                 head_oid: Some("a".repeat(40)),
                 created_at_ms: 123,
             },
