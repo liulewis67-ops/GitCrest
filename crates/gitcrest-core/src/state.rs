@@ -6,7 +6,7 @@ use std::{
 use serde::Serialize;
 
 use crate::{
-    cloning::CloneService, credentials, git_command::GitCommandService,
+    cloning::CloneService, credentials, git::command::GitCommandService,
     repository::RepositoryManager, tasks::TaskService,
 };
 

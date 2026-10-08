@@ -526,7 +526,7 @@ fn validate_conflict_mutation(request: &WorkflowConflictMutationRequest) -> Resu
 }
 
 async fn inspect_waiting_conflict(
-    git: &crate::git_command::GitCommandService,
+    git: &crate::git::command::GitCommandService,
     tasks: &TaskService,
     repositories: &RepositoryManager,
     repo_id: &str,

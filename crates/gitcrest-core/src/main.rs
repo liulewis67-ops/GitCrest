@@ -28,7 +28,6 @@ mod credentials;
 mod diff;
 mod domain;
 mod git;
-pub(crate) use git::command as git_command;
 #[path = "features/history/mod.rs"]
 mod history;
 mod ports;
@@ -67,8 +66,8 @@ use api::router::app_router;
 #[cfg(test)]
 use cloning::CloneService;
 #[cfg(test)]
-use git_command::GitCommandService;
-use git_command::{BranchCommand, GitOperation, RemoteCommand};
+use git::command::GitCommandService;
+use git::command::{BranchCommand, GitOperation, RemoteCommand};
 #[cfg(test)]
 use repository::RepositoryManager;
 use repository::{Repository, RepositoryError};

@@ -3,7 +3,7 @@ use std::path::{Component, Path, PathBuf};
 use tokio::fs;
 
 use crate::{
-    git_command::GitCommandService,
+    git::command::GitCommandService,
     repository::RepositoryManager,
     tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError},
 };

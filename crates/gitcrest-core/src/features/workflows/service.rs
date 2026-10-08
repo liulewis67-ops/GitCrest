@@ -191,7 +191,7 @@ mod tests {
             .unwrap()
             .trim()
             .to_owned();
-        let git_service = crate::git_command::GitCommandService::default();
+        let git_service = crate::git::command::GitCommandService::default();
 
         let clean = read_preflight(
             &git_service,

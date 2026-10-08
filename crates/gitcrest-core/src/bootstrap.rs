@@ -8,7 +8,7 @@ use crate::{
     cloning::CloneService,
     config::AppConfig,
     credentials,
-    git_command::GitCommandService,
+    git::command::GitCommandService,
     repository::RepositoryManager,
     state::{AppState, EventBus},
     tasks::TaskService,
