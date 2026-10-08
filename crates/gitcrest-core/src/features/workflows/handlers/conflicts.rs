@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 
+use super::super::conflicts;
 use super::super::{
     dto::{
         WorkflowConflictFileQuery, WorkflowConflictMutationRequest, WorkflowConflictSaveRequest,
@@ -13,7 +14,6 @@ use super::super::{
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    conflicts,
     repository::RepositoryManager,
     settings as ai,
     state::AppState,

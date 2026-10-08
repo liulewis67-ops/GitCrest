@@ -1,7 +1,7 @@
 use serde::Deserialize;
 
 use super::service::WorkflowAction;
-use crate::{rebase, reset};
+use super::{rebase, reset};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

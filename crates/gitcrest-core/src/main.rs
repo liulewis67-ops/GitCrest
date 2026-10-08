@@ -22,8 +22,6 @@ mod branches;
 mod cloning;
 #[path = "features/commits/mod.rs"]
 mod commits;
-#[path = "features/workflows/conflicts.rs"]
-mod conflicts;
 #[path = "features/credentials/mod.rs"]
 mod credentials;
 #[path = "features/diff/mod.rs"]
@@ -32,16 +30,12 @@ mod diff;
 mod git_command;
 #[path = "features/history/mod.rs"]
 mod history;
-#[path = "features/workflows/rebase.rs"]
-mod rebase;
 #[path = "features/remotes/mod.rs"]
 mod remotes;
 #[path = "features/repositories/mod.rs"]
 mod repositories;
 #[path = "features/repositories/repository.rs"]
 mod repository;
-#[path = "features/workflows/reset.rs"]
-mod reset;
 #[path = "features/settings/mod.rs"]
 mod settings;
 #[path = "features/shelves/mod.rs"]
@@ -63,6 +57,7 @@ mod tasks;
 mod watcher;
 #[path = "features/workflows/mod.rs"]
 mod workflows;
+pub(crate) use workflows::{conflicts, rebase, reset};
 
 use api::error::ApiError;
 #[cfg(test)]

@@ -5,9 +5,9 @@ use axum::{
 };
 
 use super::super::dto::{RebasePreviewQuery, RebaseRequest, RebaseRollbackRequest};
+use super::super::rebase;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    rebase,
     state::AppState,
     tasks::{TaskFailure, TaskSnapshot},
 };
