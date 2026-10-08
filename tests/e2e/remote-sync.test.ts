@@ -476,7 +476,14 @@ describe("remote sync E2E", () => {
       await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("started");
       await writeFile(localFile, "export const local = 'concurrent user edit preserved';\n");
       await pullTask.getByRole("button", { name: "Cancel task" }).click();
-      await pullTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+      try {
+        await pullTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+      } catch {
+        const taskState = await pullTask.innerText();
+        const indexTree = await execFileAsync("git", ["-C", fixture.path, "write-tree"]).then(({ stdout }) => stdout.trim()).catch((error: unknown) => String(error));
+        const expectedMergeTree = await execFileAsync("git", ["-C", fixture.path, "merge-tree", "--write-tree", localHead, remoteHead]).then(({ stdout }) => stdout.trim()).catch((error: unknown) => String(error));
+        throw new Error(`Pull did not cancel cleanly. Task: ${taskState}. Index tree: ${indexTree}. Expected merge tree: ${expectedMergeTree}`);
+      }
 
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(localHead);
       expect((await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only"])).stdout.trim()).toBe("");

@@ -315,6 +315,22 @@ impl GitCommandService {
             return Err(TaskFailure::Cancelled);
         }
 
+        let index_tree =
+            capture_git_output(&self.git_program, repository_path, ["write-tree"], 1024)
+                .await
+                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+        let merged_tree = pull_merge_index_tree(
+            &self.git_program,
+            repository_path,
+            &expected.local_oid,
+            &expected.tracking_oid,
+        )
+        .await
+        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+        if std::str::from_utf8(&index_tree).ok().map(str::trim) != Some(merged_tree.as_str()) {
+            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+        }
+
         let mut command = Command::new(&self.git_program);
         command
             .args(["reset", "--merge"])
@@ -1186,12 +1202,23 @@ async fn capture_git_output_args(
     arguments: Vec<OsString>,
     max_bytes: usize,
 ) -> Result<Vec<u8>, TaskFailure> {
+    capture_git_output_args_with_env(git_program, repository_path, arguments, &[], max_bytes).await
+}
+
+async fn capture_git_output_args_with_env(
+    git_program: &str,
+    repository_path: &Path,
+    arguments: Vec<OsString>,
+    environment: &[(OsString, OsString)],
+    max_bytes: usize,
+) -> Result<Vec<u8>, TaskFailure> {
     let capture = async {
         let mut command = Command::new(git_program);
         command
             .args(arguments)
             .env("GIT_TERMINAL_PROMPT", "0")
             .env("GCM_INTERACTIVE", "never")
+            .envs(environment.iter().cloned())
             .stdin(std::process::Stdio::null())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null())
@@ -1292,9 +1319,62 @@ impl TemporaryIndex {
             }
         }
         Err(TaskFailure::Failed(
-            "A temporary index could not be created for the selected commit".into(),
+            "A temporary Git index could not be created".into(),
         ))
     }
+}
+
+async fn pull_merge_index_tree(
+    git_program: &str,
+    repository_path: &Path,
+    local_oid: &str,
+    tracking_oid: &str,
+) -> Result<String, TaskFailure> {
+    let base = capture_git_output_args(
+        git_program,
+        repository_path,
+        vec!["merge-base".into(), local_oid.into(), tracking_oid.into()],
+        1024,
+    )
+    .await?;
+    let base = std::str::from_utf8(&base)
+        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?
+        .trim();
+    if base.is_empty() {
+        return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+    }
+
+    let temporary_index = TemporaryIndex::create()?;
+    capture_git_output_args(
+        git_program,
+        repository_path,
+        vec![
+            "read-tree".into(),
+            "-m".into(),
+            format!("--index-output={}", temporary_index.index.display()).into(),
+            base.into(),
+            local_oid.into(),
+            tracking_oid.into(),
+        ],
+        1024,
+    )
+    .await?;
+    let index_environment = [(
+        OsString::from("GIT_INDEX_FILE"),
+        temporary_index.index.as_os_str().to_owned(),
+    )];
+    let tree = capture_git_output_args_with_env(
+        git_program,
+        repository_path,
+        vec!["write-tree".into()],
+        &index_environment,
+        1024,
+    )
+    .await?;
+    std::str::from_utf8(&tree)
+        .map(str::trim)
+        .map(str::to_owned)
+        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))
 }
 
 impl Drop for TemporaryIndex {
