@@ -6,16 +6,372 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    remotes, AppState, TaskFailure, TaskSnapshot,
+    branches, remotes as remote_service, AppState, RemoteCommand, TaskFailure, TaskSnapshot,
 };
 
-use super::dto::{RemoteBranchDeleteQuery, RemoteBranchDeleteRequest};
+use super::dto::{
+    BranchUpstreamRequest, DefaultRemoteRequest, RemoteBranchDeleteQuery,
+    RemoteBranchDeleteRequest, RemoteNameRequest, RemoteRequest, RequiredNullableRemoteName,
+};
+
+pub(super) async fn repository_remotes(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<remote_service::RemoteSnapshot>, ApiError> {
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remote_service::read_remotes(repo_id, &target.repository_path)
+        .await
+        .map(Json)
+        .map_err(ApiError::from_remote_error)
+}
+
+async fn submit_remote_command(
+    state: &AppState,
+    repo_id: String,
+    target: crate::repository::TaskTarget,
+    operation_name: &'static str,
+    operation: RemoteCommand,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            operation_name,
+            move |context| async move {
+                command
+                    .execute_remote(&path, operation, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+pub(super) async fn add_repository_remote(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RemoteRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name and URL are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remote_service::validate_remote_name(&target.repository_path, &request.name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let url = request.url.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote URL is required.",
+        )
+    })?;
+    remote_service::validate_remote_url(&url).map_err(ApiError::from_remote_error)?;
+    let snapshot = remote_service::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.name)
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::RemoteAlreadyExists,
+            "A remote with this name already exists.",
+        ));
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteAdd",
+        RemoteCommand::Add {
+            name: request.name,
+            url,
+        },
+    )
+    .await
+}
+
+pub(super) async fn set_repository_remote_url(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RemoteRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name and URL are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remote_service::validate_remote_name(&target.repository_path, &request.name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let url = request.url.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote URL is required.",
+        )
+    })?;
+    remote_service::validate_remote_url(&url).map_err(ApiError::from_remote_error)?;
+    let snapshot = remote_service::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if !snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.name)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RemoteNotFound,
+            "The remote does not exist.",
+        ));
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteSetUrl",
+        RemoteCommand::SetUrl {
+            name: request.name,
+            url,
+        },
+    )
+    .await
+}
+
+pub(super) async fn delete_repository_remote(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RemoteNameRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    remote_service::validate_remote_name(&target.repository_path, &request.name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let snapshot = remote_service::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if !snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.name)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RemoteNotFound,
+            "The remote does not exist.",
+        ));
+    }
+    let next_default = if snapshot.default_remote.as_deref() == Some(request.name.as_str()) {
+        Some(
+            snapshot
+                .remotes
+                .iter()
+                .filter(|remote| remote.name != request.name)
+                .map(|remote| remote.name.as_str())
+                .find(|name| *name == "origin")
+                .or_else(|| {
+                    snapshot
+                        .remotes
+                        .iter()
+                        .find(|remote| remote.name != request.name)
+                        .map(|remote| remote.name.as_str())
+                })
+                .unwrap_or_default()
+                .to_owned(),
+        )
+    } else {
+        None
+    };
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteDelete",
+        RemoteCommand::Remove {
+            name: request.name,
+            next_default,
+        },
+    )
+    .await
+}
+
+pub(super) async fn set_default_remote(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<DefaultRemoteRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote name or null is required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = remote_service::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    let name = match request.name {
+        RequiredNullableRemoteName::Value(name) => Some(name),
+        RequiredNullableRemoteName::Null(()) => None,
+    };
+    if let Some(name) = name.as_deref() {
+        remote_service::validate_remote_name(&target.repository_path, name)
+            .await
+            .map_err(ApiError::from_remote_error)?;
+        if !snapshot.remotes.iter().any(|remote| remote.name == name) {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RemoteNotFound,
+                "The remote does not exist.",
+            ));
+        }
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteSetDefault",
+        RemoteCommand::SetDefault {
+            name: name.unwrap_or_default(),
+        },
+    )
+    .await
+}
+
+pub(super) async fn set_branch_upstream(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<BranchUpstreamRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A local branch and remote tracking branch are required.",
+        )
+    })?;
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    branches::validate_branch_name(&target.repository_path, &request.local_branch)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    remote_service::validate_remote_name(&target.repository_path, &request.remote_name)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    branches::validate_branch_name(&target.repository_path, &request.remote_branch)
+        .await
+        .map_err(ApiError::from_branch_error)?;
+    let remotes_snapshot = remote_service::read_remotes(repo_id.clone(), &target.repository_path)
+        .await
+        .map_err(ApiError::from_remote_error)?;
+    if !remotes_snapshot
+        .remotes
+        .iter()
+        .any(|remote| remote.name == request.remote_name)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::RemoteNotFound,
+            "The remote does not exist.",
+        ));
+    }
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let branches_snapshot = branches::read_branches(
+        repo_id.clone(),
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
+    let local_exists = branches_snapshot.branches.iter().any(|branch| {
+        matches!(branch.kind, branches::BranchKind::Local) && branch.name == request.local_branch
+    });
+    let remote_full_name = format!(
+        "refs/remotes/{}/{}",
+        request.remote_name, request.remote_branch
+    );
+    let upstream_exists = branches_snapshot.branches.iter().any(|branch| {
+        matches!(branch.kind, branches::BranchKind::Remote) && branch.full_name == remote_full_name
+    });
+    if !local_exists || !upstream_exists {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::BranchNotFound,
+            "The local branch or remote tracking branch does not exist.",
+        ));
+    }
+    submit_remote_command(
+        &state,
+        repo_id,
+        target,
+        "remoteSetUpstream",
+        RemoteCommand::SetUpstream {
+            local_branch: request.local_branch,
+            remote_name: request.remote_name,
+            remote_branch: request.remote_branch,
+        },
+    )
+    .await
+}
 
 pub(super) async fn preview_repository_remote_branch_delete(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<RemoteBranchDeleteQuery>, QueryRejection>,
-) -> Result<Json<remotes::RemoteBranchDeletePreview>, ApiError> {
+) -> Result<Json<remote_service::RemoteBranchDeletePreview>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -28,7 +384,7 @@ pub(super) async fn preview_repository_remote_branch_delete(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    remotes::read_remote_branch_delete_preview(
+    remote_service::read_remote_branch_delete_preview(
         repo_id,
         &target.repository_path,
         &query.remote_name,
@@ -63,7 +419,7 @@ pub(super) async fn delete_repository_remote_branch(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let preview = remotes::read_remote_branch_delete_preview(
+    let preview = remote_service::read_remote_branch_delete_preview(
         repo_id.clone(),
         &target.repository_path,
         &request.remote_name,
@@ -104,7 +460,7 @@ pub(super) async fn delete_repository_remote_branch(
             resource_key,
             "remoteBranchDelete",
             move |context| async move {
-                let current = remotes::read_remote_branch_delete_preview(
+                let current = remote_service::read_remote_branch_delete_preview(
                     task_repo_id.clone(),
                     &path,
                     &remote_name,
