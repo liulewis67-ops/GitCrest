@@ -1526,3 +1526,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：CommitWorkbench UI 已迁出，但提交草稿状态与 commit mutation orchestration 仍由 App 管理；后续按 commits feature model 边界迁移，并继续拆 Workspace 主区 History/Diff/Details JSX。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`src/features/commits/{index.ts,model/commit-action.ts,ui/CommitWorkbench.tsx}`、`src/features/repositories/model/workspace-session.ts`、`src/features/settings/index.ts`、`src/app/App.tsx`。
 - 实施 commit：`7b3dbaf`
+
+### Workspace 主区 History/Diff 内容迁入页面组件 — 小阶段 103
+- 状态：已完成（Commit graph 与文件 Diff 主视图组合移入 WorkspaceMainPanel）
+- 日期：2026-10-09
+- 交付：新增 `src/pages/workspace/WorkspaceMainPanel.tsx`，承接主视图标题/刷新入口、提交图加载与空状态、文件 Diff 选择/错误状态、SplitDiff 动作转发及底部状态信息。查询、选中状态、滚动记忆、暂存/丢弃/提交选区和 Diff 窗口打开仍由 App 提供为 props 回调。新增 history 与 diff feature 公开入口并改用懒加载；Vite 构建输出单独的 WorkspaceMainPanel chunk（5.06 KB）。
+- 验证：`pnpm frontend:build`（TypeScript 检查与 Vite production build）和 `git diff --check` 通过；未运行测试。tree-sitter `eval` 和 Monaco contribution 大 chunk 警告仍存在。
+- 限制/后续：Commit details/repository facts 面板、详情分隔条与工作区尺寸状态仍由 App 组合；还需继续迁出并按 feature 边界收敛数据/动作协调。S7.2、S7.4、S7.5 尚未完成验收。
+- 证据：`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/features/history/index.ts`、`src/features/diff/index.ts`、`src/app/App.tsx`。
+- 实施 commit：`09295ec`
