@@ -2101,3 +2101,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍引用其他 feature 私有 UI/model 路径，继续逐 feature 梳理并经 barrel 暴露必要 API。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 实施 commit：`75fe2bf`
+
+### tasks feature UI loader 与 task models 经公开入口导出 — 小阶段 167
+- 状态：已完成（App 不再直接依赖 tasks 私有 UI/model 路径）
+- 日期：2026-10-09
+- 交付：新增 tasks feature barrel，公开 TaskCenter 异步 loader、task center hook、刷新生命周期 hook 与终态刷新 planner/类型；App 统一通过 feature 入口装配，TaskCenter 仍独立懒加载。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：App 仍直接依赖 remotes、diff、settings 等 feature 私有 UI 或类型路径；后续继续按 feature 公开 API 收口。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/tasks/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 实施 commit：`7874434`
