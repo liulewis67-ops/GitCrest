@@ -98,63 +98,6 @@ fn test_ai_credentials() -> credentials::AiCredentialManager {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct WorkflowRecoveryQuery {
-    task_id: String,
-}
-
-pub(crate) async fn preflight_repository_workflow_recovery(
-    State(state): State<AppState>,
-    Path(repo_id): Path<String>,
-    query: Result<Query<WorkflowRecoveryQuery>, QueryRejection>,
-) -> Result<Json<workflows::WorkflowRecoveryPreflight>, ApiError> {
-    let Query(query) = query.map_err(|_| {
-        ApiError::new(
-            StatusCode::BAD_REQUEST,
-            ApiErrorCode::RequestInvalid,
-            "Workflow recovery preflight requires a waiting workflow taskId.",
-        )
-    })?;
-    let task = state.tasks.get(&query.task_id).await.ok_or_else(|| {
-        ApiError::new(
-            StatusCode::NOT_FOUND,
-            ApiErrorCode::TaskNotFound,
-            "The workflow task is no longer available.",
-        )
-    })?;
-    if task.repo_id.as_deref() != Some(repo_id.as_str())
-        || task.status != tasks::TaskStatus::WaitingForInput
-        || workflow_operation_for_task(&task.operation).is_none()
-    {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::WorkflowNoActiveOperation,
-            "Recovery requires a waiting merge, pull, cherry-pick, or revert task for this repository.",
-        ));
-    }
-    let target = state
-        .repositories
-        .task_target(&repo_id)
-        .await
-        .map_err(ApiError::from_repository_error)?;
-    let preview = read_task_recovery_preflight(
-        &repo_id,
-        &query.task_id,
-        &task.operation,
-        &target.repository_path,
-    )
-    .await?;
-    if workflow_operation_for_task(&task.operation) != Some(preview.operation) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::WorkflowNoActiveOperation,
-            "The repository operation no longer matches the waiting task. Refresh task state.",
-        ));
-    }
-    Ok(Json(preview))
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct WorkflowConflictFileQuery {
     task_id: String,
     path: String,
@@ -1008,7 +951,7 @@ pub(crate) async fn recover_repository_workflow(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOperation> {
+pub(crate) fn workflow_operation_for_task(operation: &str) -> Option<workflows::WorkflowOperation> {
     match operation {
         "merge" | "pullMerge" => Some(workflows::WorkflowOperation::Merge),
         "cherryPick" => Some(workflows::WorkflowOperation::CherryPick),
@@ -1035,7 +978,7 @@ fn shelf_apply_before_tree(operation: &str) -> Option<&str> {
         .then_some(tree)
 }
 
-async fn read_task_recovery_preflight(
+pub(crate) async fn read_task_recovery_preflight(
     repo_id: &str,
     task_id: &str,
     task_operation: &str,

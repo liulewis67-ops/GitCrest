@@ -7,7 +7,7 @@ use axum::{
 use super::{
     dto::{
         RebasePreviewQuery, RebaseRequest, RebaseRollbackRequest, ResetPreviewQuery, ResetRequest,
-        ResetRestoreRequest, WorkflowPreflightQuery, WorkflowRequest,
+        ResetRestoreRequest, WorkflowPreflightQuery, WorkflowRecoveryQuery, WorkflowRequest,
     },
     service as workflows,
 };
@@ -43,6 +43,57 @@ pub(super) async fn preflight_repository_workflow(
     .await
     .map(Json)
     .map_err(ApiError::from_workflow_error)
+}
+
+pub(super) async fn preflight_repository_workflow_recovery(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<WorkflowRecoveryQuery>, QueryRejection>,
+) -> Result<Json<workflows::WorkflowRecoveryPreflight>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Workflow recovery preflight requires a waiting workflow taskId.",
+        )
+    })?;
+    let task = state.tasks.get(&query.task_id).await.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::TaskNotFound,
+            "The workflow task is no longer available.",
+        )
+    })?;
+    if task.repo_id.as_deref() != Some(repo_id.as_str())
+        || task.status != crate::tasks::TaskStatus::WaitingForInput
+        || crate::workflow_operation_for_task(&task.operation).is_none()
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "Recovery requires a waiting merge, pull, cherry-pick, or revert task for this repository.",
+        ));
+    }
+    let target = state
+        .repositories
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let preview = crate::read_task_recovery_preflight(
+        &repo_id,
+        &query.task_id,
+        &task.operation,
+        &target.repository_path,
+    )
+    .await?;
+    if crate::workflow_operation_for_task(&task.operation) != Some(preview.operation) {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::WorkflowNoActiveOperation,
+            "The repository operation no longer matches the waiting task. Refresh task state.",
+        ));
+    }
+    Ok(Json(preview))
 }
 
 pub(super) async fn start_repository_workflow(

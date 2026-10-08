@@ -20,6 +20,12 @@ pub(super) struct WorkflowRequest {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct WorkflowRecoveryQuery {
+    pub(super) task_id: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct RebasePreviewQuery {
     pub(super) onto_oid: String,
 }
