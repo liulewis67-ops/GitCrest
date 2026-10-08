@@ -466,4 +466,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未连接真实云端/Ollama provider；loopback Ollama mock 覆盖 API 请求。
 - 证据：`crates/gitcrest-core/src/main.rs`、`doc/api/v1.yaml`、`src/api/client.ts`、`src/api/schema.ts`、`src/features/workflows/ConflictWindow.tsx`、`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/api-client.test.ts`、`tests/unit/conflict-suggestion-panel.test.tsx`。
 - 限制：此阶段不自动应用建议；实际云端/Ollama 服务与跨平台 Keychain 验证按 S7.4 验收。
-- 完成 commit：待提交后补记。
+- 完成 commit：`2209f4f`。
