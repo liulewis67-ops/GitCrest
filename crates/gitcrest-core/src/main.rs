@@ -11902,6 +11902,21 @@ mod tests {
                     .method(Method::POST)
                     .uri("/api/v1/test/write-probe")
                     .header("X-GitCrest-API-Version", API_VERSION)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        let (status, code) = error_code(response).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+        assert_eq!(code, "AUTH_UNAUTHORIZED");
+
+        let response = test_app(None)
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri("/api/v1/test/write-probe")
+                    .header("X-GitCrest-API-Version", API_VERSION)
                     .header(AUTHORIZATION, format!("Bearer {READ_ONLY_TOKEN}"))
                     .body(Body::empty())
                     .unwrap(),
