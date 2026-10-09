@@ -1,0 +1,14 @@
+{
+  "api": "D3DKMTWaitForVerticalBlankEvent",
+  "durationSecondsRequested": 10,
+  "durationSecondsMeasured": 0.001,
+  "primaryMonitorDeviceName": "\\\\.\\DISPLAY1",
+  "adapterLuid": "00000000:0000F151",
+  "vidPnSourceId": 0,
+  "waitStatusHex": "0xC01E0006",
+  "waitStatusName": "STATUS_GRAPHICS_PRESENT_OCCLUDED",
+  "successfulWaitCount": 0,
+  "intervalSampleCount": 0,
+  "intervalsMs": [],
+  "events": []
+}
