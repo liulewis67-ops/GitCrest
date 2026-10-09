@@ -4116,3 +4116,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-memory-methodology-stage371-20261010.json`。
 - 限制/后续：implementation plan 的通用指标没有独立指定 Windows memory counter；本阶段保留当前以 Working Set 判定的阈值，同时量化计数差异，不以 Private Working Set 单项较低的数值宣称通过。S7.2 继续待验收。
 - 实施 commit：`1f8696f`。
+
+### S7.5 Alpha 预览限制同步最新性能证据 — 小阶段 372
+- 状态：已完成（预览草案已同步阶段 370/371 的 Windows 验收数据；S7.5 整体仍未完成）
+- 日期：2026-10-10
+- 交付：更新 `doc/release-notes-alpha-draft.md` 日期及 Windows 性能限制，使用阶段 371 20 轮独立 Release profile 的 idle / loaded process-tree Working Set P50/P95，并使用阶段 370 compositor presented-frame P5 跨轮分布；明确两项门槛均未通过，补充内存计数口径说明。
+- 验证：将预览说明中的旧 Working Set 峰值和 RAF 帧率替换为最新证据；核对阶段 370/371 报告与实施计划记录，`git diff --check` 通过。文档改动未运行测试。
+- 证据：`doc/release-notes-alpha-draft.md`、`doc/evidence/S7.2/desktop-win32-presented-scroll-stage370-20261010.json`、`doc/evidence/S7.2/desktop-win32-memory-methodology-stage371-20261010.json`。
+- 限制/后续：Alpha 文档仍是内部预览草案，不是公开发布说明；S7.2 性能门槛、S7.4 三平台签名与更新验收、S7.5 P0 全量审计及发布/故障恢复收口仍需完成。
+- 文档 commit：`4716e2a`。
