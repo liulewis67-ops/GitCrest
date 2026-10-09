@@ -1002,10 +1002,10 @@ async fn status_api_refreshes_a_repository_by_opaque_id() {
         .unwrap();
     assert!(tracked
         .categories
-        .contains(&features::status::ChangeCategory::Unstaged));
+        .contains(&crate::domain::status::ChangeCategory::Unstaged));
     assert!(!tracked
         .categories
-        .contains(&features::status::ChangeCategory::Staged));
+        .contains(&crate::domain::status::ChangeCategory::Staged));
 
     let response = app
         .clone()
@@ -6000,7 +6000,7 @@ async fn commit_api_creates_commit_refreshes_head_and_keeps_message_out_of_logs(
     assert!(staged.files.iter().any(|file| file.path == "staged.txt"
         && file
             .categories
-            .contains(&features::status::ChangeCategory::Staged)));
+            .contains(&crate::domain::status::ChangeCategory::Staged)));
     std::fs::remove_file(pre_commit).unwrap();
     git(&["config", "user.signingkey", "fixture-signing-key"]);
     git(&[
@@ -6047,7 +6047,7 @@ async fn commit_api_creates_commit_refreshes_head_and_keeps_message_out_of_logs(
         file.path == "staged.txt"
             && file
                 .categories
-                .contains(&features::status::ChangeCategory::Staged)
+                .contains(&crate::domain::status::ChangeCategory::Staged)
     }));
     git(&["config", "--unset", "gpg.program"]);
     git(&["config", "--unset", "user.signingkey"]);
@@ -6268,7 +6268,7 @@ async fn commit_api_creates_commit_refreshes_head_and_keeps_message_out_of_logs(
         .any(|file| file.path == "amended.txt"
             && file
                 .categories
-                .contains(&features::status::ChangeCategory::Staged)));
+                .contains(&crate::domain::status::ChangeCategory::Staged)));
     std::fs::remove_file(slow_hook).unwrap();
     let amended = app
             .clone()

@@ -661,21 +661,21 @@ mod tests {
             .unwrap();
         assert!(staged_and_unstaged
             .categories
-            .contains(&crate::features::status::ChangeCategory::Staged));
+            .contains(&crate::domain::status::ChangeCategory::Staged));
         assert!(staged_and_unstaged
             .categories
-            .contains(&crate::features::status::ChangeCategory::Unstaged));
+            .contains(&crate::domain::status::ChangeCategory::Unstaged));
         assert!(snapshot.files.iter().any(|file| file.kind
-            == crate::features::status::ChangeKind::Renamed
+            == crate::domain::status::ChangeKind::Renamed
             && file.original_path.as_deref() == Some("rename source.txt")));
         assert!(snapshot.files.iter().any(|file| file.kind
-            == crate::features::status::ChangeKind::Deleted
+            == crate::domain::status::ChangeKind::Deleted
             && file.path == "deleted.txt"));
         assert!(snapshot.files.iter().any(|file| file.kind
-            == crate::features::status::ChangeKind::Untracked
+            == crate::domain::status::ChangeKind::Untracked
             && file.path == "untracked file.txt"));
         assert!(snapshot.files.iter().any(|file| file.kind
-            == crate::features::status::ChangeKind::Ignored
+            == crate::domain::status::ChangeKind::Ignored
             && file.path == "ignored.log"));
 
         fs::write(fixture.root.join("later.txt"), "external edit\n").unwrap();
@@ -727,11 +727,11 @@ mod tests {
             .unwrap();
         assert_eq!(
             conflicted.kind,
-            crate::features::status::ChangeKind::Conflicted
+            crate::domain::status::ChangeKind::Conflicted
         );
         assert_eq!(
             conflicted.categories,
-            [crate::features::status::ChangeCategory::Conflicted]
+            [crate::domain::status::ChangeCategory::Conflicted]
         );
     }
 }

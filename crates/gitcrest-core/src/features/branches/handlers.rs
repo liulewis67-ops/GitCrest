@@ -6,6 +6,7 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    domain::status::ChangeCategory,
     features::{branches, repositories::repository::RepositoryError, status},
     AppState, BranchCommand, TaskFailure, TaskSnapshot,
 };
@@ -412,7 +413,7 @@ pub(super) async fn preflight_branch_switch(
             !file
                 .categories
                 .iter()
-                .all(|category| matches!(category, status::ChangeCategory::Ignored))
+                .all(|category| matches!(category, ChangeCategory::Ignored))
         })
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
@@ -469,7 +470,7 @@ pub(super) async fn switch_repository_branch(
             !file
                 .categories
                 .iter()
-                .all(|category| matches!(category, status::ChangeCategory::Ignored))
+                .all(|category| matches!(category, ChangeCategory::Ignored))
         })
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
@@ -508,7 +509,7 @@ pub(super) async fn switch_repository_branch(
             let fresh_status = status::read(repo_for_check.clone(), &path).await
                 .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
             let fresh_dirty_paths = fresh_status.files.iter()
-                .filter(|file| !file.categories.iter().all(|category| matches!(category, status::ChangeCategory::Ignored)))
+                .filter(|file| !file.categories.iter().all(|category| matches!(category, ChangeCategory::Ignored)))
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
             if dirty_paths_overlap_branch_target(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths)

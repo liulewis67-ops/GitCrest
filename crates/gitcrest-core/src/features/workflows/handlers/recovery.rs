@@ -10,9 +10,9 @@ use super::super::dto::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::DiffScope,
+    domain::status::ChangeKind,
     domain::workflow::WorkflowRecoveryAction,
     features::shelves,
-    features::status,
     features::tasks,
     features::tasks::{TaskFailure, TaskSnapshot},
     ports::git::GitReadPort,
@@ -222,7 +222,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                                 .await
                                 .map_err(|_| TaskFailure::Failed("The shelf was resolved, but its result could not be checked. The shelf was retained.".into()))?;
                             if status.files.iter().any(|file| {
-                                file.kind == status::ChangeKind::Untracked
+                                file.kind == ChangeKind::Untracked
                                     && shelf.snapshot.paths.contains(&file.path)
                             }) {
                                 Vec::new()

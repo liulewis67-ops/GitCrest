@@ -8,7 +8,8 @@ use super::{dto as ai_dto, service as ai};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::{DiffContentStatus, DiffScope},
-    features::{credentials, diff, status},
+    domain::status::ChangeCategory,
+    features::{credentials, diff},
     state::AppState,
 };
 fn ai_provider_name(provider: ai_dto::AiProvider) -> &'static str {
@@ -223,18 +224,16 @@ pub(super) async fn request_ai(
                 )
             })?;
         let allowed = match scope {
-            DiffScope::Index => file.categories.contains(&status::ChangeCategory::Staged),
+            DiffScope::Index => file.categories.contains(&ChangeCategory::Staged),
             DiffScope::WorkingTree => {
-                file.categories.contains(&status::ChangeCategory::Unstaged)
-                    || file.categories.contains(&status::ChangeCategory::Untracked)
+                file.categories.contains(&ChangeCategory::Unstaged)
+                    || file.categories.contains(&ChangeCategory::Untracked)
             }
             DiffScope::Commit => false,
         };
         if !allowed
-            || file.categories.contains(&status::ChangeCategory::Ignored)
-            || file
-                .categories
-                .contains(&status::ChangeCategory::Conflicted)
+            || file.categories.contains(&ChangeCategory::Ignored)
+            || file.categories.contains(&ChangeCategory::Conflicted)
         {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
