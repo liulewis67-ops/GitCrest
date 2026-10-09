@@ -2743,4 +2743,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；静态搜索确认 `RepositoryManager` 不再实现 `RepositoryPathPort`，Status 与 Diff 路径查询通过 reader。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_path.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/features/diff/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：TaskTarget 和 HistoryTarget 路径解析仍由 RepositoryManager 提供，后续可按实际共用边界继续收敛；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`bf1691f`
