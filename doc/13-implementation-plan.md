@@ -128,7 +128,7 @@
 
 ## 12. 统一性能与安全验收口径
 
-S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率取持续 30 秒的 compositor presented-frame P5（不能只用 requestAnimationFrame 回调率），内存取不启用 trace 的稳定窗口峰值。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。
+S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率取持续 30 秒的 compositor presented-frame P5（不能只用 requestAnimationFrame 回调率），内存取不启用 trace 的稳定窗口峰值。Windows 报告须分别列出 process-tree Working Set、Private Working Set 与 private bytes；三者不可互相替代，当前内存验收继续按正式发行版基准记录的 process-tree Working Set 判定。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。
 
 从第一个写操作开始适用的安全门槛：renderer 不得有 Node/shell 权限；只允许通过受控 API 操作已注册 repoId；同仓写操作串行；高风险操作由后端做预检与确认票据校验；凭据存 Keychain，token 仅在当前会话内存；日志脱敏；Diff 窗口只读，冲突窗口只可写冲突文件。相关阶段未满足这些门槛时不能标已完成。
 
@@ -4106,3 +4106,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-presented-scroll-stage370-20261010.json`、`doc/evidence/S7.2/desktop-win32-presented-frame-diagnostic-stage370-20261010.json`、`doc/evidence/S7.2/desktop-win32-in-process-unlimited-scroll-stage370-20261010.json`。
 - 限制/后续：本阶段证实默认发行版实际呈现帧率稳定在约 55.3fps，仍不满足 ≥60fps；trace 期间的进程树内存数据不能用于内存验收，已保留阶段360无 trace 的正式数据。S7.2 内存和帧率继续待验收；S7.4/S7.5 继续待完成。
 - 实施 commit：`945c159`。
+
+### S7.2 对照 Windows 进程树内存计数器 — 小阶段 371
+- 状态：已完成（20 个独立 Release profile 记录三种内存计数器；不改变既定阈值或 S7.2 状态）
+- 日期：2026-10-10
+- 交付：桌面 `memory` 基准模式改为按 `GITCREST_BENCH_ITERATIONS` 启动独立打包版 profile，默认 20 轮；每轮在 idle 和加载 100k 仓库并稳定 5 秒后，记录进程树 Working Set、Private Working Set、private bytes，并另采三次 Private Working Set 窗口值。输出不同计数口径的 P5/P50/P95/max 及每轮明细。
+- 验证：Windows 11 / Ryzen 7 5800H / Electron 37 / Release / 同一 fixture，20 轮。Idle Working Set P50/P95 497.45/500.98MB，Private Working Set 110.68/114.21MB，private bytes 293.22/296.62MB；加载仓库后分别为 539.52/542.05MB、134.02/136.87MB、334.41/345.29MB。Windows process-tree Working Set 仍是现行验收口径且超过 idle <250MB / work <500MB；Private Working Set 与 private bytes 是补充数据，不替代阈值。`node --check scripts/performance/desktop-benchmark.mjs` 与 `git diff --check` 通过。
+- 手工验证：未操作 GUI；20 轮均使用发行版可执行文件和独立临时用户目录，基准完成后清理临时目录。
+- 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-memory-methodology-stage371-20261010.json`。
+- 限制/后续：implementation plan 的通用指标没有独立指定 Windows memory counter；本阶段保留当前以 Working Set 判定的阈值，同时量化计数差异，不以 Private Working Set 单项较低的数值宣称通过。S7.2 继续待验收。
+- 实施 commit：`1f8696f`。
