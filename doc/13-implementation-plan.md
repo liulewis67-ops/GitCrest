@@ -2327,3 +2327,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：真实仓库切换并发 discard 场景未运行 Electron 手工/E2E；S7.2/S7.4/S7.5 继续按实施计划验收。
 - 证据：`src/features/changes/model/use-staging-operations.ts`、`src/features/diff/DiscardChangesDialog.tsx`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`cb03256`
+
+### diff feature 查询生命周期迁入 model — 小阶段 190
+- 状态：已完成（Diff 文档查询、加载/错误状态与重试由 diff feature model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useRepositoryDiffQuery`，封装当前仓库/文件/范围/提交 OID 对应的查询 key、API 请求、过期请求取消、错误映射与重试；App 仅装配当前选择并把查询结果交给 WorkspaceMainPanel，同时将打开独立 Diff 窗口失败反馈写入 feature 状态。
+- 验证：`pnpm build`（应用与测试 TypeScript 类型检查、main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：查询 Hook 仍由 App 装配仓库与当前文件上下文；S7.2/S7.4/S7.5 继续按实施计划验收。
+- 证据：`src/features/diff/model/use-repository-diff-query.ts`、`src/features/diff/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`a56bcaa`
