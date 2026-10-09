@@ -2263,3 +2263,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 签名：installer 的 Authenticode 状态为 `NotSigned`；本机未配置签名凭证，因此不构成签名验收。
 - 证据：`doc/evidence/S7.4/win32-packaged-smoke.json`（installer SHA-256 与命令结果）。
 - 限制/后续：尚无 macOS/Linux runner 本轮结果、真实安装后启动证据、签名包验证及更新失败签名拒绝的发行包证据；S7.4 保持进行中。
+
+### S7.4 — Windows NSIS 安装、启动与清理 smoke
+- 状态：部分验收；Windows x64 unsigned 包的安装、启动、sidecar 生命周期及临时卸载清理通过，S7.4 整体仍进行中。
+- 日期：2026-10-09
+- 交付：扩展 `scripts/packaged-smoke.mjs`：Windows 上从 NSIS installer 静默安装到隔离临时目录，启动安装后的应用并核对 packaged sidecar 路径、health `204` 与应用关闭后的 sidecar 停止，然后运行静默卸载并确认临时目录已清除。清理对 Windows uninstaller 的短暂文件锁使用有限重试。
+- 验证：`pnpm electron:package` 生成 108,732,769-byte（103.7 MiB）NSIS 包；`pnpm test:packaged` 安装/启动/sidecar/卸载 smoke 通过；`node --check scripts/packaged-smoke.mjs` 与 `git diff --check` 通过。
+- 签名：包的 Authenticode 状态为 `NotSigned`；未配置真实签名凭证，不构成签名或更新签名拒绝验收。
+- 证据：`doc/evidence/S7.4/win32-packaged-smoke.json`（包 SHA-256、工具/OS、安装与清理结果）。
+- 限制/后续：macOS/Linux runner 和系统安装流程、签名包与更新签名拒绝仍待验证；S7.4 保持进行中。
+- 实施 commits：`9ed334e`、`1f64ed6`

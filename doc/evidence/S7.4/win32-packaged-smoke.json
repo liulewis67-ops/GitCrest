@@ -1,6 +1,7 @@
 {
-  "date": "2026-10-09T00:20:13.0484849+00:00",
-  "commit": "05e2c30aa7cfca84e2cfc9c90c918a865a8f2383",
+  "date": "2026-10-09T00:28:45.4305768+00:00",
+  "packageBuildCommit": "e39cedd",
+  "smokeScriptCommit": "1f64ed61ccb191f355a5659c9064ba04a73cfc2b",
   "platform": "win32-x64",
   "os": "Microsoft Windows NT 10.0.26300.0",
   "node": "v22.19.0",
@@ -12,10 +13,12 @@
     "authenticodeStatus": "NotSigned"
   },
   "smokeCommand": "pnpm test:packaged",
+  "installer": "NSIS silent install to an isolated system-temp directory, followed by silent uninstall",
   "smokeResult": "passed",
-  "smokeSummary": "Packaged startup and sidecar shutdown passed for dist/win-unpacked/GitCrest.exe",
-  "sidecarHealth": "passed",
-  "sidecarShutdown": "passed",
+  "installedAppStarted": true,
+  "sidecarHealthStatus": 204,
+  "sidecarStoppedAfterAppExit": true,
+  "temporaryInstallRemoved": true,
   "packageSizeLimitBytes": 157286400,
   "packageWithinLimit": true
 }
