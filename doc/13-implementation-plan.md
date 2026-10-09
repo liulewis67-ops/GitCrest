@@ -2489,3 +2489,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：提交分页仍使用现有 Git 命令执行适配；service 响应模型归属和 DTO 转换仍需继续按规范梳理。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/history/service/commit_history.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
 - 实施 commit：`c200e25`
+
+### history feature 内部模型与 API DTO 分离 — 小阶段 208
+- 状态：已完成（history service 返回内部模型，handler 转换为 feature DTO 后序列化）
+- 日期：2026-10-09
+- 交付：将 commit page/detail、blame、refs 响应数据和历史筛选模型迁入 `features/history/model.rs`，去除内部模型的 Serde 序列化职责；在 `dto.rs` 定义对应响应 DTO 与显式 `From` 映射；handlers 在 API 返回边界完成转换。保持现有字段名称、可空字段序列化和 API 响应结构。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、history API 集成测试（1 passed）、history service 定向测试（4 passed）及 `git diff --check` 通过。
+- 限制/后续：feature 内部模型仍有少量 crate 范围可见性，供 diff feature 消费 commit 文件与父提交信息；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/history/model.rs`、`crates/gitcrest-core/src/features/history/dto.rs`、`crates/gitcrest-core/src/features/history/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
+- 实施 commit：`d7de31b`
