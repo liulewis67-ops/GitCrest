@@ -2595,3 +2595,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：领域 DiffRow 仍包含 patch 行定位元数据供局部 patch 选择；Git 读取适配器仍在 feature service 子模块。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/diff.rs`、`crates/gitcrest-core/src/features/diff/dto.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/api/v1.yaml` Diff schemas、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
 - 实施 commit：`10d1ee2`
+
+
+### Diff Git 子进程适配器拆分 — 小阶段 219
+- 状态：已完成（Diff feature 保留路径/文件校验、领域模型组装和 patch 解析，Git 子进程执行移入 `git` 适配器）
+- 日期：2026-10-09
+- 交付：新增 `git/diff.rs` 统一执行 working tree、index 与 commit diff 命令，封装 stdout/stderr 上限、超时、进程终止和 Git 错误分类；`features/diff/service/read.rs` 调用适配器后继续完成路径检查、模型组装和 patch 解析，保持原始 patch 与 revision 计算输入。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；未运行测试。
+- 限制/后续：Diff adapter 目前仍是具体 Git CLI 适配器，尚未经由应用层 port 注入；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/git/diff.rs`、`crates/gitcrest-core/src/features/diff/service/read.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
+- 实施 commit：`033bdcc`
