@@ -3705,4 +3705,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：无 UI 变更。
 - 证据：`crates/gitcrest-core/src/features/history/mod.rs`、`crates/gitcrest-core/src/features/commits/routes.rs`。
 - 限制/后续：该改动收敛一个已发现的跨 feature 子模块依赖；其余 feature 和 `git/` 模块边界仍需持续审查，S7.2、S7.4、S7.5 验收继续未完成。
-- 完成 commit：待提交
+- 完成 commit：`49e1841`
