@@ -2773,4 +2773,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；无 API、Git 命令或错误映射行为变更。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：RepositoryStore 仍返回 repositories feature 的 Repository 类型，storage/domain 模型边界可后续独立梳理；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`3e016b6`
