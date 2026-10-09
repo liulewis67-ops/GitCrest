@@ -46,7 +46,6 @@ export function useBranchSwitchShelfFlow({
   setTaskError,
   openTaskCenter,
 }: BranchSwitchShelfFlowOptions) {
-  const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
   const [shelfComposerAfterSwitch, setShelfComposerAfterSwitch] = useState<BranchSwitchShelfContext>();
   const switchAfterShelfRef = useRef(new Map<string, BranchSwitchShelfContext>());
   const applyAfterSwitchRef = useRef(new Map<string, BranchSwitchShelfContext>());
@@ -77,13 +76,8 @@ export function useBranchSwitchShelfFlow({
     if (!savedTargetsRef.current.has(key)) shelfBaselineRef.current.delete(key);
   }
 
-  function requestShelfComposer() {
-    setShelfComposerRequest((request) => request + 1);
-  }
-
-  function requestShelfComposerForBranchSwitch(context: BranchSwitchShelfContext) {
+  function prepareShelfComposerForBranchSwitch(context: BranchSwitchShelfContext) {
     setShelfComposerAfterSwitch(context);
-    requestShelfComposer();
   }
 
   function onShelfComposerTaskSubmitted(task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) {
@@ -210,10 +204,8 @@ export function useBranchSwitchShelfFlow({
 
   return {
     prepareShelfSwitch,
-    shelfComposerRequest,
     shelfComposerAfterSwitch,
-    requestShelfComposer,
-    requestShelfComposerForBranchSwitch,
+    prepareShelfComposerForBranchSwitch,
     onShelfComposerTaskSubmitted,
     onShelfComposerClosed,
   };

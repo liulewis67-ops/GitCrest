@@ -66,6 +66,7 @@ function App() {
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const historyRequests = useHistoryViewRequests();
+  const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
@@ -498,8 +499,9 @@ function App() {
       try {
         const existingShelfIds = await branchSwitchShelfFlow.prepareShelfSwitch(repository.repoId, target);
         if (!existingShelfIds) return;
-        branchSwitchShelfFlow.requestShelfComposerForBranchSwitch({ repoId: repository.repoId, target, existingShelfIds });
+        branchSwitchShelfFlow.prepareShelfComposerForBranchSwitch({ repoId: repository.repoId, target, existingShelfIds });
         branchSwitcher.close();
+        setShelfComposerRequest((request) => request + 1);
       } catch (error) {
         branchSwitcher.setError(error instanceof Error ? error.message : "Could not prepare the shelf before switching branches.");
       }
@@ -721,7 +723,7 @@ function App() {
       changeWorkspaceMode("graph");
       historyRequests.focusSearch(repoId);
     },
-    openShelfComposer: branchSwitchShelfFlow.requestShelfComposer,
+    openShelfComposer: () => setShelfComposerRequest((request) => request + 1),
     cherryPick: (repoId, targetOid) => workflowDialog.open(repoId, targetOid, "cherryPick"),
     createTag: (repoId, oid) => {
       changeWorkspaceMode("graph");
@@ -874,7 +876,7 @@ function App() {
               renderCredentialEditor={renderCredentialEditor}
               credentialManagerOpenRequest={credentialManagerOpenRequest}
               historyRefreshKey={historyRequests.refreshKey}
-              shelfComposerRequest={branchSwitchShelfFlow.shelfComposerRequest}
+              shelfComposerRequest={shelfComposerRequest}
               shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch}
               connected={connected}
               connecting={connecting}
