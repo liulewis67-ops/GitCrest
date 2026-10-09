@@ -4614,3 +4614,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/settings.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：仓库目录、branch favorites、undo、任务快照和迁移仍位于 `storage/storage.rs`；后续继续按职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### storage 拆分任务快照 adapter — 小阶段 423
+- 状态：已完成（任务快照读写、JSON 转换与 `TaskStorePort` 实现归入 `storage/tasks.rs`）
+- 日期：2026-10-10
+- 交付：将任务快照的 SQL 读写、JSON 序列化、任务状态标签映射及终态快照保留上限清理从 `storage/storage.rs` 移至 `storage/tasks.rs`；数据库表、排序、字段映射和 100 条终态记录上限保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认 `TaskStorePort` 与底层任务快照 SQL 方法均位于新 adapter，调用方仍使用原 `RepositoryStore` 方法和端口类型。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/tasks.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：仓库目录、branch favorites、undo 和 migration 仍位于 `storage/storage.rs`；后续继续按持久化职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
