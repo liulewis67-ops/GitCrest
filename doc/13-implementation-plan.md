@@ -3606,3 +3606,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；hook 测试用延迟仓库元数据响应验证取消和迟到结果保护。
 - 证据：`src/features/tasks/model/use-task-refresh-effects.ts`、`tests/unit/task-refresh-effects.test.tsx`。
 - 限制/后续：启动阶段、TaskCenter workflow preflight 及其他独立 API 读取还需按拥有 feature 的生命周期审查；S7.2、S7.4、S7.5 验收继续未完成。
+- 完成 commit：`dfb9cef`
+
+### 前端 workflow 预检请求生命周期取消 — 小阶段 320
+- 状态：已完成（仓库、动作或目标变化以及对话框卸载时中止旧预检请求）
+- 日期：2026-10-09
+- 交付：`WorkflowDialog` 的 preflight 读取通过 `GitCrestApiClient.withSignal` 绑定 AbortController；查询参数或刷新键变化、对话框卸载时中止请求。已取消请求不会写入预检结果或错误，防止迟到响应覆盖当前目标；工作流启动写请求保持原行为。
+- 验证：新增目标切换用例断言旧预检信号被中止、旧响应迟到后不覆盖新目标；定向 workflow dialog 用例通过；完整 `pnpm test` 通过（38 files、169 tests）；`pnpm build` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件测试驱动旧目标的延迟响应并验证切换后的取消与结果隔离。
+- 证据：`src/features/workflows/WorkflowDialog.tsx`、`tests/unit/workflow-dialog.test.tsx`。
+- 限制/后续：其它独立 workflow 启动阶段读取、设置及冲突/重置/变基对话框仍需按所属 feature 生命周期审查；S7.2、S7.4、S7.5 验收继续未完成。

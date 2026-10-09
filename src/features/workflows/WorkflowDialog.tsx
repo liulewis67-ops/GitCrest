@@ -22,15 +22,15 @@ export function WorkflowDialog({ api, repoId, targetOid, action, onClose, onStar
   const key = `${repoId}:${action}:${targetOid}`;
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     setState({ key, loading: true });
-    void api.preflightRepositoryWorkflow(repoId, action, targetOid).then((snapshot) => {
-      if (active) setState({ key, loading: false, snapshot });
+    void api.withSignal(controller.signal).preflightRepositoryWorkflow(repoId, action, targetOid).then((snapshot) => {
+      if (!controller.signal.aborted) setState({ key, loading: false, snapshot });
     }).catch((reason: unknown) => {
       const message = reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not inspect this Git operation.";
-      if (active) setState({ key, loading: false, error: message });
+      if (!controller.signal.aborted) setState({ key, loading: false, error: message });
     });
-    return () => { active = false; };
+    return () => controller.abort();
   }, [api, repoId, action, targetOid, key, refreshKey]);
 
   async function confirm() {
