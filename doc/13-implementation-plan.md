@@ -4295,3 +4295,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：桌面目录选择器、open/initialize 错误状态和 workspace session 的页面激活仍由 App 装配；后续继续评估跨页面边界迁移。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：`586688f`。
+
+### cloning feature 失败任务重试流程迁入 model — 小阶段 391
+- 状态：已完成（clone 失败/取消任务触发的重试准备与对话框切换由 cloning model 执行）
+- 日期：2026-10-10
+- 交付：`useCloneSubmission` 新增 `retryFromTask`，只接受失败或取消的 clone task；按原目标路径恢复 parent/directory 草稿、关闭 TaskCenter 并打开 CloneDialog。App 移除重复的 `retryClone` handler，TaskCenter 直接连接 feature action。
+- 验证：`pnpm exec tsc`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；核对 TaskCenter 仅对失败/取消 clone 展示入口，model 再次校验 operation/status，其他任务不会触发 clone retry。
+- 证据：`src/features/cloning/model/use-clone-submission.ts`、`src/app/App.tsx`、`src/features/tasks/ui/TaskCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：凭据修复、push review 和 workflow recovery 仍由 App 组合 tasks 与对应 feature；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：`687c659`。
