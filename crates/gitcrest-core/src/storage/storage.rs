@@ -14,6 +14,7 @@ use crate::domain::{
     undo::{UndoOperation, UndoRecord},
 };
 use crate::ports::branch_favorites::BranchFavoriteStorePort;
+use crate::ports::settings::AiProviderSettingsPort;
 use crate::ports::shelves::ShelfStorePort;
 use crate::ports::undo::UndoStorePort;
 
@@ -870,6 +871,25 @@ impl BranchFavoriteStorePort for RepositoryStore {
         full_name: &str,
     ) -> Result<(), crate::domain::error::RepositoryError> {
         RepositoryStore::remove_branch_favorite(self, repo_id, full_name)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+}
+
+impl AiProviderSettingsPort for RepositoryStore {
+    fn read_ai_provider_settings(
+        &self,
+    ) -> Result<(String, String, String), crate::domain::error::RepositoryError> {
+        RepositoryStore::ai_provider_settings(self)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn save_ai_provider_settings(
+        &self,
+        provider: &str,
+        base_url: &str,
+        model: &str,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        RepositoryStore::set_ai_provider_settings(self, provider, base_url, model)
             .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
     }
 }

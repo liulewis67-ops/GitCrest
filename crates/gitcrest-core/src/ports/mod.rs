@@ -2,6 +2,7 @@ pub(crate) mod branch_favorites;
 pub(crate) mod diff;
 pub(crate) mod git;
 pub(crate) mod repository;
+pub(crate) mod settings;
 pub(crate) mod shelves;
 pub(crate) mod status;
 pub(crate) mod undo;

@@ -49,16 +49,17 @@ fn ai_settings_from_parts(
 pub(crate) async fn get_ai_settings(
     State(state): State<AppState>,
 ) -> Result<Json<ai_dto::AiSettings>, ApiError> {
-    let store = state.repositories.store();
+    let settings_store = state.ai_provider_settings.clone();
     let manager = state.ai_credentials.clone();
     let settings = tokio::task::spawn_blocking(move || {
-        let (provider, base_url, model) = store.ai_provider_settings().map_err(|_| {
-            ApiError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                ApiErrorCode::DatabaseUnavailable,
-                "AI provider settings are unavailable.",
-            )
-        })?;
+        let (provider, base_url, model) =
+            settings_store.read_ai_provider_settings().map_err(|_| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    ApiErrorCode::DatabaseUnavailable,
+                    "AI provider settings are unavailable.",
+                )
+            })?;
         let has_credential = manager
             .is_configured()
             .map_err(ApiError::from_credential_error)?;
@@ -93,14 +94,14 @@ pub(super) async fn set_ai_settings(
             "The AI provider endpoint or model is invalid for the selected provider.",
         )
     })?;
-    let store = state.repositories.store();
+    let settings_store = state.ai_provider_settings.clone();
     let provider = ai_provider_name(request.provider).to_owned();
     let base_url = request.base_url;
     let model = request.model;
     let manager = state.ai_credentials.clone();
     let settings = tokio::task::spawn_blocking(move || {
-        store
-            .set_ai_provider_settings(&provider, &base_url, &model)
+        settings_store
+            .save_ai_provider_settings(&provider, &base_url, &model)
             .map_err(|_| {
                 ApiError::new(
                     StatusCode::SERVICE_UNAVAILABLE,
@@ -135,16 +136,17 @@ pub(super) async fn set_ai_credential(
             "A non-empty API key is required.",
         )
     })?;
-    let store = state.repositories.store();
+    let settings_store = state.ai_provider_settings.clone();
     let manager = state.ai_credentials.clone();
     let settings = tokio::task::spawn_blocking(move || {
-        let (provider, base_url, model) = store.ai_provider_settings().map_err(|_| {
-            ApiError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                ApiErrorCode::DatabaseUnavailable,
-                "AI provider settings are unavailable.",
-            )
-        })?;
+        let (provider, base_url, model) =
+            settings_store.read_ai_provider_settings().map_err(|_| {
+                ApiError::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    ApiErrorCode::DatabaseUnavailable,
+                    "AI provider settings are unavailable.",
+                )
+            })?;
         if provider != "openAiCompatible" {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
@@ -348,9 +350,9 @@ pub(crate) async fn load_ai_provider(
     ),
     ApiError,
 > {
-    let store = state.repositories.store();
+    let settings_store = state.ai_provider_settings.clone();
     let (provider_name, base_url, model) =
-        tokio::task::spawn_blocking(move || store.ai_provider_settings())
+        tokio::task::spawn_blocking(move || settings_store.read_ai_provider_settings())
             .await
             .map_err(|_| ai_provider_unavailable())?
             .map_err(|_| {
