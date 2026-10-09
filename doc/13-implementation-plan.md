@@ -2218,3 +2218,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workflow dialog 的开关与 recovery UI 仍由 App/TaskCenter 装配；继续沿 workflows feature 与 app 页面边界迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/workflows/model/use-open-conflict-window.ts`、`src/features/workflows/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`7a5c7ab`
+
+### branches feature branch switch + shelf 自动恢复生命周期迁入 model — 小阶段 180
+- 状态：已完成（branch switch 关联的 shelf 创建、task 跟踪、切换后恢复及连续 apply 由 branches model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useBranchSwitchShelfFlow`，集中维护 shelf baseline、switch/apply task ID 映射和终态推进；迁入切换预检、分支 switch task 提交、按创建时间识别并恢复新 shelf、连续 shelf apply 与失败提示。App 保留 branch switch dialog、shelf composer 和 TaskCenter 的 UI 连接，并通过任务回调交接上下文。
+- 验证：`pnpm build`（TypeScript 检查及 main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：branch switch 与 shelf composer 的交互仍由 App 页面装配；S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/features/branches/model/use-branch-switcher.ts`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`845e3ea`
