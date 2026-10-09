@@ -2783,4 +2783,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；API 契约与 SQLite schema 未改变。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
 - 限制/后续：storage 仍依赖 shelves feature 类型，后续需按相同的存储模型/领域映射边界继续梳理；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`2596fc1`
