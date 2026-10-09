@@ -2155,3 +2155,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：repository tab 关闭、viewport 恢复及完整 session 持久化仍由 App 和现有 hooks 协作；后续继续完善 repositories feature 的 session 生命周期。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-workspace-session-actions.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`61f284a`
+
+### repositories feature tab close session 计算迁入 model — 小阶段 173
+- 状态：已完成（关闭 repository tab 后的 open/active IDs 推导由 repositories model 管理）
+- 日期：2026-10-09
+- 交付：扩展 `useWorkspaceSessionActions.closeTab`，从现有 session 纯计算下一份 openRepoIds/activeRepoId 与关闭的是否为活动 tab；App 使用结果更新 session ref/state，并继续管理 UI 当前仓库、页面导航和缓存失效副作用。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：workspace session 的存储恢复与滚动 viewport 生命周期仍分散在 App/ref/hooks；继续按 repositories feature 与页面职责逐步整合。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`8de2c63`
