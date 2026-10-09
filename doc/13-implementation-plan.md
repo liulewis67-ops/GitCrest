@@ -2615,3 +2615,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：DiffGitPort 当前仅包含读 patch 操作，执行参数仍由 Git CLI adapter 固定；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/ports/diff.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/diff/service/read.rs`、staging/commits/shelves/settings handlers、`doc/14-backend-development-guidelines.md` 第 4 节。
 - 实施 commit：`2201b38`
+
+
+### StatusSnapshot/StatusFile 领域归属 — 小阶段 221
+- 状态：已完成（状态快照与文件变更模型仅在 domain 定义，status feature model 仅保留兼容重导出）
+- 日期：2026-10-09
+- 交付：将 `StatusSnapshot`、`StatusFile` 从 `features/status/model.rs` 移入 `domain/status.rs`；status DTO、service、commits/diff/staging service 使用领域类型，API 转换仍由 status DTO 显式完成。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认这两个结构体只有 domain 定义；未运行测试。
+- 限制/后续：少数 handler、缓存和测试仍沿用 status feature 的兼容重导出路径，后续可继续统一引用；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/model.rs`、status DTO/service、commits/diff/staging service、`doc/14-backend-development-guidelines.md` 第 4 节。
+- 实施 commit：`71ce22f`
