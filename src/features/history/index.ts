@@ -1,2 +1,2 @@
 export { CommitDetails, CommitGraph } from "./CommitGraph";
-export { useCommitTagRequest, type CommitTagRequest } from "./model/use-commit-tag-request";
+export { useHistoryViewRequests, type CommitTagRequest, type HistorySearchFocusRequest } from "./model/use-history-view-requests";

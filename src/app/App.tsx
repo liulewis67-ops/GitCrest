@@ -14,7 +14,7 @@ import { loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../fea
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { getRepositoryEventRefreshPlan, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type CommitAction, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
-import { useCommitTagRequest } from "../features/history";
+import { useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
@@ -62,8 +62,7 @@ function App() {
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
-  const [historySearchFocusRequest, setHistorySearchFocusRequest] = useState<{ repoId: string; sequence: number }>();
-  const tagEditor = useCommitTagRequest();
+  const historyRequests = useHistoryViewRequests();
   const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
   const [shelfComposerAfterSwitch, setShelfComposerAfterSwitch] = useState<{ repoId: string; target: string; existingShelfIds: string[] }>();
   const [tasksOpen, setTasksOpen] = useState(false);
@@ -784,13 +783,13 @@ function App() {
     openDiff: () => changeWorkspaceMode("diff"),
     searchCommits: (repoId) => {
       changeWorkspaceMode("graph");
-      setHistorySearchFocusRequest((request) => ({ repoId, sequence: (request?.sequence || 0) + 1 }));
+      historyRequests.focusSearch(repoId);
     },
     openShelfComposer: () => setShelfComposerRequest((request) => request + 1),
     cherryPick: (repoId, targetOid) => workflowDialog.open(repoId, targetOid, "cherryPick"),
     createTag: (repoId, oid) => {
       changeWorkspaceMode("graph");
-      tagEditor.open(repoId, oid);
+      historyRequests.openTagEditor(repoId, oid);
     },
     openSettings: () => setSettingsOpen(true),
     commit: () => { void commitChanges("commit"); },
@@ -986,7 +985,7 @@ function App() {
                 selectedCommit={selectedCommit}
                 workspaceSession={workspaceSession}
                 historyRefreshKey={historyRefreshKey}
-                historySearchFocusRequest={historySearchFocusRequest}
+              historySearchFocusRequest={historyRequests.searchFocusRequest}
                 graphViewportRef={graphViewportRef}
                 openingRepository={repositoryOpening.opening}
                 selectedFilePath={selectedFilePath}
@@ -1000,7 +999,7 @@ function App() {
                 commitBusy={commitBusy}
                 version={version}
                 onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
-                onFocusSearchHandled={(sequence) => setHistorySearchFocusRequest((request) => request?.sequence === sequence ? undefined : request)}
+              onFocusSearchHandled={historyRequests.markSearchFocusHandled}
                 onGraphScrollPosition={rememberGraphScroll}
                 onSelectCommit={selectCommit}
                 onOpenRepository={() => void openLocalRepository()}
@@ -1019,12 +1018,12 @@ function App() {
               api={apiRef.current}
               connected={connected}
               hasActiveRepositoryTask={hasActiveRepositoryTask}
-              openTagRequest={tagEditor.request}
+              openTagRequest={historyRequests.tagEditorRequest}
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
               onOpenFile={openCommitFileDiff}
               onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
-              onTagRequestHandled={tagEditor.markHandled}
+              onTagRequestHandled={historyRequests.markTagEditorHandled}
               onWorkflow={(action, oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, action); }}
             />}
           </div>
