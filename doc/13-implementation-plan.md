@@ -4032,3 +4032,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；采样器使用独立临时用户目录，实际滚动持续 30 秒并成功完成。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、两份 stage362 报告；默认 GPU 的 20 轮基线见小阶段 360。
 - 限制/后续：禁用 GPU 虽将帧率提高至接近 60，但并未达到 60，且工作集显著恶化；不改变发行版 GPU 启动参数。继续从 Electron 基线工作集及默认合成路径调查优化，S7.2 仍待验收。
+- 完成 commit：`a8adff9 perf: reject software gpu fallback for scrolling`
