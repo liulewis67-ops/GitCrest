@@ -2182,3 +2182,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：session migration/parse 与 UI 恢复行为尚未单独验证；workspace tab 生命周期其余缓存刷新仍由 App 编排。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`840e899`
+
+### tasks feature cancel task mutation 迁入 task center model — 小阶段 176
+- 状态：已完成（TaskCenter 的取消请求、action 状态和任务刷新由 tasks model 管理）
+- 日期：2026-10-09
+- 交付：将取消后台 task 的 API 请求、进行中 task ID、成功后刷新和失败错误收口迁入 `useTaskCenter`；App 使用 feature 返回的 action ID 和 cancel action，保留 workflow recovery 对共用 TaskCenter action 状态的既有协作。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：TaskCenter 的 log copy、workflow recovery、credential retry 与 push review 仍由 App 连接相应 feature；后续按 task action 与跨 feature orchestration 边界继续迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/tasks/model/use-task-center.ts`、`src/features/tasks/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`4afe97b`
