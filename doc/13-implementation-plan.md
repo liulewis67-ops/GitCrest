@@ -3163,4 +3163,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工检查；Playwright Electron 桌面端到端覆盖接受建议后 commit message 内容保留，并验证 provider 请求只包含已审阅的 staged diff。
 - 证据：`src/features/commits/ui/CommitWorkbench.tsx`、`tests/e2e/desktop.test.ts`、`doc/15-frontend-development-guidelines.md` 第 4.1、8 节。
 - 限制/后续：本阶段验证当前 Windows 环境；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待提交
+- 完成 commit：`199a57c`
