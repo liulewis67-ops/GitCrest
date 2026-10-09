@@ -2914,3 +2914,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/repository.rs`、`crates/gitcrest-core/src/ports/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：repository domain record 与 API Repository 保持两种模型；bootstrap 仍通过同一 SQLite adapter 注入其他专用存储 port；继续收敛其他 feature 的存储依赖并按计划验证 S7.2、S7.4、S7.5。
 - 完成 commit：`a644c0e`
+
+### Repository 生命周期 Git 调用迁入 Git adapter 并由 port 注入 — 小阶段 251
+- 状态：已完成（RepositoryManager/RepositoryTargetReader 不再在生产路径直接启动 Git 子进程）
+- 日期：2026-10-09
+- 交付：新增 `RepositoryGitPort` 与 `git/repository.rs::GitRepositoryAdapter`，集中负责仓库根目录、HEAD、当前分支、Git common dir 查询及 `git init`。RepositoryManager 和 RepositoryTargetReader 改为接收 Git port，bootstrap 统一创建并注入；feature 层保留路径校验、规范化、稳定 repo id 和目录记录用例。初始化错误、路径权限错误、非仓库判定及空仓库/分离 HEAD 处理保持现有语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 repositories 的生产实现不再启动 Git 子进程或保留 feature 内 Git 命令 helper；未运行 Rust 测试。
+- 手工验证：未执行仓库打开、初始化、detached HEAD 或 worktree 资源锁场景；运行时 Git 行为尚未手工复核。
+- 证据：`crates/gitcrest-core/src/ports/git.rs`、`crates/gitcrest-core/src/git/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：其他 features 仍有 Git CLI 调用或具体 `GitCommandService` 注入，需按能力迁入 git adapter/ports；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`0f047be`
