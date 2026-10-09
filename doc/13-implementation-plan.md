@@ -4644,3 +4644,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/branch_favorites.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：仓库目录 adapter 和 migration 仍位于 `storage/storage.rs`；后续继续按持久化职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### storage 拆分仓库目录 adapter — 小阶段 426
+- 状态：已完成（仓库目录 SQL、存储 DTO 转换与 `RepositoryCatalogPort` 实现归入 `storage/repositories.rs`）
+- 日期：2026-10-10
+- 交付：将仓库列表/读取、最近访问、打开记录、收藏和忘记仓库的 SQL，`StoredRepository` 持久化模型与 `RepositoryRecord` 转换，以及 `RepositoryCatalogPort` 实现从 `storage/storage.rs` 移至 `storage/repositories.rs`；建库、数据库迁移和连接创建留在存储入口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认查询排序、字段映射、打开记录 upsert 和收藏更新 SQL 保持原样；`RepositoryStore::open` 仍负责迁移后初始化共享主连接。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/repositories.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：迁移编排仍在 `storage/storage.rs`，目前该文件主要保留连接初始化、迁移和测试；后续需按规范拆分 migrations/database 边界。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
