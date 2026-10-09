@@ -2525,3 +2525,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：适配器报告的 60 Hz 不是物理逐帧时序测量；本次诊断不能把 RAF 未达 60 FPS 归因于某个 Electron/Chromium/桌面合成器组件，也不改变 FPS 门槛未通过的结论。S7.2 继续待验收。
 - 证据：`doc/evidence/S7.2/desktop-win32-refresh-rate-diagnostic.json`、`doc/evidence/S7.2/desktop-win32-history-scroll-20runs.json`、`scripts/performance/desktop-benchmark.mjs`。
 - 阶段 commit：`09c68d7`
+
+
+### diff feature Git 读取与 patch 解析职责拆分 — 小阶段 212
+- 状态：已完成（Git diff 读取、路径检查、输出限制和 patch 解析迁入专用子模块）
+- 日期：2026-10-09
+- 交付：新增 `features/diff/service/read.rs`，集中负责 working tree/index/commit diff 读取、Git 子进程输出上限与超时、仓库相对路径和文件类型检查，以及 unified patch 解析；`service.rs` 保留 hunk/row 选择用例，并通过原导出保持既有 feature 调用接口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；未运行测试。
+- 限制/后续：本阶段只整理 diff service 内部职责，不改变 Git 命令、错误映射或 API 响应；Git 进程适配器和 Diff 领域模型归属仍可后续按 ports/domain 规范继续拆分。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/diff/service/read.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
+- 实施 commit：`b3760a0`
