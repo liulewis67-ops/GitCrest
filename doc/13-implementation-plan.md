@@ -3725,4 +3725,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件测试覆盖关闭时中止保存轮询、resolve 轮询及失败恢复预检。
 - 证据：`src/features/workflows/ConflictWindow.tsx`、`tests/unit/conflict-window.test.tsx`。
 - 限制/后续：窗口关闭不会撤销已受理的保存/resolve 任务；重新打开后由后端 recovery preflight 重新核对。S7.2、S7.4、S7.5 验收仍未完成。
-- 完成 commit：待补记
+- 完成 commit：`d5e4e73`
