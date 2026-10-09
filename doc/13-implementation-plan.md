@@ -3223,4 +3223,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：Windows 10.0.26300 x64，通过隔离安装目录 smoke；未手工操作。
 - 证据：`scripts/packaged-smoke.mjs`、`doc/evidence/S7.4/windows-package-smoke.json`。
 - 限制/后续：待 `pnpm build`、前端全量测试、Rust 全量测试和 Clippy 重跑后确认；S7.4 其它平台/签名验收仍未完成。
-- 完成 commit：待提交
+- 完成 commit：`edbf902`
