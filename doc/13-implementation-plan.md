@@ -4067,3 +4067,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`pnpm exec tsc --noEmit -p tsconfig.test.json` 通过；键盘工作流定向 Electron E2E（1/1，26.87 秒）通过；`git diff --check` 通过。
 - 证据：`tests/e2e/keyboard-workflow.test.ts`、`doc/08-development-readiness.md`。
 - 限制/后续：此改动复用了既有完整 E2E 文件，当前只运行了该定向场景；需要在后续 S7.5 完整复验中检查其它 P0 场景是否受影响。原生 macOS/Linux、真实云端 provider 和 S7.2/S7.4 门槛仍待验收。
+- 实施 commit：`06dd13a`。
