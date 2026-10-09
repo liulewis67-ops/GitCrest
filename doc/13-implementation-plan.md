@@ -2764,3 +2764,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/history/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：RepositoryManager 仍管理仓库打开/初始化、列表和收藏等生命周期操作；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`d469eab`
+
+### RepositoryTargetReader 统一登记记录与路径检查 — 小阶段 236
+- 状态：已完成（TaskTarget、HistoryTarget 与状态/Diff 路径读取复用登记记录解析和路径存在性校验）
+- 日期：2026-10-09
+- 交付：在 `RepositoryTargetReader` 内新增私有 `registered_repository` 与 `existing_path` 协作方法，合并三个读取入口重复的 RepositoryStore 查询、StorageUnavailable/RepositoryNotFound 映射与文件系统 metadata 检查；各 public(crate) 读取入口继续按需解析 common-dir 或 HEAD。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；无 API、Git 命令或错误映射行为变更。
+- 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：RepositoryStore 仍返回 repositories feature 的 Repository 类型，storage/domain 模型边界可后续独立梳理；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待补记

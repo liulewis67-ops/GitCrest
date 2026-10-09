@@ -3,7 +3,8 @@ use std::path::PathBuf;
 use tokio::{fs, process::Command, task};
 
 use crate::{
-    domain::error::RepositoryError, ports::repository::RepositoryPathPort, storage::RepositoryStore,
+    domain::error::RepositoryError, features::repositories::repository::Repository,
+    ports::repository::RepositoryPathPort, storage::RepositoryStore,
 };
 
 #[derive(Clone, Debug)]
@@ -29,17 +30,8 @@ impl RepositoryTargetReader {
     }
 
     pub(crate) async fn task_target(&self, repo_id: &str) -> Result<TaskTarget, RepositoryError> {
-        let store = self.store.clone();
-        let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let repository_path = PathBuf::from(repository.path);
-        fs::metadata(&repository_path)
-            .await
-            .map_err(super::repository::map_path_error)?;
+        let repository = self.registered_repository(repo_id).await?;
+        let repository_path = self.existing_path(&repository).await?;
         let output = Command::new("git")
             .arg("-C")
             .arg(&repository_path)
@@ -71,17 +63,8 @@ impl RepositoryTargetReader {
         &self,
         repo_id: &str,
     ) -> Result<HistoryTarget, RepositoryError> {
-        let store = self.store.clone();
-        let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let repository_path = PathBuf::from(repository.path);
-        fs::metadata(&repository_path)
-            .await
-            .map_err(super::repository::map_path_error)?;
+        let repository = self.registered_repository(repo_id).await?;
+        let repository_path = self.existing_path(&repository).await?;
         let head = if repository.detached {
             match super::repository::git_output(&repository_path, ["rev-parse", "--verify", "HEAD"])
                 .await
@@ -100,14 +83,22 @@ impl RepositoryTargetReader {
     }
 
     pub(crate) async fn read_target(&self, repo_id: &str) -> Result<PathBuf, RepositoryError> {
+        let repository = self.registered_repository(repo_id).await?;
+        self.existing_path(&repository).await
+    }
+
+    async fn registered_repository(&self, repo_id: &str) -> Result<Repository, RepositoryError> {
         let store = self.store.clone();
         let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
+        task::spawn_blocking(move || store.get(&repo_id))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let path = PathBuf::from(repository.path);
+            .ok_or(RepositoryError::RepositoryNotFound)
+    }
+
+    async fn existing_path(&self, repository: &Repository) -> Result<PathBuf, RepositoryError> {
+        let path = PathBuf::from(&repository.path);
         fs::metadata(&path)
             .await
             .map_err(super::repository::map_path_error)?;
