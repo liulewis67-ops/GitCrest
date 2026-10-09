@@ -2434,4 +2434,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`node --check scripts/performance/desktop-benchmark.mjs` 与 `git diff --check` 通过；在 Windows 11 x64 / Ryzen 7 5800H / Electron 37、100k commit + 1k 行 diff fixture 上运行 20 轮。滚动 P5 FPS 的 20 轮 P5/P50/P95 为 55.2486/55.2486/55.2486；工作阶段进程树 Working Set 峰值的 P5/P50/P95/max 为 469,831,680/476,450,816/493,465,600/493,912,064 bytes（max 471.03 MiB）。
 - 限制/后续：工作阶段内存低于 500 MB 门槛；滚动 FPS 未达到 60 FPS，且 idle process-tree Working Set 仍高于 250 MB。空闲 RAF 与滚动都约 55.25 FPS，推测存在显示刷新同步限制，但本次没有测量显示器刷新率，不能据此判定 FPS 达标。S7.2 保持待验收。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-history-scroll-20runs.json`。
-- 实施 commit：待本阶段实现提交后补记。
+- 实施 commit：`8bcdacb`
