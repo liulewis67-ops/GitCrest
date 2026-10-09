@@ -67,11 +67,11 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let git_commands = GitCommandService::default();
     let status = StatusService::with_reader(repository_targets.clone(), git_commands.clone());
     let task_status = status.clone();
-    let tasks =
-        TaskService::with_store_and_status_invalidator(repositories.store(), move |repo_id| {
-            task_status.invalidate(repo_id)
-        })
-        .map_err(|_| "Could not recover background task history")?;
+    let tasks = TaskService::with_store_and_status_invalidator(
+        Arc::new(repositories.store()),
+        move |repo_id| task_status.invalidate(repo_id),
+    )
+    .map_err(|_| "Could not recover background task history")?;
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
     let events = EventBus::default();
     tokio::spawn(refresh::run(

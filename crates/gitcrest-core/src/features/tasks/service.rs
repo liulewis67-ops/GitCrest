@@ -8,10 +8,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use serde::{Deserialize, Serialize};
 use tokio::sync::{watch, Mutex, OwnedSemaphorePermit, Semaphore};
 
-use crate::storage::RepositoryStore;
+use crate::{
+    domain::task::{TaskErrorCategory, TaskSnapshot, TaskStatus},
+    ports::tasks::TaskStorePort,
+};
 
 const MAX_ACTIVE_TASKS: usize = 64;
 const MAX_RETAINED_TASKS: usize = 100;
@@ -19,55 +21,6 @@ const MAX_LOG_LINES: usize = 200;
 const MAX_LOG_LINE_CHARS: usize = 2_000;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
 type StatusInvalidator = dyn Fn(&str) + Send + Sync;
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TaskStatus {
-    Queued,
-    Running,
-    WaitingForInput,
-    Succeeded,
-    Failed,
-    Cancelled,
-}
-
-impl TaskStatus {
-    fn is_terminal(self) -> bool {
-        matches!(self, Self::Succeeded | Self::Failed | Self::Cancelled)
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum TaskErrorCategory {
-    Authentication,
-    Network,
-    GitUnavailable,
-    CommandFailed,
-    PushRejected,
-    OutcomeUnknown,
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskSnapshot {
-    pub task_id: String,
-    pub repo_id: Option<String>,
-    #[serde(default)]
-    pub target_path: Option<String>,
-    #[serde(default)]
-    pub result_repo_id: Option<String>,
-    pub operation: String,
-    pub status: TaskStatus,
-    pub phase: String,
-    pub progress: Option<u8>,
-    pub message: Option<String>,
-    pub error_category: Option<TaskErrorCategory>,
-    pub logs: Vec<String>,
-    pub created_at_ms: u128,
-    pub updated_at_ms: u128,
-    pub cancel_requested: bool,
-}
 
 #[derive(Clone, Default)]
 pub struct TaskService {
@@ -78,7 +31,7 @@ struct TaskServiceInner {
     data: Mutex<TaskData>,
     repo_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
     workers: Arc<Semaphore>,
-    store: Option<RepositoryStore>,
+    store: Option<Arc<dyn TaskStorePort>>,
     status_invalidator: Option<Arc<StatusInvalidator>>,
 }
 
@@ -132,26 +85,27 @@ impl TaskService {
     }
 
     #[cfg(test)]
-    pub fn with_store(store: RepositoryStore) -> Result<Self, String> {
-        Self::load_store(store, None)
+    pub fn with_store(store: crate::storage::RepositoryStore) -> Result<Self, String> {
+        Self::load_store(Arc::new(store), None)
     }
 
     pub fn with_store_and_status_invalidator(
-        store: RepositoryStore,
+        store: Arc<dyn TaskStorePort>,
         invalidator: impl Fn(&str) + Send + Sync + 'static,
     ) -> Result<Self, String> {
         Self::load_store(store, Some(Arc::new(invalidator)))
     }
 
     fn load_store(
-        store: RepositoryStore,
+        store: Arc<dyn TaskStorePort>,
         status_invalidator: Option<Arc<StatusInvalidator>>,
     ) -> Result<Self, String> {
         let mut tasks = BTreeMap::new();
-        for (task_id, stored_status, snapshot_json) in store.list_task_snapshots()? {
-            let mut snapshot: TaskSnapshot = serde_json::from_str(&snapshot_json)
-                .map_err(|error| format!("stored task {task_id} is invalid: {error}"))?;
-            if matches!(stored_status.as_str(), "queued" | "running") {
+        for mut snapshot in store
+            .list_task_snapshots()
+            .map_err(|_| "task storage unavailable".to_string())?
+        {
+            if matches!(snapshot.status, TaskStatus::Queued | TaskStatus::Running) {
                 snapshot.status = TaskStatus::Failed;
                 snapshot.phase = "Interrupted".into();
                 snapshot.message = Some(
@@ -159,9 +113,11 @@ impl TaskService {
                 );
                 snapshot.error_category = Some(TaskErrorCategory::OutcomeUnknown);
                 snapshot.updated_at_ms = now_ms();
-                persist_snapshot(&store, &snapshot)?;
+                store
+                    .save_task_snapshot(&snapshot)
+                    .map_err(|_| "task storage unavailable".to_string())?;
             }
-            tasks.insert(task_id, snapshot);
+            tasks.insert(snapshot.task_id.clone(), snapshot);
         }
         Ok(Self {
             inner: Arc::new(TaskServiceInner {
@@ -548,34 +504,15 @@ async fn persist_service_snapshot(
     snapshot: TaskSnapshot,
 ) -> Result<(), String> {
     if let Some(store) = inner.store.clone() {
-        tokio::task::spawn_blocking(move || persist_snapshot(&store, &snapshot))
-            .await
-            .map_err(|error| error.to_string())??;
+        tokio::task::spawn_blocking(move || {
+            store
+                .save_task_snapshot(&snapshot)
+                .map_err(|_| "task storage unavailable".to_string())
+        })
+        .await
+        .map_err(|error| error.to_string())??;
     }
     Ok(())
-}
-
-fn persist_snapshot(store: &RepositoryStore, snapshot: &TaskSnapshot) -> Result<(), String> {
-    let serialized = serde_json::to_string(snapshot).map_err(|error| error.to_string())?;
-    store.save_task_snapshot(
-        &snapshot.task_id,
-        snapshot.repo_id.as_deref().unwrap_or_default(),
-        status_label(snapshot.status),
-        &serialized,
-        snapshot.created_at_ms.min(i64::MAX as u128) as i64,
-        snapshot.updated_at_ms.min(i64::MAX as u128) as i64,
-    )
-}
-
-fn status_label(status: TaskStatus) -> &'static str {
-    match status {
-        TaskStatus::Queued => "queued",
-        TaskStatus::Running => "running",
-        TaskStatus::WaitingForInput => "waitingForInput",
-        TaskStatus::Succeeded => "succeeded",
-        TaskStatus::Failed => "failed",
-        TaskStatus::Cancelled => "cancelled",
-    }
 }
 
 fn classify_error(task: &TaskSnapshot) -> TaskErrorCategory {

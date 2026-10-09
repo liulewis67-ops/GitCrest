@@ -397,7 +397,7 @@ mod tests {
         );
         assert_eq!(
             unreachable.error_category,
-            Some(crate::features::tasks::TaskErrorCategory::Network),
+            Some(crate::domain::task::TaskErrorCategory::Network),
             "{:?}",
             unreachable.logs
         );

@@ -2264,7 +2264,7 @@ mod tests {
         assert_eq!(failed.status, TaskStatus::Failed);
         assert_eq!(
             failed.error_category,
-            Some(crate::features::tasks::TaskErrorCategory::PushRejected)
+            Some(crate::domain::task::TaskErrorCategory::PushRejected)
         );
         assert_eq!(
             git_output(&bare, &["rev-parse", &format!("refs/heads/{branch}")]),

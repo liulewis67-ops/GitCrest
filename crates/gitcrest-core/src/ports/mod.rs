@@ -6,4 +6,5 @@ pub(crate) mod repository;
 pub(crate) mod settings;
 pub(crate) mod shelves;
 pub(crate) mod status;
+pub(crate) mod tasks;
 pub(crate) mod undo;

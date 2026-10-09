@@ -12,12 +12,14 @@ use crate::domain::{
     commit::CommitSearchEntry,
     diff::DiffScope,
     shelf::{ShelfRecord, ShelfSnapshot},
+    task::{TaskSnapshot, TaskStatus},
     undo::{UndoOperation, UndoRecord},
 };
 use crate::ports::branch_favorites::BranchFavoriteStorePort;
 use crate::ports::history::HistorySearchIndexPort;
 use crate::ports::settings::AiProviderSettingsPort;
 use crate::ports::shelves::ShelfStorePort;
+use crate::ports::tasks::TaskStorePort;
 use crate::ports::undo::UndoStorePort;
 
 const MAX_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
@@ -920,6 +922,50 @@ impl HistorySearchIndexPort for RepositoryStore {
     ) -> Result<(), crate::domain::error::RepositoryError> {
         RepositoryStore::replace_history_search_index(self, repo_id, refs_fingerprint, &entries)
             .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+}
+
+impl TaskStorePort for RepositoryStore {
+    fn list_task_snapshots(
+        &self,
+    ) -> Result<Vec<TaskSnapshot>, crate::domain::error::RepositoryError> {
+        RepositoryStore::list_task_snapshots(self)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)?
+            .into_iter()
+            .map(|(_task_id, _stored_status, snapshot_json)| {
+                serde_json::from_str(&snapshot_json)
+                    .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+            })
+            .collect()
+    }
+
+    fn save_task_snapshot(
+        &self,
+        snapshot: &TaskSnapshot,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        let serialized = serde_json::to_string(snapshot)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)?;
+        RepositoryStore::save_task_snapshot(
+            self,
+            &snapshot.task_id,
+            snapshot.repo_id.as_deref().unwrap_or_default(),
+            task_status_label(snapshot.status),
+            &serialized,
+            snapshot.created_at_ms.min(i64::MAX as u128) as i64,
+            snapshot.updated_at_ms.min(i64::MAX as u128) as i64,
+        )
+        .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+}
+
+fn task_status_label(status: TaskStatus) -> &'static str {
+    match status {
+        TaskStatus::Queued => "queued",
+        TaskStatus::Running => "running",
+        TaskStatus::WaitingForInput => "waitingForInput",
+        TaskStatus::Succeeded => "succeeded",
+        TaskStatus::Failed => "failed",
+        TaskStatus::Cancelled => "cancelled",
     }
 }
 
