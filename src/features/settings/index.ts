@@ -7,6 +7,6 @@ export {
   matchesShortcut,
   readShortcutPreferences,
   SHORTCUT_PREFERENCES_KEY,
-} from "../../shared/lib/shortcut-preferences";
-export type { ShortcutPreferences } from "../../shared/lib/shortcut-preferences";
+} from "./model/shortcut-preferences";
+export type { ShortcutPreferences } from "./model/shortcut-preferences";
 export const loadSettingsDialog = () => import("./ui/SettingsDialog");

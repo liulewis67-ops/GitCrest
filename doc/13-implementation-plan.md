@@ -4555,3 +4555,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/history/model/git-object-id.ts`、`src/features/history/index.ts`、App 与 Workspace 调用点、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
 - 限制/后续：只调整 Git 领域校验的模块归属，不改变 40/64 位十六进制规则；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### settings feature 收纳快捷键偏好与规则 — 小阶段 417
+- 状态：已完成（快捷键清单、偏好解析和匹配规则归入 Settings model）
+- 日期：2026-10-10
+- 交付：将 `shortcut-preferences.ts` 从 `src/shared/lib` 迁入 `src/features/settings/model`；Settings feature 内部改为相对导入，`settings/index.ts` 作为对外公开入口导出偏好类型和快捷键函数，Commit 与 Diff UI 经该公开入口复用。
+- 验证：`pnpm exec tsc --noEmit`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir E:\gitcrest-stage417-vite --emptyOutDir`、旧模块路径搜索与 `git diff --check` 通过；构建仅出现既有 web-tree-sitter `eval` 和大 chunk 提示。未新增或运行测试。
+- 手工验证：确认 `shared/lib` 不再包含快捷键偏好模块；Settings 内部使用 feature 私有 model 路径，Commit/Diff 仅引用 settings `index.ts`。
+- 证据：`src/features/settings/model/shortcut-preferences.ts`、`src/features/settings/index.ts`、Settings/Commit/Diff 调用点、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
+- 限制/后续：只调整快捷键偏好规则的职责归属，不改变默认绑定、键位冲突或显示语义；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。

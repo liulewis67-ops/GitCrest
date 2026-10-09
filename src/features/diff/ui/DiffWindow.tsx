@@ -1,7 +1,7 @@
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
-import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../../shared/lib/shortcut-preferences";
+import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../settings";
 import "../../../App.css";
 
 type View = "split" | "unified" | "blame";

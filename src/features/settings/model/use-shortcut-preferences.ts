@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { readShortcutPreferences, SHORTCUT_PREFERENCES_KEY } from "../../../shared/lib/shortcut-preferences";
+import { readShortcutPreferences, SHORTCUT_PREFERENCES_KEY } from "./shortcut-preferences";
 
 export function useShortcutPreferences() {
   const [shortcuts, setShortcuts] = useState(() => {

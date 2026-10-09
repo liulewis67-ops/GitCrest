@@ -8,7 +8,7 @@ import {
   shortcutFromEvent,
   type ShortcutAction,
   type ShortcutPreferences,
-} from "../../../shared/lib/shortcut-preferences";
+} from "../model/shortcut-preferences";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 import type { UpdateStatus } from "../../../api/update-status";
