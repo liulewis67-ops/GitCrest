@@ -1,0 +1,93 @@
+{
+  "generatedAt": "2026-10-09T18:03:57.700Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         "
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "launchMode": "packaged application",
+    "applicationExecutable": "E:\\personal_projects\\GitCrest\\dist\\win-unpacked\\GitCrest.exe",
+    "launchFlags": []
+  },
+  "fixture": {
+    "commits": 100000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-20261009-continuation"
+  },
+  "thresholds": {
+    "targetScrollP5Fps": 60,
+    "rafTargetPeriodMs": 16.666666666666668
+  },
+  "samples": [
+    {
+      "label": "empty-workspace-idle",
+      "durationMs": 5000,
+      "frameSamples": 282,
+      "p95FrameMs": 18.100000000000023,
+      "p5Fps": 55.248618784530315,
+      "scrollDistancePx": 0,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      }
+    },
+    {
+      "label": "loaded-history-idle",
+      "durationMs": 5000,
+      "frameSamples": 282,
+      "p95FrameMs": 18.100000000000023,
+      "p5Fps": 55.248618784530315,
+      "scrollDistancePx": 0,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      }
+    },
+    {
+      "label": "loaded-history-scroll",
+      "durationMs": 10000,
+      "frameSamples": 564,
+      "p95FrameMs": 18.100000000000364,
+      "p5Fps": 55.24861878452928,
+      "scrollDistancePx": 4520,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      },
+      "presentationTrace": {
+        "event": "benchmark,viz:Display::FrameDisplayed",
+        "frameCount": 564,
+        "intervalSamples": 563,
+        "p95FrameMs": 18.078,
+        "p5Fps": 55.31585352361987,
+        "traceEventCount": 44640
+      }
+    }
+  ],
+  "interpretation": {
+    "emptyWorkspaceAnimationFrameBelow60Fps": true,
+    "loadedHistoryIdleAnimationFrameBelow60Fps": true,
+    "requestAnimationFrameScrollBelow60Fps": true,
+    "presentedScrollBelow60Fps": true,
+    "historyScrollComparedWithEmptyAnimationFrameFps": 0,
+    "visibleAndFocusedForAllSamples": true
+  }
+}
