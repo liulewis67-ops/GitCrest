@@ -2363,3 +2363,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：StatusSnapshot 的仓库路径解析和 API 查询编排仍在 RepositoryManager；本阶段只迁移缓存实现与职责测试，不代表 status service 与 repository registry 已完全解耦。S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`crates/gitcrest-core/src/features/status/cache.rs`、`crates/gitcrest-core/src/features/status/mod.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 实施 commit：`969c32c`
+
+### status feature 查询编排迁入 service — 小阶段 194
+- 状态：已完成（状态快照读取、路径范围查询、缓存访问与失效由 status feature 的 StatusService 编排）
+- 日期：2026-10-09
+- 交付：新增 `StatusService`，承接快照全量/路径读取、缓存命中、版本保护和状态读取错误映射；`AppState` 注入共享服务，状态 API、commit/branch/settings/staging/shelf/workflow/diff handlers、任务状态失效回调与 watcher 均改用该服务。RepositoryManager 保留 RepoId 到路径的注册表读取职责；forget 成功时由 status service 失效对应缓存。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（120 tests）、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 均通过。
+- 限制/后续：StatusService 仍调用 RepositoryManager.read_target 获取已登记仓库路径；注册表与 status 执行引擎保持清晰职责边界。S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`crates/gitcrest-core/src/features/status/service.rs`、`crates/gitcrest-core/src/features/status/handlers.rs`、`crates/gitcrest-core/src/refresh/watcher.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 实施 commit：`57d7979`
