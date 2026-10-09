@@ -1,5 +1,10 @@
 // @vitest-environment node
 import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
+import { execFileSync } from "node:child_process";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { dump, load } from "js-yaml";
 import { expect, it } from "vitest";
 import {
   canonicalizeLinuxUpdateInfo,
@@ -54,4 +59,36 @@ it("rejects an unsigned manifest before the updater's default support check", as
   await expect(updater.isUpdateSupported(signed)).resolves.toBe(true);
   await expect(updater.isUpdateSupported({ version: "0.3.0" })).rejects.toThrow("signature verification failed");
   expect(defaultChecks).toBe(1);
+});
+
+it("signs Linux release YAML with the same policy used by the runtime verifier", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const directory = await mkdtemp(join(tmpdir(), "gitcrest signed update "));
+  const manifestPath = join(directory, "latest-linux.yml");
+  const privateKeyPath = join(directory, "release key.pem");
+  const scriptPath = join(process.cwd(), "scripts/sign-linux-update-manifest.mjs");
+  try {
+    const metadata = {
+      version: "0.2.0",
+      files: [{ url: "GitCrest-0.2.0.AppImage", sha512: "a".repeat(128), size: 1234 }],
+      releaseDate: "2026-10-09T00:00:00.000Z",
+    };
+    await writeFile(manifestPath, dump(metadata), "utf8");
+    await writeFile(privateKeyPath, privateKey.export({ type: "pkcs8", format: "pem" }));
+
+    execFileSync(process.execPath, [scriptPath, manifestPath, privateKeyPath]);
+
+    const signed = load(await readFile(manifestPath, "utf8")) as {
+      version: string;
+      files: Array<{ url: string; sha512: string; size: number }>;
+      releaseDate: string;
+      gitcrestSignatureVersion: number;
+      gitcrestSignature: string;
+    };
+    const publicKeyBase64 = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+    expect(verifyLinuxUpdateInfoSignature(signed, publicKeyBase64)).toBe(true);
+    expect(verifyLinuxUpdateInfoSignature({ ...signed, files: [{ ...signed.files[0], sha512: "b".repeat(128) }] }, publicKeyBase64)).toBe(false);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });
