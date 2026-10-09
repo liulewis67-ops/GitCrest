@@ -3353,4 +3353,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright Electron E2E 覆盖真实 HTTPS 401、task 错误类别、主机凭据表单和安全状态不变。
 - 证据：`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：未保存真实凭据或执行修复后的成功 Fetch；验证目标是认证失败到凭据修复 UI 的路由及失败不改仓库状态。S7.5 仍保持进行中。
-- 完成 commit：随本条阶段记录提交。
+- 完成 commit：`f29a848`
