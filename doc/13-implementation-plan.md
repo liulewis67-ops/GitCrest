@@ -3803,4 +3803,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：在现有独立 100k commit fixture 上运行 Release API 基准；fixture 和 refs 未被修改。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-search-index-streaming-stage339.json`。
 - 限制/后续：cold 搜索仍需 Git 扫描完整提交消息，解析临时字段数组的移除没有改变约 4.2 秒索引 ready 时间或达成 <200ms cold search；后续需寻找更早预热或索引构建优化，同时保持完整搜索、排序和分页语义。S7.2 桌面门槛、S7.4、S7.5 仍待完成。
-- 完成 commit：待提交
+- 完成 commit：`86dcf2e`
