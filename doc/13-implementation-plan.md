@@ -2645,3 +2645,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/mod.rs`、branches/shelves/settings/workflows/repositories handlers、`doc/14-backend-development-guidelines.md` 第 4 节。
 - 实施 commit：`d655f6e`
+
+
+### Status Git adapter 与读取 port 注入 — 小阶段 224
+- 状态：已完成（status feature 通过 `StatusReadPort` 获取快照，Git/libgit2 读取移入 adapter）
+- 日期：2026-10-09
+- 交付：将状态读取引擎迁入 `git/status_snapshot.rs`，将 path scope 验证拆至 `features/status/scope.rs`；新增 `StatusReadPort` 并由 `GitCommandService` 实现，`StatusService` 泛型依赖该 port，由 bootstrap 注入。watcher 与 shelves helper 接受 port-backed StatusService；分支切换任务使用 StatusService 刷新状态。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；静态搜索确认 status feature 生产代码不再引用 Git adapter；未运行测试。
+- 限制/后续：`StatusService` 仍负责从 RepositoryManager 解析路径并管理快照缓存；状态读取错误仍以 `std::io::Error` 跨 port 传递，后续可继续按领域错误规范收敛。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/ports/status.rs`、`crates/gitcrest-core/src/git/status_snapshot.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md` 第 4、6、12 节。
+- 实施 commit：`87200df`、`a3278fd`
