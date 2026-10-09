@@ -9,4 +9,4 @@ export {
   SHORTCUT_PREFERENCES_KEY,
 } from "../../shared/lib/shortcut-preferences";
 export type { ShortcutPreferences } from "../../shared/lib/shortcut-preferences";
-export const loadSettingsDialog = () => import("./SettingsDialog");
+export const loadSettingsDialog = () => import("./ui/SettingsDialog");

@@ -3853,3 +3853,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/workflows/index.ts`、`src/features/workflows/ui/`、`src/features/workflows/model/workflow-action.ts`、`tests/unit/workflow-dialog.test.tsx`、`tests/unit/conflict-window.test.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`、`tests/unit/rebase-dialog.test.tsx`、`tests/unit/reset-dialog.test.tsx`。
 - 限制/后续：冲突窗口继续由 feature 公共入口直接导出以供独立 renderer 使用；其它 feature 的目录迁移与 S7.2/S7.4/S7.5 整体验收仍待继续。
 - 完成 commit：`f9d8df0 refactor: organize workflow feature UI`
+
+### Settings feature UI 目录对齐 — 小阶段 345
+- 状态：已完成（设置对话框与 AI 隐私范围预览归入 `ui/`）
+- 日期：2026-10-09
+- 交付：将 `SettingsDialog` 与 `PrivacyScopePreview` 迁入 `src/features/settings/ui/`，更新 feature 的懒加载出口、组件内部依赖和测试导入路径。
+- 验证：Settings 定向测试 1 file / 9 tests、`pnpm frontend:boundaries`、`pnpm build` 与 `git diff --check` 通过；生产构建保留独立 `SettingsDialog` chunk。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；现有组件测试覆盖设置读取取消、快捷键偏好和 AI 隐私范围预览。
+- 证据：`src/features/settings/index.ts`、`src/features/settings/ui/SettingsDialog.tsx`、`src/features/settings/ui/PrivacyScopePreview.tsx`、`tests/unit/settings-dialog.test.tsx`。
+- 限制/后续：此阶段只收敛 Settings UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
+- 完成 commit：待提交

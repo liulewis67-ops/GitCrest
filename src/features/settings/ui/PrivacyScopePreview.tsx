@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { AiReplyResponse, AiSettingsResponse, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../api/client";
+import type { AiReplyResponse, AiSettingsResponse, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../../api/client";
 
 type Candidate = { id: string; path: string; scope: "workingTree" | "index" };
 

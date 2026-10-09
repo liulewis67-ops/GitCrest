@@ -3,9 +3,9 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
-import { SettingsDialog } from "../../src/features/settings/SettingsDialog";
+import { SettingsDialog } from "../../src/features/settings/ui/SettingsDialog";
 import { defaultShortcutPreferences } from "../../src/shared/lib/shortcut-preferences";
-import { PrivacyScopePreview } from "../../src/features/settings/PrivacyScopePreview";
+import { PrivacyScopePreview } from "../../src/features/settings/ui/PrivacyScopePreview";
 
 afterEach(cleanup);
 
