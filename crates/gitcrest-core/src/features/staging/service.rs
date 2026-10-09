@@ -178,8 +178,7 @@ mod tests {
     }
 
     fn run(root: &Path, operation: StagingOperation) {
-        let (arguments, input, _, _) =
-            crate::git::command::GitCommandService::staging_invocation(operation);
+        let (arguments, input, _, _) = crate::git::index::staging_invocation(operation);
         let output = if let Some(input) = input {
             let mut child = std::process::Command::new("git")
                 .arg("-C")

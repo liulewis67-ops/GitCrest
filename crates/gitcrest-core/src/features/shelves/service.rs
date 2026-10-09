@@ -213,7 +213,7 @@ mod tests {
     fn shelf_apply_undo_reverses_worktree_or_index_and_worktree_together() {
         let worktree = undo_apply_command(b"patch".to_vec(), DiffScope::WorkingTree);
         let (worktree_arguments, worktree_input, _, _) =
-            crate::git::command::GitCommandService::staging_invocation(worktree);
+            crate::git::index::staging_invocation(worktree);
         let worktree_arguments = worktree_arguments
             .iter()
             .map(|argument| argument.to_string_lossy().into_owned())
@@ -222,8 +222,7 @@ mod tests {
         assert_eq!(worktree_input.as_deref(), Some(&b"patch"[..]));
 
         let index = undo_apply_command(b"patch".to_vec(), DiffScope::Index);
-        let (index_arguments, _, _, _) =
-            crate::git::command::GitCommandService::staging_invocation(index);
+        let (index_arguments, _, _, _) = crate::git::index::staging_invocation(index);
         let index_arguments = index_arguments
             .iter()
             .map(|argument| argument.to_string_lossy().into_owned())
