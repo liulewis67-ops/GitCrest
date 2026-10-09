@@ -3902,4 +3902,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；HTTP 基准验证 pending 重试最终返回正确匹配提交。基准使用隔离 sidecar/SQLite；fixture 原有 `bench-diff.txt` 修改状态在运行前后保持不变。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/ports/history.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/history/dto.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/features/history/model/use-repository-history.ts`、`src/features/history/ui/CommitGraph.tsx`、`tests/unit/history-model.test.tsx`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-pending-stage349.json`。
 - 限制/后续：pending 协议降低 API 阻塞并保留完整结果语义，但用户仍需等待索引构建，完整冷搜索未达标；需要继续缩短/提前执行索引构建，并按 20 轮完整结果耗时复测。短于 3 字符和组合过滤仍走 Git 搜索回退。S7.2 其它桌面门槛、S7.4 与 S7.5 仍未验收。
-- 完成 commit：待提交
+- 完成 commit：`9253446 perf: defer cold history search until index is ready`
