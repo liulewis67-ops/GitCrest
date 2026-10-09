@@ -4405,3 +4405,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/ports/history.rs`、`doc/14-backend-development-guidelines.md` 第 2、8.2 节。
 - 限制/后续：该修复覆盖 Rust unwind 与 future drop 的状态清理；进程以 abort 方式终止时不运行析构，但进程内在途状态也随进程消失。冷索引完整搜索时间仍高于 200ms，S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### branches feature 接管 Shelve 后继续分支切换的启动流程 — 小阶段 402
+- 状态：已完成（分支切换前准备 Shelf、处理错误并打开 composer 的流程由 branches model 编排）
+- 日期：2026-10-10
+- 交付：扩展 `useBranchSwitchShelfFlow.openShelfComposerForBranchSwitch`，在 feature 内串联 branch switch busy/error 状态、当前分支目标、既存 Shelf 快照、Shelf composer context 和页面弹窗请求。App 移除对应的业务 handler，只注入 RepoId、branchSwitcher 控制器与 composer 请求回调；feature 入口不再暴露仅供该 handler 使用的中间动作。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 输出到临时目录；未新增或运行测试。构建仅出现既有 web-tree-sitter `eval` 和 chunk 大小提示。
+- 手工验证：未操作 GUI；逐路径核对：无仓库或无目标时不启动；busy 状态总会在流程后释放；Shelf 列表失败时保留分支切换对话框并显示 API/通用错误；成功后先保存现存 Shelf ID，再设置待切换 context、关闭 switcher 并请求 composer。
+- 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：App 仍负责将 feature 的弹窗请求映射到当前窗口 UI 状态；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

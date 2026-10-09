@@ -207,6 +207,8 @@ function App() {
     tasks,
     getApi: () => apiRef.current,
     getSelectedRepositoryId: () => selectedRepository?.repoId,
+    branchSwitcher,
+    requestShelfComposer: (repoId) => setShelfComposerRequest((request) => ({ id: request.id + 1, repoId })),
     onBranchSwitchReview: branchSwitcher.reviewAfterShelf,
     appendTask: prependTask,
     setTaskError: setTasksError,
@@ -504,24 +506,6 @@ function App() {
     submit: submitPush,
     continueCommitPush,
   } = repositoryPush;
-
-  async function openShelfComposerForBranchSwitch() {
-    const repository = selectedRepository;
-    const target = branchSwitcher.targetName;
-    if (!repository || !target) return;
-    await branchSwitcher.runWhileBusy(async () => {
-      branchSwitcher.setError("");
-      try {
-        const existingShelfIds = await branchSwitchShelfFlow.prepareShelfSwitch(repository.repoId, target);
-        if (!existingShelfIds) return;
-        branchSwitchShelfFlow.prepareShelfComposerForBranchSwitch({ repoId: repository.repoId, target, existingShelfIds });
-        branchSwitcher.close();
-        setShelfComposerRequest((request) => ({ id: request.id + 1, repoId: repository.repoId }));
-      } catch (error) {
-        branchSwitcher.setError(error instanceof Error ? error.message : "Could not prepare the shelf before switching branches.");
-      }
-    });
-  }
 
   function fetchFromPushDialog() {
     setPushOpen(false);
@@ -989,7 +973,7 @@ function App() {
               branchSwitcher.close();
               requestAnimationFrame(() => document.getElementById("commit-message")?.focus());
             }}
-            onShelveAndSwitch={() => void openShelfComposerForBranchSwitch()}
+            onShelveAndSwitch={() => void branchSwitchShelfFlow.openShelfComposerForBranchSwitch()}
           />
         </Suspense>}
 

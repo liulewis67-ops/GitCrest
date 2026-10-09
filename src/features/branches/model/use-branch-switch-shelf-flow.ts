@@ -22,6 +22,13 @@ interface BranchSwitchShelfFlowOptions {
   tasks: TaskSnapshotResponse[];
   getApi: () => GitCrestApiClient | undefined;
   getSelectedRepositoryId: () => string | undefined;
+  branchSwitcher: {
+    targetName: string;
+    setError: (message: string) => void;
+    close: () => void;
+    runWhileBusy: <T>(action: () => Promise<T>) => Promise<T>;
+  };
+  requestShelfComposer: (repoId: string) => void;
   onBranchSwitchReview: (target: string, preflight: Awaited<ReturnType<GitCrestApiClient["preflightRepositoryBranchSwitch"]>>, message: string) => void;
   appendTask: (task: TaskSnapshotResponse) => void;
   setTaskError: (message: string) => void;
@@ -41,6 +48,8 @@ export function useBranchSwitchShelfFlow({
   tasks,
   getApi,
   getSelectedRepositoryId,
+  branchSwitcher,
+  requestShelfComposer,
   onBranchSwitchReview,
   appendTask,
   setTaskError,
@@ -78,6 +87,24 @@ export function useBranchSwitchShelfFlow({
 
   function prepareShelfComposerForBranchSwitch(context: BranchSwitchShelfContext) {
     setShelfComposerAfterSwitch(context);
+  }
+
+  async function openShelfComposerForBranchSwitch() {
+    const repoId = getSelectedRepositoryId();
+    const target = branchSwitcher.targetName;
+    if (!repoId || !target) return;
+    await branchSwitcher.runWhileBusy(async () => {
+      branchSwitcher.setError("");
+      try {
+        const existingShelfIds = await prepareShelfSwitch(repoId, target);
+        if (!existingShelfIds) return;
+        prepareShelfComposerForBranchSwitch({ repoId, target, existingShelfIds });
+        branchSwitcher.close();
+        requestShelfComposer(repoId);
+      } catch (error) {
+        branchSwitcher.setError(errorMessage(error, "Could not prepare the shelf before switching branches."));
+      }
+    });
   }
 
   function onShelfComposerTaskSubmitted(task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) {
@@ -203,9 +230,8 @@ export function useBranchSwitchShelfFlow({
   }, [tasks]);
 
   return {
-    prepareShelfSwitch,
     shelfComposerAfterSwitch,
-    prepareShelfComposerForBranchSwitch,
+    openShelfComposerForBranchSwitch,
     onShelfComposerTaskSubmitted,
     onShelfComposerClosed,
   };
