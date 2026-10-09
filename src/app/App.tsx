@@ -415,6 +415,7 @@ function App() {
     },
   });
   const cloneSubmission = useCloneSubmission({
+    tasks,
     getApi: () => apiRef.current,
     onTaskAccepted: (task) => {
       appendTask(task);
@@ -651,10 +652,6 @@ function App() {
       setSelectedRepository((current) => currentRepositories.find((repository) => repository.repoId === current?.repoId));
     }
   }
-
-  useEffect(() => {
-    for (const task of tasks) void cloneSubmission.openClonedRepository(task);
-  }, [tasks]);
 
   useEffect(() => {
     branchSwitchShelfFlow.observeTasks(tasks);

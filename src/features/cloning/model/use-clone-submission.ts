@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GitCrestApiError,
   type GitCrestApiClient,
@@ -13,6 +13,7 @@ export interface CloneDraft {
 }
 
 interface CloneSubmissionOptions {
+  tasks: TaskSnapshotResponse[];
   getApi: () => GitCrestApiClient | undefined;
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
   onRepositoryOpened: (repository: RepositoryResponse) => void;
@@ -23,6 +24,7 @@ interface CloneSubmissionOptions {
 }
 
 export function useCloneSubmission({
+  tasks,
   getApi,
   onTaskAccepted,
   onRepositoryOpened,
@@ -37,6 +39,7 @@ export function useCloneSubmission({
   const [draft, setDraft] = useState<CloneDraft>({ remoteUrl: "", parentPath: "", directoryName: "" });
   const cloneTaskIdsRef = useRef(new Set<string>());
   const openedTaskIdsRef = useRef(new Set<string>());
+  const openClonedRepositoryRef = useRef<((task: TaskSnapshotResponse) => Promise<void>) | undefined>(undefined);
 
   async function submit(remoteUrl: string, parentPath: string, directoryName: string) {
     const api = getApi();
@@ -96,5 +99,10 @@ export function useCloneSubmission({
     }
   }
 
-  return { busy, error, draft, dialogOpen, submit, prepareRetry, openDialog, closeDialog, openClonedRepository };
+  openClonedRepositoryRef.current = openClonedRepository;
+  useEffect(() => {
+    for (const task of tasks) void openClonedRepositoryRef.current?.(task);
+  }, [tasks]);
+
+  return { busy, error, draft, dialogOpen, submit, prepareRetry, openDialog, closeDialog };
 }

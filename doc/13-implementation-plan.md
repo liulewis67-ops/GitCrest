@@ -2704,3 +2704,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：App 仍承载较多跨 feature 工作流组合，可按实施计划继续逐个下沉；构建输出包含依赖 `eval` 与 bundle 体积提示。
 - 证据：`src/features/tasks/model/use-task-refresh-effects.ts`、`src/features/tasks/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`d08e6b3`
+
+### Cloning 成功任务自动打开生命周期迁入 feature — 小阶段 230
+- 状态：已完成（克隆任务观察、去重与成功仓库打开由 cloning feature hook 统一管理）
+- 日期：2026-10-09
+- 交付：`useCloneSubmission` 接收 tasks 快照并在自身 Effect 中观察新克隆任务，保留仅处理本会话提交任务、成功后只打开一次、API 失败时恢复重试标记及错误反馈的行为；App 不再直接遍历任务调用克隆 feature 私有副作用，feature 返回值移除仅供该 Effect 使用的打开方法。
+- 验证：`pnpm frontend:build` 与 `git diff --check` 通过；未运行测试。
+- 手工验证：未运行 Electron 手工场景；构建完成并通过 TypeScript 检查。
+- 证据：`src/features/cloning/model/use-clone-submission.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：App 仍负责跨 feature 的仓库激活回调装配；Vite 构建仍提示 web-tree-sitter 使用 `eval` 和部分 bundle 超过 500 kB。
+- 完成 commit：待补记
