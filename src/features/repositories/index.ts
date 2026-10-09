@@ -9,4 +9,4 @@ export { useRepositoryMutations } from "./model/use-repository-mutations";
 export { useRepositoryOpening } from "./model/use-repository-opening";
 export { getRepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";
 export type { RepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";
-export type { CommitAction, WorkspaceMode, WorkspaceSession } from "./model/workspace-session";
+export type { WorkspaceMode, WorkspaceSession } from "./model/workspace-session";

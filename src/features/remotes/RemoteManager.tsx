@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse } from "../../api/client";
 import { useDialogFocus } from "../../shared/use-dialog-focus";
-import { CredentialEditor, httpsHostFromRemote } from "../credentials/CredentialEditor";
+import { CredentialEditor, httpsHostFromRemote } from "../credentials";
 
 interface RemoteManagerProps {
   snapshot?: RemoteSnapshotResponse;

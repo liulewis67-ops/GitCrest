@@ -1,4 +1,5 @@
 export const loadWorkflowDialog = () => import("./WorkflowDialog");
+export { ConflictWindow } from "./ConflictWindow";
 export const loadRebaseDialog = () => import("./RebaseDialog");
 export const loadResetDialog = () => import("./ResetDialog");
 export type { WorkflowAction } from "./WorkflowDialog";

@@ -7,10 +7,11 @@
   "scripts": {
     "dev": "electron-vite dev",
     "frontend:dev": "vite",
+    "frontend:boundaries": "node scripts/check-frontend-import-boundaries.mjs",
     "build": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && electron-vite build",
     "test": "vitest run --config vitest.config.ts",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
-    "check": "pnpm build && cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check && cargo build --manifest-path crates/gitcrest-core/Cargo.toml && pnpm test && cargo test --manifest-path crates/gitcrest-core/Cargo.toml && pnpm test:e2e",
+    "check": "pnpm frontend:boundaries && pnpm build && cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check && cargo build --manifest-path crates/gitcrest-core/Cargo.toml && pnpm test && cargo test --manifest-path crates/gitcrest-core/Cargo.toml && pnpm test:e2e",
     "test:packaged": "node scripts/packaged-smoke.mjs",
     "api:types": "openapi-typescript doc/api/v1.yaml -o src/api/schema.ts",
     "frontend:build": "tsc && vite build",

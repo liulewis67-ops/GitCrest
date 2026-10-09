@@ -3422,3 +3422,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/13-implementation-plan.md` 第 3、9–11 节及 S5.1–S6.3 进度记录。
 - 限制/后续：阶段 7 的性能门槛、跨平台发布验收和 S7.5 全量收口仍未完成。
 - 完成 commit：`b340aed`
+
+### 前端 feature 导入边界 AST 检查与 CI 门禁 — 小阶段 302
+- 状态：已完成（前端源码跨层导入通过 TypeScript AST 检查，并纳入 `pnpm check`）
+- 日期：2026-10-09
+- 交付：新增 `scripts/check-frontend-import-boundaries.mjs`，解析静态、重导出和动态 import；禁止 feature 依赖 app/page、跨 feature 深层私有文件导入、page 反向依赖 app/其它页面、page 在运行时直接依赖 API、api/shared 向上依赖。app/page 间接使用 feature 时必须走 feature `index.ts`；page 可用 API 纯类型。修复凭据编辑器、PushTarget、WorkflowAction、Diff/Conflict 窗口和 CommitAction 的私有导入路径，并新增 credentials feature 公共入口。将 `pnpm frontend:boundaries` 接入 `pnpm check`，无新增依赖。
+- 验证：`pnpm frontend:boundaries` 通过；完整 `pnpm check` 通过（前端/Electron build、Rust fmt/build、Vitest 162/162、Rust 137/137、Electron E2E 6 files / 29 tests）；`git diff --check` 通过。构建仅有已有 web-tree-sitter `eval` 警告。
+- 手工验证：未执行 GUI 手工场景；本阶段为 import 组织和自动架构检查。
+- 证据：`scripts/check-frontend-import-boundaries.mjs`、`package.json`、`src/features/{credentials,commits,diff,remotes,repositories,workflows}/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 限制/后续：检查只覆盖 `src/` TypeScript/TSX 源码，不覆盖测试或 Rust 模块依赖；通过公开入口的跨 feature 协作仍需在后续阶段逐步评估是否迁到 app/page 组合层。
+- 完成 commit：待提交

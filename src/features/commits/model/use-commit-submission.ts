@@ -6,7 +6,7 @@ import {
   type TaskSnapshotResponse,
 } from "../../../api/client";
 import type { CommitAction } from "./commit-action";
-import type { PushTarget } from "../../remotes/PushTargetDialog";
+import type { PushTarget } from "../../remotes";
 
 type CommitSelections = NonNullable<CommitRequest["selections"]>;
 type CommitIntent = { action: CommitAction; target?: PushTarget; forceWithLease: boolean };

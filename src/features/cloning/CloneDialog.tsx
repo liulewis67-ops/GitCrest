@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { GitCrestApiClient } from "../../api/client";
 import { useDialogFocus } from "../../shared/use-dialog-focus";
-import { CredentialEditor, httpsHostFromRemote } from "../credentials/CredentialEditor";
+import { CredentialEditor, httpsHostFromRemote } from "../credentials";
 
 interface CloneDialogProps {
   initialRemoteUrl?: string;

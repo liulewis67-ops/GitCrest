@@ -1,6 +1,5 @@
-import type { CommitAction } from "../../commits/model/commit-action";
+import type { CommitAction } from "../../commits";
 
-export type { CommitAction } from "../../commits/model/commit-action";
 export type WorkspaceMode = "graph" | "diff";
 
 export type RepositoryTabState = {

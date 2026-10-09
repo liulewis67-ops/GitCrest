@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { CommitAction, WorkspaceSession } from "./workspace-session";
+import type { CommitAction } from "../../commits";
+import type { WorkspaceSession } from "./workspace-session";
 
 export function useWorkspaceCommitAction(
   repoId: string | undefined,

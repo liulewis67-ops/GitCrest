@@ -1,5 +1,5 @@
-import { ConflictWindow } from "../../features/workflows/ConflictWindow";
-import { DiffWindow } from "../../features/diff/DiffWindow";
+import { ConflictWindow } from "../../features/workflows";
+import { DiffWindow } from "../../features/diff";
 import App from "../App";
 import { resolveRendererView } from "./renderer-view";
 
