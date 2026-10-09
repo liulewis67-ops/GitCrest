@@ -3706,3 +3706,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/mod.rs`、`crates/gitcrest-core/src/features/commits/routes.rs`。
 - 限制/后续：该改动收敛一个已发现的跨 feature 子模块依赖；其余 feature 和 `git/` 模块边界仍需持续审查，S7.2、S7.4、S7.5 验收继续未完成。
 - 完成 commit：`49e1841`
+
+### 前端 AI 冲突建议版本复核读取生命周期取消 — 小阶段 330
+- 状态：已完成（面板关闭后中止版本复核读取，provider 迟到时跳过后续读取）
+- 日期：2026-10-09
+- 交付：ConflictSuggestionPanel 为 AI 建议后的冲突版本复核建立面板生命周期 AbortController；面板卸载/冲突目标变化时中止 GET。若面板在 provider 响应期间关闭，则忽略迟到结果，不再启动冲突文件复核，也不更新已卸载组件状态。请求 payload、明确同意和建议仅供手工审阅的行为不变。
+- 验证：定向 `pnpm exec vitest run --config vitest.config.ts tests/unit/conflict-suggestion-panel.test.tsx` 通过（1 file / 5 tests）；`pnpm build`、`pnpm frontend:boundaries` 和 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件测试分别覆盖卸载时中止在途版本 GET、provider 返回迟到时不发起版本 GET。
+- 证据：`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`。
+- 限制/后续：面板关闭不会保证已发出的 provider 请求在服务端停止；面板会丢弃其迟到结果并跳过复核 GET。S7.2 冷搜索与桌面内存/帧率、S7.4、S7.5 仍待完成。
+- 完成 commit：待补记

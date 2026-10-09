@@ -89,3 +89,39 @@ it("aborts AI settings lookup when the suggestion panel closes", async () => {
   expect(signals[0]?.aborted).toBe(true);
   await act(async () => pending.resolve({ provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false }));
 });
+
+it("aborts the conflict revision lookup when the suggestion panel closes", async () => {
+  const pending = deferred<WorkflowConflictFileResponse>();
+  const signals: AbortSignal[] = [];
+  let api: Record<string, unknown>;
+  api = {
+    withSignal: vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return api;
+    }),
+    getRepositoryWorkflowConflictAiSettings: vi.fn().mockResolvedValue({ provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false }),
+    requestRepositoryWorkflowConflictSuggestion: vi.fn().mockResolvedValue({ provider: "ollama", model: "qwen", response: "merged result\n", files: ["src/conflict.ts"] }),
+    getRepositoryWorkflowConflictFile: vi.fn(() => pending.promise),
+  };
+  const client = api as unknown as GitCrestApiClient;
+  const { unmount } = render(<ConflictSuggestionPanel api={client} file={conflict} hasUnsavedChanges={false} onClose={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("checkbox", { name: /I reviewed the endpoint/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Request conflict suggestion" }));
+  await waitFor(() => expect(api.getRepositoryWorkflowConflictFile).toHaveBeenCalledWith("repo_fixture", "task_conflict", "src/conflict.ts"));
+  expect(signals).toHaveLength(2);
+  unmount();
+  expect(signals[1]?.aborted).toBe(true);
+  await act(async () => pending.resolve(conflict));
+});
+
+it("does not start conflict revision lookup when the panel closes while the provider is responding", async () => {
+  const pending = deferred<Awaited<ReturnType<GitCrestApiClient["requestRepositoryWorkflowConflictSuggestion"]>>>();
+  const api = makeApi(vi.fn(() => pending.promise));
+  const { unmount } = render(<ConflictSuggestionPanel api={api} file={conflict} hasUnsavedChanges={false} onClose={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("checkbox", { name: /I reviewed the endpoint/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Request conflict suggestion" }));
+  await waitFor(() => expect(api.requestRepositoryWorkflowConflictSuggestion).toHaveBeenCalled());
+  unmount();
+  await act(async () => pending.resolve({ provider: "ollama", model: "qwen", response: "merged result\n", files: ["src/conflict.ts"] }));
+  expect(api.getRepositoryWorkflowConflictFile).not.toHaveBeenCalled();
+});

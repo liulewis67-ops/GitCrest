@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AiReplyResponse, AiSettingsResponse, GitCrestApiClient, WorkflowConflictFileResponse } from "../../api/client";
 
 const CONFLICT_PROMPT = "Propose one possible merged working result for this conflict. Return only the proposed file content, without Markdown fences or explanation. Do not edit or stage files.";
@@ -15,6 +15,16 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onClose 
   const [reply, setReply] = useState<AiReplyResponse>();
   const [stale, setStale] = useState(false);
   const [error, setError] = useState("");
+  const requestLifetime = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    requestLifetime.current = controller;
+    return () => {
+      controller.abort();
+      if (requestLifetime.current === controller) requestLifetime.current = null;
+    };
+  }, [api, file.headOid, file.operation, file.path, file.repoId, file.resultRevision, file.taskId]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -28,6 +38,8 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onClose 
 
   async function requestSuggestion() {
     if (!settings || settings.provider === "none" || !confirmed || busy || hasUnsavedChanges) return;
+    const controller = requestLifetime.current;
+    if (!controller || controller.signal.aborted) return;
     setBusy(true); setError(""); setReply(undefined); setStale(false);
     try {
       const result = await api.requestRepositoryWorkflowConflictSuggestion(file.repoId, {
@@ -37,7 +49,9 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onClose 
         expectedHeadOid: file.headOid,
         expectedResultRevision: file.resultRevision,
       });
-      const current = await api.getRepositoryWorkflowConflictFile(file.repoId, file.taskId, file.path);
+      if (controller.signal.aborted) return;
+      const current = await api.withSignal(controller.signal).getRepositoryWorkflowConflictFile(file.repoId, file.taskId, file.path);
+      if (controller.signal.aborted) return;
       if (current.resultRevision !== file.resultRevision || current.headOid !== file.headOid || current.operation !== file.operation) {
         setStale(true);
         return;
@@ -45,9 +59,13 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onClose 
       setReply(result);
       setConfirmed(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The AI conflict suggestion failed. Continue resolving this conflict manually.");
-      setConfirmed(false);
-    } finally { setBusy(false); }
+      if (!controller.signal.aborted) {
+        setError(reason instanceof Error ? reason.message : "The AI conflict suggestion failed. Continue resolving this conflict manually.");
+        setConfirmed(false);
+      }
+    } finally {
+      if (!controller.signal.aborted) setBusy(false);
+    }
   }
 
   const sources = [
