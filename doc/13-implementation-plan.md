@@ -2994,3 +2994,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：远程写入仍由具体 GitCommandService 执行，需结合 TaskContext 与执行协调边界建立可替换的操作 port；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`7987f7a`
+
+### 任务失败结果类型归入 execution — 小阶段 259
+- 状态：已完成（任务执行失败/取消/等待输入的结果契约由 execution 层持有）
+- 日期：2026-10-09
+- 交付：新增 `execution` 模块并将 `TaskFailure` 从 tasks feature 移入；TaskService 与 Git command adapter 依赖执行层契约，features 暂经 tasks 模块 re-export 维持现有调用兼容。失败、取消、等待输入三种结果及其状态转换和错误文案未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未执行任务失败、协作取消或等待输入场景；本阶段仅迁移执行结果类型归属。
+- 证据：`crates/gitcrest-core/src/execution/task.rs`、`crates/gitcrest-core/src/features/tasks/service.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：`TaskContext` 仍由 tasks feature 实现并被 Git command adapter 使用；后续需把任务执行上下文与调度/API 生命周期解耦，建立 execution 层执行报告/取消接口，再迁移剩余具体 GitCommandService 写操作；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`67d2b6f`
