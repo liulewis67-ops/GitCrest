@@ -4051,3 +4051,10 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`.github/workflows/release-linux.yml`、`package.json`、`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`。
 - 限制/后续：仓库需配置 Actions secret `LINUX_UPDATE_SIGNING_KEY` 并由原生 Linux runner 实跑；标签需要和应用版本一致。发布资产仍缺真实 GitHub runner 的 AppImage 打包、签名和客户端更新安装回归证据；S7.4 与 S7.5 整体未完成。
 - 实施 commit：`effe27d`。
+
+### S7.4 Linux 打包 hook TypeScript 声明 — 小阶段 365
+- 状态：已完成
+- 日期：2026-10-10
+- 交付：为被 Vitest/TypeScript 测试导入的 Linux `afterPack` `.mjs` hook 增加相邻 `.d.mts` 声明，明确 Electron Builder context 的平台、输出目录和异步返回类型，保持打包 hook 本身可由 Electron Builder 直接加载。
+- 验证：`pnpm exec tsc --noEmit -p tsconfig.test.json` 和 `git diff --check` 通过；修复前检查因 `.mjs` 缺声明失败。
+- 证据：`scripts/inject-linux-update-public-key.d.mts`、`tests/unit/update-manifest-signature.test.ts`。
