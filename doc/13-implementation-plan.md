@@ -2372,3 +2372,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：StatusService 仍调用 RepositoryManager.read_target 获取已登记仓库路径；注册表与 status 执行引擎保持清晰职责边界。S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`crates/gitcrest-core/src/features/status/service.rs`、`crates/gitcrest-core/src/features/status/handlers.rs`、`crates/gitcrest-core/src/refresh/watcher.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 实施 commit：`57d7979`
+
+### history feature 历史列表查询迁入 model — 小阶段 195
+- 状态：已完成（CommitGraph 的历史分页与 refs 查询及其请求状态由 history model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useRepositoryHistory`，封装分页加载、并发页去重、仓库/筛选/refresh key 变化时的请求代次保护、响应校验、错误/重试和 refs 加载；CommitGraph 保留筛选表单、虚拟列表与图形布局，通过 hook 消费历史数据。
+- 验证：`pnpm build`（应用与测试 TypeScript 检查、main/preload/renderer 构建）与 `git diff --check` 通过；构建保留 web-tree-sitter eval 警告，未运行测试。
+- 限制/后续：历史数据没有跨 refreshKey 的共享缓存；分页与 refs 请求状态现由 history model 管理，筛选表单输入与虚拟滚动仍属于 CommitGraph 视图。S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`src/features/history/model/use-repository-history.ts`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`b3e345a`
