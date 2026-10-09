@@ -3505,4 +3505,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；以隔离 100k commit / 1k 行 Diff fixture 测量当前 Release sidecar API。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-background-20261009.json`。
 - 限制/后续：索引约需 20 秒完成，期间 cold message search 仍走 Git、P95 高于 200ms；S7.2 其余桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
-- 完成 commit：待补记
+- 完成 commit：`de46398`
