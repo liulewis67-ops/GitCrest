@@ -3872,4 +3872,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；现有组件测试覆盖 Shelf 列表与空状态。
 - 证据：`src/features/shelves/index.ts`、`src/features/shelves/ui/ShelfCenter.tsx`、`tests/unit/shelf-center.test.tsx`。
 - 限制/后续：此阶段只收敛 Shelves UI 目录归属；其它 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
-- 完成 commit：待提交
+- 完成 commit：`6f8d19c refactor: organize shelves feature UI`
