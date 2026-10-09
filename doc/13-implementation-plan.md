@@ -3183,4 +3183,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行真实 Git merge reset 失败场景；fixture 验证错误分类及恢复后的读取被阻断。
 - 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
 - 限制/后续：其他 recovery port 读取失败仍需按风险补充覆盖；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待提交
+- 完成 commit：`4fb19b4`
