@@ -3822,4 +3822,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；现有组件测试覆盖图、搜索焦点、滚动状态、详情展示及标签创建行为。
 - 证据：`src/features/history/index.ts`、`src/features/history/ui/CommitGraph.tsx`、`src/features/history/ui/CommitDetails.tsx`、`src/features/history/ui/format-commit-date.ts`、`tests/unit/commit-graph.test.tsx`。
 - 限制/后续：此子阶段只收敛 History UI 目录与组件职责，未完成前端规范目标目录的整体迁移或 S7.2/S7.4/S7.5 验收。
-- 完成 commit：待提交
+- 完成 commit：`6b366b0`
