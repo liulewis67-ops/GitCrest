@@ -177,6 +177,10 @@ try {
   const page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
   await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
+  const gpuDiagnostics = await app.evaluate(async ({ app: electronApp }) => ({
+    featureStatus: electronApp.getGPUFeatureStatus(),
+    info: await electronApp.getGPUInfo("complete"),
+  }));
   await page.bringToFront();
   const emptyWorkspace = await sampleAnimationFrames(page, "empty-workspace-idle", 5_000, false);
 
@@ -189,10 +193,18 @@ try {
   const historyIdle = await sampleAnimationFrames(page, "loaded-history-idle", 5_000, false);
   const historyScroll = await samplePresentedAnimationFrames(page, "loaded-history-scroll", 10_000, true);
   const samples = [emptyWorkspace, historyIdle, historyScroll];
+  const software = {
+    electron: process.versions.electron || "37.0.0",
+    node: process.version,
+    launchMode: "packaged application",
+    applicationExecutable: executablePath,
+    launchFlags,
+    gpuDiagnostics,
+  };
   const report = {
     generatedAt: new Date().toISOString(),
     host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown" },
-    software: { electron: process.versions.electron || "37.0.0", node: process.version, launchMode: "packaged application", applicationExecutable: executablePath, launchFlags },
+    software,
     fixture: { commits: 100_000, path: fixturePath },
     thresholds: { targetScrollP5Fps: 60, rafTargetPeriodMs: 1000 / 60 },
     samples,
