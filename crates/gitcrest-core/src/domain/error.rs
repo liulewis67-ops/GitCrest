@@ -1,4 +1,15 @@
 #[derive(Debug, PartialEq, Eq)]
+pub(crate) enum DiffError {
+    InvalidPath,
+    PathNotFound,
+    PermissionDenied,
+    TooLarge,
+    TimedOut,
+    GitUnavailable,
+    GitFailed,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ConflictError {
     InvalidPath,
     NotConflicted,

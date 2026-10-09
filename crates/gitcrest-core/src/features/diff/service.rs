@@ -10,6 +10,7 @@ pub use read::{read, read_commit_file, read_with_patch};
 #[cfg(test)]
 use std::path::Path;
 
+pub(crate) use crate::domain::error::DiffError;
 use crate::features::status::{ChangeCategory, ChangeKind, StatusFile};
 
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
@@ -80,17 +81,6 @@ pub struct DiffDocument {
     pub change_kind: ChangeKind,
     pub status: DiffContentStatus,
     pub hunks: Vec<DiffHunk>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum DiffError {
-    InvalidPath,
-    PathNotFound,
-    PermissionDenied,
-    TooLarge,
-    TimedOut,
-    GitUnavailable,
-    GitFailed,
 }
 
 pub struct DiffRead {
