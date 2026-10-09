@@ -2565,3 +2565,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`DiffScope` 和文档/hunk/row 模型仍留在 feature service；继续迁移前需为各 API 请求/响应与 shelf 序列化建立本地 DTO 映射。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/diff.rs`、commits/staging/shelves/settings 的 `dto.rs` 与 handlers、`doc/api/v1.yaml` 的 `DiffSelection` schema、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
 - 实施 commit：`6c1a1df`
+
+
+### DiffScope 领域归属与传输/存储映射 — 小阶段 216
+- 状态：已完成（DiffScope 成为无 Serde 的领域枚举，API 与持久化分别适配）
+- 日期：2026-10-09
+- 交付：将 `DiffScope` 移入 `domain/diff.rs`，移除 service 对该类型的 API 导出及序列化职责；diff、staging、settings、shelves 各自的 DTO 解析 scope 并映射到领域类型。新增 shelf 响应 DTO，移除 `ShelfSnapshot` 的 Serde 职责；storage 使用独立 `StoredShelfSnapshot`/scope 类型编码 undo 快照，沿用原 camelCase JSON 字段和 scope 标签。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认无 feature/storage 对 `features::diff::DiffScope` 的引用；未运行测试。
+- 限制/后续：Diff document、hunk、row 与 `ChangeKind` 的领域归属仍未完成，OpenAPI DTO 映射目前只覆盖 Diff 和 Shelf 响应；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/diff.rs`、diff/staging/settings/shelves DTO、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/shelves/dto.rs`、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
+- 实施 commit：`ceba199`
