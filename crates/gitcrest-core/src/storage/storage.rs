@@ -1093,7 +1093,7 @@ impl From<RepositoryRecord> for StoredRepository {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 12 {
+    if version > 13 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -1147,6 +1147,12 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
             "../../migrations/0012_history_search_slim_cache.sql"
         ))?;
         connection.pragma_update(None, "user_version", 12)?;
+    }
+    if version < 13 {
+        connection.execute_batch(include_str!(
+            "../../migrations/0013_history_search_drop_oid_unique.sql"
+        ))?;
+        connection.pragma_update(None, "user_version", 13)?;
     }
     Ok(())
 }
@@ -1268,7 +1274,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 13).unwrap();
+        connection.pragma_update(None, "user_version", 14).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -1311,7 +1317,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }
@@ -1368,6 +1374,17 @@ mod tests {
             message: "New cache searchable message".into(),
             sort_order: 0,
         };
+        let unique_indexes: i64 = store
+            .history_index_connection()
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM pragma_index_list('history_search_documents') WHERE \"unique\"=1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(unique_indexes, 0);
         store
             .replace_history_search_index("repo-1", "new-fingerprint", std::slice::from_ref(&entry))
             .unwrap();

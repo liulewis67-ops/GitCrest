@@ -3973,3 +3973,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-fts-columnsize0-stage356-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`；[SQLite FTS5 columnsize 选项](https://www.sqlite.org/fts5.html#the_columnsize_option)。
 - 限制/后续：该选项减少 FTS 辅助数据和局部 postings 构建耗时，但未证明能缩短端到端冷搜索，暂不引入 schema 迁移；优先寻找能减少 100k 行装载/写入时间的方案。完整冷搜索仍远超 <200ms，S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
 - 完成 commit：`3baea35 perf: evaluate compact history FTS index`
+
+### S7.2 移除历史缓存的冗余 OID 唯一索引 — 小阶段 357
+- 状态：已完成（删除可重建搜索缓存中的唯一索引；冷消息搜索仍未达到 <200ms）
+- 日期：2026-10-09
+- 交付：schema 13 重建可丢弃的历史搜索缓存表，移除 `(repo_id, oid)` 唯一约束及其二级索引；保留主键、仓库/顺序索引、FTS postings 和原查询排序。Git revision walk 每个 commit 只产出一次，索引建立时不需要再为 OID 写一棵 B-tree。迁移清空旧搜索缓存和 fingerprint，下一次搜索惰性重建；仓库与其它持久化数据保留。
+- 验证：schema 11 → 13 迁移测试确认仓库记录保留、旧 fingerprint 失效、新索引可重建且表不再有唯一索引；存储测试 13/13、历史 Git 顺序/ref 失效用例 1/1、`cargo fmt --check`、Clippy、Release build 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 同一 100k fixture 20 轮：冷搜索 P50/P95 1,949.838/2,240.190ms，文档行写入 P50/P95 222/265ms，首次 pending P95 18.533ms；所有轮次返回目标提交。对比阶段 353：冷搜索 P50/P95 4,059.403/4,945.041ms，行写入 2,281/2,440ms。冷搜索中位数和 P95 分别降低约 52%/55%，行写入中位数降低约 90%。完整冷搜索仍超 <200ms。报告：`doc/evidence/S7.2/api-win32-cold-no-oid-unique-stage357-20261009.json`。
+- 手工验证：未操作 GUI；20 轮均用独立 sidecar/SQLite 和同一 fixture，返回目标提交；fixture refs 和工作树未由基准修改。
+- 证据：`crates/gitcrest-core/migrations/0013_history_search_drop_oid_unique.sql`、`crates/gitcrest-core/src/storage/storage.rs`、History 顺序/ref 失效测试、`doc/evidence/S7.2/api-win32-cold-no-oid-unique-stage357-20261009.json`、阶段 353 基线报告。
+- 限制/后续：此优化大幅降低文档行写入，但冷搜索仍约 2.2 秒，主要耗时转为 Git 全量消息扫描、FTS postings 和提交；继续从减少必须扫描的消息量或改变建索引时机寻找改进。S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
