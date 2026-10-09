@@ -3952,3 +3952,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；20 轮均使用同一 100k fixture 和独立 sidecar/SQLite，搜索均返回目标提交。
 - 证据：`doc/evidence/S7.2/api-win32-cold-slim-bulk-stage354-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`。
 - 限制/后续：多行 SQL 拼接写入在此环境下没有改善持久化耗时；继续保持单行预编译写入，从降低写入量或提前索引构建等方向寻找方案。完整冷搜索仍远超 <200ms，S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
+- 完成 commit：`787f04d perf: evaluate slim cache batch inserts`
