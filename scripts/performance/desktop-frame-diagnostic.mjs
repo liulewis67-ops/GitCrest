@@ -140,6 +140,11 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
       ? traceEvents.filter((event) => /VSync|vsync|Begin.*Frame|PipelineReporter|SubmitCompositorFrame|DrawAndSwap|FrameDisplayed|RunTask|FunctionCall|EventDispatch|Paint|Composite|Raster|Activate|Layout|RecalculateStyle/i.test(event.name))
       : [];
     const pipelineTraceSummary = Object.groupBy(pipelineTraceEvents, (event) => `${event.cat || "unknown"}:${event.name}`);
+    const waitForVSyncSleepEvents = pipelineTraceEvents.filter((event) => event.name === "WaitForVSync Sleep");
+    const waitForVSyncImplEvents = pipelineTraceEvents.filter((event) => event.name === "WaitForVSyncImpl");
+    const waitForVSyncSleepDurationsMs = waitForVSyncSleepEvents
+      .filter((event) => event.ph === "X" && Number.isFinite(event.dur))
+      .map((event) => event.dur / 1_000);
     const processNames = new Map(traceEvents
       .filter((event) => event.ph === "M" && event.name === "process_name")
       .map((event) => [event.pid, event.args?.name]));
@@ -196,6 +201,23 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
         } : {}),
         ...(detailedTrace ? {
           detailedCategories: "viz,cc,gpu,benchmark,devtools.timeline",
+          ...(process.platform === "win32" ? { windowsVSyncWait: {
+            sleepFallback: {
+              count: waitForVSyncSleepEvents.length,
+              durationMs: summarizeSamples(waitForVSyncSleepDurationsMs),
+            },
+            waitFailureMarkers: {
+              count: waitForVSyncImplEvents.length,
+              eventSamples: waitForVSyncImplEvents.slice(0, 3).map((event) => ({
+                timestampMs: Number.isFinite(event.ts) ? event.ts / 1_000 : null,
+                processId: event.pid,
+                processName: processNames.get(event.pid),
+                threadId: event.tid,
+                threadName: threadNames.get(`${event.pid}:${event.tid}`),
+                args: event.args,
+              })),
+            },
+          } } : {}),
           pipelineEvents: Object.entries(pipelineTraceSummary).map(([name, events]) => {
             const durationsMs = events
               .filter((event) => event.ph === "X" && Number.isFinite(event.dur))

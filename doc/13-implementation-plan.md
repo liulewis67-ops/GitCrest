@@ -4385,3 +4385,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`doc/15-frontend-development-guidelines.md` 第 4.2、5 节。
 - 限制/后续：失败的最新列表请求继续将错误交给调用方，restore 意图保留到之后的成功刷新；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 单独汇总 Windows VSync Sleep 与失败 marker — 小阶段 400
+- 状态：已完成（详细帧诊断报告分别汇总 `WaitForVSync Sleep` 和 `WaitForVSyncImpl` 事件）
+- 日期：2026-10-10
+- 交付：桌面帧诊断报告新增 `windowsVSyncWait`，记录 Sleep fallback marker 的数量与持续时间分布，以及 `WaitForVSyncImpl` marker 的数量、进程/线程和参数样例。Chromium 137 的 DXGI 实现只在 `WaitForVBlank` 失败时发出 `WaitForVSyncImpl` trace；报告将它作为失败证据字段，未把 marker 缺席解释为 wait 成功。[Chromium 137 DXGI VSync 实现](https://chromium.googlesource.com/chromium/src/+/137.0.7151.68/ui/gl/vsync_thread_win_dxgi.cc)
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs` 与 `git diff --check` 通过；未运行测试或启动新的 packaged app。检查阶段 381 的既有报告，确认有 566 个 `gpu:WaitForVSync Sleep` marker、P50 持续时间 17.705ms，未包含 `WaitForVSyncImpl` marker；当前已有 packaged app 进程仍在运行，因此本阶段只扩展后续报告字段，没有争用显示/VSync 资源重新采样。
+- 手工验证：未操作 GUI；检查解析器筛选规则已同时捕获两个事件名，并检查新字段只依赖详细 trace 内原始事件的 count、dur、args 与进程线程元数据。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-vsync-provider-stage381-20261010.json`、Chromium 137 DXGI VSync 实现源码。
+- 限制/后续：阶段 381 trace 仍不能区分 DXGI wait 失败与 wait 早返回后的 Sleep fallback；下一次允许采样时使用新增字段观察 Chromium failure marker。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
