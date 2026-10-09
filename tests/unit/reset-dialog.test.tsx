@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, ResetPreviewResponse, TaskSnapshotResponse } from "../../src/api/client";
 import { ResetDialog } from "../../src/features/workflows/ResetDialog";
 
 afterEach(cleanup);
+
+function cancellableApi(methods: Record<string, unknown>) {
+  let api: Record<string, unknown>;
+  api = { ...methods, withSignal: vi.fn(() => api) };
+  return api as unknown as import("../../src/api/client").GitCrestApiClient;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
 
 const branches: BranchSnapshotResponse = {
   repoId: "repo_fixture", current: "feature", detached: false,
@@ -27,11 +39,11 @@ const task: TaskSnapshotResponse = {
 };
 
 it("previews reset impact and requires explicit confirmation before starting", async () => {
-  const api = {
+  const api = cancellableApi({
     getRepositoryResetBackups: vi.fn().mockResolvedValue({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }),
     preflightRepositoryReset: vi.fn().mockResolvedValue(preview),
     startRepositoryReset: vi.fn().mockResolvedValue(task),
-  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  });
   const onStarted = vi.fn();
   render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
 
@@ -56,11 +68,11 @@ it("previews reset impact and requires explicit confirmation before starting", a
 });
 
 it("does not enable hard reset over local modifications", async () => {
-  const api = {
+  const api = cancellableApi({
     getRepositoryResetBackups: vi.fn().mockResolvedValue({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }),
     preflightRepositoryReset: vi.fn().mockResolvedValue({ ...preview, mode: "hard", dirtyPaths: ["notes.txt"], canStart: false }),
     startRepositoryReset: vi.fn(),
-  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  });
   render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
 
   fireEvent.change(screen.getByLabelText(/Move feature to/), { target: { value: preview.targetOid } });
@@ -79,10 +91,10 @@ it("requires confirmation before restoring a reset backup", async () => {
     backups: [{ reference: "refs/gitcrest/reset-backups/task-1", oid: "d".repeat(40), subject: "feature commit" }],
     canRestore: true,
   };
-  const api = {
+  const api = cancellableApi({
     getRepositoryResetBackups: vi.fn().mockResolvedValue(backupSnapshot),
     restoreRepositoryReset: vi.fn().mockResolvedValue(task),
-  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  });
   const onStarted = vi.fn();
   render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
 
@@ -101,9 +113,9 @@ it("requires confirmation before restoring a reset backup", async () => {
 
 it("moves focus into the reset dialog and closes it with Escape", async () => {
   const onClose = vi.fn();
-  const api = {
+  const api = cancellableApi({
     getRepositoryResetBackups: vi.fn().mockResolvedValue({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }),
-  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  });
   render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={onClose} onStarted={vi.fn()} />);
   const dialog = screen.getByRole("dialog", { name: "Reset current branch" });
   const close = screen.getByRole("button", { name: "Close" });
@@ -111,4 +123,23 @@ it("moves focus into the reset dialog and closes it with Escape", async () => {
 
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("aborts a reset backup read when the dialog unmounts", async () => {
+  const pending = deferred<Awaited<ReturnType<import("../../src/api/client").GitCrestApiClient["getRepositoryResetBackups"]>>>();
+  const signals: AbortSignal[] = [];
+  let api: Record<string, unknown>;
+  api = {
+    withSignal: vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return api;
+    }),
+    getRepositoryResetBackups: vi.fn(() => pending.promise),
+  };
+  const client = api as unknown as import("../../src/api/client").GitCrestApiClient;
+  const { unmount } = render(<ResetDialog api={client} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  await waitFor(() => expect(signals).toHaveLength(1));
+  unmount();
+  expect(signals[0]?.aborted).toBe(true);
+  await act(async () => pending.resolve({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }));
 });

@@ -3616,3 +3616,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件测试驱动旧目标的延迟响应并验证切换后的取消与结果隔离。
 - 证据：`src/features/workflows/WorkflowDialog.tsx`、`tests/unit/workflow-dialog.test.tsx`。
 - 限制/后续：其它独立 workflow 启动阶段读取、设置及冲突/重置/变基对话框仍需按所属 feature 生命周期审查；S7.2、S7.4、S7.5 验收继续未完成。
+- 完成 commit：`e307b1c`
+
+### 前端 Reset 备份读取生命周期取消 — 小阶段 321
+- 状态：已完成（Reset 对话框卸载时中止备份列表读取）
+- 日期：2026-10-09
+- 交付：ResetDialog 的恢复备份查询通过 `GitCrestApiClient.withSignal` 发送 AbortSignal；仓库变化或对话框卸载会终止请求，已取消读取不会更新备份状态或展示错误。
+- 验证：新增延迟备份响应的卸载用例，断言请求 signal 被 abort；定向 ResetDialog 用例通过；完整 `pnpm test` 通过（38 files、170 tests）；`pnpm build` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件自动化用例在卸载时检查活动请求的取消信号。
+- 证据：`src/features/workflows/ResetDialog.tsx`、`tests/unit/reset-dialog.test.tsx`。
+- 限制/后续：Rebase 对话框及 workflow recovery、conflict/settings、privacy preview 等独立只读请求仍需审查生命周期；S7.2、S7.4、S7.5 验收继续未完成。
