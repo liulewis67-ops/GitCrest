@@ -32,7 +32,7 @@ pub(super) async fn repository_diff(
     })?;
     let scope: DiffScope = query.scope.into();
     let repository_path = state
-        .repository_paths
+        .repository_targets
         .read_repository_path(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -106,7 +106,7 @@ pub(super) async fn repository_commit_file_diff(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

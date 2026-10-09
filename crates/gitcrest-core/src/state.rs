@@ -9,7 +9,7 @@ use crate::{
     features::{
         credentials,
         repositories::{
-            cloning::CloneService, repository::RepositoryManager, RepositoryPathReader,
+            cloning::CloneService, repository::RepositoryManager, RepositoryTargetReader,
         },
         status::StatusService,
         tasks::TaskService,
@@ -23,8 +23,8 @@ pub(crate) struct AppState {
     pub(crate) read_only_token: Option<Arc<String>>,
     pub(crate) conflict_token: Option<Arc<String>>,
     pub(crate) repositories: RepositoryManager,
-    pub(crate) repository_paths: RepositoryPathReader,
-    pub(crate) status: StatusService<RepositoryPathReader, GitCommandService>,
+    pub(crate) repository_targets: RepositoryTargetReader,
+    pub(crate) status: StatusService<RepositoryTargetReader, GitCommandService>,
     pub(crate) tasks: TaskService,
     pub(crate) git_commands: GitCommandService,
     pub(crate) clones: CloneService,

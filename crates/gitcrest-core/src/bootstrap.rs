@@ -63,9 +63,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let repositories = RepositoryManager::open_database(config.database_path)
         .await
         .map_err(|_| "Could not initialize the repository database")?;
-    let repository_paths = repositories.path_reader();
+    let repository_targets = repositories.target_reader();
     let git_commands = GitCommandService::default();
-    let status = StatusService::with_reader(repository_paths.clone(), git_commands.clone());
+    let status = StatusService::with_reader(repository_targets.clone(), git_commands.clone());
     let task_status = status.clone();
     let tasks =
         TaskService::with_store_and_status_invalidator(repositories.store(), move |repo_id| {
@@ -84,7 +84,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         read_only_token: config.read_only_token.map(Arc::new),
         conflict_token: config.conflict_token.map(Arc::new),
         repositories,
-        repository_paths,
+        repository_targets,
         status,
         tasks,
         git_commands,

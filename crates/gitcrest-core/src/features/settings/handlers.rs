@@ -196,7 +196,7 @@ pub(super) async fn request_ai(
     let (provider, base_url, model, api_key) = load_ai_provider(&state).await?;
 
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

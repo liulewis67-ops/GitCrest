@@ -27,7 +27,7 @@ pub(in crate::features::workflows) async fn preflight_repository_reset(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -64,7 +64,7 @@ pub(in crate::features::workflows) async fn start_repository_reset(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -160,7 +160,7 @@ pub(in crate::features::workflows) async fn list_repository_reset_backups(
     Path(repo_id): Path<String>,
 ) -> Result<Json<ResetBackupSnapshotDto>, ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -201,7 +201,7 @@ pub(in crate::features::workflows) async fn restore_repository_reset(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

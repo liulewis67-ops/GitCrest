@@ -2744,3 +2744,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_path.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/features/diff/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：TaskTarget 和 HistoryTarget 路径解析仍由 RepositoryManager 提供，后续可按实际共用边界继续收敛；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`bf1691f`
+
+### TaskTarget 解析从 RepositoryManager 迁入 RepositoryTargetReader — 小阶段 234
+- 状态：已完成（Git common-dir 锁键和任务操作路径解析由 target reader 提供）
+- 日期：2026-10-09
+- 交付：将 `TaskTarget` 与其 registry lookup、工作树存在性检查、Git common-dir 解析迁至 `RepositoryTargetReader`；reader 同时实现 `RepositoryPathPort`，并取代上一阶段的 PathReader。bootstrap/AppState 将 reader 独立装配给 status、Diff 和 feature handlers，跨 branches/commits/diff/history/remotes/settings/shelves/staging/tags/workflows 的任务操作改为依赖 target reader；RepositoryManager 删除 `task_target`。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。静态搜索确认 handler 不再通过 RepositoryManager 调用 `task_target`。
+- 手工验证：未执行 Electron 或临时仓库场景；保留原 common Git directory 规范化与失效路径错误分类实现。
+- 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/state.rs`、相关 feature handlers、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：HistoryTarget 查询仍留在 RepositoryManager；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待补记

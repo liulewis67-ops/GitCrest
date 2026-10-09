@@ -51,7 +51,7 @@ pub(in crate::features::workflows) async fn preflight_repository_workflow_recove
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -115,7 +115,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

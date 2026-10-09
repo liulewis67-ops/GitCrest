@@ -106,7 +106,7 @@ pub(super) async fn commit_repository(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

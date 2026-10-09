@@ -23,7 +23,7 @@ pub(super) async fn repository_branches(
     Path(repo_id): Path<String>,
 ) -> Result<Json<branches::BranchSnapshot>, ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -107,7 +107,7 @@ pub(super) async fn create_repository_branch(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -171,13 +171,13 @@ async fn branch_for_mutation(
     name: &str,
 ) -> Result<
     (
-        crate::features::repositories::repository::TaskTarget,
+        crate::features::repositories::repository_target::TaskTarget,
         crate::features::repositories::repository::Repository,
     ),
     ApiError,
 > {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

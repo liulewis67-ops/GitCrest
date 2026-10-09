@@ -30,12 +30,6 @@ pub struct RepositoryManager {
 }
 
 #[derive(Clone, Debug)]
-pub struct TaskTarget {
-    pub repository_path: PathBuf,
-    pub resource_key: String,
-}
-
-#[derive(Clone, Debug)]
 pub struct HistoryTarget {
     pub repository_path: PathBuf,
     pub head: Option<String>,
@@ -44,45 +38,6 @@ pub struct HistoryTarget {
 impl RepositoryManager {
     pub fn store(&self) -> RepositoryStore {
         self.store.clone()
-    }
-
-    pub async fn task_target(&self, repo_id: &str) -> Result<TaskTarget, RepositoryError> {
-        let store = self.store.clone();
-        let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let repository_path = PathBuf::from(repository.path);
-        fs::metadata(&repository_path)
-            .await
-            .map_err(map_path_error)?;
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&repository_path)
-            .args(["rev-parse", "--git-common-dir"])
-            .kill_on_drop(true)
-            .output()
-            .await
-            .map_err(|_| RepositoryError::GitUnavailable)?;
-        if !output.status.success() {
-            return Err(RepositoryError::StatusFailed);
-        }
-        let common_dir = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        let common_dir = PathBuf::from(common_dir);
-        let common_dir = if common_dir.is_absolute() {
-            common_dir
-        } else {
-            repository_path.join(common_dir)
-        };
-        let canonical = fs::canonicalize(&common_dir)
-            .await
-            .map_err(|_| RepositoryError::StatusFailed)?;
-        Ok(TaskTarget {
-            repository_path,
-            resource_key: canonical.to_string_lossy().into_owned(),
-        })
     }
 
     pub async fn history_target(&self, repo_id: &str) -> Result<HistoryTarget, RepositoryError> {
@@ -112,8 +67,8 @@ impl RepositoryManager {
         })
     }
 
-    pub(crate) fn path_reader(&self) -> super::repository_path::RepositoryPathReader {
-        super::repository_path::RepositoryPathReader::new(self.store.clone())
+    pub(crate) fn target_reader(&self) -> super::repository_target::RepositoryTargetReader {
+        super::repository_target::RepositoryTargetReader::new(self.store.clone())
     }
 
     pub async fn open_database(path: PathBuf) -> Result<Self, RepositoryError> {
@@ -504,10 +459,15 @@ mod tests {
             ))
         );
         let common_target = manager
+            .target_reader()
             .task_target(&common_repository.repo_id)
             .await
             .unwrap();
-        let worktree_target = manager.task_target(&repository.repo_id).await.unwrap();
+        let worktree_target = manager
+            .target_reader()
+            .task_target(&repository.repo_id)
+            .await
+            .unwrap();
         assert_eq!(common_target.resource_key, worktree_target.resource_key);
     }
 

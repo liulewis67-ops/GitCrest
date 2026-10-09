@@ -16,7 +16,7 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::settings as ai,
     features::{
-        repositories::repository::RepositoryManager,
+        repositories::repository_target::{RepositoryTargetReader, TaskTarget},
         tasks::{TaskFailure, TaskService, TaskSnapshot, TaskStatus},
     },
     state::AppState,
@@ -67,7 +67,7 @@ pub(in crate::features::workflows) async fn read_workflow_conflict_file(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -105,7 +105,7 @@ pub(in crate::features::workflows) async fn get_workflow_conflict_ai_settings(
     Path(repo_id): Path<String>,
 ) -> Result<Json<ai::AiSettings>, ApiError> {
     state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -173,7 +173,7 @@ async fn read_reviewed_conflict_for_suggestion(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -298,7 +298,7 @@ pub(in crate::features::workflows) async fn save_workflow_conflict_file(
     let (target, preview) = inspect_waiting_conflict(
         &state.git_commands,
         &state.tasks,
-        &state.repositories,
+        &state.repository_targets,
         &repo_id,
         &request.mutation.task_id,
         &request.mutation.path,
@@ -326,7 +326,7 @@ pub(in crate::features::workflows) async fn save_workflow_conflict_file(
     let repo_path = target.repository_path;
     let resource_key = target.resource_key;
     let tasks = state.tasks.clone();
-    let repositories = state.repositories.clone();
+    let repositories = state.repository_targets.clone();
     let git_commands = state.git_commands.clone();
     let task_id = request.mutation.task_id;
     let path = request.mutation.path;
@@ -404,7 +404,7 @@ pub(in crate::features::workflows) async fn mark_workflow_conflict_resolved(
     let (target, preview) = inspect_waiting_conflict(
         &state.git_commands,
         &state.tasks,
-        &state.repositories,
+        &state.repository_targets,
         &repo_id,
         &request.task_id,
         &request.path,
@@ -443,7 +443,7 @@ pub(in crate::features::workflows) async fn mark_workflow_conflict_resolved(
     let repo_path = target.repository_path;
     let resource_key = target.resource_key;
     let tasks = state.tasks.clone();
-    let repositories = state.repositories.clone();
+    let repositories = state.repository_targets.clone();
     let git_commands = state.git_commands.clone();
     let task_id = request.task_id;
     let path = request.path;
@@ -530,17 +530,11 @@ fn validate_conflict_mutation(request: &WorkflowConflictMutationRequest) -> Resu
 async fn inspect_waiting_conflict(
     git: &crate::git::command::GitCommandService,
     tasks: &TaskService,
-    repositories: &RepositoryManager,
+    repositories: &RepositoryTargetReader,
     repo_id: &str,
     task_id: &str,
     path: &str,
-) -> Result<
-    (
-        crate::features::repositories::repository::TaskTarget,
-        workflows::WorkflowRecoveryPreflight,
-    ),
-    ApiError,
-> {
+) -> Result<(TaskTarget, workflows::WorkflowRecoveryPreflight), ApiError> {
     let task = tasks.get(task_id).await.ok_or_else(|| {
         ApiError::new(
             StatusCode::NOT_FOUND,

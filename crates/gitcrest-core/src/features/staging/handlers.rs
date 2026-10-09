@@ -29,7 +29,7 @@ pub(crate) async fn stage_repository(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -111,7 +111,7 @@ pub(crate) async fn stage_repository_patch(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -260,7 +260,7 @@ pub(crate) async fn undo_recent_operation(
     Path(repo_id): Path<String>,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -428,7 +428,7 @@ pub(crate) async fn discard_repository_patch(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

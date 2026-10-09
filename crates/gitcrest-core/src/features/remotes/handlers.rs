@@ -30,7 +30,7 @@ pub(super) async fn fetch_repository(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -65,7 +65,7 @@ pub(super) async fn preflight_repository_pull(
     Path(repo_id): Path<String>,
 ) -> Result<Json<pull::PullPreflight>, ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -98,7 +98,7 @@ pub(super) async fn pull_repository(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -182,7 +182,7 @@ pub(super) async fn preflight_repository_push(
         }
     };
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -217,7 +217,7 @@ pub(super) async fn push_repository(
     })?;
     let target_ref = Some((request.remote_name.as_str(), request.remote_branch.as_str()));
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -297,7 +297,7 @@ pub(super) async fn repository_remotes(
     Path(repo_id): Path<String>,
 ) -> Result<Json<remote_service::RemoteSnapshot>, ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -310,7 +310,7 @@ pub(super) async fn repository_remotes(
 async fn submit_remote_command(
     state: &AppState,
     repo_id: String,
-    target: crate::features::repositories::repository::TaskTarget,
+    target: crate::features::repositories::repository_target::TaskTarget,
     operation_name: &'static str,
     operation: RemoteCommand,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
@@ -348,7 +348,7 @@ pub(super) async fn add_repository_remote(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -403,7 +403,7 @@ pub(super) async fn set_repository_remote_url(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -458,7 +458,7 @@ pub(super) async fn delete_repository_remote(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -526,7 +526,7 @@ pub(super) async fn set_default_remote(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -574,7 +574,7 @@ pub(super) async fn set_branch_upstream(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -658,7 +658,7 @@ pub(super) async fn preview_repository_remote_branch_delete(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -695,7 +695,7 @@ pub(super) async fn delete_repository_remote_branch(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

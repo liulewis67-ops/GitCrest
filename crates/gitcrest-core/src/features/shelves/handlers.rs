@@ -33,7 +33,7 @@ pub(super) async fn list_repository_shelves(
     Path(repo_id): Path<String>,
 ) -> Result<Json<Vec<ShelfSnapshotDto>>, ApiError> {
     state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -50,7 +50,7 @@ pub(super) async fn get_repository_shelf(
     Path((repo_id, shelf_id)): Path<(String, String)>,
 ) -> Result<Json<ShelfDetailResponse>, ApiError> {
     state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -84,7 +84,7 @@ pub(super) async fn delete_repository_shelf(
     Path((repo_id, shelf_id)): Path<(String, String)>,
 ) -> Result<StatusCode, ApiError> {
     state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -108,7 +108,7 @@ pub(super) async fn preflight_repository_shelf_apply(
     Path((repo_id, shelf_id)): Path<(String, String)>,
 ) -> Result<Json<ShelfApplyPreviewResponse>, ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -168,7 +168,7 @@ pub(super) async fn apply_repository_shelf(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -509,7 +509,7 @@ pub(super) async fn create_repository_shelf(
         ));
     }
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

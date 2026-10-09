@@ -60,7 +60,7 @@ pub(super) async fn repository_commit_detail(
     Path((repo_id, oid)): Path<(String, String)>,
 ) -> Result<Json<CommitDetailDto>, ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -84,7 +84,7 @@ pub(super) async fn repository_blame(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
@@ -105,7 +105,7 @@ pub(super) async fn repository_refs(
     Path(repo_id): Path<String>,
 ) -> Result<Json<RefSnapshotDto>, ApiError> {
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

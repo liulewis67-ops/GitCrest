@@ -27,7 +27,7 @@ pub(crate) async fn create_repository_commit_tag(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
