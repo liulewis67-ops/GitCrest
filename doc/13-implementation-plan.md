@@ -3452,3 +3452,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/shared/lib/shortcut-preferences.ts`、`src/features/settings/SettingsDialog.tsx`、`src/features/settings/model/use-shortcut-preferences.ts`、`src/features/diff/DiffWindow.tsx`、`src/features/commits/ui/CommitWorkbench.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节；实现 commit：`538b89c`。
 - 限制/后续：Settings barrel 仍为 app/page 导出快捷键共享 API，符合组合层入口规则；平台发布验收和 S7.5 全量收口仍未完成。
 - 完成 commit：`538b89c`
+
+### CommitMessageAssistant 归回 commits feature — 小阶段 305
+- 状态：已完成（Commit 工作台不再依赖 Settings feature 内部的提交消息助手）
+- 日期：2026-10-09
+- 交付：将只处理已暂存变更审阅、AI 提交消息/摘要请求的 `CommitMessageAssistant` 移入 `features/commits/ui`，CommitWorkbench 改为同 feature 懒加载；从 Settings 公共 barrel 移除此组件，并更新组件测试导入位置。助手仍以独立 lazy chunk 加载。
+- 验证：前端边界检查和生产构建通过；Commit assistant 定向测试 1 个文件、5 项通过；完整 `pnpm check` 通过（Vitest 163/163、Rust 137/137、Electron E2E 6 files / 29 tests，含构建与 Rust fmt）；`git diff --check` 通过。构建仅输出既有 web-tree-sitter `eval` 警告。
+- 手工验证：未执行 GUI 手工场景；既有助手单测覆盖已审阅 staged diff、隐私范围、陈旧状态和建议应用，Electron E2E 全量通过。
+- 证据：`src/features/commits/ui/CommitMessageAssistant.tsx`、`src/features/commits/ui/CommitWorkbench.tsx`、`tests/unit/commit-message-assistant.test.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节；实现 commit：`1c566e0`。
+- 限制/后续：Settings 的 AI provider 配置仍由助手通过 API 读取，组件不依赖 Settings UI；平台发布验收和 S7.5 全量收口仍未完成。
+- 完成 commit：`1c566e0`
