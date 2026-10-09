@@ -3736,3 +3736,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`electron/main/update-manifest-signature.ts`、`electron/main/update-config-policy.mjs`、`electron/main/index.ts`、`tests/unit/update-manifest-signature.test.ts`。
 - 限制/后续：CI 仍需将受控公钥写入 Linux 包配置、使用 GitHub Secret 私钥给 `latest-linux.yml` 签名并发布；还需在原生 Linux runner 验证签名成功下载及缺失/错误签名拒绝。当前阶段只建立运行时验证链，不代表 S7.4 完成。
 - 完成 commit：`691452d`
+
+### S7.4 Linux 更新清单发布签名工具 — 小阶段 333
+- 状态：已完成（新增与运行时 verifier 共用 canonicalization 的签名 CLI；发布流水线接入仍待完成）
+- 日期：2026-10-09
+- 交付：新增 `pnpm release:sign-linux-update-manifest <latest-linux.yml> <ed25519-private-key.pem>`，验证 release YAML 的版本、下载文件 URL 与 SHA-512 字段，要求 Ed25519 PEM 私钥，按运行时 verifier 的域分隔 canonical JSON 格式为整个 update info 签名，并以临时文件原子替换清单。签名策略抽至共享 `.mjs` 模块供 Electron 运行时和 Node 发布工具共用；输出保留原清单文件权限。新增精确版本 `js-yaml` 及类型依赖。
+- 验证：端到端测试生成临时 Ed25519 密钥对，在含空格路径中运行发布 CLI，重新读取 YAML 并由运行时 verifier 验证通过，且篡改 SHA-512 后验签失败；定向测试通过（2 files / 6 tests），完整 `pnpm test` 通过（39 files / 186 tests），`pnpm build`、`pnpm frontend:boundaries`、CLI 与策略模块 `node --check`、`git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未生成正式 release，也未使用或配置真实发布私钥；测试密钥仅在临时目录生成并清理。
+- 证据：`scripts/sign-linux-update-manifest.mjs`、`electron/main/update-manifest-signature-policy.mjs`、`tests/unit/update-manifest-signature.test.ts`。
+- 限制/后续：CI 尚未将公钥注入 Linux 包配置、从 GitHub Secret 读取私钥并在发布 job 中调用签名工具；仍需原生 Linux runner 验证真实 AppImage 更新下载和错误签名拒绝。S7.4 整体尚未验收。
+- 完成 commit：`b57564b`
