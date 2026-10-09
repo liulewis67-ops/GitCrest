@@ -180,8 +180,15 @@ pub fn parse_askpass_prompt(prompt: &str) -> Result<(AskpassPromptKind, String),
 }
 
 pub fn answer_askpass_prompt(prompt: &str) -> Result<Zeroizing<String>, CredentialError> {
+    answer_askpass_prompt_with_manager(prompt, &CredentialManager::system())
+}
+
+fn answer_askpass_prompt_with_manager(
+    prompt: &str,
+    manager: &CredentialManager,
+) -> Result<Zeroizing<String>, CredentialError> {
     let (kind, host) = parse_askpass_prompt(prompt)?;
-    let credential = CredentialManager::system()
+    let credential = manager
         .get_for_git(&host)?
         .ok_or(CredentialError::Unavailable)?;
     Ok(match kind {
@@ -499,5 +506,39 @@ mod tests {
                 Err(CredentialError::InvalidInput)
             );
         }
+    }
+
+    #[test]
+    fn answers_git_askpass_prompts_from_the_matching_credential_store_entry() {
+        let manager = manager();
+        manager
+            .set("example.com:8443", "git-user", "test-token")
+            .unwrap();
+
+        assert_eq!(
+            answer_askpass_prompt_with_manager(
+                "Username for 'https://example.com:8443/org/repo.git': ",
+                &manager,
+            )
+            .unwrap()
+            .as_str(),
+            "git-user"
+        );
+        assert_eq!(
+            answer_askpass_prompt_with_manager(
+                "Password for 'https://git-user@example.com:8443/org/repo.git': ",
+                &manager,
+            )
+            .unwrap()
+            .as_str(),
+            "test-token"
+        );
+        assert_eq!(
+            answer_askpass_prompt_with_manager(
+                "Password for 'https://other.example.com/org/repo.git': ",
+                &manager,
+            ),
+            Err(CredentialError::Unavailable)
+        );
     }
 }
