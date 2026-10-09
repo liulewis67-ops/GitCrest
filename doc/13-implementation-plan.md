@@ -3545,4 +3545,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；Clone 现有 URL 校验单测覆盖 HTTPS、SSH、SCP、本地测试 fixture 和凭证/危险参数拒绝，远程 API 使用同一领域规则。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/features/repositories/cloning.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/storage/storage.rs`。
 - 限制/后续：其他跨 feature 的实现依赖仍需逐项迁移或通过明确的公开边界收敛；API DTO/Domain 分离与 feature 级集成测试组织仍待逐步完善。
+
+### 后端 repositories feature 公共出口 — 小阶段 314
+- 状态：已完成（业务 feature 通过 repositories 模块出口共享仓库模型和任务目标类型）
+- 日期：2026-10-09
+- 交付：repositories feature 根模块显式导出 `Repository`、`RepositoryManager`、`RepositoryTargetReader` 和 `TaskTarget`。branches、remotes、workflows handlers 改用 feature 根出口，不再依赖 `repository.rs` 与 `repository_target.rs` 子模块路径；只改变模块依赖路径，不改变 API 或仓库行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、Rust 全量测试（139/139）和 `git diff --check` 通过。Rust build/test 使用系统 TEMP 下隔离的 `CARGO_TARGET_DIR`。
+- 手工验证：未执行 GUI 操作；编译与 Rust 全量测试验证 feature 公共出口的所有使用方。
+- 证据：`crates/gitcrest-core/src/features/repositories/mod.rs`、`crates/gitcrest-core/src/features/{branches,remotes,workflows}/`。
+- 限制/后续：其他跨 feature 子模块路径与 route composition 仍需逐步审查；API DTO/Domain 分离及 feature 级集成测试组织仍待完善。
 - 完成 commit：`ea4f1ff`

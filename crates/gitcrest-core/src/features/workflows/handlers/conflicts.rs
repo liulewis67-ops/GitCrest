@@ -16,7 +16,7 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::settings as ai,
     features::{
-        repositories::repository_target::{RepositoryTargetReader, TaskTarget},
+        repositories::{RepositoryTargetReader, TaskTarget},
         tasks::{TaskFailure, TaskService, TaskSnapshot, TaskStatus},
     },
     state::AppState,

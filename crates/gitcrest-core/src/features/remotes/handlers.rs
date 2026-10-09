@@ -10,7 +10,7 @@ use crate::{
         RemoteBranchDeleteCommand, RemoteCommand, RemotePullCommand, RemotePullStrategy,
         RemotePushCommand,
     },
-    features::{branches, remotes as remote_service},
+    features::{branches, remotes as remote_service, repositories::TaskTarget},
     AppState, TaskFailure, TaskSnapshot,
 };
 
@@ -402,7 +402,7 @@ pub(super) async fn repository_remotes(
 async fn submit_remote_command(
     state: &AppState,
     repo_id: String,
-    target: crate::features::repositories::repository_target::TaskTarget,
+    target: TaskTarget,
     operation_name: &'static str,
     operation: RemoteCommand,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {

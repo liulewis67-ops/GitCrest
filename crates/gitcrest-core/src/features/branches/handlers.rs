@@ -9,6 +9,7 @@ use crate::{
     domain::status::ChangeCategory,
     domain::{branch::BranchCommand, error::RepositoryError},
     features::branches,
+    features::repositories::{Repository, TaskTarget},
     AppState, TaskFailure, TaskSnapshot,
 };
 
@@ -177,13 +178,7 @@ async fn branch_for_mutation(
     state: &AppState,
     repo_id: &str,
     name: &str,
-) -> Result<
-    (
-        crate::features::repositories::repository_target::TaskTarget,
-        crate::features::repositories::repository::Repository,
-    ),
-    ApiError,
-> {
+) -> Result<(TaskTarget, Repository), ApiError> {
     let target = state
         .repository_targets
         .task_target(repo_id)
