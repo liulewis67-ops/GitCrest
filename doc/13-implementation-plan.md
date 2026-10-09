@@ -3715,4 +3715,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件测试分别覆盖卸载时中止在途版本 GET、provider 返回迟到时不发起版本 GET。
 - 证据：`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`。
 - 限制/后续：面板关闭不会保证已发出的 provider 请求在服务端停止；面板会丢弃其迟到结果并跳过复核 GET。S7.2 冷搜索与桌面内存/帧率、S7.4、S7.5 仍待完成。
-- 完成 commit：待补记
+- 完成 commit：`c89bad1`
