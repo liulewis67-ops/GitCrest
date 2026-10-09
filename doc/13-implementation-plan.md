@@ -3431,4 +3431,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工场景；本阶段为 import 组织和自动架构检查。
 - 证据：`scripts/check-frontend-import-boundaries.mjs`、`package.json`、`src/features/{credentials,commits,diff,remotes,repositories,workflows}/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 限制/后续：检查只覆盖 `src/` TypeScript/TSX 源码，不覆盖测试或 Rust 模块依赖；通过公开入口的跨 feature 协作仍需在后续阶段逐步评估是否迁到 app/page 组合层。
-- 完成 commit：待提交
+- 完成 commit：`7bb90ae`
