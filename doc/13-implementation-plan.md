@@ -3243,4 +3243,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright Electron E2E 覆盖 clone 对话框、native folder picker 桥接、异步任务及自动打开结果。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前覆盖本地 bare remote 的成功克隆；凭据认证失败、取消和 clone UI retry 仍可在 S7.5 风险矩阵中继续补齐。
-- 完成 commit：待提交
+- 完成 commit：`d7b8386`
