@@ -4774,3 +4774,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/git/remote.rs`、`crates/gitcrest-core/src/git/mod.rs`、相关 adapter 引用、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：remote port 与 feature 目录按其复数业务能力命名；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段模块归属调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将凭据编辑器协作类型归入 credentials feature — 小阶段 439
+- 状态：已完成（凭据编辑器 renderer 类型从 shared 移入 credentials feature 公开 API）
+- 日期：2026-10-10
+- 交付：将 `CredentialEditorRenderer` 类型从 `shared/ui` 移至 `features/credentials/model/` 并由 feature `index.ts` 显式导出；App、WorkspaceNavigation、CloneDialog 和 RemoteManager 通过 credentials feature 公开入口引用。运行时渲染与页面组合方式不变。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec tsc --noEmit -p tsconfig.test.json` 与 `git diff --check` 通过；只做类型检查，未运行 Vitest。
+- 手工验证：全仓检索确认生产源码不再引用 `shared/ui/credential-editor-renderer`；跨 feature 类型依赖使用 credentials feature 的 index 入口，边界检查通过。
+- 证据：`src/features/credentials/model/credential-editor-renderer.ts`、`src/features/credentials/index.ts`、相关 App/page/feature 使用点、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
+- 限制/后续：凭据编辑器运行时仍由 App 注入 renderer 回调供 clone 和 remote UI 使用；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段类型归属与台账同一 commit（SHA 可在后续台账更新中补记）。

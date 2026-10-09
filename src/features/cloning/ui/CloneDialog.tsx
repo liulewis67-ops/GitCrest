@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
-import type { CredentialEditorRenderer } from "../../../shared/ui/credential-editor-renderer";
+import type { CredentialEditorRenderer } from "../../credentials";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 interface CloneDialogProps {

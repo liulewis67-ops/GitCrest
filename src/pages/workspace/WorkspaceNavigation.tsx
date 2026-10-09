@@ -3,7 +3,7 @@ import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse,
 import type { RepositoryStatusGroup } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadRemoteManager } from "../../features/remotes";
-import type { CredentialEditorRenderer } from "../../shared/ui/credential-editor-renderer";
+import type { CredentialEditorRenderer } from "../../features/credentials";
 
 const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
 const ShelfCenter = lazy(() => import("../../features/shelves").then(({ ShelfCenter }) => ({ default: ShelfCenter })));

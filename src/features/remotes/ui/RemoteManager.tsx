@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../api/client";
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
-import type { CredentialEditorRenderer } from "../../../shared/ui/credential-editor-renderer";
+import type { CredentialEditorRenderer } from "../../credentials";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 interface RemoteManagerProps {
