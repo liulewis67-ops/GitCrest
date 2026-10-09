@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
-import { CredentialEditor, httpsHostFromRemote } from "../../src/features/credentials/CredentialEditor";
+import { httpsHostFromRemote } from "../../src/shared/lib/https-remote-host";
+import { CredentialEditor } from "../../src/features/credentials/CredentialEditor";
 
 afterEach(cleanup);
 

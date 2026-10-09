@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse, RepositoryResponse, StagingRequest, StatusSnapshotResponse, TaskSnapshotResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadRemoteManager } from "../../features/remotes";
+import type { CredentialEditorRenderer } from "../../shared/ui/credential-editor-renderer";
 
 const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
 const ShelfCenter = lazy(() => import("../../features/shelves").then(({ ShelfCenter }) => ({ default: ShelfCenter })));
@@ -38,6 +39,7 @@ interface WorkspaceNavigationProps {
   remoteActionBusy: boolean;
   remoteDisabledReason: string;
   api?: GitCrestApiClient;
+  renderCredentialEditor: CredentialEditorRenderer;
   credentialManagerOpenRequest: number;
   historyRefreshKey: number;
   shelfComposerRequest: number;
@@ -74,7 +76,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
     workingCount, stagedCount, stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope,
     activeBranches, hasBranchSnapshot, activeBranchError, activeBranchesLoading, orderedBranches,
     activeRemotes, activeRemoteError, activeRemotesLoading, remoteActionBusy, remoteDisabledReason,
-    api, credentialManagerOpenRequest, historyRefreshKey, shelfComposerRequest, shelfComposerAfterSwitch,
+    api, renderCredentialEditor, credentialManagerOpenRequest, historyRefreshKey, shelfComposerRequest, shelfComposerAfterSwitch,
     connected, connecting, hasActiveRepositoryTask, shortcuts, isMacPlatform,
     onStageChanges: stageChanges, onRefreshRepositoryStatus: refreshRepositoryStatus,
     onRefreshRepositoryBranches: refreshRepositoryBranches, onOpenFileDiff: openFileDiff,
@@ -143,7 +145,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
               <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">Loading remote controls…</div>}><RemoteManager
                 snapshot={activeRemotes}
                 branches={activeBranches}
-                api={api}
+                renderCredentialEditor={renderCredentialEditor}
                 openRequest={credentialManagerOpenRequest}
                 onFetch={() => void fetchRepository()}
                 loading={activeRemotesLoading}

@@ -1,1 +1,1 @@
-export { CredentialEditor, httpsHostFromRemote } from "./CredentialEditor";
+export const loadCredentialEditor = () => import("./CredentialEditor");

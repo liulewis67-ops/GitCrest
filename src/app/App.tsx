@@ -10,8 +10,10 @@ import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShor
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
+import type { CredentialEditorRenderer } from "../shared/ui/credential-editor-renderer";
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
+import { loadCredentialEditor } from "../features/credentials";
 import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useHistoryViewRequests } from "../features/history";
@@ -36,6 +38,7 @@ const PushTargetDialog = lazy(() => loadPushTargetDialog().then(({ PushTargetDia
 const DiscardChangesDialog = lazy(() => loadDiscardChangesDialog().then(({ DiscardChangesDialog }) => ({ default: DiscardChangesDialog })));
 const SettingsDialog = lazy(() => loadSettingsDialog().then(({ SettingsDialog }) => ({ default: SettingsDialog })));
 const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
+const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
 
 type Page = "welcome" | "workspace";
 const changeGroups = [
@@ -746,6 +749,11 @@ function App() {
     "--details-width": `${detailsWidth}px`,
     "--workbench-height": `${workbenchHeight}px`,
   } as CSSProperties;
+  const renderCredentialEditor: CredentialEditorRenderer = (host, disabled) => (
+    <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading credential controls…</div>}>
+      <CredentialEditor key={host} api={apiRef.current} host={host} disabled={disabled} />
+    </Suspense>
+  );
 
   const commands = [
     { id: "welcome", label: "Go to Welcome", detail: "Return to recent repositories and quick actions", available: true, run: () => setPage("welcome") },
@@ -866,6 +874,7 @@ function App() {
               remoteActionBusy={remoteMutations.busy}
               remoteDisabledReason={remoteDisabledReason}
               api={apiRef.current}
+              renderCredentialEditor={renderCredentialEditor}
               credentialManagerOpenRequest={credentialManagerOpenRequest}
               historyRefreshKey={historyRequests.refreshKey}
               shelfComposerRequest={shelfComposerRequest}
@@ -1094,7 +1103,7 @@ function App() {
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
       {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
-      {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} api={apiRef.current} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
+      {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} renderCredentialEditor={renderCredentialEditor} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>
   );

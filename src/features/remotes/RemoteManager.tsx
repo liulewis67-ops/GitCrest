@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse } from "../../api/client";
+import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../api/client";
+import { httpsHostFromRemote } from "../../shared/lib/https-remote-host";
+import type { CredentialEditorRenderer } from "../../shared/ui/credential-editor-renderer";
 import { useDialogFocus } from "../../shared/use-dialog-focus";
-import { CredentialEditor, httpsHostFromRemote } from "../credentials";
 
 interface RemoteManagerProps {
   snapshot?: RemoteSnapshotResponse;
@@ -11,7 +12,7 @@ interface RemoteManagerProps {
   disabled: boolean;
   disabledReason: string;
   error: string;
-  api?: GitCrestApiClient;
+  renderCredentialEditor: CredentialEditorRenderer;
   openRequest?: number;
   onFetch?: () => void;
   onRefresh: () => void;
@@ -22,7 +23,7 @@ interface RemoteManagerProps {
   onSetUpstream: (localBranch: string, remoteName: string, remoteBranch: string) => void;
 }
 
-export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, api, openRequest, onFetch, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream }: RemoteManagerProps) {
+export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, renderCredentialEditor, openRequest, onFetch, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream }: RemoteManagerProps) {
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newUrl, setNewUrl] = useState("");
@@ -122,7 +123,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
 
             <section className="credentialSection" aria-labelledby="credential-section-title">
               <div className="remoteDialogSectionTitle"><h3 id="credential-section-title">HTTPS credentials</h3><span>{credentialHosts.length}</span></div>
-              {credentialHosts.length === 0 ? <p className="cloneHelp">Add an HTTPS remote to configure credentials for its host.</p> : credentialHosts.map((host) => <CredentialEditor key={host} api={api} host={host} disabled={disabled || busy} />)}
+              {credentialHosts.length === 0 ? <p className="cloneHelp">Add an HTTPS remote to configure credentials for its host.</p> : credentialHosts.map((host) => <div key={host}>{renderCredentialEditor(host, disabled || busy)}</div>)}
               {recoveryMode && <div className="credentialRecoveryAction"><p className="cloneHelp">After updating a credential, retry the fetch to check authentication.</p><button className="secondaryButton" type="button" disabled={disabled || busy || !onFetch} onClick={() => { setRecoveryMode(false); onFetch?.(); }}>Retry fetch</button></div>}
             </section>
 

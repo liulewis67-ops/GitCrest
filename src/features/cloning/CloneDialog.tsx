@@ -1,7 +1,7 @@
 import { useState } from "react";
-import type { GitCrestApiClient } from "../../api/client";
+import { httpsHostFromRemote } from "../../shared/lib/https-remote-host";
+import type { CredentialEditorRenderer } from "../../shared/ui/credential-editor-renderer";
 import { useDialogFocus } from "../../shared/use-dialog-focus";
-import { CredentialEditor, httpsHostFromRemote } from "../credentials";
 
 interface CloneDialogProps {
   initialRemoteUrl?: string;
@@ -9,7 +9,7 @@ interface CloneDialogProps {
   parentPath?: string;
   error: string;
   busy: boolean;
-  api?: GitCrestApiClient;
+  renderCredentialEditor: CredentialEditorRenderer;
   onChooseParent: () => Promise<string | undefined>;
   onClose: () => void;
   onSubmit: (remoteUrl: string, parentPath: string, directoryName: string) => void;
@@ -20,7 +20,7 @@ function folderFromRemote(remote: string): string {
   return normalized.split(/[/:]/).pop()?.replace(/\.git$/i, "") || "";
 }
 
-export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", parentPath, error, busy, api, onChooseParent, onClose, onSubmit }: CloneDialogProps) {
+export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", parentPath, error, busy, renderCredentialEditor, onChooseParent, onClose, onSubmit }: CloneDialogProps) {
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const [remoteUrl, setRemoteUrl] = useState(initialRemoteUrl);
   const [directoryName, setDirectoryName] = useState(initialDirectoryName || folderFromRemote(initialRemoteUrl));
@@ -46,7 +46,7 @@ export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", 
         <div className="cloneFormBody">
           <label className="cloneField">Remote URL<input autoFocus data-dialog-initial-focus value={remoteUrl} onChange={(event) => { setRemoteUrl(event.target.value); if (!folderEdited) setDirectoryName(folderFromRemote(event.target.value)); }} placeholder="https://host/owner/repository.git" autoComplete="url" /></label>
           <p className="cloneHelp">HTTPS credentials are stored in the system credential store; SSH uses your system SSH agent. Credentials in URLs are rejected.</p>
-          {credentialHost && <CredentialEditor key={credentialHost} api={api} host={credentialHost} disabled={busy} />}
+          {credentialHost && renderCredentialEditor(credentialHost, busy)}
         </div>
         <form onSubmit={(event) => { event.preventDefault(); onSubmit(remoteUrl.trim(), selectedParent, directoryName.trim()); }}>
           <div className="cloneFormBody">
