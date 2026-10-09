@@ -141,7 +141,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 | 基础提交 | `02-prd.md`、`04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
 | 查看历史 | `03-information-architecture.md`、`05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
 | Diff 浏览 | `05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
-| 冲突解决 | `04-user-flows.md`、`07-interaction-accessibility.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
+| 冲突解决 | `04-user-flows.md`、`07-interaction-accessibility.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`（键盘解决 cherry-pick 冲突；AI 建议需先明确同意，并验证建议不会自动应用或暂存）、`tests/e2e/remote-sync.test.ts`（Pull merge/rebase 冲突恢复）、`tests/e2e/desktop.test.ts` |
 | 分支切换 | `04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
 | 远程同步 | `04-user-flows.md` | 是 | `tests/e2e/remote-sync.test.ts`（Push、Fetch 成功/失败恢复/HTTPS 401 后保存凭据并认证重试成功/活动取消、Pull fast-forward/脏工作区拒绝/活动 merge 取消与安全回滚/merge-rebase 冲突恢复/排队取消/Pull rebase pre-replay 取消/两种 backend 的 replay 中断恢复、Push 失败后审阅重试） |
 | Shelve | `04-user-flows.md` | 是 | `tests/e2e/shelf-workflow.test.ts`（创建、预览和应用） |

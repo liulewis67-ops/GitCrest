@@ -1,5 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -9,10 +10,11 @@ import { createTempGitRepository } from "../fixtures/temp-repo";
 
 const execFileAsync = promisify(execFile);
 
-it("opens a repository, stages, commits, switches branches, and resolves a conflict with the keyboard", async () => {
+it("uses keyboard workflows for repository changes and reviews an AI conflict suggestion without applying it", async () => {
   const fixture = await createTempGitRepository();
   const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-keyboard-app-data-"));
   let app: ElectronApplication | undefined;
+  let mockProvider: ReturnType<typeof createServer> | undefined;
   try {
     await writeFile(resolve(fixture.path, "seed.txt"), "seed\n");
     await execFileAsync("git", ["-C", fixture.path, "add", "seed.txt"]);
@@ -25,6 +27,31 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+
+    const providerRequests: Array<Record<string, unknown>> = [];
+    mockProvider = createServer((request, response) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        providerRequests.push(JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>);
+        const body = JSON.stringify({ message: { content: "export const value = 'AI proposed merge';\n" } });
+        response.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
+        response.end(body);
+      });
+    });
+    await new Promise<void>((resolveListen) => mockProvider?.listen(0, "127.0.0.1", resolveListen));
+    const providerAddress = mockProvider.address();
+    if (!providerAddress || typeof providerAddress === "string") throw new Error("Could not bind the loopback AI test server.");
+    const providerEndpoint = `http://127.0.0.1:${providerAddress.port}`;
+    await window.getByRole("button", { name: "Settings" }).click();
+    const settingsDialog = window.getByRole("dialog", { name: "Settings" });
+    await settingsDialog.getByRole("combobox", { name: "AI provider" }).selectOption("ollama");
+    await settingsDialog.getByRole("textbox", { name: "AI endpoint" }).fill(providerEndpoint);
+    await settingsDialog.getByRole("textbox", { name: "Model" }).fill("qwen-test");
+    await expect.poll(() => settingsDialog.getByRole("button", { name: "Save provider settings" }).isEnabled(), { timeout: 5_000 }).toBe(true);
+    await settingsDialog.getByRole("button", { name: "Save provider settings" }).click();
+    await settingsDialog.getByText("Provider settings saved. No model request was made.").waitFor();
+    await settingsDialog.getByRole("button", { name: "Close settings" }).click();
 
     await app.evaluate(({ dialog }, repositoryPath) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [repositoryPath] });
@@ -165,6 +192,22 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
     const conflictWindow = await conflictWindowPromise;
     await conflictWindow.getByRole("heading", { name: "Resolve conflicts" }).waitFor();
     await conflictWindow.bringToFront();
+    const originalConflictResult = await conflictWindow.getByRole("textbox", { name: "Working result" }).inputValue();
+    await conflictWindow.getByRole("button", { name: "AI suggestion" }).click();
+    const suggestionPanel = conflictWindow.getByRole("region", { name: "AI conflict suggestion" });
+    await suggestionPanel.getByText(providerEndpoint).waitFor();
+    await suggestionPanel.getByText(/Source: cherryPick · seed\.txt/).waitFor();
+    expect(await suggestionPanel.getByRole("button", { name: "Request conflict suggestion" }).isDisabled()).toBe(true);
+    await suggestionPanel.getByRole("checkbox", { name: /I reviewed the endpoint, prompt, source stages, and result revision/ }).check();
+    await suggestionPanel.getByRole("button", { name: "Request conflict suggestion" }).click();
+    const proposedResult = suggestionPanel.getByRole("region", { name: "Suggested conflict result" });
+    await proposedResult.getByText("AI proposed merge").waitFor();
+    expect(await conflictWindow.getByRole("textbox", { name: "Working result" }).inputValue()).toBe(originalConflictResult);
+    expect(await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain=v1", "--", "seed.txt"])).toMatchObject({ stdout: expect.stringContaining("UU seed.txt") });
+    expect(providerRequests).toHaveLength(1);
+    expect(providerRequests[0]?.model).toBe("qwen-test");
+    expect(String(providerRequests[0]?.messages && (providerRequests[0].messages as Array<{ content?: string }>)[0]?.content)).toContain("theirs conflict version");
+    await suggestionPanel.getByRole("button", { name: "Close" }).click();
     await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).waitFor();
     await enterButtonByTab(conflictWindow, "Use theirs for conflict 1");
     await enterButtonByTab(conflictWindow, "Save result");
@@ -200,6 +243,7 @@ it("opens a repository, stages, commits, switches branches, and resolves a confl
     expect((await execFileAsync("git", ["-C", fixture.path, "show", "HEAD:seed.txt"])).stdout).toBe("theirs conflict version\n");
   } finally {
     await app?.close();
+    if (mockProvider) await new Promise<void>((resolveClose, rejectClose) => mockProvider?.close((error) => error ? rejectClose(error) : resolveClose()));
     await fixture.cleanup();
     await rm(appDataPath, { recursive: true, force: true });
   }
