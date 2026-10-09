@@ -15,7 +15,7 @@ import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { getRepositoryEventRefreshPlan, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type CommitAction, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { loadDiscardChangesDialog } from "../features/diff";
-import { loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRepositoryRefs } from "../features/branches";
+import { loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
 import { loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
@@ -69,7 +69,6 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
   const { shortcuts, setShortcuts } = useShortcutPreferences();
-  const [remoteBranchDeleteTarget, setRemoteBranchDeleteTarget] = useState<string>();
   const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
   const [diffRetry, setDiffRetry] = useState(0);
   const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
@@ -153,6 +152,11 @@ function App() {
   const workflowDialog = useWorkflowDialogSession({
     appendTask: prependTask,
     setTaskError: setTasksError,
+    openTaskCenter: () => setTasksOpen(true),
+  });
+  const remoteBranchDelete = useRemoteBranchDeleteSession({
+    appendTask: prependTask,
+    clearTaskError: () => setTasksError(""),
     openTaskCenter: () => setTasksOpen(true),
   });
   const recoverWorkflow = useWorkflowRecovery({
@@ -520,10 +524,6 @@ function App() {
         branchSwitcher.setError(error instanceof Error ? error.message : "Could not prepare the shelf before switching branches.");
       }
     });
-  }
-
-  async function startWorkflowTask(task: TaskSnapshotResponse) {
-    workflowDialog.startTask(task);
   }
 
   function fetchFromPushDialog() {
@@ -943,7 +943,7 @@ function App() {
               onRefreshRepositoryStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
               onRefreshRepositoryBranches={(repoId) => void refreshRepositoryBranches(repoId)}
               onOpenFileDiff={openFileDiff}
-              onDeleteRemoteBranch={setRemoteBranchDeleteTarget}
+              onDeleteRemoteBranch={remoteBranchDelete.open}
               onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository?.repoId, fullName, favorite)}
               onFetchRepository={() => void fetchRepository()}
               onRefreshRepositoryRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}
@@ -1154,10 +1154,10 @@ function App() {
         if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
       }} />}
       {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
-      {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} onClose={workflowDialog.close} onStarted={(task) => void startWorkflowTask(task)} />}
-      {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); void startWorkflowTask(task); }} />}
-      {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); void startWorkflowTask(task); }} />}
-      {remoteBranchDeleteTarget && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDeleteTarget} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRemoteBranchDeleteTarget(undefined)} onStarted={(task) => { setRemoteBranchDeleteTarget(undefined); void startWorkflowTask(task); }} />}
+      {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} onClose={workflowDialog.close} onStarted={workflowDialog.startTask} />}
+      {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
+      {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
+      {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
       {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} api={apiRef.current} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>
