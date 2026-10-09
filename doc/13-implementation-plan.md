@@ -3384,3 +3384,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前闭环在 Windows Git 2.37.3 与 Windows Credential Manager 验证；Clone 认证保存后成功仍未端到端覆盖，macOS/Linux 系统凭据库闭环留待相应 runner。S7.5 仍保持进行中。
 - 完成 commit：`7faf367`
+
+### P0 HTTPS 凭据修复后 Clone 成功闭环 E2E — 小阶段 298
+- 状态：已完成（HTTPS 认证失败后保存系统凭据，Clone 重试真实成功）
+- 日期：2026-10-09
+- 交付：新增隔离 Electron E2E：通过本机 TLS/Git HTTP backend 首次触发 401；在 Clone Retry 表单保存临时 host:port 凭据后再次克隆；验证远端 HEAD 与克隆 HEAD 一致、预期文件存在、认证请求实际到达 backend、task log 不含 token，并在 finally 经 API 删除临时凭据、确认系统凭据条目已清理。更新 `08-development-readiness.md` 的 Clone 覆盖映射。
+- 验证：凭据恢复定向 E2E 通过；`pnpm build` 通过；Windows 完整 `pnpm test:e2e` 通过（6 files、28 tests）；`git diff --check` 通过。
+- 手工验证：未执行 GUI 手工操作；Playwright 使用 Git for Windows `git-http-backend` 和本机 HTTPS server，凭据闭环实际经过 Windows Credential Manager 与 Git askpass，未访问外网。
+- 证据：`tests/e2e/repository-management.test.ts`、`tests/fixtures/authentication-server.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：当前系统凭据库闭环在 Windows Git 2.37.3 与 Windows Credential Manager 验证；macOS/Linux 系统凭据库闭环留待对应 runner。S7.5 仍保持进行中。
+- 完成 commit：待提交

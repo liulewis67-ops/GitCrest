@@ -399,3 +399,117 @@ it("opens HTTPS credentials when retrying a clone that failed authentication", a
     await rm(appDataPath, { recursive: true, force: true });
   }
 }, 60_000);
+
+it("clones successfully after saving credentials for an authentication-failed remote", async () => {
+  const source = await createTempGitRepository();
+  const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-auth-success-remote-"));
+  const bareRemotePath = resolve(remoteRoot, "repository.git");
+  const cloneParent = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-auth-success-parent-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-auth-success-app-data-"));
+  const gitConfigPath = resolve(appDataPath, "gitconfig");
+  const username = "gitcrest-clone-e2e-user";
+  const token = `clone-test-token-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const clonePath = resolve(cloneParent, "authenticated-project");
+  let authenticationServer: AuthenticationFailureServer | undefined;
+  let app: ElectronApplication | undefined;
+  let credentialSaved = false;
+
+  const removeSavedCredential = async () => {
+    if (!credentialSaved || !app || !authenticationServer) return;
+    const removed = await (await app.firstWindow()).evaluate(async (host: string) => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      const headers = { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" };
+      const query = new URLSearchParams({ host });
+      const result = await fetch(new URL(`/api/v1/credentials?${query}`, connection.baseUrl), { method: "DELETE", headers });
+      const verify = await fetch(new URL(`/api/v1/credentials?${query}`, connection.baseUrl), { headers });
+      const status = await verify.json() as { isConfigured: boolean };
+      return result.status === 204 && !status.isConfigured;
+    }, authenticationServer.host);
+    if (!removed) throw new Error(`Could not remove temporary credential for ${authenticationServer.host}`);
+    credentialSaved = false;
+  };
+
+  try {
+    await mkdir(resolve(source.path, "src"), { recursive: true });
+    await writeFile(resolve(source.path, "src/clone-auth-success.ts"), "export const cloned = true;\n");
+    await execFileAsync("git", ["-C", source.path, "add", "src/clone-auth-success.ts"]);
+    await execFileAsync("git", ["-C", source.path, "commit", "--quiet", "-m", "authenticated clone fixture"]);
+    await execFileAsync("git", ["init", "--bare", "--quiet", "--initial-branch=main", bareRemotePath]);
+    await execFileAsync("git", ["-C", source.path, "push", "--quiet", bareRemotePath, "HEAD:refs/heads/main"]);
+    const remoteHead = (await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", "refs/heads/main"])).stdout.trim();
+    authenticationServer = await createAuthenticationFailureServer(appDataPath, { projectRoot: remoteRoot, username, token });
+    await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
+
+    app = await electron.launch({
+      args: ["."],
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: gitConfigPath,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_SSL_CAINFO: authenticationServer.certificatePath,
+        ELECTRON_RENDERER_URL: "",
+        GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite"),
+      },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await app.evaluate(({ dialog }, destination) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
+    }, cloneParent);
+
+    await window.getByRole("button", { name: "Clone repository", exact: true }).click();
+    const cloneDialog = window.getByRole("dialog", { name: "Clone repository" });
+    await cloneDialog.getByRole("textbox", { name: "Remote URL" }).fill(authenticationServer.remoteUrl);
+    await cloneDialog.getByRole("button", { name: "Choose folder" }).click();
+    await cloneDialog.getByText(cloneParent, { exact: true }).waitFor();
+    await cloneDialog.getByRole("textbox", { name: "Folder name" }).fill("authenticated-project");
+    await cloneDialog.getByRole("button", { name: "Start clone" }).click();
+
+    const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+    const failedClone = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).last();
+    await failedClone.waitFor({ state: "visible" });
+    await failedClone.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
+    await failedClone.getByText("authentication:", { exact: false }).waitFor();
+    expect(authenticationServer.authenticatedRequestCount()).toBe(0);
+    await failedClone.getByRole("button", { name: "Retry clone" }).click();
+
+    const retryDialog = window.getByRole("dialog", { name: "Clone repository" });
+    expect(await retryDialog.getByRole("textbox", { name: "Remote URL" }).inputValue()).toBe(authenticationServer.remoteUrl);
+    expect(await retryDialog.getByRole("textbox", { name: "Folder name" }).inputValue()).toBe("authenticated-project");
+    const credentialCard = retryDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
+    await credentialCard.getByLabel("Username").fill(username);
+    await credentialCard.getByLabel("Token or password").fill(token);
+    await credentialCard.getByRole("button", { name: "Save credential" }).click();
+    await credentialCard.getByText("Credential saved to the system credential store.").waitFor();
+    credentialSaved = true;
+    await retryDialog.getByRole("button", { name: "Start clone" }).click();
+
+    await window.locator(".workspaceCrumb").filter({ hasText: clonePath }).waitFor({ timeout: 30_000 });
+    expect(authenticationServer.authenticatedRequestCount()).toBeGreaterThan(0);
+    expect((await execFileAsync("git", ["-C", clonePath, "rev-parse", "HEAD"])).stdout.trim()).toBe(remoteHead);
+    expect(await readFile(resolve(clonePath, "src/clone-auth-success.ts"), "utf8")).toBe("export const cloned = true;\n");
+    const taskLogs = await window.evaluate(async () => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+      });
+      const tasks = await response.json() as Array<{ operation: string; logs: string[] }>;
+      return tasks.filter((task) => task.operation === "clone").flatMap((task) => task.logs).join("\n");
+    });
+    expect(taskLogs).not.toContain(token);
+    await removeSavedCredential();
+  } finally {
+    await removeSavedCredential();
+    await app?.close();
+    await authenticationServer?.close();
+    await source.cleanup();
+    await rm(remoteRoot, { recursive: true, force: true });
+    await rm(cloneParent, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 90_000);
