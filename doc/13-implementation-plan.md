@@ -3566,3 +3566,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`git log` 与各阶段提交内容核对，确认 311=`ea4f1ff`、312=`587f7f8`、313=`4d40c1c`、314=`e78a597`；`git diff --check` 通过，不运行代码测试。
 - 证据：`doc/13-implementation-plan.md`、对应四个 Git commit。
 - 限制/后续：此台账修正不改变产品代码；后续小阶段继续逐项登记实际 commit SHA。
+
+### 前端 status 查询生命周期取消 — 小阶段 316
+- 状态：已完成（关闭仓库缓存或 app hook 卸载会终止活动 status HTTP 请求）
+- 日期：2026-10-09
+- 交付：`useRepositoryStatus` 为每个仓库合并刷新批次创建 AbortController；请求经 `GitCrestApiClient.withSignal` 发送。`clear(repoId)` 清理缓存时取消该仓库的活动请求，hook 卸载时取消所有活动请求；取消结果不写入状态或错误。保留同仓库刷新合并、generation 竞态隔离和状态路径合并行为。
+- 验证：新增 repository status hook 生命周期用例覆盖 cache clear 与卸载取消；定向 Vitest 通过；完整 `pnpm test` 通过（35 files、164 tests）；`pnpm build`、`pnpm frontend:boundaries`、`git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；hook 测试验证 abort 信号和关闭后不更新状态/错误。
+- 证据：`src/features/changes/model/use-repository-status.ts`、`tests/unit/repository-status-hook.test.tsx`。
+- 限制/后续：branch/remotes 查询目前仍使用 generation 屏蔽过期响应、没有终止底层 HTTP 请求；其它 App workspace 只读请求和查询缓存/RepoId 清理策略仍需逐项实施。

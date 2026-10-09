@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type StatusSnapshotResponse } from "../../../api/client";
 import { mergeStatusScope } from "../../../api/status-snapshot";
 
@@ -32,6 +32,12 @@ export function useRepositoryStatus({
   snapshotsRef.current = snapshots;
   const pendingRefreshesRef = useRef(new Map<string, PendingStatusRefresh>());
   const activeRefreshesRef = useRef(new Set<string>());
+  const controllersByRepoRef = useRef(new Map<string, AbortController>());
+
+  useEffect(() => () => {
+    for (const controller of controllersByRepoRef.current.values()) controller.abort();
+    controllersByRepoRef.current.clear();
+  }, []);
 
   async function refreshScope(repoId: string, full: boolean, paths: string[] = [], forceRefresh = false) {
     if (!isRepositoryOpen(repoId)) return;
@@ -53,6 +59,8 @@ export function useRepositoryStatus({
     const api = getApi();
     if (!api) return;
     activeRefreshesRef.current.add(repoId);
+    const controller = new AbortController();
+    controllersByRepoRef.current.set(repoId, controller);
     let requestGeneration = beginCacheRequest(repoId);
     setLoadingByRepo((current) => ({ ...current, [repoId]: true }));
     setErrors((current) => ({ ...current, [repoId]: "" }));
@@ -61,10 +69,11 @@ export function useRepositoryStatus({
         const requested = pendingRefreshesRef.current.get(repoId)!;
         pendingRefreshesRef.current.delete(repoId);
         requestGeneration = getCacheGeneration(repoId);
+        if (controller.signal.aborted) break;
         const useFull = requested.full || !snapshotsRef.current[repoId] || requested.paths.size === 0;
         const snapshot = useFull
-          ? await api.getRepositoryStatus(repoId, requested.forceRefresh)
-          : await api.getRepositoryStatusPaths(repoId, [...requested.paths]);
+          ? await api.withSignal(controller.signal).getRepositoryStatus(repoId, requested.forceRefresh)
+          : await api.withSignal(controller.signal).getRepositoryStatusPaths(repoId, [...requested.paths]);
         if (!isRepositoryOpen(repoId) || getCacheGeneration(repoId) !== requestGeneration) continue;
         const next = !useFull && snapshotsRef.current[repoId]
           ? mergeStatusScope(snapshotsRef.current[repoId]!, snapshot, [...requested.paths])
@@ -74,11 +83,12 @@ export function useRepositoryStatus({
       }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
+      if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
         setErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
       }
     } finally {
       activeRefreshesRef.current.delete(repoId);
+      if (controllersByRepoRef.current.get(repoId) === controller) controllersByRepoRef.current.delete(repoId);
       setLoadingByRepo((current) => isRepositoryOpen(repoId)
         ? { ...current, [repoId]: false }
         : withoutRecordKey(current, repoId));
@@ -91,6 +101,7 @@ export function useRepositoryStatus({
   }
 
   function clear(repoId: string) {
+    controllersByRepoRef.current.get(repoId)?.abort();
     snapshotsRef.current = withoutRecordKey(snapshotsRef.current, repoId);
     pendingRefreshesRef.current.delete(repoId);
     setSnapshots((current) => withoutRecordKey(current, repoId));
