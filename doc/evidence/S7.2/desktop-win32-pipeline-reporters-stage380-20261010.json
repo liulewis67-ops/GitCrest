@@ -1,0 +1,1942 @@
+{
+  "generatedAt": "2026-10-09T18:17:25.188Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         "
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "launchMode": "packaged application",
+    "applicationExecutable": "E:\\personal_projects\\GitCrest\\dist\\win-unpacked\\GitCrest.exe",
+    "launchFlags": [],
+    "gpuDiagnostics": {
+      "featureStatus": {
+        "2d_canvas": "enabled",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "enabled",
+        "multiple_raster_threads": "enabled_on",
+        "opengl": "enabled_on",
+        "rasterization": "enabled",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "enabled",
+        "video_encode": "enabled",
+        "vulkan": "disabled_off",
+        "webgl": "enabled",
+        "webgl2": "enabled",
+        "webgpu": "enabled",
+        "webnn": "disabled_off"
+      },
+      "info": {
+        "auxAttributes": {
+          "amdSwitchable": false,
+          "canSupportThreadedTextureMailbox": false,
+          "directMLFeatureLevel": "Not supported",
+          "displayType": "ANGLE_D3D11",
+          "dx12FeatureLevel": "Not supported",
+          "glExtensions": "GL_AMD_performance_monitor GL_ANGLE_base_vertex_base_instance_shader_builtin GL_ANGLE_blob_cache GL_ANGLE_client_arrays GL_ANGLE_depth_texture GL_ANGLE_framebuffer_blit GL_ANGLE_framebuffer_multisample GL_ANGLE_get_serialized_context_string GL_ANGLE_get_tex_level_parameter GL_ANGLE_instanced_arrays GL_ANGLE_lossy_etc_decode GL_ANGLE_memory_size GL_ANGLE_pack_reverse_row_order GL_ANGLE_polygon_mode GL_ANGLE_program_binary_readiness_query GL_ANGLE_program_cache_control GL_ANGLE_provoking_vertex GL_ANGLE_request_extension GL_ANGLE_robust_client_memory GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_ANGLE_texture_usage GL_ANGLE_translated_shader_source GL_APPLE_clip_distance GL_ARM_rgba8 GL_CHROMIUM_bind_generates_resource GL_CHROMIUM_bind_uniform_location GL_CHROMIUM_color_buffer_float_rgb GL_CHROMIUM_color_buffer_float_rgba GL_CHROMIUM_copy_compressed_texture GL_CHROMIUM_copy_texture GL_CHROMIUM_lose_context GL_CHROMIUM_sync_query GL_EXT_EGL_image_external_wrap_modes GL_EXT_base_instance GL_EXT_blend_func_extended GL_EXT_blend_minmax GL_EXT_clip_control GL_EXT_color_buffer_half_float GL_EXT_debug_label GL_EXT_debug_marker GL_EXT_depth_clamp GL_EXT_discard_framebuffer GL_EXT_disjoint_timer_query GL_EXT_draw_buffers GL_EXT_draw_elements_base_vertex GL_EXT_float_blend GL_EXT_frag_depth GL_EXT_instanced_arrays GL_EXT_map_buffer_range GL_EXT_multisampled_render_to_texture GL_EXT_occlusion_query_boolean GL_EXT_polygon_offset_clamp GL_EXT_read_format_bgra GL_EXT_robustness GL_EXT_sRGB GL_EXT_shader_texture_lod GL_EXT_texture_border_clamp GL_EXT_texture_compression_bptc GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_compression_s3tc_srgb GL_EXT_texture_filter_anisotropic GL_EXT_texture_format_BGRA8888 GL_EXT_texture_mirror_clamp_to_edge GL_EXT_texture_norm16 GL_EXT_texture_rg GL_EXT_texture_storage GL_EXT_texture_type_2_10_10_10_REV GL_EXT_unpack_subimage GL_KHR_debug GL_KHR_parallel_shader_compile GL_KHR_robustness GL_NV_EGL_stream_consumer_external GL_NV_fence GL_NV_framebuffer_blit GL_NV_pack_subimage GL_NV_pixel_buffer_object GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_compressed_EAC_R11_signed_texture GL_OES_compressed_EAC_R11_unsigned_texture GL_OES_compressed_EAC_RG11_signed_texture GL_OES_compressed_EAC_RG11_unsigned_texture GL_OES_compressed_ETC2_RGB8_texture GL_OES_compressed_ETC2_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_sRGB8_alpha_texture GL_OES_compressed_ETC2_sRGB8_alpha8_texture GL_OES_compressed_ETC2_sRGB8_texture GL_OES_depth24 GL_OES_depth32 GL_OES_draw_elements_base_vertex GL_OES_element_index_uint GL_OES_fbo_render_mipmap GL_OES_get_program_binary GL_OES_mapbuffer GL_OES_packed_depth_stencil GL_OES_required_internalformat GL_OES_rgb8_rgba8 GL_OES_standard_derivatives GL_OES_surfaceless_context GL_OES_texture_border_clamp GL_OES_texture_float GL_OES_texture_float_linear GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_texture_npot GL_OES_vertex_array_object GL_WEBGL_video_texture ",
+          "glImplementationParts": "(gl=egl-angle,angle=d3d11)",
+          "glRenderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3050 Laptop GPU (0x000025E2) Direct3D11 vs_5_0 ps_5_0, D3D11-32.0.16.1088)",
+          "glResetNotificationStrategy": 33362,
+          "glVendor": "Google Inc. (NVIDIA)",
+          "glVersion": "OpenGL ES 2.0.0 (ANGLE 2.1.25517 git hash: d1fb74c940fe)",
+          "glWsExtensions": "EGL_EXT_create_context_robustness EGL_ANGLE_d3d_share_handle_client_buffer EGL_ANGLE_d3d_texture_client_buffer EGL_ANGLE_surface_d3d_texture_2d_share_handle EGL_ANGLE_query_surface_pointer EGL_ANGLE_window_fixed_size EGL_ANGLE_keyed_mutex EGL_ANGLE_surface_orientation EGL_ANGLE_direct_composition EGL_NV_post_sub_buffer EGL_KHR_create_context EGL_KHR_image EGL_KHR_image_base EGL_KHR_gl_texture_2D_image EGL_KHR_gl_texture_cubemap_image EGL_KHR_gl_renderbuffer_image EGL_KHR_get_all_proc_addresses EGL_KHR_stream EGL_KHR_stream_consumer_gltexture EGL_NV_stream_consumer_gltexture_yuv EGL_ANGLE_stream_producer_d3d_texture EGL_ANGLE_create_context_webgl_compatibility EGL_CHROMIUM_create_context_bind_generates_resource EGL_CHROMIUM_sync_control EGL_EXT_pixel_format_float EGL_KHR_surfaceless_context EGL_ANGLE_display_texture_share_group EGL_ANGLE_display_semaphore_share_group EGL_ANGLE_create_context_client_arrays EGL_ANGLE_program_cache_control EGL_ANGLE_robust_resource_initialization EGL_ANGLE_create_context_extensions_enabled EGL_ANDROID_blob_cache EGL_ANDROID_recordable EGL_ANGLE_image_d3d11_texture EGL_ANGLE_create_context_backwards_compatible EGL_KHR_no_config_context EGL_KHR_create_context_no_error EGL_KHR_reusable_sync EGL_ANGLE_memory_usage_report ",
+          "glWsVendor": "Google Inc. (NVIDIA)",
+          "glWsVersion": "1.5 (ANGLE 2.1.25517 git hash: d1fb74c940fe)",
+          "hardwareSupportsVulkan": false,
+          "inProcessGpu": false,
+          "initializationTime": 435.004,
+          "isAsan": false,
+          "isClangCoverage": false,
+          "jpegDecodeAcceleratorSupported": false,
+          "maxMsaaSamples": "8",
+          "optimus": false,
+          "overlayInfo": {
+            "bgra8OverlaySupport": "SOFTWARE",
+            "directComposition": true,
+            "nv12OverlaySupport": "SOFTWARE",
+            "p010OverlaySupport": "SOFTWARE",
+            "rgb10a2OverlaySupport": "SOFTWARE",
+            "supportsOverlays": true,
+            "yuy2OverlaySupport": "SOFTWARE"
+          },
+          "passthroughCmdDecoder": true,
+          "pixelShaderVersion": "5.0",
+          "sandboxed": true,
+          "skiaBackendType": "GaneshGL",
+          "subpixelFontRendering": true,
+          "supportsD3dSharedImages": true,
+          "supportsDirectML": false,
+          "supportsDx12": false,
+          "supportsVulkan": false,
+          "targetCpuBits": 64,
+          "vertexShaderVersion": "5.0",
+          "videoDecodeAcceleratorSupportedProfile": {
+            "encrypted_only": false,
+            "maxResolutionHeight": 8192,
+            "maxResolutionWidth": 8192,
+            "minResolutionHeight": 64,
+            "minResolutionWidth": 64,
+            "profile": 29
+          },
+          "visibilityCallbackCallCount": 0,
+          "vulkanVersion": "Not supported"
+        },
+        "gpuDevice": [
+          {
+            "active": true,
+            "deviceId": 9698,
+            "deviceString": "NVIDIA GeForce RTX 3050 Laptop GPU",
+            "driverVendor": "NVIDIA",
+            "driverVersion": "32.0.16.1088",
+            "gpuPreference": 2,
+            "revision": 161,
+            "subSysId": 984553386,
+            "vendorId": 4318
+          },
+          {
+            "active": false,
+            "deviceId": 9698,
+            "deviceString": "NVIDIA GeForce RTX 3050 Laptop GPU",
+            "driverVersion": "32.0.16.1088",
+            "gpuPreference": 0,
+            "revision": 161,
+            "subSysId": 984553386,
+            "vendorId": 4318
+          },
+          {
+            "active": false,
+            "deviceId": 140,
+            "deviceString": "Microsoft Basic Render Driver",
+            "driverVersion": "10.0.26100.9278",
+            "gpuPreference": 0,
+            "revision": 0,
+            "subSysId": 0,
+            "vendorId": 5140
+          }
+        ]
+      }
+    },
+    "displayDiagnostics": {
+      "windowBounds": {
+        "x": 128,
+        "y": 0,
+        "width": 1280,
+        "height": 816
+      },
+      "primaryDisplay": {
+        "id": 217238168,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 1536,
+          "height": 864
+        },
+        "scaleFactor": 1.25,
+        "rotation": 0,
+        "internal": true,
+        "displayFrequency": 60,
+        "colorDepth": 24,
+        "label": ""
+      },
+      "matchingDisplay": {
+        "id": 217238168,
+        "bounds": {
+          "x": 0,
+          "y": 0,
+          "width": 1536,
+          "height": 864
+        },
+        "scaleFactor": 1.25,
+        "rotation": 0,
+        "internal": true,
+        "displayFrequency": 60,
+        "colorDepth": 24,
+        "label": ""
+      },
+      "displays": [
+        {
+          "id": 217238168,
+          "bounds": {
+            "x": 0,
+            "y": 0,
+            "width": 1536,
+            "height": 864
+          },
+          "scaleFactor": 1.25,
+          "rotation": 0,
+          "internal": true,
+          "displayFrequency": 60,
+          "colorDepth": 24,
+          "label": ""
+        }
+      ]
+    }
+  },
+  "fixture": {
+    "commits": 100000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-20261009-continuation"
+  },
+  "thresholds": {
+    "targetScrollP5Fps": 60,
+    "rafTargetPeriodMs": 16.666666666666668
+  },
+  "samples": [
+    {
+      "label": "empty-workspace-idle",
+      "durationMs": 5000,
+      "frameSamples": 195,
+      "p95FrameMs": 18.09999999999991,
+      "p5Fps": 55.24861878453066,
+      "scrollDistancePx": 0,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      }
+    },
+    {
+      "label": "loaded-history-idle",
+      "durationMs": 5000,
+      "frameSamples": 282,
+      "p95FrameMs": 18.100000000000364,
+      "p5Fps": 55.24861878452928,
+      "scrollDistancePx": 0,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      }
+    },
+    {
+      "label": "loaded-history-scroll",
+      "durationMs": 10000,
+      "frameSamples": 564,
+      "p95FrameMs": 18.100000000000364,
+      "p5Fps": 55.24861878452928,
+      "scrollDistancePx": 4520,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      },
+      "presentationTrace": {
+        "event": "benchmark,viz:Display::FrameDisplayed",
+        "frameCount": 564,
+        "intervalSamples": 563,
+        "p95FrameMs": 18.097,
+        "p5Fps": 55.25777753218765,
+        "traceEventCount": 222583,
+        "beginFrameFeedback": {
+          "uniqueFrames": 565,
+          "requestedIntervalUs": [
+            16666
+          ],
+          "frameTimeIntervalsMs": {
+            "samples": 564,
+            "p50": 17.793,
+            "p95": 18.097,
+            "max": 21.373
+          },
+          "deadlineBudgetMs": {
+            "samples": 565,
+            "p50": 16.666,
+            "p95": 16.666,
+            "max": 16.666
+          },
+          "arrivalAfterFrameTimeMs": {
+            "samples": 565,
+            "p50": 0.032,
+            "p95": 0.047,
+            "max": 6.032
+          },
+          "subtypeCounts": {
+            "MISSED": 1,
+            "NORMAL": 564
+          },
+          "framesThrottledSinceLast": {
+            "samples": 565,
+            "p50": 0,
+            "p95": 0,
+            "max": 0
+          }
+        },
+        "detailedCategories": "viz,cc,gpu,benchmark,devtools.timeline",
+        "pipelineEvents": [
+          {
+            "name": "devtools.timeline:FunctionCall",
+            "count": 5467,
+            "durationSamples": 5467,
+            "p50DurationMs": 0.027,
+            "p95DurationMs": 0.14,
+            "maxDurationMs": 1.14,
+            "timestampIntervalSamples": 5466,
+            "p50TimestampIntervalMs": 0.037,
+            "p95TimestampIntervalMs": 17.439
+          },
+          {
+            "name": "gpu,toplevel.flow:Scheduler::RunTask",
+            "count": 5320,
+            "durationSamples": 1773,
+            "p50DurationMs": 0.271,
+            "p95DurationMs": 0.935,
+            "maxDurationMs": 9.008,
+            "timestampIntervalSamples": 5319,
+            "p50TimestampIntervalMs": 0.01,
+            "p95TimestampIntervalMs": 16.627
+          },
+          {
+            "name": "viz,benchmark:Graphics.Pipeline.DrawAndSwap",
+            "count": 3387,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 3386,
+            "p50TimestampIntervalMs": 0.171,
+            "p95TimestampIntervalMs": 14.667
+          },
+          {
+            "name": "devtools.timeline:EventDispatch",
+            "count": 2688,
+            "durationSamples": 2688,
+            "p50DurationMs": 0.042,
+            "p95DurationMs": 0.156,
+            "maxDurationMs": 0.686,
+            "timestampIntervalSamples": 2687,
+            "p50TimestampIntervalMs": 0.062,
+            "p95TimestampIntervalMs": 17.852
+          },
+          {
+            "name": "viz:DisplayScheduler::ScheduleBeginFrameDeadline",
+            "count": 2258,
+            "durationSamples": 2258,
+            "p50DurationMs": 0.006,
+            "p95DurationMs": 0.012,
+            "maxDurationMs": 0.306,
+            "timestampIntervalSamples": 2257,
+            "p50TimestampIntervalMs": 1.689,
+            "p95TimestampIntervalMs": 14.874,
+            "eventSamples": [
+              {
+                "timestampMs": 15850755.611,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850755.636,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850757.156,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:SendBeginMainFrame",
+            "count": 1695,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1694,
+            "p50TimestampIntervalMs": 0.017,
+            "p95TimestampIntervalMs": 18.034,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.273,
+                "phase": "I",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "main_frame_pipeline": {
+                    "begin_frame_id": {
+                      "sequence_number": 627,
+                      "source_id": 4294967296
+                    },
+                    "main_frame_id": 10424744500285698000,
+                    "step": "SEND_BEGIN_MAIN_FRAME"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850771.264,
+                "phase": "I",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "main_frame_pipeline": {
+                    "begin_frame_id": {
+                      "sequence_number": 628,
+                      "source_id": 4294967296
+                    },
+                    "main_frame_id": 10424744500285698000,
+                    "step": "SEND_BEGIN_MAIN_FRAME"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850788.883,
+                "phase": "I",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "main_frame_pipeline": {
+                    "begin_frame_id": {
+                      "sequence_number": 629,
+                      "source_id": 4294967296
+                    },
+                    "main_frame_id": 10424744500285698000,
+                    "step": "SEND_BEGIN_MAIN_FRAME"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:ProxyMain::BeginMainFrame",
+            "count": 1695,
+            "durationSamples": 565,
+            "p50DurationMs": 1.26,
+            "p95DurationMs": 4.852,
+            "maxDurationMs": 7.287,
+            "timestampIntervalSamples": 1694,
+            "p50TimestampIntervalMs": 1.232,
+            "p95TimestampIntervalMs": 16.983,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.295,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {
+                  "begin_frame_id": 627,
+                  "main_frame_pipeline": {
+                    "main_frame_id": 10424744500285698000,
+                    "step": "BEGIN_MAIN_FRAME"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850771.309,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {
+                  "begin_frame_id": 628,
+                  "main_frame_pipeline": {
+                    "main_frame_id": 10424744500285698000,
+                    "step": "BEGIN_MAIN_FRAME"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850788.909,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {
+                  "begin_frame_id": 629,
+                  "main_frame_pipeline": {
+                    "main_frame_id": 10424744500285698000,
+                    "step": "BEGIN_MAIN_FRAME"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:ProxyMain::BeginMainFrame::commit",
+            "count": 1695,
+            "durationSamples": 565,
+            "p50DurationMs": 0.009,
+            "p95DurationMs": 0.012,
+            "maxDurationMs": 0.028,
+            "timestampIntervalSamples": 1694,
+            "p50TimestampIntervalMs": 0.021,
+            "p95TimestampIntervalMs": 18.978,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.907,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {
+                  "main_frame_pipeline": {
+                    "main_frame_id": 10424744500285698000,
+                    "step": "COMMIT_ON_MAIN"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850773.27,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {
+                  "main_frame_pipeline": {
+                    "main_frame_id": 10424744500285698000,
+                    "step": "COMMIT_ON_MAIN"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850791.563,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {
+                  "main_frame_pipeline": {
+                    "main_frame_id": 10424744500285698000,
+                    "step": "COMMIT_ON_MAIN"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:LayerTreeHostImpl::ActivateSyncTree",
+            "count": 1695,
+            "durationSamples": 565,
+            "p50DurationMs": 0.057,
+            "p95DurationMs": 0.14,
+            "maxDurationMs": 0.207,
+            "timestampIntervalSamples": 1694,
+            "p50TimestampIntervalMs": 0.074,
+            "p95TimestampIntervalMs": 18.981
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoRasterCHROMIUM",
+            "count": 1143,
+            "durationSamples": 1143,
+            "p50DurationMs": 0.132,
+            "p95DurationMs": 0.246,
+            "maxDurationMs": 0.653,
+            "timestampIntervalSamples": 1142,
+            "p50TimestampIntervalMs": 0.789,
+            "p95TimestampIntervalMs": 19.7
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoRasterCHROMIUM::Deserializing",
+            "count": 1143,
+            "durationSamples": 1143,
+            "p50DurationMs": 0.129,
+            "p95DurationMs": 0.24,
+            "maxDurationMs": 0.647,
+            "timestampIntervalSamples": 1142,
+            "p50TimestampIntervalMs": 0.787,
+            "p95TimestampIntervalMs": 19.699
+          },
+          {
+            "name": "cc:RasterSource::PerformSolidColorAnalysis",
+            "count": 1142,
+            "durationSamples": 1142,
+            "p50DurationMs": 0.008,
+            "p95DurationMs": 0.014,
+            "maxDurationMs": 0.026,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.032,
+            "p95TimestampIntervalMs": 20.251
+          },
+          {
+            "name": "cc:RasterizerTaskImpl::RunOnWorkerThread",
+            "count": 1142,
+            "durationSamples": 1142,
+            "p50DurationMs": 0.117,
+            "p95DurationMs": 0.202,
+            "maxDurationMs": 0.795,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.288,
+            "p95TimestampIntervalMs": 20.056
+          },
+          {
+            "name": "cc,disabled-by-default-devtools.timeline:RasterTask",
+            "count": 1142,
+            "durationSamples": 1142,
+            "p50DurationMs": 0.112,
+            "p95DurationMs": 0.193,
+            "maxDurationMs": 0.786,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.285,
+            "p95TimestampIntervalMs": 20.057
+          },
+          {
+            "name": "cc:GpuRasterBuffer::Playback",
+            "count": 1142,
+            "durationSamples": 1142,
+            "p50DurationMs": 0.109,
+            "p95DurationMs": 0.185,
+            "maxDurationMs": 0.78,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.286,
+            "p95TimestampIntervalMs": 20.058
+          },
+          {
+            "name": "gpu:RasterImplementation::RasterCHROMIUM",
+            "count": 1142,
+            "durationSamples": 1142,
+            "p50DurationMs": 0.099,
+            "p95DurationMs": 0.169,
+            "maxDurationMs": 0.677,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.283,
+            "p95TimestampIntervalMs": 20.06
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoBeginRasterCHROMIUM",
+            "count": 1142,
+            "durationSamples": 1142,
+            "p50DurationMs": 0.006,
+            "p95DurationMs": 0.011,
+            "maxDurationMs": 0.081,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.913,
+            "p95TimestampIntervalMs": 19.695
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoEndRasterCHROMIUM",
+            "count": 1142,
+            "durationSamples": 1141,
+            "p50DurationMs": 0.207,
+            "p95DurationMs": 0.385,
+            "maxDurationMs": 8.379,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.91,
+            "p95TimestampIntervalMs": 19.794
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoEndRasterCHROMIUM::Flush",
+            "count": 1142,
+            "durationSamples": 1141,
+            "p50DurationMs": 0.2,
+            "p95DurationMs": 0.377,
+            "maxDurationMs": 8.371,
+            "timestampIntervalSamples": 1141,
+            "p50TimestampIntervalMs": 0.91,
+            "p95TimestampIntervalMs": 19.793
+          },
+          {
+            "name": "cc:Scheduler::ScheduleBeginImplFrameDeadline",
+            "count": 1130,
+            "durationSamples": 1130,
+            "p50DurationMs": 0.006,
+            "p95DurationMs": 0.009,
+            "maxDurationMs": 0.038,
+            "timestampIntervalSamples": 1129,
+            "p50TimestampIntervalMs": 8.038,
+            "p95TimestampIntervalMs": 16.512,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.285,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "deadline mode": "BeginImplFrameDeadlineMode::LATE",
+                  "new deadline": 15850766260
+                }
+              },
+              {
+                "timestampMs": 15850755.209,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "deadline mode": "BeginImplFrameDeadlineMode::IMMEDIATE",
+                  "new deadline": 0
+                }
+              },
+              {
+                "timestampMs": 15850771.282,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "deadline mode": "BeginImplFrameDeadlineMode::LATE",
+                  "new deadline": 15850787633
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:PipelineReporter",
+            "count": 1130,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1129,
+            "p50TimestampIntervalMs": 17.104,
+            "p95TimestampIntervalMs": 18.051,
+            "eventSamples": [
+              {
+                "timestampMs": 15850681.187,
+                "phase": "b",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "frame_reporter": {
+                    "affects_smoothness": false,
+                    "checkerboarded_needs_raster": false,
+                    "checkerboarded_needs_record": false,
+                    "frame_sequence": 623,
+                    "frame_source": 4294967296,
+                    "has_compositor_animation": false,
+                    "has_high_latency": false,
+                    "has_main_animation": true,
+                    "has_missing_content": false,
+                    "has_smooth_input_main": false,
+                    "layer_tree_host_id": 1,
+                    "scroll_state": "SCROLL_NONE",
+                    "state": "STATE_NO_UPDATE_DESIRED",
+                    "surface_frame_trace_id": 3308645616644573000
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850698.725,
+                "phase": "b",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "frame_reporter": {
+                    "affects_smoothness": false,
+                    "checkerboarded_needs_raster": false,
+                    "checkerboarded_needs_record": false,
+                    "frame_sequence": 624,
+                    "frame_source": 4294967296,
+                    "has_compositor_animation": false,
+                    "has_high_latency": false,
+                    "has_main_animation": true,
+                    "has_missing_content": false,
+                    "has_smooth_input_main": false,
+                    "layer_tree_host_id": 1,
+                    "scroll_state": "SCROLL_NONE",
+                    "state": "STATE_NO_UPDATE_DESIRED",
+                    "surface_frame_trace_id": 3308645616644572700
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850716.346,
+                "phase": "e",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:BeginImplFrameToSendBeginMainFrame",
+            "count": 1130,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1129,
+            "p50TimestampIntervalMs": 16.753,
+            "p95TimestampIntervalMs": 18.08,
+            "eventSamples": [
+              {
+                "timestampMs": 15850681.29,
+                "phase": "b",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850681.293,
+                "phase": "e",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850698.84,
+                "phase": "b",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "devtools.timeline:AnimationFrame::StyleAndLayout",
+            "count": 1130,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1129,
+            "p50TimestampIntervalMs": 0.153,
+            "p95TimestampIntervalMs": 19.511
+          },
+          {
+            "name": "viz,input.scrolling:ExternalBeginFrameSource::OnBeginFrame",
+            "count": 1129,
+            "durationSamples": 1129,
+            "p50DurationMs": 0.072,
+            "p95DurationMs": 0.115,
+            "maxDurationMs": 0.678,
+            "timestampIntervalSamples": 1128,
+            "p50TimestampIntervalMs": 0.756,
+            "p95TimestampIntervalMs": 17.86,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.211,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "frame_time": 15850749594,
+                  "interval": 16666
+                }
+              },
+              {
+                "timestampMs": 15850770.994,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {
+                  "frame_time": 15850770967,
+                  "interval": 16666
+                }
+              },
+              {
+                "timestampMs": 15850771.201,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "frame_time": 15850770967,
+                  "interval": 16666
+                }
+              }
+            ]
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::RunStyleAndLayoutLifecyclePhases",
+            "count": 1129,
+            "durationSamples": 1129,
+            "p50DurationMs": 0.011,
+            "p95DurationMs": 1.608,
+            "maxDurationMs": 3.71,
+            "timestampIntervalSamples": 1128,
+            "p50TimestampIntervalMs": 5.328,
+            "p95TimestampIntervalMs": 17.533
+          },
+          {
+            "name": "devtools.timeline:PrePaint",
+            "count": 1129,
+            "durationSamples": 1129,
+            "p50DurationMs": 0.04,
+            "p95DurationMs": 0.388,
+            "maxDurationMs": 0.786,
+            "timestampIntervalSamples": 1128,
+            "p50TimestampIntervalMs": 1.666,
+            "p95TimestampIntervalMs": 18.636
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::RunPrePaintLifecyclePhase",
+            "count": 1129,
+            "durationSamples": 1129,
+            "p50DurationMs": 0.035,
+            "p95DurationMs": 0.17,
+            "maxDurationMs": 0.446,
+            "timestampIntervalSamples": 1128,
+            "p50TimestampIntervalMs": 1.662,
+            "p95TimestampIntervalMs": 18.876
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:SendBeginMainFrameToCommit",
+            "count": 1128,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1127,
+            "p50TimestampIntervalMs": 10.288,
+            "p95TimestampIntervalMs": 17.005,
+            "eventSamples": [
+              {
+                "timestampMs": 15850681.293,
+                "phase": "b",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "send_begin_mainframe_to_commit_breakdown": {
+                    "accessibility_update_us": 0,
+                    "animate_us": 0,
+                    "begin_main_sent_to_started_us": 18446744057858871000,
+                    "composite_commit_us": 0,
+                    "compositing_inputs_us": 0,
+                    "handle_input_events_us": 0,
+                    "layout_update_us": 0,
+                    "paint_us": 0,
+                    "prepaint_us": 0,
+                    "style_update_us": 0,
+                    "update_layers_us": 0
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850716.346,
+                "phase": "e",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850753.255,
+                "phase": "b",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "send_begin_mainframe_to_commit_breakdown": {
+                    "accessibility_update_us": 0,
+                    "animate_us": 201,
+                    "begin_main_sent_to_started_us": 41,
+                    "composite_commit_us": 232,
+                    "compositing_inputs_us": 1,
+                    "handle_input_events_us": 2,
+                    "layout_update_us": 0,
+                    "paint_us": 29,
+                    "prepaint_us": 40,
+                    "style_update_us": 0,
+                    "update_layers_us": 23
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:EndActivateToSubmitCompositorFrame",
+            "count": 1126,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1125,
+            "p50TimestampIntervalMs": 1.29,
+            "p95TimestampIntervalMs": 19.989
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:SubmitCompositorFrameToPresentationCompositorFrame",
+            "count": 1126,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1125,
+            "p50TimestampIntervalMs": 8.868,
+            "p95TimestampIntervalMs": 16.04
+          },
+          {
+            "name": "devtools.timeline:Paint",
+            "count": 596,
+            "durationSamples": 596,
+            "p50DurationMs": 0.029,
+            "p95DurationMs": 0.964,
+            "maxDurationMs": 1.421,
+            "timestampIntervalSamples": 595,
+            "p50TimestampIntervalMs": 0.331,
+            "p95TimestampIntervalMs": 107.437
+          },
+          {
+            "name": "cc:auto cc::SchedulerStateMachine::SetNeedsBeginMainFrame(bool)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.003,
+            "maxDurationMs": 0.04,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.72,
+            "p95TimestampIntervalMs": 20.271,
+            "eventSamples": [
+              {
+                "timestampMs": 15850752.959,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "now": false
+                }
+              },
+              {
+                "timestampMs": 15850753.489,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "now": false
+                }
+              },
+              {
+                "timestampMs": 15850772.856,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "now": false
+                }
+              }
+            ]
+          },
+          {
+            "name": "viz:DisplayScheduler::BeginFrame",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.02,
+            "p95DurationMs": 0.035,
+            "maxDurationMs": 0.317,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.786,
+            "p95TimestampIntervalMs": 18.1,
+            "eventSamples": [
+              {
+                "timestampMs": 15850755.595,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850766260,
+                    "frame_time_us": 15850749594,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 627,
+                    "source_id": 0,
+                    "subtype": "MISSED",
+                    "type": "BeginFrameArgs"
+                  },
+                  "now": 15850755587
+                }
+              },
+              {
+                "timestampMs": 15850755.627,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850766260,
+                    "frame_time_us": 15850749594,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 627,
+                    "source_id": 0,
+                    "subtype": "MISSED",
+                    "type": "BeginFrameArgs"
+                  },
+                  "now": 15850755626
+                }
+              },
+              {
+                "timestampMs": 15850771.012,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850787633,
+                    "frame_time_us": 15850770967,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 628,
+                    "source_id": 0,
+                    "subtype": "NORMAL",
+                    "type": "BeginFrameArgs"
+                  },
+                  "now": 15850771005
+                }
+              }
+            ]
+          },
+          {
+            "name": "viz:SendBeginFrameDecision",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.003,
+            "maxDurationMs": 0.026,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.778,
+            "p95TimestampIntervalMs": 18.105,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.13,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {
+                  "reason": "SendDefault",
+                  "should_send": true
+                }
+              },
+              {
+                "timestampMs": 15850771.062,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {
+                  "reason": "SendDefault",
+                  "should_send": true
+                }
+              },
+              {
+                "timestampMs": 15850788.645,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {
+                  "reason": "SendFrameTiming",
+                  "should_send": true
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:Scheduler::BeginFrame",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.048,
+            "p95DurationMs": 0.07,
+            "maxDurationMs": 0.664,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.77,
+            "p95TimestampIntervalMs": 18.139,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.22,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850766260,
+                    "frame_time_us": 15850749594,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 627,
+                    "source_id": 0,
+                    "subtype": "MISSED",
+                    "type": "BeginFrameArgs"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850771.211,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850787633,
+                    "frame_time_us": 15850770967,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 628,
+                    "source_id": 0,
+                    "subtype": "NORMAL",
+                    "type": "BeginFrameArgs"
+                  }
+                }
+              },
+              {
+                "timestampMs": 15850788.845,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850805244,
+                    "frame_time_us": 15850788578,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 629,
+                    "source_id": 0,
+                    "subtype": "NORMAL",
+                    "type": "BeginFrameArgs"
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:Scheduler::BeginImplFrame",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.041,
+            "p95DurationMs": 0.061,
+            "maxDurationMs": 0.652,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.767,
+            "p95TimestampIntervalMs": 18.141,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.229,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850766260,
+                    "frame_time_us": 15850749594,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 627,
+                    "source_id": 0,
+                    "subtype": "MISSED",
+                    "type": "BeginFrameArgs"
+                  },
+                  "main_thread_missed_last_deadline": false
+                }
+              },
+              {
+                "timestampMs": 15850771.219,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850787633,
+                    "frame_time_us": 15850770967,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 628,
+                    "source_id": 0,
+                    "subtype": "NORMAL",
+                    "type": "BeginFrameArgs"
+                  },
+                  "main_thread_missed_last_deadline": false
+                }
+              },
+              {
+                "timestampMs": 15850788.854,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "args": {
+                    "animate_only": false,
+                    "deadline_us": 15850805244,
+                    "frame_time_us": 15850788578,
+                    "frames_throttled_since_last": 0,
+                    "has_possible_deadlines": false,
+                    "interval_us": 16666,
+                    "on_critical_path": true,
+                    "sequence_number": 629,
+                    "source_id": 0,
+                    "subtype": "NORMAL",
+                    "type": "BeginFrameArgs"
+                  },
+                  "main_thread_missed_last_deadline": false
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc:auto cc::SchedulerStateMachine::ShouldThrottleSendBeginMainFrame()::(anonymous class)::operator()(uint32_t) const",
+            "count": 565,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.765,
+            "p95TimestampIntervalMs": 18.154,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.253,
+                "phase": "I",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "result": false
+                }
+              },
+              {
+                "timestampMs": 15850771.251,
+                "phase": "I",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "result": false
+                }
+              },
+              {
+                "timestampMs": 15850788.873,
+                "phase": "I",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "result": false
+                }
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:ProxyImpl::ScheduledActionSendBeginMainFrame",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.012,
+            "p95DurationMs": 0.02,
+            "maxDurationMs": 0.114,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.764,
+            "p95TimestampIntervalMs": 18.155,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.263,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "begin_frame_id": 627
+                }
+              },
+              {
+                "timestampMs": 15850771.254,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "begin_frame_id": 628
+                }
+              },
+              {
+                "timestampMs": 15850788.875,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {
+                  "begin_frame_id": 629
+                }
+              }
+            ]
+          },
+          {
+            "name": "gpu:WidgetBase::WillBeginMainFrame",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.005,
+            "p95DurationMs": 0.007,
+            "maxDurationMs": 0.014,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.759,
+            "p95TimestampIntervalMs": 18.181,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.305,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850771.326,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850788.92,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 33816,
+                "threadName": "CrRendererMain",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::RunPaintLifecyclePhase",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.392,
+            "p95DurationMs": 1.426,
+            "maxDurationMs": 1.99,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.721,
+            "p95TimestampIntervalMs": 20.252
+          },
+          {
+            "name": "cc:Scheduler::NotifyBeginMainFrameStarted",
+            "count": 565,
+            "durationSamples": 534,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.016,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.657,
+            "p95TimestampIntervalMs": 21.316,
+            "eventSamples": [
+              {
+                "timestampMs": 15850753.933,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850773.291,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850791.607,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "cc,benchmark:TileManager::IsReadyToActivate",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.003,
+            "p95DurationMs": 0.004,
+            "maxDurationMs": 0.008,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.637,
+            "p95TimestampIntervalMs": 21.287
+          },
+          {
+            "name": "cc,benchmark:ProxyImpl::ReadyToActivate",
+            "count": 565,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.638,
+            "p95TimestampIntervalMs": 21.286
+          },
+          {
+            "name": "cc:ImageAnimationController::WillActivate",
+            "count": 565,
+            "durationSamples": 439,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.027,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.637,
+            "p95TimestampIntervalMs": 21.388
+          },
+          {
+            "name": "cc:ProxyImpl::DidActivateSyncTreeOnImplThread",
+            "count": 565,
+            "durationSamples": 451,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.005,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.635,
+            "p95TimestampIntervalMs": 21.394
+          },
+          {
+            "name": "cc,benchmark:Scheduler::OnBeginImplFrameDeadline",
+            "count": 565,
+            "durationSamples": 564,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.004,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.639,
+            "p95TimestampIntervalMs": 21.407,
+            "eventSamples": [
+              {
+                "timestampMs": 15850755.216,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850773.775,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850792.312,
+                "phase": "X",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "viz:Surface::ActivateFrame",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.022,
+            "p95DurationMs": 0.032,
+            "maxDurationMs": 0.049,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.642,
+            "p95TimestampIntervalMs": 21.493
+          },
+          {
+            "name": "viz:Waiting for next BeginFrame",
+            "count": 565,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.624,
+            "p95TimestampIntervalMs": 21.562,
+            "eventSamples": [
+              {
+                "timestampMs": 15850755.612,
+                "phase": "I",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850757.157,
+                "phase": "I",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850774.855,
+                "phase": "I",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "viz,input.scrolling:DisplayScheduler::OnBeginFrameDeadline",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.236,
+            "p95DurationMs": 0.312,
+            "maxDurationMs": 0.375,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.641,
+            "p95TimestampIntervalMs": 21.493,
+            "eventSamples": [
+              {
+                "timestampMs": 15850755.652,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850774.114,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850792.825,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "viz:DisplayScheduler::DrawAndSwap",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.233,
+            "p95DurationMs": 0.309,
+            "maxDurationMs": 0.373,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.641,
+            "p95TimestampIntervalMs": 21.493
+          },
+          {
+            "name": "viz:Display::DrawAndSwap",
+            "count": 565,
+            "durationSamples": 565,
+            "p50DurationMs": 0.231,
+            "p95DurationMs": 0.305,
+            "maxDurationMs": 0.37,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.641,
+            "p95TimestampIntervalMs": 21.494
+          },
+          {
+            "name": "viz:SkiaRenderer::BeginDrawingFrame",
+            "count": 565,
+            "durationSamples": 543,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.016,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.633,
+            "p95TimestampIntervalMs": 21.515,
+            "eventSamples": [
+              {
+                "timestampMs": 15850755.742,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850774.186,
+                "phase": "I",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850792.938,
+                "phase": "X",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "viz:SkiaOutputSurfaceImplOnGpu::FinishPaintRenderPass",
+            "count": 564,
+            "durationSamples": 564,
+            "p50DurationMs": 0.106,
+            "p95DurationMs": 0.139,
+            "maxDurationMs": 0.177,
+            "timestampIntervalSamples": 563,
+            "p50TimestampIntervalMs": 17.63,
+            "p95TimestampIntervalMs": 21.542
+          },
+          {
+            "name": "benchmark,viz,disabled-by-default-display.framedisplayed:Display::FrameDisplayed",
+            "count": 564,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 563,
+            "p50TimestampIntervalMs": 17.793,
+            "p95TimestampIntervalMs": 18.097,
+            "eventSamples": [
+              {
+                "timestampMs": 15850770.967,
+                "phase": "I",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850788.578,
+                "phase": "I",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              },
+              {
+                "timestampMs": 15850806.651,
+                "phase": "I",
+                "processId": 33628,
+                "processName": "GPU Process",
+                "threadId": 4284,
+                "threadName": "VizCompositorThread",
+                "args": {}
+              }
+            ]
+          },
+          {
+            "name": "blink,devtools.timeline:UpdateLayoutTree",
+            "count": 167,
+            "durationSamples": 167,
+            "p50DurationMs": 0.213,
+            "p95DurationMs": 0.337,
+            "maxDurationMs": 0.413,
+            "timestampIntervalSamples": 166,
+            "p50TimestampIntervalMs": 86.333,
+            "p95TimestampIntervalMs": 107.323
+          },
+          {
+            "name": "blink,benchmark:PaintController::commitNewDisplayItems",
+            "count": 167,
+            "durationSamples": 167,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.005,
+            "maxDurationMs": 0.009,
+            "timestampIntervalSamples": 166,
+            "p50TimestampIntervalMs": 88.223,
+            "p95TimestampIntervalMs": 110.66
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::layout",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 1.441,
+            "p95DurationMs": 2.336,
+            "maxDurationMs": 3.205,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 107.935,
+            "p95TimestampIntervalMs": 125.012
+          },
+          {
+            "name": "devtools.timeline:Layout",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 1.436,
+            "p95DurationMs": 2.331,
+            "maxDurationMs": 3.197,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 107.935,
+            "p95TimestampIntervalMs": 125.013
+          },
+          {
+            "name": "blink,benchmark,rail,disabled-by-default-blink.debug.layout:LocalFrameView::performLayout",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 1.395,
+            "p95DurationMs": 2.276,
+            "maxDurationMs": 3.143,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 107.936,
+            "p95TimestampIntervalMs": 125.012
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::performPostLayoutTasks",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 0.035,
+            "p95DurationMs": 0.054,
+            "maxDurationMs": 0.057,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 108.632,
+            "p95TimestampIntervalMs": 125.33
+          },
+          {
+            "name": "cc,benchmark:NeedsBeginFrames",
+            "count": 1,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 0,
+            "p50TimestampIntervalMs": null,
+            "p95TimestampIntervalMs": null,
+            "eventSamples": [
+              {
+                "timestampMs": 15850752.966,
+                "phase": "b",
+                "processId": 4964,
+                "processName": "Renderer",
+                "threadId": 39608,
+                "threadName": "Compositor",
+                "args": {}
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "interpretation": {
+    "emptyWorkspaceAnimationFrameBelow60Fps": true,
+    "loadedHistoryIdleAnimationFrameBelow60Fps": true,
+    "requestAnimationFrameScrollBelow60Fps": true,
+    "presentedScrollBelow60Fps": true,
+    "historyScrollComparedWithEmptyAnimationFrameFps": 0,
+    "visibleAndFocusedForAllSamples": true
+  }
+}

@@ -122,6 +122,39 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
       ? traceEvents.filter((event) => /Begin.*Frame|PipelineReporter|SubmitCompositorFrame|DrawAndSwap|FrameDisplayed|RunTask|FunctionCall|EventDispatch|Paint|Composite|Raster|Activate|Layout|RecalculateStyle/i.test(event.name))
       : [];
     const pipelineTraceSummary = Object.groupBy(pipelineTraceEvents, (event) => `${event.cat || "unknown"}:${event.name}`);
+    const processNames = new Map(traceEvents
+      .filter((event) => event.ph === "M" && event.name === "process_name")
+      .map((event) => [event.pid, event.args?.name]));
+    const threadNames = new Map(traceEvents
+      .filter((event) => event.ph === "M" && event.name === "thread_name")
+      .map((event) => [`${event.pid}:${event.tid}`, event.args?.name]));
+    const beginFrameBySequence = new Map();
+    for (const event of traceEvents) {
+      if (event.name !== "DisplayScheduler::BeginFrame") continue;
+      const args = event.args?.args;
+      if (!Number.isFinite(args?.sequence_number) || !Number.isFinite(args?.frame_time_us)) continue;
+      beginFrameBySequence.set(`${event.pid}:${args.sequence_number}`, { event, args, now: event.args?.now });
+    }
+    const beginFrames = [...beginFrameBySequence.values()].sort((left, right) => left.args.frame_time_us - right.args.frame_time_us);
+    const summarizeSamples = (values) => {
+      const sorted = [...values].sort((left, right) => left - right);
+      return {
+        samples: sorted.length,
+        p50: sorted.length ? sorted[Math.ceil(sorted.length * 0.5) - 1] : null,
+        p95: sorted.length ? sorted[Math.ceil(sorted.length * 0.95) - 1] : null,
+        max: sorted.length ? sorted[sorted.length - 1] : null,
+      };
+    };
+    const beginFrameIntervalsMs = beginFrames.slice(1).map((frame, index) => (frame.args.frame_time_us - beginFrames[index].args.frame_time_us) / 1_000);
+    const beginFrameDeadlinesMs = beginFrames.map(({ args }) => (args.deadline_us - args.frame_time_us) / 1_000);
+    const beginFrameLatenessMs = beginFrames
+      .filter(({ now, args }) => Number.isFinite(now) && Number.isFinite(args.frame_time_us))
+      .map(({ now, args }) => (now - args.frame_time_us) / 1_000);
+    const beginFrameSubtypes = beginFrames.reduce((counts, { args }) => {
+      const subtype = args.subtype || "unknown";
+      counts[subtype] = (counts[subtype] || 0) + 1;
+      return counts;
+    }, {});
     return {
       ...animationFrames,
       presentationTrace: {
@@ -131,6 +164,17 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
         p95FrameMs: p95PresentedFrameMs,
         p5Fps: p95PresentedFrameMs ? 1_000 / p95PresentedFrameMs : null,
         traceEventCount: traceEvents.length,
+        ...(detailedTrace ? {
+          beginFrameFeedback: {
+            uniqueFrames: beginFrames.length,
+            requestedIntervalUs: [...new Set(beginFrames.map(({ args }) => args.interval_us).filter(Number.isFinite))],
+            frameTimeIntervalsMs: summarizeSamples(beginFrameIntervalsMs),
+            deadlineBudgetMs: summarizeSamples(beginFrameDeadlinesMs),
+            arrivalAfterFrameTimeMs: summarizeSamples(beginFrameLatenessMs),
+            subtypeCounts: beginFrameSubtypes,
+            framesThrottledSinceLast: summarizeSamples(beginFrames.map(({ args }) => args.frames_throttled_since_last).filter(Number.isFinite)),
+          },
+        } : {}),
         ...(detailedTrace ? {
           detailedCategories: "viz,cc,gpu,benchmark,devtools.timeline",
           pipelineEvents: Object.entries(pipelineTraceSummary).map(([name, events]) => {
@@ -156,6 +200,17 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
               timestampIntervalSamples: timestampIntervalsMs.length,
               p50TimestampIntervalMs: timestampIntervalsMs.length ? timestampIntervalsMs[Math.ceil(timestampIntervalsMs.length * 0.5) - 1] : null,
               p95TimestampIntervalMs: timestampIntervalsMs.length ? timestampIntervalsMs[Math.ceil(timestampIntervalsMs.length * 0.95) - 1] : null,
+              ...( /Begin.*Frame|PipelineReporter|FrameDisplayed/i.test(name) ? {
+                eventSamples: events.slice(0, 3).map((event) => ({
+                  timestampMs: Number.isFinite(event.ts) ? event.ts / 1_000 : null,
+                  phase: event.ph,
+                  processId: event.pid,
+                  processName: processNames.get(event.pid),
+                  threadId: event.tid,
+                  threadName: threadNames.get(`${event.pid}:${event.tid}`),
+                  args: event.args,
+                })),
+              } : {}),
             };
           }).sort((left, right) => right.count - left.count),
         } : {}),
