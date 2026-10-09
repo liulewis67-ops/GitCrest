@@ -148,6 +148,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
     let command = state.git_commands.clone();
     let repositories = state.repositories.clone();
     let shelf_store = state.shelf_store.clone();
+    let undo_store = state.undo_store.clone();
     let status_service = state.status.clone();
     let tasks = state.tasks.clone();
     let task_repo_id = repo_id.clone();
@@ -265,8 +266,8 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                             restore_shelf: Some(shelf.snapshot.clone()),
                             restore_shelf_patch: Some(shelf.patch.clone()),
                         };
-                        let store = repositories.store();
-                        tokio::task::spawn_blocking(move || store.save_undo_record(&record))
+                        let undo_store_for_save = undo_store.clone();
+                        tokio::task::spawn_blocking(move || undo_store_for_save.save_undo_record(record))
                             .await
                             .is_ok_and(|result| result.is_ok())
                     };

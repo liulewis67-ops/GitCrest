@@ -16,6 +16,7 @@ use crate::{
     },
     git::command::GitCommandService,
     ports::shelves::ShelfStorePort,
+    ports::undo::UndoStorePort,
 };
 
 #[derive(Clone)]
@@ -25,6 +26,7 @@ pub(crate) struct AppState {
     pub(crate) conflict_token: Option<Arc<String>>,
     pub(crate) repositories: RepositoryManager,
     pub(crate) shelf_store: Arc<dyn ShelfStorePort>,
+    pub(crate) undo_store: Arc<dyn UndoStorePort>,
     pub(crate) repository_targets: RepositoryTargetReader,
     pub(crate) status: StatusService<RepositoryTargetReader, GitCommandService>,
     pub(crate) tasks: TaskService,

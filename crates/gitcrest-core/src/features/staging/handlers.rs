@@ -18,8 +18,8 @@ use crate::{
     features::staging,
     features::tasks::{self, TaskFailure, TaskSnapshot},
     git::command::GitCommandService,
+    ports::undo::UndoStorePort,
     state::AppState,
-    storage::RepositoryStore,
 };
 pub(crate) async fn stage_repository(
     State(state): State<AppState>,
@@ -52,9 +52,8 @@ pub(crate) async fn stage_repository(
         staging::StagingAction::StageAll => "stageAll",
         staging::StagingAction::UnstageAll => "unstageAll",
     };
-    let repositories = state.repositories.clone();
     let status_service = state.status.clone();
-    let store = repositories.store();
+    let undo_store = state.undo_store.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
@@ -88,7 +87,7 @@ pub(crate) async fn stage_repository(
                     .await?;
                 persist_staging_undo(
                     &commands,
-                    &store,
+                    undo_store.as_ref(),
                     &repository_path,
                     &task_repo_id,
                     before_tree,
@@ -164,9 +163,8 @@ pub(crate) async fn stage_repository_patch(
         staging::StagingPatchAction::Stage => "stageHunks",
         staging::StagingPatchAction::Unstage => "unstageHunks",
     };
-    let repositories = state.repositories.clone();
     let status_service = state.status.clone();
-    let store = repositories.store();
+    let undo_store = state.undo_store.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
@@ -245,7 +243,7 @@ pub(crate) async fn stage_repository_patch(
                     .await?;
                 persist_staging_undo(
                     &commands,
-                    &store,
+                    undo_store.as_ref(),
                     &repository_path,
                     &task_repo_id,
                     before_tree,
@@ -269,8 +267,8 @@ pub(crate) async fn undo_recent_operation(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let store = state.repositories.store();
-    if store
+    let undo_store = state.undo_store.clone();
+    if undo_store
         .latest_undo_record(&repo_id)
         .map_err(|_| ApiError::task_storage_unavailable())?
         .is_none()
@@ -282,7 +280,7 @@ pub(crate) async fn undo_recent_operation(
         ));
     }
     let task_repo_id = repo_id.clone();
-    let task_store = store.clone();
+    let task_store = undo_store.clone();
     let shelf_store = state.shelf_store.clone();
     let commands = state.git_commands.clone();
     let repository_path = target.repository_path;
@@ -376,7 +374,7 @@ pub(crate) async fn undo_recent_operation(
 
 async fn persist_staging_undo(
     commands: &GitCommandService,
-    store: &RepositoryStore,
+    store: &dyn UndoStorePort,
     repository_path: &FilePath,
     repo_id: &str,
     before_tree: Option<String>,
@@ -397,7 +395,7 @@ async fn persist_staging_undo(
             return Ok(());
         }
         store
-            .save_undo_record(&UndoRecord {
+            .save_undo_record(UndoRecord {
                 operation_task_id: context.task_id().to_owned(),
                 repo_id: repo_id.to_owned(),
                 created_at_ms: unix_time_ms(),
@@ -485,7 +483,7 @@ pub(crate) async fn discard_repository_patch(
             ApiError::from_diff_error(error)
         }
     })?;
-    let repositories = state.repositories.clone();
+    let undo_store = state.undo_store.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
@@ -564,9 +562,8 @@ pub(crate) async fn discard_repository_patch(
                     )
                     .await
                     ?;
-                let store = repositories.store();
-                if store
-                    .save_undo_record(&UndoRecord {
+                if undo_store
+                    .save_undo_record(UndoRecord {
                         operation_task_id: context.task_id().to_owned(),
                         repo_id: task_repo_id.clone(),
                         created_at_ms: unix_time_ms(),

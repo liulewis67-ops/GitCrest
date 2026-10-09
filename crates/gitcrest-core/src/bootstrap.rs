@@ -84,6 +84,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         read_only_token: config.read_only_token.map(Arc::new),
         conflict_token: config.conflict_token.map(Arc::new),
         shelf_store: Arc::new(repositories.store()),
+        undo_store: Arc::new(repositories.store()),
         repositories,
         repository_targets,
         status,

@@ -14,6 +14,7 @@ use crate::domain::{
     undo::{UndoOperation, UndoRecord},
 };
 use crate::ports::shelves::ShelfStorePort;
+use crate::ports::undo::UndoStorePort;
 
 const MAX_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
 const MAX_UNDO_RECORDS_PER_REPOSITORY: i64 = 100;
@@ -802,6 +803,33 @@ impl ShelfStorePort for RepositoryStore {
         shelf_id: &str,
     ) -> Result<bool, crate::domain::error::RepositoryError> {
         self.delete_shelf(repo_id, shelf_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+}
+
+impl UndoStorePort for RepositoryStore {
+    fn save_undo_record(
+        &self,
+        record: UndoRecord,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        RepositoryStore::save_undo_record(self, &record)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn latest_undo_record(
+        &self,
+        repo_id: &str,
+    ) -> Result<Option<UndoRecord>, crate::domain::error::RepositoryError> {
+        RepositoryStore::latest_undo_record(self, repo_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn delete_undo_record(
+        &self,
+        repo_id: &str,
+        operation_task_id: &str,
+    ) -> Result<bool, crate::domain::error::RepositoryError> {
+        RepositoryStore::delete_undo_record(self, repo_id, operation_task_id)
             .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
     }
 }

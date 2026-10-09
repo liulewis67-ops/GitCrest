@@ -214,6 +214,7 @@ pub(super) async fn apply_repository_shelf(
 
     let repositories = state.repositories.clone();
     let shelf_store = state.shelf_store.clone();
+    let undo_store = state.undo_store.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
@@ -322,8 +323,8 @@ pub(super) async fn apply_repository_shelf(
                         restore_shelf: Some(current_shelf.snapshot.clone()),
                         restore_shelf_patch: Some(current_shelf.patch.clone()),
                     };
-                    let store = repositories.store();
-                    tokio::task::spawn_blocking(move || store.save_undo_record(&undo_record))
+                    let undo_store_for_save = undo_store.clone();
+                    tokio::task::spawn_blocking(move || undo_store_for_save.save_undo_record(undo_record))
                         .await
                         .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?
                         .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?;
@@ -337,11 +338,11 @@ pub(super) async fn apply_repository_shelf(
                     .and_then(|result| result.map_err(|_| "The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".to_owned()));
                 if deletion != Ok(true) {
                     if clean_apply {
-                        let store = repositories.store();
+                        let undo_store_for_delete = undo_store.clone();
                         let repo_id = task_repo_id.clone();
                         let operation_task_id = context.task_id().to_owned();
                         let _ = tokio::task::spawn_blocking(move || {
-                            store.delete_undo_record(&repo_id, &operation_task_id)
+                            undo_store_for_delete.delete_undo_record(&repo_id, &operation_task_id)
                         })
                         .await;
                     }

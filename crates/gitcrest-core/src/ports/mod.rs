@@ -3,3 +3,4 @@ pub(crate) mod git;
 pub(crate) mod repository;
 pub(crate) mod shelves;
 pub(crate) mod status;
+pub(crate) mod undo;
