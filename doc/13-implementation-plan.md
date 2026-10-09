@@ -3472,4 +3472,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；HTTP harness 通过当前 Release sidecar 和隔离 100k fixture 执行请求，并校验每轮搜索/status/Diff 返回内容。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-release-recheck-20261009.json`。旧 `gitcrest-s7.2-100k-fixture-v2` 临时目录仅剩空 `.git`，本次 fixture 使用独立新目录；临时报告副本写入系统 TEMP 后再收录。
 - 限制/后续：S7.2 仍未整体通过，桌面空闲 Working Set 超过 250MB、冷启动尚未在冷文件系统缓存下测量，滚动 P5 尚未在稳定 ≥60Hz 帧调度环境达标；跨平台性能留待 S7.4。
-- 完成 commit：待补记
+- 完成 commit：`317bf2d`
