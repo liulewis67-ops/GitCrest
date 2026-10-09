@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
 mod askpass;
+mod keyring;
 
 pub use askpass::answer_askpass_prompt;
 
@@ -16,8 +17,6 @@ pub use askpass::{parse_askpass_prompt, AskpassPromptKind};
 #[cfg(test)]
 pub(super) use askpass::answer_askpass_prompt_with_manager;
 
-const KEYRING_SERVICE: &str = "com.gitcrest.git-https";
-const AI_KEYRING_SERVICE: &str = "com.gitcrest.ai-provider";
 const MAX_CREDENTIAL_BYTES: usize = 64 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -55,7 +54,7 @@ pub struct AiCredentialManager {
 impl AiCredentialManager {
     pub fn system() -> Self {
         Self {
-            store: Arc::new(SystemAiCredentialStore),
+            store: Arc::new(keyring::SystemAiCredentialStore),
         }
     }
 
@@ -101,7 +100,7 @@ pub struct CredentialManager {
 impl CredentialManager {
     pub fn system() -> Self {
         Self {
-            store: Arc::new(SystemCredentialStore),
+            store: Arc::new(keyring::SystemCredentialStore),
         }
     }
 
@@ -158,87 +157,6 @@ impl CredentialManager {
 
     pub fn get_for_git(&self, host: &str) -> Result<Option<GitCredential>, CredentialError> {
         self.store.get(&normalize_host(host)?)
-    }
-}
-
-struct SystemCredentialStore;
-
-struct SystemAiCredentialStore;
-
-impl AiCredentialStore for SystemAiCredentialStore {
-    fn is_configured(&self) -> Result<bool, CredentialError> {
-        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
-            .map_err(|_| CredentialError::Unavailable)?;
-        match entry.get_password() {
-            Ok(value) => {
-                let _secret = Zeroizing::new(value);
-                Ok(true)
-            }
-            Err(keyring::Error::NoEntry) => Ok(false),
-            Err(_) => Err(CredentialError::Unavailable),
-        }
-    }
-
-    fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError> {
-        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
-            .map_err(|_| CredentialError::Unavailable)?;
-        match entry.get_password() {
-            Ok(value) => Ok(Some(Zeroizing::new(value))),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(CredentialError::Unavailable),
-        }
-    }
-
-    fn set(&self, api_key: &str) -> Result<(), CredentialError> {
-        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
-            .map_err(|_| CredentialError::Unavailable)?;
-        let secret = Zeroizing::new(api_key.to_owned());
-        entry
-            .set_password(&secret)
-            .map_err(|_| CredentialError::Unavailable)
-    }
-
-    fn delete(&self) -> Result<(), CredentialError> {
-        let entry = keyring::Entry::new(AI_KEYRING_SERVICE, "openai-compatible")
-            .map_err(|_| CredentialError::Unavailable)?;
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(CredentialError::Unavailable),
-        }
-    }
-}
-
-impl CredentialStore for SystemCredentialStore {
-    fn get(&self, host: &str) -> Result<Option<GitCredential>, CredentialError> {
-        let entry =
-            keyring::Entry::new(KEYRING_SERVICE, host).map_err(|_| CredentialError::Unavailable)?;
-        match entry.get_password() {
-            Ok(value) => serde_json::from_str(&Zeroizing::new(value))
-                .map(Some)
-                .map_err(|_| CredentialError::Unavailable),
-            Err(keyring::Error::NoEntry) => Ok(None),
-            Err(_) => Err(CredentialError::Unavailable),
-        }
-    }
-
-    fn set(&self, host: &str, credential: &GitCredential) -> Result<(), CredentialError> {
-        let entry =
-            keyring::Entry::new(KEYRING_SERVICE, host).map_err(|_| CredentialError::Unavailable)?;
-        let value = Zeroizing::new(
-            serde_json::to_string(credential).map_err(|_| CredentialError::Unavailable)?,
-        );
-        entry
-            .set_password(&value)
-            .map_err(|_| CredentialError::Unavailable)
-    }
-
-    fn delete(&self, host: &str) -> Result<(), CredentialError> {
-        let entry =
-            keyring::Entry::new(KEYRING_SERVICE, host).map_err(|_| CredentialError::Unavailable)?;
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(_) => Err(CredentialError::Unavailable),
-        }
     }
 }
 

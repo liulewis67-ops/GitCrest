@@ -4754,3 +4754,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/credentials/askpass.rs`、`crates/gitcrest-core/src/credentials/mod.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：系统 Git 与 AI 凭据 keyring store 仍在 `credentials/mod.rs`；后续按规范移至 `credentials/keyring.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段职责拆分与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 拆分系统凭据库 adapter — 小阶段 437
+- 状态：已完成（Git 与 AI 凭据的系统 keyring 实现位于 `credentials/keyring.rs`）
+- 日期：2026-10-10
+- 交付：将系统 Git 凭据与 AI provider 凭据的 keyring store 实现、服务标识常量移至 `credentials/keyring.rs`；credential manager 仍通过 store traits 注入系统实现。Keyring service/account、序列化格式、错误映射和 `Zeroizing` secret 处理保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认 `CredentialManager::system` 与 `AiCredentialManager::system` 构造的类型仍实现各自既有 store trait；Git 和 AI secret 的 keyring service 名称与 account key 保持不变。
+- 证据：`crates/gitcrest-core/src/credentials/keyring.rs`、`crates/gitcrest-core/src/credentials/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：凭据适配层现已按规范分为 Askpass 和 keyring 文件；manager、validation 与领域数据类型保留在 `credentials/mod.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段职责拆分与台账同一 commit（SHA 可在后续台账更新中补记）。
