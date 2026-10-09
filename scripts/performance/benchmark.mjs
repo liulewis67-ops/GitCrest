@@ -16,7 +16,7 @@ const iterations = Number(process.env.GITCREST_BENCH_ITERATIONS || 20);
 const args = process.argv.slice(2);
 
 function usage() {
-  process.stdout.write("Usage:\n  node scripts/performance/benchmark.mjs prepare [fixture-path]\n  node scripts/performance/benchmark.mjs cold [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs run [fixture-path] [report-path]\n");
+  process.stdout.write("Usage:\n  node scripts/performance/benchmark.mjs prepare [fixture-path]\n  node scripts/performance/benchmark.mjs cold [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs diagnose-search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs run [fixture-path] [report-path]\n");
 }
 
 async function git(cwd, args, options = {}) {
@@ -311,6 +311,49 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
   };
 }
 
+async function runGitSearchDiagnostic(fixturePath, reportPath) {
+  const query = "benchmark commit 099999";
+  const searchArgs = ["log", "--fixed-strings", "--regexp-ignore-case", `--grep=${query}`, "--max-count=51"];
+  const commands = [
+    { name: "gitProcessStartup", args: ["--version"] },
+    { name: "repositoryMetadata", args: ["rev-parse", "--git-dir"] },
+    { name: "singleCommit", args: ["log", "--format=%H", "-1", "HEAD"] },
+    { name: "messageSearchFullSummary", args: [...searchArgs, "--format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%s", "HEAD", "--branches", "--remotes"], expected: query },
+    { name: "messageSearchOidOnly", args: [...searchArgs, "--format=tformat:%H", "HEAD", "--branches", "--remotes"] },
+    { name: "messageSearchFirstParent", args: [...searchArgs, "--format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%s", "--first-parent", "HEAD"] },
+    { name: "messageSearchTopoOrder", args: [...searchArgs, "--format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%s", "--topo-order", "HEAD", "--branches", "--remotes"], expected: query },
+    { name: "revisionWalkAllOids", args: ["rev-list", "HEAD", "--branches", "--remotes"] },
+  ];
+  const results = [];
+  for (const command of commands) {
+    let outputBytes = 0;
+    const result = await measure(command.name, async () => {
+      const { stdout } = await git(fixturePath, command.args);
+      outputBytes = Buffer.byteLength(stdout);
+      if (command.expected && !stdout.includes(command.expected)) {
+        throw new Error(`${command.name} did not return the expected matching commit.`);
+      }
+    });
+    results.push({ ...result, outputBytes });
+  }
+  const report = {
+    generatedAt: new Date().toISOString(),
+    host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: await cpuModel(), logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
+    software: { node: process.version, git: (await execFileAsync("git", ["--version"])).stdout.trim() },
+    fixture: { commits: 100_000, path: fixturePath, searchQuery: `message contains ${query}`, iterations },
+    results,
+    interpretation: [
+      "Process startup and metadata commands isolate fixed git process overhead from history traversal.",
+      "Full-summary versus OID-only output compares formatting cost while preserving the same message filter and ref roots.",
+      "First-parent and topo-order variants are diagnostic only; their history semantics differ and are not substitutes without a separate correctness proof.",
+      "The all-OID revision walk measures graph traversal without message filtering or summary formatting.",
+    ],
+  };
+  await mkdir(dirname(reportPath), { recursive: true });
+  await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+}
+
 async function runIndexedHistorySearchBenchmark(fixturePath, reportPath) {
   const executable = join(root, "crates", "gitcrest-core", "target", "release", process.platform === "win32" ? "gitcrest-core.exe" : "gitcrest-core");
   const tempData = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-search-data-"));
@@ -525,6 +568,10 @@ if (command === "prepare") {
   if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
   const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}-indexed-search.json`));
   await runIndexedHistorySearchBenchmark(fixturePath, reportPath);
+} else if (command === "diagnose-search") {
+  if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
+  const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}-git-search-diagnostic.json`));
+  await runGitSearchDiagnostic(fixturePath, reportPath);
 } else if (command === "run") {
   if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
   const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}.json`));

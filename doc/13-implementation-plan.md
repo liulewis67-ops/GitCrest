@@ -4485,3 +4485,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-search-index-git-first-stage409-20261010.json`、阶段 408 冷搜索报告。
 - 限制/后续：冷搜索完整结果 P95 仍约 590ms，未达 <200ms；下一步需优化 Git message scan 本身或将冷搜索定义在后台索引已预热后的实际用户流程中，并保持首次冷查询单独报告。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现、复测证据与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 拆分 Git 消息搜索的进程和遍历成本 — 小阶段 410
+- 状态：已完成（基准新增 Git 命令对照模式；证据显示冷查询耗时主要在完整历史扫描而非进程启动或输出格式化）
+- 日期：2026-10-10
+- 交付：`benchmark.mjs diagnose-search` 新增可复用诊断模式，在固定 100k fixture 上分别测量 Git 进程启动、仓库元数据、单提交读取、完整摘要/仅 OID 消息搜索、first-parent/topo-order 搜索和全量 OID rev-list，并记录每个命令的 20 个样本和输出字节数。
+- 验证：`node --check scripts/performance/benchmark.mjs`、20 轮诊断运行、报告 JSON 解析与 `git diff --check` 通过；未运行测试。full-summary message search P95 为 560.455ms，OID-only 为 544.728ms；first-parent 与 topo-order 分别为 574.266/562.168ms；全量 OID rev-list 为 699.667ms；单次 `git --version` 进程启动 P95 60.429ms，单提交读取 P95 126.907ms。摘要和 OID 输出仅相差约 16ms，降低输出格式负载没有显著收益。
+- 手工验证：所有候选命令使用相同 E: 盘 100k commit fixture、相同目标消息与 20 次运行；默认 full-summary 和 topo-order 均核对目标消息在输出中。first-parent/topo-order 仅用于诊断，不作为不同拓扑仓库的语义等价证明。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-git-search-diagnostic-stage410-20261010.json`。
+- 限制/后续：约 500ms 冷查询时间主要受 Git 全量历史顺序遍历和消息筛选限制；进程启动和格式化不是主瓶颈，枚举全部 OID 再应用层筛选更慢。后续优先复用后台索引满足常规搜索，并探索不改变多分支结果完整性与顺序的查询策略。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段工具、诊断证据与台账同一 commit（SHA 可在后续台账更新中补记）。
