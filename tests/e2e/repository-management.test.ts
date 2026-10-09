@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -161,6 +161,50 @@ it.skipIf(process.platform !== "win32")("reports an access error for a folder de
   } finally {
     await app?.close();
     if (denyApplied) await execFileAsync("icacls", [projectPath, "/remove:d", `*${userSid}`]);
+    await rm(projectPath, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("keeps a failed Git template initialization out of the selected project folder", async () => {
+  const projectPath = await mkdtemp(resolve(tmpdir(), "gitcrest-init-template-e2e-project-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-init-template-e2e-app-data-"));
+  const templatePath = resolve(appDataPath, "invalid-template");
+  const gitConfigPath = resolve(appDataPath, "gitconfig");
+  const projectFile = resolve(projectPath, "README.md");
+  let app: ElectronApplication | undefined;
+
+  try {
+    await writeFile(projectFile, "# Keep this project unchanged\n");
+    await mkdir(templatePath);
+    await writeFile(resolve(templatePath, "config"), "not a valid git config line\n");
+    await writeFile(gitConfigPath, `[init]\n\ttemplateDir = ${templatePath.replace(/\\/g, "/")}\n`);
+    app = await electron.launch({
+      args: ["."],
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: gitConfigPath,
+        GIT_CONFIG_NOSYSTEM: "1",
+        ELECTRON_RENDERER_URL: "",
+        GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite"),
+      },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await app.evaluate(({ dialog }, destination) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
+    }, projectPath);
+
+    await window.getByRole("button", { name: "Initialize a repository" }).click();
+    const errorAlert = window.getByRole("alert");
+    await errorAlert.waitFor({ state: "visible" });
+    expect(await errorAlert.innerText()).toBe("Git could not initialize this folder.");
+    expect(await readFile(projectFile, "utf8")).toBe("# Keep this project unchanged\n");
+    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+    expect(await readdir(projectPath)).toEqual(["README.md"]);
+  } finally {
+    await app?.close();
     await rm(projectPath, { recursive: true, force: true });
     await rm(appDataPath, { recursive: true, force: true });
   }

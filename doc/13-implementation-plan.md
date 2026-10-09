@@ -3324,3 +3324,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：macOS/Linux 真实权限拒绝行为未在对应 runner 验证；Git 初始化中途失败后的部分 `.git` 清理仍待验收；S7.5 保持进行中。
 - 完成 commit：`a77c393`
+
+### Git init staging 失败清理与成功后安装 — 小阶段 292
+- 状态：已完成（Git 初始化在 staging 目录执行；失败不在用户项目留下部分 `.git`）
+- 日期：2026-10-09
+- 交付：将 Git 初始化改为在用户选定目录内创建受 tempfile 管理的 staging 目录，Git 成功后才把 staging `.git` 安装到项目根；失败由 TempDir 清理所有临时元数据。安装前后检查目标 `.git`，拒绝替换已存在的元数据。把 `tempfile` 从 dev-dependency 移至运行时依赖。新增真实损坏 Git template 故障测试及 Windows Electron E2E，验证原文件保留、无 `.git` 残留且界面呈现初始化失败提示。
+- 验证：adapter 故障与已有 `.git` 保护定向测试通过；Rust 全量测试（135/135）、fmt、Clippy 通过；release 与 debug sidecar 构建通过；定向初始化错误 E2E、`pnpm build`、Windows 完整 E2E（6 files、24 tests）通过；`git diff --check` 通过。
+- 手工验证：未执行手工 GUI 操作；实际 Git 损坏模板在隔离 Electron 流程触发失败，确认项目内容和页面状态。
+- 证据：`crates/gitcrest-core/src/git/repository.rs`、`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：staging 与最终 `.git` 安装之间若外部 Git 进程同时初始化同一目录，仍存在跨进程并发窗口；macOS/Linux runner 尚未复测；S7.5 保持进行中。
+- 完成 commit：待提交
