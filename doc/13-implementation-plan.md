@@ -2408,3 +2408,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：筛选表单字段布局与滚动行为仍由 CommitGraph 视图负责；S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`src/features/history/model/use-history-filters.ts`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`19df38d`
+
+### history feature tag editor 状态迁入 model — 小阶段 199
+- 状态：已完成（tag 编辑器开合、表单值及成功后的清理由 history model 管理）
+- 日期：2026-10-09
+- 交付：扩展 `useCommitTagCreation` 管理编辑器开合状态、tag 名称/注释草稿、打开/切换动作及创建成功后的表单清理；repository/OID 改变时同步清理编辑状态，并继续忽略已过期创建请求。CommitDetails 仅绑定表单控件和渲染 busy/error/status 状态。
+- 验证：`pnpm build`（应用与测试 TypeScript 检查、main/preload/renderer 构建）与 `git diff --check` 通过；构建保留 web-tree-sitter eval 警告，未运行测试。
+- 限制/后续：Copy SHA 提示和 tag 表单的 HTML 呈现仍留在 CommitDetails；S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`src/features/history/model/use-commit-tag-creation.ts`、`src/features/history/CommitGraph.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`fed0492`
