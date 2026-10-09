@@ -2545,3 +2545,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff 内部模型仍定义在 feature service；共享的 `DiffScope` / `DiffSelection` 仍承担传输反序列化职责，后续需继续迁入领域模型并在各 feature 请求 DTO 边界映射。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/diff/dto.rs`、`crates/gitcrest-core/src/features/diff/handlers.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/api/v1.yaml` 的 `DiffDocument`/`DiffHunk`/`DiffRow` schema、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
 - 实施 commit：`8c5609e`
+
+
+### Diff 错误类型归入领域错误模块 — 小阶段 214
+- 状态：已完成（Diff 错误语义由领域错误模块集中定义，API 层继续负责 HTTP 映射）
+- 日期：2026-10-09
+- 交付：将 `DiffError` 从 `features/diff/service.rs` 移至 `domain/error.rs`，Diff service 与读取子模块复用该类型；`api/error.rs` 保持既有错误码和 HTTP 状态映射。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；未运行测试。
+- 限制/后续：Diff document、hunk、row 与 selection 的领域归属和请求 DTO 转换仍需继续整理；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/error.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
+- 实施 commit：`7085ee0`
