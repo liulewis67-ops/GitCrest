@@ -4584,3 +4584,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`.github/workflows/release.yml`。
 - 限制/后续：本地仓库无 Git remote，且没有可用的 Linux release runner 与签名 secret；尚未验证真实 AppImage 构建、清单签名和更新安装。S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段 workflow 调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### storage 拆分历史搜索索引 adapter — 小阶段 420
+- 状态：已完成（历史 FTS 索引持久化职责独立位于 `storage/history_index.rs`）
+- 日期：2026-10-10
+- 交付：将历史搜索索引的构建状态、查询、原子替换和 `HistorySearchIndexPort` 实现从 `storage/storage.rs` 移至 `storage/history_index.rs`；`RepositoryStore` 构造、共享连接、其他存储能力及调用签名保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：确认 history adapter 子模块继续使用同一 `RepositoryStore` history connection/build lease，FTS 事务和 port 错误映射保持原实现；编译无新增 warning。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/history_index.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：仓库目录、设置、shelf、undo、任务快照和迁移仍位于 `storage/storage.rs`；后续按职责和共享事务边界逐块拆分，不预建空模块。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
