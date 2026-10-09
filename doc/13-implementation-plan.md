@@ -4086,3 +4086,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-indexed-search-stage368.json`。
 - 限制/后续：本阶段验证的是索引就绪后的查询延迟；首次索引建立期间仍显示 pending，约 1.63 秒就绪时间不是 <200ms，且没有复跑 20 轮冷搜索完整耗时。S7.2 的空闲内存、滚动工作集和帧率仍未达标；S7.4、S7.5 继续待验收。
 - 实施 commit：`5a76f4c`。
+
+### S7.2 帧调度启动参数候选对照 — 小阶段 369
+- 状态：已完成（否决两个启动参数候选；保留默认 GPU/帧调度配置）
+- 日期：2026-10-10
+- 交付：发行版帧诊断和 30 秒滚动基准增加 `--disable-frame-rate-limit` 诊断开关，供隔离帧调度影响。该开关只在基准环境变量显式指定时启用，不进入产品默认启动参数。
+- 验证：Windows 11 / Ryzen 7 5800H / Electron 37 / 打包 Release / 同一 100k fixture。`--disable-frame-rate-limit` 的 30 秒单轮滚动 P5 达 208.33fps，但空闲仍为 55.25fps，滚动进程树工作集峰值升至 600,002,560 bytes（目标 <500MB）；`--in-process-gpu` 的 10 秒诊断空闲约 59.5fps，历史滚动 P5 降至 29.94fps。两个候选均不满足组合目标，未应用到产品配置。两个脚本 `node --check`、`git diff --check` 通过。
+- 手工验证：未操作 GUI；使用发行版可执行文件和独立临时 profile 自动采样。帧率限制候选完成一轮 30 秒滚动；in-process GPU 在 10 秒诊断中已明显低于目标，不再进行耗时的 20 轮测量。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-frame-limit-diagnostic-stage369-20261010.json`、`doc/evidence/S7.2/desktop-win32-frame-limit-scroll-stage369-20261010.json`、`doc/evidence/S7.2/desktop-win32-in-process-gpu-diagnostic-stage369-20261010.json`。
+- 限制/后续：帧率限制参数会在空闲状态继续受约 55fps 影响，并使工作集超标；in-process GPU 造成历史滚动掉到约 30fps。S7.2 仍待进一步调查 Windows/Electron 默认帧调度和内存基线；S7.4/S7.5 保持待验收。
+- 实施 commit：`c17b1a1`。
