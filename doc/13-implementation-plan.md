@@ -4245,3 +4245,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/windows-vsync-sleep-sampling.ps1`、`doc/evidence/S7.2/windows-vsync-sleep-stage385-20261010.json`；阶段 381 VSync worker trace、阶段 384 occluded 状态。
 - 限制/后续：隐藏 PowerShell 的 Sleep 分布不能解释 Electron 活动窗口下的约 17.7ms VSync wait；阶段 384 的 D3DKMT API 与 Chromium 当前 DXGI `WaitForVBlank` 调用也不是同一入口。下一阶段需要直接读取 Chromium trace 中 fallback 路径可见的状态/时长，或在 Electron 运行进程内关联 timer-resolution 可见性，继续保持诊断配置不进入产品启动参数。S7.2、S7.4、S7.5 仍未验收。
 - 证据 commit：`d96b920`。
+
+### branches feature 分支切换对话框迁入 feature UI — 小阶段 386
+- 状态：已完成（branch switcher 展示与键盘焦点管理已归属 branches feature；跨 feature shelf 编排仍由 App 注入回调）
+- 日期：2026-10-10
+- 交付：新增 `src/features/branches/ui/BranchSwitcherDialog.tsx`，承接分支选择、预检结果、脏文件覆盖提示、键盘焦点陷阱及提交/暂存/继续入口；通过 branches feature 的动态加载出口按需懒加载。App 只传入仓库快照、branch switcher model、shortcut 展示值，以及 commit/shelf 跨 feature 回调。
+- 验证：`pnpm exec tsc`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；build 产物包含独立 `BranchSwitcherDialog` chunk（4.70 kB）。`pnpm frontend:build` 的 tsc 阶段通过，但默认 Vite 清理 `dist` 时因仍运行的 packaged GitCrest 进程占用 `dist/win-unpacked/d3dcompiler_47.dll` 返回 EPERM；未终止该进程，改用临时 outDir 成功完成 production bundle。
+- 手工验证：未操作 GUI；对话框用 `branchSwitcher.open` 条件挂载，关闭时复用 `useDialogFocus` 的焦点恢复清理；未运行测试。
+- 证据：`src/features/branches/ui/BranchSwitcherDialog.tsx`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：App 仍负责 branch switch 的 shelf composer 生命周期和两个 feature 之间的协调；后续继续沿页面组合与 feature use case 边界拆分。S7.2、S7.4、S7.5 仍未验收。
+- 实施 commit：`7ad87b3`。
