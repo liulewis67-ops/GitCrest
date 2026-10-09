@@ -14,9 +14,10 @@ use crate::{
         time::unix_time_ms,
         undo::{UndoOperation, UndoRecord},
     },
+    execution::TaskContext,
     features::diff::{self, DiffError},
     features::staging,
-    features::tasks::{self, TaskFailure, TaskSnapshot},
+    features::tasks::{TaskFailure, TaskSnapshot},
     git::command::GitCommandService,
     ports::undo::UndoStorePort,
     state::AppState,
@@ -378,7 +379,7 @@ async fn persist_staging_undo(
     repository_path: &FilePath,
     repo_id: &str,
     before_tree: Option<String>,
-    context: tasks::TaskContext,
+    context: TaskContext,
 ) {
     let Some(before_tree) = before_tree else {
         return;
