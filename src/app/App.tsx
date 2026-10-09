@@ -71,7 +71,6 @@ function App() {
   const { shortcuts, setShortcuts } = useShortcutPreferences();
   const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
   const [diffRetry, setDiffRetry] = useState(0);
-  const [discardSelection, setDiscardSelection] = useState<{ path: string; revision: string; selections: Array<{ hunkIndex: number; rowIndex?: number }> }>();
   const {
     message: commitMessage,
     setMessage: setCommitMessage,
@@ -384,6 +383,9 @@ function App() {
     stageChanges,
     stageSelectedChanges,
     undoRecentOperation,
+    discardSelection,
+    requestDiscard,
+    clearDiscardSelection,
     discardSelectedChanges,
   } = useStagingOperations({
     getApi: () => apiRef.current,
@@ -392,8 +394,6 @@ function App() {
     hasActiveRepositoryTask,
     hasActiveStagingTask,
     document: diffState.document,
-    discardSelection,
-    clearDiscardSelection: () => setDiscardSelection(undefined),
     appendTask,
     prependTask,
     setTaskError: setTasksError,
@@ -1005,7 +1005,7 @@ function App() {
                 onOpenRepository={() => void openLocalRepository()}
                 onRetryDiff={() => setDiffRetry((current) => current + 1)}
                 onStageSelection={stageSelectedChanges}
-                onDiscardSelection={(document, selections) => { setTasksError(""); setDiscardSelection({ path: document.path, revision: document.revision, selections }); }}
+                onDiscardSelection={requestDiscard}
                 onCommitSelection={addDiffSelectionToCommit}
                 onOpenDiffWindow={(path, scope, oid) => void openDiffWindow(path, scope, oid)}
               />
@@ -1153,7 +1153,7 @@ function App() {
         const install = getGitCrestBridge()?.installUpdate;
         if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
       }} />}
-      {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
+      {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
       {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} onClose={workflowDialog.close} onStarted={workflowDialog.startTask} />}
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}

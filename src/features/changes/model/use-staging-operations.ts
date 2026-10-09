@@ -22,8 +22,6 @@ interface StagingOperationsOptions {
   hasActiveRepositoryTask: boolean;
   hasActiveStagingTask: boolean;
   document?: DiffDocumentResponse;
-  discardSelection?: DiscardSelection;
-  clearDiscardSelection: () => void;
   appendTask: (task: TaskSnapshotResponse) => void;
   prependTask: (task: TaskSnapshotResponse) => void;
   setTaskError: (message: string) => void;
@@ -37,14 +35,23 @@ export function useStagingOperations({
   hasActiveRepositoryTask,
   hasActiveStagingTask,
   document,
-  discardSelection,
-  clearDiscardSelection,
   appendTask,
   prependTask,
   setTaskError,
   openTaskCenter,
 }: StagingOperationsOptions) {
   const [busy, setBusy] = useState(false);
+  const [discardSelection, setDiscardSelection] = useState<DiscardSelection>();
+
+  function requestDiscard(document: DiffDocumentResponse, selections: DiscardSelection["selections"]) {
+    if (document.scope !== "workingTree") return;
+    setTaskError("");
+    setDiscardSelection({ path: document.path, revision: document.revision, selections });
+  }
+
+  function clearDiscardSelection() {
+    setDiscardSelection(undefined);
+  }
 
   async function stageChanges(action: StagingRequest["action"], path?: string) {
     const api = getApi();
@@ -120,5 +127,5 @@ export function useStagingOperations({
     }
   }
 
-  return { busy, stageChanges, stageSelectedChanges, undoRecentOperation, discardSelectedChanges };
+  return { busy, stageChanges, stageSelectedChanges, undoRecentOperation, discardSelection, requestDiscard, clearDiscardSelection, discardSelectedChanges };
 }
