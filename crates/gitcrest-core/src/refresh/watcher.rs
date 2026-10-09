@@ -15,6 +15,7 @@ use tokio::{sync::mpsc, time::Instant};
 
 use crate::{
     features::{repositories::RepositoryManager, status::StatusService},
+    ports::status::StatusReadPort,
     EventBus,
 };
 
@@ -91,7 +92,11 @@ struct WatchFailure {
     poll_at: Instant,
 }
 
-pub async fn run(repositories: RepositoryManager, status: StatusService, events: EventBus) {
+pub async fn run<G: StatusReadPort + Clone + 'static>(
+    repositories: RepositoryManager,
+    status: StatusService<G>,
+    events: EventBus,
+) {
     let (sender, mut receiver) = mpsc::channel::<WatchInput>(EVENT_QUEUE_CAPACITY);
     let overflowed = Arc::new(AtomicBool::new(false));
     let mut registrations = HashMap::<String, Registration>::new();
@@ -148,9 +153,9 @@ pub async fn run(repositories: RepositoryManager, status: StatusService, events:
     }
 }
 
-async fn reconcile_repositories(
+async fn reconcile_repositories<G: StatusReadPort + Clone + 'static>(
     repositories: &RepositoryManager,
-    status: &StatusService,
+    status: &StatusService<G>,
     sender: &mpsc::Sender<WatchInput>,
     overflowed: &Arc<AtomicBool>,
     registrations: &mut HashMap<String, Registration>,
@@ -222,10 +227,10 @@ async fn reconcile_repositories(
     }
 }
 
-async fn create_registration(
+async fn create_registration<G: StatusReadPort + Clone + 'static>(
     repo_id: &str,
     root: PathBuf,
-    status: StatusService,
+    status: StatusService<G>,
     sender: &mpsc::Sender<WatchInput>,
     overflowed: &Arc<AtomicBool>,
 ) -> Result<Registration, ()> {
@@ -439,8 +444,8 @@ fn classify_path(path: &Path, location: &WatchLocation) -> DirtyScope {
     scope
 }
 
-fn publish_pending(
-    status: &StatusService,
+fn publish_pending<G: StatusReadPort>(
+    status: &StatusService<G>,
     events: &EventBus,
     pending: &mut HashMap<String, DirtyScope>,
 ) {

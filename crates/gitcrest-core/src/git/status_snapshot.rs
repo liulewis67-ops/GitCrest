@@ -5,42 +5,12 @@ use tokio::process::Command;
 
 use crate::domain::status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot};
 
-pub(crate) async fn read(repo_id: String, path: &Path) -> Result<StatusSnapshot, std::io::Error> {
-    read_scope(repo_id, path, &[]).await
-}
-
-pub(super) async fn read_paths(
+pub(super) async fn read_status(
     repo_id: String,
     path: &Path,
     paths: &[String],
 ) -> Result<StatusSnapshot, std::io::Error> {
-    validate_paths(paths)?;
     read_scope(repo_id, path, paths).await
-}
-
-pub(super) fn validate_paths(paths: &[String]) -> Result<(), std::io::Error> {
-    if paths.is_empty()
-        || paths.len() > 256
-        || paths.iter().any(|path| {
-            path.is_empty()
-                || path.contains('\0')
-                || path.len() > 4096
-                || Path::new(path).is_absolute()
-                || Path::new(path).components().any(|component| {
-                    matches!(
-                        component,
-                        std::path::Component::ParentDir | std::path::Component::RootDir
-                    )
-                })
-        })
-        || paths.iter().map(String::len).sum::<usize>() > 64 * 1024
-    {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            "The status path scope is invalid or too large",
-        ));
-    }
-    Ok(())
 }
 
 async fn read_scope(
@@ -433,7 +403,9 @@ mod tests {
     #[test]
     fn status_scope_rejects_nul_and_matches_repository_dot() {
         assert_eq!(
-            validate_paths(&["bad\0path".into()]).unwrap_err().kind(),
+            crate::features::status::scope::validate_paths(&["bad\0path".into()])
+                .unwrap_err()
+                .kind(),
             std::io::ErrorKind::InvalidInput
         );
         assert!(path_matches("nested/file.txt", "."));

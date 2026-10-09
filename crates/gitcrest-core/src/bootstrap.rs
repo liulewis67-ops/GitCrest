@@ -63,14 +63,14 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let repositories = RepositoryManager::open_database(config.database_path)
         .await
         .map_err(|_| "Could not initialize the repository database")?;
-    let status = StatusService::new(repositories.clone());
+    let git_commands = GitCommandService::default();
+    let status = StatusService::with_reader(repositories.clone(), git_commands.clone());
     let task_status = status.clone();
     let tasks =
         TaskService::with_store_and_status_invalidator(repositories.store(), move |repo_id| {
             task_status.invalidate(repo_id)
         })
         .map_err(|_| "Could not recover background task history")?;
-    let git_commands = GitCommandService::default();
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
     let events = EventBus::default();
     tokio::spawn(watcher::run(

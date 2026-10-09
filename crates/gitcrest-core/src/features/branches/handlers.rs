@@ -7,7 +7,7 @@ use axum::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::status::ChangeCategory,
-    features::{branches, repositories::repository::RepositoryError, status},
+    features::{branches, repositories::repository::RepositoryError},
     AppState, BranchCommand, TaskFailure, TaskSnapshot,
 };
 
@@ -495,6 +495,7 @@ pub(super) async fn switch_repository_branch(
     let target_name = request.name;
     let repo_for_check = repo_id.clone();
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let command = state.git_commands.clone();
     let task = state
         .tasks
@@ -506,7 +507,7 @@ pub(super) async fn switch_repository_branch(
             if fresh_repository.head != expected_head || fresh_repository.branch != expected_branch {
                 return Err(TaskFailure::Failed("The current branch changed. Review branch state and retry the switch.".into()));
             }
-            let fresh_status = status::read(repo_for_check.clone(), &path).await
+            let fresh_status = status_service.snapshot(&repo_for_check).await
                 .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
             let fresh_dirty_paths = fresh_status.files.iter()
                 .filter(|file| !file.categories.iter().all(|category| matches!(category, ChangeCategory::Ignored)))

@@ -1,18 +1,30 @@
 use crate::features::repositories::{RepositoryError, RepositoryManager};
 
-use super::{engine, StatusSnapshotCache};
+use super::{scope, StatusSnapshotCache};
 use crate::domain::status::StatusSnapshot;
+#[cfg(test)]
+use crate::git::command::GitCommandService;
+use crate::ports::status::StatusReadPort;
 
 #[derive(Clone)]
-pub(crate) struct StatusService {
+pub(crate) struct StatusService<G> {
     repositories: RepositoryManager,
+    git: G,
     cache: StatusSnapshotCache,
 }
 
-impl StatusService {
+#[cfg(test)]
+impl StatusService<GitCommandService> {
     pub(crate) fn new(repositories: RepositoryManager) -> Self {
+        Self::with_reader(repositories, GitCommandService::default())
+    }
+}
+
+impl<G: StatusReadPort> StatusService<G> {
+    pub(crate) fn with_reader(repositories: RepositoryManager, git: G) -> Self {
         Self {
             repositories,
+            git,
             cache: StatusSnapshotCache::default(),
         }
     }
@@ -47,7 +59,9 @@ impl StatusService {
         version: u64,
     ) -> Result<StatusSnapshot, RepositoryError> {
         let path = self.repositories.read_target(repo_id).await?;
-        let snapshot = engine::read(repo_id.to_owned(), &path)
+        let snapshot = self
+            .git
+            .read_status(repo_id.to_owned(), &path, &[])
             .await
             .map_err(map_status_error)?;
         self.cache.store_full(repo_id, version, &snapshot);
@@ -59,7 +73,7 @@ impl StatusService {
         repo_id: &str,
         paths: &[String],
     ) -> Result<StatusSnapshot, RepositoryError> {
-        engine::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
+        scope::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
         let version = self.cache.version(repo_id);
         self.read_paths(repo_id, paths, version).await
     }
@@ -69,7 +83,7 @@ impl StatusService {
         repo_id: &str,
         paths: &[String],
     ) -> Result<StatusSnapshot, RepositoryError> {
-        engine::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
+        scope::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
         let version = self.cache.version(repo_id);
         if let Some(snapshot) = self.cache.paths(repo_id, paths) {
             return Ok(snapshot);
@@ -84,12 +98,26 @@ impl StatusService {
         version: u64,
     ) -> Result<StatusSnapshot, RepositoryError> {
         let path = self.repositories.read_target(repo_id).await?;
-        let snapshot = engine::read_paths(repo_id.to_owned(), &path, paths)
+        let snapshot = self
+            .git
+            .read_status(repo_id.to_owned(), &path, paths)
             .await
             .map_err(map_status_error)?;
         self.cache.store_paths(repo_id, version, paths, &snapshot);
         Ok(snapshot)
     }
+}
+
+#[cfg(test)]
+pub(crate) async fn read(
+    repo_id: String,
+    path: &std::path::Path,
+) -> Result<StatusSnapshot, std::io::Error> {
+    use crate::ports::status::StatusReadPort;
+
+    GitCommandService::default()
+        .read_status(repo_id, path, &[])
+        .await
 }
 
 fn map_status_error(error: std::io::Error) -> RepositoryError {

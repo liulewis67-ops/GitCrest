@@ -29,6 +29,7 @@ use crate::{
     },
     ports::diff::DiffGitPort,
     ports::git::GitReadPort,
+    ports::status::StatusReadPort,
 };
 
 use super::{history, refs, status};
@@ -125,6 +126,17 @@ impl DiffGitPort for GitCommandService {
         relative_path: &str,
     ) -> Result<Vec<u8>, crate::domain::error::DiffError> {
         super::diff::read_commit_file_patch(repository_path, oid, parent_oid, relative_path).await
+    }
+}
+
+impl StatusReadPort for GitCommandService {
+    async fn read_status(
+        &self,
+        repo_id: String,
+        repository_path: &Path,
+        paths: &[String],
+    ) -> Result<crate::domain::status::StatusSnapshot, std::io::Error> {
+        super::status_snapshot::read_status(repo_id, repository_path, paths).await
     }
 }
 
