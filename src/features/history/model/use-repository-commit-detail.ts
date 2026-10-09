@@ -18,19 +18,19 @@ export function useRepositoryCommitDetail(api: GitCrestApiClient, repoId: string
   const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     if (!oid) {
       setState({ loading: false });
-      return () => { active = false; };
+      return () => controller.abort();
     }
     setState({ oid, loading: true });
-    void api.getRepositoryCommit(repoId, oid).then((response) => {
+    void api.withSignal(controller.signal).getRepositoryCommit(repoId, oid).then((response) => {
       if (!isCommitDetail(response)) throw new Error("Commit detail response was invalid.");
-      if (active) setState({ oid, detail: response, loading: false });
+      if (!controller.signal.aborted) setState({ oid, detail: response, loading: false });
     }).catch((reason: unknown) => {
-      if (active) setState({ oid, error: reason instanceof Error ? reason.message : "Could not read commit details.", loading: false });
+      if (!controller.signal.aborted) setState({ oid, error: reason instanceof Error ? reason.message : "Could not read commit details.", loading: false });
     });
-    return () => { active = false; };
+    return () => controller.abort();
   }, [api, oid, repoId]);
 
   return state;

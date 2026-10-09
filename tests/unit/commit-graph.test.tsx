@@ -6,6 +6,12 @@ import { CommitDetails, CommitGraph } from "../../src/features/history/CommitGra
 
 afterEach(cleanup);
 
+function cancellableApi(methods: Record<string, unknown>) {
+  let api: Record<string, unknown>;
+  api = { ...methods, withSignal: vi.fn(() => api) };
+  return api as unknown as GitCrestApiClient;
+}
+
 function commit(index: number) {
   return {
     oid: index.toString(16).padStart(40, "0"),
@@ -21,10 +27,10 @@ describe("CommitGraph", () => {
   it("draws commit parent edges when timestamp order places the parent first", async () => {
     const parent = { ...commit(3), parents: [] };
     const child = { ...commit(2), parents: [parent.oid] };
-    const api = {
+    const api = cancellableApi({
       getRepositoryCommits: vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [parent, child], nextOffset: null })),
       getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: child.oid, branch: "main", detached: false, refs: [] })),
-    } as unknown as GitCrestApiClient;
+    });
     const { container } = render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
 
     await screen.findByRole("list", { name: "Commit history" });
@@ -33,10 +39,10 @@ describe("CommitGraph", () => {
 
   it("persists the graph scroll position after scrolling ends", async () => {
     const oid = "a".repeat(40);
-    const api = {
+    const api = cancellableApi({
       getRepositoryCommits: vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null })),
       getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: oid, branch: "main", detached: false, refs: [] })),
-    } as unknown as GitCrestApiClient;
+    });
     const onScrollPosition = vi.fn();
     render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} onScrollPosition={onScrollPosition} onSelect={vi.fn()} />);
 
@@ -49,10 +55,10 @@ describe("CommitGraph", () => {
   });
 
   it("focuses the message filter when a search shortcut request arrives", async () => {
-    const api = {
+    const api = cancellableApi({
       getRepositoryCommits: vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null })),
       getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: commit(0).oid, branch: "main", detached: false, refs: [] })),
-    } as unknown as GitCrestApiClient;
+    });
     render(<CommitGraph api={api} repoId="repo_fixture" initialScrollTop={0} focusSearchRequest={{ repoId: "repo_fixture", sequence: 1 }} searchShortcut="Control+F" onScrollPosition={vi.fn()} onSelect={vi.fn()} />);
 
     const messageFilter = await screen.findByRole("textbox", { name: "Filter by message" });
@@ -69,10 +75,10 @@ describe("CommitGraph", () => {
       commits: entries.slice(offset, offset + limit),
       nextOffset: offset + limit < entries.length ? offset + limit : null,
     }));
-    const api = {
+    const api = cancellableApi({
       getRepositoryCommits,
       getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: entries[0].oid, branch: "main", detached: false, refs: [{ name: "main", fullName: "refs/heads/main", oid: entries[0].oid, kind: "local" as const, upstream: null }] })),
-    } as unknown as GitCrestApiClient;
+    });
     const onSelect = vi.fn();
     render(<CommitGraph api={api} repoId="repo_fixture" selectedOid={entries[0].oid} initialScrollTop={0} onScrollPosition={vi.fn()} onSelect={onSelect} />);
 
@@ -98,7 +104,7 @@ describe("CommitGraph", () => {
 
   it("shows the selected commit details and reports clipboard fallback", async () => {
     const oid = "a".repeat(40);
-    const api = {
+    const api = cancellableApi({
       getRepositoryCommit: vi.fn(async () => ({
         repoId: "repo_fixture", oid, parents: [], authorName: "GitCrest Author", authorEmail: "author@example.test",
         committedAtMs: 1_791_386_400_000, message: "A commit message\nwith context",
@@ -106,7 +112,7 @@ describe("CommitGraph", () => {
         files: [{ path: "src/file.ts", additions: 2, deletions: 1 }],
       })),
       createRepositoryCommitTag: vi.fn(async () => ({ repoId: "repo_fixture", name: "v1.0.0", fullName: "refs/tags/v1.0.0", oid })),
-    } as unknown as GitCrestApiClient;
+    });
     const onOpenFile = vi.fn();
     const onOpenDiffWindow = vi.fn();
     render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} />);
@@ -128,13 +134,13 @@ describe("CommitGraph", () => {
 
   it("opens the tag editor when the tag shortcut request arrives", async () => {
     const oid = "a".repeat(40);
-    const api = {
+    const api = cancellableApi({
       getRepositoryCommit: vi.fn(async () => ({
         repoId: "repo_fixture", oid, parents: [], authorName: "Author", authorEmail: "author@example.test",
         committedAtMs: 1_791_386_400_000, message: "A commit message",
         stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [],
       })),
-    } as unknown as GitCrestApiClient;
+    });
     render(<CommitDetails api={api} repoId="repo_fixture" oid={oid} openTagRequest={{ repoId: "repo_fixture", oid, sequence: 1 }} />);
 
     expect(await screen.findByRole("textbox", { name: "Tag name" })).toBeDefined();

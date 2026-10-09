@@ -32,6 +32,19 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
+function cancellableApi(methods: Record<string, unknown>) {
+  const signals: AbortSignal[] = [];
+  let api: Record<string, unknown>;
+  api = {
+    ...methods,
+    withSignal: vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return api;
+    }),
+  };
+  return { api: api as unknown as GitCrestApiClient, signals };
+}
+
 describe("history feature models", () => {
   it("applies only non-empty filters and clears the applied and draft values", () => {
     const { result } = renderHook(() => useHistoryFilters());
@@ -52,12 +65,12 @@ describe("history feature models", () => {
   });
 
   it("loads refs and pages history without duplicating a page request", async () => {
-    const api = {
+    const { api } = cancellableApi({
       getRepositoryCommits: vi.fn()
         .mockResolvedValueOnce(page("repo_a", 0, [commit("one")], 50))
         .mockResolvedValueOnce(page("repo_a", 50, [commit("two")], null)),
       getRepositoryRefs: vi.fn().mockResolvedValue(refs("repo_a")),
-    } as unknown as GitCrestApiClient;
+    });
     const { result } = renderHook(() => useRepositoryHistory(api, "repo_a", NO_FILTERS, 0));
 
     await waitFor(() => expect(result.current.loading).toBe(false));
@@ -74,18 +87,19 @@ describe("history feature models", () => {
 
   it("ignores a history response from a repository that is no longer selected", async () => {
     const oldPage = deferred<CommitPageResponse>();
-    const api = {
+    const { api, signals } = cancellableApi({
       getRepositoryCommits: vi.fn((repoId: string) => repoId === "repo_old"
         ? oldPage.promise
         : Promise.resolve(page("repo_new", 0, [commit("new")], null))),
       getRepositoryRefs: vi.fn().mockResolvedValue(refs("repo_new")),
-    } as unknown as GitCrestApiClient;
+    });
     const { result, rerender } = renderHook(
       ({ repoId }) => useRepositoryHistory(api, repoId, NO_FILTERS, 0),
       { initialProps: { repoId: "repo_old" } },
     );
 
     rerender({ repoId: "repo_new" });
+    expect(signals.some((signal) => signal.aborted)).toBe(true);
     await waitFor(() => expect(result.current.commits.map(({ oid }) => oid)).toEqual(["new"]));
     await act(async () => oldPage.resolve(page("repo_old", 0, [commit("old")], null)));
     expect(result.current.commits.map(({ oid }) => oid)).toEqual(["new"]);
@@ -97,15 +111,16 @@ describe("history feature models", () => {
       repoId: "repo_a", oid: "second", parents: [], authorName: "Ada", authorEmail: "ada@example.test",
       committedAtMs: 2, message: "second", stats: { filesChanged: 0, insertions: 0, deletions: 0 }, files: [],
     };
-    const api = {
+    const { api, signals } = cancellableApi({
       getRepositoryCommit: vi.fn((_repoId: string, oid: string) => oid === "first" ? first.promise : Promise.resolve(second)),
-    } as unknown as GitCrestApiClient;
+    });
     const { result, rerender } = renderHook(
       ({ oid }) => useRepositoryCommitDetail(api, "repo_a", oid),
       { initialProps: { oid: "first" } },
     );
 
     rerender({ oid: "second" });
+    expect(signals[0]?.aborted).toBe(true);
     await waitFor(() => expect(result.current.detail?.oid).toBe("second"));
     await act(async () => first.resolve({ ...second, oid: "first", message: "first" }));
     expect(result.current.detail?.oid).toBe("second");

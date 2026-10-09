@@ -3527,4 +3527,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；以隔离 100k commit / 1k 行 Diff fixture 测 Windows Release sidecar API。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-bulk-fts-20261009.json`。
 - 限制/后续：索引仍需约 4.6 秒构建，cold search P95 仍高于 200ms；S7.2 桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
+
+### 前端 history 只读请求生命周期取消 — 小阶段 312
+- 状态：已完成（提交历史分页、refs 与提交详情读取在查询失效或卸载时取消底层 HTTP 请求）
+- 日期：2026-10-09
+- 交付：history feature 的分页、refs 和 commit detail model 均通过 `GitCrestApiClient.withSignal` 发送可取消读取。仓库、筛选、刷新或提交选择变化以及组件卸载时 abort 对应请求；history 页请求的 in-flight 键加入 generation，避免旧 generation 的 finally 清理新 generation 的同 offset 请求状态。过期响应保护继续保留；写请求不变。
+- 验证：`pnpm check` 全量通过：前端 import boundary、Electron build、Vitest 163/163、Rust fmt/build/test 139/139、Electron E2E 6 files / 29 tests（394.25s）；`git diff --check` 通过。运行中 Electron 持有默认 debug sidecar，Rust build/test 使用系统 TEMP 下的独立 `CARGO_TARGET_DIR`。构建仅显示既有 web-tree-sitter `eval` 警告。
+- 手工验证：未执行 GUI 手工操作；history hook 与 CommitGraph 组件自动化用例覆盖仓库变更取消、提交选择取消、分页、筛选和详情行为。
+- 证据：`src/features/history/model/use-repository-history.ts`、`src/features/history/model/use-repository-commit-detail.ts`、`tests/unit/history-model.test.tsx`、`tests/unit/commit-graph.test.tsx`。
+- 限制/后续：此阶段仅覆盖 history feature 只读请求；App workspace 的 status/branches/remotes 读取及其它独立读取仍需按各自 feature 生命周期逐项传播 AbortSignal，查询缓存与统一 RepoId 清理策略仍待实施。
 - 完成 commit：`ea4f1ff`

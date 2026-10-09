@@ -30,16 +30,18 @@ export function useRepositoryHistory(
   const [error, setError] = useState("");
   const [refsError, setRefsError] = useState("");
   const requestGeneration = useRef(0);
-  const offsetsInFlight = useRef(new Set<number>());
+  const offsetsInFlight = useRef(new Set<string>());
+  const activeController = useRef<AbortController>();
 
-  const readPage = useCallback(async (offset: number, generation: number) => {
-    if (offsetsInFlight.current.has(offset)) return;
-    offsetsInFlight.current.add(offset);
+  const readPage = useCallback(async (offset: number, generation: number, signal: AbortSignal) => {
+    const requestKey = `${generation}:${offset}`;
+    if (offsetsInFlight.current.has(requestKey)) return;
+    offsetsInFlight.current.add(requestKey);
     if (offset === 0) setLoading(true);
     else setLoadingMore(true);
     setError("");
     try {
-      const response: unknown = await api.getRepositoryCommits(repoId, offset, PAGE_SIZE, filters);
+      const response: unknown = await api.withSignal(signal).getRepositoryCommits(repoId, offset, PAGE_SIZE, filters);
       if (requestGeneration.current !== generation) return;
       if (!response || typeof response !== "object" || !Array.isArray((response as Partial<CommitPageResponse>).commits)) {
         throw new Error("History response did not contain a commit list.");
@@ -52,7 +54,7 @@ export function useRepositoryHistory(
       if (requestGeneration.current !== generation) return;
       setError(reason instanceof Error ? reason.message : "Could not read commit history.");
     } finally {
-      offsetsInFlight.current.delete(offset);
+      offsetsInFlight.current.delete(requestKey);
       if (requestGeneration.current === generation) {
         if (offset === 0) setLoading(false);
         else setLoadingMore(false);
@@ -62,6 +64,8 @@ export function useRepositoryHistory(
 
   useEffect(() => {
     const generation = ++requestGeneration.current;
+    const controller = new AbortController();
+    activeController.current = controller;
     offsetsInFlight.current.clear();
     setCommits([]);
     setRefs([]);
@@ -70,27 +74,35 @@ export function useRepositoryHistory(
     setLoadingMore(false);
     setError("");
     setRefsError("");
-    void readPage(0, generation);
-    return () => { requestGeneration.current += 1; };
+    void readPage(0, generation, controller.signal);
+    return () => {
+      controller.abort();
+      if (activeController.current === controller) activeController.current = undefined;
+      requestGeneration.current += 1;
+    };
   }, [readPage, refreshKey]);
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     setRefsError("");
-    void api.getRepositoryRefs(repoId).then((snapshot) => {
-      if (active) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
+    void api.withSignal(controller.signal).getRepositoryRefs(repoId).then((snapshot) => {
+      if (!controller.signal.aborted) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
     }).catch((reason: unknown) => {
-      if (active) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
+      if (!controller.signal.aborted) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
     });
-    return () => { active = false; };
+    return () => controller.abort();
   }, [api, repoId, refreshKey]);
 
   const loadMore = useCallback(() => {
-    if (nextOffset !== null && !loadingMore) void readPage(nextOffset, requestGeneration.current);
+    const controller = activeController.current;
+    if (controller && !controller.signal.aborted && nextOffset !== null && !loadingMore) {
+      void readPage(nextOffset, requestGeneration.current, controller.signal);
+    }
   }, [loadingMore, nextOffset, readPage]);
 
   const retry = useCallback(() => {
-    void readPage(commits.length, requestGeneration.current);
+    const controller = activeController.current;
+    if (controller && !controller.signal.aborted) void readPage(commits.length, requestGeneration.current, controller.signal);
   }, [commits.length, readPage]);
 
   return { commits, refs, loading, loadingMore, error, refsError, loadMore, retry };
