@@ -41,18 +41,18 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
   const reviewAttempt = useRef(0);
 
   useEffect(() => {
-    let current = true;
+    const controller = new AbortController();
     diffRequest.current += 1;
     reviewAttempt.current += 1;
     setStatus(undefined); setSelectedIds([]); setSelectedDiff(undefined); setDocument(undefined); setError("");
     setReviewed([]); setConfirmSend(false); setConfirmed(false); setReply(undefined);
-    if (!repoId) return () => { current = false; };
-    void api.getRepositoryStatus(repoId).then((snapshot) => {
-      if (current) setStatus(snapshot);
+    if (!repoId) return () => controller.abort();
+    void api.withSignal(controller.signal).getRepositoryStatus(repoId).then((snapshot) => {
+      if (!controller.signal.aborted) setStatus(snapshot);
     }).catch((reason: unknown) => {
-      if (current) setError(reason instanceof Error ? reason.message : "Changed files could not be loaded.");
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Changed files could not be loaded.");
     });
-    return () => { current = false; };
+    return () => controller.abort();
   }, [api, repoId]);
 
   useEffect(() => {

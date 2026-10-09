@@ -3667,3 +3667,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`。
 - 限制/后续：AI 建议请求完成后的冲突文件版本核验仍为同一操作流程中的读取；ConflictWindow 保存/resolve 后轮询与错误恢复查询、设置/隐私读取以及 S7.2、S7.4、S7.5 验收仍待完成。
 - 完成 commit：`c2192c6`
+
+### 前端隐私预览仓库状态读取生命周期取消 — 小阶段 326
+- 状态：已完成（仓库切换或预览卸载时中止 changed-file status 请求）
+- 日期：2026-10-09
+- 交付：PrivacyScopePreview 加载候选文件列表的仓库 status 查询通过 `GitCrestApiClient.withSignal` 绑定 AbortController；切换仓库或卸载预览组件时取消请求，已取消读取不会更新候选列表或错误状态。预览发送前的 diff scope 与显式确认流程不变。
+- 验证：新增 status 延迟响应的卸载用例并断言 AbortSignal 被触发；定向 Settings/PrivacyScopePreview 用例通过；完整 `pnpm test` 通过（38 files、176 tests）；`pnpm build`、`pnpm frontend:boundaries` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件测试在状态读取 pending 时卸载并验证取消信号。
+- 证据：`src/features/settings/PrivacyScopePreview.tsx`、`tests/unit/settings-dialog.test.tsx`。
+- 限制/后续：diff 预览及批量审阅读取、AI 建议请求后的版本核验、workflow 保存/resolve 后轮询仍未统一取消；S7.2、S7.4、S7.5 验收继续未完成。

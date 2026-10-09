@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from "react";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { SettingsDialog } from "../../src/features/settings/SettingsDialog";
@@ -8,6 +8,18 @@ import { defaultShortcutPreferences } from "../../src/shared/lib/shortcut-prefer
 import { PrivacyScopePreview } from "../../src/features/settings/PrivacyScopePreview";
 
 afterEach(cleanup);
+
+function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
+  let api: Record<string, unknown>;
+  api = { ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
+  return api as unknown as GitCrestApiClient;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
 
 it("moves focus into settings, traps Tab, and restores the opener on close", async () => {
   const api = {
@@ -89,7 +101,7 @@ it("submits cloud keys through the credential API and clears the field", async (
 });
 
 it("shows reviewable staged and worktree scopes and previews selected local diff text", async () => {
-  const api = {
+  const api = cancellableApi({
     getRepositoryStatus: vi.fn().mockResolvedValue({ repoId: "repo_fixture", refreshedAtMs: 1, files: [
       { path: "src/staged.ts", indexStatus: "M", worktreeStatus: " ", kind: "modified", categories: ["staged"], modeChanged: false },
       { path: "src/both.ts", indexStatus: "M", worktreeStatus: "M", kind: "modified", categories: ["staged", "unstaged"], modeChanged: false },
@@ -97,7 +109,7 @@ it("shows reviewable staged and worktree scopes and previews selected local diff
       { path: "src/conflict.ts", indexStatus: "U", worktreeStatus: "U", kind: "conflicted", categories: ["conflicted"], modeChanged: false },
     ] }),
     getFileDiff: vi.fn().mockResolvedValue({ repoId: "repo_fixture", path: "src/staged.ts", revision: "rev", originalPath: null, scope: "index", changeKind: "modified", status: "text", hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change", oldLine: 1, newLine: 1, oldText: "old value", newText: "new value" }] }] }),
-  } as unknown as GitCrestApiClient;
+  });
   render(<PrivacyScopePreview api={api} repoId="repo_fixture" />);
   await screen.findByText("src/staged.ts");
   expect(screen.queryByText("secret.env")).toBeNull();
@@ -111,13 +123,24 @@ it("shows reviewable staged and worktree scopes and previews selected local diff
   expect(await screen.findByText("2 selected")).toBeTruthy();
 });
 
+it("aborts changed-file status loading when the privacy preview unmounts", async () => {
+  const pending = deferred<Awaited<ReturnType<GitCrestApiClient["getRepositoryStatus"]>>>();
+  const signals: AbortSignal[] = [];
+  const api = cancellableApi({ getRepositoryStatus: vi.fn(() => pending.promise) }, signals);
+  const { unmount } = render(<PrivacyScopePreview api={api} repoId="repo_fixture" />);
+  await waitFor(() => expect(signals).toHaveLength(1));
+  unmount();
+  expect(signals[0]?.aborted).toBe(true);
+  await act(async () => pending.resolve({ repoId: "repo_fixture", refreshedAtMs: 1, files: [] }));
+});
+
 it("requires reviewed diff display and an explicit confirmation before provider requests", async () => {
   const document = { repoId: "repo_fixture", path: "src/only.ts", revision: "sha256:reviewed", originalPath: null, scope: "workingTree" as const, changeKind: "modified" as const, status: "text" as const, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change" as const, oldLine: 1, newLine: 1, oldText: "before", newText: "after" }] }] };
-  const api = {
+  const api = cancellableApi({
     getRepositoryStatus: vi.fn().mockResolvedValue({ repoId: "repo_fixture", refreshedAtMs: 1, files: [{ path: "src/only.ts", indexStatus: " ", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false }] }),
     getFileDiff: vi.fn().mockResolvedValue(document),
     requestAiReview: vi.fn().mockResolvedValue({ provider: "openAiCompatible", model: "model-a", response: "Reviewed response", files: ["src/only.ts [worktree]"] }),
-  } as unknown as GitCrestApiClient;
+  });
   render(<PrivacyScopePreview api={api} repoId="repo_fixture" settings={{ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true }} />);
   await screen.findByText("src/only.ts");
   fireEvent.click(screen.getByRole("checkbox"));
