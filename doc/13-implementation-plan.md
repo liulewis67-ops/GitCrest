@@ -2535,3 +2535,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段只整理 diff service 内部职责，不改变 Git 命令、错误映射或 API 响应；Git 进程适配器和 Diff 领域模型归属仍可后续按 ports/domain 规范继续拆分。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/diff/service/read.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
 - 实施 commit：`b3760a0`
+
+
+### diff feature 响应 DTO 映射 — 小阶段 213
+- 状态：已完成（Diff 查询响应在 HTTP 边界显式转换为 feature DTO）
+- 日期：2026-10-09
+- 交付：在 `features/diff/dto.rs` 定义 Diff document、hunk、row 及枚举响应 DTO，并从内部 Diff 结果显式映射；repository 和 commit-file Diff handlers 统一返回 DTO。移除内部 document/hunk/row/status/kind 的 Serde 序列化派生，保留 `originalPath`、行字段 null 和驼峰枚举与 OpenAPI schema 一致。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；按当前执行约束未运行测试。
+- 限制/后续：Diff 内部模型仍定义在 feature service；共享的 `DiffScope` / `DiffSelection` 仍承担传输反序列化职责，后续需继续迁入领域模型并在各 feature 请求 DTO 边界映射。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/diff/dto.rs`、`crates/gitcrest-core/src/features/diff/handlers.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/api/v1.yaml` 的 `DiffDocument`/`DiffHunk`/`DiffRow` schema、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
+- 实施 commit：`8c5609e`
