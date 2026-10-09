@@ -4002,3 +4002,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；20 轮均完成目标提交搜索；status/Diff 检查成功；基准结束后恢复 `bench-diff.txt` 原始内容。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-post-cache-prune-stage359-20261009.json`。
 - 限制/后续：首页、暖搜索、status 与 Diff 本机 sidecar 指标达到各自目标；冷搜索 P95 约 2.27s，仍需降低冷构建/等待时间。完整 API 数据不能替代 Electron 启动、工作集稳定窗口、30 秒滚动 P5、安装包、跨平台或 S7.4/S7.5 验收。
+- 完成 commit：`3debffb perf: benchmark history cache optimizations`
