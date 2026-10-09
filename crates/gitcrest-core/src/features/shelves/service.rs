@@ -1,5 +1,4 @@
 use std::{
-    ffi::OsString,
     path::Path,
     process::Stdio,
     sync::atomic::{AtomicU64, Ordering},
@@ -8,7 +7,10 @@ use std::{
 
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::{domain::diff::DiffScope, features::staging::StagingCommand};
+use crate::domain::{
+    diff::DiffScope,
+    staging::{ShelfPatchAction, StagingOperation},
+};
 
 pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
 const APPLY_CHECK_DEADLINE: Duration = Duration::from_secs(10);
@@ -73,32 +75,21 @@ pub fn apply_command(
     scope: DiffScope,
     reverse: bool,
     check: bool,
-) -> StagingCommand {
-    let mut arguments = vec![OsString::from("apply")];
-    if check {
-        arguments.push("--check".into());
-    }
-    if reverse {
-        arguments.push("--reverse".into());
-    }
-    if scope == DiffScope::Index {
-        arguments.push("--cached".into());
-    }
-    StagingCommand {
-        arguments,
-        input: Some(patch),
-        label: if check {
-            "Check shelve patch"
-        } else if reverse {
-            "Remove shelved changes"
-        } else {
-            "Restore shelved changes"
-        },
-        log_label: "git apply <shelve patch>",
+) -> StagingOperation {
+    let action = match (check, reverse) {
+        (true, true) => ShelfPatchAction::CheckCleanup,
+        (false, true) => ShelfPatchAction::Cleanup,
+        (false, false) => ShelfPatchAction::Rollback,
+        (true, false) => ShelfPatchAction::CheckRestore,
+    };
+    StagingOperation::ApplyShelfPatch {
+        patch,
+        scope,
+        action,
     }
 }
 
-pub fn cleanup_commands(patch: Vec<u8>, scope: DiffScope) -> Vec<(DiffScope, StagingCommand)> {
+pub fn cleanup_commands(patch: Vec<u8>, scope: DiffScope) -> Vec<(DiffScope, StagingOperation)> {
     match scope {
         DiffScope::WorkingTree => vec![(scope, apply_command(patch, scope, true, false))],
         DiffScope::Index => vec![
@@ -112,7 +103,7 @@ pub fn cleanup_commands(patch: Vec<u8>, scope: DiffScope) -> Vec<(DiffScope, Sta
     }
 }
 
-pub fn check_commands(patch: Vec<u8>, scope: DiffScope) -> Vec<(DiffScope, StagingCommand)> {
+pub fn check_commands(patch: Vec<u8>, scope: DiffScope) -> Vec<(DiffScope, StagingOperation)> {
     match scope {
         DiffScope::WorkingTree => vec![(scope, apply_command(patch, scope, true, true))],
         DiffScope::Index => vec![
@@ -126,60 +117,36 @@ pub fn check_commands(patch: Vec<u8>, scope: DiffScope) -> Vec<(DiffScope, Stagi
     }
 }
 
-pub fn rollback_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
+pub fn rollback_command(patch: Vec<u8>, scope: DiffScope) -> StagingOperation {
     apply_command(patch, scope, false, false)
 }
 
-pub fn restore_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
-    let mut arguments = vec![OsString::from("apply")];
-    if scope == DiffScope::Index {
-        arguments.push("--index".into());
-    }
-    StagingCommand {
-        arguments,
-        input: Some(patch),
-        label: "Apply saved shelf",
-        log_label: "git apply <shelf patch>",
+pub fn restore_command(patch: Vec<u8>, scope: DiffScope) -> StagingOperation {
+    StagingOperation::ApplyShelfPatch {
+        patch,
+        scope,
+        action: ShelfPatchAction::Restore,
     }
 }
 
-pub fn undo_apply_command(patch: Vec<u8>, scope: DiffScope) -> StagingCommand {
-    let mut arguments = vec![OsString::from("apply"), OsString::from("--reverse")];
-    if scope == DiffScope::Index {
-        arguments.push("--index".into());
-    }
-    StagingCommand {
-        arguments,
-        input: Some(patch),
-        label: "Undo saved shelf apply",
-        log_label: "git apply --reverse <shelf patch>",
+pub fn undo_apply_command(patch: Vec<u8>, scope: DiffScope) -> StagingOperation {
+    StagingOperation::ApplyShelfPatch {
+        patch,
+        scope,
+        action: ShelfPatchAction::UndoRestore,
     }
 }
 
-pub fn restore_three_way_command(patch: Vec<u8>) -> StagingCommand {
-    StagingCommand {
-        arguments: ["apply", "--3way", "--index"]
-            .into_iter()
-            .map(OsString::from)
-            .collect(),
-        input: Some(patch),
-        label: "Apply shelf with three-way conflict resolution",
-        log_label: "git apply --3way --index <shelf patch>",
+pub fn restore_three_way_command(patch: Vec<u8>) -> StagingOperation {
+    StagingOperation::ApplyShelfPatch {
+        patch,
+        scope: DiffScope::Index,
+        action: ShelfPatchAction::RestoreThreeWay,
     }
 }
 
-pub fn unstage_paths_command(paths: &[String]) -> StagingCommand {
-    let mut arguments = ["reset", "-q", "HEAD", "--"]
-        .into_iter()
-        .map(OsString::from)
-        .collect::<Vec<_>>();
-    arguments.extend(paths.iter().map(OsString::from));
-    StagingCommand {
-        arguments,
-        input: None,
-        label: "Keep shelf changes unstaged",
-        log_label: "git reset -q HEAD -- <shelf paths>",
-    }
+pub fn unstage_paths_command(paths: &[String]) -> StagingOperation {
+    StagingOperation::UnstagePaths(paths.to_vec())
 }
 
 pub async fn check_apply(
@@ -245,17 +212,19 @@ mod tests {
     #[test]
     fn shelf_apply_undo_reverses_worktree_or_index_and_worktree_together() {
         let worktree = undo_apply_command(b"patch".to_vec(), DiffScope::WorkingTree);
-        let worktree_arguments = worktree
-            .arguments
+        let (worktree_arguments, worktree_input, _, _) =
+            crate::git::command::GitCommandService::staging_invocation(worktree);
+        let worktree_arguments = worktree_arguments
             .iter()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect::<Vec<_>>();
         assert_eq!(worktree_arguments, ["apply", "--reverse"]);
-        assert_eq!(worktree.input.as_deref(), Some(&b"patch"[..]));
+        assert_eq!(worktree_input.as_deref(), Some(&b"patch"[..]));
 
         let index = undo_apply_command(b"patch".to_vec(), DiffScope::Index);
-        let index_arguments = index
-            .arguments
+        let (index_arguments, _, _, _) =
+            crate::git::command::GitCommandService::staging_invocation(index);
+        let index_arguments = index_arguments
             .iter()
             .map(|argument| argument.to_string_lossy().into_owned())
             .collect::<Vec<_>>();

@@ -1,8 +1,9 @@
-use std::{ffi::OsString, path::Component};
+use std::path::Component;
 
 use super::dto::{StagingAction, StagingPatchAction, StagingPatchRequest, StagingRequest};
 use crate::{
     domain::diff::DiffScope,
+    domain::staging::StagingOperation,
     domain::status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot},
 };
 
@@ -15,74 +16,23 @@ pub enum StagingError {
     StaleSelection,
 }
 
-pub struct StagingCommand {
-    pub arguments: Vec<OsString>,
-    pub input: Option<Vec<u8>>,
-    pub label: &'static str,
-    pub log_label: &'static str,
-}
-
-pub fn patch_command(action: StagingPatchAction, patch: Vec<u8>) -> StagingCommand {
-    let (arguments, label, log_label): (Vec<OsString>, &'static str, &'static str) = match action {
-        StagingPatchAction::Stage => (
-            ["apply", "--cached", "--unidiff-zero"]
-                .into_iter()
-                .map(OsString::from)
-                .collect(),
-            "Stage selected diff",
-            "git apply --cached <selected patch>",
-        ),
-        StagingPatchAction::Unstage => (
-            ["apply", "--cached", "--reverse", "--unidiff-zero"]
-                .into_iter()
-                .map(OsString::from)
-                .collect(),
-            "Unstage selected diff",
-            "git apply --cached --reverse <selected patch>",
-        ),
-    };
-    StagingCommand {
-        arguments,
-        input: Some(patch),
-        label,
-        log_label,
+pub fn patch_command(action: StagingPatchAction, patch: Vec<u8>) -> StagingOperation {
+    match action {
+        StagingPatchAction::Stage => StagingOperation::StagePatch(patch),
+        StagingPatchAction::Unstage => StagingOperation::UnstagePatch(patch),
     }
 }
 
-pub fn undo_command(reverse_patch: Vec<u8>) -> StagingCommand {
-    StagingCommand {
-        arguments: ["apply", "--cached"]
-            .into_iter()
-            .map(OsString::from)
-            .collect(),
-        input: Some(reverse_patch),
-        label: "Undo recent staging change",
-        log_label: "git apply --cached <staging undo patch>",
-    }
+pub fn undo_command(reverse_patch: Vec<u8>) -> StagingOperation {
+    StagingOperation::UndoStaging(reverse_patch)
 }
 
-pub fn discard_patch_command(patch: Vec<u8>) -> StagingCommand {
-    StagingCommand {
-        arguments: ["apply", "--reverse", "--unidiff-zero"]
-            .into_iter()
-            .map(OsString::from)
-            .collect(),
-        input: Some(patch),
-        label: "Discard selected working-tree changes",
-        log_label: "git apply --reverse <selected working-tree patch>",
-    }
+pub fn discard_patch_command(patch: Vec<u8>) -> StagingOperation {
+    StagingOperation::DiscardPatch(patch)
 }
 
-pub fn undo_discard_command(patch: Vec<u8>) -> StagingCommand {
-    StagingCommand {
-        arguments: ["apply", "--unidiff-zero"]
-            .into_iter()
-            .map(OsString::from)
-            .collect(),
-        input: Some(patch),
-        label: "Undo selected working-tree discard",
-        log_label: "git apply <discard undo patch>",
-    }
+pub fn undo_discard_command(patch: Vec<u8>) -> StagingOperation {
+    StagingOperation::UndoDiscard(patch)
 }
 
 pub fn validate_patch_request(
@@ -121,7 +71,7 @@ pub fn validate_patch_request(
 pub fn command(
     snapshot: &StatusSnapshot,
     request: &StagingRequest,
-) -> Result<StagingCommand, StagingError> {
+) -> Result<StagingOperation, StagingError> {
     if matches!(
         request.action,
         StagingAction::StageAll | StagingAction::UnstageAll
@@ -140,16 +90,8 @@ pub fn command(
         return Err(StagingError::ConflictMustBeResolvedFirst);
     }
     match request.action {
-        StagingAction::StageAll => Ok(simple_command(
-            ["--literal-pathspecs", "add", "--all", "--", "."],
-            "Stage all changes",
-            "git add --all <repository>",
-        )),
-        StagingAction::UnstageAll => Ok(simple_command(
-            ["reset", "--mixed"],
-            "Unstage all changes",
-            "git reset --mixed",
-        )),
+        StagingAction::StageAll => Ok(StagingOperation::StageAll),
+        StagingAction::UnstageAll => Ok(StagingOperation::UnstageAll),
         StagingAction::StageFile | StagingAction::UnstageFile => {
             let path = request
                 .path
@@ -171,12 +113,7 @@ pub fn command(
                     if file.categories.contains(&ChangeCategory::Ignored) {
                         return Err(StagingError::FileNotChanged);
                     }
-                    Ok(path_command(
-                        ["--literal-pathspecs", "add", "--"],
-                        path,
-                        "Stage file",
-                        "git add <selected path>",
-                    ))
+                    Ok(StagingOperation::StagePath(path.to_owned()))
                 }
                 StagingAction::UnstageFile => {
                     if !file.categories.contains(&ChangeCategory::Staged) {
@@ -190,14 +127,9 @@ pub fn command(
     }
 }
 
-fn unstage_file(file: &StatusFile) -> Result<StagingCommand, StagingError> {
+fn unstage_file(file: &StatusFile) -> Result<StagingOperation, StagingError> {
     if file.index_status == "A" || file.kind == ChangeKind::Added {
-        return Ok(path_command(
-            ["--literal-pathspecs", "rm", "--cached", "--force", "--"],
-            &file.path,
-            "Unstage added file",
-            "git rm --cached <selected path>",
-        ));
+        return Ok(StagingOperation::UnstageAddedPath(file.path.clone()));
     }
     if file.kind == ChangeKind::Renamed {
         let original = file
@@ -205,53 +137,12 @@ fn unstage_file(file: &StatusFile) -> Result<StagingCommand, StagingError> {
             .as_deref()
             .ok_or(StagingError::InvalidRequest)?;
         validate_relative_path(original)?;
-        let mut arguments = ["--literal-pathspecs", "restore", "--staged", "--"]
-            .map(OsString::from)
-            .to_vec();
-        arguments.push(original.into());
-        arguments.push(file.path.clone().into());
-        return Ok(StagingCommand {
-            arguments,
-            input: None,
-            label: "Unstage renamed file",
-            log_label: "git restore --staged <selected paths>",
+        return Ok(StagingOperation::UnstageRenamedPath {
+            original_path: original.to_owned(),
+            path: file.path.clone(),
         });
     }
-    Ok(path_command(
-        ["--literal-pathspecs", "restore", "--staged", "--"],
-        &file.path,
-        "Unstage file",
-        "git restore --staged <selected path>",
-    ))
-}
-
-fn simple_command<const N: usize>(
-    args: [&str; N],
-    label: &'static str,
-    log_label: &'static str,
-) -> StagingCommand {
-    StagingCommand {
-        arguments: args.into_iter().map(OsString::from).collect(),
-        input: None,
-        label,
-        log_label,
-    }
-}
-
-fn path_command<const N: usize>(
-    prefix: [&str; N],
-    path: &str,
-    label: &'static str,
-    log_label: &'static str,
-) -> StagingCommand {
-    let mut arguments = prefix.into_iter().map(OsString::from).collect::<Vec<_>>();
-    arguments.push(path.into());
-    StagingCommand {
-        arguments,
-        input: None,
-        label,
-        log_label,
-    }
+    Ok(StagingOperation::UnstagePath(file.path.clone()))
 }
 
 fn validate_relative_path(path: &str) -> Result<(), StagingError> {
@@ -286,13 +177,30 @@ mod tests {
         );
     }
 
-    fn run(root: &Path, command: StagingCommand) {
-        let output = std::process::Command::new("git")
-            .arg("-C")
-            .arg(root)
-            .args(command.arguments)
-            .output()
-            .unwrap();
+    fn run(root: &Path, operation: StagingOperation) {
+        let (arguments, input, _, _) =
+            crate::git::command::GitCommandService::staging_invocation(operation);
+        let output = if let Some(input) = input {
+            let mut child = std::process::Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(arguments)
+                .stdin(std::process::Stdio::piped())
+                .stdout(std::process::Stdio::piped())
+                .stderr(std::process::Stdio::piped())
+                .spawn()
+                .unwrap();
+            use std::io::Write;
+            child.stdin.take().unwrap().write_all(&input).unwrap();
+            child.wait_with_output().unwrap()
+        } else {
+            std::process::Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(arguments)
+                .output()
+                .unwrap()
+        };
         assert!(
             output.status.success(),
             "{}",
