@@ -24,9 +24,12 @@ export function ConflictWindow() {
   const [action, setAction] = useState<ActionState>({});
   const [suggestionOpen, setSuggestionOpen] = useState(false);
   const selectedPathRef = useRef(selectedPath);
+  const actionControllerRef = useRef<AbortController | null>(null);
   selectedPathRef.current = selectedPath;
   const sessionKey = `${repoId}:${taskId}`;
   const fileKey = `${sessionKey}:${selectedPath}`;
+
+  useEffect(() => () => actionControllerRef.current?.abort(), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -91,9 +94,10 @@ export function ConflictWindow() {
     return () => window.removeEventListener("beforeunload", warnBeforeClose);
   }, [hasUnsavedChanges]);
 
-  const refreshSession = async () => {
-    if (!api) return undefined;
-    const preview = await api.preflightRepositoryWorkflowRecovery(repoId, taskId);
+  const refreshSession = async (signal: AbortSignal) => {
+    if (!api || signal.aborted) return undefined;
+    const preview = await api.withSignal(signal).preflightRepositoryWorkflowRecovery(repoId, taskId);
+    if (signal.aborted) return undefined;
     setSession({ key: sessionKey, loading: false, data: preview });
     setSelectedPath((current) => preview.conflictedPaths.includes(current) ? current : preview.conflictedPaths[0] || "");
     return preview;
@@ -102,6 +106,8 @@ export function ConflictWindow() {
   const saveDraft = async () => {
     const currentFile = file.data;
     if (!api || !currentFile || !currentFile.isText || action.busy) return;
+    const controller = new AbortController();
+    actionControllerRef.current = controller;
     setAction({ busy: "save", message: "Saving this file to the working tree…" });
     try {
       await api.saveRepositoryWorkflowConflictFile(repoId, {
@@ -113,8 +119,10 @@ export function ConflictWindow() {
         content: draft,
       });
       for (let attempt = 0; attempt < TASK_POLL_ATTEMPTS; attempt += 1) {
-        await delay(TASK_POLL_INTERVAL_MS);
-        const refreshed = await api.getRepositoryWorkflowConflictFile(repoId, taskId, currentFile.path);
+        await delay(TASK_POLL_INTERVAL_MS, controller.signal);
+        if (controller.signal.aborted) return;
+        const refreshed = await api.withSignal(controller.signal).getRepositoryWorkflowConflictFile(repoId, taskId, currentFile.path);
+        if (controller.signal.aborted) return;
         if (refreshed.resultContent === draft) {
           if (selectedPathRef.current === currentFile.path) {
             setFile({ key: `${sessionKey}:${currentFile.path}`, loading: false, data: refreshed });
@@ -126,14 +134,19 @@ export function ConflictWindow() {
       }
       throw new Error("The save task has not completed yet. Refresh this file before resolving it.");
     } catch (reason) {
+      if (controller.signal.aborted) return;
       setAction({ error: reason instanceof Error ? reason.message : "Could not save the conflict result." });
-      try { await refreshSession(); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
+      try { await refreshSession(controller.signal); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
+    } finally {
+      if (actionControllerRef.current === controller) actionControllerRef.current = null;
     }
   };
 
   const markResolved = async () => {
     const currentFile = file.data;
     if (!api || !currentFile || !currentFile.isText || hasUnsavedChanges || action.busy) return;
+    const controller = new AbortController();
+    actionControllerRef.current = controller;
     setAction({ busy: "resolve", message: "Staging this file as resolved…" });
     try {
       await api.markRepositoryWorkflowConflictResolved(repoId, {
@@ -144,8 +157,10 @@ export function ConflictWindow() {
         expectedResultRevision: currentFile.resultRevision,
       });
       for (let attempt = 0; attempt < TASK_POLL_ATTEMPTS; attempt += 1) {
-        await delay(TASK_POLL_INTERVAL_MS);
-        const preview = await api.preflightRepositoryWorkflowRecovery(repoId, taskId);
+        await delay(TASK_POLL_INTERVAL_MS, controller.signal);
+        if (controller.signal.aborted) return;
+        const preview = await api.withSignal(controller.signal).preflightRepositoryWorkflowRecovery(repoId, taskId);
+        if (controller.signal.aborted) return;
         if (!preview.conflictedPaths.includes(currentFile.path)) {
           setSession({ key: sessionKey, loading: false, data: preview });
           setSelectedPath((current) => current === currentFile.path ? preview.conflictedPaths[0] || "" : current);
@@ -155,8 +170,11 @@ export function ConflictWindow() {
       }
       throw new Error("The resolve task has not completed yet. Refresh the conflict list before continuing.");
     } catch (reason) {
+      if (controller.signal.aborted) return;
       setAction({ error: reason instanceof Error ? reason.message : "Could not mark this conflict resolved." });
-      try { await refreshSession(); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
+      try { await refreshSession(controller.signal); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
+    } finally {
+      if (actionControllerRef.current === controller) actionControllerRef.current = null;
     }
   };
 
@@ -229,8 +247,22 @@ function updateDraft(content: string, savedContent: string, setDraft: (content: 
   setHasUnsavedChanges(content !== savedContent);
 }
 
-function delay(milliseconds: number) {
-  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+function delay(milliseconds: number, signal: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal.aborted) {
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, milliseconds);
+    const abort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+    };
+    signal.addEventListener("abort", abort, { once: true });
+  });
 }
 
 function ConflictStage({ label, content, onSelect }: { label: string; content: string | null; onSelect?: () => void }) {

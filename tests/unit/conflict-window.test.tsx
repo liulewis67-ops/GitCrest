@@ -142,3 +142,133 @@ it("edits, saves, and marks a conflict resolved using conflict-scoped window acc
   await waitFor(() => expect(screen.getByText("0 unresolved")).toBeTruthy());
   expect(screen.getByText("No unresolved files remain. Return to Task Center to continue the Git operation.")).toBeTruthy();
 });
+
+it("aborts save polling when the conflict window closes", async () => {
+  const repoId = `repo_${"c".repeat(64)}`;
+  const taskId = "task-save-close-1";
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=${taskId}`);
+  Object.defineProperty(window, "gitcrest", {
+    configurable: true,
+    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
+  });
+  const preview = {
+    repoId, taskId, operation: "merge", headOid: "a".repeat(40), dirtyPaths: ["conflict.ts"],
+    omittedDirtyPathCount: 0, conflictedPaths: ["conflict.ts"], omittedConflictedPathCount: 0, canContinue: false, canSkip: false, canAbort: true,
+  };
+  const conflict = {
+    repoId, taskId, path: "conflict.ts", operation: "merge", headOid: "a".repeat(40),
+    baseContent: "base", oursContent: "ours", theirsContent: "theirs", resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n",
+    resultRevision: "b".repeat(64), isText: true,
+  };
+  const pollResponse = deferred<Response>();
+  let fileReads = 0;
+  let pollSignal: AbortSignal | null | undefined;
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.includes("recovery-preflight")) return Promise.resolve(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    if (url.includes("conflicts/file") && init?.method === "PUT") return Promise.resolve(new Response(JSON.stringify({ taskId: "save-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    if (url.includes("conflicts/file")) {
+      fileReads += 1;
+      if (fileReads === 1) return Promise.resolve(new Response(JSON.stringify(conflict), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+      pollSignal = init?.signal;
+      return pollResponse.promise;
+    }
+    return Promise.reject(new Error(`Unexpected request: ${url}`));
+  }));
+
+  const view = render(<ConflictWindow />);
+  const editor = await screen.findByRole("textbox", { name: "Working result" });
+  fireEvent.change(editor, { target: { value: "saved result\n" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save result" }));
+  await waitFor(() => expect(pollSignal).toBeTruthy());
+  view.unmount();
+  expect(pollSignal?.aborted).toBe(true);
+  await act(async () => pollResponse.resolve(new Response(JSON.stringify({ ...conflict, resultContent: "saved result\n" }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
+});
+
+it("aborts resolved-state polling when the conflict window closes", async () => {
+  const repoId = `repo_${"d".repeat(64)}`;
+  const taskId = "task-resolve-close-1";
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=${taskId}`);
+  Object.defineProperty(window, "gitcrest", {
+    configurable: true,
+    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
+  });
+  const preview = {
+    repoId, taskId, operation: "merge", headOid: "a".repeat(40), dirtyPaths: [],
+    omittedDirtyPathCount: 0, conflictedPaths: ["conflict.ts"], omittedConflictedPathCount: 0, canContinue: false, canSkip: false, canAbort: true,
+  };
+  const pollPreview = deferred<Response>();
+  let preflightCalls = 0;
+  let pollSignal: AbortSignal | null | undefined;
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.includes("conflicts/file")) return Promise.resolve(new Response(JSON.stringify({
+      repoId, taskId, path: "conflict.ts", operation: "merge", headOid: "a".repeat(40), baseContent: "base", oursContent: "ours", theirsContent: "theirs",
+      resultContent: "resolved\n", resultRevision: "b".repeat(64), isText: true,
+    }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    if (url.includes("conflicts/resolved")) return Promise.resolve(new Response(JSON.stringify({ taskId: "resolve-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    if (url.includes("recovery-preflight")) {
+      preflightCalls += 1;
+      if (preflightCalls === 1) return Promise.resolve(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+      pollSignal = init?.signal;
+      return pollPreview.promise;
+    }
+    return Promise.reject(new Error(`Unexpected request: ${url}`));
+  }));
+
+  const view = render(<ConflictWindow />);
+  await screen.findByRole("textbox", { name: "Working result" });
+  fireEvent.click(screen.getByRole("button", { name: "Mark resolved" }));
+  await waitFor(() => expect(pollSignal).toBeTruthy());
+  view.unmount();
+  expect(pollSignal?.aborted).toBe(true);
+  await act(async () => pollPreview.resolve(new Response(JSON.stringify({ ...preview, conflictedPaths: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
+});
+
+it("aborts error-recovery preflight when the conflict window closes", async () => {
+  const repoId = `repo_${"e".repeat(64)}`;
+  const taskId = "task-recovery-close-1";
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=${taskId}`);
+  Object.defineProperty(window, "gitcrest", {
+    configurable: true,
+    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
+  });
+  const preview = {
+    repoId, taskId, operation: "merge", headOid: "a".repeat(40), dirtyPaths: ["conflict.ts"],
+    omittedDirtyPathCount: 0, conflictedPaths: ["conflict.ts"], omittedConflictedPathCount: 0, canContinue: false, canSkip: false, canAbort: true,
+  };
+  const conflict = {
+    repoId, taskId, path: "conflict.ts", operation: "merge", headOid: "a".repeat(40), baseContent: "base", oursContent: "ours", theirsContent: "theirs",
+    resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n", resultRevision: "b".repeat(64), isText: true,
+  };
+  const recoveryResponse = deferred<Response>();
+  let fileReads = 0;
+  let preflightCalls = 0;
+  let recoverySignal: AbortSignal | null | undefined;
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation((input, init) => {
+    const url = String(input);
+    if (url.includes("conflicts/file") && init?.method === "PUT") return Promise.resolve(new Response(JSON.stringify({ taskId: "save-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
+    if (url.includes("conflicts/file")) {
+      fileReads += 1;
+      if (fileReads === 1) return Promise.resolve(new Response(JSON.stringify(conflict), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+      return Promise.reject(new Error("simulated poll failure"));
+    }
+    if (url.includes("recovery-preflight")) {
+      preflightCalls += 1;
+      if (preflightCalls === 1) return Promise.resolve(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+      recoverySignal = init?.signal;
+      return recoveryResponse.promise;
+    }
+    return Promise.reject(new Error(`Unexpected request: ${url}`));
+  }));
+
+  const view = render(<ConflictWindow />);
+  const editor = await screen.findByRole("textbox", { name: "Working result" });
+  fireEvent.change(editor, { target: { value: "saved result\n" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save result" }));
+  await waitFor(() => expect(recoverySignal).toBeTruthy());
+  view.unmount();
+  expect(recoverySignal?.aborted).toBe(true);
+  await act(async () => recoveryResponse.resolve(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
+});

@@ -3716,3 +3716,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`。
 - 限制/后续：面板关闭不会保证已发出的 provider 请求在服务端停止；面板会丢弃其迟到结果并跳过复核 GET。S7.2 冷搜索与桌面内存/帧率、S7.4、S7.5 仍待完成。
 - 完成 commit：`c89bad1`
+
+### 前端 ConflictWindow 保存/resolve 轮询生命周期取消 — 小阶段 331
+- 状态：已完成（窗口卸载时取消保存/resolve 状态轮询和失败恢复预检）
+- 日期：2026-10-09
+- 交付：ConflictWindow 为保存与标记冲突已解决后的状态轮询创建受窗口生命周期管理的 AbortController；关闭窗口时终止轮询 GET、等待中的轮询间隔和错误恢复预检。已提交的保存/resolve 写任务不因窗口关闭而重放或宣称已取消；重新打开窗口通过现有预检核对真实状态。
+- 验证：定向 `pnpm exec vitest run --config vitest.config.ts tests/unit/conflict-window.test.tsx` 通过（1 file / 7 tests）；`pnpm build`、`pnpm frontend:boundaries` 和 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件测试覆盖关闭时中止保存轮询、resolve 轮询及失败恢复预检。
+- 证据：`src/features/workflows/ConflictWindow.tsx`、`tests/unit/conflict-window.test.tsx`。
+- 限制/后续：窗口关闭不会撤销已受理的保存/resolve 任务；重新打开后由后端 recovery preflight 重新核对。S7.2、S7.4、S7.5 验收仍未完成。
+- 完成 commit：待补记
