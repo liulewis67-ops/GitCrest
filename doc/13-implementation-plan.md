@@ -4784,3 +4784,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/credentials/model/credential-editor-renderer.ts`、`src/features/credentials/index.ts`、相关 App/page/feature 使用点、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 限制/后续：凭据编辑器运行时仍由 App 注入 renderer 回调供 clone 和 remote UI 使用；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段类型归属与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将任务 worker 生命周期归入 scheduler — 小阶段 440
+- 状态：已完成（排队等待、资源锁、worker 准入、执行结果收尾位于 `execution/scheduler.rs`）
+- 日期：2026-10-10
+- 交付：将 `TaskService` 状态、任务查询/提交/取消和日志处理模块从 `execution/tasks.rs` 归并为 `execution/tasks/mod.rs`；将 worker 调度、同资源串行锁、全局 worker semaphore、排队取消及执行结果收尾迁入规范约定的 `execution/scheduler.rs`。并发上限、每资源锁、4 个 worker 容量、状态转换和取消消息保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认 `TaskService::submit` 仍只在成功持久化 queued 快照后 spawn worker；调度仍先取得相同 resource key 锁，再取得有界 worker permit；取消可在两类等待期间优先完成并释放资源。
+- 证据：`crates/gitcrest-core/src/execution/scheduler.rs`、`crates/gitcrest-core/src/execution/tasks/mod.rs`、`crates/gitcrest-core/src/execution/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：S7.2 冷搜索完整结果 P95 仍高于 200ms（现有阶段 409 约 590ms）；本阶段为 execution 目录对齐，不代表性能门槛通过。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段调度边界与台账同一 commit（SHA 可在后续台账更新中补记）。

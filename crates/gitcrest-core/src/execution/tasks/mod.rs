@@ -8,7 +8,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use tokio::sync::{watch, Mutex, OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{watch, Mutex, Semaphore};
 
 use crate::{
     domain::task::{TaskErrorCategory, TaskSnapshot, TaskStatus},
@@ -19,7 +19,7 @@ use crate::{
 const MAX_ACTIVE_TASKS: usize = 64;
 const MAX_RETAINED_TASKS: usize = 100;
 const MAX_LOG_LINES: usize = 200;
-const MAX_LOG_LINE_CHARS: usize = 2_000;
+pub(super) const MAX_LOG_LINE_CHARS: usize = 2_000;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
 type StatusInvalidator = dyn Fn(&str) + Send + Sync;
 
@@ -28,12 +28,12 @@ pub struct TaskService {
     inner: Arc<TaskServiceInner>,
 }
 
-struct TaskServiceInner {
-    data: Mutex<TaskData>,
-    repo_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
-    workers: Arc<Semaphore>,
-    store: Option<Arc<dyn TaskStorePort>>,
-    status_invalidator: Option<Arc<StatusInvalidator>>,
+pub(super) struct TaskServiceInner {
+    pub(super) data: Mutex<TaskData>,
+    pub(super) repo_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    pub(super) workers: Arc<Semaphore>,
+    pub(super) store: Option<Arc<dyn TaskStorePort>>,
+    pub(super) status_invalidator: Option<Arc<StatusInvalidator>>,
 }
 
 impl Default for TaskServiceInner {
@@ -49,9 +49,9 @@ impl Default for TaskServiceInner {
 }
 
 #[derive(Default)]
-struct TaskData {
-    tasks: BTreeMap<String, TaskSnapshot>,
-    cancellations: HashMap<String, watch::Sender<bool>>,
+pub(super) struct TaskData {
+    pub(super) tasks: BTreeMap<String, TaskSnapshot>,
+    pub(super) cancellations: HashMap<String, watch::Sender<bool>>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -62,9 +62,9 @@ pub enum TaskSubmitError {
 
 #[derive(Clone)]
 pub struct TaskContext {
-    inner: Arc<TaskServiceInner>,
-    task_id: String,
-    cancellation: watch::Receiver<bool>,
+    pub(super) inner: Arc<TaskServiceInner>,
+    pub(super) task_id: String,
+    pub(super) cancellation: watch::Receiver<bool>,
 }
 
 impl TaskService {
@@ -273,7 +273,8 @@ impl TaskService {
         }
         let worker_inner = self.inner.clone();
         tokio::spawn(async move {
-            run_task(worker_inner, task_id, resource_key, cancellation, work).await;
+            super::scheduler::run_task(worker_inner, task_id, resource_key, cancellation, work)
+                .await;
         });
         Ok(snapshot)
     }
@@ -320,105 +321,7 @@ impl TaskContext {
     }
 }
 
-async fn run_task<F, Fut>(
-    inner: Arc<TaskServiceInner>,
-    task_id: String,
-    resource_key: String,
-    mut cancellation: watch::Receiver<bool>,
-    work: F,
-) where
-    F: FnOnce(TaskContext) -> Fut,
-    Fut: Future<Output = Result<Option<String>, TaskFailure>>,
-{
-    let repository_lock = {
-        let mut locks = inner.repo_locks.lock().await;
-        locks
-            .entry(resource_key)
-            .or_insert_with(|| Arc::new(Mutex::new(())))
-            .clone()
-    };
-    let repo_guard = tokio::select! {
-        biased;
-        _ = wait_for_cancel(&mut cancellation) => {
-            finish_task(&inner, &task_id, TaskStatus::Cancelled, "Cancelled while queued".into(), None).await;
-            cleanup_task(&inner, &task_id).await;
-            return;
-        }
-        guard = repository_lock.lock_owned() => guard,
-    };
-
-    let worker_permit: OwnedSemaphorePermit = tokio::select! {
-        biased;
-        _ = wait_for_cancel(&mut cancellation) => {
-            drop(repo_guard);
-            finish_task(&inner, &task_id, TaskStatus::Cancelled, "Cancelled while queued".into(), None).await;
-            cleanup_task(&inner, &task_id).await;
-            return;
-        }
-        permit = inner.workers.clone().acquire_owned() => match permit {
-            Ok(permit) => permit,
-            Err(_) => {
-                drop(repo_guard);
-                finish_task(&inner, &task_id, TaskStatus::Failed, "Task worker is unavailable".into(), None).await;
-                cleanup_task(&inner, &task_id).await;
-                return;
-            }
-        },
-    };
-
-    update_task(&inner, &task_id, |task| {
-        task.status = TaskStatus::Running;
-        task.phase = "Starting".into();
-        task.updated_at_ms = now_ms();
-    })
-    .await;
-    let context = TaskContext {
-        inner: inner.clone(),
-        task_id: task_id.clone(),
-        cancellation: cancellation.clone(),
-    };
-    let outcome = work(context).await;
-    if let Some(invalidator) = &inner.status_invalidator {
-        let repo_id = inner
-            .data
-            .lock()
-            .await
-            .tasks
-            .get(&task_id)
-            .and_then(|task| task.repo_id.clone());
-        if let Some(repo_id) = repo_id {
-            invalidator(&repo_id);
-        }
-    }
-    let (status, message, result_repo_id) = match outcome {
-        Ok(result_repo_id) => (
-            TaskStatus::Succeeded,
-            "Task completed".into(),
-            result_repo_id,
-        ),
-        Err(TaskFailure::Cancelled) => (
-            TaskStatus::Cancelled,
-            "Cancellation completed safely".into(),
-            None,
-        ),
-        Err(TaskFailure::Failed(message)) => (TaskStatus::Failed, redact_log_line(&message), None),
-        Err(TaskFailure::WaitingForInput(message)) => {
-            (TaskStatus::WaitingForInput, redact_log_line(&message), None)
-        }
-    };
-    drop(worker_permit);
-    drop(repo_guard);
-    finish_task(&inner, &task_id, status, message, result_repo_id).await;
-    cleanup_task(&inner, &task_id).await;
-}
-
-async fn wait_for_cancel(cancellation: &mut watch::Receiver<bool>) {
-    if !*cancellation.borrow() {
-        let _ = cancellation.changed().await;
-    }
-}
-
-async fn update_task(
+pub(super) async fn update_task(
     inner: &TaskServiceInner,
     task_id: &str,
     update: impl FnOnce(&mut TaskSnapshot),
@@ -437,7 +340,7 @@ async fn update_task(
     }
 }
 
-async fn finish_task(
+pub(super) async fn finish_task(
     inner: &TaskServiceInner,
     task_id: &str,
     status: TaskStatus,
@@ -470,7 +373,7 @@ async fn finish_task(
     .await;
 }
 
-async fn cleanup_task(inner: &TaskServiceInner, task_id: &str) {
+pub(super) async fn cleanup_task(inner: &TaskServiceInner, task_id: &str) {
     let mut data = inner.data.lock().await;
     data.cancellations.remove(task_id);
     trim_tasks(&mut data);
@@ -549,7 +452,7 @@ fn classify_error(task: &TaskSnapshot) -> TaskErrorCategory {
     }
 }
 
-fn now_ms() -> u128 {
+pub(super) fn now_ms() -> u128 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
@@ -564,7 +467,7 @@ fn next_task_id() -> String {
     )
 }
 
-pub fn redact_log_line(line: &str) -> String {
+pub(super) fn redact_log_line(line: &str) -> String {
     let mut redacted = String::with_capacity(line.len().min(MAX_LOG_LINE_CHARS));
     let mut tokens = line.split_whitespace().peekable();
     while let Some(token) = tokens.next() {

@@ -1,3 +1,4 @@
+mod scheduler;
 mod task;
 mod tasks;
 
