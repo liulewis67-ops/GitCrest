@@ -3746,3 +3746,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/sign-linux-update-manifest.mjs`、`electron/main/update-manifest-signature-policy.mjs`、`tests/unit/update-manifest-signature.test.ts`。
 - 限制/后续：CI 尚未将公钥注入 Linux 包配置、从 GitHub Secret 读取私钥并在发布 job 中调用签名工具；仍需原生 Linux runner 验证真实 AppImage 更新下载和错误签名拒绝。S7.4 整体尚未验收。
 - 完成 commit：`b57564b`
+
+### 前端 Settings AI 配置读取生命周期取消 — 小阶段 334
+- 状态：已完成（关闭 Settings 对话框时中止 AI provider 设置读取）
+- 日期：2026-10-09
+- 交付：SettingsDialog 加载 AI provider 设置时使用 `GitCrestApiClient.withSignal` 绑定 AbortController；对话框关闭或 API 客户端变化时取消读取，已取消请求不会写入设置状态或错误状态。保存设置、凭据写入和删除操作行为不变。
+- 验证：新增延迟响应卸载用例并断言请求 `AbortSignal` 已触发；定向 Settings 用例通过（1 file / 9 tests）；完整 `pnpm test` 通过（39 files / 187 tests）；`pnpm build`、`pnpm frontend:boundaries` 和 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件测试在 AI 设置读取 pending 时关闭对话框并检查取消信号。
+- 证据：`src/features/settings/SettingsDialog.tsx`、`tests/unit/settings-dialog.test.tsx`。
+- 限制/后续：取消仅覆盖初始 AI 设置读取；用户显式发起的设置保存和凭据变更仍按已受理的写请求完成。S7.2、S7.4、S7.5 验收仍未完成。
+- 完成 commit：`1f81dbc`
