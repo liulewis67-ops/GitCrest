@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../api/client";
-import { useDialogFocus } from "../../shared/use-dialog-focus";
-import { supportsWorkflowRecovery } from "./task-operations";
+import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
+import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { supportsWorkflowRecovery } from "../task-operations";
 
 interface TaskCenterProps {
   tasks: TaskSnapshotResponse[];

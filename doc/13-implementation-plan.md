@@ -3873,3 +3873,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/shelves/index.ts`、`src/features/shelves/ui/ShelfCenter.tsx`、`tests/unit/shelf-center.test.tsx`。
 - 限制/后续：此阶段只收敛 Shelves UI 目录归属；其它 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
 - 完成 commit：`6f8d19c refactor: organize shelves feature UI`
+
+### Tasks feature UI 目录对齐 — 小阶段 347
+- 状态：已完成（TaskCenter 归入 feature 的 `ui/`）
+- 日期：2026-10-09
+- 交付：将 `TaskCenter` 迁入 `src/features/tasks/ui/`，更新 tasks feature 懒加载出口及测试导入路径；任务恢复能力仍依赖 tasks feature 内部的 `task-operations`。
+- 验证：TaskCenter 定向测试 1 file / 10 tests、`pnpm frontend:boundaries`、`pnpm build` 与 `git diff --check` 通过；生产构建保留独立 `TaskCenter` chunk。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；现有组件测试覆盖任务操作、恢复预检、取消与冲突窗口入口。
+- 证据：`src/features/tasks/index.ts`、`src/features/tasks/ui/TaskCenter.tsx`、`tests/unit/task-center.test.tsx`。
+- 限制/后续：此阶段只收敛 Tasks UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
+- 完成 commit：待提交

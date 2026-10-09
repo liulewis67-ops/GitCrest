@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { TaskSnapshotResponse } from "../../src/api/client";
-import { TaskCenter } from "../../src/features/tasks/TaskCenter";
+import { TaskCenter } from "../../src/features/tasks/ui/TaskCenter";
 
 afterEach(cleanup);
 

@@ -1,4 +1,4 @@
-export const loadTaskCenter = () => import("./TaskCenter");
+export const loadTaskCenter = () => import("./ui/TaskCenter");
 export { useTaskCenter } from "./model/use-task-center";
 export { useTaskRefreshLifecycle } from "./model/use-task-refresh-lifecycle";
 export { useTaskRefreshEffects } from "./model/use-task-refresh-effects";
