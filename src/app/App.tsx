@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
-import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse, type WorkflowRecoveryPreflightResponse } from "../api/client";
+import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
@@ -18,7 +18,7 @@ import { loadDiscardChangesDialog } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useBranchSwitcher, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
 import { loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
-import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, type WorkflowAction } from "../features/workflows";
+import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useWorkflowRecovery, type WorkflowAction } from "../features/workflows";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
 
@@ -158,6 +158,12 @@ function App() {
     appendTask,
     cancel: cancelTask,
   } = useTaskCenter(() => apiRef.current);
+  const recoverWorkflow = useWorkflowRecovery({
+    getApi: () => apiRef.current,
+    setActionId: setTaskActionId,
+    setTaskError: setTasksError,
+    refreshTasks,
+  });
   const [page, setPage] = useState<Page>("welcome");
   const { session: workspaceSession, setSession: setWorkspaceSession, sessionRef: workspaceSessionRef } = useWorkspaceSessionState();
   const repositoryCacheGenerationRef = useRef(new Map<string, number>());
@@ -605,30 +611,6 @@ function App() {
       setTasksError("");
     } catch (reason) {
       setTasksError(reason instanceof Error ? reason.message : "Could not open the conflict window.");
-    }
-  }
-
-  async function recoverWorkflowTask(task: TaskSnapshotResponse, _preview: WorkflowRecoveryPreflightResponse, action: "continue" | "skip" | "abort") {
-    const api = apiRef.current;
-    if (!api || !task.repoId || task.status !== "waitingForInput") return;
-    setTaskActionId(task.taskId);
-    setTasksError("");
-    try {
-      const current = await api.preflightRepositoryWorkflowRecovery(task.repoId, task.taskId);
-      const allowed = action === "continue" ? current.canContinue : action === "skip" ? current.canSkip : current.canAbort;
-      if (!allowed || !current.headOid) throw new Error("Repository state changed. Review the refreshed recovery preview before continuing.");
-      await api.recoverRepositoryWorkflow(task.repoId, {
-        taskId: task.taskId,
-        action,
-        expectedOperation: current.operation,
-        expectedHeadOid: current.headOid,
-        expectedConflictedPaths: current.conflictedPaths,
-      });
-      await refreshTasks();
-    } catch (reason) {
-      setTasksError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not queue workflow recovery.");
-    } finally {
-      setTaskActionId("");
     }
   }
 
@@ -1278,7 +1260,7 @@ function App() {
       {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} forceWithLeaseOnly={pushForceOnly} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
-      {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, preview, action) => void recoverWorkflowTask(task, preview, action)} onOpenConflictWindow={(task) => void openWorkflowConflictWindow(task)} />}
+      {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={retryClone} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, _preview, action) => void recoverWorkflow(task, action)} onOpenConflictWindow={(task) => void openWorkflowConflictWindow(task)} />}
       {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={async () => {
         const check = getGitCrestBridge()?.checkForUpdates;
         if (!check) return;
