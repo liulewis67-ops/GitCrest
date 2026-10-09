@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 import { useState } from "react";
 import type { AiSettingsResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../src/api/client";
-import { CommitMessageAssistant } from "../../src/features/settings/CommitMessageAssistant";
+import { CommitMessageAssistant } from "../../src/features/commits/ui/CommitMessageAssistant";
 
 afterEach(cleanup);
 

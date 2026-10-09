@@ -3,7 +3,7 @@ import type { CommitRequest, GitCrestApiClient, RepositoryResponse, StatusSnapsh
 import { ariaShortcut, displayShortcut, matchesShortcut, type ShortcutPreferences } from "../../../shared/lib/shortcut-preferences";
 import type { CommitAction } from "../model/commit-action";
 
-const CommitMessageAssistant = lazy(() => import("../../settings").then(({ CommitMessageAssistant }) => ({ default: CommitMessageAssistant })));
+const CommitMessageAssistant = lazy(() => import("./CommitMessageAssistant").then(({ CommitMessageAssistant }) => ({ default: CommitMessageAssistant })));
 
 interface CommitWorkbenchProps {
   repository?: RepositoryResponse;

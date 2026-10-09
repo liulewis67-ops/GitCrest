@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AiFileSelection, AiReplyResponse, AiSettingsResponse, CommitRequest, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../api/client";
+import type { AiFileSelection, AiReplyResponse, AiSettingsResponse, CommitRequest, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../../api/client";
 
 type CommitSelection = NonNullable<CommitRequest["selections"]>[number];
 type ReviewedFile = { path: string; document: DiffDocumentResponse; selections?: CommitSelection["selections"] };
