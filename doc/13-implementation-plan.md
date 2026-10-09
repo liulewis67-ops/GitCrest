@@ -3596,3 +3596,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；hook 自动化测试驱动延迟的任务列表响应并检查 AbortSignal 和状态结果。
 - 证据：`src/features/tasks/model/use-task-center.ts`、`tests/unit/task-center-model.test.tsx`。
 - 限制/后续：terminal-task 后的 repository metadata 查询以及 TaskRefreshEffects 触发的其它 workspace 读取尚未统一取消；查询缓存和 RepoId 失效策略仍需继续落实。
+- 完成 commit：`957e559`
+
+### 前端任务终态仓库元数据读取取消 — 小阶段 319
+- 状态：已完成（终态任务触发的仓库元数据读取按 RepoId 中止旧请求，并在 hook 卸载时取消）
+- 日期：2026-10-09
+- 交付：`useTaskRefreshEffects` 为终态任务触发的 `getRepository` 查询建立按 RepoId 管理的 AbortController；同仓库后续刷新会中止旧查询，只有当前活动查询可更新 repositories feature 状态。hook 卸载会中止所有未完成查询；abort 不报告为业务错误。其他 status/branches/remotes/history 刷新沿用各 feature 已有生命周期。
+- 验证：新增 TaskRefreshEffects 自动化用例验证卸载时 AbortSignal 触发且迟到结果不更新仓库；定向用例通过；完整 `pnpm test` 通过（38 files、168 tests）；`pnpm build`、`pnpm frontend:boundaries`、`git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；hook 测试用延迟仓库元数据响应验证取消和迟到结果保护。
+- 证据：`src/features/tasks/model/use-task-refresh-effects.ts`、`tests/unit/task-refresh-effects.test.tsx`。
+- 限制/后续：启动阶段、TaskCenter workflow preflight 及其他独立 API 读取还需按拥有 feature 的生命周期审查；S7.2、S7.4、S7.5 验收继续未完成。

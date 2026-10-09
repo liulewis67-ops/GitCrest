@@ -18,6 +18,12 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
   const plannerRef = useRef(new TaskRefreshPlanner());
   const optionsRef = useRef(options);
   optionsRef.current = options;
+  const repositoryRefreshControllersRef = useRef(new Map<string, AbortController>());
+
+  useEffect(() => () => {
+    for (const controller of repositoryRefreshControllersRef.current.values()) controller.abort();
+    repositoryRefreshControllersRef.current.clear();
+  }, []);
 
   useEffect(() => {
     const current = optionsRef.current;
@@ -30,12 +36,25 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
       if (!plan) continue;
       if (["branch", "remote", "pull", "workflow"].includes(plan.kind) && !plan.repoId) continue;
 
-      if (plan.repoId && plan.refreshRepository) {
+      const repoId = plan.repoId;
+      if (repoId && plan.refreshRepository) {
         const api = current.getApi();
         if (api) {
-          void api.getRepository(plan.repoId).then(current.updateRepository).catch((error: unknown) => {
-            if (plan.reportRepositoryRefreshError) {
-              current.reportError(error instanceof Error ? error.message : "Could not refresh repository metadata after commit.");
+          const previousController = repositoryRefreshControllersRef.current.get(repoId);
+          previousController?.abort();
+          const controller = new AbortController();
+          repositoryRefreshControllersRef.current.set(repoId, controller);
+          void api.withSignal(controller.signal).getRepository(repoId).then((repository) => {
+            if (!controller.signal.aborted && repositoryRefreshControllersRef.current.get(repoId) === controller) {
+              optionsRef.current.updateRepository(repository);
+            }
+          }).catch((error: unknown) => {
+            if (!controller.signal.aborted && plan.reportRepositoryRefreshError) {
+              optionsRef.current.reportError(error instanceof Error ? error.message : "Could not refresh repository metadata after commit.");
+            }
+          }).finally(() => {
+            if (repositoryRefreshControllersRef.current.get(repoId) === controller) {
+              repositoryRefreshControllersRef.current.delete(repoId);
             }
           });
         }
