@@ -3084,3 +3084,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：pull 取消恢复仍由 GitCommandService 编排，并直接依赖 remotes pull 预检；后续继续把恢复用例协调迁到 feature service，拆出所需的 Git 读写能力；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`fc853c4`
+
+### Pull 取消恢复状态经 RemotePreflightReadPort 读取 — 小阶段 268
+- 状态：已完成（Git command adapter 不再引用 remotes PullPreflight feature DTO）
+- 日期：2026-10-09
+- 交付：新增领域 `RemotePullState` 与 `RemotePreflightReadPort::read_pull_state`，读取并校验当前分支/upstream、tracking OID、分歧状态及工作树 clean/conflict/operation 状态。RemoteCommandPort 的 pull 执行接收已注入的 preflight reader，取消后的 rebase abort/merge 回滚核对统一从该 port 获取快照；移除 RemotePullCommand 中不参与执行的 repo_id。remote 名称语法规则提取为 domain helper，由 feature 预检和 adapter reader 共用。Git 参数、未知结果保护及取消/等待输入状态判断保留。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 `git/command.rs` 无 `features::remotes::pull` 引用；未运行 Rust 测试。
+- 手工验证：未运行 pull 正常取消、rebase/am abort、冲突等待或 merge index 恢复场景。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、8、14 节。
+- 限制/后续：取消后的 Git 写操作与恢复决策仍由 GitCommandService 编排；后续继续把协调移到 remotes workflow service，并把所需 Git 原语收敛成显式写 port；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`11c1372`
