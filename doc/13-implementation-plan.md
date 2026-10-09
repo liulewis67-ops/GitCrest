@@ -4145,3 +4145,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-detailed-frame-trace-stage374-20261010.json`；阶段 370/373 的 RAF 与 presented 对照报告。
 - 限制/后续：详细 trace 期间测得帧率用于诊断，不替代阶段 370 的 20 轮正式 presented-frame 基准；下一步沿 Windows/Electron begin-frame/vsync 调度和显示设备有效刷新信息继续定位，不改变默认启动参数。S7.2、S7.4、S7.5 验收保持未完成。
 - 证据 commit：`9ad490f`。
+
+### S7.2 读取 Windows 原生 DWM 刷新与合成速率 — 小阶段 375
+- 状态：已完成（原生桌面刷新/合成速率约 60Hz；Chromium 应用帧节奏仍约 56Hz，差异位于应用侧采样/调度链路）
+- 日期：2026-10-10
+- 交付：新增 `scripts/performance/windows-display-timing.ps1`，通过 `DwmGetCompositionTimingInfo` 采集 Windows DWM 系统级 refresh/compose 速率、刷新周期与计数器，并附当前显示设备报告；支持输出 JSON 报告。
+- 验证：脚本 PowerShell AST 解析、报告 JSON 解析及 `git diff --check` 通过。Windows 11 10.0.26300 / RTX 3050 当前 DWM `refreshHz` 与 `composeHz` 均为 59.99952Hz，刷新周期 QPC 为 166,668；NVIDIA 显示模式报告 1920×1080、60Hz。与阶段 374 Chromium `DisplayScheduler::BeginFrame`/`FrameDisplayed` 约 17.845ms 中位间隔（约 56Hz）对照，说明 60Hz 显示模式本身不足以解释应用的低帧 cadence。
+- 手工验证：运行 `scripts/performance/windows-display-timing.ps1 -DurationSeconds 3 -OutputPath <report>` 完成只读系统采样；DWM 采样是桌面级信息，报告明确注明不等于单应用呈现率。
+- 证据：`scripts/performance/windows-display-timing.ps1`、`doc/evidence/S7.2/windows-dwm-timing-stage375-20261010.json`；阶段 374 Chromium 帧管线报告。
+- 限制/后续：此采样确认桌面配置为 60Hz，但仍不能确定 Chromium/viz 为何以约 56Hz 请求 BeginFrame；继续调查 Electron GPU/VSync 设备与输出路径，暂不变更产品 flags。S7.2、S7.4、S7.5 继续未验收。
+- 证据 commit：`820045c`。
