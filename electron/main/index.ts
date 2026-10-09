@@ -4,7 +4,8 @@ import { pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell, type WebContents } from "electron";
 import { startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
 import { UpdateController, type UpdateEventSource } from "./update-controller";
-import { isUpdateFeedConfigured } from "./update-config";
+import { getLinuxUpdateManifestPublicKey, isUpdateFeedConfigured } from "./update-config";
+import { requireLinuxUpdateInfoSignature } from "./update-manifest-signature";
 import WebSocket from "ws";
 
 let mainWindow: BrowserWindow | undefined;
@@ -38,6 +39,9 @@ const updateConfig = (() => {
     return undefined;
   }
 })();
+const linuxUpdateManifestPublicKey = process.platform === "linux"
+  ? getLinuxUpdateManifestPublicKey(updateConfig)
+  : undefined;
 const updateFeedConfigured = isUpdateFeedConfigured(app.isPackaged, process.platform, updateConfig);
 const autoUpdater: (UpdateEventSource & { autoDownload: boolean; autoInstallOnAppQuit: boolean }) | undefined = updateFeedConfigured
   ? (await import("electron-updater")).default.autoUpdater
@@ -45,6 +49,12 @@ const autoUpdater: (UpdateEventSource & { autoDownload: boolean; autoInstallOnAp
 if (autoUpdater) {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
+  if (linuxUpdateManifestPublicKey) {
+    requireLinuxUpdateInfoSignature(
+      autoUpdater as unknown as UpdateEventSource & { isUpdateSupported: (updateInfo: unknown) => boolean | Promise<boolean> },
+      linuxUpdateManifestPublicKey,
+    );
+  }
 }
 const updateController = new UpdateController(updateFeedConfigured, autoUpdater, (status) => {
   for (const window of BrowserWindow.getAllWindows()) {

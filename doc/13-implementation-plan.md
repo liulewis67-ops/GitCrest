@@ -3726,3 +3726,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/workflows/ConflictWindow.tsx`、`tests/unit/conflict-window.test.tsx`。
 - 限制/后续：窗口关闭不会撤销已受理的保存/resolve 任务；重新打开后由后端 recovery preflight 重新核对。S7.2、S7.4、S7.5 验收仍未完成。
 - 完成 commit：`d5e4e73`
+
+### S7.4 Linux AppImage 更新清单 Ed25519 运行时验证 — 小阶段 332
+- 状态：已完成（新增验证钩子与 fail-closed 配置门；Linux 发布链尚未启用）
+- 日期：2026-10-09
+- 交付：Linux updater 只有在打包 `app-update.yml` 含有效 `gitcrestUpdatePublicKey`（base64 DER SPKI）时才会初始化；`electron-updater` 的 `isUpdateSupported` 在下载前验证 update info 中的 Ed25519 签名。签名格式为 `gitcrestSignatureVersion: 1` 与 base64 `gitcrestSignature`，签名消息含 `gitcrest-linux-update-manifest-v1` 域分隔前缀及除签名字段外所有更新元数据的排序 canonical JSON，覆盖版本、下载 URL、SHA-512 等字段；缺失、格式错误或内容被改动时抛错并拒绝更新。
+- 验证：新增签名用例使用运行时生成的 Ed25519 密钥对，覆盖有效签名、字段顺序规范化、缺签名/错误公钥/篡改 SHA-512 拒绝，以及校验发生在 updater 默认支持判定前。定向测试通过（2 files / 5 tests）；完整 `pnpm test` 通过（39 files / 185 tests）；`pnpm build`、`pnpm frontend:boundaries`、`node --check electron/main/update-config-policy.mjs` 和 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未执行 Linux AppImage runner 或下载；当前包无 update config 和公钥，策略继续返回 `notConfigured`。
+- 证据：`electron/main/update-manifest-signature.ts`、`electron/main/update-config-policy.mjs`、`electron/main/index.ts`、`tests/unit/update-manifest-signature.test.ts`。
+- 限制/后续：CI 仍需将受控公钥写入 Linux 包配置、使用 GitHub Secret 私钥给 `latest-linux.yml` 签名并发布；还需在原生 Linux runner 验证签名成功下载及缺失/错误签名拒绝。当前阶段只建立运行时验证链，不代表 S7.4 完成。
+- 完成 commit：待补记

@@ -19,9 +19,20 @@ export function isUpdateFeedConfigured(isPackaged, platform, updateConfig) {
   if (!isPackaged || updateConfig === undefined) return false;
   if (platform === "win32") return hasWindowsUpdatePublisherName(updateConfig);
   // electron-updater 6.8.10's AppImage path validates the downloaded SHA-512,
-  // but does not authenticate the update metadata with a signed manifest.
-  if (platform === "linux") return false;
+  // so Linux requires the first-party Ed25519 manifest verification key.
+  if (platform === "linux") return getLinuxUpdateManifestPublicKey(updateConfig) !== undefined;
   return platform === "darwin";
+}
+
+export function getLinuxUpdateManifestPublicKey(updateConfig) {
+  if (updateConfig === undefined) return undefined;
+  const line = updateConfig.split(/\r?\n/).find((value) => /^gitcrestUpdatePublicKey\s*:/.test(value));
+  if (!line) return undefined;
+  const value = line.slice(line.indexOf(":") + 1).trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(value)) return undefined;
+  const decoded = Buffer.from(value, "base64");
+  if (decoded.length < 32 || decoded.toString("base64") !== value) return undefined;
+  return value;
 }
 
 function isNonEmptyYamlValue(value) {

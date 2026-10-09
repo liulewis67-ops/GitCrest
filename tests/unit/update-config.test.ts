@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { expect, it } from "vitest";
+import { generateKeyPairSync } from "node:crypto";
 import { hasWindowsUpdatePublisherName, isUpdateFeedConfigured } from "../../electron/main/update-config";
 
 it("requires a non-empty publisher name for Windows update metadata", () => {
@@ -18,6 +19,10 @@ it("fails closed for Linux and requires trusted Windows publisher metadata", () 
   expect(isUpdateFeedConfigured(true, "win32", "publisherName: CN=GitCrest")).toBe(true);
   expect(isUpdateFeedConfigured(true, "linux", "provider: generic\nurl: https://updates.example.test")).toBe(false);
   expect(isUpdateFeedConfigured(true, "linux", "provider: generic\nurl: https://updates.example.test\nsha512: is-not-a-signature")).toBe(false);
+  const { publicKey } = generateKeyPairSync("ed25519");
+  const key = publicKey.export({ type: "spki", format: "der" }).toString("base64");
+  expect(isUpdateFeedConfigured(true, "linux", `provider: generic\nurl: https://updates.example.test\ngitcrestUpdatePublicKey: ${key}`)).toBe(true);
+  expect(isUpdateFeedConfigured(true, "linux", "provider: generic\nurl: https://updates.example.test\ngitcrestUpdatePublicKey: invalid")).toBe(false);
   expect(isUpdateFeedConfigured(true, "darwin", "provider: generic\nurl: https://updates.example.test")).toBe(true);
   expect(isUpdateFeedConfigured(true, "freebsd", "provider: generic\nurl: https://updates.example.test")).toBe(false);
 });
