@@ -2665,3 +2665,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：repositories feature 仍有兼容重导出，StatusService 路径查询将继续通过单独 port 注入；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/error.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/mod.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4、12 节。
 - 实施 commit：`7890b4d`
+
+
+### StatusService 仓库路径 port 注入 — 小阶段 226
+- 状态：已完成（StatusService 仅依赖 status-read 与 repository-path ports，不直接引用 RepositoryManager/GitCommandService 实现）
+- 日期：2026-10-09
+- 交付：新增 `RepositoryPathPort`，RepositoryManager 实现其仓库路径查询；StatusService 泛型接收路径 port 与 StatusReadPort，调用方 bootstrap 注入实现，AppState 持有装配后的具体服务。同步调整 watcher 和 shelves helper 的服务类型边界，并移除 repositories feature 对 RepositoryError 的兼容出口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行测试。
+- 限制/后续：RepositoryManager 仍同时负责仓库 registry、状态元数据和路径解析，后续可按 ownership 拆分；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/ports/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4 节。
+- 实施 commit：`553edd0`
