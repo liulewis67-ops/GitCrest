@@ -8,7 +8,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
-use crate::storage::RepositoryStore;
+use crate::{domain::error::RepositoryError, storage::RepositoryStore};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -39,20 +39,6 @@ pub struct TaskTarget {
 pub struct HistoryTarget {
     pub repository_path: PathBuf,
     pub head: Option<String>,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum RepositoryError {
-    InvalidPath,
-    PathNotFound,
-    PathPermissionDenied,
-    NotRepository,
-    AlreadyRepository,
-    InitializationFailed,
-    GitUnavailable,
-    StorageUnavailable,
-    RepositoryNotFound,
-    StatusFailed,
 }
 
 impl RepositoryManager {

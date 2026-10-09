@@ -6,8 +6,9 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    domain::error::RepositoryError,
     domain::status::ChangeCategory,
-    features::{branches, repositories::repository::RepositoryError},
+    features::branches,
     AppState, BranchCommand, TaskFailure, TaskSnapshot,
 };
 

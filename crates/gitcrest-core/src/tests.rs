@@ -4941,23 +4941,21 @@ async fn remote_branch_delete_api_requires_confirmation_and_uses_reviewed_tracki
 
 #[tokio::test]
 async fn repository_path_failures_have_distinct_api_errors() {
-    let missing = ApiError::from_repository_error(
-        features::repositories::repository::RepositoryError::PathNotFound,
-    );
+    let missing =
+        ApiError::from_repository_error(crate::domain::error::RepositoryError::PathNotFound);
     let (status, code) = error_code(missing.into_response()).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(code, "REPOSITORY_PATH_NOT_FOUND");
 
     let permission = ApiError::from_repository_error(
-        features::repositories::repository::RepositoryError::PathPermissionDenied,
+        crate::domain::error::RepositoryError::PathPermissionDenied,
     );
     let (status, code) = error_code(permission.into_response()).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
     assert_eq!(code, "REPOSITORY_ACCESS_DENIED");
 
-    let invalid = ApiError::from_repository_error(
-        features::repositories::repository::RepositoryError::NotRepository,
-    );
+    let invalid =
+        ApiError::from_repository_error(crate::domain::error::RepositoryError::NotRepository);
     let (status, code) = error_code(invalid.into_response()).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(code, "NOT_A_REPOSITORY");

@@ -1,4 +1,18 @@
 #[derive(Debug, PartialEq, Eq)]
+pub(crate) enum RepositoryError {
+    InvalidPath,
+    PathNotFound,
+    PathPermissionDenied,
+    NotRepository,
+    AlreadyRepository,
+    InitializationFailed,
+    GitUnavailable,
+    StorageUnavailable,
+    RepositoryNotFound,
+    StatusFailed,
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub(crate) enum DiffError {
     InvalidPath,
     PathNotFound,
