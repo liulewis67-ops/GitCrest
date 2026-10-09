@@ -8,7 +8,9 @@ pub use read::{read, read_commit_file, read_with_patch};
 #[cfg(test)]
 use std::path::Path;
 
-use crate::domain::diff::{DiffScope, DiffSelection};
+use crate::domain::diff::{
+    DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffScope, DiffSelection,
+};
 pub(crate) use crate::domain::error::DiffError;
 use crate::{
     domain::status::{ChangeCategory, ChangeKind},
@@ -18,56 +20,6 @@ use crate::{
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ERROR_BYTES: usize = 16 * 1024;
 const DIFF_DEADLINE: Duration = Duration::from_secs(10);
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DiffContentStatus {
-    Text,
-    Binary,
-    Empty,
-    Conflicted,
-    Ignored,
-    Symlink,
-    Submodule,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum DiffRowKind {
-    Context,
-    Change,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DiffRow {
-    pub kind: DiffRowKind,
-    pub old_line: Option<u32>,
-    pub new_line: Option<u32>,
-    pub old_text: Option<String>,
-    pub new_text: Option<String>,
-    patch_change_lines: Vec<usize>,
-    old_position: Option<u32>,
-    new_position: Option<u32>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DiffHunk {
-    pub old_start: u32,
-    pub old_lines: u32,
-    pub new_start: u32,
-    pub new_lines: u32,
-    pub rows: Vec<DiffRow>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DiffDocument {
-    pub repo_id: String,
-    pub path: String,
-    pub revision: String,
-    pub original_path: Option<String>,
-    pub scope: DiffScope,
-    pub change_kind: ChangeKind,
-    pub status: DiffContentStatus,
-    pub hunks: Vec<DiffHunk>,
-}
 
 pub struct DiffRead {
     pub document: DiffDocument,

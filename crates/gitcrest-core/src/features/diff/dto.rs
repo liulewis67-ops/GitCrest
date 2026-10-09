@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::service::{DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind};
-use crate::domain::diff::DiffScope;
-use crate::domain::status::ChangeKind;
+use crate::domain::{
+    diff::{DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffScope},
+    status::ChangeKind,
+};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

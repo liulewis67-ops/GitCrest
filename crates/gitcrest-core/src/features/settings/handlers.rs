@@ -7,7 +7,7 @@ use axum::{
 use super::{dto as ai_dto, service as ai};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::diff::DiffScope,
+    domain::diff::{DiffContentStatus, DiffScope},
     features::{credentials, diff, status},
     state::AppState,
 };
@@ -246,7 +246,7 @@ pub(super) async fn request_ai(
             .await
             .map_err(ApiError::from_diff_error)?;
         if read.document.revision != selection.revision
-            || read.document.status != diff::DiffContentStatus::Text
+            || read.document.status != DiffContentStatus::Text
         {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,

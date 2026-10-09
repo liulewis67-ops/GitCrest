@@ -11,7 +11,7 @@ use super::dto::{
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::diff::DiffScope,
+    domain::diff::{DiffContentStatus, DiffScope},
     features::diff::{self, DiffError},
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging, status},
@@ -664,7 +664,7 @@ async fn prepare_shelf_items(
                 staging::StagingError::StaleSelection,
             ));
         }
-        if current.document.status != diff::DiffContentStatus::Text {
+        if current.document.status != DiffContentStatus::Text {
             return Err(ApiError::from_shelf_error(
                 shelves::ShelfError::EmptySelection,
             ));

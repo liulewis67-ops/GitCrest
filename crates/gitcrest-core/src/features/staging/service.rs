@@ -697,7 +697,7 @@ mod tests {
             diff.document.hunks[0]
                 .rows
                 .iter()
-                .filter(|row| row.kind == crate::features::diff::DiffRowKind::Change)
+                .filter(|row| row.kind == crate::domain::diff::DiffRowKind::Change)
                 .count(),
             2
         );
