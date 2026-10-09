@@ -3765,4 +3765,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未单独操作 GUI；E2E 启动打包 Electron 并使用临时仓库、远端、应用数据和测试 HTTPS 服务。
 - 证据：`tests/e2e/desktop.test.ts`、`tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/shelf-workflow.test.ts`、`tests/e2e/shortcut-settings.test.ts`、`tests/e2e/repository-management.test.ts`、`tests/e2e/remote-sync.test.ts`。
 - 限制/后续：此复验确认现有自动化矩阵在本机全量通过，不证明 `08` 每条 P0 都已覆盖，也不替代 macOS/Linux 权限、凭据和 Git 版本行为验收；需继续审计未覆盖场景、S7.2 性能目标与 S7.4 更新发布链。
+- 完成 commit：`41b0a05`
+
+### S7.2 100k 冷消息搜索热点诊断 — 小阶段 336
+- 状态：已完成（定位冷索引请求的主要同步成本；性能目标仍未达标）
+- 日期：2026-10-09
+- 交付：在既有 100k commit fixture 上拆分测量冷路径的两个 Git 步骤。refs fingerprint 的 `for-each-ref` 五次样本为 52.65–62.87ms；与运行时查询相同的 `git log --grep` 冷回退五次为 513.42–959.68ms（首个冷盘样本 959.68ms，其后 513–538ms）。额外对比完整 metadata 格式、仅 OID、`rev-list --grep`、仅 HEAD 等命令，均约 528–675ms；减少输出字段或改用 `rev-list` 没有带来稳定改善。主要同步成本是未命中/低频查询必须扫描大量提交消息以保证分页与 `nextOffset` 正确，refs fingerprint 仅占次要成本。
+- 验证：只读使用 `C:\Users\lewis\AppData\Local\Temp\gitcrest-s7.2-100k-fixture-20261009-continuation`，确认 fixture 有 100,000 commits、单个 18.6 MiB pack 和现存 commit-graph；仅执行 Git 读命令与本机 PowerShell 计时，没有修改 fixture。此为探索性小样本，不替代正式 20 轮 API P95 基准。
+- 证据：`scripts/performance/benchmark.mjs` 当前冷搜索路径及阶段 311 / 328 的 20 轮 API 证据（最近冷搜索 P95 623.466ms / 669.049ms）。
+- 限制/后续：严格的 <200ms 首次冷搜索目标仍未达到；数据表明只调整 Git 输出格式或缩短 fingerprint 不足以达标，下一步需处理“索引尚未就绪”的产品/API 查询策略，同时维持完整搜索结果与分页正确性。S7.2 其余桌面门槛、S7.4、S7.5 仍待完成。
 - 完成 commit：待提交
