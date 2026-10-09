@@ -144,6 +144,7 @@ mod tests {
 
     use crate::features::repositories::repository::RepositoryManager;
     use crate::ports::history::HistorySearchIndexPort;
+    use sha2::{Digest, Sha256};
 
     use super::*;
 
@@ -165,6 +166,58 @@ mod tests {
     fn commit(path: &Path, message: &str) {
         git(path, &["add", "."]);
         git(path, &["commit", "--quiet", "-m", message]);
+    }
+
+    fn git_reference_fingerprint(refs: &[u8], head: Option<&str>) -> String {
+        let mut digest = Sha256::new();
+        let attached_head_is_in_refs = refs.windows(3).any(|value| value == b"\0*\n");
+        if !attached_head_is_in_refs {
+            digest.update(head.unwrap_or_default().as_bytes());
+            digest.update([0]);
+        }
+        digest.update(refs);
+        format!("{:x}", digest.finalize())
+    }
+
+    #[tokio::test]
+    async fn refs_fingerprint_preserves_git_ref_bytes_for_attached_and_detached_heads() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        git(path, &["init", "--quiet"]);
+        git(path, &["config", "user.name", "GitCrest History"]);
+        git(path, &["config", "user.email", "history@example.invalid"]);
+        std::fs::write(path.join("history.txt"), "root\n").unwrap();
+        commit(path, "root entry");
+        let head = git(path, &["rev-parse", "HEAD"]);
+        git(path, &["branch", "feature"]);
+        git(path, &["update-ref", "refs/remotes/origin/main", &head]);
+
+        let read_git_refs = || async {
+            run_git(
+                path,
+                &[
+                    "for-each-ref".into(),
+                    "--format=%(refname)%00%(objectname)%00%(HEAD)".into(),
+                    "refs/heads".into(),
+                    "refs/remotes".into(),
+                ],
+                MAX_HISTORY_OUTPUT,
+            )
+            .await
+            .unwrap()
+        };
+        let attached_refs = read_git_refs().await;
+        assert_eq!(
+            refs_fingerprint(path, Some(&head)).await.unwrap(),
+            git_reference_fingerprint(&attached_refs, Some(&head)),
+        );
+
+        git(path, &["checkout", "--quiet", "--detach", "HEAD"]);
+        let detached_refs = read_git_refs().await;
+        assert_eq!(
+            refs_fingerprint(path, Some(&head)).await.unwrap(),
+            git_reference_fingerprint(&detached_refs, Some(&head)),
+        );
     }
 
     #[test]

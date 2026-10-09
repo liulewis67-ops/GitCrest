@@ -1,14 +1,14 @@
 use std::{fmt::Write as _, path::Path, sync::Arc};
 
+use git2::Repository;
 use sha2::{Digest, Sha256};
 
 use crate::{domain::commit::CommitSearchEntry, ports::history::HistorySearchIndexPort};
 
 use super::commit_history::{read_page, valid_filters};
 use super::{
-    parse_timestamp, run_git, run_git_with_deadline, split_words, text, CommitPage, CommitSummary,
+    parse_timestamp, run_git_with_deadline, split_words, text, CommitPage, CommitSummary,
     HistoryError, HistoryFilters, HISTORY_INDEX_DEADLINE, MAX_HISTORY_INDEX_OUTPUT,
-    MAX_HISTORY_OUTPUT,
 };
 
 pub async fn read_page_indexed(
@@ -201,24 +201,62 @@ pub(super) async fn refs_fingerprint(
     repository_path: &Path,
     head: Option<&str>,
 ) -> Result<String, HistoryError> {
-    let refs = run_git(
-        repository_path,
-        &[
-            "for-each-ref".into(),
-            "--format=%(refname)%00%(objectname)%00%(HEAD)".into(),
-            "refs/heads".into(),
-            "refs/remotes".into(),
-        ],
-        MAX_HISTORY_OUTPUT,
-    )
-    .await?;
+    let repository_path = repository_path.to_owned();
+    let head = head.map(str::to_owned);
+    tokio::task::spawn_blocking(move || refs_fingerprint_sync(&repository_path, head.as_deref()))
+        .await
+        .map_err(|_| HistoryError::GitFailed)?
+}
+
+fn refs_fingerprint_sync(
+    repository_path: &Path,
+    head: Option<&str>,
+) -> Result<String, HistoryError> {
+    let repository = Repository::open(repository_path).map_err(|_| HistoryError::GitFailed)?;
+    let head_reference = repository.find_reference("HEAD").ok();
+    let attached_head = head_reference
+        .as_ref()
+        .and_then(|reference| reference.symbolic_target_bytes());
+    let mut references = Vec::new();
+    for pattern in ["refs/heads/*", "refs/remotes/*"] {
+        let iterator = repository
+            .references_glob(pattern)
+            .map_err(|_| HistoryError::GitFailed)?;
+        for reference in iterator {
+            let reference = reference.map_err(|_| HistoryError::GitFailed)?;
+            let name = reference.name_bytes().to_vec();
+            let target = reference
+                .resolve()
+                .map_err(|_| HistoryError::GitFailed)?
+                .target()
+                .ok_or(HistoryError::GitFailed)?;
+            references.push((name, target.to_string()));
+        }
+    }
+    references.sort_unstable_by(|left, right| left.0.cmp(&right.0));
+
     let mut digest = Sha256::new();
-    let attached_head_is_in_refs = refs.windows(3).any(|value| value == b"\0*\n");
+    let attached_head_is_in_refs = attached_head.is_some_and(|head_name| {
+        references
+            .iter()
+            .any(|(name, _)| name.as_slice() == head_name)
+    });
     if !attached_head_is_in_refs {
         digest.update(head.unwrap_or_default().as_bytes());
         digest.update([0]);
     }
-    digest.update(refs);
+    for (name, target) in references {
+        let is_attached_head = attached_head.is_some_and(|head_name| name.as_slice() == head_name);
+        digest.update(name);
+        digest.update([0]);
+        digest.update(target.as_bytes());
+        digest.update([0]);
+        if is_attached_head {
+            digest.update(b"*\n");
+        } else {
+            digest.update(b" \n");
+        }
+    }
     let mut fingerprint = String::with_capacity(64);
     for byte in digest.finalize() {
         write!(fingerprint, "{byte:02x}").map_err(|_| HistoryError::GitFailed)?;
