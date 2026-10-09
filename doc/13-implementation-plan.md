@@ -4744,3 +4744,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/lib.rs`、`crates/gitcrest-core/src/credentials/mod.rs`、`crates/gitcrest-core/src/features/credentials/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：`credentials/mod.rs` 仍包含 keyring 与 Askpass 适配实现；后续可按规范拆成 `keyring.rs` 和 `askpass.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段模块边界与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 拆分 Git Askpass 交互适配 — 小阶段 436
+- 状态：已完成（Askpass prompt 解析与凭据响应位于 `credentials/askpass.rs`）
+- 日期：2026-10-10
+- 交付：将 Git HTTPS username/password prompt 识别、host 解析和 secret 响应逻辑移至 `credentials/askpass.rs`；凭据管理器和 keyring store 留在凭据模块入口。对外 `answer_askpass_prompt` 调用、支持的 prompt 形式、secret 零化及错误语义保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：生产 Askpass 唯一入口仍由 bootstrap 调用；测试辅助解析和 manager 注入路径保留在 crate 内，prompt parser 仍只接受 HTTPS username/password 提示并规范化 host。
+- 证据：`crates/gitcrest-core/src/credentials/askpass.rs`、`crates/gitcrest-core/src/credentials/mod.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：系统 Git 与 AI 凭据 keyring store 仍在 `credentials/mod.rs`；后续按规范移至 `credentials/keyring.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段职责拆分与台账同一 commit（SHA 可在后续台账更新中补记）。
