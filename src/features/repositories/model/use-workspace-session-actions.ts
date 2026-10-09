@@ -76,5 +76,18 @@ export function useWorkspaceSessionActions(setSession: Dispatch<SetStateAction<W
     };
   }
 
-  return { activateRepository, changeMode, openFileDiff, openCommitFileDiff, closeTab };
+  function restoreAvailableRepositories(session: WorkspaceSession, repositories: RepositoryResponse[]) {
+    const availableRepoIds = session.openRepoIds.filter((repoId) =>
+      repositories.some((repository) => repository.repoId === repoId && repository.availability === "available"));
+    const activeRepoId = session.activeRepoId && availableRepoIds.includes(session.activeRepoId)
+      ? session.activeRepoId
+      : availableRepoIds[availableRepoIds.length - 1];
+    const activeRepository = repositories.find((repository) => repository.repoId === activeRepoId);
+    return {
+      session: { ...session, openRepoIds: availableRepoIds, activeRepoId },
+      activeRepository,
+    };
+  }
+
+  return { activateRepository, changeMode, openFileDiff, openCommitFileDiff, closeTab, restoreAvailableRepositories };
 }

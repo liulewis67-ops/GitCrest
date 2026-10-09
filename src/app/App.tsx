@@ -832,15 +832,10 @@ function App() {
     setRepositories(currentRepositories);
     if (restoreWorkspace) {
       const saved = workspaceSessionRef.current;
-      const availableIds = saved.openRepoIds.filter((repoId) =>
-        currentRepositories.some((repository) => repository.repoId === repoId && repository.availability === "available"));
-      const activeRepoId = saved.activeRepoId && availableIds.includes(saved.activeRepoId)
-        ? saved.activeRepoId
-        : availableIds[availableIds.length - 1];
-      const activeRepository = currentRepositories.find((repository) => repository.repoId === activeRepoId);
-      setWorkspaceSession({ ...saved, openRepoIds: availableIds, activeRepoId });
-      setSelectedRepository(activeRepository);
-      setPage(activeRepository ? "workspace" : "welcome");
+      const restored = workspaceSessionActions.restoreAvailableRepositories(saved, currentRepositories);
+      setWorkspaceSession(restored.session);
+      setSelectedRepository(restored.activeRepository);
+      setPage(restored.activeRepository ? "workspace" : "welcome");
     } else {
       setSelectedRepository((current) => currentRepositories.find((repository) => repository.repoId === current?.repoId));
     }
