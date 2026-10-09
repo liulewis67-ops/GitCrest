@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 export function DiscardChangesDialog({ repositoryPath, path, selectionCount, disabled, error, onCancel, onConfirm }: {
   repositoryPath: string;

@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import type { components } from "../../../api/schema";
-import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 type PushPreflight = components["schemas"]["PushPreflight"];
 

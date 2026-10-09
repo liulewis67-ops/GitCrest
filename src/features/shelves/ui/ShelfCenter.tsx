@@ -9,7 +9,7 @@ import type {
   TaskSnapshotResponse,
   StatusSnapshotResponse,
 } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 type SelectedChange = { revision: string; hunks?: number[] };
 type ShelfAfterCreateAction = { switchTarget: string; existingShelfIds: string[] };

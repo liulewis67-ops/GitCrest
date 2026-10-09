@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type ResetBackupSnapshotResponse, type ResetPreviewResponse, type TaskSnapshotResponse } from "../../../api/client";
 import type { components } from "../../../api/schema";
-import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 type ResetMode = components["schemas"]["ResetMode"];
 const MODES: ResetMode[] = ["soft", "mixed", "hard"];

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type WorkflowPreflightResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import type { WorkflowAction } from "../model/workflow-action";
 
 const labels: Record<WorkflowAction, string> = { merge: "Merge", cherryPick: "Cherry-pick", revert: "Revert" };

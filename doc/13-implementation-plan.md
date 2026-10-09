@@ -4535,3 +4535,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 12.2 节。
 - 限制/后续：该改动提升 FTS 降级的可观测性，不缩短冷搜索延迟；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### shared/hooks 对齐通用焦点 Hook 目录 — 小阶段 415
+- 状态：已完成（共享对话框焦点 Hook 位于规范约定的 `shared/hooks`）
+- 日期：2026-10-10
+- 交付：将 `src/shared/use-dialog-focus.ts` 迁入 `src/shared/hooks/use-dialog-focus.ts`，并更新 App 与 feature UI 中的 15 个相对导入；Hook 实现和对话框行为不变。
+- 验证：`pnpm exec tsc --noEmit`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir E:\gitcrest-stage415-vite --emptyOutDir`、旧/新导入搜索与 `git diff --check` 通过。首次 Vite 构建写入系统临时目录时因 C: 盘空间不足报 `ENOSPC`，改在 E: 盘重跑成功。未新增或运行测试。成功构建仅出现既有 web-tree-sitter `eval` 和大 chunk 提示。
+- 手工验证：确认所有 15 个调用方均导入新路径，源码中不再引用旧路径；对照迁移前后 Hook 内容保持一致。
+- 证据：`src/shared/hooks/use-dialog-focus.ts`、相关 App/feature UI 导入、`doc/15-frontend-development-guidelines.md` 第 3.1、3.3 节。
+- 限制/后续：只调整通用 Hook 的目录归属，不改变焦点行为；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。

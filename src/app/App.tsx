@@ -8,7 +8,7 @@ import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
 import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
 import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShortcutPreferences, useThemePreference } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
-import { useDialogFocus } from "../shared/use-dialog-focus";
+import { useDialogFocus } from "../shared/hooks/use-dialog-focus";
 import { isFullGitObjectId } from "../shared/lib/git-object-id";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";

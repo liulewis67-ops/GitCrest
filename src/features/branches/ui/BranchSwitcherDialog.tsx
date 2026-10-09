@@ -1,5 +1,5 @@
 import type { BranchSnapshotResponse, RepositoryResponse } from "../../../api/client";
-import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useBranchSwitcher } from "../model/use-branch-switcher";
 import { getRepositoryDisplayName } from "../../../shared/lib/repository-display-name";
 

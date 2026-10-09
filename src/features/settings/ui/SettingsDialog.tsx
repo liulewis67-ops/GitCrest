@@ -9,7 +9,7 @@ import {
   type ShortcutAction,
   type ShortcutPreferences,
 } from "../../../shared/lib/shortcut-preferences";
-import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 import type { UpdateStatus } from "../../../api/update-status";
 
