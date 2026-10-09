@@ -2954,3 +2954,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/branch.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：分支写操作仍由现有 GitCommandService 执行；需要结合任务执行上下文边界评估其类型化执行接口；其他 Git 操作迁移及 S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`3bdc71f`
+
+### Remote 配置读取迁入 Git adapter 并通过 port 注入 — 小阶段 255
+- 状态：已完成（remotes service 生产路径不再启动 Git 子进程读取远程配置）
+- 日期：2026-10-09
+- 交付：新增 `RemoteConfiguration`/`RemoteConfigurationSnapshot`、`RemoteGitPort` 与 `git/remotes.rs::GitRemoteAdapter`，负责远程 fetch/push URL 读取、本地默认远程配置读取及 remote 名称 Git 格式检查；AppState/bootstrap 注入 port，remote handlers 与 pull/push/远程删除预检统一使用。远程 URL 脱敏和默认项选择留在 feature service，原有 8 MiB 列表输出、1 KiB 默认配置输出、20 秒期限及 128 个 remote 上限保留。分支名纯语法规则迁入 domain，避免 remotes service 调用 branches service。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 remotes service 生产路径不再启动 Git 子进程，旧读取入口仅保留测试包装；未运行 Rust 测试。
+- 手工验证：未执行多 fetch/push URL、凭据 URL 脱敏、默认 remote 配置缺失/损坏或输出上限场景；API 运行时行为未手工复核。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/remotes.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：pull/push preflight 与执行仍各自有 Git 子进程逻辑；继续按操作能力迁移，随后补足运行时及故障场景验收；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`9867ff0`
