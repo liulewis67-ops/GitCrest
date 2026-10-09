@@ -2345,3 +2345,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：历史数据仍由 CommitGraph 按 refresh key 发起请求，统一查询缓存与失效策略待后续按实施计划推进；S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`src/features/history/model/use-history-view-requests.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`4d2e158`
+
+### history feature commit graph 行渲染优化与懒加载恢复 — 小阶段 192
+- 状态：已完成（降低滚动时可见行的重复渲染工作；基准未显示滚动 FPS 提升）
+- 日期：2026-10-09
+- 交付：CommitGraph 的可见提交行改为 memo 组件，refs 名称按 oid 建索引并复用，避免虚拟窗口移动时重复格式化日期和构造行内容；history feature barrel 公开 CommitGraph/CommitDetails loader，保持 App 静态装配 history model 时历史视图仍按需分块加载。生产 renderer 输出独立 `CommitGraph` chunk（29.30 kB），主 renderer chunk 从前一构建的 528.90 kB 降至 499.78 kB。
+- 验证：`pnpm build` 与 `git diff --check` 通过；Windows x64 / Ryzen 7 5800H / Electron 37 的 Release renderer 在 100k commit fixture 上完成 5 秒空闲 RAF 与 30 秒滚动测量。空闲与滚动 P5 均为 55.249 FPS，和既有基线一致；滚动期间进程树 Working Set 峰值 475,713,536 bytes。未运行测试。
+- 限制/后续：此改动没有证明 FPS 提升；该运行环境空闲 RAF 同样约 55 FPS，说明当前采样受主机/显示刷新率限制的可能性仍需区分。进程树内存仍超过计划的 250/500 MiB 门槛，S7.2 保持待验收，不据此宣称性能门槛通过。
+- 证据：`doc/evidence/S7.2/desktop-win32-history-row-memo-scroll.json`、`scripts/performance/desktop-benchmark.mjs`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/pages/workspace/WorkspaceDetailsPanel.tsx`。
+- 实施 commit：`f00d2df`
