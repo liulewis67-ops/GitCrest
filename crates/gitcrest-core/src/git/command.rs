@@ -1,7 +1,4 @@
-use std::sync::{
-    atomic::{AtomicU64, Ordering},
-    Arc,
-};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -26,7 +23,6 @@ use crate::{
         branch::BranchCommand,
         error::WorkflowError,
         remote::{
-            assess_cancelled_pull, pull_state_restored, PullRecoveryDecision,
             RemoteBranchDeleteCommand, RemoteCommand, RemotePullCommand, RemotePullStrategy,
             RemotePushCommand,
         },
@@ -43,7 +39,7 @@ use crate::{
         diff::DiffGitPort,
         remotes::{
             RemoteCommandFuture, RemoteCommandPort, RemoteGitPort, RemotePreflightFuture,
-            RemotePreflightReadPort,
+            RemotePreflightReadPort, RemotePullRecoveryFuture, RemotePullRecoveryPort,
         },
     },
 };
@@ -337,7 +333,6 @@ impl GitCommandService {
         repository_path: &Path,
         expected: &RemotePullCommand,
         strategy: RemotePullStrategy,
-        preflight_read: &dyn RemotePreflightReadPort,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let strategy_flag = match strategy {
@@ -374,200 +369,11 @@ impl GitCommandService {
             task,
         )
         .await;
-        if strategy == RemotePullStrategy::Rebase && matches!(&result, Err(TaskFailure::Cancelled))
-        {
-            return self
-                .reconcile_cancelled_pull_rebase(repository_path, expected, preflight_read)
-                .await;
+        if matches!(result, Err(TaskFailure::Cancelled)) {
+            return result;
         }
-        let result = workflow_command_result(&self.git_program, repository_path, result).await;
-        if matches!(&result, Err(TaskFailure::Cancelled)) {
-            return self
-                .reconcile_cancelled_pull(repository_path, expected, preflight_read)
-                .await;
-        }
-        result
+        workflow_command_result(&self.git_program, repository_path, result).await
     }
-
-    async fn reconcile_cancelled_pull_rebase(
-        &self,
-        repository_path: &Path,
-        expected: &RemotePullCommand,
-        preflight_read: &dyn RemotePreflightReadPort,
-    ) -> Result<(), TaskFailure> {
-        match preflight_read
-            .read_worktree(repository_path)
-            .await
-            .map(|state| state.operation)
-        {
-            Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
-                let is_am_rebase = preflight_read
-                    .is_am_rebase(repository_path)
-                    .await
-                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                if is_am_rebase {
-                    capture_git_output_args(
-                        &self.git_program,
-                        repository_path,
-                        vec!["am".into(), "--abort".into()],
-                        1024,
-                    )
-                    .await
-                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                } else {
-                    let worktree = preflight_read
-                        .read_worktree(repository_path)
-                        .await
-                        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                    if !worktree.dirty_paths.is_empty() || worktree.omitted_dirty_path_count > 0 {
-                        return Err(TaskFailure::WaitingForInput(
-                            "Pull rebase was cancelled while user changes remain in the worktree. Review the changes before aborting the rebase.".into(),
-                        ));
-                    }
-                    capture_git_output_args(
-                        &self.git_program,
-                        repository_path,
-                        vec!["rebase".into(), "--abort".into()],
-                        1024,
-                    )
-                    .await
-                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                }
-
-                let branch_ref = format!("refs/heads/{}", expected.local_branch);
-                let branch_oid = capture_git_output_args(
-                    &self.git_program,
-                    repository_path,
-                    vec!["rev-parse".into(), "--verify".into(), branch_ref.into()],
-                    1024,
-                )
-                .await
-                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                if std::str::from_utf8(&branch_oid).ok().map(str::trim)
-                    != Some(expected.local_oid.as_str())
-                {
-                    return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
-                }
-
-                let current_branch = capture_git_output(
-                    &self.git_program,
-                    repository_path,
-                    ["branch", "--show-current"],
-                    1024,
-                )
-                .await
-                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                if std::str::from_utf8(&current_branch).ok().map(str::trim)
-                    != Some(expected.local_branch.as_str())
-                {
-                    capture_git_output_args(
-                        &self.git_program,
-                        repository_path,
-                        vec!["switch".into(), "--".into(), expected.local_branch.clone().into()],
-                        1024,
-                    )
-                    .await
-                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                }
-
-                let restored = preflight_read
-                    .read_pull_state(repository_path, &expected.local_branch)
-                .await
-                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                if pull_state_restored(expected, &restored) {
-                    Err(TaskFailure::Cancelled)
-                } else {
-                    Err(TaskFailure::Failed(pull_cancel_outcome_unknown()))
-                }
-            }
-            Ok(Some(_)) => Err(TaskFailure::WaitingForInput(
-                "Pull rebase was cancelled while another Git operation remains active. Review repository state before continuing.".into(),
-            )),
-            Ok(None) => {
-                self.reconcile_cancelled_pull(repository_path, expected, preflight_read)
-                    .await
-            }
-            Err(_) => Err(TaskFailure::Failed(pull_cancel_outcome_unknown())),
-        }
-    }
-
-    async fn reconcile_cancelled_pull(
-        &self,
-        repository_path: &Path,
-        expected: &RemotePullCommand,
-        preflight_read: &dyn RemotePreflightReadPort,
-    ) -> Result<(), TaskFailure> {
-        let snapshot = preflight_read
-            .read_pull_state(repository_path, &expected.local_branch)
-            .await
-            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-        match assess_cancelled_pull(expected, &snapshot) {
-            PullRecoveryDecision::OutcomeUnknown => {
-                return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
-            }
-            PullRecoveryDecision::WaitForInput => {
-                return Err(TaskFailure::WaitingForInput(
-                    "Pull was cancelled while a Git operation remains active. Continue or abort it from Task Center.".into(),
-                ));
-            }
-            PullRecoveryDecision::Cancelled => return Err(TaskFailure::Cancelled),
-            PullRecoveryDecision::VerifyMergeResult => {}
-        }
-
-        let index_tree =
-            capture_git_output(&self.git_program, repository_path, ["write-tree"], 1024)
-                .await
-                .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-        let merged_tree = pull_merge_index_tree(
-            &self.git_program,
-            repository_path,
-            &expected.local_oid,
-            &expected.tracking_oid,
-        )
-        .await
-        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-        if std::str::from_utf8(&index_tree).ok().map(str::trim) != Some(merged_tree.as_str()) {
-            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
-        }
-
-        let mut command = Command::new(&self.git_program);
-        command
-            .args(["reset", "--merge"])
-            .arg(&expected.local_oid)
-            .current_dir(repository_path)
-            .env("GIT_TERMINAL_PROMPT", "0")
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .kill_on_drop(true);
-        let output = tokio::time::timeout(Duration::from_secs(30), command.output())
-            .await
-            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?
-            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-        if !output.status.success() {
-            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
-        }
-
-        let restored = preflight_read
-            .read_pull_state(repository_path, &expected.local_branch)
-            .await
-            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-        if pull_state_restored(expected, &restored)
-            && capture_git_output(
-                &self.git_program,
-                repository_path,
-                ["diff", "--cached", "--name-only", "-z"],
-                2 * 1024 * 1024,
-            )
-            .await
-            .is_ok_and(|staged_paths| staged_paths.is_empty())
-        {
-            Err(TaskFailure::Cancelled)
-        } else {
-            Err(TaskFailure::Failed(pull_cancel_outcome_unknown()))
-        }
-    }
-
     pub async fn execute_workflow(
         &self,
         repository_path: &Path,
@@ -1364,19 +1170,10 @@ impl RemoteCommandPort for GitCommandService {
         repository_path: &'a Path,
         command: RemotePullCommand,
         strategy: RemotePullStrategy,
-        preflight_read: Arc<dyn RemotePreflightReadPort>,
         task: TaskContext,
     ) -> RemoteCommandFuture<'a> {
         Box::pin(async move {
-            GitCommandService::execute_pull(
-                self,
-                repository_path,
-                &command,
-                strategy,
-                preflight_read.as_ref(),
-                task,
-            )
-            .await
+            GitCommandService::execute_pull(self, repository_path, &command, strategy, task).await
         })
     }
 
@@ -1390,6 +1187,178 @@ impl RemoteCommandPort for GitCommandService {
         Box::pin(async move {
             GitCommandService::execute_push(self, repository_path, &command, force_with_lease, task)
                 .await
+        })
+    }
+}
+
+impl RemotePullRecoveryPort for GitCommandService {
+    fn is_am_rebase<'a>(&'a self, repository_path: &'a Path) -> RemotePullRecoveryFuture<'a, bool> {
+        Box::pin(async move {
+            let output = capture_git_output(
+                &self.git_program,
+                repository_path,
+                ["rev-parse", "--git-path", "rebase-apply"],
+                4096,
+            )
+            .await
+            .map_err(|_| WorkflowError::GitFailed)?;
+            let path = std::str::from_utf8(&output).map_err(|_| WorkflowError::GitFailed)?;
+            let path = PathBuf::from(path.trim());
+            let path = if path.is_absolute() {
+                path
+            } else {
+                repository_path.join(path)
+            };
+            match tokio::fs::metadata(path).await {
+                Ok(metadata) => Ok(metadata.is_dir()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+                Err(_) => Err(WorkflowError::GitFailed),
+            }
+        })
+    }
+
+    fn abort_rebase<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        am_rebase: bool,
+    ) -> RemotePullRecoveryFuture<'a, ()> {
+        Box::pin(async move {
+            let arguments = if am_rebase {
+                vec!["am".into(), "--abort".into()]
+            } else {
+                vec!["rebase".into(), "--abort".into()]
+            };
+            capture_git_output_args(&self.git_program, repository_path, arguments, 1024)
+                .await
+                .map(|_| ())
+                .map_err(|_| WorkflowError::GitFailed)
+        })
+    }
+
+    fn read_branch_oid<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        branch: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, String> {
+        Box::pin(async move {
+            let output = capture_git_output_args(
+                &self.git_program,
+                repository_path,
+                vec![
+                    "rev-parse".into(),
+                    "--verify".into(),
+                    format!("refs/heads/{branch}").into(),
+                ],
+                1024,
+            )
+            .await
+            .map_err(|_| WorkflowError::GitFailed)?;
+            std::str::from_utf8(&output)
+                .map(str::trim)
+                .map(str::to_owned)
+                .map_err(|_| WorkflowError::GitFailed)
+        })
+    }
+
+    fn read_current_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePullRecoveryFuture<'a, String> {
+        Box::pin(async move {
+            let output = capture_git_output(
+                &self.git_program,
+                repository_path,
+                ["branch", "--show-current"],
+                1024,
+            )
+            .await
+            .map_err(|_| WorkflowError::GitFailed)?;
+            std::str::from_utf8(&output)
+                .map(str::trim)
+                .map(str::to_owned)
+                .map_err(|_| WorkflowError::GitFailed)
+        })
+    }
+
+    fn switch_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        branch: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, ()> {
+        Box::pin(async move {
+            capture_git_output_args(
+                &self.git_program,
+                repository_path,
+                vec!["switch".into(), "--".into(), branch.into()],
+                1024,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|_| WorkflowError::GitFailed)
+        })
+    }
+
+    fn read_index_tree<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePullRecoveryFuture<'a, String> {
+        Box::pin(async move {
+            let output =
+                capture_git_output(&self.git_program, repository_path, ["write-tree"], 1024)
+                    .await
+                    .map_err(|_| WorkflowError::GitFailed)?;
+            std::str::from_utf8(&output)
+                .map(str::trim)
+                .map(str::to_owned)
+                .map_err(|_| WorkflowError::GitFailed)
+        })
+    }
+
+    fn read_merge_tree<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_oid: &'a str,
+        tracking_oid: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, String> {
+        Box::pin(async move {
+            pull_merge_index_tree(&self.git_program, repository_path, local_oid, tracking_oid)
+                .await
+                .map_err(|_| WorkflowError::GitFailed)
+        })
+    }
+
+    fn reset_merge<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_oid: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, ()> {
+        Box::pin(async move {
+            capture_git_output_args(
+                &self.git_program,
+                repository_path,
+                vec!["reset".into(), "--merge".into(), local_oid.into()],
+                1024,
+            )
+            .await
+            .map(|_| ())
+            .map_err(|_| WorkflowError::GitFailed)
+        })
+    }
+
+    fn has_staged_changes<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePullRecoveryFuture<'a, bool> {
+        Box::pin(async move {
+            capture_git_output(
+                &self.git_program,
+                repository_path,
+                ["diff", "--cached", "--name-only", "-z"],
+                2 * 1024 * 1024,
+            )
+            .await
+            .map(|paths| !paths.is_empty())
+            .map_err(|_| WorkflowError::GitFailed)
         })
     }
 }
@@ -1434,31 +1403,6 @@ impl RemotePreflightReadPort for GitCommandService {
         repository_path: &'a Path,
     ) -> RemotePreflightFuture<'a, WorkflowState> {
         Box::pin(async move { GitReadPort::read_worktree_state(self, repository_path).await })
-    }
-
-    fn is_am_rebase<'a>(&'a self, repository_path: &'a Path) -> RemotePreflightFuture<'a, bool> {
-        Box::pin(async move {
-            let output = capture_git_output(
-                &self.git_program,
-                repository_path,
-                ["rev-parse", "--git-path", "rebase-apply"],
-                4096,
-            )
-            .await
-            .map_err(|_| WorkflowError::GitFailed)?;
-            let path = std::str::from_utf8(&output).map_err(|_| WorkflowError::GitFailed)?;
-            let path = PathBuf::from(path.trim());
-            let path = if path.is_absolute() {
-                path
-            } else {
-                repository_path.join(path)
-            };
-            match tokio::fs::metadata(path).await {
-                Ok(metadata) => Ok(metadata.is_dir()),
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-                Err(_) => Err(WorkflowError::GitFailed),
-            }
-        })
     }
 
     fn read_pull_state<'a>(

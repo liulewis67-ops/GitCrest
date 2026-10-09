@@ -18,7 +18,9 @@ use crate::{
     },
     ports::branches::BranchGitPort,
     ports::git::RepositoryGitPort,
-    ports::remotes::{RemoteCommandPort, RemoteGitPort, RemotePreflightReadPort},
+    ports::remotes::{
+        RemoteCommandPort, RemoteGitPort, RemotePreflightReadPort, RemotePullRecoveryPort,
+    },
     ports::tags::TagGitPort,
     refresh,
     state::{AppState, EventBus},
@@ -84,6 +86,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     );
     let git_commands = GitCommandService::default();
     let remote_preflight_read: Arc<dyn RemotePreflightReadPort> = Arc::new(git_commands.clone());
+    let remote_pull_recovery: Arc<dyn RemotePullRecoveryPort> = Arc::new(git_commands.clone());
     let remote_commands: Arc<dyn RemoteCommandPort> = Arc::new(git_commands.clone());
     let tag_git: Arc<dyn TagGitPort> = Arc::new(GitTagAdapter);
     let branch_git: Arc<dyn BranchGitPort> = Arc::new(GitBranchAdapter);
@@ -121,6 +124,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         remote_git,
         remote_commands,
         remote_preflight_read,
+        remote_pull_recovery,
         clones,
         credentials: credentials::CredentialManager::system(),
         ai_credentials: credentials::AiCredentialManager::system(),

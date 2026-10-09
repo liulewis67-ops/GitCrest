@@ -140,6 +140,7 @@ pub(super) async fn pull_repository(
     let path = target.repository_path;
     let operation_command = RemotePullCommand::from(&preflight);
     let git_reader = state.remote_preflight_read.clone();
+    let recovery = state.remote_pull_recovery.clone();
     let branch_git = state.branch_git.clone();
     let remote_git = state.remote_git.clone();
     let task_repo_id = repo_id.clone();
@@ -183,10 +184,23 @@ pub(super) async fn pull_repository(
                             .into(),
                     ));
                 }
-                command
-                    .pull(&path, operation_command, strategy, git_reader, context)
+                match command
+                    .pull(&path, operation_command.clone(), strategy, context)
                     .await
-                    .map(|()| None)
+                {
+                    Err(TaskFailure::Cancelled) => {
+                        super::recovery::reconcile_cancelled_pull(
+                            &path,
+                            &operation_command,
+                            strategy,
+                            git_reader.as_ref(),
+                            recovery.as_ref(),
+                        )
+                        .await
+                    }
+                    result => result,
+                }
+                .map(|()| None)
             },
         )
         .await

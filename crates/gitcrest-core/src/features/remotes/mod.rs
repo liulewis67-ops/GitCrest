@@ -2,6 +2,7 @@ mod dto;
 mod handlers;
 pub(crate) mod pull;
 pub(crate) mod push;
+pub(crate) mod recovery;
 pub(crate) mod routes;
 mod service;
 

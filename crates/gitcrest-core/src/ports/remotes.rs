@@ -91,8 +91,6 @@ pub(crate) trait RemotePreflightReadPort: Send + Sync {
         repository_path: &'a Path,
     ) -> RemotePreflightFuture<'a, WorkflowState>;
 
-    fn is_am_rebase<'a>(&'a self, repository_path: &'a Path) -> RemotePreflightFuture<'a, bool>;
-
     fn read_pull_state<'a>(
         &'a self,
         repository_path: &'a Path,
@@ -101,6 +99,59 @@ pub(crate) trait RemotePreflightReadPort: Send + Sync {
 }
 
 pub(crate) type RemotePreflightFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, WorkflowError>> + Send + 'a>>;
+
+pub(crate) trait RemotePullRecoveryPort: Send + Sync {
+    fn is_am_rebase<'a>(&'a self, repository_path: &'a Path) -> RemotePullRecoveryFuture<'a, bool>;
+
+    fn abort_rebase<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        am_rebase: bool,
+    ) -> RemotePullRecoveryFuture<'a, ()>;
+
+    fn read_branch_oid<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        branch: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, String>;
+
+    fn read_current_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePullRecoveryFuture<'a, String>;
+
+    fn switch_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        branch: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, ()>;
+
+    fn read_index_tree<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePullRecoveryFuture<'a, String>;
+
+    fn read_merge_tree<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_oid: &'a str,
+        tracking_oid: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, String>;
+
+    fn reset_merge<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_oid: &'a str,
+    ) -> RemotePullRecoveryFuture<'a, ()>;
+
+    fn has_staged_changes<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePullRecoveryFuture<'a, bool>;
+}
+
+pub(crate) type RemotePullRecoveryFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, WorkflowError>> + Send + 'a>>;
 
 pub(crate) trait RemoteCommandPort: Send + Sync {
@@ -130,7 +181,6 @@ pub(crate) trait RemoteCommandPort: Send + Sync {
         repository_path: &'a Path,
         command: RemotePullCommand,
         strategy: RemotePullStrategy,
-        preflight_read: std::sync::Arc<dyn RemotePreflightReadPort>,
         task: TaskContext,
     ) -> RemoteCommandFuture<'a>;
 

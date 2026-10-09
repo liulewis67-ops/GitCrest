@@ -18,7 +18,9 @@ use crate::{
     ports::branch_favorites::BranchFavoriteStorePort,
     ports::branches::BranchGitPort,
     ports::history::HistorySearchIndexPort,
-    ports::remotes::{RemoteCommandPort, RemoteGitPort, RemotePreflightReadPort},
+    ports::remotes::{
+        RemoteCommandPort, RemoteGitPort, RemotePreflightReadPort, RemotePullRecoveryPort,
+    },
     ports::settings::AiProviderSettingsPort,
     ports::shelves::ShelfStorePort,
     ports::tags::TagGitPort,
@@ -36,6 +38,7 @@ pub(crate) struct AppState {
     pub(crate) remote_git: Arc<dyn RemoteGitPort>,
     pub(crate) remote_commands: Arc<dyn RemoteCommandPort>,
     pub(crate) remote_preflight_read: Arc<dyn RemotePreflightReadPort>,
+    pub(crate) remote_pull_recovery: Arc<dyn RemotePullRecoveryPort>,
     pub(crate) ai_provider_settings: Arc<dyn AiProviderSettingsPort>,
     pub(crate) history_search_index: Arc<dyn HistorySearchIndexPort>,
     pub(crate) shelf_store: Arc<dyn ShelfStorePort>,
