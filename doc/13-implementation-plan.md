@@ -3334,3 +3334,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/git/repository.rs`、`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：staging 与最终 `.git` 安装之间若外部 Git 进程同时初始化同一目录，仍存在跨进程并发窗口；macOS/Linux runner 尚未复测；S7.5 保持进行中。
 - 完成 commit：`73dd418`
+
+### Git init 元数据安装禁止覆盖 — 小阶段 293
+- 状态：已完成（staging `.git` 通过操作系统的不覆盖目录重命名安装，消除最终检查到安装之间的替换窗口）
+- 日期：2026-10-09
+- 交付：Windows 使用 `MoveFileW`（目标存在时失败），Unix 使用 `renameat2(RENAME_NOREPLACE)` 接口；安装失败沿用稳定的仓库已存在错误。新增竞态回归测试：模拟最后一次检查后竞争进程创建 `.git`，确认竞争仓库与 staging 元数据均完整保留。应用范围限定在 Windows 与 Unix；其他平台明确返回 unsupported。
+- 验证：定向竞态 Rust 测试通过；Rust 全量测试（136/136）、`cargo fmt --check`、Clippy 通过；Windows release 与 debug sidecar 构建通过；`pnpm build` 通过；Windows 完整 `pnpm test:e2e` 通过（6 files、24 tests）；`git diff --check` 通过。Linux 目标交叉检查因环境缺少 `x86_64-linux-gnu-gcc`，在 `libz-sys` 原生依赖构建阶段失败，未完成 Linux crate 级验证。
+- 手工验证：未执行 GUI 手工操作；Windows 单元测试直接验证竞态目标不能被替换，E2E 验证正常初始化路径。
+- 证据：`crates/gitcrest-core/src/git/repository.rs`；实现 commit：`bcc5b83`。
+- 限制/后续：Unix/macOS 尚未在原生 runner 复测；Windows race 与完整初始化路径已在本机验证；S7.5 仍保持进行中。
+- 完成 commit：`bcc5b83`
