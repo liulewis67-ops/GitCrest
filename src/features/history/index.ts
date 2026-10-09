@@ -3,3 +3,4 @@ export const loadCommitDetails = () => import("./CommitGraph").then(({ CommitDet
 export { useHistoryViewRequests, type CommitTagRequest, type HistorySearchFocusRequest } from "./model/use-history-view-requests";
 export { useRepositoryHistory } from "./model/use-repository-history";
 export { useRepositoryCommitDetail } from "./model/use-repository-commit-detail";
+export { useCommitTagCreation } from "./model/use-commit-tag-creation";
