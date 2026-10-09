@@ -3274,3 +3274,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`。
 - 限制/后续：初始化目录权限不足和部分失败后的恢复仍未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
 - 完成 commit：`f547937`
+
+### P0 打开非 Git 目录错误反馈 E2E — 小阶段 287
+- 状态：已完成（所选目录非 Git 工作树时展示明确错误并留在欢迎页）
+- 日期：2026-10-09
+- 交付：新增隔离 Electron E2E，从欢迎页打开仅含普通文本文件的目录，验证显示 `The selected folder is not a Git working tree.` 且未切入工作区；更新 `08-development-readiness.md` 打开仓库场景映射。
+- 验证：错误场景定向 E2E、`pnpm build`、完整 `pnpm test:e2e`（6 files、21 tests）、`git diff --check` 通过。
+- 手工验证：未执行 GUI 手工操作；Playwright 覆盖 native folder picker 桥接与 API 错误反馈。
+- 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：路径不存在、权限不足及初始化写入失败尚未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
+- 完成 commit：待提交
