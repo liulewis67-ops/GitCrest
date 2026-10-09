@@ -6,11 +6,10 @@ mod features;
 mod domain;
 mod git;
 mod ports;
+mod refresh;
 mod state;
 #[path = "storage/storage.rs"]
 mod storage;
-#[path = "refresh/watcher.rs"]
-mod watcher;
 
 use features::tasks::{TaskFailure, TaskSnapshot};
 use git::command::{BranchCommand, GitOperation, RemoteCommand};

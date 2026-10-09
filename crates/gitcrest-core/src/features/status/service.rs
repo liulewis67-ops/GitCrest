@@ -1,6 +1,7 @@
-use super::{scope, StatusSnapshotCache};
+use super::scope;
 use crate::domain::{error::RepositoryError, status::StatusSnapshot};
 use crate::ports::{repository::RepositoryPathPort, status::StatusReadPort};
+use crate::refresh::snapshots::StatusSnapshotCache;
 #[cfg(test)]
 use crate::{features::repositories::RepositoryManager, git::command::GitCommandService};
 

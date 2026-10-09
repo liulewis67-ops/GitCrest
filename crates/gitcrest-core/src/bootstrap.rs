@@ -13,8 +13,8 @@ use crate::{
         tasks::TaskService,
     },
     git::command::GitCommandService,
+    refresh,
     state::{AppState, EventBus},
-    watcher,
 };
 
 #[derive(Serialize)]
@@ -73,7 +73,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "Could not recover background task history")?;
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
     let events = EventBus::default();
-    tokio::spawn(watcher::run(
+    tokio::spawn(refresh::run(
         repositories.clone(),
         status.clone(),
         events.clone(),
