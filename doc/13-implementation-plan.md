@@ -2480,3 +2480,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段未将服务响应改为领域对象与 DTO 转换；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/history/service/commit_detail.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
 - 实施 commit：`b08ae2f`
+
+### history feature commit page 查询与筛选拆分 — 小阶段 207
+- 状态：已完成（历史分页读取与筛选规则已归入独立子模块）
+- 日期：2026-10-09
+- 交付：新增 `features/history/service/commit_history.rs`，承载历史分页查询、过滤参数校验、日期校验及正则转义；search index 子模块显式依赖该查询模块作为缓存未命中回退，handler 继续使用原有 indexed query 入口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、history service 定向测试（4 passed）及 `git diff --check` 通过。
+- 限制/后续：提交分页仍使用现有 Git 命令执行适配；service 响应模型归属和 DTO 转换仍需继续按规范梳理。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/history/service/commit_history.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
+- 实施 commit：`c200e25`
