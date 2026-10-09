@@ -18,7 +18,7 @@ import { loadDiscardChangesDialog } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
 import { loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
-import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useOpenConflictWindow, useWorkflowRecovery, type WorkflowAction } from "../features/workflows";
+import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
 
@@ -69,7 +69,6 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
   const { shortcuts, setShortcuts } = useShortcutPreferences();
-  const [workflowDialog, setWorkflowDialog] = useState<{ repoId: string; targetOid: string; action: WorkflowAction }>();
   const [rebaseDialogOpen, setRebaseDialogOpen] = useState(false);
   const [resetDialogOpen, setResetDialogOpen] = useState(false);
   const [remoteBranchDeleteTarget, setRemoteBranchDeleteTarget] = useState<string>();
@@ -153,6 +152,11 @@ function App() {
     appendTask,
     cancel: cancelTask,
   } = useTaskCenter(() => apiRef.current);
+  const workflowDialog = useWorkflowDialogSession({
+    appendTask: prependTask,
+    setTaskError: setTasksError,
+    openTaskCenter: () => setTasksOpen(true),
+  });
   const recoverWorkflow = useWorkflowRecovery({
     getApi: () => apiRef.current,
     setActionId: setTaskActionId,
@@ -521,10 +525,7 @@ function App() {
   }
 
   async function startWorkflowTask(task: TaskSnapshotResponse) {
-    prependTask(task);
-    setWorkflowDialog(undefined);
-    setTasksError("");
-    setTasksOpen(true);
+    workflowDialog.startTask(task);
   }
 
   function fetchFromPushDialog() {
@@ -787,7 +788,7 @@ function App() {
       setHistorySearchFocusRequest((request) => ({ repoId, sequence: (request?.sequence || 0) + 1 }));
     },
     openShelfComposer: () => setShelfComposerRequest((request) => request + 1),
-    cherryPick: (repoId, targetOid) => setWorkflowDialog({ repoId, targetOid, action: "cherryPick" }),
+    cherryPick: (repoId, targetOid) => workflowDialog.open(repoId, targetOid, "cherryPick"),
     createTag: (repoId, oid) => {
       changeWorkspaceMode("graph");
       setTagEditorRequest((request) => ({ repoId, oid, sequence: (request?.sequence || 0) + 1 }));
@@ -1025,7 +1026,7 @@ function App() {
               onOpenFile={openCommitFileDiff}
               onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
               onTagRequestHandled={(sequence) => setTagEditorRequest((request) => request?.sequence === sequence ? undefined : request)}
-              onWorkflow={(action, oid) => { if (selectedRepository) setWorkflowDialog({ repoId: selectedRepository.repoId, targetOid: oid, action }); }}
+              onWorkflow={(action, oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, action); }}
             />}
           </div>
 
@@ -1155,7 +1156,7 @@ function App() {
         if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
       }} />}
       {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={() => setDiscardSelection(undefined)} onConfirm={() => void discardSelectedChanges()} />}
-      {workflowDialog && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.repoId} targetOid={workflowDialog.targetOid} action={workflowDialog.action} onClose={() => setWorkflowDialog(undefined)} onStarted={(task) => void startWorkflowTask(task)} />}
+      {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} onClose={workflowDialog.close} onStarted={(task) => void startWorkflowTask(task)} />}
       {rebaseDialogOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRebaseDialogOpen(false)} onStarted={(task) => { setRebaseDialogOpen(false); void startWorkflowTask(task); }} />}
       {resetDialogOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setResetDialogOpen(false)} onStarted={(task) => { setResetDialogOpen(false); void startWorkflowTask(task); }} />}
       {remoteBranchDeleteTarget && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDeleteTarget} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRemoteBranchDeleteTarget(undefined)} onStarted={(task) => { setRemoteBranchDeleteTarget(undefined); void startWorkflowTask(task); }} />}
