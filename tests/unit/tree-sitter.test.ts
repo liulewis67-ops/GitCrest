@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseDiffHunkSyntax } from "../../src/features/diff/tree-sitter";
+import { parseDiffHunkSyntax } from "../../src/features/diff/model/tree-sitter";
 
 describe("parseDiffHunkSyntax", () => {
   it("selects a plain-text fallback for grammars outside the bundled parser set", async () => {

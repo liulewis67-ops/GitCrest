@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { monacoLanguageForPath } from "../../src/features/diff/monaco-language";
+import { monacoLanguageForPath } from "../../src/features/diff/model/monaco-language";
 
 describe("monacoLanguageForPath", () => {
   it("recognizes common source paths regardless of directory separators or case", () => {

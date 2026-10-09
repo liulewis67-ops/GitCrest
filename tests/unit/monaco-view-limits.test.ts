@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DiffDocumentResponse } from "../../src/api/client";
-import { exceedsMonacoViewLimits } from "../../src/features/diff/monaco-view-limits";
+import { exceedsMonacoViewLimits } from "../../src/features/diff/model/monaco-view-limits";
 
 const hunk: DiffDocumentResponse["hunks"][number] = {
   oldStart: 1,

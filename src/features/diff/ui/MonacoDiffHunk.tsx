@@ -1,6 +1,6 @@
 import { DiffEditor } from "@monaco-editor/react";
 import { useEffect, useState } from "react";
-import { parseDiffHunkSyntax } from "../tree-sitter";
+import { parseDiffHunkSyntax } from "../model/tree-sitter";
 
 const LANGUAGE_LOADERS: Record<string, () => Promise<unknown>> = {
   javascript: () => import("../../../../node_modules/monaco-editor/esm/vs/languages/definitions/javascript/register.js"),

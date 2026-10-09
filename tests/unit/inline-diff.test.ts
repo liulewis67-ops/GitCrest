@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { splitInlineDiff } from "../../src/features/diff/inline-diff";
+import { splitInlineDiff } from "../../src/features/diff/model/inline-diff";
 
 describe("splitInlineDiff", () => {
   it("marks only changed word tokens and preserves matching prefix and suffix", () => {

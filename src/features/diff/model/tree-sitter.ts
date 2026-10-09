@@ -1,9 +1,9 @@
 import { Language, Parser } from "@willbooster/web-tree-sitter";
-import javascriptGrammarUrl from "../../../node_modules/@willbooster/tree-sitter-javascript/tree-sitter-javascript.wasm?url";
-import rustGrammarUrl from "../../../node_modules/@willbooster/tree-sitter-rust/tree-sitter-rust.wasm?url";
-import tsxGrammarUrl from "../../../node_modules/@willbooster/tree-sitter-typescript/tree-sitter-tsx.wasm?url";
-import typescriptGrammarUrl from "../../../node_modules/@willbooster/tree-sitter-typescript/tree-sitter-typescript.wasm?url";
-import runtimeWasmUrl from "../../../node_modules/@willbooster/web-tree-sitter/web-tree-sitter.wasm?url";
+import javascriptGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-javascript/tree-sitter-javascript.wasm?url";
+import rustGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-rust/tree-sitter-rust.wasm?url";
+import tsxGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-typescript/tree-sitter-tsx.wasm?url";
+import typescriptGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-typescript/tree-sitter-typescript.wasm?url";
+import runtimeWasmUrl from "../../../../node_modules/@willbooster/web-tree-sitter/web-tree-sitter.wasm?url";
 
 export type TreeSitterGrammar = "javascript" | "rust" | "tsx" | "typescript";
 

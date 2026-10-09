@@ -1,4 +1,4 @@
-import type { DiffDocumentResponse } from "../../api/client";
+import type { DiffDocumentResponse } from "../../../api/client";
 
 const MAX_MONACO_HUNKS = 50;
 const MAX_MONACO_TEXT_UNITS = 1_000_000;

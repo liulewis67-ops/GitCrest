@@ -4714,3 +4714,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/events/publisher.rs`、`crates/gitcrest-core/src/events/envelope.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：`state.rs` 仍是 AppState 依赖组装容器；事件模块目前已按规范包含 routes、envelope 和 publisher。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将 Diff 内部逻辑收纳到 model — 小阶段 433
+- 状态：已完成（inline diff、Monaco 配置/限制与 tree-sitter 解析器位于 `features/diff/model/`）
+- 日期：2026-10-10
+- 交付：将 Diff feature 根目录的四个纯逻辑/编辑器适配模块移入 `model/`，更新 SplitDiff、MonacoDiffHunk 和现有单元测试的导入路径，并按新模块深度调整 tree-sitter WASM 静态资源引用。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit` 和 `pnpm exec vite build --outDir E:\gitcrest-stage433-vite --emptyOutDir` 通过；构建在新输出目录生成 JS 和 tree-sitter WASM 资源。未新增或运行测试。
+- 手工验证：源码及现有测试引用均解析到 `features/diff/model/`，原 feature 根目录不再保留四个工具模块；变更仅调整归属/导入，不改变 diff 算法和解析代码。
+- 证据：`src/features/diff/model/inline-diff.ts`、`src/features/diff/model/monaco-language.ts`、`src/features/diff/model/monaco-view-limits.ts`、`src/features/diff/model/tree-sitter.ts`、相关 UI 与测试导入、`doc/15-frontend-development-guidelines.md` 第 3 节。
+- 限制/后续：测试 TypeScript 检查另发现两个 Settings 偏好测试仍引用阶段 417 前的旧路径，将在独立修复阶段处理；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段目录整理与台账同一 commit（SHA 可在后续台账更新中补记）。
