@@ -70,17 +70,17 @@ export function SettingsDialog({
   }
 
   useEffect(() => {
-    let current = true;
-    void api.getAiSettings().then((value) => {
-      if (!current) return;
+    const controller = new AbortController();
+    void api.withSignal(controller.signal).getAiSettings().then((value) => {
+      if (controller.signal.aborted) return;
       setSettings(value);
       setProvider(value.provider);
       setBaseUrl(value.baseUrl);
       setModel(value.model);
     }).catch((reason: unknown) => {
-      if (current) setError(reason instanceof Error ? reason.message : "Settings could not be loaded.");
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Settings could not be loaded.");
     });
-    return () => { current = false; };
+    return () => controller.abort();
   }, [api]);
 
   function changeProvider(next: AiSettingsResponse["provider"]) {

@@ -22,9 +22,9 @@ function deferred<T>() {
 }
 
 it("moves focus into settings, traps Tab, and restores the opener on close", async () => {
-  const api = {
+  const api = cancellableApi({
     getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
-  } as unknown as GitCrestApiClient;
+  });
   function Harness() {
     const [open, setOpen] = useState(false);
     return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsDialog api={api} onClose={() => setOpen(false)} />}</>;
@@ -50,10 +50,29 @@ it("moves focus into settings, traps Tab, and restores the opener on close", asy
   await waitFor(() => expect(document.activeElement).toBe(opener));
 });
 
+it("aborts AI settings loading when the settings dialog closes", async () => {
+  const pending = deferred<Awaited<ReturnType<GitCrestApiClient["getAiSettings"]>>>();
+  const signals: AbortSignal[] = [];
+  const api = cancellableApi({ getAiSettings: vi.fn(() => pending.promise) }, signals);
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsDialog api={api} onClose={() => setOpen(false)} />}</>;
+  }
+  render(<Harness />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  const dialog = await screen.findByRole("dialog", { name: "Settings" });
+  await waitFor(() => expect(signals).toHaveLength(1));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Close settings" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
+  expect(signals[0]?.aborted).toBe(true);
+  await act(async () => pending.resolve({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }));
+});
+
 it("records a replacement shortcut and rejects an existing assignment", async () => {
-  const api = {
+  const api = cancellableApi({
     getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
-  } as unknown as GitCrestApiClient;
+  });
   const onShortcutsChange = vi.fn();
   render(<SettingsDialog api={api} onClose={vi.fn()} onShortcutsChange={onShortcutsChange} />);
 
@@ -68,11 +87,11 @@ it("records a replacement shortcut and rejects an existing assignment", async ()
 });
 
 it("saves provider configuration without sending a model request", async () => {
-  const api = {
+  const api = cancellableApi({
     getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
     setAiSettings: vi.fn().mockResolvedValue({ provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false }),
     setAiCredential: vi.fn(), deleteAiCredential: vi.fn(),
-  } as unknown as GitCrestApiClient;
+  });
   render(<SettingsDialog api={api} onClose={vi.fn()} />);
   await screen.findByRole("combobox", { name: "AI provider" });
   fireEvent.change(screen.getByRole("combobox", { name: "AI provider" }), { target: { value: "ollama" } });
@@ -84,12 +103,12 @@ it("saves provider configuration without sending a model request", async () => {
 });
 
 it("submits cloud keys through the credential API and clears the field", async () => {
-  const api = {
+  const api = cancellableApi({
     getAiSettings: vi.fn().mockResolvedValue({ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: false }),
     setAiSettings: vi.fn(),
     setAiCredential: vi.fn().mockResolvedValue({ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true }),
     deleteAiCredential: vi.fn(),
-  } as unknown as GitCrestApiClient;
+  });
   render(<SettingsDialog api={api} onClose={vi.fn()} />);
   const keyInput = await screen.findByLabelText("Cloud API key");
   fireEvent.change(keyInput, { target: { value: "private-test-key" } });
