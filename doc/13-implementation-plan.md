@@ -4165,3 +4165,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-gpu-info-default-stage376-20261010.json`、`doc/evidence/S7.2/desktop-win32-gpu-info-disabled-stage376-20261010.json`。
 - 限制/后续：硬件 GPU 确实启用，但 Electron/viz 的 BeginFrame cadence 与 DWM 60Hz 仍不一致；禁用 GPU 使 presented-frame 更慢，因此不修改产品启动参数。继续检查 Windows/Electron VSync 与 compositor 源头。S7.2、S7.4、S7.5 验收仍未完成。
 - 证据 commit：`ed82cdc`。
+
+### S7.2 单独评估 Chromium GPU VSync 旁路 — 小阶段 377
+- 状态：已完成（否决 `--disable-gpu-vsync`；默认帧调度未修改）
+- 日期：2026-10-10
+- 交付：为发行版帧诊断增加仅供 benchmark 使用的 `GITCREST_BENCH_DISABLE_GPU_VSYNC=1`，追加 `--disable-gpu-vsync`，并拒绝与 `--disable-gpu` / `--in-process-gpu` 同时使用。该开关只改变诊断启动参数，不进入产品配置。Chromium 将其定义为停止 GPU 与垂直消隐同步的开关；禁用同步可能导致快速更新时画面撕裂。[Chromium switch 定义](https://chromium.googlesource.com/chromium/src/+/a3dd2655825cabc1536ae4ca87a8d54eeff3ba6b/ui/gl/gl_switches.cc)。
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs`、报告 JSON 解析和 `git diff --check` 通过。相同 100k fixture 的两轮 10 秒 `--disable-gpu-vsync` 滚动，RAF P5 均约 55.25fps，presented P5 分别为 46.13fps（详细 trace）和 46.38fps（`viz` 常规 trace）；详细 trace 中 `DisplayScheduler::BeginFrame` 中位间隔仍为 17.759ms。候选没有恢复 60Hz cadence，呈现结果低于默认配置约 55.3fps。
+- 手工验证：未操作 GUI；分别运行详细 trace 和常规 presented-frame 诊断，均复用同一 100k fixture。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-no-gpu-vsync-stage377-20261010.json`、`doc/evidence/S7.2/desktop-win32-no-gpu-vsync-viz-stage377-20261010.json`。
+- 限制/后续：该诊断否决了 GPU VSync 旁路作为当前帧率修复；下一步检查 Electron/Chromium 是否为窗口获得了错误的 BeginFrame source 或刷新率信息，维持默认 VSync 与 GPU 配置。S7.2、S7.4、S7.5 仍待验收。
+- 证据 commit：`a7d941c`。
