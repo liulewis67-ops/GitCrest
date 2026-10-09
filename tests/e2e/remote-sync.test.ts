@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import { createServer as createHttpsServer } from "node:https";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
@@ -356,6 +357,116 @@ describe("remote sync E2E", () => {
       app = undefined;
       await fixture.cleanup();
       await rm(remoteRoot, { recursive: true, force: true });
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("opens the remote credential manager after an authentication-failed fetch", async () => {
+    const fixture = await createTempGitRepository();
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-fetch-auth-app-data-"));
+    const gitConfigPath = resolve(appDataPath, "gitconfig");
+    const keyPath = resolve(appDataPath, "localhost-key.pem");
+    const certificatePath = resolve(appDataPath, "localhost-cert.pem");
+    let server: ReturnType<typeof createHttpsServer> | undefined;
+    let app: ElectronApplication | undefined;
+    let serverListening = false;
+
+    try {
+      const gitExecPath = (await execFileAsync("git", ["--exec-path"])).stdout.trim();
+      const opensslPath = resolve(gitExecPath, "..", "..", "bin", "openssl.exe");
+      await execFileAsync(opensslPath, [
+        "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", keyPath,
+        "-out", certificatePath, "-days", "1", "-subj", "/CN=127.0.0.1",
+        "-addext", "subjectAltName=IP:127.0.0.1",
+      ]);
+      server = createHttpsServer({ key: await readFile(keyPath), cert: await readFile(certificatePath) }, (_request, response) => {
+        response.writeHead(401, {
+          "Content-Type": "text/plain",
+          "WWW-Authenticate": 'Basic realm="GitCrest E2E"',
+        });
+        response.end("authentication required\n");
+      });
+
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(resolve(fixture.path, "src/auth-recovery.ts"), "export const base = true;\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/auth-recovery.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add auth recovery fixture"]);
+      const baselineHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+
+      await new Promise<void>((resolveListen, rejectListen) => {
+        if (!server) throw new Error("Authentication fixture server was not created");
+        server.once("error", rejectListen);
+        server.listen(0, "127.0.0.1", resolveListen);
+      });
+      serverListening = true;
+      const address = server?.address();
+      if (!address || typeof address === "string") throw new Error("Authentication fixture did not bind a TCP port");
+      const remoteUrl = `https://127.0.0.1:${address.port}/repository.git`;
+      const credentialHost = `127.0.0.1:${address.port}`;
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", remoteUrl]);
+      await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
+
+      app = await electron.launch({
+        args: ["."],
+        env: {
+          ...process.env,
+          GIT_CONFIG_GLOBAL: gitConfigPath,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_SSL_CAINFO: certificatePath,
+          ELECTRON_RENDERER_URL: "",
+          GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite"),
+        },
+      });
+      const window = await app.firstWindow();
+      await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${connection.token}`,
+            "X-GitCrest-API-Version": "1",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return response.status;
+      }, fixture.path);
+      expect(opened).toBe(200);
+
+      await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      await window.locator(".repositoryRowOpen").click();
+      await window.locator(".workspaceCrumb").waitFor();
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Fetch", exact: true }).click();
+
+      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) }).last();
+      await fetchTask.waitFor({ state: "visible" });
+      await fetchTask.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
+      await fetchTask.getByText("authentication:", { exact: false }).waitFor();
+      await fetchTask.getByRole("button", { name: "Configure credentials" }).click();
+
+      const remoteDialog = window.getByRole("dialog", { name: "Manage remotes" });
+      await remoteDialog.getByRole("heading", { name: "HTTPS credentials" }).waitFor();
+      try {
+        await remoteDialog.getByRole("article", { name: `HTTPS credential for ${credentialHost}` }).waitFor({ timeout: 5_000 });
+      } catch {
+        throw new Error(`Expected the failed remote host credential card; credential section showed: ${await remoteDialog.locator(".credentialSection").innerText()}`);
+      }
+      await remoteDialog.getByRole("button", { name: "Retry fetch" }).waitFor();
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(baselineHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain"])).stdout.trim()).toBe("");
+    } finally {
+      await app?.close();
+      app = undefined;
+      const serverToClose = server;
+      if (serverListening && serverToClose) await new Promise<void>((resolveClose) => serverToClose.close(() => resolveClose()));
+      await fixture.cleanup();
       await rm(appDataPath, { recursive: true, force: true });
     }
   }, 60_000);

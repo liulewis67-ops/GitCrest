@@ -3344,3 +3344,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/git/repository.rs`；实现 commit：`bcc5b83`。
 - 限制/后续：Unix/macOS 尚未在原生 runner 复测；Windows race 与完整初始化路径已在本机验证；S7.5 仍保持进行中。
 - 完成 commit：`bcc5b83`
+
+### P0 Fetch 认证失败后凭据修复流程 E2E — 小阶段 294
+- 状态：已完成（真实 HTTPS 401 认证失败后，任务中心可打开仓库凭据管理器）
+- 日期：2026-10-09
+- 交付：新增隔离 Electron E2E，通过本机 HTTPS 服务器返回 Basic 401，验证 Fetch task 分类为 authentication、任务中心“Configure credentials”打开当前仓库的 HTTPS 凭据管理器并提供“Retry fetch”。使用临时自签名证书和独立 Git 配置；核对 HEAD 与工作树未变化，不写入或替换系统凭据。
+- 验证：认证恢复定向 E2E 通过；`pnpm build` 通过；Windows 完整 `pnpm test:e2e` 通过（6 files、25 tests）；`git diff --check` 通过。首次构建发现测试 finally 闭包中的可选 TLS server 类型未收窄，修正后重新构建通过。
+- 手工验证：未执行 GUI 手工操作；Playwright Electron E2E 覆盖真实 HTTPS 401、task 错误类别、主机凭据表单和安全状态不变。
+- 证据：`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：未保存真实凭据或执行修复后的成功 Fetch；验证目标是认证失败到凭据修复 UI 的路由及失败不改仓库状态。S7.5 仍保持进行中。
+- 完成 commit：随本条阶段记录提交。
