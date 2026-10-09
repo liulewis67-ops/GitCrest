@@ -2804,3 +2804,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/undo.rs`、`crates/gitcrest-core/src/storage/storage.rs`、staging/shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 3、4.1、4.2 节。
 - 限制/后续：storage 仅依赖 domain 模型与存储自身记录/映射；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`4d66050`
+
+### 暂存与 Shelve 操作语义迁入 domain 并由 Git adapter 生成命令 — 小阶段 240
+- 状态：已完成（feature 返回领域操作，Git adapter 负责 argv、stdin 和执行标签映射）
+- 日期：2026-10-09
+- 交付：新增 `domain::staging::StagingOperation` 与 `ShelfPatchAction`；staging/shelves service 不再构造携带 argv 的 `StagingCommand`，Shelve feature 不再依赖 staging feature 类型，Git command adapter 统一将语义操作映射为既有 Git 参数、patch 输入和任务标签。保留路径字面量保护、各 patch 参数次序、index/working tree scope 与错误处理行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 `git/`、`features/shelves/` 与 `domain/` 不再引用 `StagingCommand` 或 `features::staging`；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；adapter 中生成的参数与原实现一致，API 与持久化契约未改变。
+- 证据：`crates/gitcrest-core/src/domain/staging.rs`、`crates/gitcrest-core/src/features/staging/service.rs`、`crates/gitcrest-core/src/features/shelves/service.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、4.2 节。
+- 限制/后续：Git command adapter 目前仍包含全部暂存和 Shelve 操作映射；后续按 Git adapter 的 index/workflow 能力边界继续整理；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`8adba41`
