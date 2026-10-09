@@ -1,26 +1,14 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, UIEvent } from "react";
-import type { CommitDetailResponse, CommitHistoryFilters, GitCrestApiClient } from "../../api/client";
+import type { CommitHistoryFilters, GitCrestApiClient } from "../../api/client";
 import type { components } from "../../api/schema";
+import { useRepositoryCommitDetail } from "./model/use-repository-commit-detail";
 import { useRepositoryHistory } from "./model/use-repository-history";
 
 const ROW_HEIGHT = 52;
 const OVERSCAN = 8;
 const COMMIT_DATE_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 type CommitSummary = components["schemas"]["CommitSummary"];
-
-function isCommitDetail(value: unknown): value is CommitDetailResponse {
-  if (!value || typeof value !== "object") return false;
-  const detail = value as Partial<CommitDetailResponse>;
-  return typeof detail.oid === "string"
-    && Array.isArray(detail.parents)
-    && typeof detail.authorName === "string"
-    && typeof detail.authorEmail === "string"
-    && typeof detail.committedAtMs === "number"
-    && typeof detail.message === "string"
-    && Boolean(detail.stats && typeof detail.stats.filesChanged === "number" && typeof detail.stats.insertions === "number" && typeof detail.stats.deletions === "number")
-    && Array.isArray(detail.files);
-}
 
 type CommitGraphProps = {
   api: GitCrestApiClient;
@@ -288,7 +276,7 @@ export function CommitDetails({
   cherryPickShortcut?: string;
   onTagRequestHandled?: (sequence: number) => void;
 }) {
-  const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
+  const state = useRepositoryCommitDetail(api, repoId, oid);
   const [copyMessage, setCopyMessage] = useState("");
   const [tagEditorOpen, setTagEditorOpen] = useState(false);
   const [tagName, setTagName] = useState("");
@@ -296,22 +284,6 @@ export function CommitDetails({
   const [tagBusy, setTagBusy] = useState(false);
   const [tagStatus, setTagStatus] = useState("");
   const [tagError, setTagError] = useState("");
-  useEffect(() => {
-    let active = true;
-    if (!oid) {
-      setState({ loading: false });
-      return () => { active = false; };
-    }
-    setState({ oid, loading: true });
-    void api.getRepositoryCommit(repoId, oid).then((response) => {
-      if (!isCommitDetail(response)) throw new Error("Commit detail response was invalid.");
-      if (active) setState({ oid, detail: response, loading: false });
-    }).catch((reason: unknown) => {
-      if (active) setState({ oid, error: reason instanceof Error ? reason.message : "Could not read commit details.", loading: false });
-    });
-    return () => { active = false; };
-  }, [api, oid, repoId]);
-
   useEffect(() => {
     setTagEditorOpen(false);
     setTagName("");
