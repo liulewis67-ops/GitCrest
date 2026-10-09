@@ -2964,3 +2964,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/remotes.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：pull/push preflight 与执行仍各自有 Git 子进程逻辑；继续按操作能力迁移，随后补足运行时及故障场景验收；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`9867ff0`
+
+### Pull preflight 通过 Git ports 读取状态 — 小阶段 256
+- 状态：已完成（pull preflight 不再自行启动 Git 子进程或解析 status 输出）
+- 日期：2026-10-09
+- 交付：扩展 `RemoteGitPort` 读取本地分支 upstream、跟踪提交及 ahead/behind；pull preflight 通过该 port 和现有 `GitReadPort::read_worktree_state` 组装预检结果。Git 工作树状态、冲突及操作标记的解析归回 Git adapter；分支/远程名业务校验和 Pull API 响应模型仍由 remotes feature 负责。保留 2 MiB 输出上限、20 秒期限及 upstream 丢失错误语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 pull feature 生产代码不再运行 Git 命令；未运行 Rust 测试。
+- 手工验证：未执行有/无 upstream、upstream 丢失、分叉计数、脏文件、冲突和操作标记等 pull preflight 场景；运行时行为尚未手工复核。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/remotes.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/git/status.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：push preflight 仍在 feature 中直接运行 Git 子进程；pull/push 实际写操作仍由 GitCommandService 协调；继续迁移并验证远程操作行为，S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`a83ae28`
