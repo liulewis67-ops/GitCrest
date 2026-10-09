@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use crate::{
-    events::envelope::EventEnvelope,
+    events::publisher::EventBus,
     features::{
         credentials,
         repositories::{
@@ -48,30 +48,4 @@ pub(crate) struct AppState {
     pub(crate) credentials: credentials::CredentialManager,
     pub(crate) ai_credentials: credentials::AiCredentialManager,
     pub(crate) events: EventBus,
-}
-
-#[derive(Clone)]
-pub(crate) struct EventBus(tokio::sync::broadcast::Sender<EventEnvelope>);
-
-impl Default for EventBus {
-    fn default() -> Self {
-        let (sender, _) = tokio::sync::broadcast::channel(512);
-        Self(sender)
-    }
-}
-
-impl EventBus {
-    pub(crate) fn subscribe(&self) -> tokio::sync::broadcast::Receiver<EventEnvelope> {
-        self.0.subscribe()
-    }
-
-    pub(crate) fn publish(
-        &self,
-        repo_id: Option<String>,
-        event_type: &str,
-        payload: serde_json::Value,
-    ) {
-        let event = EventEnvelope::new(repo_id, event_type, payload);
-        let _ = self.0.send(event);
-    }
 }

@@ -6,6 +6,7 @@ use tokio::net::TcpListener;
 use crate::{
     api::router::app_router,
     config::AppConfig,
+    events::publisher::EventBus,
     features::{
         credentials,
         repositories::{cloning::CloneService, repository::RepositoryManager},
@@ -23,7 +24,7 @@ use crate::{
     },
     ports::tags::TagGitPort,
     refresh,
-    state::{AppState, EventBus},
+    state::AppState,
     storage::RepositoryStore,
 };
 

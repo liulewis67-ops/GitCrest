@@ -12,9 +12,10 @@ mod refresh;
 mod state;
 mod storage;
 
+pub(crate) use events::publisher::EventBus;
 use execution::TaskFailure;
 use features::tasks::TaskSnapshot;
-use state::{AppState, EventBus};
+use state::AppState;
 
 #[cfg(test)]
 use axum::{http::StatusCode, response::IntoResponse};

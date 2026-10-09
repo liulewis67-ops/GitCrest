@@ -4704,3 +4704,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/events/envelope.rs`、`crates/gitcrest-core/src/events/routes.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 3、5 节。
 - 限制/后续：EventBus 广播实现仍位于 `state.rs`；发布/订阅队列机制是否独立为 `events/publisher.rs` 需先厘清 AppState 装配边界。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 拆分事件广播 publisher — 小阶段 432
+- 状态：已完成（EventBus 广播发布与订阅实现归入 `events/publisher.rs`）
+- 日期：2026-10-10
+- 交付：将 `EventBus`、默认广播 channel、订阅和 publish 操作从 `state.rs` 迁至 `events/publisher.rs`；AppState 持有 publisher，bootstrap 和 crate 内既有调用点改用新模块归属，并在 crate root 保留 `EventBus` 可见性供 watcher/tests 使用。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认广播 channel 容量仍为 512，subscribe 返回同种 broadcast receiver，publish 仍构造相同 envelope 并忽略无订阅者时的发送错误。
+- 证据：`crates/gitcrest-core/src/events/publisher.rs`、`crates/gitcrest-core/src/events/envelope.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：`state.rs` 仍是 AppState 依赖组装容器；事件模块目前已按规范包含 routes、envelope 和 publisher。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
