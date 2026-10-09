@@ -4505,3 +4505,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/shared/lib/git-object-id.ts`、`src/app/App.tsx`、`src/app/use-global-shortcuts.ts`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/pages/workspace/WorkspaceDetailsPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
 - 限制/后续：本阶段只统一完整对象 ID 纯校验，不改变调用方的仓库状态判断与 UI 行为；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### shared/lib 统一仓库路径显示名 — 小阶段 412
+- 状态：已完成（App、Welcome、分支切换与 Workspace 详情共用路径显示规则）
+- 日期：2026-10-10
+- 交付：新增 `src/shared/lib/repository-display-name.ts` 的 `getRepositoryDisplayName`，统一从仓库路径末段生成显示名；迁移 App、Welcome、BranchSwitcherDialog 与 WorkspaceDetailsPanel 的重复实现，保留原有尾部分隔符清理、Windows/Unix 分隔符兼容及空结果回退语义。
+- 验证：`pnpm exec tsc --noEmit`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir`、仓库内旧 `repositoryName` 标识搜索与 `git diff --check` 通过；Vite 输出到临时目录；未新增或运行测试。构建仅出现既有 web-tree-sitter `eval` 和 chunk 大小提示。
+- 手工验证：对比提取前后的路径截取表达式完全一致，并搜索确认原有局部函数全部删除。
+- 证据：`src/shared/lib/repository-display-name.ts`、`src/app/App.tsx`、`src/pages/welcome/WelcomePage.tsx`、`src/features/branches/ui/BranchSwitcherDialog.tsx`、`src/pages/workspace/WorkspaceDetailsPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
+- 限制/后续：只统一仓库路径的显示名派生，不调整路径解析或仓库身份逻辑；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

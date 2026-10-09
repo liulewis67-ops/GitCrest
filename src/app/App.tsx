@@ -10,6 +10,7 @@ import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShor
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
 import { isFullGitObjectId } from "../shared/lib/git-object-id";
+import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import type { CredentialEditorRenderer } from "../shared/ui/credential-editor-renderer";
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
@@ -43,10 +44,6 @@ const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench
 const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
 
 type Page = "welcome" | "workspace";
-
-function repositoryName(path: string): string {
-  return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
-}
 
 function App() {
   const isMacPlatform = navigator.platform.toLowerCase().includes("mac");
@@ -691,9 +688,9 @@ function App() {
             return (
               <div className={active ? "repositoryTab active" : "repositoryTab"} key={repoId}>
                 <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (!active) void repositoryOpening.openRecent(repository); }}>
-                  {repositoryName(repository.path)}
+                  {getRepositoryDisplayName(repository.path)}
                 </button>
-                <button type="button" className="closeRepositoryTab" aria-label={`Close ${repositoryName(repository.path)} tab`} title="Close tab" onClick={() => closeRepositoryTab(repoId)}>×</button>
+                <button type="button" className="closeRepositoryTab" aria-label={`Close ${getRepositoryDisplayName(repository.path)} tab`} title="Close tab" onClick={() => closeRepositoryTab(repoId)}>×</button>
               </div>
             );
           })}
@@ -941,7 +938,7 @@ function App() {
           >
             <h2 id="palette-title" className="srOnly">Command palette</h2>
             <div className="paletteSearch"><span aria-hidden="true">⌕</span><input autoFocus data-dialog-initial-focus aria-label="Search commands" placeholder="Search commands…" value={paletteQuery} onChange={(event) => setPaletteQuery(event.target.value)} /><kbd>ESC</kbd></div>
-          <div className="paletteContext">{page === "welcome" ? "WELCOME" : selectedRepository ? `WORKSPACE · ${repositoryName(selectedRepository.path).toUpperCase()}` : "WORKSPACE · NO REPOSITORY"}</div>
+          <div className="paletteContext">{page === "welcome" ? "WELCOME" : selectedRepository ? `WORKSPACE · ${getRepositoryDisplayName(selectedRepository.path).toUpperCase()}` : "WORKSPACE · NO REPOSITORY"}</div>
             <div className="commandList">
               {filteredCommands.map((command) => (
                 <button key={command.id} className="commandItem" type="button" disabled={!command.available} onClick={() => { command.run(); setPaletteOpen(false); }}>

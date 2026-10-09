@@ -4,6 +4,7 @@ import type { WorkflowAction } from "../../features/workflows";
 import { ariaShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadCommitDetails } from "../../features/history";
 import { isFullGitObjectId } from "../../shared/lib/git-object-id";
+import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 
 const CommitDetails = lazy(loadCommitDetails);
 
@@ -20,10 +21,6 @@ interface WorkspaceDetailsPanelProps {
   onOpenDiffWindow: (path: string, oid: string) => void;
   onTagRequestHandled: (sequence: number) => void;
   onWorkflow: (action: WorkflowAction, oid: string) => void;
-}
-
-function repositoryName(path: string): string {
-  return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
 }
 
 export function WorkspaceDetailsPanel({
@@ -54,7 +51,7 @@ export function WorkspaceDetailsPanel({
       {repository && isFullGitObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">Loading commit details…</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} /></Suspense> : repository ? (
         <div className="repositoryDetails">
           <span className="detailsGlyph" aria-hidden="true">G</span>
-          <h2>{repositoryName(repository.path)}</h2>
+          <h2>{getRepositoryDisplayName(repository.path)}</h2>
           <p>{repository.path}</p>
           <div className="repositoryFact"><span>BRANCH</span><strong>{repository.detached ? "Detached HEAD" : repository.branch || "Unborn"}</strong></div>
           <div className="repositoryFact"><span>{selectedCommit && selectedCommit !== repository.head ? "SELECTED COMMIT" : "HEAD"}</span><strong className="monoText">{selectedCommit?.slice(0, 12) || "No commits"}</strong></div>

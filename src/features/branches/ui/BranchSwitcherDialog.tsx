@@ -1,6 +1,7 @@
 import type { BranchSnapshotResponse, RepositoryResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/use-dialog-focus";
 import { useBranchSwitcher } from "../model/use-branch-switcher";
+import { getRepositoryDisplayName } from "../../../shared/lib/repository-display-name";
 
 interface BranchSwitcherDialogProps {
   repository?: RepositoryResponse;
@@ -16,10 +17,6 @@ interface BranchSwitcherDialogProps {
   shelveAriaShortcut: string;
   onCommitChanges: () => void;
   onShelveAndSwitch: () => void;
-}
-
-function repositoryName(path: string): string {
-  return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
 }
 
 export function BranchSwitcherDialog({
@@ -70,7 +67,7 @@ export function BranchSwitcherDialog({
       >
         <div className="dialogHeading">
           <div>
-            <span className="sectionEyebrow">BRANCHES · {repositoryName(repository.path)}</span>
+            <span className="sectionEyebrow">BRANCHES · {getRepositoryDisplayName(repository.path)}</span>
             <h2 id="branch-switcher-title">Switch branch</h2>
           </div>
           <button className="dialogClose" type="button" aria-label="Close branch switcher" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>×</button>
