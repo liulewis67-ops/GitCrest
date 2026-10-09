@@ -2713,4 +2713,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未运行 Electron 手工场景；构建完成并通过 TypeScript 检查。
 - 证据：`src/features/cloning/model/use-clone-submission.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：App 仍负责跨 feature 的仓库激活回调装配；Vite 构建仍提示 web-tree-sitter 使用 `eval` 和部分 bundle 超过 500 kB。
-- 完成 commit：待补记
+- 完成 commit：`e3e3b40`
