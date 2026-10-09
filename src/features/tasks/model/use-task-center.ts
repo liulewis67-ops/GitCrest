@@ -50,6 +50,16 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
     }
   }
 
+  async function copyLogs(task: TaskSnapshotResponse) {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
+      await navigator.clipboard.writeText(task.logs.join("\n"));
+      setError("");
+    } catch {
+      setError("Clipboard access is unavailable. Select and copy the task log text.");
+    }
+  }
+
   function prependTask(task: TaskSnapshotResponse) {
     setTasks((current) => [task, ...current.filter((item) => item.taskId !== task.taskId)]);
   }
@@ -66,6 +76,7 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
     setActionId,
     refresh,
     cancel,
+    copyLogs,
     prependTask,
     appendTask,
   };

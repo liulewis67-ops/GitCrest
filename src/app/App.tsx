@@ -146,6 +146,7 @@ function App() {
     prependTask,
     appendTask,
     cancel: cancelTask,
+    copyLogs: copyTaskLogs,
   } = useTaskCenter(() => apiRef.current);
   const workflowDialog = useWorkflowDialogSession({
     appendTask: prependTask,
@@ -555,15 +556,6 @@ function App() {
     }
     setTasksOpen(false);
     setCredentialManagerOpenRequest((current) => current + 1);
-  }
-
-  async function copyTaskLogs(task: TaskSnapshotResponse) {
-    try {
-      await navigator.clipboard.writeText(task.logs.join("\n"));
-      setTasksError("");
-    } catch {
-      setTasksError("Clipboard access is unavailable. Select and copy the task log text.");
-    }
   }
 
   function activateRepository(repository: RepositoryResponse) {
