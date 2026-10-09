@@ -3912,4 +3912,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；20 个隔离 sidecar/SQLite 冷搜索样本均返回期望的匹配提交；fixture 原有工作树修改状态运行前后不变。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-index-phases-stage350.json`。
 - 限制/后续：计时只代表此 Windows 主机与该 fixture；日志记录有毫秒粒度，写入和事务提交合计占主要耗时。冷搜索完整结果仍未达到 <200ms；下一小阶段应优化 SQLite 文档批量写入并再次按完整结果延迟复测。
-- 完成 commit：待提交
+- 完成 commit：`c6e733b perf: profile cold history index construction`
