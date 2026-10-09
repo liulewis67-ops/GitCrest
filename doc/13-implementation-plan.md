@@ -3394,3 +3394,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`、`tests/fixtures/authentication-server.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前系统凭据库闭环在 Windows Git 2.37.3 与 Windows Credential Manager 验证；macOS/Linux 系统凭据库闭环留待对应 runner。S7.5 仍保持进行中。
 - 完成 commit：`bb6fe6c`
+
+### P0 活动 Clone 取消与 partial 清理 E2E — 小阶段 299
+- 状态：已完成（活动 Clone 收到取消后任务终态正确，目标与 partial 目录均清理）
+- 日期：2026-10-09
+- 交付：认证 fixture 支持暂停已认证 HTTPS 请求；新增 Electron E2E 在 Git 请求挂起期间从 Task Center 取消 Clone，确认 task 为 running 后可取消并到达 cancelled，未创建最终目录或 `.gitcrest-clone-<task-id>.partial`。通过 UI 保存的临时凭据经 finally API 删除并确认不存在。
+- 验证：Clone 取消定向 E2E 通过；`pnpm build` 通过；Windows 完整 `pnpm test:e2e` 通过（6 files、29 tests）；`git diff --check` 通过。构建仅输出既有 web-tree-sitter `eval` 警告。
+- 手工验证：未执行 GUI 手工操作；Playwright 驱动本机 HTTPS/Git HTTP fixture、Git askpass 和 Windows Credential Manager。
+- 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：当前取消和凭据清理场景在 Windows 验证；macOS/Linux 系统凭据库与 Git 进程取消需在对应 runner 复测。S7.5 仍保持进行中。
+- 完成 commit：待提交

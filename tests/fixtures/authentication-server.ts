@@ -12,6 +12,8 @@ export interface AuthenticationFailureServer {
   host: string;
   remoteUrl: string;
   authenticatedRequestCount: () => number;
+  waitForAuthenticatedRequest: () => Promise<void>;
+  releaseAuthenticatedRequests: () => void;
   close: () => Promise<void>;
 }
 
@@ -19,6 +21,7 @@ export interface AuthenticationServerOptions {
   projectRoot?: string;
   username?: string;
   token?: string;
+  holdAuthenticatedRequests?: boolean;
 }
 
 export async function createAuthenticationFailureServer(
@@ -38,7 +41,15 @@ export async function createAuthenticationFailureServer(
 
   let port = 0;
   let authenticatedRequests = 0;
-  const server = createHttpsServer({ key: await readFile(keyPath), cert: await readFile(certificatePath) }, (request, response) => {
+  let announceAuthenticatedRequest: (() => void) | undefined;
+  const authenticatedRequestReceived = new Promise<void>((resolveRequest) => {
+    announceAuthenticatedRequest = resolveRequest;
+  });
+  let releaseHeldRequests: (() => void) | undefined;
+  const authenticatedRequestsReleased = new Promise<void>((resolveRequests) => {
+    releaseHeldRequests = resolveRequests;
+  });
+  const server = createHttpsServer({ key: await readFile(keyPath), cert: await readFile(certificatePath) }, async (request, response) => {
     const expectedAuthorization = options.username && options.token
       ? `Basic ${Buffer.from(`${options.username}:${options.token}`).toString("base64")}`
       : undefined;
@@ -52,6 +63,11 @@ export async function createAuthenticationFailureServer(
     }
 
     authenticatedRequests += 1;
+    announceAuthenticatedRequest?.();
+    if (options.holdAuthenticatedRequests) {
+      await authenticatedRequestsReleased;
+      if (response.destroyed) return;
+    }
     proxyGitHttpBackend(request, response, {
       executablePath: gitHttpBackendPath,
       executableDirectory: gitExecPath,
@@ -83,6 +99,8 @@ export async function createAuthenticationFailureServer(
     host,
     remoteUrl: `https://${host}/repository.git`,
     authenticatedRequestCount: () => authenticatedRequests,
+    waitForAuthenticatedRequest: () => authenticatedRequestReceived,
+    releaseAuthenticatedRequests: () => releaseHeldRequests?.(),
     close: () => new Promise<void>((resolveClose, rejectClose) => {
       server.close((error) => error ? rejectClose(error) : resolveClose());
     }),

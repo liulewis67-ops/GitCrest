@@ -513,3 +513,138 @@ it("clones successfully after saving credentials for an authentication-failed re
     await rm(appDataPath, { recursive: true, force: true });
   }
 }, 90_000);
+
+it("removes the partial destination when an active clone is cancelled", async () => {
+  const source = await createTempGitRepository();
+  const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-cancel-remote-"));
+  const bareRemotePath = resolve(remoteRoot, "repository.git");
+  const cloneParent = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-cancel-parent-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-cancel-app-data-"));
+  const gitConfigPath = resolve(appDataPath, "gitconfig");
+  const username = "gitcrest-clone-cancel-user";
+  const token = `clone-cancel-token-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const folderName = "cancelled-project";
+  let authenticationServer: AuthenticationFailureServer | undefined;
+  let app: ElectronApplication | undefined;
+  let credentialSaved = false;
+
+  const removeSavedCredential = async () => {
+    if (!credentialSaved || !app || !authenticationServer) return;
+    const removed = await (await app.firstWindow()).evaluate(async (host: string) => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      const headers = { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" };
+      const query = new URLSearchParams({ host });
+      const result = await fetch(new URL(`/api/v1/credentials?${query}`, connection.baseUrl), { method: "DELETE", headers });
+      const verify = await fetch(new URL(`/api/v1/credentials?${query}`, connection.baseUrl), { headers });
+      const status = await verify.json() as { isConfigured: boolean };
+      return result.status === 204 && !status.isConfigured;
+    }, authenticationServer.host);
+    if (!removed) throw new Error(`Could not remove temporary credential for ${authenticationServer.host}`);
+    credentialSaved = false;
+  };
+
+  try {
+    await mkdir(resolve(source.path, "src"), { recursive: true });
+    await writeFile(resolve(source.path, "src/clone-cancel.ts"), "export const cloneCancel = true;\n");
+    await execFileAsync("git", ["-C", source.path, "add", "src/clone-cancel.ts"]);
+    await execFileAsync("git", ["-C", source.path, "commit", "--quiet", "-m", "clone cancellation fixture"]);
+    await execFileAsync("git", ["init", "--bare", "--quiet", "--initial-branch=main", bareRemotePath]);
+    await execFileAsync("git", ["-C", source.path, "push", "--quiet", bareRemotePath, "HEAD:refs/heads/main"]);
+    authenticationServer = await createAuthenticationFailureServer(appDataPath, {
+      projectRoot: remoteRoot,
+      username,
+      token,
+      holdAuthenticatedRequests: true,
+    });
+    await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
+
+    app = await electron.launch({
+      args: ["."],
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: gitConfigPath,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_SSL_CAINFO: authenticationServer.certificatePath,
+        ELECTRON_RENDERER_URL: "",
+        GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite"),
+      },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await app.evaluate(({ dialog }, destination) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
+    }, cloneParent);
+
+    await window.getByRole("button", { name: "Clone repository", exact: true }).click();
+    const cloneDialog = window.getByRole("dialog", { name: "Clone repository" });
+    await cloneDialog.getByRole("textbox", { name: "Remote URL" }).fill(authenticationServer.remoteUrl);
+    await cloneDialog.getByRole("button", { name: "Choose folder" }).click();
+    await cloneDialog.getByText(cloneParent, { exact: true }).waitFor();
+    await cloneDialog.getByRole("textbox", { name: "Folder name" }).fill(folderName);
+    await cloneDialog.getByRole("button", { name: "Start clone" }).click();
+
+    const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+    const failedClone = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).last();
+    await failedClone.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
+    await failedClone.getByRole("button", { name: "Retry clone" }).click();
+    const retryDialog = window.getByRole("dialog", { name: "Clone repository" });
+    const credentialCard = retryDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
+    await credentialCard.getByLabel("Username").fill(username);
+    await credentialCard.getByLabel("Token or password").fill(token);
+    await credentialCard.getByRole("button", { name: "Save credential" }).click();
+    await credentialCard.getByText("Credential saved to the system credential store.").waitFor();
+    credentialSaved = true;
+    await retryDialog.getByRole("button", { name: "Start clone" }).click();
+
+    await authenticationServer.waitForAuthenticatedRequest();
+    expect(authenticationServer.authenticatedRequestCount()).toBeGreaterThan(0);
+    const cloneTaskId = await window.evaluate(async () => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+      });
+      const tasks = await response.json() as Array<{ taskId: string; operation: string }>;
+      const cloneTasks = tasks.filter((task) => task.operation === "clone");
+      const cloneTask = cloneTasks[cloneTasks.length - 1];
+      if (!cloneTask) throw new Error("The active clone task was not returned by the API.");
+      return cloneTask.taskId;
+    });
+    const cloneTaskStatus = await window.evaluate(async (taskId) => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+      });
+      const tasks = await response.json() as Array<{ taskId: string; status: string; logs: string[]; message: string | null }>;
+      return tasks.find((task) => task.taskId === taskId);
+    }, cloneTaskId);
+    expect(cloneTaskStatus, `clone task snapshot: ${JSON.stringify(cloneTaskStatus)}`).toBeDefined();
+    expect(cloneTaskStatus?.status, `clone task snapshot: ${JSON.stringify(cloneTaskStatus)}`).toBe("running");
+    await tasksDialog.getByRole("button", { name: "Refresh" }).click();
+    const activeClone = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).first();
+    await activeClone.getByText("running", { exact: true }).waitFor({ timeout: 10_000 });
+    await activeClone.getByRole("button", { name: "Cancel task" }).click();
+    await activeClone.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+    authenticationServer.releaseAuthenticatedRequests();
+
+    expect(await readdir(cloneParent)).not.toContain(folderName);
+    expect(await readdir(cloneParent)).not.toContain(`.gitcrest-clone-${cloneTaskId}.partial`);
+    expect(authenticationServer.authenticatedRequestCount()).toBe(1);
+    await removeSavedCredential();
+  } finally {
+    authenticationServer?.releaseAuthenticatedRequests();
+    await removeSavedCredential();
+    await app?.close();
+    await authenticationServer?.close();
+    await source.cleanup();
+    await rm(remoteRoot, { recursive: true, force: true });
+    await rm(cloneParent, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 90_000);
