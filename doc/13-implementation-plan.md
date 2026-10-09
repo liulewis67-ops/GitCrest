@@ -2471,3 +2471,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：refs 响应模型暂留 service 模块，后续按模型归属规范审视 DTO 拆分；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/history/service/refs.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`e839c3f`
+
+### history feature commit detail 查询拆分 — 小阶段 206
+- 状态：已完成（提交详情读取、对象校验和 numstat 解析已归入独立子模块）
+- 日期：2026-10-09
+- 交付：新增 `features/history/service/commit_detail.rs`，承载 commit OID 校验、Git 对象读取、首提交/普通提交文件统计和详情组装；service 通过 `read_commit` 保留 handler 使用入口，响应模型与 Git 命令语义不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、history service 定向测试（4 passed）与 `git diff --check` 通过。
+- 限制/后续：本阶段未将服务响应改为领域对象与 DTO 转换；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/history/service/commit_detail.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
+- 实施 commit：`b08ae2f`
