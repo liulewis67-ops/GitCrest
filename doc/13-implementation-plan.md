@@ -4634,3 +4634,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/undo.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：仓库目录、branch favorites 和迁移仍位于 `storage/storage.rs`；后续继续按持久化职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### storage 拆分分支收藏 adapter — 小阶段 425
+- 状态：已完成（分支收藏 SQL 和 `BranchFavoriteStorePort` 实现归入 `storage/branch_favorites.rs`）
+- 日期：2026-10-10
+- 交付：将分支收藏的列表、添加/移除、重命名操作和 port 实现从 `storage/storage.rs` 移至 `storage/branch_favorites.rs`；重命名继续在单个 SQLite transaction 内插入新名称并删除旧名称。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认 adapter 使用原 `RepositoryStore` 主连接，收藏操作的 SQL、幂等插入语义与错误映射未变。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/branch_favorites.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：仓库目录 adapter 和 migration 仍位于 `storage/storage.rs`；后续继续按持久化职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
