@@ -3695,3 +3695,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；100k fixture 存于系统 TEMP，由基准脚本停止 sidecar 并清理临时数据库。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-stage328-20261009.json`。
 - 限制/后续：冷搜索走 Git fallback，P95 669ms；索引 ready 约 5s（本次 benchmark stderr），需优化首次 cold path 并以同一 20 轮基准复测。桌面 idle/loaded Working Set、滚动帧率及 S7.4、S7.5 验收仍未完成。本测量只更新证据，不代表 S7.2 达标。
+- 完成 commit：`d4ac97b`
