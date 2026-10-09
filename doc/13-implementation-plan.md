@@ -4061,10 +4061,10 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 实施 commit：`f9ca414`。
 
 ### S7.5 桌面端 AI 冲突建议同意与不自动应用验收 — 小阶段 366
-- 状态：已完成（新增场景定向 E2E 通过；完整 E2E 矩阵仍需复验）
+- 状态：已完成（定向场景及完整 Windows Electron E2E 矩阵均通过）
 - 日期：2026-10-10
 - 交付：扩展键盘工作流桌面 E2E，启动 loopback Ollama mock 并通过 Settings 配置本地 endpoint；真实 cherry-pick 冲突窗口检查来源后，确认未经同意按钮不可用、明确同意后才请求 provider。验证 AI 返回建议与来源 prompt，但建议仍独立于冲突编辑器，工作树/index 保留未解决状态；随后继续手工选择冲突侧并完成 cherry-pick。同步更新 P0 冲突解决场景映射。
-- 验证：`pnpm exec tsc --noEmit -p tsconfig.test.json` 通过；键盘工作流定向 Electron E2E（1/1，26.87 秒）通过；`git diff --check` 通过。
+- 验证：`pnpm exec tsc --noEmit -p tsconfig.test.json` 通过；键盘工作流定向 Electron E2E（1/1，26.87 秒）通过；完整 `pnpm test:e2e`（6 files / 29 tests，241.87 秒）通过。完整复验基于代码提交 `929dd7c`；`git diff --check` 通过。
 - 证据：`tests/e2e/keyboard-workflow.test.ts`、`doc/08-development-readiness.md`。
-- 限制/后续：此改动复用了既有完整 E2E 文件，当前只运行了该定向场景；需要在后续 S7.5 完整复验中检查其它 P0 场景是否受影响。原生 macOS/Linux、真实云端 provider 和 S7.2/S7.4 门槛仍待验收。
+- 限制/后续：本次完整场景矩阵是当前 Windows 环境的证据，不覆盖 macOS/Linux 权限、凭据与 Git 版本差异。真实云端 provider 和 S7.2/S7.4 门槛仍待验收。
 - 实施 commit：`06dd13a`。
