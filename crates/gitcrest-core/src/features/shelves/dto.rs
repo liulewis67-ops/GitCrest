@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::features::shelves;
+use crate::domain::shelf::ShelfSnapshot;
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,8 +43,8 @@ pub(super) struct ShelfSnapshotDto {
     created_at_ms: i64,
 }
 
-impl From<shelves::ShelfSnapshot> for ShelfSnapshotDto {
-    fn from(snapshot: shelves::ShelfSnapshot) -> Self {
+impl From<ShelfSnapshot> for ShelfSnapshotDto {
+    fn from(snapshot: ShelfSnapshot) -> Self {
         Self {
             shelf_id: snapshot.shelf_id,
             repo_id: snapshot.repo_id,

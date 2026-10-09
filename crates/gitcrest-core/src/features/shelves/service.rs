@@ -14,24 +14,6 @@ pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
 const APPLY_CHECK_DEADLINE: Duration = Duration::from_secs(10);
 static NEXT_SHELF_ID: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ShelfSnapshot {
-    pub shelf_id: String,
-    pub repo_id: String,
-    pub name: String,
-    pub description: String,
-    pub paths: Vec<String>,
-    pub scope: Option<DiffScope>,
-    pub head_oid: Option<String>,
-    pub created_at_ms: i64,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ShelfRecord {
-    pub snapshot: ShelfSnapshot,
-    pub patch: Vec<u8>,
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub enum ShelfError {
     InvalidName,

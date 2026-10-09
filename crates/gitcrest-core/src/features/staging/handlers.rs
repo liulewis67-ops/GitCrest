@@ -339,7 +339,7 @@ pub(crate) async fn undo_recent_operation(
                 }
                 if let Some(snapshot) = record.restore_shelf {
                     if !shelf_already_restored {
-                    let shelf = shelves::ShelfRecord {
+                    let shelf = crate::domain::shelf::ShelfRecord {
                         snapshot,
                         patch: record.restore_shelf_patch.unwrap_or(undo_patch),
                     };

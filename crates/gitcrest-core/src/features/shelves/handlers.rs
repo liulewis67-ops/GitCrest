@@ -12,6 +12,7 @@ use super::dto::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::{DiffContentStatus, DiffScope},
+    domain::shelf::{ShelfRecord, ShelfSnapshot},
     domain::status::{ChangeCategory, ChangeKind},
     features::diff::{self, DiffError},
     features::tasks::{TaskFailure, TaskSnapshot},
@@ -356,7 +357,7 @@ pub(crate) async fn load_shelf_record(
     repositories: &RepositoryManager,
     repo_id: &str,
     shelf_id: &str,
-) -> Result<shelves::ShelfRecord, ApiError> {
+) -> Result<ShelfRecord, ApiError> {
     let store = repositories.store();
     let repo_id = repo_id.to_owned();
     let shelf_id = shelf_id.to_owned();
@@ -377,7 +378,7 @@ async fn can_shelf_apply_with_conflicts<R: RepositoryPathPort, G: StatusReadPort
     repositories: &RepositoryManager,
     status_service: &super::super::status::StatusService<R, G>,
     repo_id: &str,
-    shelf: &shelves::ShelfRecord,
+    shelf: &ShelfRecord,
     head_oid: Option<&str>,
 ) -> Result<bool, ApiError> {
     let Some(scope @ (DiffScope::WorkingTree | DiffScope::Index)) = shelf.snapshot.scope else {
@@ -433,7 +434,7 @@ async fn shelf_apply_revision<R: RepositoryPathPort, G: StatusReadPort>(
     status_service: &super::super::status::StatusService<R, G>,
     repo_id: &str,
     repository_path: &std::path::Path,
-    shelf: &shelves::ShelfRecord,
+    shelf: &ShelfRecord,
     head_oid: Option<&str>,
 ) -> Result<String, ApiError> {
     let status = status_service
@@ -588,8 +589,8 @@ pub(super) async fn create_repository_shelf(
                     }
                 }
 
-                let shelf = shelves::ShelfRecord {
-                    snapshot: shelves::ShelfSnapshot {
+                let shelf = ShelfRecord {
+                    snapshot: ShelfSnapshot {
                         shelf_id: shelves::new_shelf_id(),
                         repo_id: task_repo_id.clone(),
                         name,

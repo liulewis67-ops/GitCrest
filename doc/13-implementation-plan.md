@@ -2784,3 +2784,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
 - 限制/后续：storage 仍依赖 shelves feature 类型，后续需按相同的存储模型/领域映射边界继续梳理；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`2596fc1`
+
+### Shelf 领域模型归属并解除 storage 对 shelves feature 的依赖 — 小阶段 238
+- 状态：已完成（ShelfSnapshot/ShelfRecord 由 domain 定义，storage 仅依赖领域模型与自身序列化记录）
+- 日期：2026-10-09
+- 交付：新增 `domain::shelf` 定义 `ShelfSnapshot` 与 `ShelfRecord`；storage、shelves DTO/handler 和 staging handler 改为引用领域类型，shelves service 不再定义这两个共享业务模型。保留 storage 内部 `StoredShelfSnapshot` 的 JSON 字段映射，未改变数据库存储格式或 API DTO。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 storage 无 `crate::features::shelves` 依赖；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；API 与持久化字段保持不变。
+- 证据：`crates/gitcrest-core/src/domain/shelf.rs`、`crates/gitcrest-core/src/features/shelves/service.rs`、`crates/gitcrest-core/src/features/shelves/dto.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、4.2 节。
+- 限制/后续：storage 尚有其他 feature 类型依赖（包括 staging/shelves 之外的记录协作），应继续按模型所有权拆分；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待补记
