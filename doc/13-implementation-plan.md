@@ -4175,3 +4175,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-no-gpu-vsync-stage377-20261010.json`、`doc/evidence/S7.2/desktop-win32-no-gpu-vsync-viz-stage377-20261010.json`。
 - 限制/后续：该诊断否决了 GPU VSync 旁路作为当前帧率修复；下一步检查 Electron/Chromium 是否为窗口获得了错误的 BeginFrame source 或刷新率信息，维持默认 VSync 与 GPU 配置。S7.2、S7.4、S7.5 仍待验收。
 - 证据 commit：`a7d941c`。
+
+### S7.2 核对 Electron 窗口所处显示器与刷新模式 — 小阶段 378
+- 状态：已完成（窗口确实位于 60Hz 主显示器；显示器选择不解释约 55Hz 呈现结果）
+- 日期：2026-10-10
+- 交付：帧诊断报告新增 Electron `screen` 模块的 primary/display list/window bounds/matching display 信息，记录窗口实际匹配显示器的刷新率、DPI、分辨率、旋转和内外屏属性。
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs`、报告 JSON 解析和 `git diff --check` 通过。Windows 11 / 100k fixture 的 packaged diagnostic 报告主屏与窗口匹配屏为同一 internal display，1536×864 logical、scale factor 1.25、displayFrequency 60Hz；窗口 bounds 完整落在主屏。该轮 presented P5 55.29fps。
+- 手工验证：未操作 GUI；运行默认发行版 10 秒 presented-frame diagnostic，并从 Electron 主进程读取屏幕配置。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-display-path-stage378-20261010.json`。
+- 限制/后续：Electron 选择的是 60Hz 内置显示器，未发现落到虚拟显示器或低刷新副屏；窗口选屏不能解释约 55Hz cadence。继续沿 Electron/Chromium BeginFrame source 与平台适配定位，不修改产品窗口位置或 GPU flags。S7.2、S7.4、S7.5 保持待验收。
+- 证据 commit：`567b4c9`。
