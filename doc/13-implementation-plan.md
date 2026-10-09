@@ -2635,3 +2635,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：状态枚举的少数消费者仍使用 status feature 兼容出口；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/mod.rs`、status engine/cache/DTO、diff/commits handlers、`doc/14-backend-development-guidelines.md` 第 4 节。
 - 实施 commit：`5f9089f`
+
+
+### Status 枚举消费者统一归属 — 小阶段 223
+- 状态：已完成（跨 feature 业务代码通过 domain 使用变更类型，status feature 不再重导出领域枚举）
+- 日期：2026-10-09
+- 交付：branches、shelves、settings、workflows、repositories 与 refresh consumers 改为直接引用 `domain/status`；status 模块移除 `ChangeKind`/`ChangeCategory` 兼容出口，diff DTO、engine/cache 和测试保持领域类型导入。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认无 `features::status::ChangeKind/ChangeCategory` 消费；未运行测试。
+- 限制/后续：S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/mod.rs`、branches/shelves/settings/workflows/repositories handlers、`doc/14-backend-development-guidelines.md` 第 4 节。
+- 实施 commit：`d655f6e`
