@@ -4205,3 +4205,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-vsync-provider-stage381-20261010.json`；阶段 374/380 的帧时序证据。
 - 限制/后续：trace 暴露了 VSync worker 的等待周期，但没有提供 D3DKMT adapter/source ID 与实际 vblank 来源，尚不能决定应修复应用调度、驱动路径还是主机显示配置；下一步映射 GPU worker 使用的输出源与 Electron 窗口匹配显示器。S7.2、S7.4、S7.5 继续未验收。
 - 证据 commit：`aa20b9f`。
+
+### S7.2 滚动采样期间同步读取 Windows DWM 速率 — 小阶段 382
+- 状态：已完成（应用滚动约 55.3fps 时，Windows DWM 仍报告 60Hz；系统 rate 与应用 presented-frame 指标分离）
+- 日期：2026-10-10
+- 交付：帧诊断增加可选 `GITCREST_BENCH_SAMPLE_WINDOWS_DWM=1`，在滚动采样期间并行调用 Windows DWM timing helper，将桌面刷新/合成速率放进同一份报告；默认测量不启动额外 PowerShell 进程。
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs`、报告 JSON 解析和 `git diff --check` 通过。Windows 11 / RTX 3050 / 60Hz 主屏 / 100k fixture 的 10 秒同步样本中，compositor presented P5 为 55.340fps；DWM `refreshHz`/`composeHz` 为 59.99952Hz，刷新周期 QPC 166,668。DWM 的 point-in-time frame/refresh count 在采样窗口只变化 1 次，不具备本轮单应用帧计数用途，因此仅使用 DWM 报告的系统级 rate 作对照，不把计数器当作滚动 FPS。
+- 手工验证：未操作 GUI；运行 `GITCREST_BENCH_SAMPLE_WINDOWS_DWM=1 node scripts/performance/desktop-frame-diagnostic.mjs <100k fixture> <report>`，Windows helper 与 10 秒 packaged scroll sample 同步采样。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`scripts/performance/windows-display-timing.ps1`、`doc/evidence/S7.2/desktop-win32-vblank-during-scroll-stage382-20261010.json`。
+- 限制/后续：系统 DWM timing 仍不能直接解释 GPU VSync worker 的等待来源；现有 trace 显示 VSync wait-event 与应用帧 cadence 同步在约56Hz，而系统 rate 仍为60Hz。继续映射 GPU worker 的 adapter/source 与显示路径，S7.2/S7.4/S7.5 均未验收。
+- 证据 commit：`24d00eb`。
