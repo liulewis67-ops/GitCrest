@@ -2354,3 +2354,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：此改动没有证明 FPS 提升；该运行环境空闲 RAF 同样约 55 FPS，说明当前采样受主机/显示刷新率限制的可能性仍需区分。进程树内存仍超过计划的 250/500 MiB 门槛，S7.2 保持待验收，不据此宣称性能门槛通过。
 - 证据：`doc/evidence/S7.2/desktop-win32-history-row-memo-scroll.json`、`scripts/performance/desktop-benchmark.mjs`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/pages/workspace/WorkspaceDetailsPanel.tsx`。
 - 实施 commit：`f00d2df`
+
+### status feature bounded snapshot cache 拆分 — 小阶段 193
+- 状态：已完成（status 缓存实现及其行为测试归入 status feature）
+- 日期：2026-10-09
+- 交付：将按 RepoId 限量的全量/路径 StatusSnapshot 缓存、dirty scope 失效、版本校验、路径范围匹配和缓存合并逻辑从 `RepositoryManager` 移至 `features/status/cache.rs`；仓库模块通过 status feature 导出的缓存接口读写。缓存上限、失效范围与迟到刷新保护保持原行为，4 个缓存单元测试随实现迁入 status feature。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（120 tests）、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 均通过。
+- 限制/后续：StatusSnapshot 的仓库路径解析和 API 查询编排仍在 RepositoryManager；本阶段只迁移缓存实现与职责测试，不代表 status service 与 repository registry 已完全解耦。S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`crates/gitcrest-core/src/features/status/cache.rs`、`crates/gitcrest-core/src/features/status/mod.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 实施 commit：`969c32c`
