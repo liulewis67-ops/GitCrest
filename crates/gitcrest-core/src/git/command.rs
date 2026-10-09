@@ -1140,40 +1140,6 @@ impl GitCommandService {
         force_with_lease: bool,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let current = crate::features::remotes::push::read_push_preflight_for_target(
-            expected.repo_id.clone(),
-            repository_path,
-            Some(&expected.local_branch),
-            false,
-            Some((&expected.remote_name, &expected.remote_branch)),
-            &super::refs::GitBranchAdapter,
-            &super::remotes::GitRemoteAdapter,
-        )
-        .await
-        .map_err(|_| {
-            TaskFailure::Failed(
-                "Push preflight could not be revalidated. Refresh and retry.".into(),
-            )
-        })?;
-        if current.local_oid != expected.local_oid
-            || current.expected_remote_oid != expected.expected_remote_oid
-            || current.remote_name != expected.remote_name
-            || current.remote_branch != expected.remote_branch
-        {
-            return Err(TaskFailure::Failed(
-                "Push preflight became stale before execution. Refresh and review the target again.".into(),
-            ));
-        }
-        if current.ahead == 0 {
-            return Err(TaskFailure::Failed(
-                "There are no local commits to push.".into(),
-            ));
-        }
-        if current.behind > 0 && !force_with_lease {
-            return Err(TaskFailure::Failed(
-                "The remote has commits missing locally. Fetch and review before pushing.".into(),
-            ));
-        }
         let mut arguments = vec!["push".into(), "--progress".into(), "--porcelain".into()];
         if force_with_lease {
             arguments.push(

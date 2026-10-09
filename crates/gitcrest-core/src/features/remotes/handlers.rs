@@ -272,6 +272,9 @@ pub(super) async fn push_repository(
     let command = state.remote_commands.clone();
     let path = target.repository_path;
     let operation_command = RemotePushCommand::from(&preflight);
+    let branch_git = state.branch_git.clone();
+    let remote_git = state.remote_git.clone();
+    let task_repo_id = repo_id.clone();
     let force_with_lease = request.force_with_lease;
     let operation = if force_with_lease {
         "pushForceWithLease"
@@ -286,6 +289,41 @@ pub(super) async fn push_repository(
             target.resource_key,
             operation,
             move |context| async move {
+                let current = push::read_push_preflight_for_target(
+                    task_repo_id,
+                    &path,
+                    Some(&operation_command.local_branch),
+                    false,
+                    Some((&operation_command.remote_name, &operation_command.remote_branch)),
+                    branch_git.as_ref(),
+                    remote_git.as_ref(),
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "Push preflight could not be revalidated. Refresh and retry.".into(),
+                    )
+                })?;
+                if current.local_oid != operation_command.local_oid
+                    || current.expected_remote_oid != operation_command.expected_remote_oid
+                    || current.remote_name != operation_command.remote_name
+                    || current.remote_branch != operation_command.remote_branch
+                {
+                    return Err(TaskFailure::Failed(
+                        "Push preflight became stale before execution. Refresh and review the target again.".into(),
+                    ));
+                }
+                if current.ahead == 0 {
+                    return Err(TaskFailure::Failed(
+                        "There are no local commits to push.".into(),
+                    ));
+                }
+                if current.behind > 0 && !force_with_lease {
+                    return Err(TaskFailure::Failed(
+                        "The remote has commits missing locally. Fetch and review before pushing."
+                            .into(),
+                    ));
+                }
                 command
                     .push(&path, operation_command, force_with_lease, context)
                     .await

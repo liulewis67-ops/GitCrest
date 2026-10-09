@@ -30,7 +30,6 @@ pub struct PushPreflight {
 impl From<&PushPreflight> for RemotePushCommand {
     fn from(preflight: &PushPreflight) -> Self {
         Self {
-            repo_id: preflight.repo_id.clone(),
             local_branch: preflight.local_branch.clone(),
             remote_name: preflight.remote_name.clone(),
             remote_branch: preflight.remote_branch.clone(),

@@ -80,7 +80,6 @@ pub(crate) enum RemotePullStrategy {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RemotePushCommand {
-    pub(crate) repo_id: String,
     pub(crate) local_branch: String,
     pub(crate) remote_name: String,
     pub(crate) remote_branch: String,
