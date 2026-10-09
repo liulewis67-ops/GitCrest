@@ -1,0 +1,53 @@
+{
+  "primaryMonitorDeviceName": "\\\\.\\DISPLAY1",
+  "primaryMonitorBounds": {
+    "left": 0,
+    "top": 0,
+    "right": 1536,
+    "bottom": 864
+  },
+  "d3dkmtAdapterLuid": "00000000:0000F151",
+  "d3dkmtVidPnSourceId": 0,
+  "matchingActivePaths": [
+    {
+      "sourceAdapterLuid": "00000000:0000F151",
+      "sourceId": 0,
+      "sourceDeviceName": "\\\\.\\DISPLAY1",
+      "targetAdapterLuid": "00000000:0000F151",
+      "targetAdapterDevicePath": "\\\\?\\PCI#VEN_10DE&DEV_25E2&SUBSYS_3AAF17AA&REV_A1#4&2cae475f&0&0009#{5b45201d-f2f2-4f3b-85bb-30ff1f953599}",
+      "targetId": 4357,
+      "targetName": "",
+      "targetDevicePath": "",
+      "outputTechnology": 11,
+      "refreshRate": {
+        "numerator": 60001,
+        "denominator": 1000
+      },
+      "targetAvailable": true,
+      "sourceStatusFlags": 1,
+      "targetStatusFlags": 17,
+      "pathFlags": 1
+    }
+  ],
+  "allActivePaths": [
+    {
+      "sourceAdapterLuid": "00000000:0000F151",
+      "sourceId": 0,
+      "sourceDeviceName": "\\\\.\\DISPLAY1",
+      "targetAdapterLuid": "00000000:0000F151",
+      "targetAdapterDevicePath": "\\\\?\\PCI#VEN_10DE&DEV_25E2&SUBSYS_3AAF17AA&REV_A1#4&2cae475f&0&0009#{5b45201d-f2f2-4f3b-85bb-30ff1f953599}",
+      "targetId": 4357,
+      "targetName": "",
+      "targetDevicePath": "",
+      "outputTechnology": 11,
+      "refreshRate": {
+        "numerator": 60001,
+        "denominator": 1000
+      },
+      "targetAvailable": true,
+      "sourceStatusFlags": 1,
+      "targetStatusFlags": 17,
+      "pathFlags": 1
+    }
+  ]
+}
