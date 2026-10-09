@@ -24,8 +24,7 @@ pub enum DiffScope {
     Commit,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiffContentStatus {
     Text,
     Binary,
@@ -36,31 +35,25 @@ pub enum DiffContentStatus {
     Submodule,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiffRowKind {
     Context,
     Change,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiffRow {
     pub kind: DiffRowKind,
     pub old_line: Option<u32>,
     pub new_line: Option<u32>,
     pub old_text: Option<String>,
     pub new_text: Option<String>,
-    #[serde(skip)]
     patch_change_lines: Vec<usize>,
-    #[serde(skip)]
     old_position: Option<u32>,
-    #[serde(skip)]
     new_position: Option<u32>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiffHunk {
     pub old_start: u32,
     pub old_lines: u32,
@@ -77,8 +70,7 @@ pub struct DiffSelection {
     pub row_index: Option<usize>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DiffDocument {
     pub repo_id: String,
     pub path: String,

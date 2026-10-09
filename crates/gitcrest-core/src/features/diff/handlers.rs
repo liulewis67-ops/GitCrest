@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    dto::{CommitDiffQuery, DiffQuery},
+    dto::{CommitDiffQuery, DiffDocumentDto, DiffQuery},
     service::{self, DiffScope},
 };
 
@@ -19,7 +19,7 @@ pub(super) async fn repository_diff(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<DiffQuery>, QueryRejection>,
-) -> Result<Json<service::DiffDocument>, ApiError> {
+) -> Result<Json<DiffDocumentDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -75,20 +75,21 @@ pub(super) async fn repository_diff(
     {
         return service::read(repo_id, &repository_path, file, query.scope)
             .await
+            .map(DiffDocumentDto::from)
             .map(Json)
             .map_err(ApiError::from_diff_error);
     }
     let mut document = candidate_diff.map_err(ApiError::from_diff_error)?;
     document.change_kind = file.kind.clone();
     document.original_path = file.original_path.clone();
-    Ok(Json(document))
+    Ok(Json(document.into()))
 }
 
 pub(super) async fn repository_commit_file_diff(
     State(state): State<AppState>,
     Path((repo_id, oid)): Path<(String, String)>,
     query: Result<Query<CommitDiffQuery>, QueryRejection>,
-) -> Result<Json<service::DiffDocument>, ApiError> {
+) -> Result<Json<DiffDocumentDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -119,6 +120,7 @@ pub(super) async fn repository_commit_file_diff(
         &query.path,
     )
     .await
+    .map(DiffDocumentDto::from)
     .map(Json)
     .map_err(ApiError::from_diff_error)
 }
