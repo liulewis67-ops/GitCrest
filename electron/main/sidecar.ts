@@ -133,12 +133,28 @@ export async function startSidecar(): Promise<SidecarConnection> {
   });
 }
 
-export function stopSidecar(): void {
-  if (!child) {
-    return;
-  }
-
-  child.kill();
+export function stopSidecar(): Promise<void> {
+  const stoppingChild = child;
   child = undefined;
   connection = undefined;
+  if (!stoppingChild) return Promise.resolve();
+
+  return new Promise((resolve) => {
+    let finished = false;
+    const finish = (): void => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(forceKill);
+      stoppingChild.removeListener("exit", finish);
+      stoppingChild.removeListener("error", finish);
+      resolve();
+    };
+    const forceKill = setTimeout(() => {
+      stoppingChild.kill();
+      finish();
+    }, 5_000);
+    stoppingChild.once("exit", finish);
+    stoppingChild.once("error", finish);
+    stoppingChild.stdin.end();
+  });
 }

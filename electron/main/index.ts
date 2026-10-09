@@ -10,6 +10,7 @@ import WebSocket from "ws";
 
 let mainWindow: BrowserWindow | undefined;
 let sidecarConnection: SidecarConnection | undefined;
+let finishingQuit = false;
 type WindowAccess = "readWrite" | "readOnly" | "conflictResolution";
 interface DiffWindowRequest {
   repoId: string;
@@ -371,8 +372,11 @@ app.on("activate", () => {
   }
 });
 
-app.on("before-quit", () => {
-  stopSidecar();
+app.on("before-quit", (event) => {
+  if (finishingQuit) return;
+  event.preventDefault();
+  finishingQuit = true;
+  void stopSidecar().finally(() => app.quit());
 });
 
 app.on("window-all-closed", () => {

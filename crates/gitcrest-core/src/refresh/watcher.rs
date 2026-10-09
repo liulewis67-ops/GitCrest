@@ -11,7 +11,10 @@ use std::{
 
 use notify::{Event, EventKind, RecursiveMode, Watcher};
 use serde::Serialize;
-use tokio::{sync::mpsc, time::Instant};
+use tokio::{
+    sync::{mpsc, watch},
+    time::Instant,
+};
 
 use crate::{
     features::{repositories::RepositoryManager, status::StatusService},
@@ -96,6 +99,7 @@ pub async fn run<R, G>(
     repositories: RepositoryManager,
     status: StatusService<R, G>,
     events: EventBus,
+    mut shutdown: watch::Receiver<bool>,
 ) where
     R: RepositoryPathPort + Clone + 'static,
     G: StatusReadPort + Clone + 'static,
@@ -112,6 +116,11 @@ pub async fn run<R, G>(
     loop {
         tokio::select! {
             biased;
+            changed = shutdown.changed() => {
+                if changed.is_err() || *shutdown.borrow() {
+                    break;
+                }
+            }
             _ = async {
                 if let Some(deadline) = flush_at { tokio::time::sleep_until(deadline).await; }
                 else { std::future::pending::<()>().await; }

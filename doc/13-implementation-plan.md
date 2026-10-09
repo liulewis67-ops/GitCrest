@@ -4814,3 +4814,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/lifecycle/readiness.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：刷新 worker 仍由 bootstrap detach，HTTP server 目前未接收 graceful shutdown signal；下一阶段将处理后台 watcher 的停止与 listener drain。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段生命周期边界与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### sidecar graceful shutdown 与 watcher 排空 — 小阶段 443
+- 状态：已完成（Electron 通过 stdin EOF 请求后端退出，HTTP server drain 并停止 refresh watcher）
+- 日期：2026-10-10
+- 交付：新增 `lifecycle/shutdown.rs` 等待 sidecar stdin EOF、Ctrl+C 或 Unix SIGTERM；Axum 使用 graceful shutdown 停止接收新连接并排空在途请求，向 refresh watcher 发送 watch 通知并监督其在 5 秒内退出，超时后 abort。Electron `before-quit` 先结束 sidecar stdin、等待进程退出最多 5 秒，再强制 kill 并继续退出应用。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`pnpm exec tsc --noEmit` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：确认 ready 协议不变；Electron 唯一 stop 调用等待 Promise 完成；后端同时支持 Electron EOF、交互终端 Ctrl+C 和 Unix SIGTERM，shutdown watch 分支优先于 watcher 队列/周期任务。
+- 证据：`crates/gitcrest-core/src/lifecycle/shutdown.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/refresh/watcher.rs`、`electron/main/sidecar.ts`、`electron/main/index.ts`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.2 节。
+- 限制/后续：TaskService 中正在运行的操作仍由独立 Tokio task 执行，尚未接入停止准入、取消信号和排空等待；本阶段只监督 refresh watcher 和 HTTP server，不宣称所有后台任务均已可恢复停止。需后续按任务副作用语义补全 supervisor/drain，再完成 S7.4/S7.5 跨平台与故障验收。S7.2 仍有冷搜索、Working Set 和滚动帧率未达标项。
+- 实施 commit：本阶段进程生命周期与台账同一 commit（SHA 可在后续台账更新中补记）。

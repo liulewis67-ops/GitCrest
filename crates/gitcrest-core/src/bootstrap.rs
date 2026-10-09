@@ -1,6 +1,8 @@
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 
 use tokio::net::TcpListener;
+use tokio::sync::watch;
+use tokio::time::timeout;
 
 use crate::{
     api::router::app_router,
@@ -16,7 +18,7 @@ use crate::{
         command::GitCommandService, refs::GitBranchAdapter, remote::GitRemoteAdapter,
         repository::GitRepositoryAdapter, tags::GitTagAdapter,
     },
-    lifecycle::readiness,
+    lifecycle::{readiness, shutdown},
     ports::branches::BranchGitPort,
     ports::git::RepositoryGitPort,
     ports::remotes::{
@@ -93,11 +95,6 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "Could not recover background task history")?;
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
     let events = EventBus::default();
-    tokio::spawn(refresh::run(
-        repositories.clone(),
-        status.clone(),
-        events.clone(),
-    ));
     let state = AppState {
         read_write_token: Arc::new(config.write_token),
         read_only_token: config.read_only_token.map(Arc::new),
@@ -107,9 +104,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         branch_favorites: Arc::new(store.clone()),
         ai_provider_settings: Arc::new(store.clone()),
         history_search_index: Arc::new(store),
-        repositories,
+        repositories: repositories.clone(),
         repository_targets,
-        status,
+        status: status.clone(),
         tasks,
         git_commands,
         tag_git,
@@ -121,14 +118,38 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         clones,
         credentials: credentials::CredentialManager::system(),
         ai_credentials: credentials::AiCredentialManager::system(),
-        events,
+        events: events.clone(),
     };
     let app = app_router(state, config.cors_origin);
 
     let listener = TcpListener::bind(config.listen_address).await?;
     let address = listener.local_addr()?;
+    let (shutdown_sender, shutdown_receiver) = watch::channel(false);
+    let mut refresh_task = tokio::spawn(refresh::run(
+        repositories,
+        status,
+        events,
+        shutdown_receiver,
+    ));
     readiness::announce(&config.listen_address.ip().to_string(), address);
 
-    axum::serve(listener, app).await?;
+    let server_shutdown = shutdown_sender.clone();
+    let server_result = axum::serve(listener, app)
+        .with_graceful_shutdown(async move {
+            shutdown::wait_for_shutdown().await;
+            let _ = server_shutdown.send(true);
+        })
+        .await;
+    let _ = shutdown_sender.send(true);
+    match timeout(Duration::from_secs(5), &mut refresh_task).await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => eprintln!("[gitcrest-core] Refresh watcher exited unexpectedly: {error}"),
+        Err(_) => {
+            refresh_task.abort();
+            let _ = refresh_task.await;
+            eprintln!("[gitcrest-core] Refresh watcher did not stop within 5 seconds");
+        }
+    }
+    server_result?;
     Ok(())
 }
