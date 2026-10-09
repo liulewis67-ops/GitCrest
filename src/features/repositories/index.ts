@@ -1,4 +1,4 @@
-export { loadWorkspaceSession, saveWorkspaceSession } from "./model/workspace-session";
+export { useWorkspaceSessionState } from "./model/use-workspace-session-state";
 export { useWorkspaceLayout } from "./model/use-workspace-layout";
 export { useWorkspaceGraphScroll } from "./model/use-workspace-graph-scroll";
 export { useWorkspaceCommitSelection } from "./model/use-workspace-commit-selection";
