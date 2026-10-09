@@ -8,6 +8,7 @@ mod domain;
 mod events;
 mod execution;
 mod git;
+mod lifecycle;
 mod ports;
 mod refresh;
 mod state;

@@ -4804,3 +4804,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/execution/locks.rs`、`crates/gitcrest-core/src/execution/scheduler.rs`、`crates/gitcrest-core/src/execution/tasks/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：该变更限制多仓库切换时锁注册表的长期保留，不宣称已满足 S7.2 桌面 Working Set 门槛；历史冷搜索及桌面 Working Set/帧率仍需专项优化和测量，S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段资源生命周期调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将 sidecar 就绪协议归入 lifecycle — 小阶段 442
+- 状态：已完成（sidecar ready 消息由 `lifecycle/readiness.rs` 负责序列化与输出）
+- 日期：2026-10-10
+- 交付：将 `ReadyMessage` 及 ready stdout 输出从 bootstrap 移至 `lifecycle/readiness.rs`，bootstrap 仍在 listener 成功绑定并获取实际端口后调用；JSON 字段、camelCase、stdout 单行消息及输出时序保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：全仓只有 `lifecycle/readiness.rs` 定义 `ReadyMessage`；ready 输出仍发生在 Axum server 开始服务前、listener 绑定之后，Electron 进程协议 JSON 未变。
+- 证据：`crates/gitcrest-core/src/lifecycle/readiness.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/lib.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：刷新 worker 仍由 bootstrap detach，HTTP server 目前未接收 graceful shutdown signal；下一阶段将处理后台 watcher 的停止与 listener drain。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段生命周期边界与台账同一 commit（SHA 可在后续台账更新中补记）。

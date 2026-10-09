@@ -1,6 +1,5 @@
-use std::{env, net::SocketAddr, sync::Arc};
+use std::{env, sync::Arc};
 
-use serde::Serialize;
 use tokio::net::TcpListener;
 
 use crate::{
@@ -17,6 +16,7 @@ use crate::{
         command::GitCommandService, refs::GitBranchAdapter, remote::GitRemoteAdapter,
         repository::GitRepositoryAdapter, tags::GitTagAdapter,
     },
+    lifecycle::readiness,
     ports::branches::BranchGitPort,
     ports::git::RepositoryGitPort,
     ports::remotes::{
@@ -27,14 +27,6 @@ use crate::{
     state::AppState,
     storage::RepositoryStore,
 };
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct ReadyMessage<'a> {
-    event: &'a str,
-    host: &'a str,
-    port: u16,
-}
 
 pub(crate) async fn run() -> i32 {
     if env::var_os("GITCREST_GIT_ASKPASS").as_deref() == Some(std::ffi::OsStr::new("1")) {
@@ -135,20 +127,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
 
     let listener = TcpListener::bind(config.listen_address).await?;
     let address = listener.local_addr()?;
-    announce_ready(&config.listen_address.ip().to_string(), address);
+    readiness::announce(&config.listen_address.ip().to_string(), address);
 
     axum::serve(listener, app).await?;
     Ok(())
-}
-
-fn announce_ready(host: &str, address: SocketAddr) {
-    let message = ReadyMessage {
-        event: "ready",
-        host,
-        port: address.port(),
-    };
-    println!(
-        "{}",
-        serde_json::to_string(&message).expect("ready message serializes")
-    );
 }
