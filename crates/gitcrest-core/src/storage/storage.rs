@@ -234,6 +234,7 @@ impl RepositoryStore {
         let transaction = connection
             .transaction()
             .map_err(|error| error.to_string())?;
+        let maintenance_started = std::time::Instant::now();
         transaction
             .execute(
                 "DELETE FROM history_search_documents WHERE repo_id=?1",
@@ -249,6 +250,8 @@ impl RepositoryStore {
         transaction
             .execute_batch("DROP TRIGGER IF EXISTS history_search_documents_insert;")
             .map_err(|error| error.to_string())?;
+        let maintenance_elapsed_ms = maintenance_started.elapsed().as_millis();
+        let rows_started = std::time::Instant::now();
         {
             let mut statement = transaction
                 .prepare_cached(
@@ -276,12 +279,15 @@ impl RepositoryStore {
                     .map_err(|error| error.to_string())?;
             }
         }
+        let rows_elapsed_ms = rows_started.elapsed().as_millis();
+        let fts_started = std::time::Instant::now();
         transaction
             .execute(
                 "INSERT INTO history_search_fts(rowid, message) SELECT id, message FROM history_search_documents WHERE repo_id=?1",
                 [repo_id],
             )
             .map_err(|error| error.to_string())?;
+        let fts_elapsed_ms = fts_started.elapsed().as_millis();
         transaction
             .execute_batch(
                 "CREATE TRIGGER history_search_documents_insert AFTER INSERT ON history_search_documents BEGIN INSERT INTO history_search_fts(rowid, message) VALUES (new.id, new.message); END;",
@@ -293,7 +299,13 @@ impl RepositoryStore {
                 params![repo_id, refs_fingerprint, now_ms()],
             )
             .map_err(|error| error.to_string())?;
-        transaction.commit().map_err(|error| error.to_string())
+        let commit_started = std::time::Instant::now();
+        transaction.commit().map_err(|error| error.to_string())?;
+        let commit_elapsed_ms = commit_started.elapsed().as_millis();
+        eprintln!(
+            "[gitcrest-core] History index store phases maintenance={maintenance_elapsed_ms}ms rows={rows_elapsed_ms}ms fts={fts_elapsed_ms}ms commit={commit_elapsed_ms}ms"
+        );
+        Ok(())
     }
 
     pub fn search_history_messages(

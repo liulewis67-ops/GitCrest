@@ -204,6 +204,7 @@ pub async fn build_history_search_index(
     }
     arguments.push("--branches".into());
     arguments.push("--remotes".into());
+    let git_started = std::time::Instant::now();
     let output = run_git_with_deadline(
         repository_path,
         &arguments,
@@ -211,18 +212,30 @@ pub async fn build_history_search_index(
         HISTORY_INDEX_DEADLINE,
     )
     .await?;
+    let git_elapsed_ms = git_started.elapsed().as_millis();
+    let parse_started = std::time::Instant::now();
     let entries = tokio::task::spawn_blocking(move || parse_history_search_index(&output))
         .await
         .map_err(|_| HistoryError::GitFailed)??;
+    let parse_elapsed_ms = parse_started.elapsed().as_millis();
+    let verify_started = std::time::Instant::now();
     let final_fingerprint = refs_fingerprint(repository_path, head).await?;
     if final_fingerprint != fingerprint {
         return Ok(());
     }
+    let verify_elapsed_ms = verify_started.elapsed().as_millis();
     let repo_id = repo_id.to_owned();
-    tokio::task::spawn_blocking(move || store.replace_index(&repo_id, &fingerprint, entries))
-        .await
-        .map_err(|_| HistoryError::GitFailed)?
-        .map_err(|_| HistoryError::GitFailed)
+    let persist_started = std::time::Instant::now();
+    let persist_result =
+        tokio::task::spawn_blocking(move || store.replace_index(&repo_id, &fingerprint, entries))
+            .await
+            .map_err(|_| HistoryError::GitFailed)?
+            .map_err(|_| HistoryError::GitFailed);
+    let persist_elapsed_ms = persist_started.elapsed().as_millis();
+    eprintln!(
+        "[gitcrest-core] History index build phases git={git_elapsed_ms}ms parse={parse_elapsed_ms}ms verify={verify_elapsed_ms}ms persist={persist_elapsed_ms}ms"
+    );
+    persist_result
 }
 
 pub(super) async fn refs_fingerprint(

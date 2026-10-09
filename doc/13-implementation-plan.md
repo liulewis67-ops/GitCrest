@@ -3903,3 +3903,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/ports/history.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/history/dto.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/features/history/model/use-repository-history.ts`、`src/features/history/ui/CommitGraph.tsx`、`tests/unit/history-model.test.tsx`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-pending-stage349.json`。
 - 限制/后续：pending 协议降低 API 阻塞并保留完整结果语义，但用户仍需等待索引构建，完整冷搜索未达标；需要继续缩短/提前执行索引构建，并按 20 轮完整结果耗时复测。短于 3 字符和组合过滤仍走 Git 搜索回退。S7.2 其它桌面门槛、S7.4 与 S7.5 仍未验收。
 - 完成 commit：`9253446 perf: defer cold history search until index is ready`
+
+### S7.2 冷搜索索引构建分段计时 — 小阶段 350
+- 状态：已完成（新增冷索引构建阶段计时与独立 20 轮基准入口；定位 SQLite 行插入为当前最大成本）
+- 日期：2026-10-09
+- 交付：history 索引构建增加 Git 输出、解析、refs 复核、持久化总耗时；SQLite adapter 分别记录文档行写入、FTS postings 构建与事务提交耗时。性能脚本新增 `cold` 命令，只运行 100k 冷搜索 20 轮并报告首个响应、完整结果及各构建阶段分布。
+- 验证：history 索引去重用例通过；`cargo clippy --all-targets -- -D warnings`、Release build、基准脚本 `node --check` 与 `git diff --check` 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 100k fixture 20 轮：完整冷结果 P95 4,005.638ms、pending 首响应 P95 16.688ms；Git 输出 P95 962ms、解析 78ms、refs 复核 5ms、SQLite 文档行写入 2,079ms、FTS 构建 395ms、事务提交 571ms。报告：`doc/evidence/S7.2/api-win32-cold-index-phases-stage350.json`。
+- 手工验证：未操作 GUI；20 个隔离 sidecar/SQLite 冷搜索样本均返回期望的匹配提交；fixture 原有工作树修改状态运行前后不变。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-index-phases-stage350.json`。
+- 限制/后续：计时只代表此 Windows 主机与该 fixture；日志记录有毫秒粒度，写入和事务提交合计占主要耗时。冷搜索完整结果仍未达到 <200ms；下一小阶段应优化 SQLite 文档批量写入并再次按完整结果延迟复测。
+- 完成 commit：待提交
