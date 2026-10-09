@@ -1,7 +1,5 @@
 use serde::Deserialize;
 
-use crate::features::diff::DiffSelection;
-
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CommitRequest {
@@ -21,5 +19,22 @@ pub struct CommitRequest {
 pub struct CommitSelection {
     pub path: String,
     pub revision: String,
-    pub selections: Vec<DiffSelection>,
+    pub selections: Vec<CommitDiffSelection>,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CommitDiffSelection {
+    pub hunk_index: usize,
+    #[serde(default)]
+    pub row_index: Option<usize>,
+}
+
+impl From<CommitDiffSelection> for crate::domain::diff::DiffSelection {
+    fn from(selection: CommitDiffSelection) -> Self {
+        Self {
+            hunk_index: selection.hunk_index,
+            row_index: selection.row_index,
+        }
+    }
 }

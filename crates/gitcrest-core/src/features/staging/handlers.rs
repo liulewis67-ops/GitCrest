@@ -138,7 +138,13 @@ pub(crate) async fn stage_repository_patch(
         ));
     }
     staging::validate_patch_request(&request, file).map_err(ApiError::from_staging_error)?;
-    let _ = diff::select_changes(&current_diff, &request.selections).map_err(|error| {
+    let diff_selections = request
+        .selections
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect::<Vec<_>>();
+    let _ = diff::select_changes(&current_diff, &diff_selections).map_err(|error| {
         if error == DiffError::InvalidPath {
             ApiError::from_staging_error(staging::StagingError::InvalidRequest)
         } else {
@@ -201,7 +207,13 @@ pub(crate) async fn stage_repository_patch(
                         "The selected diff became stale; refresh and select changes again".into(),
                     ));
                 }
-                let selected_patch = diff::select_changes(&current_diff, &request.selections)
+                let diff_selections = request
+                    .selections
+                    .iter()
+                    .cloned()
+                    .map(Into::into)
+                    .collect::<Vec<_>>();
+                let selected_patch = diff::select_changes(&current_diff, &diff_selections)
                     .map_err(|_| {
                         TaskFailure::Failed("The selected diff hunk is no longer available".into())
                     })?;
@@ -448,7 +460,13 @@ pub(crate) async fn discard_repository_patch(
             staging::StagingError::StaleSelection,
         ));
     }
-    let _ = diff::select_changes(&current_diff, &request.selections).map_err(|error| {
+    let diff_selections = request
+        .selections
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect::<Vec<_>>();
+    let _ = diff::select_changes(&current_diff, &diff_selections).map_err(|error| {
         if error == DiffError::InvalidPath {
             ApiError::from_staging_error(staging::StagingError::InvalidRequest)
         } else {
@@ -462,7 +480,12 @@ pub(crate) async fn discard_repository_patch(
     let repository_path = target.repository_path;
     let path = request.path;
     let revision = request.revision;
-    let selections = request.selections;
+    let selection_dtos = request.selections;
+    let selections = selection_dtos
+        .iter()
+        .cloned()
+        .map(Into::into)
+        .collect::<Vec<_>>();
     let task = state
         .tasks
         .submit(
@@ -493,7 +516,7 @@ pub(crate) async fn discard_repository_patch(
                     path: path.clone(),
                     scope: DiffScope::WorkingTree,
                     revision: revision.clone(),
-                    selections: selections.clone(),
+                    selections: selection_dtos.clone(),
                 };
                 staging::validate_patch_request(&selection, file).map_err(|_| {
                     TaskFailure::Failed(

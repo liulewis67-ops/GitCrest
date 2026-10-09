@@ -268,7 +268,12 @@ pub(super) async fn request_ai(
         );
         let text = match selection.selections.as_deref() {
             Some(selections) => {
-                ai::format_selected_changes(&read.document, selections).map_err(|_| {
+                let selections = selections
+                    .iter()
+                    .cloned()
+                    .map(Into::into)
+                    .collect::<Vec<_>>();
+                ai::format_selected_changes(&read.document, &selections).map_err(|_| {
                     ApiError::new(
                         StatusCode::BAD_REQUEST,
                         ApiErrorCode::RequestInvalid,

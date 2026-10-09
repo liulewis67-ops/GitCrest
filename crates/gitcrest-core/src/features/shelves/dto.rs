@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{features::diff, features::diff::DiffScope, features::shelves};
+use crate::{features::diff::DiffScope, features::shelves};
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -9,7 +9,24 @@ pub(super) struct ShelfSelectionRequest {
     pub(super) scope: DiffScope,
     pub(super) revision: String,
     #[serde(default)]
-    pub(super) selections: Vec<diff::DiffSelection>,
+    pub(super) selections: Vec<ShelfDiffSelection>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ShelfDiffSelection {
+    pub(super) hunk_index: usize,
+    #[serde(default)]
+    pub(super) row_index: Option<usize>,
+}
+
+impl From<ShelfDiffSelection> for crate::domain::diff::DiffSelection {
+    fn from(selection: ShelfDiffSelection) -> Self {
+        Self {
+            hunk_index: selection.hunk_index,
+            row_index: selection.row_index,
+        }
+    }
 }
 
 #[derive(Deserialize)]

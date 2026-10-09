@@ -45,8 +45,14 @@ async fn selected_commit_patch(
         if current.document.revision != selection.revision {
             return Err(CommitPatchError::Stale);
         }
+        let diff_selections = selection
+            .selections
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect::<Vec<_>>();
         selected_patch.extend(
-            diff::select_changes(&current, &selection.selections)
+            diff::select_changes(&current, &diff_selections)
                 .map_err(|_| CommitPatchError::Invalid)?,
         );
     }

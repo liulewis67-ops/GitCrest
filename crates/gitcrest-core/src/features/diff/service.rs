@@ -10,6 +10,7 @@ pub use read::{read, read_commit_file, read_with_patch};
 #[cfg(test)]
 use std::path::Path;
 
+use crate::domain::diff::DiffSelection;
 pub(crate) use crate::domain::error::DiffError;
 use crate::features::status::{ChangeCategory, ChangeKind, StatusFile};
 
@@ -61,14 +62,6 @@ pub struct DiffHunk {
     pub new_start: u32,
     pub new_lines: u32,
     pub rows: Vec<DiffRow>,
-}
-
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DiffSelection {
-    pub hunk_index: usize,
-    #[serde(default)]
-    pub row_index: Option<usize>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

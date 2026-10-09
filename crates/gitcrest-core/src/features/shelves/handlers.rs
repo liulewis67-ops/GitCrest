@@ -670,7 +670,13 @@ async fn prepare_shelf_items(
         let patch = if item.selections.is_empty() {
             current.patch
         } else {
-            diff::select_changes(&current, &item.selections).map_err(|error| {
+            let selections = item
+                .selections
+                .iter()
+                .cloned()
+                .map(Into::into)
+                .collect::<Vec<_>>();
+            diff::select_changes(&current, &selections).map_err(|error| {
                 if error == DiffError::InvalidPath {
                     ApiError::from_shelf_error(shelves::ShelfError::EmptySelection)
                 } else {
