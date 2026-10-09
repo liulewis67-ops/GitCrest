@@ -3094,3 +3094,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、8、14 节。
 - 限制/后续：取消后的 Git 写操作与恢复决策仍由 GitCommandService 编排；后续继续把协调移到 remotes workflow service，并把所需 Git 原语收敛成显式写 port；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`11c1372`
+
+### Pull 取消恢复状态判定迁入 domain — 小阶段 269
+- 状态：已完成（pull cancellation state machine 的纯判断集中在 remote domain）
+- 日期：2026-10-09
+- 交付：新增 `PullRecoveryDecision`、`assess_cancelled_pull` 与 `pull_state_restored`，集中表达 pull 取消后的 OID 不匹配、活动 Git 操作、冲突、clean 状态和需验证 merge 结果等决策；GitCommandService 依据领域决策选择失败/等待/取消或继续核对，并共用恢复成功条件。Git 子进程读取、abort、reset 和 tree 校验仍由现有执行路径负责，未改变日志文案和任务终态。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未执行取消与 rebase abort、merge index 核对、冲突和用户输入等待场景。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、8、14 节。
+- 限制/后续：取消恢复中的 Git 操作编排仍在 GitCommandService；后续继续拆分 feature workflow 与 Git 恢复命令端口，并补充对应故障场景验收；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`a31ed19`
