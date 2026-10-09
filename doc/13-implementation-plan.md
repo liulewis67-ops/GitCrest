@@ -4654,3 +4654,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/repositories.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：迁移编排仍在 `storage/storage.rs`，目前该文件主要保留连接初始化、迁移和测试；后续需按规范拆分 migrations/database 边界。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 对齐 storage 模块入口目录 — 小阶段 427
+- 状态：已完成（SQLite 存储模块入口使用规范约定的 `storage/mod.rs`）
+- 日期：2026-10-10
+- 交付：将 `src/storage/storage.rs` 重命名为 `src/storage/mod.rs`，并移除 `lib.rs` 上针对旧路径的 `#[path]` 属性。子模块位置与路径不变，crate 仍通过 `mod storage;` 加载存储边界。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：确认所有 storage child modules 仍位于 `src/storage/`，外部 crate 内部调用路径 `storage::RepositoryStore` 保持不变。
+- 证据：`crates/gitcrest-core/src/lib.rs`、`crates/gitcrest-core/src/storage/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：连接配置与 migration 编排仍在 `storage/mod.rs`；下一小阶段拆迁移职责到规范约定的 `storage/migrations.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段目录调整与台账同一 commit（SHA 可在后续台账更新中补记）。

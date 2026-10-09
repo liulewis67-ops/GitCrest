@@ -9,7 +9,6 @@ mod git;
 mod ports;
 mod refresh;
 mod state;
-#[path = "storage/storage.rs"]
 mod storage;
 
 use execution::TaskFailure;
