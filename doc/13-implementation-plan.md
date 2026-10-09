@@ -3962,3 +3962,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；每轮使用独立 sidecar/SQLite 和同一 fixture，返回目标提交。基准运行前后 fixture refs 和工作树状态保持不变。
 - 证据：`doc/evidence/S7.2/api-win32-cold-repo-index-stage355-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`。
 - 限制/后续：移除排序复合索引不能稳定改善写入，继续保留当前排序索引与 schema 12；冷搜索仍约 4–5 秒，下一轮从减少 FTS 建索引输入或更早启动构建寻找方案。S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
+- 完成 commit：`b714c7e perf: evaluate history cache index width`
