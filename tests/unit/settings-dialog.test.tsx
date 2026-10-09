@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { SettingsDialog } from "../../src/features/settings/SettingsDialog";
-import { defaultShortcutPreferences } from "../../src/features/settings/model/shortcut-preferences";
+import { defaultShortcutPreferences } from "../../src/shared/lib/shortcut-preferences";
 import { PrivacyScopePreview } from "../../src/features/settings/PrivacyScopePreview";
 
 afterEach(cleanup);

@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent, type KeyboardEvent } from "react";
 import type { AiSettingsResponse, GitCrestApiClient } from "../../api/client";
-import { useDialogFocus } from "../../shared/use-dialog-focus";
 import {
   defaultShortcutPreferences,
   displayShortcut,
@@ -9,7 +8,8 @@ import {
   shortcutFromEvent,
   type ShortcutAction,
   type ShortcutPreferences,
-} from "./model/shortcut-preferences";
+} from "../../shared/lib/shortcut-preferences";
+import { useDialogFocus } from "../../shared/use-dialog-focus";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 import type { UpdateStatus } from "../../api/update-status";
 

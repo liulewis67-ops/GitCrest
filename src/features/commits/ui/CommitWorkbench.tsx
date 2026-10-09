@@ -1,6 +1,6 @@
 import { lazy, Suspense, type KeyboardEvent } from "react";
 import type { CommitRequest, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../../api/client";
-import { ariaShortcut, displayShortcut, matchesShortcut, type ShortcutPreferences } from "../../settings";
+import { ariaShortcut, displayShortcut, matchesShortcut, type ShortcutPreferences } from "../../../shared/lib/shortcut-preferences";
 import type { CommitAction } from "../model/commit-action";
 
 const CommitMessageAssistant = lazy(() => import("../../settings").then(({ CommitMessageAssistant }) => ({ default: CommitMessageAssistant })));
