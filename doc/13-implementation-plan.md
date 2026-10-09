@@ -3403,4 +3403,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright 驱动本机 HTTPS/Git HTTP fixture、Git askpass 和 Windows Credential Manager。
 - 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前取消和凭据清理场景在 Windows 验证；macOS/Linux 系统凭据库与 Git 进程取消需在对应 runner 复测。S7.5 仍保持进行中。
-- 完成 commit：待提交
+- 完成 commit：`e0c43cd`
