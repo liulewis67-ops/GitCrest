@@ -4565,3 +4565,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/settings/model/shortcut-preferences.ts`、`src/features/settings/index.ts`、Settings/Commit/Diff 调用点、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
 - 限制/后续：只调整快捷键偏好规则的职责归属，不改变默认绑定、键位冲突或显示语义；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 防止返回 refs 变化后的历史搜索缓存 — 小阶段 418
+- 状态：已完成（FTS 命中在响应前复核 refs 指纹；不一致时回退到 Git 查询）
+- 日期：2026-10-10
+- 交付：history message FTS 命中并从 Git 装配提交摘要后，再次读取 refs fingerprint；只有与查询开始时一致才返回缓存结果。refs 已变化或无法复核时，使用 Git 当前结果回退，并以重新计算的指纹调度后台索引，避免把旧 refs 集合的缓存结果当作当前搜索结果返回。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：检查 refs 复核成功且相同才构造 FTS response；指纹变化或复核失败均进入现有 Git 查询路径，随后索引构建重新读取当前 refs 指纹；固定类别日志不包含仓库路径、查询词或 refs 内容。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 6.2 节。
+- 限制/后续：refs 仍可能在最后一次复核完成后立刻被外部 Git 操作改变；读取接口提供的是复核时点的最佳可用快照，不建立跨 Git 与 SQLite 的原子锁。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。

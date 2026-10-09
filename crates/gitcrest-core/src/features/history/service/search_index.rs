@@ -57,6 +57,7 @@ pub async fn read_page_indexed(
         None
     };
 
+    let mut stale_cached_index = false;
     if let (Some(fingerprint), Some(message)) = (&fingerprint, &filters.message) {
         let store_for_search = store.clone();
         let repo_id_for_search = repo_id.clone();
@@ -92,15 +93,37 @@ pub async fn read_page_indexed(
             if has_more {
                 entries.pop();
             }
-            let commits = summaries_for_search_entries(repository_path, &entries).await?;
-            return Ok(CommitPage {
-                repo_id,
-                offset,
-                limit,
-                commits,
-                next_offset: has_more.then_some(offset + limit),
-                search_pending: false,
-            });
+            let commits = summaries_for_search_entries(repository_path, &entries).await;
+            let current_fingerprint = refs_fingerprint(repository_path, head).await;
+            let refs_are_current =
+                matches!(&current_fingerprint, Ok(current) if current == fingerprint);
+            match commits {
+                Ok(commits) if refs_are_current => {
+                    return Ok(CommitPage {
+                        repo_id,
+                        offset,
+                        limit,
+                        commits,
+                        next_offset: has_more.then_some(offset + limit),
+                        search_pending: false,
+                    });
+                }
+                Err(_) => eprintln!(
+                    "[gitcrest-core] History message index commit hydration failed; falling back to Git search"
+                ),
+                _ => {}
+            }
+            if !refs_are_current {
+                match current_fingerprint {
+                    Ok(_) => eprintln!(
+                        "[gitcrest-core] History message index refs changed during query; falling back to Git search"
+                    ),
+                    Err(_) => eprintln!(
+                        "[gitcrest-core] History message index refs recheck failed; falling back to Git search"
+                    ),
+                }
+                stale_cached_index = true;
+            }
         }
     }
 
@@ -122,7 +145,11 @@ pub async fn read_page_indexed(
             repo_id,
             repository_path.to_owned(),
             head.map(str::to_owned),
-            fingerprint,
+            if stale_cached_index {
+                None
+            } else {
+                fingerprint
+            },
             store,
         );
     }
