@@ -23,9 +23,9 @@ pub(crate) use self::commit_detail::read_commit;
 #[cfg(test)]
 use self::commit_history::{read_page, valid_date, valid_filters};
 pub(crate) use self::refs::read_refs;
-#[cfg(test)]
-use self::search_index::build_history_search_index;
 pub(crate) use self::search_index::read_page_indexed;
+#[cfg(test)]
+use self::search_index::refs_fingerprint;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HistoryError {
@@ -293,20 +293,39 @@ mod tests {
         let manager = RepositoryManager::default();
         let repository = manager.open_path(path.to_str().unwrap()).await.unwrap();
         let store: Arc<dyn HistorySearchIndexPort> = Arc::new(manager.store());
-        build_history_search_index(
-            &repository.repo_id,
-            path,
-            repository.head.as_deref(),
-            None,
-            store.clone(),
-        )
-        .await
-        .unwrap();
-
         let filters = HistoryFilters {
             message: Some("nEeDlE".into()),
             ..HistoryFilters::default()
         };
+        let cold = read_page_indexed(
+            repository.repo_id.clone(),
+            path,
+            0,
+            1,
+            repository.head.as_deref(),
+            &filters,
+            store.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(cold.commits[0].subject, "second NEEDLE entry");
+        let fingerprint = refs_fingerprint(path, repository.head.as_deref())
+            .await
+            .unwrap();
+        let mut index_ready = false;
+        for _ in 0..100 {
+            let search = store.search_messages(&repository.repo_id, &fingerprint, "needle", 0, 1);
+            if search.unwrap().is_some() {
+                index_ready = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            index_ready,
+            "a cold message search should start index building"
+        );
+
         let indexed = read_page_indexed(
             repository.repo_id.clone(),
             path,

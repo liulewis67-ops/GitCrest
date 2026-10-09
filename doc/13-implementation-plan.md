@@ -496,6 +496,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 测试：`pnpm test` 通过（112 tests）；`pnpm build`、`pnpm test:e2e`（1 个 Electron E2E）、Rust 格式检查、Clippy、history 单测（3 tests）、历史 API 集成测试（1 test）及完整 Rust suite（`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`，99 tests）通过；日期格式器修改后再次 `pnpm test`（112 tests）、`pnpm build` 与 `pnpm electron:package` 通过。`node scripts/performance/benchmark.mjs prepare <temp-path>` 生成 100,000 commits，Diff 基线 `git diff --numstat` 为 1000/1000；history-order API 与两个 desktop benchmark 各按 20 轮运行。
 - 进度 commits：`cd06f7c`（基准与首轮优化）、`106d81d`（历史顺序优化）、`6e16c36`（可见行日期格式器复用）、`3528979`（大仓库消息搜索索引）、`fe40ead`（只读 status 禁止可选 index 写入）、`34ba669`（Diff 按所选路径刷新 status）、`fbd056f`（Diff 并行读取 status 与 patch）、`2a82e54`（滚动停止后保存历史位置）、`e3c1c1c`（watcher 有效状态缓存）、`3ae910a`（强制 status 刷新基准）、`5769b7d`（低干扰桌面帧/内存采样）、`377a705`（桌面完整基准复测）、`9a29ea5`（进程级内存归因）、`6e50868`（GPU 内存/帧率权衡复测）、`ba91d98`（保留未受影响的 watcher 状态缓存）、`04bb5ef`（增量 status 缓存基准复测）、`ec9d777`（watcher dirty-scope status 基准）、`d248b0f`（关闭仓库标签时释放 renderer 快照）、`20f8fff`（多仓关闭标签缓存回收配对测量）、`80e3010`（libgit2 status 冷读优化）、`2099169`（隔离 Electron profile）、`63947b0`（未配置更新源时延迟加载 updater）、`fece084`（隔离 profile GPU 对照）、`bf2e332`（补充 Private Working Set）、`cc080bb`（记录 Windows 计数器开销）、`a928696`（Private Working Set 窗口采样）。S7.2 仍待验收，这些进度提交不代表阶段完成。
 - 搜索索引进展：SQLite FTS5 trigram 持久索引在首次 message 搜索后后台惰性构建，索引未就绪及短查询继续走 Git；refs/HEAD 快照变化会使旧索引失效。Release API 100k fixture 20 轮复测：消息搜索 P95 87ms，首屏历史 P95 144ms；索引构建约 14.4s。`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（102 tests）、`cargo fmt --check`、Clippy 和 `git diff --check` 通过。证据：`doc/evidence/S7.2/api-win32-search-index-headfast.json`。
+- Cold/warm 搜索复测（小阶段 307）：以每轮新建 sidecar 和空数据库测冷索引首次查询，20 轮 P95 631.626ms，未达到 <200ms；warm 索引搜索 P95 92.208ms 达标，但 max 18.343s 有单次异常长尾，需继续定位。索引准备约 16.478s。首页历史 P95 94.911ms、dirty-scope status 14.067ms、强制全量 status 9.508ms、缓存全量/路径 status 0.862/0.806ms、1k 行 Diff 103.547ms。完整证据：`doc/evidence/S7.2/api-win32-cold-warm-search-20261009.json`。这些是本机 Windows Release sidecar API 数据，不代表 Electron 桌面启动、工作集、帧率或安装包目标通过。
 - Status 进展：只读 Git status 子进程设置 `GIT_OPTIONAL_LOCKS=0`，不修改仓库配置或工作区文件。100k API 基准 20 轮 P95：全量 116ms、路径 scope 129ms（此前 126/140ms）；目标 <100ms 仍未达成。status 单元/集成用例、Clippy 和 Release API 基准通过。证据：`doc/evidence/S7.2/api-win32-status-locks.json`。
 - 状态缓存进展：普通 status API 复用 watcher 失效后的全量/路径快照；watcher 文件事件立即使缓存版本失效，避免并发 Git 读取把旧结果重新写回。缓存最多保留 8 个仓库、每仓库最多 10,000 条文件记录或 256 个路径记录；手动刷新通过 `refresh=true` 强制调用 Git，写操作预检保持强制读取。100k Release API 基准 20 轮缓存命中 P95：全量 0.953ms、路径 scope 0.772ms；首次冷全量读取样本 113.132ms。基准新增强制刷新场景后，`refresh=true` 全量 P95 为 125.634ms，确认缓存命中目标达成，但 watcher 失效或手动强刷的冷读仍未达到 <100ms。直接测试 untracked/ignored/rename 和 index 并行选项未见稳定收益。构建与 Clippy 通过。证据：`doc/evidence/S7.2/api-win32-status-cache.json`、`doc/evidence/S7.2/api-win32-status-forced-refresh.json`。
 - 状态缓存增量修复：watcher 现在按 dirty scope 失效路径快照，保留未受影响的全量快照供非重叠路径读取；受影响 scope 刷新后合并回全量快照。dirty path 超过 256 条时升级为全量失效。TaskService 在仓库任务终止后主动失效该仓库状态缓存，覆盖测试环境和 watcher 尚未发送事件时的 Git 写入；此前 commit API 集成测试暴露了任务完成后读取旧状态的问题。新增覆盖路径合并、目录边界、并发旧刷新和 dirty path 上限的测试。验收：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（106 tests）、`git diff --check` 均通过。尚未对增量失效后的冷读重新跑 100k 基准；S7.2 整体仍待验收。
@@ -3465,11 +3466,21 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 完成 commit：`1c566e0`
 
 ### S7.2 Release API 基准复测 — 小阶段 306
-- 状态：已完成（当前 Windows Release sidecar 的 100k 历史搜索、status 与 Diff API 指标均达到目标）
+- 状态：已完成（复测并记录当时测量范围内的指标；当时未测冷索引首次查询）
 - 日期：2026-10-09
-- 交付：用基准脚本重新生成干净的 100,000 commit / 1,000 行 diff fixture，使用当前 Release sidecar 执行 20 轮并保存完整样本。搜索索引后台构建在 14.941 秒后 ready；warm index message search P95 为 70.550ms，未索引首次查询的构建时延不纳入搜索 P95。
-- 验证：`node scripts/performance/benchmark.mjs run <独立临时 fixture> <报告路径>` 成功；20 轮 P95：历史首页 110.195ms、搜索 70.550ms、dirty-scope status 15.260ms、强制全量 status 13.551ms、缓存全量/路径 status 0.800/0.867ms、1k 行 Diff 102.761ms。指标低于 S7.2 对应阈值；本阶段只测 Release API，不覆盖 Electron 桌面启动/内存/30 秒帧率/安装包，也不重跑代码测试。
+- 交付：用基准脚本重新生成干净的 100,000 commit / 1,000 行 diff fixture，使用当时的 Release sidecar 执行 20 轮并保存完整样本。索引约 14.941 秒后 ready；报告中的搜索 P95 70.550ms 是索引已就绪后的 warm 查询，冷索引首次查询没有纳入该指标。
+- 验证：`node scripts/performance/benchmark.mjs run <独立临时 fixture> <报告路径>` 成功；当时测得历史首页 P95 110.195ms、warm 搜索 P95 70.550ms、dirty-scope status 15.260ms、强制全量 status 13.551ms、缓存全量/路径 status 0.800/0.867ms、1k 行 Diff 102.761ms。本阶段没有冷索引首次查询样本，因此不能据此宣称搜索目标整体通过；本阶段只测 Release API，不覆盖 Electron 桌面启动/内存/30 秒帧率/安装包，也不重跑代码测试。
 - 手工验证：未执行 GUI 操作；HTTP harness 通过当前 Release sidecar 和隔离 100k fixture 执行请求，并校验每轮搜索/status/Diff 返回内容。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-release-recheck-20261009.json`。旧 `gitcrest-s7.2-100k-fixture-v2` 临时目录仅剩空 `.git`，本次 fixture 使用独立新目录；临时报告副本写入系统 TEMP 后再收录。
 - 限制/后续：S7.2 仍未整体通过，桌面空闲 Working Set 超过 250MB、冷启动尚未在冷文件系统缓存下测量，滚动 P5 尚未在稳定 ≥60Hz 帧调度环境达标；跨平台性能留待 S7.4。
 - 完成 commit：`317bf2d`
+
+### S7.2 历史搜索 cold/warm 基准与索引解析调度 — 小阶段 307
+- 状态：已完成（新增冷索引首次查询基准，并将索引输出解析移出 Tokio async runtime）
+- 日期：2026-10-09
+- 交付：API benchmark 新增 20 轮 cold-index message search：每轮启动独立 sidecar、创建空数据库并注册同一 100k fixture，计时首次查询；保留 warm-index 搜索作为对照。history search index 输出解析改用 `tokio::task::spawn_blocking`；首次搜索请求立即执行 Git 搜索并异步构建索引，首页浏览不触发预热。单测覆盖首次冷搜索结果、后台索引就绪后索引结果的 Git 顺序和 refs 变更失效。
+- 验证：完整 `pnpm check` 通过：前端/Electron build、Vitest 163/163、Rust 137/137、Electron E2E 6 files / 29 tests，以及 Rust 格式检查；`git diff --check` 通过。Windows Release API 20 轮结果：cold 搜索 P95 631.626ms（未达到 <200ms）、warm 搜索 P95 92.208ms（P95 达标，但 max 18.343s 异常）、首页 P95 94.911ms、dirty-scope status 14.067ms、强制全量 status 9.508ms、缓存全量/路径 status 0.862/0.806ms、1k 行 Diff 103.547ms；索引构建约 16.478s。
+- 手工验证：未执行 GUI 操作；独立 sidecar harness 在隔离 100k Git fixture 上执行 20 轮冷/热查询，并核对响应。曾尝试首次历史页触发后台预热，但首页请求出现 13–18 秒长尾，已撤回该改动；当前首页不触发索引构建。
+- 证据：`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/evidence/S7.2/api-win32-cold-warm-search-20261009.json`。
+- 限制/后续：冷索引查询仍超过 200ms；warm 查询 max 的 18.343 秒异常样本尚未归因；索引构建约 16.5 秒。S7.2 的桌面内存、帧率等指标仍未达标，S7.2、S7.4、S7.5 均未整体完成。
+- 完成 commit：待补记

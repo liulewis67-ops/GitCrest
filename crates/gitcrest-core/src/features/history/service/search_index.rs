@@ -166,7 +166,9 @@ pub async fn build_history_search_index(
         HISTORY_INDEX_DEADLINE,
     )
     .await?;
-    let entries = parse_history_search_index(&output)?;
+    let entries = tokio::task::spawn_blocking(move || parse_history_search_index(&output))
+        .await
+        .map_err(|_| HistoryError::GitFailed)??;
     let final_fingerprint = refs_fingerprint(repository_path, head).await?;
     if final_fingerprint != fingerprint {
         return Ok(());
@@ -178,7 +180,7 @@ pub async fn build_history_search_index(
         .map_err(|_| HistoryError::GitFailed)
 }
 
-async fn refs_fingerprint(
+pub(super) async fn refs_fingerprint(
     repository_path: &Path,
     head: Option<&str>,
 ) -> Result<String, HistoryError> {

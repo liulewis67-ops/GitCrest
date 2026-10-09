@@ -233,6 +233,41 @@ async function startSidecar(executable, databasePath) {
   return { child, address, token, getStderr: () => stderr };
 }
 
+async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
+  const samplesMs = [];
+  for (let index = 0; index < iterations; index += 1) {
+    const sampleDirectory = join(tempDataPath, `cold-search-${index + 1}`);
+    const databasePath = join(sampleDirectory, "gitcrest.sqlite");
+    let instance;
+    try {
+      await mkdir(sampleDirectory, { recursive: true });
+      instance = await startSidecar(executable, databasePath);
+      const baseUrl = `http://${instance.address.host}:${instance.address.port}`;
+      const repository = await requestJson(`${baseUrl}/api/v1/repositories`, instance.token, "POST", { path: fixturePath });
+      const startedAt = performance.now();
+      const page = await requestJson(
+        `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`,
+        instance.token,
+      );
+      samplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
+      if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+        throw new Error("Cold history search did not return its matching commit.");
+      }
+    } finally {
+      if (instance) await stop(instance.child);
+      await rm(sampleDirectory, { recursive: true, force: true });
+    }
+  }
+  return {
+    name: "historySearch100kColdIndex",
+    samples: samplesMs.length,
+    p50Ms: percentile(samplesMs, 0.5),
+    p95Ms: percentile(samplesMs),
+    maxMs: Math.max(...samplesMs),
+    samplesMs,
+  };
+}
+
 async function runBenchmark(fixturePath, reportPath) {
   const executable = join(root, "crates", "gitcrest-core", "target", "release", process.platform === "win32" ? "gitcrest-core.exe" : "gitcrest-core");
   const tempData = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-data-"));
@@ -250,6 +285,7 @@ async function runBenchmark(fixturePath, reportPath) {
       }
       return Number((performance.now() - startTime).toFixed(3));
     });
+    const coldHistorySearch = await measureColdHistorySearch(executable, fixturePath, tempData);
     const started = await startSidecar(executable, databasePath);
     child = started.child;
     const address = started.address;
@@ -335,7 +371,7 @@ async function runBenchmark(fixturePath, reportPath) {
       fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath, historyQuery: "first page, 50 entries", searchQuery: "message contains benchmark commit 099999" },
       iterations,
       searchIndexWarmup: { ready: historySearchIndexReady, attempts: historySearchWarmupAttempts, elapsedMs: historySearchWarmupMs },
-      results: [startup, history, historySearch, dirtyScopedStatus, forcedFullStatus, fullStatus, partialStatus, diff],
+      results: [startup, coldHistorySearch, history, historySearch, dirtyScopedStatus, forcedFullStatus, fullStatus, partialStatus, diff],
       memory: { sidecarWorkingSetBytes: workingSetBytes, sampleCount: 1, note: "Sidecar only; Electron renderer and desktop process tree are not included." },
       limitations: ["This harness measures the Rust sidecar API and does not claim Electron cold start, desktop process-tree memory, 30-second scroll P5, or installer size."],
       stderr: started.getStderr().trim() || undefined,
