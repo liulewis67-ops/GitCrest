@@ -3863,3 +3863,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/settings/index.ts`、`src/features/settings/ui/SettingsDialog.tsx`、`src/features/settings/ui/PrivacyScopePreview.tsx`、`tests/unit/settings-dialog.test.tsx`。
 - 限制/后续：此阶段只收敛 Settings UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
 - 完成 commit：`522d4d5 refactor: organize settings feature UI`
+
+### Shelves feature UI 目录对齐 — 小阶段 346
+- 状态：已完成（ShelfCenter 归入 feature 的 `ui/`）
+- 日期：2026-10-09
+- 交付：将 `ShelfCenter` 迁入 `src/features/shelves/ui/`，更新 shelves feature 公共出口、WorkspaceNavigation 懒加载所用的模块入口保持不变，以及组件测试导入路径。
+- 验证：Shelf 定向测试 1 file / 2 tests、`pnpm frontend:boundaries`、`pnpm build` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；现有组件测试覆盖 Shelf 列表与空状态。
+- 证据：`src/features/shelves/index.ts`、`src/features/shelves/ui/ShelfCenter.tsx`、`tests/unit/shelf-center.test.tsx`。
+- 限制/后续：此阶段只收敛 Shelves UI 目录归属；其它 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
+- 完成 commit：待提交

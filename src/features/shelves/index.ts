@@ -1,1 +1,1 @@
-export { ShelfCenter } from "./ShelfCenter";
+export { ShelfCenter } from "./ui/ShelfCenter";

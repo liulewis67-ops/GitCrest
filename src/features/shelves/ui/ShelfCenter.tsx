@@ -8,8 +8,8 @@ import type {
   ShelfResponse,
   TaskSnapshotResponse,
   StatusSnapshotResponse,
-} from "../../api/client";
-import { useDialogFocus } from "../../shared/use-dialog-focus";
+} from "../../../api/client";
+import { useDialogFocus } from "../../../shared/use-dialog-focus";
 
 type SelectedChange = { revision: string; hunks?: number[] };
 type ShelfAfterCreateAction = { switchTarget: string; existingShelfIds: string[] };

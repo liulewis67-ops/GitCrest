@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ShelfResponse } from "../../src/api/client";
-import { ShelfCenter } from "../../src/features/shelves/ShelfCenter";
+import { ShelfCenter } from "../../src/features/shelves/ui/ShelfCenter";
 
 afterEach(cleanup);
 
