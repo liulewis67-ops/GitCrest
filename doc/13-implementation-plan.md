@@ -3932,4 +3932,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；基准每轮使用隔离 sidecar/SQLite，全部返回期望的目标提交；fixture refs 和工作树未改动。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-cold-index-sync-normal-stage352-20261009.json`、`doc/evidence/S7.2/api-win32-cold-index-sync-full-control-stage352-20261009.json`。
 - 限制/后续：该调整降低了索引事务提交时间，但索引构建和完整冷搜索仍需数秒，远超 <200ms 目标；100k 首屏、桌面内存/帧率、S7.4 和 S7.5 仍待验收。下一步继续减少冷索引需要装载和写入的数据量，并维持完整搜索、顺序、分页及断电后可重建语义。
-- 完成 commit：待补记
+- 完成 commit：`ef37e97 perf: relax sync for rebuildable history index`
