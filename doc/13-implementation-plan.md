@@ -2516,3 +2516,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：status/refs 快照清理仍由 App 在仓库 tab 关闭时调用相应 feature 清理入口；App 其余 session 恢复和页面编排仍待按职责收敛。S7.2、S7.4、S7.5 继续待验收。
 - 证据：`src/features/repositories/model/use-repository-cache-lifecycle.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、5 节。
 - 实施 commit：`afc15c5`
+
+### S7.2 — Windows 显示刷新率与 RAF 帧间隔诊断 — 小阶段 211
+- 状态：已完成（补充刷新率证据；S7.2 整体仍待验收）
+- 日期：2026-10-09
+- 交付：读取 Windows `Win32_VideoController` 当前显示模式：NVIDIA GeForce RTX 3050 Laptop GPU 报告 1920×1080、60 Hz；Oray 虚拟显示驱动未报告刷新率。与同机 100k commit fixture 的 20 轮 RAF 数据对照，idle 与 scroll P5 均约 55.2486 FPS，P95 帧间隔都约 18.1 ms，表明滚动负载不是唯一帧率限制来源。
+- 验证：原始测量来自 `Get-CimInstance Win32_VideoController | Select-Object Name,CurrentRefreshRate,VideoModeDescription`；对照已归档 20 轮 Release Electron benchmark 数据。`git diff --check` 与 JSON 解析通过。
+- 限制/后续：适配器报告的 60 Hz 不是物理逐帧时序测量；本次诊断不能把 RAF 未达 60 FPS 归因于某个 Electron/Chromium/桌面合成器组件，也不改变 FPS 门槛未通过的结论。S7.2 继续待验收。
+- 证据：`doc/evidence/S7.2/desktop-win32-refresh-rate-diagnostic.json`、`doc/evidence/S7.2/desktop-win32-history-scroll-20runs.json`、`scripts/performance/desktop-benchmark.mjs`。
+- 阶段 commit：`09c68d7`
