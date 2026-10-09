@@ -2605,3 +2605,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff adapter 目前仍是具体 Git CLI 适配器，尚未经由应用层 port 注入；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/git/diff.rs`、`crates/gitcrest-core/src/features/diff/service/read.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5、14 节。
 - 实施 commit：`033bdcc`
+
+
+### Diff Git 读取通过 port 注入 — 小阶段 220
+- 状态：已完成（Diff feature service 依赖领域化 port，Git CLI 实现由 GitCommandService 提供）
+- 日期：2026-10-09
+- 交付：新增 `ports/diff.rs` 定义 patch 读取契约，由 `GitCommandService` 调用 Git 适配器实现；Diff service 改为接收 `DiffGitPort`，diff、commit、staging、shelves、settings 等请求/任务路径均显式传入 git service 句柄。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 和 `git diff --check` 通过；未运行测试。
+- 限制/后续：DiffGitPort 当前仅包含读 patch 操作，执行参数仍由 Git CLI adapter 固定；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/ports/diff.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/diff/service/read.rs`、staging/commits/shelves/settings handlers、`doc/14-backend-development-guidelines.md` 第 4 节。
+- 实施 commit：`2201b38`
