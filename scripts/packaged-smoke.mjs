@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
@@ -11,17 +11,6 @@ const root = process.cwd();
 const output = resolve(process.env.GITCREST_PACKAGED_OUTPUT ?? join(root, "dist"));
 let executable = await findPackagedExecutable(output);
 await assertReleaseArtifactSizes(output);
-const injectLinuxUnsignedFeed = process.platform === "linux" && process.env.GITCREST_PACKAGED_LINUX_UNSIGNED_FEED === "1";
-const linuxUpdateConfigPath = join(output, "linux-unpacked", "resources", "app-update.yml");
-let originalLinuxUpdateConfig;
-if (injectLinuxUnsignedFeed) {
-  try {
-    originalLinuxUpdateConfig = await readFile(linuxUpdateConfigPath);
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-  }
-  await writeFile(linuxUpdateConfigPath, "provider: generic\nurl: https://updates.invalid\n");
-}
 let appData;
 let installDirectory;
 let diskImageMountPoint;
@@ -55,7 +44,12 @@ try {
   app = await electron.launch({
     executablePath: executable,
     args: [],
-    env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: join(appData, "gitcrest.sqlite") },
+    env: {
+      ...process.env,
+      ...(process.platform === "linux" ? { APPIMAGE_EXTRACT_AND_RUN: "1" } : {}),
+      ELECTRON_RENDERER_URL: "",
+      GITCREST_DATABASE_PATH: join(appData, "gitcrest.sqlite"),
+    },
   });
   const runtime = await app.evaluate(({ app: electronApp }) => ({
     isPackaged: electronApp.isPackaged,
@@ -102,17 +96,10 @@ try {
           diskImageMounted = false;
         }
       } finally {
-        try {
-          if (injectLinuxUnsignedFeed) {
-            if (originalLinuxUpdateConfig) await writeFile(linuxUpdateConfigPath, originalLinuxUpdateConfig);
-            else await unlink(linuxUpdateConfigPath);
-          }
-        } finally {
-          if (appData) {
-            await rm(appData, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
-            await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_500));
-            assert.equal(existsSync(appData), false, "the temporary packaged smoke directory should be removed");
-          }
+        if (appData) {
+          await rm(appData, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_500));
+          assert.equal(existsSync(appData), false, "the temporary packaged smoke directory should be removed");
         }
       }
     }
@@ -135,13 +122,22 @@ async function assertReleaseArtifactSizes(distPath) {
 
 async function findPackagedExecutable(distPath) {
   if (process.platform === "win32") return join(distPath, "win-unpacked", "GitCrest.exe");
-  if (process.platform === "linux") return join(distPath, "linux-unpacked", "gitcrest");
+  if (process.platform === "linux") return await findLinuxAppImage(distPath);
   if (process.platform === "darwin") {
     const entries = await readdir(distPath, { withFileTypes: true });
     const macDirectory = entries.find((entry) => entry.isDirectory() && entry.name.startsWith("mac"));
     if (macDirectory) return join(distPath, macDirectory.name, "GitCrest.app", "Contents", "MacOS", "GitCrest");
   }
   throw new Error(`No packaged GitCrest executable was found for ${process.platform} in ${resolve(distPath)}.`);
+}
+
+async function findLinuxAppImage(distPath) {
+  const entries = await readdir(distPath, { withFileTypes: true });
+  const appImages = entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".appimage"))
+    .map((entry) => join(distPath, entry.name));
+  assert.ok(appImages.length > 0, `a Linux AppImage should exist in ${resolve(distPath)}`);
+  return appImages.sort((left, right) => right.localeCompare(left))[0];
 }
 
 async function findWindowsInstaller(distPath) {
