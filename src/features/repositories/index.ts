@@ -3,6 +3,7 @@ export { useWorkspaceLayout } from "./model/use-workspace-layout";
 export { useWorkspaceGraphScroll } from "./model/use-workspace-graph-scroll";
 export { useWorkspaceCommitSelection } from "./model/use-workspace-commit-selection";
 export { useWorkspaceCommitAction } from "./model/use-workspace-commit-action";
+export { useWorkspaceSessionActions } from "./model/use-workspace-session-actions";
 export { useRepositoryMutations } from "./model/use-repository-mutations";
 export { useRepositoryOpening } from "./model/use-repository-opening";
 export { getRepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";

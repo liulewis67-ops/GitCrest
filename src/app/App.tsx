@@ -12,7 +12,7 @@ import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
-import { getRepositoryEventRefreshPlan, loadWorkspaceSession, saveWorkspaceSession, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
+import { getRepositoryEventRefreshPlan, loadWorkspaceSession, saveWorkspaceSession, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { loadDiscardChangesDialog } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useRepositoryRefs } from "../features/branches";
@@ -210,6 +210,7 @@ function App() {
     workspaceSession,
     setWorkspaceSession,
   );
+  const workspaceSessionActions = useWorkspaceSessionActions(setWorkspaceSession);
   const rememberCommitAction = useWorkspaceCommitAction(selectedRepository?.repoId, setWorkspaceSession);
   const graphViewportRef = useRef<HTMLDivElement>(null);
   const { theme, nextTheme } = useThemePreference();
@@ -754,17 +755,7 @@ function App() {
 
   function activateRepository(repository: RepositoryResponse) {
     setOpenError("");
-    setWorkspaceSession((current) => ({
-      ...current,
-      openRepoIds: [...current.openRepoIds.filter((repoId) => repoId !== repository.repoId), repository.repoId],
-      activeRepoId: repository.repoId,
-      tabs: {
-        ...current.tabs,
-        [repository.repoId]: current.tabs[repository.repoId]
-          ? { ...current.tabs[repository.repoId], selectedCommit: current.tabs[repository.repoId].selectedCommit || repository.head || undefined }
-          : { mode: "graph", selectedCommit: repository.head || undefined, graphScrollTop: 0 },
-      },
-    }));
+    workspaceSessionActions.activateRepository(repository);
     setSelectedRepository(repository);
     setPage("workspace");
   }
@@ -774,53 +765,19 @@ function App() {
       setPage("workspace");
       return;
     }
-    setWorkspaceSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [selectedRepository.repoId]: {
-          ...(current.tabs[selectedRepository.repoId] || { graphScrollTop: 0 }),
-          mode: nextMode,
-        },
-      },
-    }));
+    workspaceSessionActions.changeMode(selectedRepository.repoId, nextMode);
   }
 
   function openFileDiff(path: string, scope: "workingTree" | "index") {
     const repoId = selectedRepository?.repoId;
     if (!repoId) return;
-    setWorkspaceSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: {
-          ...(current.tabs[repoId] || { graphScrollTop: 0 }),
-          mode: "diff",
-          selectedFilePath: path,
-          selectedFileScope: scope,
-          selectedDiffCommitOid: undefined,
-        },
-      },
-    }));
+    workspaceSessionActions.openFileDiff(repoId, path, scope);
   }
 
   function openCommitFileDiff(path: string, oid: string) {
     const repoId = selectedRepository?.repoId;
     if (!repoId || !isFullObjectId(oid)) return;
-    setWorkspaceSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: {
-          ...(current.tabs[repoId] || { graphScrollTop: 0 }),
-          mode: "diff",
-          selectedCommit: oid,
-          selectedFilePath: path,
-          selectedFileScope: "commit",
-          selectedDiffCommitOid: oid,
-        },
-      },
-    }));
+    workspaceSessionActions.openCommitFileDiff(repoId, path, oid);
   }
 
   async function openDiffWindow(path: string, scope: "workingTree" | "index" | "commit", commitOid?: string) {
