@@ -17,7 +17,7 @@ import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
-import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
+import { loadTaskCenter, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
 import { loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
 import type { UpdateStatus } from "../api/update-status";
@@ -87,7 +87,6 @@ function App() {
   const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
   const pushTargetsByTask = useRef(new Map<string, PushTarget>());
   const [commitActionMenuOpen, setCommitActionMenuOpen] = useState(false);
-  const taskRefreshPlannerRef = useRef(new TaskRefreshPlanner());
   const [openError, setOpenError] = useState("");
   const { toggleFavorite, forgetRepository } = useRepositoryMutations({
     getApi: () => apiRef.current,
@@ -659,45 +658,33 @@ function App() {
 
   useEffect(() => {
     branchSwitchShelfFlow.observeTasks(tasks);
-    for (const task of tasks) {
-      if (task.repoId && taskRefreshPlannerRef.current.shouldRefreshWorkflowInput(task)) {
-        void refreshRepositoryStatus(task.repoId);
-      }
-
-      const refreshPlan = taskRefreshPlannerRef.current.takeTerminalTaskPlan(task);
-      if (!refreshPlan) continue;
-      let commitIntent: { action: CommitAction; target?: PushTarget; forceWithLease: boolean } | undefined;
-      if (refreshPlan.kind === "commit") {
-        const commitContext = commitSubmission.takeTaskContext(task.taskId);
-        commitIntent = commitContext?.intent;
-        if (task.status === "succeeded" && commitContext?.message === commitMessage) setCommitMessage("");
-        if (task.status === "succeeded" && commitContext?.selections === JSON.stringify(commitSelections)) {
-          setCommitSelections([]);
-        }
-      }
-      if (["branch", "remote", "pull", "workflow"].includes(refreshPlan.kind) && !refreshPlan.repoId) continue;
-      if (refreshPlan.repoId && refreshPlan.refreshRepository) {
-        const api = apiRef.current;
-        if (api) {
-          void api.getRepository(refreshPlan.repoId).then((repository) => {
-            setRepositories((current) => current.map((entry) => entry.repoId === repository.repoId ? repository : entry));
-            setSelectedRepository((current) => current?.repoId === repository.repoId ? repository : current);
-          }).catch((error) => {
-            if (refreshPlan.reportRepositoryRefreshError) {
-              setTasksError(error instanceof Error ? error.message : "Could not refresh repository metadata after commit.");
-            }
-          });
-        }
-      }
-      if (refreshPlan.repoId && refreshPlan.refreshStatus) void refreshRepositoryStatus(refreshPlan.repoId);
-      if (refreshPlan.repoId && refreshPlan.refreshBranches) void refreshRepositoryBranches(refreshPlan.repoId);
-      if (refreshPlan.repoId && refreshPlan.refreshRemotes) void refreshRepositoryRemotes(refreshPlan.repoId);
-      if (refreshPlan.refreshHistory) historyRequests.refresh();
-      if (refreshPlan.kind === "commit" && task.repoId && task.status === "succeeded" && commitIntent && commitIntent.action !== "commit") {
-        void continueCommitPush(task.repoId, commitIntent);
-      }
-    }
   }, [tasks]);
+
+  useTaskRefreshEffects({
+    tasks,
+    getApi: () => apiRef.current,
+    refreshRepositoryStatus,
+    refreshRepositoryBranches,
+    refreshRepositoryRemotes,
+    refreshHistory: historyRequests.refresh,
+    updateRepository: (repository) => {
+      setRepositories((current) => current.map((entry) => entry.repoId === repository.repoId ? repository : entry));
+      setSelectedRepository((current) => current?.repoId === repository.repoId ? repository : current);
+    },
+    reportError: setTasksError,
+    onTerminalPlan: (task, plan) => {
+      if (plan.kind !== "commit") return;
+      const commitContext = commitSubmission.takeTaskContext(task.taskId);
+      if (task.status === "succeeded" && commitContext?.message === commitMessage) setCommitMessage("");
+      if (task.status === "succeeded" && commitContext?.selections === JSON.stringify(commitSelections)) {
+        setCommitSelections([]);
+      }
+      const intent = commitContext?.intent;
+      if (task.status === "succeeded" && task.repoId && intent && intent.action !== "commit") {
+        void continueCommitPush(task.repoId, intent);
+      }
+    },
+  });
 
   useEffect(() => {
     if (selectedRepository?.availability === "available") {
