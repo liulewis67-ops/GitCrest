@@ -4185,3 +4185,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-display-path-stage378-20261010.json`。
 - 限制/后续：Electron 选择的是 60Hz 内置显示器，未发现落到虚拟显示器或低刷新副屏；窗口选屏不能解释约 55Hz cadence。继续沿 Electron/Chromium BeginFrame source 与平台适配定位，不修改产品窗口位置或 GPU flags。S7.2、S7.4、S7.5 保持待验收。
 - 证据 commit：`567b4c9`。
+
+### S7.2 解析 Chromium BeginFrame 帧时间与 deadline — 小阶段 380
+- 状态：已完成（帧时间源以约 56Hz 推进，renderer 与 GPU 均未报告明显排队/节流；S7.2 滚动帧率仍不达标）
+- 日期：2026-10-10
+- 交付：详细帧 trace 汇总新增唯一 `DisplayScheduler::BeginFrame` 序列分析，读取 `frame_time_us`、名义 `interval_us`、deadline、subtype、调度到达时间和 throttled count，并保留事件对应的 Chromium process/thread 名称及参数样例。
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs`、报告 JSON 解析与 `git diff --check` 通过。Windows 11 / Electron 37 / RTX 3050 / 100k fixture 的 10 秒详细 trace 中，565 个唯一 BeginFrame 的名义 interval 均为 16,666µs，但帧时间 P50/P95 间隔为 17.793/18.097ms；事件到达调度线程的延迟 P50/P95 为 0.032/0.047ms，deadline 固定 16.666ms，只有 1 帧标记为 `MISSED`，所有 `frames_throttled_since_last` 为 0。GPU Process 的 VizCompositorThread 收到正常 BeginFrame 后仅绘制约 55.3fps；该证据把差异定位到 Chromium BeginFrame 时间戳实际推进节奏，不支持 renderer/GPU 处理耗时或被节流解释。
+- 手工验证：未操作 GUI；运行详细 trace packaged diagnostic，采集 10 秒滚动并分析唯一帧序列。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-pipeline-reporters-stage380-20261010.json`。
+- 限制/后续：该 trace 没有直接说明 BeginFrame 时间戳为何每次晚于名义周期约 1.1ms；继续确认 Electron/Chromium 的 Windows VSync timebase、系统计时器/显示驱动交互，避免改历史列表做无效优化。S7.2、S7.4、S7.5 仍待验收。
+- 证据 commit：`2299a71`。
