@@ -4684,3 +4684,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/mod.rs`、`crates/gitcrest-core/src/storage/database.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：`storage/mod.rs` 仍含测试和少量通用时间/undo 限制常量；迁移代码、连接初始化和业务 adapter 已按规范分离。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将 WebSocket 路由归入 events 边界 — 小阶段 430
+- 状态：已完成（事件 WebSocket 协议处理位于独立 `events/` 模块）
+- 日期：2026-10-10
+- 交付：将 WebSocket 握手、subprotocol 校验、事件序号、重同步通知、广播 lag 处理和 ping/pong 路由从 `api/events.rs` 迁至 `events/routes.rs`，新增 `events/mod.rs` 并由 API router 组合。HTTP 错误仍复用 `api::error`；外部路径 `/api/v1/events` 不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：全仓搜索确认生产路由只注册 `/v1/events` 并调用 `crate::events::routes::events`；既有 API 测试继续请求 `/api/v1/events`。
+- 证据：`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/events/mod.rs`、`crates/gitcrest-core/src/events/routes.rs`、`doc/14-backend-development-guidelines.md` 第 3、5 节。
+- 限制/后续：`EventEnvelope` 仍由 `state.rs` 定义，事件发布与协议 envelope 的进一步拆分需结合 state/event bus 边界单独进行。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。

@@ -7,7 +7,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use super::error::{ApiError, ApiErrorCode};
+use crate::api::error::{ApiError, ApiErrorCode};
 use crate::{state::EventEnvelope, AppState};
 
 pub(crate) async fn events(

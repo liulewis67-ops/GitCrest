@@ -48,7 +48,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(tags::routes::router())
         .merge(tasks::routes::router())
         .merge(workflows::routes::router())
-        .route("/v1/events", get(crate::api::events::events))
+        .route("/v1/events", get(crate::events::routes::events))
         .fallback(api_not_found);
 
     #[cfg(test)]

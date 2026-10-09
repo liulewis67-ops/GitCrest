@@ -4,6 +4,7 @@ mod config;
 mod features;
 
 mod domain;
+mod events;
 mod execution;
 mod git;
 mod ports;
