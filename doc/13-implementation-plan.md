@@ -2944,3 +2944,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/branch.rs`、`crates/gitcrest-core/src/ports/branches.rs`、`crates/gitcrest-core/src/git/refs.rs`、`crates/gitcrest-core/src/features/branches/service.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`crates/gitcrest-core/src/features/remotes`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：branches 的写操作仍通过现有 Git 命令服务执行；其他 features 仍有 Git CLI 调用或具体 GitCommandService 注入，继续逐项迁入 adapter/port；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`6949939`
+
+### BranchCommand 领域归属 — 小阶段 254
+- 状态：已完成（分支操作命令由 domain 定义，Git command adapter 只负责执行）
+- 日期：2026-10-09
+- 交付：将 `BranchCommand` 从 `git/command.rs` 移入 `domain/branch.rs`；branches handler 与 Git command adapter 均直接依赖领域操作类型。命令参数、任务排队、Git argv 和 API 行为保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 `BranchCommand` 定义仅存在于 domain 并由 handler/adapter 引用；未运行 Rust 测试。
+- 手工验证：未执行分支创建、切换、重命名或删除任务；本阶段仅调整模型归属，执行路径未改变。
+- 证据：`crates/gitcrest-core/src/domain/branch.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：分支写操作仍由现有 GitCommandService 执行；需要结合任务执行上下文边界评估其类型化执行接口；其他 Git 操作迁移及 S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`3bdc71f`
