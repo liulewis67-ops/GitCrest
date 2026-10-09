@@ -265,27 +265,58 @@ fn refs_fingerprint_sync(
 }
 
 fn parse_history_search_index(output: &[u8]) -> Result<Vec<CommitSearchEntry>, HistoryError> {
-    let mut fields = output.split(|byte| *byte == 0).collect::<Vec<_>>();
-    if fields.last().is_some_and(|field| field.is_empty()) {
-        fields.pop();
+    let mut fields = output.split(|byte| *byte == 0).peekable();
+    let mut entries = Vec::new();
+    while let Some(oid) = fields.next() {
+        if oid.is_empty() && fields.peek().is_none() {
+            break;
+        }
+        if entries.len() >= 200_000 {
+            return Err(HistoryError::TooLarge);
+        }
+        let parents = fields.next().ok_or(HistoryError::TooLarge)?;
+        let author_name = fields.next().ok_or(HistoryError::TooLarge)?;
+        let author_email = fields.next().ok_or(HistoryError::TooLarge)?;
+        let committed_at = fields.next().ok_or(HistoryError::TooLarge)?;
+        let subject = fields.next().ok_or(HistoryError::TooLarge)?;
+        let message = fields.next().ok_or(HistoryError::TooLarge)?;
+        entries.push(CommitSearchEntry {
+            oid: text(oid),
+            parents: split_words(parents),
+            author_name: text(author_name),
+            author_email: text(author_email),
+            committed_at_ms: parse_timestamp(committed_at)?,
+            subject: text(subject),
+            message: text(message),
+            sort_order: entries.len(),
+        });
     }
-    if fields.len() % 7 != 0 || fields.len() / 7 > 200_000 {
-        return Err(HistoryError::TooLarge);
+    Ok(entries)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_search_index_records_without_collecting_all_fields() {
+        let output = b"oid-1\0\0Author One\0one@example.invalid\x001700000000\0first subject\0first body\0oid-2\0oid-1\0Author Two\0two@example.invalid\x001700000001\0second subject\0second body\0";
+        let entries = parse_history_search_index(output).unwrap();
+
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].oid, "oid-1");
+        assert!(entries[0].parents.is_empty());
+        assert_eq!(entries[0].committed_at_ms, 1_700_000_000_000);
+        assert_eq!(entries[0].message, "first body");
+        assert_eq!(entries[1].parents, ["oid-1"]);
+        assert_eq!(entries[1].sort_order, 1);
     }
-    fields
-        .chunks_exact(7)
-        .enumerate()
-        .map(|(sort_order, fields)| {
-            Ok(CommitSearchEntry {
-                oid: text(fields[0]),
-                parents: split_words(fields[1]),
-                author_name: text(fields[2]),
-                author_email: text(fields[3]),
-                committed_at_ms: parse_timestamp(fields[4])?,
-                subject: text(fields[5]),
-                message: text(fields[6]),
-                sort_order,
-            })
-        })
-        .collect()
+
+    #[test]
+    fn rejects_incomplete_search_index_records() {
+        assert_eq!(
+            parse_history_search_index(b"oid-1\0parents\0author"),
+            Err(HistoryError::TooLarge)
+        );
+    }
 }

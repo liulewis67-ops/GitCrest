@@ -3794,3 +3794,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-search-revwalk-stage338.json`。
 - 限制/后续：冷索引查询仍受完整 Git 消息扫描限制，最近正式 API P95 621.200ms；继续寻找利用索引或分批返回、且不改变完整搜索与分页契约的方案。S7.2 桌面门槛、S7.4 与 S7.5 仍待完成。
 - 完成 commit：`70b73a8`
+
+### S7.2 消息索引流式解析 — 小阶段 339
+- 状态：已完成（索引解析不再一次性收集全部 NUL 分隔字段；冷搜索目标仍未达成）
+- 日期：2026-10-09
+- 交付：`parse_history_search_index` 改为按 7 个字段流式读取 Git 输出，移除对全部字段切片的临时 `Vec` 收集；保留 200,000 条目上限、时间戳校验、排序序号和结尾 NUL 行为。新增完整记录与不完整记录解析用例。
+- 验证：Rust 全量测试 142/142 通过；修正 lint 提示后的定向解析测试 2/2、`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 和 Release build 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar，在同一 100k fixture 上执行 20 轮：cold-index search P95 589.574ms（此前 Stage 337 为 621.200ms，仍远超 200ms）；warm search P95 7.807ms；history first page P95 123.626ms；status dirty/full/cache P95 13.389/10.159/0.652ms；1k 行 Diff P95 90.215ms。索引日志约 4.216s ready；索引搜索预热等待 2.771s。正式报告：`doc/evidence/S7.2/api-win32-search-index-streaming-stage339.json`。
+- 手工验证：在现有独立 100k commit fixture 上运行 Release API 基准；fixture 和 refs 未被修改。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-search-index-streaming-stage339.json`。
+- 限制/后续：cold 搜索仍需 Git 扫描完整提交消息，解析临时字段数组的移除没有改变约 4.2 秒索引 ready 时间或达成 <200ms cold search；后续需寻找更早预热或索引构建优化，同时保持完整搜索、排序和分页语义。S7.2 桌面门槛、S7.4、S7.5 仍待完成。
+- 完成 commit：待提交
