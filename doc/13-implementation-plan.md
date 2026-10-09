@@ -4265,3 +4265,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceNavigation.tsx`、`src/features/shelves/ui/ShelfCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：分支切换 dialog、ShelfCenter UI、打开请求和页面上的仓库刷新仍由各自页面/feature 入口组合；后续可继续将 App 中剩余跨 feature task 生命周期迁至相应 model。S7.2、S7.4、S7.5 仍未验收。
 - 实施 commits：`fdc6e31`、`6d48a4c`。
+
+### S7.5 按 RepoId 隔离 ShelfCenter composer 请求 — 小阶段 388
+- 状态：已完成（切换仓库时不会把 branch-switch after-create 上下文或 ShelfCenter 打开请求交给另一仓库）
+- 日期：2026-10-10
+- 交付：App 将 ShelfCenter composer 请求保存为 request id + RepoId；仅在当前选中仓库与请求仓库一致时向 WorkspaceNavigation 传递打开信号。branch-switch after-create 上下文也只在 context RepoId 与当前仓库相同时传入 ShelfCenter，普通 composer 请求同样绑定发起时的仓库。
+- 验证：`pnpm exec tsc` 与 `git diff --check` 通过；检查 branch-switch 打开路径使用捕获的 repository.repoId，普通打开入口使用当前 selectedRepository.repoId，WorkspaceNavigation 接收值对当前选中仓库做 RepoId 匹配；未运行测试。
+- 手工验证：未操作 GUI。
+- 证据：`src/app/App.tsx`、`src/pages/workspace/WorkspaceNavigation.tsx`、`src/features/shelves/ui/ShelfCenter.tsx`、`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`doc/15-frontend-development-guidelines.md` 第 5.1 节。
+- 限制/后续：这是 renderer 中异步操作的仓库上下文隔离，不替代后端按 RepoId 的并发写保护；S7.2、S7.4、S7.5 的整体验收仍未完成。
+- 实施 commit：`3c2bcab`。
