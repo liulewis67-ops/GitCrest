@@ -3756,3 +3756,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/settings/SettingsDialog.tsx`、`tests/unit/settings-dialog.test.tsx`。
 - 限制/后续：取消仅覆盖初始 AI 设置读取；用户显式发起的设置保存和凭据变更仍按已受理的写请求完成。S7.2、S7.4、S7.5 验收仍未完成。
 - 完成 commit：`1f81dbc`
+
+### S7.5 最新 P0 Electron E2E 全量复验 — 小阶段 335
+- 状态：已完成（当前 Windows 工作树的完整 Electron E2E 通过；S7.5 整体仍待全量审计及发布收口）
+- 日期：2026-10-09
+- 交付：在最新代码状态复跑全部桌面 E2E，覆盖桌面/sidecar 启动、键盘主流程、Shelf 创建与恢复、快捷键设置、仓库初始化/克隆/认证恢复，以及远端 Push/Fetch/Pull、取消与冲突恢复场景。
+- 验证：`pnpm test:e2e` 完整复跑通过（6 files / 29 tests，416.68 秒）。测试临时目录改用 E 盘 `TEMP`/`TMP`；第一次尝试因系统 C 盘 0 GiB 可用导致临时 Git 仓库创建失败，迁移后一次完整运行曾有 HTTPS 凭据修复场景超时；该场景独立复跑通过，随后第二次全量复跑 29/29 通过。当前是 Windows 11 / Git for Windows 2.37.3 的证据，不代表 macOS/Linux runner 覆盖。
+- 手工验证：未单独操作 GUI；E2E 启动打包 Electron 并使用临时仓库、远端、应用数据和测试 HTTPS 服务。
+- 证据：`tests/e2e/desktop.test.ts`、`tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/shelf-workflow.test.ts`、`tests/e2e/shortcut-settings.test.ts`、`tests/e2e/repository-management.test.ts`、`tests/e2e/remote-sync.test.ts`。
+- 限制/后续：此复验确认现有自动化矩阵在本机全量通过，不证明 `08` 每条 P0 都已覆盖，也不替代 macOS/Linux 权限、凭据和 Git 版本行为验收；需继续审计未覆盖场景、S7.2 性能目标与 S7.4 更新发布链。
+- 完成 commit：待提交
