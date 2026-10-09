@@ -2435,3 +2435,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：工作阶段内存低于 500 MB 门槛；滚动 FPS 未达到 60 FPS，且 idle process-tree Working Set 仍高于 250 MB。空闲 RAF 与滚动都约 55.25 FPS，推测存在显示刷新同步限制，但本次没有测量显示器刷新率，不能据此判定 FPS 达标。S7.2 保持待验收。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-history-scroll-20runs.json`。
 - 实施 commit：`8bcdacb`
+
+### backend status feature 拆分 model 与 Git 状态 engine — 小阶段 202
+- 状态：已完成（状态数据模型、Git 读取实现和应用级服务职责已分离）
+- 日期：2026-10-09
+- 交付：将 `StatusSnapshot`、`StatusFile` 和状态类型迁入 `features/status/model.rs`；将 libgit2/porcelain v2 读取、路径范围校验及解析测试迁入 `engine.rs`；`service.rs` 只负责仓库定位、缓存协调与错误映射，保留 `status` feature 的内部导出接口。
+- 验证：`cargo fmt --check`、`cargo test -- --test-threads=1`（120 passed）、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过。
+- 限制/后续：本阶段是结构调整，未改变状态读取行为；S7.2 的 idle Working Set 与滚动 FPS 指标，以及 S7.4/S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/status/model.rs`、`crates/gitcrest-core/src/features/status/engine.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md`。
+- 实施 commit：`9c8801c`
