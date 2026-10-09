@@ -3214,3 +3214,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.4/windows-package-smoke.json`、`scripts/packaged-smoke.mjs`、`dist/GitCrest Setup 0.1.0.exe`（本地产物，未提交）。
 - 限制/后续：此证据仅覆盖 Windows unsigned 安装包；Windows 签名、macOS/Linux 构建与运行、签名验证失败拒绝安装及自动更新仍待实际 runner/凭证验收；S7.4 保持进行中。
 - 完成 commit：`56defc1`
+
+### S7.4 Packaged smoke 临时目录清理重试 — 小阶段 281
+- 状态：待验收（packaged smoke 重试通过；全量前端单测发现一个无关的 workflow dialog 异步断言竞态，待修复后重跑统一门禁）
+- 日期：2026-10-09
+- 交付：将 packaged smoke 临时目录清理改为最多 5 秒的有界重试，覆盖 Windows 安装器/应用释放文件句柄的时序，超时仍保留明确失败。
+- 验证：`pnpm test:packaged` 在修改后通过；修改前的 Windows packaged smoke 首次因临时目录仍存在失败、重跑通过。`pnpm test` 为 161/162，单独重跑失败测试通过，具体竞态另记小阶段处理。
+- 手工验证：Windows 10.0.26300 x64，通过隔离安装目录 smoke；未手工操作。
+- 证据：`scripts/packaged-smoke.mjs`、`doc/evidence/S7.4/windows-package-smoke.json`。
+- 限制/后续：待 `pnpm build`、前端全量测试、Rust 全量测试和 Clippy 重跑后确认；S7.4 其它平台/签名验收仍未完成。
+- 完成 commit：待提交

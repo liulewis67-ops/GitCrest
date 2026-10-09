@@ -97,12 +97,27 @@ try {
         }
       } finally {
         if (appData) {
-          await rm(appData, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_500));
-          assert.equal(existsSync(appData), false, "the temporary packaged smoke directory should be removed");
+          await removeTemporaryDirectory(appData);
         }
       }
     }
+  }
+}
+
+async function removeTemporaryDirectory(path) {
+  const deadline = Date.now() + 5_000;
+  let lastError;
+  while (existsSync(path) && Date.now() < deadline) {
+    try {
+      await rm(path, { recursive: true, force: true, maxRetries: 2, retryDelay: 100 });
+    } catch (error) {
+      lastError = error;
+    }
+    if (existsSync(path)) await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+  }
+  if (existsSync(path)) {
+    if (lastError) throw lastError;
+    assert.fail("the temporary packaged smoke directory should be removed");
   }
 }
 
