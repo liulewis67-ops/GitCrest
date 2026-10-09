@@ -3074,3 +3074,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：pull 取消后的恢复/结果核对仍调用 remotes feature 预检，且由 GitCommandService 编排；后续将取消协调从 Git adapter 移入 remotes workflow service，再保持原恢复保护语义；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`7d4cc34`
+
+### Remote preflight 读取经专用 port 注入 — 小阶段 267
+- 状态：已完成（remotes feature 生产代码不再依赖 GitCommandService）
+- 日期：2026-10-09
+- 交付：新增对象安全的 `RemotePreflightReadPort`，仅覆盖目标解析、HEAD 读取、远程分支删除影响比较和工作树状态读取；GitCommandService adapter 通过既有 GitReadPort 实现该能力，bootstrap 注入 AppState。pull preflight、remote branch delete preview 与队列内复检统一通过该 port。未将宽泛、含 async 方法而不可对象化的 GitReadPort 直接放入 AppState；API/错误映射和读取行为不变。测试构造器补充 port 依赖。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 remotes feature 生产路径无 GitCommandService 引用（单元测试仍直接构造 adapter）；未运行 Rust 测试。
+- 手工验证：未运行 pull preview、远程删除影响预览及 worktree 状态读取场景。
+- 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：pull 取消恢复仍由 GitCommandService 编排，并直接依赖 remotes pull 预检；后续继续把恢复用例协调迁到 feature service，拆出所需的 Git 读写能力；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`fc853c4`
