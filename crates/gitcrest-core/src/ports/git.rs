@@ -1,12 +1,35 @@
-use std::path::Path;
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+    pin::Pin,
+};
 
 use crate::domain::{
-    error::WorkflowError,
+    error::{RepositoryError, WorkflowError},
     workflow::{
         WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
         WorkflowRemoteBranchComparison, WorkflowResetComparison, WorkflowState,
     },
 };
+
+pub(crate) trait RepositoryGitPort: Send + Sync {
+    fn worktree_root<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, PathBuf>;
+
+    fn head_oid<'a>(&'a self, repository_path: &'a Path)
+        -> RepositoryGitFuture<'a, Option<String>>;
+
+    fn current_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RepositoryGitFuture<'a, Option<String>>;
+
+    fn common_dir<'a>(&'a self, repository_path: &'a Path) -> RepositoryGitFuture<'a, PathBuf>;
+
+    fn initialize<'a>(&'a self, repository_path: &'a Path) -> RepositoryGitFuture<'a, ()>;
+}
+
+pub(crate) type RepositoryGitFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, RepositoryError>> + Send + 'a>>;
 
 pub(crate) trait GitReadPort: Send + Sync {
     async fn resolve_commit_target(

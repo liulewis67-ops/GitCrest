@@ -1,20 +1,19 @@
 use std::{
     fmt::Write as _,
     path::{Path, PathBuf},
-    process::Stdio,
 };
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokio::{fs, process::Command, task};
+use tokio::{fs, task};
 
 use crate::{
     domain::{error::RepositoryError, repository::RepositoryRecord},
-    ports::repository::RepositoryCatalogPort,
+    ports::{git::RepositoryGitPort, repository::RepositoryCatalogPort},
 };
 
 #[cfg(test)]
-use crate::storage::RepositoryStore;
+use crate::{git::repository::GitRepositoryAdapter, storage::RepositoryStore};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,14 +32,19 @@ pub struct Repository {
 #[derive(Clone)]
 pub struct RepositoryManager {
     catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
+    git: std::sync::Arc<dyn RepositoryGitPort>,
     #[cfg(test)]
     test_store: Option<RepositoryStore>,
 }
 
 impl RepositoryManager {
-    pub(crate) fn with_catalog(catalog: std::sync::Arc<dyn RepositoryCatalogPort>) -> Self {
+    pub(crate) fn with_adapters(
+        catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
+        git: std::sync::Arc<dyn RepositoryGitPort>,
+    ) -> Self {
         Self {
             catalog,
+            git,
             #[cfg(test)]
             test_store: None,
         }
@@ -55,7 +59,10 @@ impl RepositoryManager {
 
     #[cfg(test)]
     pub(crate) fn target_reader(&self) -> super::repository_target::RepositoryTargetReader {
-        super::repository_target::RepositoryTargetReader::new(self.catalog.clone())
+        super::repository_target::RepositoryTargetReader::new(
+            self.catalog.clone(),
+            self.git.clone(),
+        )
     }
 
     #[cfg(test)]
@@ -84,18 +91,11 @@ impl RepositoryManager {
             .await
             .map_err(map_path_error)?;
 
-        let root = git_output(&requested_path, ["rev-parse", "--show-toplevel"]).await?;
-        let root = PathBuf::from(root);
+        let root = self.git.worktree_root(&requested_path).await?;
         let root = normalize_canonical_path(fs::canonicalize(root).await.map_err(map_path_error)?);
 
-        let head = match git_output(&root, ["rev-parse", "--verify", "HEAD"]).await {
-            Ok(head) if !head.is_empty() => Some(head),
-            _ => None,
-        };
-        let branch = match git_output(&root, ["symbolic-ref", "--quiet", "--short", "HEAD"]).await {
-            Ok(branch) if !branch.is_empty() => Some(branch),
-            _ => None,
-        };
+        let head = self.git.head_oid(&root).await.unwrap_or_default();
+        let branch = self.git.current_branch(&root).await.unwrap_or_default();
         let detached = branch.is_none() && head.is_some();
         let repository = Repository {
             repo_id: stable_repo_id(&root),
@@ -130,39 +130,10 @@ impl RepositoryManager {
             return Err(RepositoryError::AlreadyRepository);
         }
         let path = fs::canonicalize(path).await.map_err(map_path_error)?;
-        if git_output(&path, ["rev-parse", "--show-toplevel"])
-            .await
-            .is_ok()
-        {
+        if self.git.worktree_root(&path).await.is_ok() {
             return Err(RepositoryError::AlreadyRepository);
         }
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&path)
-            .args(["init", "--quiet"])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .output()
-            .await
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
-                std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
-                _ => RepositoryError::GitUnavailable,
-            })?;
-        if !output.status.success() {
-            return Err(
-                if String::from_utf8_lossy(&output.stderr)
-                    .to_lowercase()
-                    .contains("permission")
-                {
-                    RepositoryError::PathPermissionDenied
-                } else {
-                    RepositoryError::InitializationFailed
-                },
-            );
-        }
+        self.git.initialize(&path).await?;
         self.open_path(&path.to_string_lossy()).await
     }
 
@@ -249,6 +220,7 @@ impl RepositoryManager {
     fn with_test_store(store: RepositoryStore) -> Self {
         Self {
             catalog: std::sync::Arc::new(store.clone()),
+            git: std::sync::Arc::new(GitRepositoryAdapter),
             test_store: Some(store),
         }
     }
@@ -338,37 +310,6 @@ pub(super) fn map_path_error(error: std::io::Error) -> RepositoryError {
         std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
         _ => RepositoryError::PathNotFound,
     }
-}
-
-pub(super) async fn git_output<const N: usize>(
-    path: &Path,
-    args: [&str; N],
-) -> Result<String, RepositoryError> {
-    let output = Command::new("git")
-        .arg("-C")
-        .arg(path)
-        .args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true)
-        .output()
-        .await
-        .map_err(|error| match error.kind() {
-            std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
-            std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
-            _ => RepositoryError::GitUnavailable,
-        })?;
-
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_lowercase();
-        if stderr.contains("permission denied") || stderr.contains("access is denied") {
-            return Err(RepositoryError::PathPermissionDenied);
-        }
-        return Err(RepositoryError::NotRepository);
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
 
 #[cfg(test)]

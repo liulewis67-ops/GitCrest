@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 
-use tokio::{fs, process::Command, task};
+use tokio::{fs, task};
 
 use crate::{
     domain::{error::RepositoryError, repository::RepositoryRecord},
-    ports::repository::RepositoryCatalogPort,
-    ports::repository::RepositoryPathPort,
+    ports::{
+        git::RepositoryGitPort,
+        repository::{RepositoryCatalogPort, RepositoryPathPort},
+    },
 };
 
 #[derive(Clone, Debug)]
@@ -23,29 +25,21 @@ pub struct HistoryTarget {
 #[derive(Clone)]
 pub(crate) struct RepositoryTargetReader {
     catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
+    git: std::sync::Arc<dyn RepositoryGitPort>,
 }
 
 impl RepositoryTargetReader {
-    pub(crate) fn new(catalog: std::sync::Arc<dyn RepositoryCatalogPort>) -> Self {
-        Self { catalog }
+    pub(crate) fn new(
+        catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
+        git: std::sync::Arc<dyn RepositoryGitPort>,
+    ) -> Self {
+        Self { catalog, git }
     }
 
     pub(crate) async fn task_target(&self, repo_id: &str) -> Result<TaskTarget, RepositoryError> {
         let repository = self.registered_repository(repo_id).await?;
         let repository_path = self.existing_path(&repository).await?;
-        let output = Command::new("git")
-            .arg("-C")
-            .arg(&repository_path)
-            .args(["rev-parse", "--git-common-dir"])
-            .kill_on_drop(true)
-            .output()
-            .await
-            .map_err(|_| RepositoryError::GitUnavailable)?;
-        if !output.status.success() {
-            return Err(RepositoryError::StatusFailed);
-        }
-        let common_dir = String::from_utf8_lossy(&output.stdout).trim().to_owned();
-        let common_dir = PathBuf::from(common_dir);
+        let common_dir = self.git.common_dir(&repository_path).await?;
         let common_dir = if common_dir.is_absolute() {
             common_dir
         } else {
@@ -67,13 +61,7 @@ impl RepositoryTargetReader {
         let repository = self.registered_repository(repo_id).await?;
         let repository_path = self.existing_path(&repository).await?;
         let head = if repository.detached {
-            match super::repository::git_output(&repository_path, ["rev-parse", "--verify", "HEAD"])
-                .await
-            {
-                Ok(head) if !head.is_empty() => Some(head),
-                Ok(_) | Err(RepositoryError::NotRepository) => None,
-                Err(error) => return Err(error),
-            }
+            self.git.head_oid(&repository_path).await?
         } else {
             repository.head
         };

@@ -12,7 +12,8 @@ use crate::{
         status::StatusService,
         tasks::TaskService,
     },
-    git::command::GitCommandService,
+    git::{command::GitCommandService, repository::GitRepositoryAdapter},
+    ports::git::RepositoryGitPort,
     refresh,
     state::{AppState, EventBus},
     storage::RepositoryStore,
@@ -68,9 +69,13 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|_| "Could not initialize the repository database")?;
     let repository_catalog: Arc<dyn crate::ports::repository::RepositoryCatalogPort> =
         Arc::new(store.clone());
-    let repositories = RepositoryManager::with_catalog(repository_catalog.clone());
-    let repository_targets =
-        crate::features::repositories::RepositoryTargetReader::new(repository_catalog);
+    let repository_git: Arc<dyn RepositoryGitPort> = Arc::new(GitRepositoryAdapter);
+    let repositories =
+        RepositoryManager::with_adapters(repository_catalog.clone(), repository_git.clone());
+    let repository_targets = crate::features::repositories::RepositoryTargetReader::new(
+        repository_catalog,
+        repository_git,
+    );
     let git_commands = GitCommandService::default();
     let status = StatusService::with_reader(repository_targets.clone(), git_commands.clone());
     let task_status = status.clone();
