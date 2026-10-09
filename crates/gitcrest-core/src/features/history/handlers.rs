@@ -28,7 +28,7 @@ pub(super) async fn repository_commits(
         )
     })?;
     let target = state
-        .repositories
+        .repository_targets
         .history_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;

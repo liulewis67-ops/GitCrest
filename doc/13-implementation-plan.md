@@ -2754,3 +2754,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/state.rs`、相关 feature handlers、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：HistoryTarget 查询仍留在 RepositoryManager；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`752978a`
+
+### HistoryTarget 解析从 RepositoryManager 迁入 RepositoryTargetReader — 小阶段 235
+- 状态：已完成（历史查询的工作树路径与 HEAD 解析由 repository target reader 统一提供）
+- 日期：2026-10-09
+- 交付：将 `HistoryTarget` 和 `history_target` 从 RepositoryManager 移入 `RepositoryTargetReader`，history handler 改用 AppState 中独立装配的 reader；reader 复用仓库 feature 的 Git 输出错误分类，保留 detached HEAD、unborn repository 与 not-a-repository 的原有处理语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。静态搜索确认 `history_target` 仅由 reader 定义并由 history handler 调用。
+- 手工验证：未执行 Electron 或临时仓库场景；本阶段未改变 API 与历史分页行为。
+- 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/history/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：RepositoryManager 仍管理仓库打开/初始化、列表和收藏等生命周期操作；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待补记

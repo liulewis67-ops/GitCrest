@@ -12,6 +12,12 @@ pub struct TaskTarget {
     pub resource_key: String,
 }
 
+#[derive(Clone, Debug)]
+pub struct HistoryTarget {
+    pub repository_path: PathBuf,
+    pub head: Option<String>,
+}
+
 #[derive(Clone)]
 pub(crate) struct RepositoryTargetReader {
     store: RepositoryStore,
@@ -58,6 +64,38 @@ impl RepositoryTargetReader {
         Ok(TaskTarget {
             repository_path,
             resource_key: canonical.to_string_lossy().into_owned(),
+        })
+    }
+
+    pub(crate) async fn history_target(
+        &self,
+        repo_id: &str,
+    ) -> Result<HistoryTarget, RepositoryError> {
+        let store = self.store.clone();
+        let repo_id = repo_id.to_owned();
+        let repository = task::spawn_blocking(move || store.get(&repo_id))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .ok_or(RepositoryError::RepositoryNotFound)?;
+        let repository_path = PathBuf::from(repository.path);
+        fs::metadata(&repository_path)
+            .await
+            .map_err(super::repository::map_path_error)?;
+        let head = if repository.detached {
+            match super::repository::git_output(&repository_path, ["rev-parse", "--verify", "HEAD"])
+                .await
+            {
+                Ok(head) if !head.is_empty() => Some(head),
+                Ok(_) | Err(RepositoryError::NotRepository) => None,
+                Err(error) => return Err(error),
+            }
+        } else {
+            repository.head
+        };
+        Ok(HistoryTarget {
+            repository_path,
+            head,
         })
     }
 

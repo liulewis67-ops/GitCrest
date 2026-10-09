@@ -29,42 +29,9 @@ pub struct RepositoryManager {
     store: RepositoryStore,
 }
 
-#[derive(Clone, Debug)]
-pub struct HistoryTarget {
-    pub repository_path: PathBuf,
-    pub head: Option<String>,
-}
-
 impl RepositoryManager {
     pub fn store(&self) -> RepositoryStore {
         self.store.clone()
-    }
-
-    pub async fn history_target(&self, repo_id: &str) -> Result<HistoryTarget, RepositoryError> {
-        let store = self.store.clone();
-        let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let repository_path = PathBuf::from(repository.path);
-        fs::metadata(&repository_path)
-            .await
-            .map_err(map_path_error)?;
-        let head = if repository.detached {
-            match git_output(&repository_path, ["rev-parse", "--verify", "HEAD"]).await {
-                Ok(head) if !head.is_empty() => Some(head),
-                Ok(_) | Err(RepositoryError::NotRepository) => None,
-                Err(error) => return Err(error),
-            }
-        } else {
-            repository.head
-        };
-        Ok(HistoryTarget {
-            repository_path,
-            head,
-        })
     }
 
     pub(crate) fn target_reader(&self) -> super::repository_target::RepositoryTargetReader {
@@ -294,7 +261,7 @@ pub(super) fn map_path_error(error: std::io::Error) -> RepositoryError {
     }
 }
 
-async fn git_output<const N: usize>(
+pub(super) async fn git_output<const N: usize>(
     path: &Path,
     args: [&str; N],
 ) -> Result<String, RepositoryError> {
