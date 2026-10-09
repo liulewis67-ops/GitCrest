@@ -3363,4 +3363,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright 验证真实 HTTPS 401、clone task 状态、重试表单保留值和凭据 host。
 - 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/repository-management.test.ts`、`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：未保存真实凭据或验证更新凭据后的 Clone 成功；当前确认失败路径可到达正确凭据编辑器。S7.5 仍保持进行中。
-- 完成 commit：随本条阶段记录提交。
+- 完成 commit：`75592fa`
