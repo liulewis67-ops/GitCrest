@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, RebasePreviewResponse, TaskSnapshotResponse } from "../../src/api/client";
-import { RebaseDialog } from "../../src/features/workflows/RebaseDialog";
+import { RebaseDialog } from "../../src/features/workflows/ui/RebaseDialog";
 
 afterEach(cleanup);
 

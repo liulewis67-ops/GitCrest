@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient, WorkflowConflictFileResponse } from "../../src/api/client";
-import { ConflictSuggestionPanel } from "../../src/features/workflows/ConflictSuggestionPanel";
+import { ConflictSuggestionPanel } from "../../src/features/workflows/ui/ConflictSuggestionPanel";
 
 afterEach(cleanup);
 

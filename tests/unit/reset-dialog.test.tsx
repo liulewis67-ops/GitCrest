@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, ResetPreviewResponse, TaskSnapshotResponse } from "../../src/api/client";
-import { ResetDialog } from "../../src/features/workflows/ResetDialog";
+import { ResetDialog } from "../../src/features/workflows/ui/ResetDialog";
 
 afterEach(cleanup);
 

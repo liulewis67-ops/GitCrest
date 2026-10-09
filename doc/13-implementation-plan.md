@@ -3843,3 +3843,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：三个 feature 的 `index.ts` 与 `ui/` 文件、`tests/unit/remote-branch-delete-dialog.test.tsx`、`tests/unit/clone-dialog.test.tsx`、`tests/unit/credential-editor.test.tsx`。
 - 限制/后续：仅完成三个 feature 的 UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
 - 完成 commit：`157ca58`
+
+### Workflows feature UI 目录对齐 — 小阶段 344
+- 状态：已完成（工作流、冲突、Reset 与 Rebase UI 归入 `ui/`；共享动作类型归入 `model/`）
+- 日期：2026-10-09
+- 交付：将 `WorkflowDialog`、`ConflictWindow`、`ConflictSuggestionPanel`、`RebaseDialog` 和 `ResetDialog` 迁入 `src/features/workflows/ui/`，更新动态加载和冲突窗口 feature 出口。`WorkflowAction` 类型迁入 `model/workflow-action.ts`，让工作流 session model 不依赖 UI 组件。
+- 验证：工作流/冲突组件定向测试 5 files / 25 tests 通过，`pnpm frontend:boundaries` 与 `pnpm build` 通过；Workflow、Rebase、Reset 对话框仍为独立 production chunks。构建仅有既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；既有组件测试覆盖工作流预检、冲突文件保存/解决、AI 建议、Rebase 与 Reset 预览。
+- 证据：`src/features/workflows/index.ts`、`src/features/workflows/ui/`、`src/features/workflows/model/workflow-action.ts`、`tests/unit/workflow-dialog.test.tsx`、`tests/unit/conflict-window.test.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`、`tests/unit/rebase-dialog.test.tsx`、`tests/unit/reset-dialog.test.tsx`。
+- 限制/后续：冲突窗口继续由 feature 公共入口直接导出以供独立 renderer 使用；其它 feature 的目录迁移与 S7.2/S7.4/S7.5 整体验收仍待继续。
+- 完成 commit：待提交

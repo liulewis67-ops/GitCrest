@@ -6,9 +6,9 @@ import {
   type RebasePreviewResponse,
   type RebaseBackupSnapshotResponse,
   type TaskSnapshotResponse,
-} from "../../api/client";
-import type { components } from "../../api/schema";
-import { useDialogFocus } from "../../shared/use-dialog-focus";
+} from "../../../api/client";
+import type { components } from "../../../api/schema";
+import { useDialogFocus } from "../../../shared/use-dialog-focus";
 
 type RebaseTodoItem = components["schemas"]["RebaseTodoItem"];
 

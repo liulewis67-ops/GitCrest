@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
-import { WorkflowDialog } from "../../src/features/workflows/WorkflowDialog";
+import { WorkflowDialog } from "../../src/features/workflows/ui/WorkflowDialog";
 
 afterEach(cleanup);
 

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../api/client";
-import { getGitCrestBridge } from "../../api/bridge";
+import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../../api/client";
+import { getGitCrestBridge } from "../../../api/bridge";
 import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
-import "../../App.css";
+import "../../../App.css";
 
 type RequestState<T> = { key: string; loading: boolean; data?: T; error?: string };
 type ActionState = { busy?: "save" | "resolve"; message?: string; error?: string };

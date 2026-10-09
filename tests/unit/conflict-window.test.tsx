@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { ConflictWindow } from "../../src/features/workflows/ConflictWindow";
+import { ConflictWindow } from "../../src/features/workflows/ui/ConflictWindow";
 
 afterEach(() => {
   cleanup();

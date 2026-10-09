@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { TaskSnapshotResponse } from "../../../api/client";
-import type { WorkflowAction } from "../WorkflowDialog";
+import type { WorkflowAction } from "./workflow-action";
 
 interface WorkflowDialogContext {
   repoId: string;

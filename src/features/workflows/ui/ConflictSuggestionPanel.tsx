@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AiReplyResponse, AiSettingsResponse, GitCrestApiClient, WorkflowConflictFileResponse } from "../../api/client";
+import type { AiReplyResponse, AiSettingsResponse, GitCrestApiClient, WorkflowConflictFileResponse } from "../../../api/client";
 
 const CONFLICT_PROMPT = "Propose one possible merged working result for this conflict. Return only the proposed file content, without Markdown fences or explanation. Do not edit or stage files.";
 
