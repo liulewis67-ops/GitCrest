@@ -2555,3 +2555,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff document、hunk、row 与 selection 的领域归属和请求 DTO 转换仍需继续整理；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/error.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
 - 实施 commit：`7085ee0`
+
+
+### Diff selection 领域类型与 feature 请求 DTO 分离 — 小阶段 215
+- 状态：已完成（跨 feature 复用的行/hunk 选择语义归入 domain，各 API 在本 feature 解析请求）
+- 日期：2026-10-09
+- 交付：新增 `domain/diff.rs` 的非 Serde `DiffSelection`；commits、staging、shelves、settings 分别在自己的 `dto.rs` 定义请求 selection，并在 handler/AI review 边界显式转换为领域类型。移除各请求 DTO 对 `features/diff` 共享 DTO 的依赖，保留 `rowIndex` 可省略的行为，并按 OpenAPI 对嵌套选择对象拒绝未知字段。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；未运行测试。
+- 限制/后续：`DiffScope` 和文档/hunk/row 模型仍留在 feature service；继续迁移前需为各 API 请求/响应与 shelf 序列化建立本地 DTO 映射。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/diff.rs`、commits/staging/shelves/settings 的 `dto.rs` 与 handlers、`doc/api/v1.yaml` 的 `DiffSelection` schema、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
+- 实施 commit：`6c1a1df`
