@@ -576,6 +576,7 @@ mod tests {
             .find(|file| file.path == "multi.txt")
             .unwrap();
         let working = crate::features::diff::read_with_patch(
+            &crate::git::command::GitCommandService::default(),
             "repo".into(),
             &root,
             file,
@@ -604,6 +605,7 @@ mod tests {
             .find(|file| file.path == "multi.txt")
             .unwrap();
         let remaining_diff = crate::features::diff::read_with_patch(
+            &crate::git::command::GitCommandService::default(),
             "repo".into(),
             &root,
             file,
@@ -622,10 +624,15 @@ mod tests {
             .iter()
             .find(|file| file.path == "multi.txt")
             .unwrap();
-        let staged_diff =
-            crate::features::diff::read_with_patch("repo".into(), &root, file, DiffScope::Index)
-                .await
-                .unwrap();
+        let staged_diff = crate::features::diff::read_with_patch(
+            &crate::git::command::GitCommandService::default(),
+            "repo".into(),
+            &root,
+            file,
+            DiffScope::Index,
+        )
+        .await
+        .unwrap();
         assert_eq!(staged_diff.document.hunks.len(), 2);
         let revision = staged_diff.document.revision.clone();
         let selected = crate::features::diff::select_hunks(&staged_diff, &[0]).unwrap();
@@ -648,10 +655,15 @@ mod tests {
             .iter()
             .find(|file| file.path == "multi.txt")
             .unwrap();
-        let new_diff =
-            crate::features::diff::read_with_patch("repo".into(), &root, file, DiffScope::Index)
-                .await
-                .unwrap();
+        let new_diff = crate::features::diff::read_with_patch(
+            &crate::git::command::GitCommandService::default(),
+            "repo".into(),
+            &root,
+            file,
+            DiffScope::Index,
+        )
+        .await
+        .unwrap();
         assert_ne!(revision, new_diff.document.revision);
     }
 
@@ -685,6 +697,7 @@ mod tests {
             .find(|file| file.path == "lines.txt")
             .unwrap();
         let diff = crate::features::diff::read_with_patch(
+            &crate::git::command::GitCommandService::default(),
             "repo".into(),
             &root,
             file,
@@ -733,6 +746,7 @@ mod tests {
             .find(|file| file.path == "new file.txt")
             .unwrap();
         let diff = crate::features::diff::read_with_patch(
+            &crate::git::command::GitCommandService::default(),
             "repo".into(),
             &root,
             file,

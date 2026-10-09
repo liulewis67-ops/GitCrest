@@ -242,9 +242,15 @@ pub(super) async fn request_ai(
                 "A reviewed file scope is no longer eligible. Review the files again.",
             ));
         }
-        let read = diff::read_with_patch(repo_id.clone(), &target.repository_path, file, scope)
-            .await
-            .map_err(ApiError::from_diff_error)?;
+        let read = diff::read_with_patch(
+            &state.git_commands,
+            repo_id.clone(),
+            &target.repository_path,
+            file,
+            scope,
+        )
+        .await
+        .map_err(ApiError::from_diff_error)?;
         if read.document.revision != selection.revision
             || read.document.status != DiffContentStatus::Text
         {

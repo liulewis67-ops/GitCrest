@@ -544,6 +544,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
         .find(|file| file.path == "selected.txt")
         .unwrap();
     let preview = features::diff::read(
+        &crate::git::command::GitCommandService::default(),
         repository.repo_id.clone(),
         &repository_path,
         selected_file,

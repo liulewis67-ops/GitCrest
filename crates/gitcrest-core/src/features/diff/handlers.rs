@@ -50,7 +50,13 @@ pub(super) async fn repository_diff(
         state
             .status
             .snapshot_paths(&repo_id, std::slice::from_ref(&query.path),),
-        service::read(repo_id.clone(), &repository_path, &candidate, scope),
+        service::read(
+            &state.git_commands,
+            repo_id.clone(),
+            &repository_path,
+            &candidate,
+            scope,
+        ),
     );
     let snapshot = snapshot.map_err(ApiError::from_repository_error)?;
     let file = snapshot
@@ -75,7 +81,7 @@ pub(super) async fn repository_diff(
             )
         })
     {
-        return service::read(repo_id, &repository_path, file, scope)
+        return service::read(&state.git_commands, repo_id, &repository_path, file, scope)
             .await
             .map(DiffDocumentDto::from)
             .map(Json)
@@ -115,6 +121,7 @@ pub(super) async fn repository_commit_file_diff(
         ));
     }
     service::read_commit_file(
+        &state.git_commands,
         repo_id,
         &target.repository_path,
         &oid,

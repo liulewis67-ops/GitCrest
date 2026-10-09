@@ -15,6 +15,7 @@ use crate::{
     features::diff::{self, DiffError},
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging, status},
+    ports::diff::DiffGitPort,
     state::AppState,
     storage::{UndoOperation, UndoRecord},
 };
@@ -123,6 +124,7 @@ pub(super) async fn preflight_repository_shelf_apply(
         )
     })?;
     let preview_revision = shelf_apply_revision(
+        &state.git_commands,
         &state.status,
         &repo_id,
         &target.repository_path,
@@ -187,6 +189,7 @@ pub(super) async fn apply_repository_shelf(
         )
     })?;
     let current_revision = shelf_apply_revision(
+        &state.git_commands,
         &state.status,
         &repo_id,
         &target.repository_path,
@@ -246,6 +249,7 @@ pub(super) async fn apply_repository_shelf(
                     return Err(TaskFailure::Failed("The shelf restore scope changed after preview. Preview it again.".into()));
                 }
                 let current_revision = shelf_apply_revision(
+                    &commands,
                     &status_service,
                     &task_repo_id,
                     &task_path,
@@ -423,6 +427,7 @@ async fn can_shelf_apply_with_conflicts(
 }
 
 async fn shelf_apply_revision(
+    git: &impl DiffGitPort,
     status_service: &super::super::status::StatusService,
     repo_id: &str,
     repository_path: &std::path::Path,
@@ -455,9 +460,10 @@ async fn shelf_apply_revision(
                 ));
             }
             for scope in [DiffScope::Index, DiffScope::WorkingTree] {
-                let diff = diff::read_with_patch(repo_id.to_owned(), repository_path, file, scope)
-                    .await
-                    .map_err(ApiError::from_diff_error)?;
+                let diff =
+                    diff::read_with_patch(git, repo_id.to_owned(), repository_path, file, scope)
+                        .await
+                        .map_err(ApiError::from_diff_error)?;
                 digest.update(diff.document.revision.as_bytes());
             }
         } else {
@@ -506,6 +512,7 @@ pub(super) async fn create_repository_shelf(
         .await
         .map_err(ApiError::from_repository_error)?;
     let prepared = prepare_shelf_items(
+        &state.git_commands,
         &state.status,
         &repo_id,
         &target.repository_path,
@@ -557,7 +564,7 @@ pub(super) async fn create_repository_shelf(
                 if current_repository.head != expected_head_oid {
                     return Err(TaskFailure::Failed("The repository HEAD changed after shelf review. Refresh the selected diffs and try again.".into()));
                 }
-                let prepared = prepare_shelf_items(&status_service, &task_repo_id, &task_path, &items)
+                let prepared = prepare_shelf_items(&commands, &status_service, &task_repo_id, &task_path, &items)
                     .await
                     .map_err(|_| TaskFailure::Failed("The selected changes changed after shelf review. Refresh and select them again.".into()))?;
                 let mut patch = Vec::new();
@@ -633,6 +640,7 @@ pub(super) async fn create_repository_shelf(
 }
 
 async fn prepare_shelf_items(
+    git: &impl DiffGitPort,
     status_service: &super::super::status::StatusService,
     repo_id: &str,
     repository_path: &std::path::Path,
@@ -656,7 +664,7 @@ async fn prepare_shelf_items(
             .iter()
             .find(|file| file.path == item.path)
             .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
-        let current = diff::read_with_patch(repo_id.to_owned(), repository_path, file, scope)
+        let current = diff::read_with_patch(git, repo_id.to_owned(), repository_path, file, scope)
             .await
             .map_err(ApiError::from_diff_error)?;
         if current.document.revision != item.revision {

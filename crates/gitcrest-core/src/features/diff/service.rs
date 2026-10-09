@@ -283,17 +283,29 @@ mod tests {
         let snapshot = status::read("repo-test".into(), &root).await.unwrap();
         let staged = snapshot.files.iter().find(|file| file.path == "readme.txt");
         let staged = staged.expect("staged path is reported");
-        let index = read("repo-test".into(), &root, staged, DiffScope::Index)
-            .await
-            .unwrap();
+        let index = read(
+            &crate::git::command::GitCommandService::default(),
+            "repo-test".into(),
+            &root,
+            staged,
+            DiffScope::Index,
+        )
+        .await
+        .unwrap();
         assert!(index
             .hunks
             .iter()
             .flat_map(|hunk| &hunk.rows)
             .any(|row| row.new_text.as_deref() == Some("staged line")));
-        let working = read("repo-test".into(), &root, staged, DiffScope::WorkingTree)
-            .await
-            .unwrap();
+        let working = read(
+            &crate::git::command::GitCommandService::default(),
+            "repo-test".into(),
+            &root,
+            staged,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
         assert!(working
             .hunks
             .iter()
@@ -305,9 +317,15 @@ mod tests {
             .iter()
             .find(|file| file.path == "delete-me.txt")
             .unwrap();
-        let deleted_diff = read("repo-test".into(), &root, deleted, DiffScope::WorkingTree)
-            .await
-            .unwrap();
+        let deleted_diff = read(
+            &crate::git::command::GitCommandService::default(),
+            "repo-test".into(),
+            &root,
+            deleted,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
         assert!(deleted_diff
             .hunks
             .iter()
@@ -319,9 +337,15 @@ mod tests {
             .iter()
             .find(|file| file.path == "new file.txt")
             .unwrap();
-        let untracked = read("repo-test".into(), &root, new_file, DiffScope::WorkingTree)
-            .await
-            .unwrap();
+        let untracked = read(
+            &crate::git::command::GitCommandService::default(),
+            "repo-test".into(),
+            &root,
+            new_file,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
         assert_eq!(untracked.status, DiffContentStatus::Text);
         assert!(untracked
             .hunks
@@ -335,6 +359,7 @@ mod tests {
             .find(|file| file.path == "binary.bin")
             .unwrap();
         let binary = read(
+            &crate::git::command::GitCommandService::default(),
             "repo-test".into(),
             &root,
             binary_file,
@@ -349,9 +374,15 @@ mod tests {
             .iter()
             .find(|file| file.kind == ChangeKind::Renamed)
             .unwrap();
-        let renamed_diff = read("repo-test".into(), &root, renamed, DiffScope::Index)
-            .await
-            .unwrap();
+        let renamed_diff = read(
+            &crate::git::command::GitCommandService::default(),
+            "repo-test".into(),
+            &root,
+            renamed,
+            DiffScope::Index,
+        )
+        .await
+        .unwrap();
         assert_eq!(renamed_diff.change_kind, ChangeKind::Renamed);
         assert_eq!(renamed_diff.original_path.as_deref(), Some("rename-me.txt"));
     }
@@ -371,9 +402,15 @@ mod tests {
             .iter()
             .find(|file| file.path == "readme.txt")
             .unwrap();
-        let result = read_with_patch("repo-test".into(), &root, file, DiffScope::WorkingTree)
-            .await
-            .unwrap();
+        let result = read_with_patch(
+            &crate::git::command::GitCommandService::default(),
+            "repo-test".into(),
+            &root,
+            file,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
         let git_patch = std::process::Command::new("git")
             .arg("-C")
             .arg(&root)
@@ -403,7 +440,14 @@ mod tests {
             .find(|file| file.path == "readme.txt")
             .unwrap();
         assert_eq!(
-            read("repo-test".into(), &root, file, DiffScope::WorkingTree).await,
+            read(
+                &crate::git::command::GitCommandService::default(),
+                "repo-test".into(),
+                &root,
+                file,
+                DiffScope::WorkingTree,
+            )
+            .await,
             Err(DiffError::TooLarge)
         );
     }

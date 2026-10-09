@@ -126,6 +126,7 @@ pub(crate) async fn stage_repository_patch(
         .find(|file| file.path == request.path)
         .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
     let current_diff = diff::read_with_patch(
+        &state.git_commands,
         repo_id.clone(),
         &target.repository_path,
         file,
@@ -192,6 +193,7 @@ pub(crate) async fn stage_repository_patch(
                     )
                 })?;
                 let current_diff = diff::read_with_patch(
+                    &commands,
                     task_repo_id.clone(),
                     &repository_path,
                     file,
@@ -449,6 +451,7 @@ pub(crate) async fn discard_repository_patch(
     };
     staging::validate_patch_request(&selection, file).map_err(ApiError::from_staging_error)?;
     let current_diff = diff::read_with_patch(
+        &state.git_commands,
         repo_id.clone(),
         &target.repository_path,
         file,
@@ -525,6 +528,7 @@ pub(crate) async fn discard_repository_patch(
                     )
                 })?;
                 let current_diff = diff::read_with_patch(
+                    &commands,
                     task_repo_id.clone(),
                     &repository_path,
                     file,

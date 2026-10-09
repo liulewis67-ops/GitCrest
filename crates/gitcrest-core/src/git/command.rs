@@ -27,6 +27,7 @@ use crate::{
             WorkflowRemoteBranchComparison, WorkflowResetComparison, WorkflowState,
         },
     },
+    ports::diff::DiffGitPort,
     ports::git::GitReadPort,
 };
 
@@ -102,6 +103,28 @@ impl Default for GitCommandService {
         Self {
             git_program: "git".into(),
         }
+    }
+}
+
+impl DiffGitPort for GitCommandService {
+    async fn read_file_patch(
+        &self,
+        repository_path: &Path,
+        relative_path: &str,
+        scope: crate::domain::diff::DiffScope,
+        untracked: bool,
+    ) -> Result<Vec<u8>, crate::domain::error::DiffError> {
+        super::diff::read_file_patch(repository_path, relative_path, scope, untracked).await
+    }
+
+    async fn read_commit_file_patch(
+        &self,
+        repository_path: &Path,
+        oid: &str,
+        parent_oid: Option<&str>,
+        relative_path: &str,
+    ) -> Result<Vec<u8>, crate::domain::error::DiffError> {
+        super::diff::read_commit_file_patch(repository_path, oid, parent_oid, relative_path).await
     }
 }
 

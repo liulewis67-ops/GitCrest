@@ -13,6 +13,7 @@ use crate::{
         status,
         tasks::{TaskFailure, TaskSnapshot},
     },
+    ports::diff::DiffGitPort,
     state::AppState,
 };
 enum CommitPatchError {
@@ -22,6 +23,7 @@ enum CommitPatchError {
 }
 
 async fn selected_commit_patch(
+    git: &impl DiffGitPort,
     repo_id: &str,
     repository_path: &std::path::Path,
     snapshot: &status::StatusSnapshot,
@@ -39,10 +41,15 @@ async fn selected_commit_patch(
             .find(|file| file.path == selection.path)
             .filter(|file| file.categories.contains(&status::ChangeCategory::Staged))
             .ok_or(CommitPatchError::Invalid)?;
-        let current =
-            diff::read_with_patch(repo_id.to_owned(), repository_path, file, DiffScope::Index)
-                .await
-                .map_err(CommitPatchError::Diff)?;
+        let current = diff::read_with_patch(
+            git,
+            repo_id.to_owned(),
+            repository_path,
+            file,
+            DiffScope::Index,
+        )
+        .await
+        .map_err(CommitPatchError::Diff)?;
         if current.document.revision != selection.revision {
             return Err(CommitPatchError::Stale);
         }
@@ -111,6 +118,7 @@ pub(super) async fn commit_repository(
     commits::validate_snapshot(&snapshot).map_err(ApiError::from_commit_error)?;
     commits::validate_selection_shape(&request.selections).map_err(ApiError::from_commit_error)?;
     let _selected_patch = selected_commit_patch(
+        &state.git_commands,
         &repo_id,
         &target.repository_path,
         &snapshot,
@@ -154,6 +162,7 @@ pub(super) async fn commit_repository(
                     TaskFailure::Failed(format!("Commit precondition changed: {error:?}"))
                 })?;
                 let selected_patch = selected_commit_patch(
+                    &commands,
                     &task_repo_id,
                     &repository_path,
                     &current,

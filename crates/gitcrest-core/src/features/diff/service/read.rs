@@ -3,19 +3,22 @@ use std::path::{Component, Path};
 use sha2::{Digest, Sha256};
 
 use super::*;
+use crate::ports::diff::DiffGitPort;
 
-pub async fn read(
+pub async fn read<G: DiffGitPort + ?Sized>(
+    git: &G,
     repo_id: String,
     repository_path: &Path,
     file: &StatusFile,
     scope: DiffScope,
 ) -> Result<DiffDocument, DiffError> {
-    read_with_patch(repo_id, repository_path, file, scope)
+    read_with_patch(git, repo_id, repository_path, file, scope)
         .await
         .map(|result| result.document)
 }
 
-pub async fn read_commit_file(
+pub async fn read_commit_file<G: DiffGitPort + ?Sized>(
+    git: &G,
     repo_id: String,
     repository_path: &Path,
     oid: &str,
@@ -26,9 +29,9 @@ pub async fn read_commit_file(
     if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(DiffError::InvalidPath);
     }
-    let patch =
-        crate::git::diff::read_commit_file_patch(repository_path, oid, parent_oid, relative_path)
-            .await?;
+    let patch = git
+        .read_commit_file_patch(repository_path, oid, parent_oid, relative_path)
+        .await?;
     let parsed = parse_diff(&patch);
     let mut document = DiffDocument {
         repo_id,
@@ -52,7 +55,8 @@ pub async fn read_commit_file(
     Ok(document)
 }
 
-pub async fn read_with_patch(
+pub async fn read_with_patch<G: DiffGitPort + ?Sized>(
+    git: &G,
     repo_id: String,
     repository_path: &Path,
     file: &StatusFile,
@@ -125,8 +129,9 @@ pub async fn read_with_patch(
 
     let untracked =
         scope == DiffScope::WorkingTree && file.categories.contains(&ChangeCategory::Untracked);
-    let patch =
-        crate::git::diff::read_file_patch(repository_path, &file.path, scope, untracked).await?;
+    let patch = git
+        .read_file_patch(repository_path, &file.path, scope, untracked)
+        .await?;
     document.revision = revision_for(scope, &file.path, &patch);
     let parsed = parse_diff(&patch);
     document.status = if parsed.binary {
