@@ -3852,4 +3852,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；既有组件测试覆盖工作流预检、冲突文件保存/解决、AI 建议、Rebase 与 Reset 预览。
 - 证据：`src/features/workflows/index.ts`、`src/features/workflows/ui/`、`src/features/workflows/model/workflow-action.ts`、`tests/unit/workflow-dialog.test.tsx`、`tests/unit/conflict-window.test.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`、`tests/unit/rebase-dialog.test.tsx`、`tests/unit/reset-dialog.test.tsx`。
 - 限制/后续：冲突窗口继续由 feature 公共入口直接导出以供独立 renderer 使用；其它 feature 的目录迁移与 S7.2/S7.4/S7.5 整体验收仍待继续。
-- 完成 commit：待提交
+- 完成 commit：`f9d8df0 refactor: organize workflow feature UI`
