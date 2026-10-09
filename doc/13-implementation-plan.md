@@ -2934,3 +2934,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/tags.rs`、`crates/gitcrest-core/src/git/tags.rs`、`crates/gitcrest-core/src/features/tags/service.rs`、`crates/gitcrest-core/src/features/tags/handlers.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：其它 feature 仍含 Git CLI 调用和具体 GitCommandService 注入，继续逐项迁入 adapter/port；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`6f1c9ed`
+
+### Branch 读操作迁入 Git adapter 并由 port 注入 — 小阶段 253
+- 状态：已完成（branches feature 的引用读取、ref 名校验、未合并计数与分支差异路径读取改由 Git port 执行）
+- 日期：2026-10-09
+- 交付：新增 `BranchReference` 与 `BranchGitPort`，由 `git/refs.rs::GitBranchAdapter` 实现分支 ref 列表、名称校验、未合并提交计数和分支差异路径查询；分支命令的超时、输出上限和输出解析迁入 adapter。branches service 保留业务模型转换和错误映射，AppState/bootstrap 注入 port，branch handlers 及 remotes 的 pull/push/远程分支删除预检接入 port；公开 API 字段和预检决策逻辑保持现有语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索检查 branch/remotes 相关入口使用新 port；未运行 Rust 测试。
+- 手工验证：未执行临时仓库分支列表、ref 名校验、未合并删除保护、脏文件冲突预检及 remotes 预检场景；运行时 Git 行为尚未手工复核。
+- 证据：`crates/gitcrest-core/src/domain/branch.rs`、`crates/gitcrest-core/src/ports/branches.rs`、`crates/gitcrest-core/src/git/refs.rs`、`crates/gitcrest-core/src/features/branches/service.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`crates/gitcrest-core/src/features/remotes`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：branches 的写操作仍通过现有 Git 命令服务执行；其他 features 仍有 Git CLI 调用或具体 GitCommandService 注入，继续逐项迁入 adapter/port；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`6949939`
