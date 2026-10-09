@@ -2734,3 +2734,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/refresh/status.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`crates/gitcrest-core/src/refresh/snapshots.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：refresh service 仍以 RepositoryPathPort 和 StatusReadPort 的具体泛型装配；StatusSnapshotCache 的边界和容量策略未改变；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`208ce8d`
+
+### 仓库路径读取适配器与 RepositoryManager 解耦 — 小阶段 233
+- 状态：已完成（路径解析由独立 RepositoryPathReader 实现，RepositoryManager 不再实现路径 port）
+- 日期：2026-10-09
+- 交付：新增 `RepositoryPathReader`，封装通过 RepositoryStore 查询登记记录并检查工作树路径；`RepositoryManager` 移除 `read_target` 与 `RepositoryPathPort` 实现，bootstrap 单独装配 reader 给 Status refresh 和 Diff handler，AppState 显式持有路径 reader。测试 AppState 装配同步更新。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；静态搜索确认 `RepositoryManager` 不再实现 `RepositoryPathPort`，Status 与 Diff 路径查询通过 reader。
+- 证据：`crates/gitcrest-core/src/features/repositories/repository_path.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/features/diff/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：TaskTarget 和 HistoryTarget 路径解析仍由 RepositoryManager 提供，后续可按实际共用边界继续收敛；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待补记

@@ -7,6 +7,7 @@ use axum::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::history,
+    ports::repository::RepositoryPathPort,
     AppState,
 };
 
@@ -31,8 +32,8 @@ pub(super) async fn repository_diff(
     })?;
     let scope: DiffScope = query.scope.into();
     let repository_path = state
-        .repositories
-        .read_target(&repo_id)
+        .repository_paths
+        .read_repository_path(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let candidate = StatusFile {

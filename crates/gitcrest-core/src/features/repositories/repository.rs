@@ -8,9 +8,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
-use crate::{
-    domain::error::RepositoryError, ports::repository::RepositoryPathPort, storage::RepositoryStore,
-};
+use crate::{domain::error::RepositoryError, storage::RepositoryStore};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -114,17 +112,8 @@ impl RepositoryManager {
         })
     }
 
-    pub async fn read_target(&self, repo_id: &str) -> Result<PathBuf, RepositoryError> {
-        let store = self.store.clone();
-        let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let path = PathBuf::from(repository.path);
-        fs::metadata(&path).await.map_err(map_path_error)?;
-        Ok(path)
+    pub(crate) fn path_reader(&self) -> super::repository_path::RepositoryPathReader {
+        super::repository_path::RepositoryPathReader::new(self.store.clone())
     }
 
     pub async fn open_database(path: PathBuf) -> Result<Self, RepositoryError> {
@@ -303,12 +292,6 @@ impl RepositoryManager {
     }
 }
 
-impl RepositoryPathPort for RepositoryManager {
-    async fn read_repository_path(&self, repo_id: &str) -> Result<PathBuf, RepositoryError> {
-        self.read_target(repo_id).await
-    }
-}
-
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -348,7 +331,7 @@ fn normalize_canonical_path(path: PathBuf) -> PathBuf {
     path
 }
 
-fn map_path_error(error: std::io::Error) -> RepositoryError {
+pub(super) fn map_path_error(error: std::io::Error) -> RepositoryError {
     match error.kind() {
         std::io::ErrorKind::NotFound => RepositoryError::PathNotFound,
         std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,

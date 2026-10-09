@@ -1,4 +1,6 @@
 use super::scope;
+#[cfg(test)]
+use crate::features::repositories::RepositoryPathReader;
 use crate::{
     domain::{error::RepositoryError, status::StatusSnapshot},
     ports::{repository::RepositoryPathPort, status::StatusReadPort},
@@ -13,9 +15,9 @@ pub(crate) struct StatusService<R, G> {
 }
 
 #[cfg(test)]
-impl StatusService<RepositoryManager, GitCommandService> {
+impl StatusService<RepositoryPathReader, GitCommandService> {
     pub(crate) fn new(repositories: RepositoryManager) -> Self {
-        Self::with_reader(repositories, GitCommandService::default())
+        Self::with_reader(repositories.path_reader(), GitCommandService::default())
     }
 }
 
