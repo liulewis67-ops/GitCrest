@@ -7,6 +7,7 @@ use tokio::{
 };
 
 use crate::ports::branches::BranchGitPort;
+use crate::ports::remotes::RemoteGitPort;
 
 const MAX_PULL_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_DIRTY_PATHS: usize = 200;
@@ -55,18 +56,20 @@ pub async fn read_pull_preflight(
     current: Option<&str>,
     detached: bool,
     branch_git: &dyn BranchGitPort,
+    remote_git: &dyn RemoteGitPort,
 ) -> Result<PullPreflight, PullError> {
     if detached || current.is_none() {
         return Err(PullError::NoCurrentBranch);
     }
     let local_branch = current.ok_or(PullError::NoCurrentBranch)?;
-    crate::features::branches::validate_branch_name_with_git(
-        repository_path,
-        local_branch,
-        branch_git,
-    )
-    .await
-    .map_err(|_| PullError::NoCurrentBranch)?;
+    if !crate::domain::branch::is_branch_name_syntactically_valid(local_branch)
+        || !branch_git
+            .validate_name(repository_path, local_branch)
+            .await
+            .map_err(|_| PullError::NoCurrentBranch)?
+    {
+        return Err(PullError::NoCurrentBranch);
+    }
     let config = run_git(
         repository_path,
         &[
@@ -89,20 +92,25 @@ pub async fn read_pull_preflight(
     if remote_name == "." || !remote_ref.starts_with("refs/heads/") {
         return Err(PullError::InvalidUpstream);
     }
-    crate::features::remotes::validate_remote_name(repository_path, &remote_name)
-        .await
-        .map_err(|_| PullError::InvalidUpstream)?;
+    crate::features::remotes::validate_remote_name_with_git(
+        repository_path,
+        &remote_name,
+        remote_git,
+    )
+    .await
+    .map_err(|_| PullError::InvalidUpstream)?;
     let remote_branch = remote_ref
         .strip_prefix("refs/heads/")
         .filter(|name| !name.is_empty())
         .ok_or(PullError::InvalidUpstream)?;
-    crate::features::branches::validate_branch_name_with_git(
-        repository_path,
-        remote_branch,
-        branch_git,
-    )
-    .await
-    .map_err(|_| PullError::InvalidUpstream)?;
+    if !crate::domain::branch::is_branch_name_syntactically_valid(remote_branch)
+        || !branch_git
+            .validate_name(repository_path, remote_branch)
+            .await
+            .map_err(|_| PullError::InvalidUpstream)?
+    {
+        return Err(PullError::InvalidUpstream);
+    }
     let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
     let tracking_oid = run_git(
         repository_path,

@@ -7,6 +7,7 @@ use tokio::{
 };
 
 use crate::ports::branches::BranchGitPort;
+use crate::ports::remotes::RemoteGitPort;
 
 const MAX_PUSH_PREVIEW_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PREVIEW_PATHS: usize = 200;
@@ -64,6 +65,7 @@ pub async fn read_push_preflight(
         detached,
         None,
         &crate::git::refs::GitBranchAdapter,
+        &crate::git::remotes::GitRemoteAdapter,
     )
     .await
 }
@@ -75,26 +77,36 @@ pub async fn read_push_preflight_for_target(
     detached: bool,
     target: Option<(&str, &str)>,
     branch_git: &dyn BranchGitPort,
+    remote_git: &dyn RemoteGitPort,
 ) -> Result<PushPreflight, PushError> {
     if detached || current.is_none() {
         return Err(PushError::NoCurrentBranch);
     }
     let local_branch = current.ok_or(PushError::NoCurrentBranch)?;
-    crate::features::branches::validate_branch_name_with_git(
-        repository_path,
-        local_branch,
-        branch_git,
-    )
-    .await
-    .map_err(|_| PushError::NoCurrentBranch)?;
+    if !crate::domain::branch::is_branch_name_syntactically_valid(local_branch)
+        || !branch_git
+            .validate_name(repository_path, local_branch)
+            .await
+            .map_err(|_| PushError::NoCurrentBranch)?
+    {
+        return Err(PushError::NoCurrentBranch);
+    }
     let (local_oid, remote_name, remote_branch) = if let Some((remote_name, remote_branch)) = target
     {
-        crate::features::remotes::validate_remote_name(repository_path, remote_name)
-            .await
-            .map_err(|_| PushError::InvalidUpstream)?;
-        let remotes = crate::features::remotes::read_remotes(repo_id.clone(), repository_path)
-            .await
-            .map_err(|_| PushError::InvalidUpstream)?;
+        crate::features::remotes::validate_remote_name_with_git(
+            repository_path,
+            remote_name,
+            remote_git,
+        )
+        .await
+        .map_err(|_| PushError::InvalidUpstream)?;
+        let remotes = crate::features::remotes::read_remotes_with_git(
+            repo_id.clone(),
+            repository_path,
+            remote_git,
+        )
+        .await
+        .map_err(|_| PushError::InvalidUpstream)?;
         if !remotes
             .remotes
             .iter()
@@ -102,13 +114,14 @@ pub async fn read_push_preflight_for_target(
         {
             return Err(PushError::InvalidUpstream);
         }
-        crate::features::branches::validate_branch_name_with_git(
-            repository_path,
-            remote_branch,
-            branch_git,
-        )
-        .await
-        .map_err(|_| PushError::InvalidUpstream)?;
+        if !crate::domain::branch::is_branch_name_syntactically_valid(remote_branch)
+            || !branch_git
+                .validate_name(repository_path, remote_branch)
+                .await
+                .map_err(|_| PushError::InvalidUpstream)?
+        {
+            return Err(PushError::InvalidUpstream);
+        }
         let local_oid = run_git(
             repository_path,
             &[
@@ -155,16 +168,21 @@ pub async fn read_push_preflight_for_target(
             .ok_or(PushError::InvalidUpstream)?;
         (local_oid, remote_name, remote_branch.to_owned())
     };
-    crate::features::remotes::validate_remote_name(repository_path, &remote_name)
-        .await
-        .map_err(|_| PushError::InvalidUpstream)?;
-    crate::features::branches::validate_branch_name_with_git(
+    crate::features::remotes::validate_remote_name_with_git(
         repository_path,
-        &remote_branch,
-        branch_git,
+        &remote_name,
+        remote_git,
     )
     .await
     .map_err(|_| PushError::InvalidUpstream)?;
+    if !crate::domain::branch::is_branch_name_syntactically_valid(&remote_branch)
+        || !branch_git
+            .validate_name(repository_path, &remote_branch)
+            .await
+            .map_err(|_| PushError::InvalidUpstream)?
+    {
+        return Err(PushError::InvalidUpstream);
+    }
     let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
     let remote_oid = run_git(
         repository_path,

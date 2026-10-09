@@ -6,6 +6,10 @@ pub(crate) enum BranchCommand {
     Delete { name: String, allow_unmerged: bool },
 }
 
+pub(crate) fn is_branch_name_syntactically_valid(name: &str) -> bool {
+    !name.is_empty() && name.len() <= 255 && !name.chars().any(char::is_control)
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct BranchReference {
     pub(crate) full_name: String,

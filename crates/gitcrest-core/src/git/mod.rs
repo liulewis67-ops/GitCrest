@@ -4,6 +4,7 @@ pub(crate) mod history;
 pub(crate) mod index;
 pub(crate) mod process;
 pub(crate) mod refs;
+pub(crate) mod remotes;
 pub(crate) mod repository;
 pub(crate) mod status;
 pub(crate) mod status_snapshot;

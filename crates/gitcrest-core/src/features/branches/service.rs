@@ -3,7 +3,10 @@ use std::path::Path;
 use serde::Serialize;
 
 use crate::{
-    domain::{branch::BranchReference, error::GitAdapterError},
+    domain::{
+        branch::{is_branch_name_syntactically_valid, BranchReference},
+        error::GitAdapterError,
+    },
     ports::branches::BranchGitPort,
 };
 
@@ -55,7 +58,7 @@ pub async fn validate_branch_name_with_git(
     name: &str,
     git: &dyn BranchGitPort,
 ) -> Result<(), BranchError> {
-    if name.is_empty() || name.len() > 255 || name.chars().any(char::is_control) {
+    if !is_branch_name_syntactically_valid(name) {
         return Err(BranchError::InvalidName);
     }
     match git

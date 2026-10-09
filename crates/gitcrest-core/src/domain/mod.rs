@@ -2,6 +2,7 @@ pub(crate) mod branch;
 pub(crate) mod commit;
 pub(crate) mod diff;
 pub(crate) mod error;
+pub(crate) mod remote;
 pub(crate) mod repository;
 pub(crate) mod shelf;
 pub(crate) mod staging;

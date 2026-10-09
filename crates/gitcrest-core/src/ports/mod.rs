@@ -3,6 +3,7 @@ pub(crate) mod branches;
 pub(crate) mod diff;
 pub(crate) mod git;
 pub(crate) mod history;
+pub(crate) mod remotes;
 pub(crate) mod repository;
 pub(crate) mod settings;
 pub(crate) mod shelves;
