@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { dump, load } from "js-yaml";
@@ -11,6 +11,8 @@ import {
   requireLinuxUpdateInfoSignature,
   verifyLinuxUpdateInfoSignature,
 } from "../../electron/main/update-manifest-signature";
+import { isUpdateFeedConfigured } from "../../electron/main/update-config-policy.mjs";
+import injectLinuxUpdatePublicKey from "../../scripts/inject-linux-update-public-key.mjs";
 
 function createSignedUpdateInfo(privateKey: KeyObject) {
   const unsigned = {
@@ -90,5 +92,39 @@ it("signs Linux release YAML with the same policy used by the runtime verifier",
     expect(verifyLinuxUpdateInfoSignature({ ...signed, files: [{ ...signed.files[0], sha512: "b".repeat(128) }] }, publicKeyBase64)).toBe(false);
   } finally {
     await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it("injects the Ed25519 release public key into packaged Linux updater metadata", async () => {
+  const { privateKey, publicKey } = generateKeyPairSync("ed25519");
+  const directory = await mkdtemp(join(tmpdir(), "gitcrest linux updater package "));
+  const resourcesPath = join(directory, "resources");
+  const originalSigningKey = process.env.LINUX_UPDATE_SIGNING_KEY;
+  try {
+    await mkdir(resourcesPath);
+    await writeFile(join(resourcesPath, "app-update.yml"), "provider: github\nowner: example\nrepo: gitcrest\n", "utf8");
+    process.env.LINUX_UPDATE_SIGNING_KEY = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+
+    await injectLinuxUpdatePublicKey({ electronPlatformName: "linux", appOutDir: directory });
+
+    const config = await readFile(join(resourcesPath, "app-update.yml"), "utf8");
+    const embeddedPublicKey = config.match(/^gitcrestUpdatePublicKey: (.+)$/m)?.[1];
+    expect(embeddedPublicKey).toBe(publicKey.export({ type: "spki", format: "der" }).toString("base64"));
+    expect(isUpdateFeedConfigured(true, "linux", config)).toBe(true);
+  } finally {
+    if (originalSigningKey === undefined) delete process.env.LINUX_UPDATE_SIGNING_KEY;
+    else process.env.LINUX_UPDATE_SIGNING_KEY = originalSigningKey;
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it("fails closed when a Linux release package has no Ed25519 signing key", async () => {
+  const originalSigningKey = process.env.LINUX_UPDATE_SIGNING_KEY;
+  delete process.env.LINUX_UPDATE_SIGNING_KEY;
+  try {
+    await expect(injectLinuxUpdatePublicKey({ electronPlatformName: "linux", appOutDir: "unused" }))
+      .rejects.toThrow("LINUX_UPDATE_SIGNING_KEY is required");
+  } finally {
+    if (originalSigningKey !== undefined) process.env.LINUX_UPDATE_SIGNING_KEY = originalSigningKey;
   }
 });

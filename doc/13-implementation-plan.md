@@ -4033,3 +4033,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、两份 stage362 报告；默认 GPU 的 20 轮基线见小阶段 360。
 - 限制/后续：禁用 GPU 虽将帧率提高至接近 60，但并未达到 60，且工作集显著恶化；不改变发行版 GPU 启动参数。继续从 Electron 基线工作集及默认合成路径调查优化，S7.2 仍待验收。
 - 完成 commit：`a8adff9 perf: reject software gpu fallback for scrolling`
+
+### S7.4 Linux release 包内公钥注入 — 小阶段 363
+- 状态：已完成（release 配置与 Ed25519 公钥注入通过定向验证；Linux 原生 runner 构建及发布仍待完成）
+- 日期：2026-10-10
+- 交付：新增独立 `electron-builder.linux-release.mjs`，只为 Linux AppImage 指定 GitHub 更新源，仓库身份由 CI 的 `GITHUB_REPOSITORY` 提供；普通开发和 package-smoke 构建继续使用原配置。新增 Linux `afterPack` hook，从 `LINUX_UPDATE_SIGNING_KEY` 派生 Ed25519 SPKI DER 公钥并写入打包目录的 `resources/app-update.yml`；密钥缺失、类型错误或已有重复注入字段时构建失败。新增 `electron:package:linux-release` 命令供 Linux runner 调用。
+- 验证：更新清单签名/策略定向 Vitest（6/6）通过；生成临时 Ed25519 keypair，执行实际 `afterPack` hook 并确认包内公钥与私钥对应公钥相同，且 Linux updater policy 因受信公钥启用；缺失私钥时按预期失败。两个新增 MJS 文件 `node --check`、release config 用临时仓库名加载和 `git diff --check` 通过。未在 Windows 主机尝试生成 AppImage。
+- 证据：`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`、`tests/unit/update-manifest-signature.test.ts`。
+- 限制/后续：尚未接入 Linux 原生 runner workflow，也未生成并签名真实 AppImage 发布清单或完成更新端到端安装；Linux feed 仍不能视为已验收。Windows/macOS 真实签名发布、跨平台 runner 结果和 S7.5 收口仍待完成。
