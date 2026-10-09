@@ -3833,3 +3833,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/remotes/index.ts`、`src/features/remotes/ui/`、`src/features/remotes/model/push-target.ts`、`tests/unit/pull-dialog.test.tsx`、`tests/unit/push-dialog.test.tsx`、`tests/unit/push-target-dialog.test.tsx`、`tests/unit/remote-manager.test.tsx`。
 - 限制/后续：此子阶段只整理 Remotes feature 的界面与类型归属，其余 feature 目录迁移及 S7.2/S7.4/S7.5 整体验收仍未完成。
 - 完成 commit：`f0c4d29`
+
+### Branches/Cloning/Credentials feature UI 目录对齐 — 小阶段 343
+- 状态：已完成（分支删除、Clone 与系统凭据编辑 UI 归入对应 feature 的 `ui/`）
+- 日期：2026-10-09
+- 交付：将 `RemoteBranchDeleteDialog`、`CloneDialog` 和 `CredentialEditor` 分别迁入 `features/branches/ui/`、`features/cloning/ui/` 与 `features/credentials/ui/`；feature 入口更新动态加载路径，保持 UI 延迟加载。
+- 验证：定向测试 3 files / 6 tests、`pnpm frontend:boundaries`、`pnpm build` 通过；production build 保留三个独立组件 chunk。构建仅有既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；现有组件用例覆盖远端分支删除确认、Clone 表单与凭据编辑交互。
+- 证据：三个 feature 的 `index.ts` 与 `ui/` 文件、`tests/unit/remote-branch-delete-dialog.test.tsx`、`tests/unit/clone-dialog.test.tsx`、`tests/unit/credential-editor.test.tsx`。
+- 限制/后续：仅完成三个 feature 的 UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
+- 完成 commit：待提交

@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { CredentialStatusResponse, GitCrestApiClient } from "../../api/client";
+import type { CredentialStatusResponse, GitCrestApiClient } from "../../../api/client";
 
 interface CredentialEditorProps {
   api?: GitCrestApiClient;

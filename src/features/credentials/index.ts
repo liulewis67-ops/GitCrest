@@ -1,1 +1,1 @@
-export const loadCredentialEditor = () => import("./CredentialEditor");
+export const loadCredentialEditor = () => import("./ui/CredentialEditor");

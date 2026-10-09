@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { RemoteBranchDeletePreviewResponse, RemoteSnapshotResponse } from "../../src/api/client";
-import { RemoteBranchDeleteDialog } from "../../src/features/branches/RemoteBranchDeleteDialog";
+import { RemoteBranchDeleteDialog } from "../../src/features/branches/ui/RemoteBranchDeleteDialog";
 
 afterEach(cleanup);
 

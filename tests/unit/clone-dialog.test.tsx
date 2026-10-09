@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { CloneDialog } from "../../src/features/cloning/CloneDialog";
+import { CloneDialog } from "../../src/features/cloning/ui/CloneDialog";
 
 afterEach(cleanup);
 

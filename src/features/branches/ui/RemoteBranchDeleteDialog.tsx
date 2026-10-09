@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type RemoteBranchDeletePreviewResponse, type RemoteSnapshotResponse, type TaskSnapshotResponse } from "../../api/client";
-import { useDialogFocus } from "../../shared/use-dialog-focus";
+import { GitCrestApiError, type GitCrestApiClient, type RemoteBranchDeletePreviewResponse, type RemoteSnapshotResponse, type TaskSnapshotResponse } from "../../../api/client";
+import { useDialogFocus } from "../../../shared/use-dialog-focus";
 
 function resolveTarget(branchRef: string, remotes?: RemoteSnapshotResponse) {
   const referencePrefix = "refs/remotes/";
