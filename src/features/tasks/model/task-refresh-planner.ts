@@ -1,5 +1,5 @@
 import type { TaskSnapshotResponse } from "../../../api/client";
-import { supportsWorkflowRecovery } from "../task-operations";
+import { supportsWorkflowRecovery } from "./task-operations";
 
 export type TaskRefreshKind = "staging" | "commit" | "branch" | "remote" | "push" | "pull" | "fetch" | "workflow";
 

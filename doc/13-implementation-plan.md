@@ -4445,3 +4445,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/remotes/model/remote-action-availability.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：Workspace toolbar 仍以 disabled props 控制按钮交互，feature 返回原因用于提示文案；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### tasks feature 统一任务操作判定的 model 归属 — 小阶段 406
+- 状态：已完成（workflow recovery、fetch 凭据恢复和失败 push 的任务资格判断统一位于 tasks model）
+- 日期：2026-10-10
+- 交付：将 `supportsWorkflowRecovery` 从 tasks feature 根目录迁入 `model/task-operations.ts`，并将 TaskCenter 内的认证失败 fetch、失败 push 资格判断一并迁入 model。TaskCenter 和任务刷新规划器共享同一判定模块，UI 保留原提示文案及动作回调。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 输出到临时 outDir；未新增或运行测试。构建仅出现既有 web-tree-sitter `eval` 和 chunk 大小提示。
+- 手工验证：未操作 GUI；比对迁移前后判定条件，workflow recovery 仍支持原有六类操作及 `shelfApply:` 前缀；凭据恢复仅匹配 failed fetch 且保留 errorCategory 与日志回退判断；push review 仅匹配 failed 且 operation 以 `push` 开头。
+- 证据：`src/features/tasks/model/task-operations.ts`、`src/features/tasks/model/task-refresh-planner.ts`、`src/features/tasks/ui/TaskCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4.1、4.2 节。
+- 限制/后续：此阶段只收敛任务操作资格的规则归属，不改变 TaskCenter 与 App 的跨 feature 回调装配；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

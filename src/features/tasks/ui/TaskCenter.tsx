@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/use-dialog-focus";
-import { supportsWorkflowRecovery } from "../task-operations";
+import { isAuthenticationFailure, isFailedPush, supportsWorkflowRecovery } from "../model/task-operations";
 
 interface TaskCenterProps {
   tasks: TaskSnapshotResponse[];
@@ -17,16 +17,6 @@ interface TaskCenterProps {
   api?: GitCrestApiClient;
   onRecoverWorkflow: (task: TaskSnapshotResponse, preflight: WorkflowRecoveryPreflightResponse, action: "continue" | "skip" | "abort") => void;
   onOpenConflictWindow: (task: TaskSnapshotResponse) => void;
-}
-
-function isAuthenticationFailure(task: TaskSnapshotResponse): boolean {
-  if (task.status !== "failed" || task.operation !== "fetch") return false;
-  if (task.errorCategory === "authentication") return true;
-  return /authentication failed|authentication required|could not read username|could not read password|access denied|terminal prompts disabled/i.test([task.message, ...task.logs].join("\n"));
-}
-
-function isFailedPush(task: TaskSnapshotResponse): boolean {
-  return task.status === "failed" && task.operation.startsWith("push");
 }
 
 export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow }: TaskCenterProps) {
