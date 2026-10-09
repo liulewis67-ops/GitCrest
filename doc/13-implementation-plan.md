@@ -3323,4 +3323,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright 在本机真实 Windows ACL 上覆盖权限拒绝、renderer 告警和清理恢复。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：macOS/Linux 真实权限拒绝行为未在对应 runner 验证；Git 初始化中途失败后的部分 `.git` 清理仍待验收；S7.5 保持进行中。
-- 完成 commit：待提交
+- 完成 commit：`a77c393`
