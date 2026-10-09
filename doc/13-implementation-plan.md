@@ -3882,4 +3882,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；现有组件测试覆盖任务操作、恢复预检、取消与冲突窗口入口。
 - 证据：`src/features/tasks/index.ts`、`src/features/tasks/ui/TaskCenter.tsx`、`tests/unit/task-center.test.tsx`。
 - 限制/后续：此阶段只收敛 Tasks UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
-- 完成 commit：待提交
+- 完成 commit：`60061bb refactor: organize tasks feature UI`
