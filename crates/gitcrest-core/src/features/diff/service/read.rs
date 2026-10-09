@@ -1,0 +1,523 @@
+use std::{
+    path::{Component, Path},
+    process::Stdio,
+};
+
+use sha2::{Digest, Sha256};
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    process::Command,
+};
+
+use super::*;
+
+pub async fn read(
+    repo_id: String,
+    repository_path: &Path,
+    file: &StatusFile,
+    scope: DiffScope,
+) -> Result<DiffDocument, DiffError> {
+    read_with_patch(repo_id, repository_path, file, scope)
+        .await
+        .map(|result| result.document)
+}
+
+pub async fn read_commit_file(
+    repo_id: String,
+    repository_path: &Path,
+    oid: &str,
+    parent_oid: Option<&str>,
+    relative_path: &str,
+) -> Result<DiffDocument, DiffError> {
+    validate_repo_relative_path(relative_path)?;
+    if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(DiffError::InvalidPath);
+    }
+    let mut command = Command::new("git");
+    command.arg("-C").arg(repository_path).args([
+        "--literal-pathspecs",
+        if parent_oid.is_some() {
+            "diff"
+        } else {
+            "diff-tree"
+        },
+        "--no-ext-diff",
+        "--no-color",
+        "--unified=3",
+    ]);
+    if let Some(parent_oid) = parent_oid {
+        command.arg(parent_oid).arg(oid);
+    } else {
+        command.args(["--root", "--no-commit-id", "-p", "-r", oid]);
+    }
+    command
+        .arg("--")
+        .arg(relative_path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("GIT_PAGER", "cat")
+        .kill_on_drop(true);
+    let mut child = command.spawn().map_err(|_| DiffError::GitUnavailable)?;
+    let stdout = child.stdout.take().ok_or(DiffError::GitFailed)?;
+    let stderr = child.stderr.take().ok_or(DiffError::GitFailed)?;
+    let stdout_reader = tokio::spawn(read_capped(stdout, MAX_DIFF_BYTES));
+    let stderr_reader = tokio::spawn(read_capped(stderr, MAX_ERROR_BYTES));
+    let result = tokio::time::timeout(DIFF_DEADLINE, async {
+        let status = child.wait().await.map_err(|_| DiffError::GitFailed)?;
+        let stdout = stdout_reader
+            .await
+            .map_err(|_| DiffError::GitFailed)?
+            .map_err(|_| DiffError::GitFailed)?;
+        let stderr = stderr_reader
+            .await
+            .map_err(|_| DiffError::GitFailed)?
+            .map_err(|_| DiffError::GitFailed)?;
+        Ok::<_, DiffError>((status, stdout, stderr))
+    })
+    .await;
+    let (status, stdout, stderr) = match result {
+        Ok(result) => result?,
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err(DiffError::TimedOut);
+        }
+    };
+    if stdout.overflowed {
+        return Err(DiffError::TooLarge);
+    }
+    if !status.success() {
+        return Err(classify_git_error(
+            &String::from_utf8_lossy(&stderr.bytes).to_ascii_lowercase(),
+        ));
+    }
+    let parsed = parse_diff(&stdout.bytes);
+    let mut document = DiffDocument {
+        repo_id,
+        path: relative_path.to_owned(),
+        revision: revision_for(DiffScope::Commit, relative_path, &stdout.bytes),
+        original_path: None,
+        scope: DiffScope::Commit,
+        change_kind: ChangeKind::Modified,
+        status: if parsed.binary {
+            DiffContentStatus::Binary
+        } else if parsed.hunks.is_empty() {
+            DiffContentStatus::Empty
+        } else {
+            DiffContentStatus::Text
+        },
+        hunks: parsed.hunks,
+    };
+    if document.status == DiffContentStatus::Empty {
+        document.hunks.clear();
+    }
+    Ok(document)
+}
+
+pub async fn read_with_patch(
+    repo_id: String,
+    repository_path: &Path,
+    file: &StatusFile,
+    scope: DiffScope,
+) -> Result<DiffRead, DiffError> {
+    validate_repo_relative_path(&file.path)?;
+    let mut document = DiffDocument {
+        repo_id,
+        path: file.path.clone(),
+        revision: revision_for(scope, &file.path, &[]),
+        original_path: file.original_path.clone(),
+        scope,
+        change_kind: file.kind.clone(),
+        status: DiffContentStatus::Empty,
+        hunks: Vec::new(),
+    };
+
+    if file.categories.contains(&ChangeCategory::Conflicted) {
+        document.status = DiffContentStatus::Conflicted;
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
+    }
+    if file.categories.contains(&ChangeCategory::Ignored) {
+        document.status = DiffContentStatus::Ignored;
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
+    }
+    if scope == DiffScope::Index && !file.categories.contains(&ChangeCategory::Staged) {
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
+    }
+    if scope == DiffScope::WorkingTree
+        && !file.categories.iter().any(|category| {
+            matches!(
+                category,
+                ChangeCategory::Unstaged | ChangeCategory::Untracked
+            )
+        })
+    {
+        return Ok(DiffRead {
+            document,
+            patch: Vec::new(),
+        });
+    }
+
+    let file_path = inspect_path(repository_path, &file.path).await?;
+    match file_path {
+        FilePathState::Symlink => {
+            document.status = DiffContentStatus::Symlink;
+            return Ok(DiffRead {
+                document,
+                patch: Vec::new(),
+            });
+        }
+        FilePathState::Submodule => {
+            document.status = DiffContentStatus::Submodule;
+            return Ok(DiffRead {
+                document,
+                patch: Vec::new(),
+            });
+        }
+        FilePathState::Regular | FilePathState::Missing => {}
+    }
+
+    let mut command = Command::new("git");
+    command
+        .arg("-C")
+        .arg(repository_path)
+        .args([
+            "--literal-pathspecs",
+            "diff",
+            "--no-ext-diff",
+            "--no-color",
+            "--unified=3",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env("GIT_PAGER", "cat")
+        .kill_on_drop(true);
+    if scope == DiffScope::Index {
+        command.arg("--cached");
+    } else if file.categories.contains(&ChangeCategory::Untracked) {
+        command.arg("--no-index");
+    }
+    command.arg("--");
+    if scope == DiffScope::WorkingTree && file.categories.contains(&ChangeCategory::Untracked) {
+        command.arg("/dev/null");
+    }
+    command.arg(&file.path);
+
+    let mut child = command.spawn().map_err(|error| match error.kind() {
+        std::io::ErrorKind::NotFound => DiffError::GitUnavailable,
+        std::io::ErrorKind::PermissionDenied => DiffError::PermissionDenied,
+        _ => DiffError::GitUnavailable,
+    })?;
+    let stdout = child.stdout.take().ok_or(DiffError::GitFailed)?;
+    let stderr = child.stderr.take().ok_or(DiffError::GitFailed)?;
+    let stdout_reader = tokio::spawn(read_capped(stdout, MAX_DIFF_BYTES));
+    let stderr_reader = tokio::spawn(read_capped(stderr, MAX_ERROR_BYTES));
+    let result = tokio::time::timeout(DIFF_DEADLINE, async {
+        let status = child.wait().await.map_err(|_| DiffError::GitFailed)?;
+        let stdout = stdout_reader
+            .await
+            .map_err(|_| DiffError::GitFailed)?
+            .map_err(|_| DiffError::GitFailed)?;
+        let stderr = stderr_reader
+            .await
+            .map_err(|_| DiffError::GitFailed)?
+            .map_err(|_| DiffError::GitFailed)?;
+        Ok::<_, DiffError>((status, stdout, stderr))
+    })
+    .await;
+    let (status, stdout, stderr) = match result {
+        Ok(result) => result?,
+        Err(_) => {
+            let _ = child.kill().await;
+            return Err(DiffError::TimedOut);
+        }
+    };
+    if stdout.overflowed {
+        return Err(DiffError::TooLarge);
+    }
+    let expected_no_index_diff =
+        scope == DiffScope::WorkingTree && file.categories.contains(&ChangeCategory::Untracked);
+    if !(status.success() || (expected_no_index_diff && status.code() == Some(1))) {
+        let error = String::from_utf8_lossy(&stderr.bytes).to_ascii_lowercase();
+        return Err(classify_git_error(&error));
+    }
+    document.revision = revision_for(scope, &file.path, &stdout.bytes);
+    let parsed = parse_diff(&stdout.bytes);
+    document.status = if parsed.binary {
+        DiffContentStatus::Binary
+    } else if parsed.hunks.is_empty() {
+        DiffContentStatus::Empty
+    } else {
+        DiffContentStatus::Text
+    };
+    document.hunks = parsed.hunks;
+    Ok(DiffRead {
+        document,
+        patch: stdout.bytes,
+    })
+}
+
+fn revision_for(scope: DiffScope, path: &str, patch: &[u8]) -> String {
+    let mut hash = Sha256::new();
+    hash.update(match scope {
+        DiffScope::WorkingTree => b"workingTree\0".as_slice(),
+        DiffScope::Index => b"index\0".as_slice(),
+        DiffScope::Commit => b"commit\0".as_slice(),
+    });
+    hash.update(path.as_bytes());
+    hash.update([0]);
+    hash.update(patch);
+    format!("sha256:{:x}", hash.finalize())
+}
+
+fn classify_git_error(error: &str) -> DiffError {
+    if error.contains("permission denied") || error.contains("access is denied") {
+        DiffError::PermissionDenied
+    } else if error.contains("could not access") || error.contains("no such file") {
+        DiffError::PathNotFound
+    } else {
+        DiffError::GitFailed
+    }
+}
+
+async fn read_capped<R: AsyncRead + Unpin>(
+    mut stream: R,
+    limit: usize,
+) -> std::io::Result<CappedOutput> {
+    let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
+    let mut chunk = [0_u8; 8192];
+    let mut overflowed = false;
+    loop {
+        let count = stream.read(&mut chunk).await?;
+        if count == 0 {
+            break;
+        }
+        let available = limit.saturating_sub(bytes.len());
+        let kept = available.min(count);
+        bytes.extend_from_slice(&chunk[..kept]);
+        overflowed |= kept != count;
+    }
+    Ok(CappedOutput { bytes, overflowed })
+}
+
+struct CappedOutput {
+    bytes: Vec<u8>,
+    overflowed: bool,
+}
+
+enum FilePathState {
+    Regular,
+    Missing,
+    Symlink,
+    Submodule,
+}
+
+async fn inspect_path(repository_path: &Path, relative: &str) -> Result<FilePathState, DiffError> {
+    let path = Path::new(relative);
+    let mut current = repository_path.to_path_buf();
+    let components = path.components().collect::<Vec<_>>();
+    for (index, component) in components.iter().enumerate() {
+        let Component::Normal(component) = component else {
+            return Err(DiffError::InvalidPath);
+        };
+        current.push(component);
+        let metadata = match tokio::fs::symlink_metadata(&current).await {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if index + 1 == components.len() {
+                    return Ok(FilePathState::Missing);
+                }
+                return Err(DiffError::PathNotFound);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
+                return Err(DiffError::PermissionDenied);
+            }
+            Err(_) => return Err(DiffError::PathNotFound),
+        };
+        if metadata.file_type().is_symlink() {
+            return Ok(FilePathState::Symlink);
+        }
+        if index + 1 < components.len() && !metadata.is_dir() {
+            return Err(DiffError::PathNotFound);
+        }
+        if index + 1 == components.len() && metadata.is_dir() {
+            return Ok(FilePathState::Submodule);
+        }
+    }
+    Ok(FilePathState::Regular)
+}
+
+pub(super) fn validate_repo_relative_path(value: &str) -> Result<(), DiffError> {
+    if value.is_empty()
+        || value.chars().any(char::is_control)
+        || has_windows_drive_prefix(value)
+        || value.contains('\\')
+        || Path::new(value).is_absolute()
+        || !Path::new(value)
+            .components()
+            .all(|component| matches!(component, Component::Normal(_)))
+    {
+        return Err(DiffError::InvalidPath);
+    }
+    Ok(())
+}
+
+fn has_windows_drive_prefix(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
+}
+
+pub(super) struct ParsedDiff {
+    pub(super) binary: bool,
+    pub(super) hunks: Vec<DiffHunk>,
+}
+
+pub(super) fn parse_diff(output: &[u8]) -> ParsedDiff {
+    let text = String::from_utf8_lossy(output);
+    let mut binary = false;
+    let mut hunks = Vec::new();
+    let mut current: Option<DiffHunk> = None;
+    let mut old_line = 0_u32;
+    let mut new_line = 0_u32;
+    let mut changes = Vec::new();
+
+    for (patch_line, line) in text.lines().enumerate() {
+        if line.starts_with("Binary files ") || line == "GIT binary patch" {
+            binary = true;
+            continue;
+        }
+        if let Some((old_start, old_count, new_start, new_count)) = parse_hunk_header(line) {
+            if let Some(mut hunk) = current.take() {
+                flush_changes(&mut hunk.rows, &mut changes);
+                hunks.push(hunk);
+            }
+            old_line = old_start;
+            new_line = new_start;
+            current = Some(DiffHunk {
+                old_start,
+                old_lines: old_count,
+                new_start,
+                new_lines: new_count,
+                rows: Vec::new(),
+            });
+            continue;
+        }
+        let Some(hunk) = current.as_mut() else {
+            continue;
+        };
+        if let Some(text) = line.strip_prefix(' ') {
+            flush_changes(&mut hunk.rows, &mut changes);
+            hunk.rows.push(DiffRow {
+                kind: DiffRowKind::Context,
+                old_line: Some(old_line),
+                new_line: Some(new_line),
+                old_text: Some(text.to_owned()),
+                new_text: Some(text.to_owned()),
+                patch_change_lines: Vec::new(),
+                old_position: Some(old_line),
+                new_position: Some(new_line),
+            });
+            old_line += 1;
+            new_line += 1;
+        } else if let Some(text) = line.strip_prefix('-') {
+            changes.push(RawLine::Deletion {
+                text: text.to_owned(),
+                line: old_line,
+                old_position: old_line,
+                new_position: new_line,
+                patch_line,
+            });
+            old_line += 1;
+        } else if let Some(text) = line.strip_prefix('+') {
+            changes.push(RawLine::Addition {
+                text: text.to_owned(),
+                line: new_line,
+                old_position: old_line,
+                new_position: new_line,
+                patch_line,
+            });
+            new_line += 1;
+        }
+    }
+    if let Some(mut hunk) = current {
+        flush_changes(&mut hunk.rows, &mut changes);
+        hunks.push(hunk);
+    }
+    ParsedDiff { binary, hunks }
+}
+
+pub(super) fn parse_hunk_header(line: &str) -> Option<(u32, u32, u32, u32)> {
+    let header = line.strip_prefix("@@ ")?.split_once(" @@")?.0;
+    let (old, new) = header.split_once(' ')?;
+    let (old_start, old_count) = parse_range(old.strip_prefix('-')?)?;
+    let (new_start, new_count) = parse_range(new.strip_prefix('+')?)?;
+    Some((old_start, old_count, new_start, new_count))
+}
+
+fn parse_range(value: &str) -> Option<(u32, u32)> {
+    if let Some((start, count)) = value.split_once(',') {
+        Some((start.parse().ok()?, count.parse().ok()?))
+    } else {
+        Some((value.parse().ok()?, 1))
+    }
+}
+
+fn flush_changes(rows: &mut Vec<DiffRow>, changes: &mut Vec<RawLine>) {
+    if changes.is_empty() {
+        return;
+    }
+    let mut old = Vec::new();
+    let mut new = Vec::new();
+    for change in changes.drain(..) {
+        match change {
+            RawLine::Deletion {
+                text,
+                line,
+                old_position,
+                new_position,
+                patch_line,
+            } => old.push((text, line, old_position, new_position, patch_line)),
+            RawLine::Addition {
+                text,
+                line,
+                old_position,
+                new_position,
+                patch_line,
+            } => new.push((text, line, old_position, new_position, patch_line)),
+        }
+    }
+    for index in 0..old.len().max(new.len()) {
+        let old_entry = old.get(index);
+        let new_entry = new.get(index);
+        let mut patch_change_lines = Vec::new();
+        if let Some(entry) = old_entry {
+            patch_change_lines.push(entry.4);
+        }
+        if let Some(entry) = new_entry {
+            patch_change_lines.push(entry.4);
+        }
+        rows.push(DiffRow {
+            kind: DiffRowKind::Change,
+            old_line: old_entry.map(|(_, line, _, _, _)| *line),
+            new_line: new_entry.map(|(_, line, _, _, _)| *line),
+            old_text: old_entry.map(|(text, _, _, _, _)| text.clone()),
+            new_text: new_entry.map(|(text, _, _, _, _)| text.clone()),
+            patch_change_lines,
+            old_position: old_entry
+                .map(|(_, _, position, _, _)| *position)
+                .or_else(|| new_entry.map(|(_, _, position, _, _)| *position)),
+            new_position: new_entry
+                .map(|(_, _, _, position, _)| *position)
+                .or_else(|| old_entry.map(|(_, _, _, position, _)| *position)),
+        });
+    }
+}
