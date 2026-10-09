@@ -3992,3 +3992,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；20 轮均使用独立 sidecar/SQLite 和同一 fixture，返回目标提交；fixture refs 和工作树状态未被基准改变。
 - 证据：`crates/gitcrest-core/migrations/0014_history_search_rowid_order.sql`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、历史顺序/ref 失效测试、性能报告。
 - 限制/后续：行 ID 保持插入时的 Git 顺序，并移除了重复存储；本次端到端收益很小，主要性能改进仍来自阶段 357 移除 OID 唯一索引。冷消息搜索仍约 2.2 秒，继续分析索引构建时机和 Git 全量消息扫描成本；S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
+- 完成 commit：`dfe7b41 perf: use row ids for history search order`
