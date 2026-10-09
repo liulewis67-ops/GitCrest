@@ -3333,4 +3333,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行手工 GUI 操作；实际 Git 损坏模板在隔离 Electron 流程触发失败，确认项目内容和页面状态。
 - 证据：`crates/gitcrest-core/src/git/repository.rs`、`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：staging 与最终 `.git` 安装之间若外部 Git 进程同时初始化同一目录，仍存在跨进程并发窗口；macOS/Linux runner 尚未复测；S7.5 保持进行中。
-- 完成 commit：待提交
+- 完成 commit：`73dd418`
