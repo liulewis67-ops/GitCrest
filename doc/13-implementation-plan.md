@@ -2655,3 +2655,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`StatusService` 仍负责从 RepositoryManager 解析路径并管理快照缓存；状态读取错误仍以 `std::io::Error` 跨 port 传递，后续可继续按领域错误规范收敛。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/ports/status.rs`、`crates/gitcrest-core/src/git/status_snapshot.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md` 第 4、6、12 节。
 - 实施 commit：`87200df`、`a3278fd`
+
+
+### RepositoryError 领域归属 — 小阶段 225
+- 状态：已完成（仓库错误语义由 domain 唯一定义，API 继续显式映射）
+- 日期：2026-10-09
+- 交付：将 `RepositoryError` 从 repositories feature 移入 `domain/error.rs`；RepositoryManager 和 StatusService 使用领域错误，API error mapper 直接映射领域错误，repositories feature 出口仅重导出供现有 feature 调用。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 和 `git diff --check` 通过；未运行测试。
+- 限制/后续：repositories feature 仍有兼容重导出，StatusService 路径查询将继续通过单独 port 注入；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/error.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/mod.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4、12 节。
+- 实施 commit：`7890b4d`
