@@ -3064,3 +3064,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/features/remotes/push.rs`、`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.1、14 节。
 - 限制/后续：pull 执行及取消恢复仍在 GitCommandService 中调用 remotes feature 预检；继续将 pull 写流程协调放回 feature/application 层，并将 adapter 保持为 Git 能力执行器；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`778852e`
+
+### Pull 入队后复检移回 remotes feature — 小阶段 266
+- 状态：已完成（pull 写入前的 stale/clean 检查在 feature task closure 中复核）
+- 日期：2026-10-09
+- 交付：pull task 在取得仓库执行权后，使用 BranchGitPort、RemoteGitPort 和 GitReadPort 重读当前 pull preflight，并核对 local/tracking OID、remote/branch 目标及 clean 状态后才调用 RemoteCommandPort。GitCommandService 的 pull 写入入口删除同一项 feature 预检依赖；原 stale、脏工作树错误分类和文案保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未运行排队期间分支/远端移动、工作树变脏、pull merge/rebase 任务场景。
+- 证据：`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：pull 取消后的恢复/结果核对仍调用 remotes feature 预检，且由 GitCommandService 编排；后续将取消协调从 Git adapter 移入 remotes workflow service，再保持原恢复保护语义；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`7d4cc34`
