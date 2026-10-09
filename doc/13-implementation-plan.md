@@ -3913,3 +3913,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-index-phases-stage350.json`。
 - 限制/后续：计时只代表此 Windows 主机与该 fixture；日志记录有毫秒粒度，写入和事务提交合计占主要耗时。冷搜索完整结果仍未达到 <200ms；下一小阶段应优化 SQLite 文档批量写入并再次按完整结果延迟复测。
 - 完成 commit：`c6e733b perf: profile cold history index construction`
+
+### S7.2 SQLite 历史索引批量写入方案评估 — 小阶段 351
+- 状态：已完成（完成 20 轮评估并排除多行插入及重建排序索引方案；S7.2 性能目标仍未达标）
+- 日期：2026-10-09
+- 交付：针对阶段 350 定位的文档行持久化成本，评估 100 行一批的参数化多行 INSERT；随后评估在同一事务内暂时删除 `(repo_id, sort_order)` 索引、写入后重建。两种改动均未保留，存储实现继续使用单行预编译语句，避免将已测得的性能回归带入产品。
+- 验证：Windows 11 10.0.26300、Ryzen 7 5800H、Git 2.37.3.windows.1、Release sidecar、同一 100,000 commit fixture，各运行 20 轮。阶段 350 基线完整冷搜索 P95 为 4,005.638ms、文档行写入 P95 为 2,079ms；多行写入 P95 为 5,619.422ms、行写入 3,502ms；借用参数版本分别为 5,601.427ms、3,525ms；额外重建索引版本分别为 6,083.571ms、3,821ms。三组均在全部 20 轮返回目标提交；pending 首响应 P95 为 18.667–23.118ms。`pnpm check` 通过（前端边界、构建、Vitest 39 files / 188 tests、Rust 142 tests、Electron E2E 6 files / 29 tests）；`cargo clippy --all-targets -- -D warnings`、Release build 与 `git diff --check` 通过。构建仅有既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；基准使用隔离 sidecar/SQLite 与既有独立 fixture。fixture refs 和工作树未由基准改动。
+- 证据：`doc/evidence/S7.2/api-win32-cold-bulk-inserts-stage351.json`、`doc/evidence/S7.2/api-win32-cold-bulk-inserts-borrowed-stage351-20261009.json`、`doc/evidence/S7.2/api-win32-cold-bulk-index-rebuild-stage351-20261009.json`。
+- 限制/后续：本阶段未缩短冷索引构建；单行预编译写入仍是当前已测的较快实现，下一步需从减少数据装载/持久化量或改变索引构建时机寻找方案。首次 pending 响应已低于 200ms，但完整冷搜索仍约 5–6 秒；S7.2 桌面内存/帧率等门槛、S7.4 和 S7.5 仍待验收。
+- 完成 commit：待补记
