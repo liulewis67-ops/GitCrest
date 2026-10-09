@@ -4225,3 +4225,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/windows-vsync-display-path.ps1`、`doc/evidence/S7.2/windows-vsync-display-path-stage383-20261010.json`；阶段 376/378/381/382 的 GPU、Electron display、VSync worker 与 DWM 采样。
 - 限制/后续：GPU VSync 使用的 source 已匹配到主屏活动 NVIDIA 路径，显示器选错或落到另一 adapter 的解释不成立；该静态路径查询不能测量每次 VBlank 回调到 Chromium worker 的实际时序，也未解释 60Hz 活动路径为何对应约 17.8ms 等待间隔。继续定位驱动 VBlank 通知与 Chromium VSync timebase 的差异；不改变产品 GPU/VSync flags。S7.2、S7.4、S7.5 仍未验收。
 - 证据 commit：`b3003e9`。
+
+### S7.2 直接探测 D3DKMT VBlank wait 返回状态 — 小阶段 384
+- 状态：已完成（本机桌面上下文未能通过该接口取得 VBlank 样本；不据此推断刷新率）
+- 日期：2026-10-10
+- 交付：新增 `scripts/performance/windows-vblank-event-sampling.ps1`，沿主屏 HDC 获取 adapter handle / LUID / VidPnSourceId，并调用 `D3DKMTWaitForVerticalBlankEvent` 采样成功返回的 QPC 间隔；遇到 NTSTATUS 时记录状态并停止，不伪造等待间隔。
+- 验证：PowerShell AST 解析、脚本执行、JSON 解析、occluded 状态断言及 `git diff --check` 通过。Windows 11 当前 `\\.\DISPLAY1` / LUID `00000000:0000F151` / source 0 的第一次 wait 在约 1ms 内返回 `0xC01E0006`（`STATUS_GRAPHICS_PRESENT_OCCLUDED`）；成功等待次数与有效间隔样本均为 0。微软 API 文档说明该接口用于等待垂直空白发生后返回，返回状态包括成功及设备/参数错误；本次状态不是成功 VBlank 样本。[D3DKMTWaitForVerticalBlankEvent](https://learn.microsoft.com/en-us/windows-hardware/drivers/ddi/d3dkmthk/nf-d3dkmthk-d3dkmtwaitforverticalblankevent)
+- 手工验证：运行 `scripts/performance/windows-vblank-event-sampling.ps1 -DurationSeconds 10 -OutputPath doc/evidence/S7.2/windows-vblank-event-stage384-20261010.json`；调用在首个状态返回后立即结束，没有持续等待 10 秒。
+- 证据：`scripts/performance/windows-vblank-event-sampling.ps1`、`doc/evidence/S7.2/windows-vblank-event-stage384-20261010.json`、阶段 383 活动显示路径映射。
+- 限制/后续：该 API 在当前普通桌面上下文返回 occluded，无法用于当前机器的周期测量；它不推翻阶段 381 Chromium worker trace、阶段 382 DWM 60Hz 或阶段 383 活动显示路径结果。后续需查明 Chromium 何种调用上下文/回退路径产生其 VSync wait cadence，或采用有权限且适用于 DWM 桌面合成态的原生时序事件；不把 occluded 状态当作驱动帧率。S7.2、S7.4、S7.5 仍未验收。
+- 证据 commit：`1352116`。
