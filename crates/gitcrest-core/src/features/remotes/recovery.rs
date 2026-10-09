@@ -313,8 +313,12 @@ mod tests {
             _repository_path: &'a Path,
         ) -> RemotePullRecoveryFuture<'a, String> {
             self.record("read_index_tree");
-            let result = self.index_tree.clone();
-            Box::pin(async move { Ok(result) })
+            let result = if self.fail_call == Some("read_index_tree") {
+                Err(WorkflowError::GitFailed)
+            } else {
+                Ok(self.index_tree.clone())
+            };
+            Box::pin(async move { result })
         }
 
         fn read_merge_tree<'a>(
@@ -573,5 +577,26 @@ mod tests {
             recovery.calls(),
             ["read_index_tree", "read_merge_tree", "reset_merge"]
         );
+    }
+
+    #[tokio::test]
+    async fn cancelled_merge_does_not_reset_when_index_tree_read_fails() {
+        let reads = Reads::new(worktree(None, &[]), vec![pull_state(false, false)]);
+        let recovery = Recovery {
+            fail_call: Some("read_index_tree"),
+            ..recovery(false, "", "", "expected-tree", "expected-tree", false)
+        };
+
+        let result = reconcile_cancelled_pull(
+            Path::new("repo"),
+            &expected(),
+            RemotePullStrategy::Merge,
+            &reads,
+            &recovery,
+        )
+        .await;
+
+        assert_eq!(result, Err(pull_outcome_unknown()));
+        assert_eq!(recovery.calls(), ["read_index_tree"]);
     }
 }

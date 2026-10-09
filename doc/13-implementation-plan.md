@@ -3184,3 +3184,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
 - 限制/后续：其他 recovery port 读取失败仍需按风险补充覆盖；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`4fb19b4`
+
+### Pull merge index tree 读取失败时禁止 reset — 小阶段 278
+- 状态：已完成（merge recovery 的 index tree 校验读取失败时不执行任何 reset）
+- 日期：2026-10-09
+- 交付：为 recovery test fixture 增加 index tree 读取失败注入；新增用例验证无法读取当前 index tree 时返回 outcome unknown，且不读取预期 merge tree、不执行 reset_merge，避免在写前条件无法确认时修改仓库。
+- 验证：目标测试 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml cancelled_merge_does_not_reset_when_index_tree_read_fails` 通过；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（128 tests）；`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过。
+- 手工验证：未执行真实 index tree 读取失败场景；fixture 验证失败结果映射和 Git 写操作未发生。
+- 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
+- 限制/后续：其他 recovery port 读取失败仍需按风险补充覆盖；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待提交
