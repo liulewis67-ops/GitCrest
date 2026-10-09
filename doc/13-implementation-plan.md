@@ -3404,3 +3404,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前取消和凭据清理场景在 Windows 验证；macOS/Linux 系统凭据库与 Git 进程取消需在对应 runner 复测。S7.5 仍保持进行中。
 - 完成 commit：`e0c43cd`
+
+### Alpha 发布草案同步凭据恢复验收边界 — 小阶段 300
+- 状态：已完成（Alpha 内部预览草案明确记录最新 Windows 凭据恢复与 Clone 取消验证，以及其它平台待验收范围）
+- 日期：2026-10-09
+- 交付：将 Alpha 预览说明日期更新至 2026-10-09，并记录 HTTPS 认证失败后保存凭据重试 Fetch/Clone、运行中取消 Clone 清理临时目录已由 Windows Electron E2E 验证；macOS/Linux 系统凭据库与 Git 进程取消行为仍待对应 runner 验收。保留 GA 门槛未通过的发布限制。
+- 验证：人工核对发布草案与阶段 297、298、299 的验收记录一致；`git diff --check` 通过。没有运行代码测试，本阶段仅修改发布文档。
+- 证据：`doc/release-notes-alpha-draft.md`、`doc/13-implementation-plan.md` 阶段 297–299。
+- 限制/后续：草案不代表签名或公开分发工件；S7.5 仍待 P0 全量审计及发布验收收口。
+- 完成 commit：待提交
