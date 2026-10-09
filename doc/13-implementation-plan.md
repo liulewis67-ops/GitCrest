@@ -2137,3 +2137,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本地打开、初始化、重开仓库和最近仓库刷新仍由 App 编排；继续按 repositories feature 边界迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-repository-mutations.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`6e649fd`
+
+### repositories feature 仓库打开与初始化流程迁入 model — 小阶段 171
+- 状态：已完成（按路径打开、初始化及重开最近仓库的 API 生命周期由 repositories model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useRepositoryOpening`，集中管理 open/initialize/get repository 请求、加载状态、错误映射与重开失败后的列表刷新；通过回调更新仓库列表并激活会话。App 保留桌面目录选择器调用和页面状态装配，欢迎页与工作区共用 feature 的 opening 状态。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：仓库 tab 激活/关闭和 workspace session 恢复仍在 App；后续继续迁入 repositories feature session actions。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-repository-opening.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`340f1d6`
