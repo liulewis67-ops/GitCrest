@@ -9,12 +9,13 @@ use axum::{
 use crate::domain::diff::DiffScope;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    domain::undo::{UndoOperation, UndoRecord},
     features::diff::{self, DiffError},
     features::tasks::{self, TaskFailure, TaskSnapshot},
     features::{shelves, staging},
     git::command::GitCommandService,
     state::AppState,
-    storage::{RepositoryStore, UndoOperation, UndoRecord},
+    storage::RepositoryStore,
 };
 pub(crate) async fn stage_repository(
     State(state): State<AppState>,

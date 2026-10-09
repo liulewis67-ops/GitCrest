@@ -8,29 +8,14 @@ use std::{
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::diff::DiffScope;
-use crate::domain::shelf::{ShelfRecord, ShelfSnapshot};
+use crate::domain::{
+    diff::DiffScope,
+    shelf::{ShelfRecord, ShelfSnapshot},
+    undo::{UndoOperation, UndoRecord},
+};
 
 const MAX_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
 const MAX_UNDO_RECORDS_PER_REPOSITORY: i64 = 100;
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct UndoRecord {
-    pub operation_task_id: String,
-    pub repo_id: String,
-    pub created_at_ms: i64,
-    pub reverse_patch: Vec<u8>,
-    pub operation: UndoOperation,
-    pub restore_shelf: Option<ShelfSnapshot>,
-    pub restore_shelf_patch: Option<Vec<u8>>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UndoOperation {
-    Staging,
-    ShelfApply { scope: DiffScope },
-    WorkspaceDiscard,
-}
 
 #[derive(Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -720,7 +705,7 @@ impl RepositoryStore {
         transaction
             .execute(
                 "INSERT INTO staging_undo_records (operation_task_id, repo_id, created_at_ms, reverse_patch, operation_kind, scope, restore_shelf_json, restore_shelf_patch) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![record.operation_task_id, record.repo_id, record.created_at_ms, record.reverse_patch, record.operation.kind(), record.operation.scope(), record.restore_shelf.as_ref().map(StoredShelfSnapshot::from).as_ref().map(serde_json::to_string).transpose().map_err(|error| error.to_string())?, record.restore_shelf_patch],
+                params![record.operation_task_id, record.repo_id, record.created_at_ms, record.reverse_patch, undo_operation_kind(record.operation), undo_operation_scope(record.operation), record.restore_shelf.as_ref().map(StoredShelfSnapshot::from).as_ref().map(serde_json::to_string).transpose().map_err(|error| error.to_string())?, record.restore_shelf_patch],
             )
             .map_err(|error| error.to_string())?;
         transaction
@@ -755,7 +740,7 @@ impl RepositoryStore {
                         repo_id: row.get(1)?,
                         created_at_ms: row.get(2)?,
                         reverse_patch: row.get(3)?,
-                        operation: UndoOperation::from_database(&operation_kind, scope.as_deref()).ok_or_else(|| rusqlite::Error::InvalidQuery)?,
+                        operation: undo_operation_from_database(&operation_kind, scope.as_deref()).ok_or_else(|| rusqlite::Error::InvalidQuery)?,
                         restore_shelf,
                         restore_shelf_patch: row.get(7)?,
                     })
@@ -838,46 +823,43 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-impl UndoOperation {
-    fn kind(self) -> &'static str {
-        match self {
-            Self::Staging => "staging",
-            Self::ShelfApply { .. } => "shelfApply",
-            Self::WorkspaceDiscard => "workspaceDiscard",
-        }
+fn undo_operation_kind(operation: UndoOperation) -> &'static str {
+    match operation {
+        UndoOperation::Staging => "staging",
+        UndoOperation::ShelfApply { .. } => "shelfApply",
+        UndoOperation::WorkspaceDiscard => "workspaceDiscard",
     }
+}
 
-    fn scope(self) -> Option<&'static str> {
-        match self {
-            Self::Staging => None,
-            Self::WorkspaceDiscard => None,
-            Self::ShelfApply {
-                scope: DiffScope::WorkingTree,
-            } => Some("workingTree"),
-            Self::ShelfApply {
-                scope: DiffScope::Index,
-            } => Some("index"),
-            Self::ShelfApply {
-                scope: DiffScope::Commit,
-            } => Some("commit"),
-        }
+fn undo_operation_scope(operation: UndoOperation) -> Option<&'static str> {
+    match operation {
+        UndoOperation::Staging | UndoOperation::WorkspaceDiscard => None,
+        UndoOperation::ShelfApply {
+            scope: DiffScope::WorkingTree,
+        } => Some("workingTree"),
+        UndoOperation::ShelfApply {
+            scope: DiffScope::Index,
+        } => Some("index"),
+        UndoOperation::ShelfApply {
+            scope: DiffScope::Commit,
+        } => Some("commit"),
     }
+}
 
-    fn from_database(kind: &str, scope: Option<&str>) -> Option<Self> {
-        match (kind, scope) {
-            ("staging", None) => Some(Self::Staging),
-            ("workspaceDiscard", None) => Some(Self::WorkspaceDiscard),
-            ("shelfApply", Some("workingTree")) => Some(Self::ShelfApply {
-                scope: DiffScope::WorkingTree,
-            }),
-            ("shelfApply", Some("index")) => Some(Self::ShelfApply {
-                scope: DiffScope::Index,
-            }),
-            ("shelfApply", Some("commit")) => Some(Self::ShelfApply {
-                scope: DiffScope::Commit,
-            }),
-            _ => None,
-        }
+fn undo_operation_from_database(kind: &str, scope: Option<&str>) -> Option<UndoOperation> {
+    match (kind, scope) {
+        ("staging", None) => Some(UndoOperation::Staging),
+        ("workspaceDiscard", None) => Some(UndoOperation::WorkspaceDiscard),
+        ("shelfApply", Some("workingTree")) => Some(UndoOperation::ShelfApply {
+            scope: DiffScope::WorkingTree,
+        }),
+        ("shelfApply", Some("index")) => Some(UndoOperation::ShelfApply {
+            scope: DiffScope::Index,
+        }),
+        ("shelfApply", Some("commit")) => Some(UndoOperation::ShelfApply {
+            scope: DiffScope::Commit,
+        }),
+        _ => None,
     }
 }
 
@@ -893,6 +875,7 @@ fn parse_shelf_scope(value: Option<String>) -> Result<Option<DiffScope>, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::undo::{UndoOperation, UndoRecord};
 
     fn repository(id: &str, path: &str, timestamp: i64) -> StoredRepository {
         StoredRepository {

@@ -14,13 +14,13 @@ use crate::{
     domain::diff::{DiffContentStatus, DiffScope},
     domain::shelf::{ShelfRecord, ShelfSnapshot},
     domain::status::{ChangeCategory, ChangeKind},
+    domain::undo::{UndoOperation, UndoRecord},
     features::diff::{self, DiffError},
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging},
     ports::diff::DiffGitPort,
     ports::{repository::RepositoryPathPort, status::StatusReadPort},
     state::AppState,
-    storage::{UndoOperation, UndoRecord},
 };
 #[derive(Clone)]
 struct PreparedShelfItem {

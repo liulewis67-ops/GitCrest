@@ -11,13 +11,13 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::DiffScope,
     domain::status::ChangeKind,
+    domain::undo::{UndoOperation, UndoRecord},
     domain::workflow::WorkflowRecoveryAction,
     features::shelves,
     features::tasks,
     features::tasks::{TaskFailure, TaskSnapshot},
     ports::git::GitReadPort,
     state::AppState,
-    storage::{UndoOperation, UndoRecord},
 };
 
 pub(in crate::features::workflows) async fn preflight_repository_workflow_recovery(
