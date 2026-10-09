@@ -3044,3 +3044,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.1、14 节。
 - 限制/后续：remote delete preview 查询仍将 GitCommandService 作为 GitReadPort 注入；pull/push 执行仍由 feature DTO 驱动的具体服务完成，后续需继续抽取领域执行条件与可注入 port；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`e247d15`
+
+### Pull/Push 执行条件归入 domain 并经 RemoteCommandPort 调用 — 小阶段 264
+- 状态：已完成（remotes handlers 通过 port 提交 pull/push，Git command adapter 接收领域执行条件）
+- 日期：2026-10-09
+- 交付：新增 `RemotePullCommand`、`RemotePullStrategy`、`RemotePushCommand` 领域类型；pull/push API preflight DTO 在 feature 边界转换为执行命令。扩展 RemoteCommandPort 并将 handlers 改为依赖 port，GitCommandService adapter 收到 domain 命令后沿用原二次预检、pull merge/rebase、push 拒绝条件及 force-with-lease 执行路径。Git adapter 的入参和内部取消协调不再依赖 PullPreflight/PushPreflight feature DTO；既有 adapter 用例改用领域投影构造执行参数。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未运行 pull merge/rebase、冲突等待、push 与 force-with-lease 场景。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/features/remotes/push.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：GitCommandService 的 pull/push 二次预检仍调用 remotes feature 的预检函数，后续需将这段执行前校验协调迁至 feature/application service 并让 adapter 只执行 Git 能力；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`0d21c71`
