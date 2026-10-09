@@ -71,6 +71,7 @@ try {
 } finally {
   try {
     await app?.close();
+    if (sidecarUrl) await assertSidecarStopped(sidecarUrl);
   } finally {
     try {
       if (installDirectory) {
@@ -79,30 +80,19 @@ try {
       }
     } finally {
       try {
-        if (appData) await rm(appData, { recursive: true, force: true });
-      } finally {
         if (injectLinuxUnsignedFeed) {
           if (originalLinuxUpdateConfig) await writeFile(linuxUpdateConfigPath, originalLinuxUpdateConfig);
           else await unlink(linuxUpdateConfigPath);
         }
+      } finally {
+        if (appData) {
+          await rm(appData, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_500));
+          assert.equal(existsSync(appData), false, "the temporary packaged smoke directory should be removed");
+        }
       }
     }
   }
-}
-
-if (sidecarUrl) {
-  const deadline = Date.now() + 5_000;
-  let exited = false;
-  while (Date.now() < deadline) {
-    try {
-      await fetch(new URL("/health", sidecarUrl), { signal: AbortSignal.timeout(250) });
-    } catch {
-      exited = true;
-      break;
-    }
-    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
-  }
-  assert.equal(exited, true, "sidecar should stop when the packaged Electron app closes");
 }
 
 console.log(`Packaged installation, startup and sidecar shutdown passed: ${executable}`);
@@ -153,4 +143,20 @@ function runProcess(command, args) {
       else rejectPromise(new Error(`${command} exited with code ${code ?? "null"} and signal ${signal ?? "none"}`));
     });
   });
+}
+
+async function assertSidecarStopped(baseUrl) {
+  const deadline = Date.now() + 5_000;
+  let unavailableSince;
+  while (Date.now() < deadline) {
+    try {
+      await fetch(new URL("/health", baseUrl), { signal: AbortSignal.timeout(250) });
+      unavailableSince = undefined;
+    } catch {
+      unavailableSince ??= Date.now();
+      if (Date.now() - unavailableSince >= 1_000) return;
+    }
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 100));
+  }
+  assert.fail("sidecar should stop when the packaged Electron app closes");
 }
