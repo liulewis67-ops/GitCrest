@@ -16,6 +16,8 @@ interface WorkflowDialogSessionOptions {
 
 export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCenter }: WorkflowDialogSessionOptions) {
   const [context, setContext] = useState<WorkflowDialogContext>();
+  const [rebaseOpen, setRebaseOpen] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
 
   function open(repoId: string, targetOid: string, action: WorkflowAction) {
     setContext({ repoId, targetOid, action });
@@ -25,6 +27,22 @@ export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCen
     setContext(undefined);
   }
 
+  function openRebase() {
+    setRebaseOpen(true);
+  }
+
+  function closeRebase() {
+    setRebaseOpen(false);
+  }
+
+  function openReset() {
+    setResetOpen(true);
+  }
+
+  function closeReset() {
+    setResetOpen(false);
+  }
+
   function startTask(task: TaskSnapshotResponse) {
     appendTask(task);
     close();
@@ -32,5 +50,5 @@ export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCen
     openTaskCenter();
   }
 
-  return { context, open, close, startTask };
+  return { context, open, close, rebaseOpen, openRebase, closeRebase, resetOpen, openReset, closeReset, startTask };
 }
