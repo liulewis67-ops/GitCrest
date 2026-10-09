@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-10-09T02:17:19Z",
+  "mode": "display-refresh-and-raf-diagnostic",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics",
+    "displayAdapters": [
+      {
+        "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+        "currentRefreshRateHz": 60,
+        "mode": "1920 x 1080"
+      },
+      {
+        "name": "OrayIddDriver Device",
+        "currentRefreshRateHz": null,
+        "mode": null
+      }
+    ],
+    "displayQuery": "Get-CimInstance Win32_VideoController | Select-Object Name,CurrentRefreshRate,VideoModeDescription"
+  },
+  "benchmark": {
+    "source": "doc/evidence/S7.2/desktop-win32-history-scroll-20runs.json",
+    "generatedAt": "2026-10-09T01:31:19.105Z",
+    "iterations": 20,
+    "electron": "37.0.0",
+    "fixtureCommits": 100000,
+    "idleAnimationFrame": {
+      "p5Fps": 55.24861878452928,
+      "p50Fps": 55.24861878452928,
+      "p95FrameMs": 18.09999999999991
+    },
+    "scroll": {
+      "p5Fps": 55.24861878452372,
+      "p50Fps": 55.24861878452372,
+      "p95FrameMs": 18.100000000002183
+    }
+  },
+  "interpretation": "The GPU adapter reports a 60 Hz mode, while idle and scrolling RAF measurements have effectively identical 18.1 ms P95 frame intervals. This points away from scroll workload as the only cause. It does not establish that the application meets the 60 FPS target or identify whether the remaining pacing limit is Electron, Chromium, desktop composition, or another host scheduling factor.",
+  "limitations": [
+    "Win32_VideoController reports adapter mode data, not a per-frame physical display timing trace.",
+    "The Oray virtual display adapter did not report a current refresh rate."
+  ]
+}
