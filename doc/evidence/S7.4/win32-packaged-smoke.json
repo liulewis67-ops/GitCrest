@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-09T00:20:13.0484849+00:00",
+  "commit": "05e2c30aa7cfca84e2cfc9c90c918a865a8f2383",
+  "platform": "win32-x64",
+  "os": "Microsoft Windows NT 10.0.26300.0",
+  "node": "v22.19.0",
+  "packageCommand": "pnpm electron:package",
+  "package": {
+    "path": "dist/GitCrest Setup 0.1.0.exe",
+    "bytes": 108732769,
+    "sha256": "812EAB3308B6534D4C3AA088E3864CC16D84DE5786DD5E7F8ACEDCFD0EF0EDFE",
+    "authenticodeStatus": "NotSigned"
+  },
+  "smokeCommand": "pnpm test:packaged",
+  "smokeResult": "passed",
+  "smokeSummary": "Packaged startup and sidecar shutdown passed for dist/win-unpacked/GitCrest.exe",
+  "sidecarHealth": "passed",
+  "sidecarShutdown": "passed",
+  "packageSizeLimitBytes": 157286400,
+  "packageWithinLimit": true
+}

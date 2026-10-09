@@ -2254,3 +2254,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：远程分支删除预览和 API 调用仍由 dialog 组件管理；S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/branches/model/use-remote-branch-delete-session.ts`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`f8428bf`
+
+### S7.4 — Windows x64 unsigned package 与 sidecar smoke
+- 状态：部分验收；Windows 本机构建和打包启动/shutdown smoke 通过，S7.4 整体仍进行中。
+- 日期：2026-10-09
+- 环境：Microsoft Windows 10.0.26300 x64、Node.js 22.19.0、Electron 37.0.0。
+- 验收：`pnpm electron:package` 成功生成 Windows NSIS installer；installer 为 108,732,769 bytes（103.7 MiB），低于 150 MiB 上限。`pnpm test:packaged` 通过，实际启动 `dist/win-unpacked/GitCrest.exe`，确认 packaged sidecar health 返回成功并在 Electron 退出后停止。
+- 签名：installer 的 Authenticode 状态为 `NotSigned`；本机未配置签名凭证，因此不构成签名验收。
+- 证据：`doc/evidence/S7.4/win32-packaged-smoke.json`（installer SHA-256 与命令结果）。
+- 限制/后续：尚无 macOS/Linux runner 本轮结果、真实安装后启动证据、签名包验证及更新失败签名拒绝的发行包证据；S7.4 保持进行中。
