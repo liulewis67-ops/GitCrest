@@ -4604,3 +4604,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/shelves.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：仓库目录、设置、undo、任务快照和迁移仍在 `storage/storage.rs`；后续按职责和共享事务边界继续拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### storage 拆分设置持久化 adapter — 小阶段 422
+- 状态：已完成（AI provider 设置 SQL 和 `AiProviderSettingsPort` 实现归入 `storage/settings.rs`）
+- 日期：2026-10-10
+- 交付：将 AI provider 设置的读取、保存 SQL 和 port 实现从 `storage/storage.rs` 移至 `storage/settings.rs`；复用原有 `RepositoryStore` 主连接与时间戳函数，表结构、写入字段和错误映射不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认设置方法和 `AiProviderSettingsPort` 实现在新模块；迁移 SQL 仍由原数据库 migration 顺序负责。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/settings.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：仓库目录、branch favorites、undo、任务快照和迁移仍位于 `storage/storage.rs`；后续继续按职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
