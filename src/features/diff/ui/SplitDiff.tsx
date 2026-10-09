@@ -1,8 +1,8 @@
-import type { DiffDocumentResponse } from "../../api/client";
+import type { DiffDocumentResponse } from "../../../api/client";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { splitInlineDiff } from "./inline-diff";
-import { monacoLanguageForPath } from "./monaco-language";
-import { exceedsMonacoViewLimits } from "./monaco-view-limits";
+import { splitInlineDiff } from "../inline-diff";
+import { monacoLanguageForPath } from "../monaco-language";
+import { exceedsMonacoViewLimits } from "../monaco-view-limits";
 
 const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({ default: module.MonacoDiffHunk })));
 

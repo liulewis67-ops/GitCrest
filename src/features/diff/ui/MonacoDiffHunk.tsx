@@ -1,16 +1,16 @@
 import { DiffEditor } from "@monaco-editor/react";
 import { useEffect, useState } from "react";
-import { parseDiffHunkSyntax } from "./tree-sitter";
+import { parseDiffHunkSyntax } from "../tree-sitter";
 
 const LANGUAGE_LOADERS: Record<string, () => Promise<unknown>> = {
-  javascript: () => import("../../../node_modules/monaco-editor/esm/vs/languages/definitions/javascript/register.js"),
-  rust: () => import("../../../node_modules/monaco-editor/esm/vs/languages/definitions/rust/register.js"),
-  typescript: () => import("../../../node_modules/monaco-editor/esm/vs/languages/definitions/typescript/register.js"),
+  javascript: () => import("../../../../node_modules/monaco-editor/esm/vs/languages/definitions/javascript/register.js"),
+  rust: () => import("../../../../node_modules/monaco-editor/esm/vs/languages/definitions/rust/register.js"),
+  typescript: () => import("../../../../node_modules/monaco-editor/esm/vs/languages/definitions/typescript/register.js"),
 };
 const registeredLanguages = new Map<string, Promise<unknown>>();
 const workerCreators = {
-  editor: () => new Worker(new URL("../../../node_modules/monaco-editor/esm/vs/editor/editor.worker.js", import.meta.url), { type: "module" }),
-  json: () => new Worker(new URL("../../../node_modules/monaco-editor/esm/vs/language/json/json.worker.js", import.meta.url), { type: "module" }),
+  editor: () => new Worker(new URL("../../../../node_modules/monaco-editor/esm/vs/editor/editor.worker.js", import.meta.url), { type: "module" }),
+  json: () => new Worker(new URL("../../../../node_modules/monaco-editor/esm/vs/language/json/json.worker.js", import.meta.url), { type: "module" }),
 };
 
 function loadLanguage(language: string): Promise<unknown> {

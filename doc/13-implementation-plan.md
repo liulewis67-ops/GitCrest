@@ -3883,3 +3883,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/tasks/index.ts`、`src/features/tasks/ui/TaskCenter.tsx`、`tests/unit/task-center.test.tsx`。
 - 限制/后续：此阶段只收敛 Tasks UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
 - 完成 commit：`60061bb refactor: organize tasks feature UI`
+
+### Diff feature UI 目录对齐 — 小阶段 348
+- 状态：已完成（Diff 窗口、分屏查看器、Monaco hunk 和丢弃确认组件归入 `ui/`）
+- 日期：2026-10-09
+- 交付：将 `DiffWindow`、`DiscardChangesDialog`、`MonacoDiffHunk` 和 `SplitDiff` 迁入 `src/features/diff/ui/`；更新 feature 出口、lazy import、测试 mock 及编辑器 worker/语言注册模块的相对路径。纯 Diff 算法与 Tree-sitter loader 保留在 feature 根目录供 UI 内部调用。
+- 验证：Diff 定向测试 2 files / 9 tests、`pnpm frontend:boundaries`、`pnpm build` 与 `git diff --check` 通过；生产构建保留 SplitDiff、MonacoDiffHunk 和 DiscardChangesDialog 独立 chunks。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；现有用例覆盖 Diff 选择和只读视图，边界与构建检查验证 Diff 窗口入口及 Monaco worker 资源解析。
+- 证据：`src/features/diff/index.ts`、`src/features/diff/ui/`、`tests/unit/split-diff.test.tsx`、`tests/unit/inline-diff.test.ts`。
+- 限制/后续：Diff 根目录仍保留算法与 Monaco/tree-sitter 配置模块；其它 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
+- 完成 commit：待提交

@@ -3,9 +3,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DiffDocumentResponse } from "../../src/api/client";
-import { SplitDiff } from "../../src/features/diff/SplitDiff";
+import { SplitDiff } from "../../src/features/diff/ui/SplitDiff";
 
-vi.mock("../../src/features/diff/MonacoDiffHunk", () => ({
+vi.mock("../../src/features/diff/ui/MonacoDiffHunk", () => ({
   MonacoDiffHunk: (props: { original: string; modified: string; language: string; treeSitterGrammar: string | null }) => createElement(
     "pre",
     { "data-testid": "monaco-diff-hunk" },
