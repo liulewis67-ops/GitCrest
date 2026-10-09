@@ -23,6 +23,7 @@ export function useRepositoryListRefresh({
   setPage,
 }: RepositoryListRefreshOptions) {
   const refreshGenerationRef = useRef(0);
+  const restoreWorkspacePendingRef = useRef(false);
 
   function registerOpenedRepository(repository: RepositoryResponse, sortByRecentAccess = false) {
     setRepositories((current) => {
@@ -34,11 +35,13 @@ export function useRepositoryListRefresh({
   }
 
   async function refresh(api: GitCrestApiClient, restoreSavedWorkspace = false) {
+    if (restoreSavedWorkspace) restoreWorkspacePendingRef.current = true;
     const generation = ++refreshGenerationRef.current;
     const repositories = await api.listRepositories();
     if (refreshGenerationRef.current !== generation) return;
     setRepositories(repositories);
-    if (restoreSavedWorkspace) {
+    if (restoreWorkspacePendingRef.current) {
+      restoreWorkspacePendingRef.current = false;
       const restored = restoreAvailableRepositories(sessionRef.current, repositories);
       sessionRef.current = restored.session;
       setSession(restored.session);

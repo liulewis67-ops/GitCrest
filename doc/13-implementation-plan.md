@@ -4375,3 +4375,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：页面路由仍由 App 通过 setter 装配；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 保留被并发列表刷新覆盖的 session 恢复意图 — 小阶段 399
+- 状态：已完成（启动恢复请求被后续普通仓库刷新取代时，最新成功列表仍会执行 session restore）
+- 日期：2026-10-10
+- 交付：`useRepositoryListRefresh` 记录尚未完成的 WorkspaceSession restore 意图。请求代次仍阻止迟到响应覆盖新状态；若普通刷新代次胜出，它会在写入最新仓库列表后消费 restore 意图并恢复可用 tabs/活动仓库，而不会只更新仓库列表。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；逐条检查 refresh 分支：restore 请求会置 pending 标记；过期响应不提交；最新成功响应检查并消费 pending 标记；普通刷新且无 pending 时仅同步当前 RepoId 选择。
+- 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`doc/15-frontend-development-guidelines.md` 第 4.2、5 节。
+- 限制/后续：失败的最新列表请求继续将错误交给调用方，restore 意图保留到之后的成功刷新；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
