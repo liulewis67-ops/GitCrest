@@ -6,10 +6,10 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::error::RepositoryError,
     domain::status::ChangeCategory,
+    domain::{branch::BranchCommand, error::RepositoryError},
     features::branches,
-    AppState, BranchCommand, TaskFailure, TaskSnapshot,
+    AppState, TaskFailure, TaskSnapshot,
 };
 
 use super::dto::{

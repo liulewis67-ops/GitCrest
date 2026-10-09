@@ -20,6 +20,7 @@ use std::os::unix::process::CommandExt;
 use crate::features::tasks::{TaskContext, TaskFailure};
 use crate::{
     domain::{
+        branch::BranchCommand,
         error::WorkflowError,
         staging::StagingOperation,
         workflow::{
@@ -44,14 +45,6 @@ static NEXT_TEMP_REBASE: AtomicU64 = AtomicU64::new(1);
 pub enum GitOperation {
     Fetch,
     FetchPrune,
-}
-
-#[derive(Clone, Debug)]
-pub enum BranchCommand {
-    Create { name: String },
-    Switch { name: String },
-    Rename { old_name: String, new_name: String },
-    Delete { name: String, allow_unmerged: bool },
 }
 
 #[derive(Clone, Debug)]
