@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useDialogFocus } from "../../shared/use-dialog-focus";
 
-export function DiscardChangesDialog({ path, selectionCount, disabled, error, onCancel, onConfirm }: {
+export function DiscardChangesDialog({ repositoryPath, path, selectionCount, disabled, error, onCancel, onConfirm }: {
+  repositoryPath: string;
   path: string;
   selectionCount: number;
   disabled: boolean;
@@ -18,6 +19,7 @@ export function DiscardChangesDialog({ path, selectionCount, disabled, error, on
         <button className="quietButton compact" type="button" disabled={disabled} onClick={onCancel}>Close</button>
       </div>
       <div className="workflowDialogBody">
+        <div className="repositoryFact"><span>REPOSITORY</span><strong className="monoText">{repositoryPath}</strong></div>
         <div className="repositoryFact"><span>FILE</span><strong className="monoText">{path}</strong></div>
         <div className="repositoryFact"><span>SELECTED CHANGES</span><strong>{selectionCount} hunk or changed-row selection{selectionCount === 1 ? "" : "s"}</strong></div>
         <p className="cloneHelp">Only the selected lines from this reviewed working-tree diff will be reverted. Staged changes are not included. For a recovery copy, cancel and save these changes to a shelf first; GitCrest cannot undo this discard. GitCrest will refuse if the file changes before the task applies.</p>

@@ -10,6 +10,8 @@ import {
 } from "../../../api/client";
 
 interface DiscardSelection {
+  repoId: string;
+  repositoryPath: string;
   path: string;
   revision: string;
   selections: Array<{ hunkIndex: number; rowIndex?: number }>;
@@ -20,6 +22,7 @@ interface StagingOperationsOptions {
   repository?: RepositoryResponse;
   connected: boolean;
   hasActiveRepositoryTask: boolean;
+  hasActiveRepositoryTaskForRepo: (repoId: string) => boolean;
   hasActiveStagingTask: boolean;
   document?: DiffDocumentResponse;
   appendTask: (task: TaskSnapshotResponse) => void;
@@ -33,6 +36,7 @@ export function useStagingOperations({
   repository,
   connected,
   hasActiveRepositoryTask,
+  hasActiveRepositoryTaskForRepo,
   hasActiveStagingTask,
   document,
   appendTask,
@@ -44,9 +48,9 @@ export function useStagingOperations({
   const [discardSelection, setDiscardSelection] = useState<DiscardSelection>();
 
   function requestDiscard(document: DiffDocumentResponse, selections: DiscardSelection["selections"]) {
-    if (document.scope !== "workingTree") return;
+    if (document.scope !== "workingTree" || !repository || document.repoId !== repository.repoId) return;
     setTaskError("");
-    setDiscardSelection({ path: document.path, revision: document.revision, selections });
+    setDiscardSelection({ repoId: document.repoId, repositoryPath: repository.path, path: document.path, revision: document.revision, selections });
   }
 
   function clearDiscardSelection() {
@@ -112,11 +116,13 @@ export function useStagingOperations({
 
   async function discardSelectedChanges() {
     const api = getApi();
-    if (!api || !repository || !discardSelection || busy || hasActiveRepositoryTask) return;
+    if (!api || !discardSelection || busy || hasActiveRepositoryTaskForRepo(discardSelection.repoId)) return;
     setBusy(true);
     setTaskError("");
     try {
-      prependTask(await api.discardSelectedDiffChanges(repository.repoId, { ...discardSelection, confirmDiscard: true }));
+      const { repoId, path, revision, selections } = discardSelection;
+      const request = { path, revision, selections };
+      prependTask(await api.discardSelectedDiffChanges(repoId, { ...request, confirmDiscard: true }));
       openTaskCenter();
       clearDiscardSelection();
     } catch (error) {
@@ -127,5 +133,6 @@ export function useStagingOperations({
     }
   }
 
-  return { busy, stageChanges, stageSelectedChanges, undoRecentOperation, discardSelection, requestDiscard, clearDiscardSelection, discardSelectedChanges };
+  const hasActiveDiscardRepositoryTask = Boolean(discardSelection && hasActiveRepositoryTaskForRepo(discardSelection.repoId));
+  return { busy, stageChanges, stageSelectedChanges, undoRecentOperation, discardSelection, hasActiveDiscardRepositoryTask, requestDiscard, clearDiscardSelection, discardSelectedChanges };
 }

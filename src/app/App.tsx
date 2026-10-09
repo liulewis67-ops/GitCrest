@@ -384,6 +384,7 @@ function App() {
     stageSelectedChanges,
     undoRecentOperation,
     discardSelection,
+    hasActiveDiscardRepositoryTask,
     requestDiscard,
     clearDiscardSelection,
     discardSelectedChanges,
@@ -392,6 +393,7 @@ function App() {
     repository: selectedRepository,
     connected,
     hasActiveRepositoryTask,
+    hasActiveRepositoryTaskForRepo: (repoId) => tasks.some((task) => task.repoId === repoId && (task.status === "queued" || task.status === "running")),
     hasActiveStagingTask,
     document: diffState.document,
     appendTask,
@@ -1153,7 +1155,7 @@ function App() {
         const install = getGitCrestBridge()?.installUpdate;
         if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
       }} />}
-      {discardSelection && <DiscardChangesDialog path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
+      {discardSelection && <DiscardChangesDialog repositoryPath={discardSelection.repositoryPath} path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveDiscardRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
       {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} onClose={workflowDialog.close} onStarted={workflowDialog.startTask} />}
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
