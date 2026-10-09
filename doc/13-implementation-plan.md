@@ -3922,4 +3922,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；基准使用隔离 sidecar/SQLite 与既有独立 fixture。fixture refs 和工作树未由基准改动。
 - 证据：`doc/evidence/S7.2/api-win32-cold-bulk-inserts-stage351.json`、`doc/evidence/S7.2/api-win32-cold-bulk-inserts-borrowed-stage351-20261009.json`、`doc/evidence/S7.2/api-win32-cold-bulk-index-rebuild-stage351-20261009.json`。
 - 限制/后续：本阶段未缩短冷索引构建；单行预编译写入仍是当前已测的较快实现，下一步需从减少数据装载/持久化量或改变索引构建时机寻找方案。首次 pending 响应已低于 200ms，但完整冷搜索仍约 5–6 秒；S7.2 桌面内存/帧率等门槛、S7.4 和 S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`6e6e19d perf: evaluate batched history index writes`
