@@ -188,6 +188,10 @@ fn schedule_history_index_build(
     if expected_fingerprint.is_some() && !claimed {
         return false;
     }
+    let mut _build_lease = claimed.then(|| HistoryIndexBuildLease {
+        repo_id: repo_id.clone(),
+        store: store.clone(),
+    });
     tokio::spawn(async move {
         let started = std::time::Instant::now();
         let preclaimed = claimed;
@@ -202,6 +206,12 @@ fn schedule_history_index_build(
         };
         if !preclaimed && !store.begin_index_build(&repo_id, &index_fingerprint) {
             return;
+        }
+        if !preclaimed {
+            _build_lease = Some(HistoryIndexBuildLease {
+                repo_id: repo_id.clone(),
+                store: store.clone(),
+            });
         }
         let result = build_history_search_index(
             &repo_id,
@@ -221,9 +231,19 @@ fn schedule_history_index_build(
             "[gitcrest-core] History message index {outcome} in {}ms",
             started.elapsed().as_millis()
         );
-        store.finish_index_build(&repo_id);
     });
     claimed
+}
+
+struct HistoryIndexBuildLease {
+    repo_id: String,
+    store: Arc<dyn HistorySearchIndexPort>,
+}
+
+impl Drop for HistoryIndexBuildLease {
+    fn drop(&mut self) {
+        self.store.finish_index_build(&self.repo_id);
+    }
 }
 
 pub async fn build_history_search_index(

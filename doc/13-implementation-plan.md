@@ -4395,3 +4395,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-vsync-provider-stage381-20261010.json`、Chromium 137 DXGI VSync 实现源码。
 - 限制/后续：阶段 381 trace 仍不能区分 DXGI wait 失败与 wait 早返回后的 Sleep fallback；下一次允许采样时使用新增字段观察 Chromium failure marker。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### History 索引构建状态在任务退出时自动释放 — 小阶段 401
+- 状态：已完成（索引构建任务正常结束、取消或 panic unwind 时都会释放在途状态）
+- 日期：2026-10-10
+- 交付：为每次成功 claim 的 history index build 增加 `HistoryIndexBuildLease`。lease 在 `tokio::spawn` future 外创建并随 future 持有，因此任务尚未首次 poll 就被丢弃时也会清理；无 fingerprint 的路径则在成功 claim 后立即建立 lease。移除仅在正常尾部调用的手动清理，避免任务异常退出后同一 RepoId 永久处于 `searchPending`。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：未操作 GUI；逐路径核对：预先 claim 后尚未 poll 时 future 被丢弃由捕获的 lease 清理；动态 fingerprint 路径仅在 claim 成功后创建 lease；fingerprint 失败或 claim 失败时不误清其他构建；正常完成和错误返回时由 Drop 统一释放。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/ports/history.rs`、`doc/14-backend-development-guidelines.md` 第 2、8.2 节。
+- 限制/后续：该修复覆盖 Rust unwind 与 future drop 的状态清理；进程以 abort 方式终止时不运行析构，但进程内在途状态也随进程消失。冷索引完整搜索时间仍高于 200ms，S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
