@@ -23,7 +23,7 @@ use crate::{
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging},
     ports::diff::DiffGitPort,
-    ports::shelves::ShelfRecordReadPort,
+    ports::shelves::ShelfStorePort,
     ports::{repository::RepositoryPathPort, status::StatusReadPort},
     state::AppState,
 };
@@ -43,8 +43,8 @@ pub(super) async fn list_repository_shelves(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let store = state.repositories.store();
-    let shelves = tokio::task::spawn_blocking(move || store.list_shelves(&repo_id))
+    let shelf_store = state.shelf_store.clone();
+    let shelves = tokio::task::spawn_blocking(move || shelf_store.list_shelf_snapshots(&repo_id))
         .await
         .map_err(|_| ApiError::task_storage_unavailable())?
         .map_err(|_| ApiError::task_storage_unavailable())?;
@@ -60,18 +60,7 @@ pub(super) async fn get_repository_shelf(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let store = state.repositories.store();
-    let shelf = tokio::task::spawn_blocking(move || store.get_shelf(&repo_id, &shelf_id))
-        .await
-        .map_err(|_| ApiError::task_storage_unavailable())?
-        .map_err(|_| ApiError::task_storage_unavailable())?
-        .ok_or_else(|| {
-            ApiError::new(
-                StatusCode::NOT_FOUND,
-                ApiErrorCode::ShelfNotFound,
-                "This shelf is no longer available.",
-            )
-        })?;
+    let shelf = load_shelf_record(state.shelf_store.clone(), &repo_id, &shelf_id).await?;
     let patch = String::from_utf8(shelf.patch).map_err(|_| {
         ApiError::new(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -94,11 +83,12 @@ pub(super) async fn delete_repository_shelf(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let store = state.repositories.store();
-    let deleted = tokio::task::spawn_blocking(move || store.delete_shelf(&repo_id, &shelf_id))
-        .await
-        .map_err(|_| ApiError::task_storage_unavailable())?
-        .map_err(|_| ApiError::task_storage_unavailable())?;
+    let shelf_store = state.shelf_store.clone();
+    let deleted =
+        tokio::task::spawn_blocking(move || shelf_store.delete_shelf_record(&repo_id, &shelf_id))
+            .await
+            .map_err(|_| ApiError::task_storage_unavailable())?
+            .map_err(|_| ApiError::task_storage_unavailable())?;
     if !deleted {
         return Err(ApiError::new(
             StatusCode::NOT_FOUND,
@@ -123,7 +113,7 @@ pub(super) async fn preflight_repository_shelf_apply(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let shelf = load_shelf_record(state.shelf_records.clone(), &repo_id, &shelf_id).await?;
+    let shelf = load_shelf_record(state.shelf_store.clone(), &repo_id, &shelf_id).await?;
     let scope = shelf.snapshot.scope.ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
@@ -188,7 +178,7 @@ pub(super) async fn apply_repository_shelf(
             staging::StagingError::StaleSelection,
         ));
     }
-    let shelf = load_shelf_record(state.shelf_records.clone(), &repo_id, &shelf_id).await?;
+    let shelf = load_shelf_record(state.shelf_store.clone(), &repo_id, &shelf_id).await?;
     let scope = shelf.snapshot.scope.ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
@@ -223,7 +213,7 @@ pub(super) async fn apply_repository_shelf(
         })?;
 
     let repositories = state.repositories.clone();
-    let shelf_records = state.shelf_records.clone();
+    let shelf_store = state.shelf_store.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
@@ -250,7 +240,7 @@ pub(super) async fn apply_repository_shelf(
                 if current_repository.head != expected_head_oid {
                     return Err(TaskFailure::Failed("Repository HEAD changed after shelf preview. Preview the shelf again.".into()));
                 }
-                let current_shelf = load_shelf_record(shelf_records, &task_repo_id, &task_shelf_id)
+                let current_shelf = load_shelf_record(shelf_store.clone(), &task_repo_id, &task_shelf_id)
                     .await
                     .map_err(|_| TaskFailure::Failed("The reviewed shelf is no longer available.".into()))?;
                 let current_scope = current_shelf.snapshot.scope.ok_or_else(|| TaskFailure::Failed("This shelf has no safe restore scope.".into()))?;
@@ -338,10 +328,10 @@ pub(super) async fn apply_repository_shelf(
                         .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?
                         .map_err(|_| TaskFailure::Failed("The shelf was applied, but its undo record could not be saved. The shelf entry was retained.".into()))?;
                 }
-                let store = repositories.store();
+                let shelf_store_for_delete = shelf_store.clone();
                 let delete_repo_id = task_repo_id.clone();
                 let delete_task_shelf_id = task_shelf_id.clone();
-                let deletion = tokio::task::spawn_blocking(move || store.delete_shelf(&delete_repo_id, &delete_task_shelf_id))
+                let deletion = tokio::task::spawn_blocking(move || shelf_store_for_delete.delete_shelf_record(&delete_repo_id, &delete_task_shelf_id))
                     .await
                     .map_err(|_| "The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".to_owned())
                     .and_then(|result| result.map_err(|_| "The shelf was applied, but its saved entry could not be removed. Verify the working tree before retrying.".to_owned()));
@@ -366,13 +356,13 @@ pub(super) async fn apply_repository_shelf(
 }
 
 async fn load_shelf_record(
-    shelf_records: Arc<dyn ShelfRecordReadPort>,
+    shelf_store: Arc<dyn ShelfStorePort>,
     repo_id: &str,
     shelf_id: &str,
 ) -> Result<ShelfRecord, ApiError> {
     let repo_id = repo_id.to_owned();
     let shelf_id = shelf_id.to_owned();
-    tokio::task::spawn_blocking(move || shelf_records.read_shelf_record(&repo_id, &shelf_id))
+    tokio::task::spawn_blocking(move || shelf_store.read_shelf_record(&repo_id, &shelf_id))
         .await
         .map_err(|_| ApiError::task_storage_unavailable())?
         .map_err(|_| ApiError::task_storage_unavailable())?
@@ -554,6 +544,7 @@ pub(super) async fn create_repository_shelf(
     shelves::validate_patch(&patch_bytes, &paths).map_err(ApiError::from_shelf_error)?;
 
     let repositories = state.repositories.clone();
+    let shelf_store = state.shelf_store.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
@@ -613,9 +604,9 @@ pub(super) async fn create_repository_shelf(
                     },
                     patch,
                 };
-                let store = repositories.store();
                 let persisted = shelf.clone();
-                tokio::task::spawn_blocking(move || store.save_shelf(&persisted))
+                let shelf_store_for_save = shelf_store.clone();
+                tokio::task::spawn_blocking(move || shelf_store_for_save.save_shelf_record(persisted))
                     .await
                     .map_err(|_| TaskFailure::Failed("Could not persist the shelf before changing the working tree.".into()))?
                     .map_err(|_| TaskFailure::Failed("Could not persist the shelf before changing the working tree.".into()))?;
@@ -635,10 +626,10 @@ pub(super) async fn create_repository_shelf(
                                     }
                                 }
                                 if restored {
-                                    let store = repositories.store();
+                                    let shelf_store_for_delete = shelf_store.clone();
                                     let shelf_id = shelf.snapshot.shelf_id.clone();
                                     let repo_id = task_repo_id.clone();
-                                    let _ = tokio::task::spawn_blocking(move || store.delete_shelf(&repo_id, &shelf_id)).await;
+                                    let _ = tokio::task::spawn_blocking(move || shelf_store_for_delete.delete_shelf_record(&repo_id, &shelf_id)).await;
                                 }
                                 return Err(TaskFailure::Failed(if restored { message } else { format!("{message}. The saved shelf was retained so the selected changes can be recovered.") }));
                             }

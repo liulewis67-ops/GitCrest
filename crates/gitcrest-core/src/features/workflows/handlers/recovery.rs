@@ -147,7 +147,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
 
     let command = state.git_commands.clone();
     let repositories = state.repositories.clone();
-    let shelf_records = state.shelf_records.clone();
+    let shelf_store = state.shelf_store.clone();
     let status_service = state.status.clone();
     let tasks = state.tasks.clone();
     let task_repo_id = repo_id.clone();
@@ -197,8 +197,9 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task has no safe pre-apply index snapshot. The shelf was retained.".into()))?;
                     let shelf_repo_id = task_repo_id.clone();
                     let shelf_record_id = shelf_id.to_owned();
+                    let shelf_store_for_read = shelf_store.clone();
                     let shelf = tokio::task::spawn_blocking(move || {
-                        shelf_records.read_shelf_record(&shelf_repo_id, &shelf_record_id)
+                        shelf_store_for_read.read_shelf_record(&shelf_repo_id, &shelf_record_id)
                     })
                     .await
                     .map_err(|_| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?
@@ -272,10 +273,10 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                     if !undo_saved {
                         task_context.log("The shelf was resolved, but no safe undo snapshot could be saved. The original shelf was retained.").await;
                     } else {
-                        let store = repositories.store();
+                        let shelf_store_for_delete = shelf_store.clone();
                         let delete_repo_id = task_repo_id.clone();
                         let delete_shelf_id = shelf_id.to_owned();
-                        let deleted = tokio::task::spawn_blocking(move || store.delete_shelf(&delete_repo_id, &delete_shelf_id))
+                        let deleted = tokio::task::spawn_blocking(move || shelf_store_for_delete.delete_shelf_record(&delete_repo_id, &delete_shelf_id))
                             .await
                             .is_ok_and(|result| result.is_ok_and(|deleted| deleted));
                         if !deleted {

@@ -283,6 +283,7 @@ pub(crate) async fn undo_recent_operation(
     }
     let task_repo_id = repo_id.clone();
     let task_store = store.clone();
+    let shelf_store = state.shelf_store.clone();
     let commands = state.git_commands.clone();
     let repository_path = target.repository_path;
     let task = state
@@ -307,8 +308,8 @@ pub(crate) async fn undo_recent_operation(
                 let shelf_already_restored = if let Some(snapshot) = record.restore_shelf.as_ref() {
                     let repo_id = task_repo_id.clone();
                     let shelf_id = snapshot.shelf_id.clone();
-                    let store = task_store.clone();
-                    let existing = tokio::task::spawn_blocking(move || store.get_shelf(&repo_id, &shelf_id))
+                    let shelf_store_for_read = shelf_store.clone();
+                    let existing = tokio::task::spawn_blocking(move || shelf_store_for_read.read_shelf_record(&repo_id, &shelf_id))
                         .await
                         .map_err(|_| TaskFailure::Failed("Could not verify the saved shelf state before undo.".into()))?
                         .map_err(|_| TaskFailure::Failed("Could not verify the saved shelf state before undo.".into()))?;
@@ -350,8 +351,8 @@ pub(crate) async fn undo_recent_operation(
                         snapshot,
                         patch: record.restore_shelf_patch.unwrap_or(undo_patch),
                     };
-                    let store = task_store.clone();
-                    tokio::task::spawn_blocking(move || store.save_shelf(&shelf))
+                    let shelf_store_for_save = shelf_store.clone();
+                    tokio::task::spawn_blocking(move || shelf_store_for_save.save_shelf_record(shelf))
                         .await
                         .map_err(|_| TaskFailure::Failed("The shelf changes were undone, but the saved shelf entry could not be restored. The undo record was retained.".into()))?
                         .map_err(|_| TaskFailure::Failed("The shelf changes were undone, but the saved shelf entry could not be restored. The undo record was retained.".into()))?;

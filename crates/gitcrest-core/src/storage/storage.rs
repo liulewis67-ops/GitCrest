@@ -13,7 +13,7 @@ use crate::domain::{
     shelf::{ShelfRecord, ShelfSnapshot},
     undo::{UndoOperation, UndoRecord},
 };
-use crate::ports::shelves::ShelfRecordReadPort;
+use crate::ports::shelves::ShelfStorePort;
 
 const MAX_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
 const MAX_UNDO_RECORDS_PER_REPOSITORY: i64 = 100;
@@ -770,13 +770,38 @@ impl RepositoryStore {
     }
 }
 
-impl ShelfRecordReadPort for RepositoryStore {
+impl ShelfStorePort for RepositoryStore {
+    fn list_shelf_snapshots(
+        &self,
+        repo_id: &str,
+    ) -> Result<Vec<ShelfSnapshot>, crate::domain::error::RepositoryError> {
+        self.list_shelves(repo_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
     fn read_shelf_record(
         &self,
         repo_id: &str,
         shelf_id: &str,
     ) -> Result<Option<ShelfRecord>, crate::domain::error::RepositoryError> {
         self.get_shelf(repo_id, shelf_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn save_shelf_record(
+        &self,
+        shelf: ShelfRecord,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        self.save_shelf(&shelf)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn delete_shelf_record(
+        &self,
+        repo_id: &str,
+        shelf_id: &str,
+    ) -> Result<bool, crate::domain::error::RepositoryError> {
+        self.delete_shelf(repo_id, shelf_id)
             .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
     }
 }
