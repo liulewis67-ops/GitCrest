@@ -20,7 +20,7 @@ import { useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
 import { loadBranchSwitcherDialog, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
-import { loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
+import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
@@ -312,33 +312,11 @@ function App() {
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
-  const remoteDisabledReason = !selectedRepository
-    ? "Open a repository to manage remotes."
-    : !connected
-      ? "Connect to the local Git engine to manage remotes."
-      : selectedRepository.availability !== "available"
-        ? "This repository is unavailable."
-        : hasActiveRepositoryTask
-          ? "Wait for the current repository task to finish before changing remotes."
-          : "";
-  const pushDisabledReason = !selectedRepository
-    ? "Open a repository to push its current branch."
-    : !connected
-      ? "Connect to the local Git engine to push."
-      : selectedRepository.availability !== "available"
-        ? "This repository is unavailable."
-        : hasActiveRepositoryTask
-          ? "Wait for the current repository task to finish before pushing."
-          : "";
-  const pullDisabledReason = !selectedRepository
-    ? "Open a repository to pull its current branch."
-    : !connected
-      ? "Connect to the local Git engine to pull."
-      : selectedRepository.availability !== "available"
-        ? "This repository is unavailable."
-        : hasActiveRepositoryTask
-          ? "Wait for the current repository task to finish before pulling."
-          : "";
+  const { remoteDisabledReason, pushDisabledReason, pullDisabledReason } = getRemoteActionDisabledReasons({
+    repository: selectedRepository,
+    connected,
+    hasActiveRepositoryTask,
+  });
   const commitActionLabel = amendCommit
     ? activeCommitAction === "commit" ? "Amend" : activeCommitAction === "commitAndPushTo" ? "Amend and Push to…" : "Amend and Push"
     : activeCommitAction === "commit" ? "Commit" : activeCommitAction === "commitAndPushTo" ? "Commit and Push to…" : activeCommitAction === "commitAndPushForce" ? "Commit and Push (force-with-lease)" : "Commit and Push";

@@ -4435,3 +4435,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/changes/model/repository-status-summary.ts`、`src/features/changes/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceNavigation.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：`getSensitiveStagedPaths` 仍由 commits feature 提供并在 App 装配；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### remotes feature 收拢远程操作可用性原因 — 小阶段 405
+- 状态：已完成（Remotes、Push、Pull 的禁用原因由 remotes model 按统一优先级生成）
+- 日期：2026-10-10
+- 交付：新增 `getRemoteActionDisabledReasons`，统一按无仓库、引擎未连接、仓库不可用、仓库任务进行中的顺序，为管理 remote、Push 和 Pull 生成禁用原因。App 删除三份重复的仓库/连接/任务判断，仅将选中仓库、连接状态和活动任务状态交给 remotes feature。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 输出到临时目录；未新增或运行测试。构建仅出现既有 web-tree-sitter `eval` 和 chunk 大小提示。
+- 手工验证：未操作 GUI；逐项比对提取前的分支优先级与提示文案，确认仓库不可用优先于活动任务提示，三类操作在相同状态下保持各自的现有用户提示。
+- 证据：`src/features/remotes/model/remote-action-availability.ts`、`src/features/remotes/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：Workspace toolbar 仍以 disabled props 控制按钮交互，feature 返回原因用于提示文案；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

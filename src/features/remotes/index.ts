@@ -3,6 +3,7 @@ export const loadPushDialog = () => import("./ui/PushDialog");
 export const loadPullDialog = () => import("./ui/PullDialog");
 export const loadPushTargetDialog = () => import("./ui/PushTargetDialog");
 export type { PushTarget } from "./model/push-target";
+export { getRemoteActionDisabledReasons } from "./model/remote-action-availability";
 export { useRemoteMutations } from "./model/use-remote-mutations";
 export { useRepositoryFetch } from "./model/use-repository-fetch";
 export { useRepositoryPull } from "./model/use-repository-pull";
