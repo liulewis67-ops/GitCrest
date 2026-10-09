@@ -2685,3 +2685,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：StatusService 仍编排缓存填充和 Git 状态读取，后续可评估是否把刷新协作进一步抽到 refresh；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/refresh/mod.rs`、`crates/gitcrest-core/src/refresh/snapshots.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md` 第 3 节目录结构。
 - 实施 commit：`527a40c`、`e203548`
+
+
+### Status 按请求路径限定 libgit2 扫描 — 小阶段 228
+- 状态：已完成（scoped status 不再默认遍历整个工作树；新增/删除/未跟踪等重命名歧义路径回退全量扫描）
+- 日期：2026-10-09
+- 交付：为 `read_libgit2` 增加字面路径范围并由 scoped status 请求传入，减少 Diff/增量 Status 查询对无关工作树文件的遍历；遇到可能隐藏重命名另一侧的新增、删除或未跟踪结果时，重跑完整 libgit2 status 以保留 rename identity。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 和 `git diff --check` 通过；未运行测试或性能基准。
+- 限制/后续：scoped status 的 P95 与 Diff API P95 尚未在相同发行构建和 20 轮口径下复测；S7.2 不据此标记通过，新增/删除/未跟踪场景仍可能全量扫描。S7.2、S7.4、S7.5 继续待验收。
+- 证据：`crates/gitcrest-core/src/git/status_snapshot.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md` 第 4 节、S7.2 性能口径第 12 节。
+- 实施 commit：`3d6223d`
