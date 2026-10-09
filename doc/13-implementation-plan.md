@@ -4275,3 +4275,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/app/App.tsx`、`src/pages/workspace/WorkspaceNavigation.tsx`、`src/features/shelves/ui/ShelfCenter.tsx`、`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`doc/15-frontend-development-guidelines.md` 第 5.1 节。
 - 限制/后续：这是 renderer 中异步操作的仓库上下文隔离，不替代后端按 RepoId 的并发写保护；S7.2、S7.4、S7.5 的整体验收仍未完成。
 - 实施 commit：`3c2bcab`。
+
+### tasks feature 任务日志复制动作迁入 model — 小阶段 389
+- 状态：已完成（TaskCenter 的剪贴板写入、成功清错和失败提示由 tasks feature 统一执行）
+- 日期：2026-10-10
+- 交付：将 `copyTaskLogs` 从 App 移入 `useTaskCenter.copyLogs`；该 feature action 写入任务日志、成功后清除 TaskCenter 错误，剪贴板不可用时设置明确提示。App 只把该 action 传给 TaskCenter UI。
+- 验证：`pnpm exec tsc`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；未运行测试。
+- 手工验证：未操作 GUI；对比成功/失败时既有 TaskCenter 错误文案与状态清理行为，保持原交互。
+- 证据：`src/features/tasks/model/use-task-center.ts`、`src/app/App.tsx`、`src/features/tasks/ui/TaskCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4.1、5.3 节。
+- 限制/后续：Clone 重试、凭据修复、push review 和跨 feature workflow recovery 仍由 App 装配；后续继续沿 tasks model 与应用组合边界拆分。S7.2、S7.4、S7.5 仍未验收。
+- 实施 commit：`c4567ec`。
