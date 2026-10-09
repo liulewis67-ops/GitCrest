@@ -2984,3 +2984,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/remotes.rs`、`crates/gitcrest-core/src/features/remotes/push.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：push/pull 实际写操作与 fetch/remote 配置写操作仍由现有 GitCommandService 执行；继续拆分写入能力并完成运行时验收；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`5a1d9c8`
+
+### RemoteCommand 领域归属 — 小阶段 258
+- 状态：已完成（远程配置写入操作模型由 domain 定义，Git command adapter 负责解释并执行）
+- 日期：2026-10-09
+- 交付：将 `RemoteCommand` 从 `git/command.rs` 移入 `domain/remote.rs`；remotes handlers 与 Git command adapter 直接引用领域命令类型。命令变体、任务队列、Git argv、敏感 URL 日志处理和 API 行为保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认命令类型仅在 domain 定义，并由 feature handler/Git adapter 引用；未运行 Rust 测试。
+- 手工验证：未执行 remote add/set-url/remove/default/upstream 任务；本阶段仅调整模型归属，执行路径未改变。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：远程写入仍由具体 GitCommandService 执行，需结合 TaskContext 与执行协调边界建立可替换的操作 port；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`7987f7a`
