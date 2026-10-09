@@ -3774,4 +3774,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：只读使用 `C:\Users\lewis\AppData\Local\Temp\gitcrest-s7.2-100k-fixture-20261009-continuation`，确认 fixture 有 100,000 commits、单个 18.6 MiB pack 和现存 commit-graph；仅执行 Git 读命令与本机 PowerShell 计时，没有修改 fixture。此为探索性小样本，不替代正式 20 轮 API P95 基准。
 - 证据：`scripts/performance/benchmark.mjs` 当前冷搜索路径及阶段 311 / 328 的 20 轮 API 证据（最近冷搜索 P95 623.466ms / 669.049ms）。
 - 限制/后续：严格的 <200ms 首次冷搜索目标仍未达到；数据表明只调整 Git 输出格式或缩短 fingerprint 不足以达标，下一步需处理“索引尚未就绪”的产品/API 查询策略，同时维持完整搜索结果与分页正确性。S7.2 其余桌面门槛、S7.4、S7.5 仍待完成。
-- 完成 commit：待提交
+- 完成 commit：`dba870f`
+
+### S7.2 用 libgit2 计算历史搜索 refs 指纹 — 小阶段 337
+- 状态：已完成（移除每次历史搜索的 refs 子进程；warm search 达标，cold search 仍未达标）
+- 日期：2026-10-09
+- 交付：历史搜索索引校验与构建改用进程内 libgit2 枚举 local/remote refs，代替每次启动 Git 执行 `for-each-ref`。按 refname 字节排序，并逐字节复现原 `%refname%00%objectname%00%(HEAD)` 指纹输入；attached/detached HEAD、分支与 remote refs 均不改变已持久化索引的 fingerprint 语义。
+- 验证：新增 Rust 用例将 libgit2 指纹与 Git `for-each-ref` 原始输出对照，覆盖 attached/detached HEAD、多个本地分支和 remote tracking ref；定向用例及完整 Rust suite 140/140 通过，`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 通过。Windows 11 / Git 2.37.3 / 当前 100k Release fixture 20 轮：warm message search P95 10.934ms（此前 68.978ms），cold-index search P95 621.200ms（此前 623.466ms，未见实质改善），history first page P95 118.050ms，dirty status P95 15.165ms、强制全量 status 15.446ms、缓存全量/路径 status 2.085/1.331ms、1k 行 Diff 98.539ms；后台索引 ready 4.155s。正式复测 JSON：`doc/evidence/S7.2/api-win32-search-index-fingerprint-stage337.json`。
+- 手工验证：使用隔离 sidecar、SQLite 数据库和 100k fixture 执行基准；TEMP/TMP 指向 E 盘，未改动 fixture refs 或工作树。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/evidence/S7.2/api-win32-search-index-fingerprint-stage337.json`。
+- 限制/后续：warm 搜索已达标且约快 6 倍，但 cold search 仍需 Git 扫描 100k 条消息，P95 约 621ms；需设计冷索引未就绪时保持正确结果、分页和用户反馈的查询策略。S7.2 桌面内存/帧率、S7.4 发布更新与 S7.5 跨平台/完整审计仍未完成。
+- 完成 commit：`ffd7c1b`
