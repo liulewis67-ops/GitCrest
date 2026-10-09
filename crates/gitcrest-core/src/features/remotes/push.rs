@@ -72,7 +72,7 @@ pub async fn read_push_preflight(
         detached,
         None,
         &crate::git::refs::GitBranchAdapter,
-        &crate::git::remotes::GitRemoteAdapter,
+        &crate::git::remote::GitRemoteAdapter,
     )
     .await
 }

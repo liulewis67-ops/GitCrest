@@ -14,7 +14,7 @@ use crate::{
         tasks::TaskService,
     },
     git::{
-        command::GitCommandService, refs::GitBranchAdapter, remotes::GitRemoteAdapter,
+        command::GitCommandService, refs::GitBranchAdapter, remote::GitRemoteAdapter,
         repository::GitRepositoryAdapter, tags::GitTagAdapter,
     },
     ports::branches::BranchGitPort,

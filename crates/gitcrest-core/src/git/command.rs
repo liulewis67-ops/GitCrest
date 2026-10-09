@@ -1412,7 +1412,7 @@ impl RemotePreflightReadPort for GitCommandService {
     ) -> RemotePreflightFuture<'a, crate::domain::remote::RemotePullState> {
         Box::pin(async move {
             let branch_git = super::refs::GitBranchAdapter;
-            let remote_git = super::remotes::GitRemoteAdapter;
+            let remote_git = super::remote::GitRemoteAdapter;
             if !crate::domain::branch::is_branch_name_syntactically_valid(local_branch)
                 || !branch_git
                     .validate_name(repository_path, local_branch)

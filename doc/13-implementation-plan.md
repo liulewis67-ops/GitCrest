@@ -4764,3 +4764,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/credentials/keyring.rs`、`crates/gitcrest-core/src/credentials/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：凭据适配层现已按规范分为 Askpass 和 keyring 文件；manager、validation 与领域数据类型保留在 `credentials/mod.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段职责拆分与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 对齐 Git remote adapter 模块命名 — 小阶段 438
+- 状态：已完成（底层 Git 远端适配器模块使用规范约定的 `git/remote.rs`）
+- 日期：2026-10-10
+- 交付：将 `git/remotes.rs` 重命名为 `git/remote.rs`，模块声明和 adapter 引用同步调整；`ports::remotes` 与 `features::remotes` 保持原名以表达其多项能力集合。Git remote 命令和 adapter 行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：生产 adapter、remote feature、bootstrap 与现有 crate 内构造点均指向 `crate::git::remote::GitRemoteAdapter`；剩余 `git::remotes` 搜索匹配仅为 feature 与 port 模块声明。
+- 证据：`crates/gitcrest-core/src/git/remote.rs`、`crates/gitcrest-core/src/git/mod.rs`、相关 adapter 引用、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：remote port 与 feature 目录按其复数业务能力命名；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段模块归属调整与台账同一 commit（SHA 可在后续台账更新中补记）。

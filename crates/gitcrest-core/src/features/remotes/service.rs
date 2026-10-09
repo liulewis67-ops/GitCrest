@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[cfg(test)]
-use crate::git::remotes::GitRemoteAdapter;
+use crate::git::remote::GitRemoteAdapter;
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
