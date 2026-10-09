@@ -2300,3 +2300,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：需 macOS CI runner 证明 DMG 挂载、复制、启动与 detach；Linux 仍以 `linux-unpacked` + Xvfb 运行 smoke。S7.4 整体保持进行中。
 - 证据：`scripts/packaged-smoke.mjs`、`.github/workflows/ci.yml` 中 package-smoke matrix。
 - 实施 commit：`d6d00b9`
+
+### S7.4 — Linux AppImage 发行产物 smoke 接入 — 小阶段 187
+- 状态：待验收（smoke 已改为运行最终 AppImage；本机 Windows 回归通过，Linux Xvfb runner 仍需执行）
+- 日期：2026-10-09
+- 交付：`scripts/packaged-smoke.mjs` 在 Linux runner 选择 `.AppImage` 而非 `linux-unpacked`，并设置 `APPIMAGE_EXTRACT_AND_RUN=1` 兼容 runner 缺少 FUSE；仍检查 packaged renderer、`resources/bin/gitcrest-core`、core health、退出时 sidecar 停止和临时目录清理。移除对构建目录 update YAML 的临时改写，Linux 不接受通用 feed 的信任策略由 `tests/unit/update-config.test.ts` 独立覆盖。
+- 验证：`node --check scripts/packaged-smoke.mjs`、`pnpm test:packaged`（Windows NSIS 安装回归）与 `git diff --check` 通过；未运行 Linux runner 或新增/运行单测。
+- 限制/后续：需要 Linux Xvfb runner 实际启动 AppImage 并证明 sidecar shutdown；macOS DMG smoke 也待 macOS runner 验证。S7.4 整体保持进行中。
+- 证据：`scripts/packaged-smoke.mjs`、`.github/workflows/ci.yml` 中三平台 package-smoke matrix、`tests/unit/update-config.test.ts`。
+- 实施 commit：`f9ba486`
