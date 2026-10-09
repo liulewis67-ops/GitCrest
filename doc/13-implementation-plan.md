@@ -4255,3 +4255,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/branches/ui/BranchSwitcherDialog.tsx`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：App 仍负责 branch switch 的 shelf composer 生命周期和两个 feature 之间的协调；后续继续沿页面组合与 feature use case 边界拆分。S7.2、S7.4、S7.5 仍未验收。
 - 实施 commit：`7ad87b3`。
+
+### branches feature 分支切换 ShelfCenter 编排状态迁入 model — 小阶段 387
+- 状态：已完成（ShelfCenter 打开请求、branch-switch after-create 上下文和 task 跟踪归属 branches model）
+- 日期：2026-10-10
+- 交付：扩展 `useBranchSwitchShelfFlow` 管理通用 ShelfCenter 打开请求及 branch-switch 专用上下文；封装准备后打开 composer、提交任务后记录 switch task、关闭未提交 composer 时清理 baseline。App 保留仓库状态刷新、任务列表插入与刷新，WorkspaceNavigation 继续承载页面组合。
+- 验证：`pnpm exec tsc`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 和 `git diff --check` 通过；Vite 使用临时 outDir，避免清理仍被运行实例占用的默认发行目录；未运行测试。
+- 手工验证：未操作 GUI；对比 hook 返回 API 与 App/ShelfCenter props，确保普通快捷键 composer 请求和 branch switch 专属 after-create action 都继续传递。
+- 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceNavigation.tsx`、`src/features/shelves/ui/ShelfCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：分支切换 dialog、ShelfCenter UI 和页面上的仓库刷新仍由各自页面/feature 入口组合；后续可继续将 App 中剩余跨 feature task 生命周期迁至相应 model。S7.2、S7.4、S7.5 仍未验收。
+- 实施 commit：`fdc6e31`。
