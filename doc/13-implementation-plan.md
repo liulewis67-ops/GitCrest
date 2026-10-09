@@ -3701,7 +3701,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 状态：已完成（移除 commits feature 对 history 内部 routes 子模块的直接访问）
 - 日期：2026-10-09
 - 交付：由 `history` feature 根重导出组合 `/v1/repositories/:repo_id/commits` 所需的 GET `MethodRouter` 工厂；`commits` feature 通过该 crate 内 feature 出口复用历史查询路由，不再耦合 `history::routes` 内部模块路径。HTTP 路径、method 与 handler 行为不变。
-- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、隔离 target 的 `cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`pnpm frontend:boundaries`、`pnpm build` 和 `git diff --check` 通过。完整 `pnpm check` 首次在默认 Cargo target 因桌面进程锁定 exe 失败；改用隔离 target 重跑时，vendored 依赖编译因系统盘空间耗尽失败，未进入 pnpm/Rust 测试阶段。构建输出仅有既有 web-tree-sitter `eval` 警告。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、隔离 target 的 `cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 和完整 `pnpm check` 通过（前端/Electron build、Vitest 38 files / 177 tests、Rust 139 tests、Electron E2E 6 files / 29 tests）；通过将 `CARGO_TARGET_DIR`、`TEMP` 和 `TMP` 指向 E 盘避开默认 sidecar 文件锁与系统盘空间不足。`git diff --check` 通过。构建输出仅有既有 web-tree-sitter `eval` 警告。
 - 手工验证：无 UI 变更。
 - 证据：`crates/gitcrest-core/src/features/history/mod.rs`、`crates/gitcrest-core/src/features/commits/routes.rs`。
 - 限制/后续：该改动收敛一个已发现的跨 feature 子模块依赖；其余 feature 和 `git/` 模块边界仍需持续审查，S7.2、S7.4、S7.5 验收继续未完成。
