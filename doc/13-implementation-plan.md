@@ -2854,3 +2854,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/shelves.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、shelves/staging/workflows handlers、`doc/14-backend-development-guidelines.md` 第 4.1 节。
 - 限制/后续：其他 feature 仍通过 RepositoryManager.store() 访问其各自持久化记录，按业务能力继续分 port；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`7efbfae`
+
+### UndoRecord 持久化通过 UndoStorePort 注入 — 小阶段 245
+- 状态：已完成（staging、shelves 与 workflows 的 undo 记录读写通过显式 port）
+- 日期：2026-10-09
+- 交付：新增 `UndoStorePort`，覆盖保存、读取最新 undo 记录和删除；SQLite RepositoryStore 实现该 port，并将错误映射为 RepositoryError。bootstrap/AppState 注入 undo store，staging undo、暂存/丢弃 undo 保存、shelf apply undo 与 workflow recovery 不再通过 RepositoryManager.store() 直接调用 undo 持久化 API。数据库 schema、记录排序、保留上限及序列化映射不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认相关 handlers 中不再直接调用 RepositoryStore undo 方法；未运行 Rust 测试。
+- 手工验证：未执行真实 SQLite 故障场景；异常仍按当前 API/task 错误处理与日志路径传递。
+- 证据：`crates/gitcrest-core/src/ports/undo.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、staging/shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 4.1 节。
+- 限制/后续：其他 feature 的仓库、任务、设置、history 数据访问仍有 RepositoryStore 直接调用，继续按能力拆分端口；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`c8d098b`
