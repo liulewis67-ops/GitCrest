@@ -9,7 +9,6 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::diff::DiffScope;
-use crate::features::repositories::repository::Repository;
 use crate::features::shelves::{ShelfRecord, ShelfSnapshot};
 
 const MAX_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
@@ -116,6 +115,19 @@ fn now_ms() -> i64 {
 pub struct RepositoryStore {
     connection: Arc<Mutex<Connection>>,
     history_index_builds: Arc<Mutex<HashSet<String>>>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct StoredRepository {
+    pub repo_id: String,
+    pub path: String,
+    pub head: Option<String>,
+    pub branch: Option<String>,
+    pub detached: bool,
+    pub state: String,
+    pub is_favorite: bool,
+    pub last_accessed_at: i64,
+    pub availability: String,
 }
 
 #[derive(Clone, Debug)]
@@ -324,7 +336,7 @@ impl RepositoryStore {
             .map_err(|error| error.to_string())
     }
 
-    pub fn list(&self) -> Result<Vec<Repository>, String> {
+    pub fn list(&self) -> Result<Vec<StoredRepository>, String> {
         let connection = self
             .connection
             .lock()
@@ -334,7 +346,7 @@ impl RepositoryStore {
         ).map_err(|error| error.to_string())?;
         let rows = statement
             .query_map([], |row| {
-                Ok(Repository {
+                Ok(StoredRepository {
                     repo_id: row.get(0)?,
                     path: row.get(1)?,
                     head: row.get(2)?,
@@ -351,7 +363,7 @@ impl RepositoryStore {
             .map_err(|error| error.to_string())
     }
 
-    pub fn get(&self, repo_id: &str) -> Result<Option<Repository>, String> {
+    pub fn get(&self, repo_id: &str) -> Result<Option<StoredRepository>, String> {
         Ok(self
             .list()?
             .into_iter()
@@ -395,7 +407,7 @@ impl RepositoryStore {
         &self,
         repo_id: &str,
         last_accessed_at: i64,
-    ) -> Result<Option<Repository>, String> {
+    ) -> Result<Option<StoredRepository>, String> {
         let connection = self
             .connection
             .lock()
@@ -414,7 +426,7 @@ impl RepositoryStore {
         }
     }
 
-    pub fn save_opened(&self, repository: Repository) -> Result<Repository, String> {
+    pub fn save_opened(&self, repository: StoredRepository) -> Result<StoredRepository, String> {
         let connection = self
             .connection
             .lock()
@@ -432,7 +444,7 @@ impl RepositoryStore {
         &self,
         repo_id: &str,
         favorite: bool,
-    ) -> Result<Option<Repository>, String> {
+    ) -> Result<Option<StoredRepository>, String> {
         let connection = self
             .connection
             .lock()
@@ -882,8 +894,8 @@ fn parse_shelf_scope(value: Option<String>) -> Result<Option<DiffScope>, String>
 mod tests {
     use super::*;
 
-    fn repository(id: &str, path: &str, timestamp: i64) -> Repository {
-        Repository {
+    fn repository(id: &str, path: &str, timestamp: i64) -> StoredRepository {
+        StoredRepository {
             repo_id: id.into(),
             path: path.into(),
             head: None,

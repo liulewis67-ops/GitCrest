@@ -3,8 +3,9 @@ use std::path::PathBuf;
 use tokio::{fs, process::Command, task};
 
 use crate::{
-    domain::error::RepositoryError, features::repositories::repository::Repository,
-    ports::repository::RepositoryPathPort, storage::RepositoryStore,
+    domain::error::RepositoryError,
+    ports::repository::RepositoryPathPort,
+    storage::{RepositoryStore, StoredRepository},
 };
 
 #[derive(Clone, Debug)]
@@ -87,7 +88,10 @@ impl RepositoryTargetReader {
         self.existing_path(&repository).await
     }
 
-    async fn registered_repository(&self, repo_id: &str) -> Result<Repository, RepositoryError> {
+    async fn registered_repository(
+        &self,
+        repo_id: &str,
+    ) -> Result<StoredRepository, RepositoryError> {
         let store = self.store.clone();
         let repo_id = repo_id.to_owned();
         task::spawn_blocking(move || store.get(&repo_id))
@@ -97,7 +101,10 @@ impl RepositoryTargetReader {
             .ok_or(RepositoryError::RepositoryNotFound)
     }
 
-    async fn existing_path(&self, repository: &Repository) -> Result<PathBuf, RepositoryError> {
+    async fn existing_path(
+        &self,
+        repository: &StoredRepository,
+    ) -> Result<PathBuf, RepositoryError> {
         let path = PathBuf::from(&repository.path);
         fs::metadata(&path)
             .await

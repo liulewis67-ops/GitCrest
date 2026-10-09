@@ -8,7 +8,10 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
-use crate::{domain::error::RepositoryError, storage::RepositoryStore};
+use crate::{
+    domain::error::RepositoryError,
+    storage::{RepositoryStore, StoredRepository},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,7 +92,7 @@ impl RepositoryManager {
         };
 
         let store = self.store.clone();
-        task::spawn_blocking(move || store.save_opened(repository))
+        task::spawn_blocking(move || store.save_opened(repository.into()).map(Repository::from))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)
@@ -148,14 +151,14 @@ impl RepositoryManager {
     pub async fn get(&self, repo_id: &str) -> Result<Option<Repository>, RepositoryError> {
         let store = self.store.clone();
         let repo_id = repo_id.to_owned();
-        let Some(mut repository) =
-            task::spawn_blocking(move || store.mark_opened(&repo_id, now_ms()))
-                .await
-                .map_err(|_| RepositoryError::StorageUnavailable)?
-                .map_err(|_| RepositoryError::StorageUnavailable)?
+        let Some(repository) = task::spawn_blocking(move || store.mark_opened(&repo_id, now_ms()))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)?
         else {
             return Ok(None);
         };
+        let mut repository = Repository::from(repository);
         repository.availability = if fs::metadata(&repository.path).await.is_ok() {
             "available"
         } else {
@@ -178,10 +181,14 @@ impl RepositoryManager {
 
     pub async fn list(&self) -> Result<Vec<Repository>, RepositoryError> {
         let store = self.store.clone();
-        let mut repositories = task::spawn_blocking(move || store.list())
+        let stored_repositories = task::spawn_blocking(move || store.list())
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?;
+        let mut repositories = stored_repositories
+            .into_iter()
+            .map(Repository::from)
+            .collect::<Vec<_>>();
         for repository in &mut repositories {
             repository.availability = if fs::metadata(&repository.path).await.is_ok() {
                 "available"
@@ -199,10 +206,14 @@ impl RepositoryManager {
         favorite: bool,
     ) -> Result<Option<Repository>, RepositoryError> {
         let store = self.store.clone();
-        task::spawn_blocking(move || store.set_favorite(&repo_id, favorite))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)
+        task::spawn_blocking(move || {
+            store
+                .set_favorite(&repo_id, favorite)
+                .map(|repository| repository.map(Repository::from))
+        })
+        .await
+        .map_err(|_| RepositoryError::StorageUnavailable)?
+        .map_err(|_| RepositoryError::StorageUnavailable)
     }
 
     pub async fn forget(&self, repo_id: String) -> Result<bool, RepositoryError> {
@@ -211,6 +222,38 @@ impl RepositoryManager {
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)
+    }
+}
+
+impl From<StoredRepository> for Repository {
+    fn from(repository: StoredRepository) -> Self {
+        Self {
+            repo_id: repository.repo_id,
+            path: repository.path,
+            head: repository.head,
+            branch: repository.branch,
+            detached: repository.detached,
+            state: repository.state,
+            is_favorite: repository.is_favorite,
+            last_accessed_at: repository.last_accessed_at,
+            availability: repository.availability,
+        }
+    }
+}
+
+impl From<Repository> for StoredRepository {
+    fn from(repository: Repository) -> Self {
+        Self {
+            repo_id: repository.repo_id,
+            path: repository.path,
+            head: repository.head,
+            branch: repository.branch,
+            detached: repository.detached,
+            state: repository.state,
+            is_favorite: repository.is_favorite,
+            last_accessed_at: repository.last_accessed_at,
+            availability: repository.availability,
+        }
     }
 }
 

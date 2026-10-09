@@ -2774,3 +2774,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：RepositoryStore 仍返回 repositories feature 的 Repository 类型，storage/domain 模型边界可后续独立梳理；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`3e016b6`
+
+### RepositoryStore 与 repositories feature 模型分离 — 小阶段 237
+- 状态：已完成（RepositoryStore 使用自身 StoredRepository 存储模型，API/feature Repository 在 manager 边界映射）
+- 日期：2026-10-09
+- 交付：在 storage 内定义 `StoredRepository`，SQLite list/get/mark_opened/save_opened/set_favorite 不再导入或返回 repositories feature 的 `Repository`；RepositoryManager 显式完成 feature/storage 类型转换并计算当前 availability，RepositoryTargetReader 直接消费 StoredRepository。数据库 schema、查询排序和外部 Repository JSON 字段保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 storage 下无 `crate::features::repositories` 依赖；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；API 契约与 SQLite schema 未改变。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
+- 限制/后续：storage 仍依赖 shelves feature 类型，后续需按相同的存储模型/领域映射边界继续梳理；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待补记
