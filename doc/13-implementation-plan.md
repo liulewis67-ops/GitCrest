@@ -2399,3 +2399,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：tag 表单字段和编辑器展开状态仍由 CommitDetails 视图管理；S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`src/features/history/model/use-commit-tag-creation.ts`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`b2b4b94`
+
+### history feature 筛选状态迁入 model — 小阶段 198
+- 状态：已完成（CommitGraph 草稿筛选、已应用筛选和清除逻辑由 history model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useHistoryFilters`，维护草稿与已提交的 SHA、作者、消息、分支、路径、日期筛选，提供筛选提交、清空和是否存在活动筛选的派生状态；CommitGraph 保留表单呈现和筛选变更时滚动归零的视图行为。
+- 验证：`pnpm build`（应用与测试 TypeScript 检查、main/preload/renderer 构建）与 `git diff --check` 通过；构建保留 web-tree-sitter eval 警告，未运行测试。
+- 限制/后续：筛选表单字段布局与滚动行为仍由 CommitGraph 视图负责；S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`src/features/history/model/use-history-filters.ts`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`19df38d`
