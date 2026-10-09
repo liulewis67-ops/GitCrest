@@ -199,8 +199,8 @@ pub(super) async fn request_ai(
         .await
         .map_err(ApiError::from_repository_error)?;
     let snapshot = state
-        .repositories
-        .status_snapshot(&repo_id)
+        .status
+        .snapshot(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let mut prompt = format!(

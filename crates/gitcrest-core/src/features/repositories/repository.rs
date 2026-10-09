@@ -8,7 +8,6 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
-use crate::features::status::{StatusSnapshot, StatusSnapshotCache};
 use crate::storage::RepositoryStore;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -28,7 +27,6 @@ pub struct Repository {
 #[derive(Clone, Default)]
 pub struct RepositoryManager {
     store: RepositoryStore,
-    status_cache: StatusSnapshotCache,
 }
 
 #[derive(Clone, Debug)]
@@ -58,14 +56,6 @@ pub enum RepositoryError {
 }
 
 impl RepositoryManager {
-    pub fn invalidate_status(&self, repo_id: &str) {
-        self.invalidate_status_scope(repo_id, true, &[]);
-    }
-
-    pub fn invalidate_status_scope(&self, repo_id: &str, full: bool, paths: &[String]) {
-        self.status_cache.invalidate(repo_id, full, paths);
-    }
-
     pub fn store(&self) -> RepositoryStore {
         self.store.clone()
     }
@@ -154,10 +144,7 @@ impl RepositoryManager {
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?;
-        Ok(Self {
-            store,
-            status_cache: StatusSnapshotCache::default(),
-        })
+        Ok(Self { store })
     }
 
     pub async fn open_path(&self, path: &str) -> Result<Repository, RepositoryError> {
@@ -320,97 +307,11 @@ impl RepositoryManager {
     }
 
     pub async fn forget(&self, repo_id: String) -> Result<bool, RepositoryError> {
-        self.invalidate_status(&repo_id);
         let store = self.store.clone();
         task::spawn_blocking(move || store.forget(&repo_id))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)
-    }
-
-    pub async fn status_snapshot(&self, repo_id: &str) -> Result<StatusSnapshot, RepositoryError> {
-        let version = self.status_cache.version(repo_id);
-        let snapshot = self.read_status_snapshot(repo_id).await?;
-        self.status_cache.store_full(repo_id, version, &snapshot);
-        Ok(snapshot)
-    }
-
-    /// Read the latest watcher-valid snapshot, running Git only when the cache is cold.
-    pub async fn status_snapshot_cached(
-        &self,
-        repo_id: &str,
-    ) -> Result<StatusSnapshot, RepositoryError> {
-        if let Some(snapshot) = self.status_cache.full(repo_id) {
-            return Ok(snapshot);
-        }
-        self.status_snapshot(repo_id).await
-    }
-
-    async fn read_status_snapshot(&self, repo_id: &str) -> Result<StatusSnapshot, RepositoryError> {
-        let store = self.store.clone();
-        let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let path = PathBuf::from(&repository.path);
-        fs::metadata(&path).await.map_err(map_path_error)?;
-        crate::features::status::read(repository.repo_id, &path)
-            .await
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
-                std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
-                _ => RepositoryError::StatusFailed,
-            })
-    }
-
-    pub async fn status_snapshot_paths(
-        &self,
-        repo_id: &str,
-        paths: &[String],
-    ) -> Result<StatusSnapshot, RepositoryError> {
-        let version = self.status_cache.version(repo_id);
-        let snapshot = self.read_status_snapshot_paths(repo_id, paths).await?;
-        self.status_cache
-            .store_paths(repo_id, version, paths, &snapshot);
-        Ok(snapshot)
-    }
-
-    pub async fn status_snapshot_paths_cached(
-        &self,
-        repo_id: &str,
-        paths: &[String],
-    ) -> Result<StatusSnapshot, RepositoryError> {
-        crate::features::status::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
-        if let Some(snapshot) = self.status_cache.paths(repo_id, paths) {
-            return Ok(snapshot);
-        }
-        self.status_snapshot_paths(repo_id, paths).await
-    }
-
-    async fn read_status_snapshot_paths(
-        &self,
-        repo_id: &str,
-        paths: &[String],
-    ) -> Result<StatusSnapshot, RepositoryError> {
-        let store = self.store.clone();
-        let repo_id_owned = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id_owned))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .ok_or(RepositoryError::RepositoryNotFound)?;
-        let path = PathBuf::from(&repository.path);
-        fs::metadata(&path).await.map_err(map_path_error)?;
-        crate::features::status::read_paths(repository.repo_id, &path, paths)
-            .await
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::InvalidInput => RepositoryError::InvalidPath,
-                std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
-                std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
-                _ => RepositoryError::StatusFailed,
-            })
     }
 }
 
@@ -751,7 +652,8 @@ mod tests {
             .open_path(fixture.root.to_str().unwrap())
             .await
             .unwrap();
-        let snapshot = manager.status_snapshot(&repository.repo_id).await.unwrap();
+        let status_service = crate::features::status::StatusService::new(manager.clone());
+        let snapshot = status_service.snapshot(&repository.repo_id).await.unwrap();
         let staged_and_unstaged = snapshot
             .files
             .iter()
@@ -777,7 +679,7 @@ mod tests {
             && file.path == "ignored.log"));
 
         fs::write(fixture.root.join("later.txt"), "external edit\n").unwrap();
-        let refreshed = manager.status_snapshot(&repository.repo_id).await.unwrap();
+        let refreshed = status_service.snapshot(&repository.repo_id).await.unwrap();
         assert!(refreshed.refreshed_at_ms >= snapshot.refreshed_at_ms);
         assert!(refreshed.files.iter().any(|file| file.path == "later.txt"));
     }
@@ -814,7 +716,10 @@ mod tests {
 
         let manager = RepositoryManager::default();
         let repository = manager.open_path(root.to_str().unwrap()).await.unwrap();
-        let snapshot = manager.status_snapshot(&repository.repo_id).await.unwrap();
+        let snapshot = crate::features::status::StatusService::new(manager.clone())
+            .snapshot(&repository.repo_id)
+            .await
+            .unwrap();
         let conflicted = snapshot
             .files
             .iter()

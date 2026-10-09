@@ -122,7 +122,7 @@ pub(super) async fn preflight_repository_shelf_apply(
         )
     })?;
     let preview_revision = shelf_apply_revision(
-        &state.repositories,
+        &state.status,
         &repo_id,
         &target.repository_path,
         &shelf,
@@ -135,6 +135,7 @@ pub(super) async fn preflight_repository_shelf_apply(
     let can_apply_with_conflicts = !can_apply_cleanly
         && can_shelf_apply_with_conflicts(
             &state.repositories,
+            &state.status,
             &repo_id,
             &shelf,
             repository.head.as_deref(),
@@ -185,7 +186,7 @@ pub(super) async fn apply_repository_shelf(
         )
     })?;
     let current_revision = shelf_apply_revision(
-        &state.repositories,
+        &state.status,
         &repo_id,
         &target.repository_path,
         &shelf,
@@ -210,6 +211,7 @@ pub(super) async fn apply_repository_shelf(
         })?;
 
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let task_shelf_id = shelf_id;
@@ -243,7 +245,7 @@ pub(super) async fn apply_repository_shelf(
                     return Err(TaskFailure::Failed("The shelf restore scope changed after preview. Preview it again.".into()));
                 }
                 let current_revision = shelf_apply_revision(
-                    &repositories,
+                    &status_service,
                     &task_repo_id,
                     &task_path,
                     &current_shelf,
@@ -265,6 +267,7 @@ pub(super) async fn apply_repository_shelf(
                 } else {
                     let can_resolve_conflicts = can_shelf_apply_with_conflicts(
                         &repositories,
+                        &status_service,
                         &task_repo_id,
                         &current_shelf,
                         current_repository.head.as_deref(),
@@ -284,8 +287,8 @@ pub(super) async fn apply_repository_shelf(
                                 .await?;
                         }
                         Err(TaskFailure::Failed(message)) | Err(TaskFailure::WaitingForInput(message)) => {
-                            let status = repositories
-                                .status_snapshot(&task_repo_id)
+                            let status = status_service
+                                .snapshot(&task_repo_id)
                                 .await
                                 .map_err(|_| TaskFailure::Failed("Git reported an apply failure and conflict state could not be inspected. The shelf was retained.".into()))?;
                             if status.files.iter().any(|file| file.kind == status::ChangeKind::Conflicted && current_shelf.snapshot.paths.contains(&file.path)) {
@@ -365,6 +368,7 @@ pub(crate) async fn load_shelf_record(
 
 async fn can_shelf_apply_with_conflicts(
     repositories: &RepositoryManager,
+    status_service: &super::super::status::StatusService,
     repo_id: &str,
     shelf: &shelves::ShelfRecord,
     head_oid: Option<&str>,
@@ -385,8 +389,8 @@ async fn can_shelf_apply_with_conflicts(
     if repository.state != "normal" {
         return Ok(false);
     }
-    let status = repositories
-        .status_snapshot(repo_id)
+    let status = status_service
+        .snapshot(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     if status
@@ -418,14 +422,14 @@ async fn can_shelf_apply_with_conflicts(
 }
 
 async fn shelf_apply_revision(
-    repositories: &RepositoryManager,
+    status_service: &super::super::status::StatusService,
     repo_id: &str,
     repository_path: &std::path::Path,
     shelf: &shelves::ShelfRecord,
     head_oid: Option<&str>,
 ) -> Result<String, ApiError> {
-    let status = repositories
-        .status_snapshot(repo_id)
+    let status = status_service
+        .snapshot(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let mut digest = Sha256::new();
@@ -501,7 +505,7 @@ pub(super) async fn create_repository_shelf(
         .await
         .map_err(ApiError::from_repository_error)?;
     let prepared = prepare_shelf_items(
-        &state.repositories,
+        &state.status,
         &repo_id,
         &target.repository_path,
         &request.items,
@@ -528,6 +532,7 @@ pub(super) async fn create_repository_shelf(
     shelves::validate_patch(&patch_bytes, &paths).map_err(ApiError::from_shelf_error)?;
 
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let task_path = target.repository_path;
@@ -551,7 +556,7 @@ pub(super) async fn create_repository_shelf(
                 if current_repository.head != expected_head_oid {
                     return Err(TaskFailure::Failed("The repository HEAD changed after shelf review. Refresh the selected diffs and try again.".into()));
                 }
-                let prepared = prepare_shelf_items(&repositories, &task_repo_id, &task_path, &items)
+                let prepared = prepare_shelf_items(&status_service, &task_repo_id, &task_path, &items)
                     .await
                     .map_err(|_| TaskFailure::Failed("The selected changes changed after shelf review. Refresh and select them again.".into()))?;
                 let mut patch = Vec::new();
@@ -627,14 +632,14 @@ pub(super) async fn create_repository_shelf(
 }
 
 async fn prepare_shelf_items(
-    repositories: &RepositoryManager,
+    status_service: &super::super::status::StatusService,
     repo_id: &str,
     repository_path: &std::path::Path,
     items: &[ShelfSelectionRequest],
 ) -> Result<Vec<PreparedShelfItem>, ApiError> {
     let mut paths = std::collections::HashSet::new();
-    let snapshot = repositories
-        .status_snapshot(repo_id)
+    let snapshot = status_service
+        .snapshot(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let mut prepared = Vec::with_capacity(items.len());

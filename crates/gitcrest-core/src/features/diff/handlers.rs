@@ -46,8 +46,8 @@ pub(super) async fn repository_diff(
     };
     let (snapshot, candidate_diff) = tokio::join!(
         state
-            .repositories
-            .status_snapshot_paths(&repo_id, std::slice::from_ref(&query.path),),
+            .status
+            .snapshot_paths(&repo_id, std::slice::from_ref(&query.path),),
         service::read(repo_id.clone(), &repository_path, &candidate, query.scope),
     );
     let snapshot = snapshot.map_err(ApiError::from_repository_error)?;

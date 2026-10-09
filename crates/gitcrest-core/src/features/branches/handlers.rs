@@ -401,8 +401,8 @@ pub(super) async fn preflight_branch_switch(
     })?;
     let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
     let snapshot = state
-        .repositories
-        .status_snapshot(&repo_id)
+        .status
+        .snapshot(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let dirty_files = snapshot
@@ -458,8 +458,8 @@ pub(super) async fn switch_repository_branch(
         ));
     }
     let status = state
-        .repositories
-        .status_snapshot(&repo_id)
+        .status
+        .snapshot(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let dirty_files = status

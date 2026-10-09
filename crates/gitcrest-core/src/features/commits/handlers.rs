@@ -97,8 +97,8 @@ pub(super) async fn commit_repository(
         .await
         .map_err(ApiError::from_repository_error)?;
     let snapshot = state
-        .repositories
-        .status_snapshot(&repo_id)
+        .status
+        .snapshot(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     commits::validate_snapshot(&snapshot).map_err(ApiError::from_commit_error)?;
@@ -113,6 +113,7 @@ pub(super) async fn commit_repository(
     .map_err(map_commit_patch_error)?;
 
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
@@ -137,14 +138,11 @@ pub(super) async fn commit_repository(
                             "Could not read repository metadata before committing".into(),
                         )
                     })?;
-                let current = repositories
-                    .status_snapshot(&task_repo_id)
-                    .await
-                    .map_err(|_| {
-                        TaskFailure::Failed(
-                            "Could not refresh repository status before committing".into(),
-                        )
-                    })?;
+                let current = status_service.snapshot(&task_repo_id).await.map_err(|_| {
+                    TaskFailure::Failed(
+                        "Could not refresh repository status before committing".into(),
+                    )
+                })?;
                 commits::validate_snapshot(&current).map_err(|error| {
                     TaskFailure::Failed(format!("Commit precondition changed: {error:?}"))
                 })?;

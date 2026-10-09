@@ -9,6 +9,7 @@ use crate::{
     features::{
         credentials,
         repositories::{cloning::CloneService, repository::RepositoryManager},
+        status::StatusService,
         tasks::TaskService,
     },
     git::command::GitCommandService,
@@ -62,21 +63,27 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let repositories = RepositoryManager::open_database(config.database_path)
         .await
         .map_err(|_| "Could not initialize the repository database")?;
-    let task_status_repositories = repositories.clone();
+    let status = StatusService::new(repositories.clone());
+    let task_status = status.clone();
     let tasks =
         TaskService::with_store_and_status_invalidator(repositories.store(), move |repo_id| {
-            task_status_repositories.invalidate_status(repo_id)
+            task_status.invalidate(repo_id)
         })
         .map_err(|_| "Could not recover background task history")?;
     let git_commands = GitCommandService::default();
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
     let events = EventBus::default();
-    tokio::spawn(watcher::run(repositories.clone(), events.clone()));
+    tokio::spawn(watcher::run(
+        repositories.clone(),
+        status.clone(),
+        events.clone(),
+    ));
     let state = AppState {
         read_write_token: Arc::new(config.write_token),
         read_only_token: config.read_only_token.map(Arc::new),
         conflict_token: config.conflict_token.map(Arc::new),
         repositories,
+        status,
         tasks,
         git_commands,
         clones,

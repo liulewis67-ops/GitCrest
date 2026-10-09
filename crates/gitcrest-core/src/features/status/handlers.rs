@@ -56,15 +56,15 @@ pub(super) async fn repository_status(
     }
     if paths.is_empty() {
         let snapshot = if force_refresh {
-            state.repositories.status_snapshot(&repo_id).await
+            state.status.snapshot(&repo_id).await
         } else {
-            state.repositories.status_snapshot_cached(&repo_id).await
+            state.status.snapshot_cached(&repo_id).await
         };
         snapshot.map(Json).map_err(ApiError::from_repository_error)
     } else {
         state
-            .repositories
-            .status_snapshot_paths_cached(&repo_id, &paths)
+            .status
+            .snapshot_paths_cached(&repo_id, &paths)
             .await
             .map(Json)
             .map_err(ApiError::from_repository_error)

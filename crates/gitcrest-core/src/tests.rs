@@ -67,9 +67,10 @@ fn test_credentials() -> features::credentials::CredentialManager {
 
 fn test_app(cors_origin: Option<&str>) -> Router {
     let repositories = RepositoryManager::default();
-    let task_status_repositories = repositories.clone();
+    let status = features::status::StatusService::new(repositories.clone());
+    let task_status = status.clone();
     let tasks = TaskService::with_status_invalidator(move |repo_id| {
-        task_status_repositories.invalidate_status(repo_id);
+        task_status.invalidate(repo_id);
     });
     let git_commands = GitCommandService::default();
     let state = AppState {
@@ -81,6 +82,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         events: EventBus::default(),
         clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
         repositories,
+        status,
         tasks,
         git_commands,
     };
@@ -222,7 +224,8 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
             events: EventBus::default(),
-            repositories,
+            repositories: repositories.clone(),
+            status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             git_commands: commands.clone(),
             clones: CloneService::new(tasks.clone(), commands, RepositoryManager::default()),
@@ -531,8 +534,8 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
         .open_path(repository_path.to_str().unwrap())
         .await
         .unwrap();
-    let snapshot = repositories
-        .status_snapshot(&repository.repo_id)
+    let snapshot = features::status::StatusService::new(repositories.clone())
+        .snapshot(&repository.repo_id)
         .await
         .unwrap();
     let selected_file = snapshot
@@ -605,6 +608,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             conflict_token: None,
             repositories: repositories.clone(),
+            status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             git_commands: commands.clone(),
             clones: CloneService::new(tasks, commands, repositories.clone()),
@@ -1563,6 +1567,7 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             events: EventBus::default(),
             clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
             repositories: repositories.clone(),
+            status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             git_commands,
         },
@@ -2531,6 +2536,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             ai_credentials: test_ai_credentials(),
             events: EventBus::default(),
             repositories: RepositoryManager::default(),
+            status: features::status::StatusService::new(RepositoryManager::default()),
             tasks: tasks.clone(),
             git_commands: GitCommandService::default(),
             clones: CloneService::new(
@@ -2656,7 +2662,8 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
             events: EventBus::default(),
-            repositories,
+            repositories: repositories.clone(),
+            status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             git_commands: GitCommandService::default(),
             clones: CloneService::new(

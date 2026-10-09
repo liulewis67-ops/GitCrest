@@ -146,6 +146,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
 
     let command = state.git_commands.clone();
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let tasks = state.tasks.clone();
     let task_repo_id = repo_id.clone();
     let waiting_task_id = request.task_id.clone();
@@ -215,8 +216,8 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                             .diff_index_trees_for_paths(&path, before_tree, &after_tree, &shelf.snapshot.paths)
                             .await?,
                         DiffScope::WorkingTree => {
-                            let status = repositories
-                                .status_snapshot(&task_repo_id)
+                            let status = status_service
+                                .snapshot(&task_repo_id)
                                 .await
                                 .map_err(|_| TaskFailure::Failed("The shelf was resolved, but its result could not be checked. The shelf was retained.".into()))?;
                             if status.files.iter().any(|file| {

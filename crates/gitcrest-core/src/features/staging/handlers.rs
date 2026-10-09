@@ -33,8 +33,8 @@ pub(crate) async fn stage_repository(
         .await
         .map_err(ApiError::from_repository_error)?;
     let snapshot = state
-        .repositories
-        .status_snapshot(&repo_id)
+        .status
+        .snapshot(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     staging::command(&snapshot, &request).map_err(ApiError::from_staging_error)?;
@@ -47,6 +47,7 @@ pub(crate) async fn stage_repository(
         staging::StagingAction::UnstageAll => "unstageAll",
     };
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let store = repositories.store();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
@@ -59,14 +60,9 @@ pub(crate) async fn stage_repository(
             target.resource_key,
             operation,
             move |context| async move {
-                let current = repositories
-                    .status_snapshot(&task_repo_id)
-                    .await
-                    .map_err(|_| {
-                        TaskFailure::Failed(
-                            "Could not refresh repository status before staging".into(),
-                        )
-                    })?;
+                let current = status_service.snapshot(&task_repo_id).await.map_err(|_| {
+                    TaskFailure::Failed("Could not refresh repository status before staging".into())
+                })?;
                 let command = staging::command(&current, &request).map_err(|error| {
                     TaskFailure::Failed(format!("Staging precondition changed: {error:?}"))
                 })?;
@@ -119,8 +115,8 @@ pub(crate) async fn stage_repository_patch(
         .await
         .map_err(ApiError::from_repository_error)?;
     let snapshot = state
-        .repositories
-        .status_snapshot(&repo_id)
+        .status
+        .snapshot(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let file = snapshot
@@ -156,6 +152,7 @@ pub(crate) async fn stage_repository_patch(
         staging::StagingPatchAction::Unstage => "unstageHunks",
     };
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let store = repositories.store();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
@@ -168,14 +165,11 @@ pub(crate) async fn stage_repository_patch(
             target.resource_key,
             operation,
             move |context| async move {
-                let current = repositories
-                    .status_snapshot(&task_repo_id)
-                    .await
-                    .map_err(|_| {
-                        TaskFailure::Failed(
-                            "Could not refresh repository status before partial staging".into(),
-                        )
-                    })?;
+                let current = status_service.snapshot(&task_repo_id).await.map_err(|_| {
+                    TaskFailure::Failed(
+                        "Could not refresh repository status before partial staging".into(),
+                    )
+                })?;
                 let file = current
                     .files
                     .iter()
@@ -424,8 +418,8 @@ pub(crate) async fn discard_repository_patch(
         .await
         .map_err(ApiError::from_repository_error)?;
     let snapshot = state
-        .repositories
-        .status_snapshot(&repo_id)
+        .status
+        .snapshot(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
     let file = snapshot
@@ -462,6 +456,7 @@ pub(crate) async fn discard_repository_patch(
         }
     })?;
     let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
@@ -476,8 +471,8 @@ pub(crate) async fn discard_repository_patch(
             target.resource_key,
             "discardChanges",
             move |context| async move {
-                let current = repositories
-                    .status_snapshot(&task_repo_id)
+                let current = status_service
+                    .snapshot(&task_repo_id)
                     .await
                     .map_err(|_| {
                         TaskFailure::Failed(

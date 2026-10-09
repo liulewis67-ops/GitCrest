@@ -433,7 +433,10 @@ mod tests {
             .unwrap()
             .expect("clone is registered");
         assert_eq!(repository.path, parent.join("retry-me").to_string_lossy());
-        let status = repositories.status_snapshot(repo_id).await.unwrap();
+        let status = crate::features::status::StatusService::new(repositories.clone())
+            .snapshot(repo_id)
+            .await
+            .unwrap();
         assert_eq!(status.files.len(), 0);
         assert!(!parent
             .join(format!(".gitcrest-clone-{}.partial", retried.task_id))

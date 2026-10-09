@@ -122,12 +122,13 @@ pub(super) async fn forget_repository(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
 ) -> Result<StatusCode, ApiError> {
-    if state
+    let forgotten = state
         .repositories
-        .forget(repo_id)
+        .forget(repo_id.clone())
         .await
-        .map_err(ApiError::from_repository_error)?
-    {
+        .map_err(ApiError::from_repository_error)?;
+    if forgotten {
+        state.status.invalidate(&repo_id);
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(ApiError::repository_not_found())
