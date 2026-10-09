@@ -3666,3 +3666,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；面板组件测试在设置请求 pending 时卸载并检查取消。
 - 证据：`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`。
 - 限制/后续：AI 建议请求完成后的冲突文件版本核验仍为同一操作流程中的读取；ConflictWindow 保存/resolve 后轮询与错误恢复查询、设置/隐私读取以及 S7.2、S7.4、S7.5 验收仍待完成。
+- 完成 commit：`c2192c6`
