@@ -6,7 +6,8 @@ mod search_index;
 
 use std::{path::Path, time::Duration};
 
-use serde::Serialize;
+use super::model::*;
+
 use tokio::{
     io::{AsyncRead, AsyncReadExt},
     process::Command,
@@ -17,38 +18,6 @@ const MAX_HISTORY_INDEX_OUTPUT: usize = 64 * 1024 * 1024;
 const GIT_READ_DEADLINE: Duration = Duration::from_secs(20);
 const HISTORY_INDEX_DEADLINE: Duration = Duration::from_secs(60);
 
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitPage {
-    pub repo_id: String,
-    pub offset: usize,
-    pub limit: usize,
-    pub commits: Vec<CommitSummary>,
-    pub next_offset: Option<usize>,
-}
-
-#[derive(Clone, Debug, Default)]
-pub struct HistoryFilters {
-    pub sha: Option<String>,
-    pub author: Option<String>,
-    pub message: Option<String>,
-    pub branch: Option<String>,
-    pub path: Option<String>,
-    pub since: Option<String>,
-    pub until: Option<String>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitSummary {
-    pub oid: String,
-    pub parents: Vec<String>,
-    pub author_name: String,
-    pub author_email: String,
-    pub committed_at_ms: i64,
-    pub subject: String,
-}
-
 pub(crate) use self::blame::read_blame;
 pub(crate) use self::commit_detail::read_commit;
 #[cfg(test)]
@@ -57,78 +26,6 @@ pub(crate) use self::refs::read_refs;
 #[cfg(test)]
 use self::search_index::build_history_search_index;
 pub(crate) use self::search_index::read_page_indexed;
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitDetail {
-    pub repo_id: String,
-    pub oid: String,
-    pub parents: Vec<String>,
-    pub author_name: String,
-    pub author_email: String,
-    pub committed_at_ms: i64,
-    pub message: String,
-    pub stats: CommitStats,
-    pub files: Vec<CommitFileStat>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitStats {
-    pub files_changed: usize,
-    pub insertions: u64,
-    pub deletions: u64,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CommitFileStat {
-    pub path: String,
-    pub additions: Option<u64>,
-    pub deletions: Option<u64>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BlameDocument {
-    pub repo_id: String,
-    pub path: String,
-    pub revision: Option<String>,
-    pub lines: Vec<BlameLine>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct BlameLine {
-    pub line_number: u32,
-    pub original_line_number: u32,
-    pub commit_oid: String,
-    pub author_name: String,
-    pub author_email: String,
-    pub committed_at_ms: i64,
-    pub summary: String,
-    pub text: String,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RefSnapshot {
-    pub repo_id: String,
-    pub head: Option<String>,
-    pub branch: Option<String>,
-    pub detached: bool,
-    pub refs: Vec<RepositoryRef>,
-}
-
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RepositoryRef {
-    pub name: String,
-    pub full_name: String,
-    pub oid: String,
-    pub kind: String,
-    pub upstream: Option<String>,
-}
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HistoryError {

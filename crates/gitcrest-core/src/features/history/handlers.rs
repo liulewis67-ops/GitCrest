@@ -8,15 +8,18 @@ use crate::api::error::{ApiError, ApiErrorCode};
 use crate::AppState;
 
 use super::{
-    dto::{BlameQuery, HistoryQuery},
-    service::{self, HistoryFilters},
+    dto::{
+        BlameDocumentDto, BlameQuery, CommitDetailDto, CommitPageDto, HistoryQuery, RefSnapshotDto,
+    },
+    model::HistoryFilters,
+    service,
 };
 
 pub(super) async fn repository_commits(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<HistoryQuery>, QueryRejection>,
-) -> Result<Json<service::CommitPage>, ApiError> {
+) -> Result<Json<CommitPageDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -47,6 +50,7 @@ pub(super) async fn repository_commits(
         state.repositories.store(),
     )
     .await
+    .map(CommitPageDto::from)
     .map(Json)
     .map_err(ApiError::from_history_error)
 }
@@ -54,7 +58,7 @@ pub(super) async fn repository_commits(
 pub(super) async fn repository_commit_detail(
     State(state): State<AppState>,
     Path((repo_id, oid)): Path<(String, String)>,
-) -> Result<Json<service::CommitDetail>, ApiError> {
+) -> Result<Json<CommitDetailDto>, ApiError> {
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -62,6 +66,7 @@ pub(super) async fn repository_commit_detail(
         .map_err(ApiError::from_repository_error)?;
     service::read_commit(repo_id, &target.repository_path, &oid)
         .await
+        .map(CommitDetailDto::from)
         .map(Json)
         .map_err(ApiError::from_history_error)
 }
@@ -70,7 +75,7 @@ pub(super) async fn repository_blame(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     query: Result<Query<BlameQuery>, QueryRejection>,
-) -> Result<Json<service::BlameDocument>, ApiError> {
+) -> Result<Json<BlameDocumentDto>, ApiError> {
     let Query(query) = query.map_err(|_| {
         ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -90,6 +95,7 @@ pub(super) async fn repository_blame(
         query.revision.as_deref(),
     )
     .await
+    .map(BlameDocumentDto::from)
     .map(Json)
     .map_err(ApiError::from_history_error)
 }
@@ -97,7 +103,7 @@ pub(super) async fn repository_blame(
 pub(super) async fn repository_refs(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
-) -> Result<Json<service::RefSnapshot>, ApiError> {
+) -> Result<Json<RefSnapshotDto>, ApiError> {
     let target = state
         .repositories
         .task_target(&repo_id)
@@ -116,6 +122,7 @@ pub(super) async fn repository_refs(
         metadata.detached,
     )
     .await
+    .map(RefSnapshotDto::from)
     .map(Json)
     .map_err(ApiError::from_history_error)
 }
