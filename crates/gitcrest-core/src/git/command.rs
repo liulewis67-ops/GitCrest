@@ -17,7 +17,6 @@ use tokio::{
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
-use crate::features::tasks::{TaskContext, TaskFailure};
 use crate::{
     domain::{
         branch::BranchCommand,
@@ -33,6 +32,7 @@ use crate::{
     ports::git::GitReadPort,
     ports::status::StatusReadPort,
 };
+use crate::{execution::TaskFailure, features::tasks::TaskContext};
 
 use super::{history, refs, status};
 

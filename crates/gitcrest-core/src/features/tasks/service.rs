@@ -12,6 +12,7 @@ use tokio::sync::{watch, Mutex, OwnedSemaphorePermit, Semaphore};
 
 use crate::{
     domain::task::{TaskErrorCategory, TaskSnapshot, TaskStatus},
+    execution::TaskFailure,
     ports::tasks::TaskStorePort,
 };
 
@@ -57,13 +58,6 @@ struct TaskData {
 pub enum TaskSubmitError {
     QueueFull,
     StorageUnavailable,
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub enum TaskFailure {
-    Failed(String),
-    Cancelled,
-    WaitingForInput(String),
 }
 
 #[derive(Clone)]

@@ -4,6 +4,7 @@ mod config;
 mod features;
 
 mod domain;
+mod execution;
 mod git;
 mod ports;
 mod refresh;
@@ -11,7 +12,8 @@ mod state;
 #[path = "storage/storage.rs"]
 mod storage;
 
-use features::tasks::{TaskFailure, TaskSnapshot};
+use execution::TaskFailure;
+use features::tasks::TaskSnapshot;
 use git::command::GitOperation;
 use state::{AppState, EventBus};
 
