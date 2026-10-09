@@ -9,6 +9,7 @@ import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel"
 import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShortcutPreferences, useThemePreference } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/use-dialog-focus";
+import { isFullGitObjectId } from "../shared/lib/git-object-id";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import type { CredentialEditorRenderer } from "../shared/ui/credential-editor-renderer";
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
@@ -45,10 +46,6 @@ type Page = "welcome" | "workspace";
 
 function repositoryName(path: string): string {
   return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
-}
-
-function isFullObjectId(value: string | null | undefined): value is string {
-  return typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 }
 
 function App() {
@@ -536,7 +533,7 @@ function App() {
 
   function openCommitFileDiff(path: string, oid: string) {
     const repoId = selectedRepository?.repoId;
-    if (!repoId || !isFullObjectId(oid)) return;
+    if (!repoId || !isFullGitObjectId(oid)) return;
     workspaceSessionActions.openCommitFileDiff(repoId, path, oid);
   }
 
@@ -599,7 +596,7 @@ function App() {
     connected,
     repository: selectedRepository ? { repoId: selectedRepository.repoId, availability: selectedRepository.availability } : undefined,
     selectedCommit,
-    repositoryHeadIsFull: isFullObjectId(selectedRepository?.head),
+    repositoryHeadIsFull: isFullGitObjectId(selectedRepository?.head),
     hasActiveStatus: Boolean(activeStatus),
     workingCount,
     hasConflicts,

@@ -3,6 +3,7 @@ import type { GitCrestApiClient, RepositoryResponse } from "../../api/client";
 import type { WorkflowAction } from "../../features/workflows";
 import { ariaShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadCommitDetails } from "../../features/history";
+import { isFullGitObjectId } from "../../shared/lib/git-object-id";
 
 const CommitDetails = lazy(loadCommitDetails);
 
@@ -23,10 +24,6 @@ interface WorkspaceDetailsPanelProps {
 
 function repositoryName(path: string): string {
   return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
-}
-
-function isFullObjectId(value: string | null | undefined): value is string {
-  return typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 }
 
 export function WorkspaceDetailsPanel({
@@ -54,7 +51,7 @@ export function WorkspaceDetailsPanel({
   return (
     <aside className="detailsPanel" aria-label="Commit details">
       <div className="panelHeading">{repository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-      {repository && isFullObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">Loading commit details…</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} /></Suspense> : repository ? (
+      {repository && isFullGitObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">Loading commit details…</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} /></Suspense> : repository ? (
         <div className="repositoryDetails">
           <span className="detailsGlyph" aria-hidden="true">G</span>
           <h2>{repositoryName(repository.path)}</h2>

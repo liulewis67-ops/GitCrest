@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { matchesShortcut, type ShortcutPreferences } from "../features/settings";
+import { isFullGitObjectId } from "../shared/lib/git-object-id";
 
 type ShortcutRepository = {
   repoId: string;
@@ -26,10 +27,6 @@ type GlobalShortcutContext = {
   commitBusy: boolean;
   hasActiveBranches: boolean;
 };
-
-function isFullObjectId(value: string | undefined): value is string {
-  return typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
-}
 
 type GlobalShortcutActions = {
   openRepository: () => void;
@@ -104,10 +101,10 @@ export function useGlobalShortcuts(context: GlobalShortcutContext, actions: Glob
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.shelve, isMacPlatform) && repository) {
         event.preventDefault();
         run.openShelfComposer();
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.cherryPick, isMacPlatform) && repository && isFullObjectId(state.selectedCommit) && connected && repositoryAvailable && !state.hasActiveRepositoryTask) {
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.cherryPick, isMacPlatform) && repository && isFullGitObjectId(state.selectedCommit) && connected && repositoryAvailable && !state.hasActiveRepositoryTask) {
         event.preventDefault();
         run.cherryPick(repository.repoId, state.selectedCommit);
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.createTag, isMacPlatform) && repository && isFullObjectId(state.selectedCommit) && connected && repositoryAvailable && !state.hasActiveRepositoryTask) {
+      } else if (page === "workspace" && matchesShortcut(event, shortcuts.createTag, isMacPlatform) && repository && isFullGitObjectId(state.selectedCommit) && connected && repositoryAvailable && !state.hasActiveRepositoryTask) {
         event.preventDefault();
         run.createTag(repository.repoId, state.selectedCommit);
       } else if (matchesShortcut(event, shortcuts.settings, isMacPlatform)) {

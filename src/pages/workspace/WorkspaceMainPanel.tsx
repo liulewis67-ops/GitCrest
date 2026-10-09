@@ -4,6 +4,7 @@ import type { WorkspaceSession } from "../../features/repositories";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadSplitDiff } from "../../features/diff";
 import { loadCommitGraph } from "../../features/history";
+import { isFullGitObjectId } from "../../shared/lib/git-object-id";
 
 const CommitGraph = lazy(loadCommitGraph);
 const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));
@@ -41,10 +42,6 @@ interface WorkspaceMainPanelProps {
   onDiscardSelection: (document: DiffDocumentResponse, selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   onCommitSelection: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   onOpenDiffWindow: (path: string, scope: "workingTree" | "index" | "commit", commitOid?: string) => void;
-}
-
-function isFullObjectId(value: string | null | undefined): value is string {
-  return typeof value === "string" && /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(value);
 }
 
 export function WorkspaceMainPanel({
@@ -91,7 +88,7 @@ export function WorkspaceMainPanel({
   return (
     <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
       <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!repository || statusLoading} onClick={() => { if (repository) onRefreshStatus(repository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={statusLoading ? "Refreshing working tree status" : `Refresh working tree status (${displayShortcut(shortcuts.refreshStatus, isMacPlatform)})`}>{statusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
-      {mode === "graph" ? repository && api && isFullObjectId(repository.head) ? <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">Loading commit history…</div>}><CommitGraph
+      {mode === "graph" ? repository && api && isFullGitObjectId(repository.head) ? <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">Loading commit history…</div>}><CommitGraph
         key={repository.repoId}
         api={api}
         repoId={repository.repoId}

@@ -4495,3 +4495,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-git-search-diagnostic-stage410-20261010.json`。
 - 限制/后续：约 500ms 冷查询时间主要受 Git 全量历史顺序遍历和消息筛选限制；进程启动和格式化不是主瓶颈，枚举全部 OID 再应用层筛选更慢。后续优先复用后台索引满足常规搜索，并探索不改变多分支结果完整性与顺序的查询策略。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段工具、诊断证据与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### shared/lib 统一完整 Git 对象 ID 校验 — 小阶段 411
+- 状态：已完成（App、快捷键与 Workspace 页面共用同一纯校验函数）
+- 日期：2026-10-10
+- 交付：将 40 位 SHA-1 和 64 位 SHA-256 完整对象 ID 校验迁入 `src/shared/lib/git-object-id.ts`，并由 App、全局快捷键 Hook、Workspace 主面板与详情面板统一调用；校验格式和大小写语义保持不变。
+- 验证：`pnpm exec tsc --noEmit`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 输出到临时目录；未新增或运行测试。构建仅出现既有 web-tree-sitter `eval` 和 chunk 大小提示。
+- 手工验证：搜索确认四个调用位置均使用共享函数，旧的 `isFullObjectId` 局部实现已移除；共享函数只接受完整 40/64 位十六进制字符串，并保留大小写不敏感行为。
+- 证据：`src/shared/lib/git-object-id.ts`、`src/app/App.tsx`、`src/app/use-global-shortcuts.ts`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`src/pages/workspace/WorkspaceDetailsPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
+- 限制/后续：本阶段只统一完整对象 ID 纯校验，不改变调用方的仓库状态判断与 UI 行为；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
