@@ -133,6 +133,20 @@ jobs:
           codesign --verify --deep --strict "$app_bundle"
           spctl --assess --type execute --verbose "$app_bundle"
 
+      - name: Validate Linux update signing key
+        if: matrix.platform == 'linux'
+        shell: bash
+        env:
+          LINUX_UPDATE_SIGNING_KEY: ${{ secrets.LINUX_UPDATE_SIGNING_KEY }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { createPrivateKey } from 'node:crypto';
+
+          if (!process.env.LINUX_UPDATE_SIGNING_KEY) throw new Error('Set LINUX_UPDATE_SIGNING_KEY before making a Linux release.');
+          const key = createPrivateKey(process.env.LINUX_UPDATE_SIGNING_KEY);
+          if (key.asymmetricKeyType !== 'ed25519') throw new Error('The Linux update key must use Ed25519.');
+          NODE
+
       - name: Build Linux AppImage with release trust key
         if: matrix.platform == 'linux'
         run: pnpm electron:package:linux-release

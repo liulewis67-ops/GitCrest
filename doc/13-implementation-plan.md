@@ -4575,3 +4575,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 6.2 节。
 - 限制/后续：refs 仍可能在最后一次复核完成后立刻被外部 Git 操作改变；读取接口提供的是复核时点的最佳可用快照，不建立跨 Git 与 SQLite 的原子锁。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.4 Linux 更新签名密钥构建前校验 — 小阶段 419
+- 状态：已完成（Linux release job 会在 AppImage 构建前检查签名密钥存在且类型为 Ed25519）
+- 日期：2026-10-10
+- 交付：新增 Linux release key preflight，在执行 electron-builder 前解析 `LINUX_UPDATE_SIGNING_KEY` 并拒绝空值或非 Ed25519 私钥；原有打包后公钥匹配检查及发布前清单签名/验签保持不变。
+- 验证：`release.yml` 经 `js-yaml` 解析，并通过节点顺序检查确认密钥 preflight 早于 Linux AppImage 构建；`git diff --check` 通过。未触发 GitHub Actions，未新增或运行测试。
+- 证据：`.github/workflows/release.yml`。
+- 限制/后续：本地仓库无 Git remote，且没有可用的 Linux release runner 与签名 secret；尚未验证真实 AppImage 构建、清单签名和更新安装。S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段 workflow 调整与台账同一 commit（SHA 可在后续台账更新中补记）。
