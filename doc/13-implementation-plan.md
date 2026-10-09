@@ -4674,3 +4674,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/mod.rs`、`crates/gitcrest-core/src/storage/migrations.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：数据库连接参数和双连接创建仍在 `storage/mod.rs`；是否拆为 `database.rs` 需结合实际连接生命周期职责继续收敛。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 拆分 SQLite database 连接初始化 — 小阶段 429
+- 状态：已完成（RepositoryStore、内存库默认构造和文件数据库双连接初始化归入 `storage/database.rs`）
+- 日期：2026-10-10
+- 交付：将 `RepositoryStore` 及 `Default`/`open` 连接初始化迁入规范约定的 `storage/database.rs`，在 `storage/mod.rs` 通过稳定 re-export 提供 `RepositoryStore`。主连接的 WAL/FULL、busy timeout、foreign keys 与索引连接的 NORMAL synchronous 配置不变；adapter 所需字段限制在 storage 父模块可见。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认 default 内存库与 `open(path)` 都调用 `migrations::migrate`，文件库仍创建 durable 主连接及可重建索引连接，bootstrap 继续经 `storage::RepositoryStore` 使用同一类型。
+- 证据：`crates/gitcrest-core/src/storage/mod.rs`、`crates/gitcrest-core/src/storage/database.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：`storage/mod.rs` 仍含测试和少量通用时间/undo 限制常量；迁移代码、连接初始化和业务 adapter 已按规范分离。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
