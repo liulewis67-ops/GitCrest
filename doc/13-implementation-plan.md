@@ -2803,4 +2803,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；SQLite 列名、operation/scope 字符串和 schema 未改变。
 - 证据：`crates/gitcrest-core/src/domain/undo.rs`、`crates/gitcrest-core/src/storage/storage.rs`、staging/shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 3、4.1、4.2 节。
 - 限制/后续：storage 仅依赖 domain 模型与存储自身记录/映射；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`4d66050`
