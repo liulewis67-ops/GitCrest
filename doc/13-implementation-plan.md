@@ -3527,4 +3527,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；以隔离 100k commit / 1k 行 Diff fixture 测 Windows Release sidecar API。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-bulk-fts-20261009.json`。
 - 限制/后续：索引仍需约 4.6 秒构建，cold search P95 仍高于 200ms；S7.2 桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
-- 完成 commit：待补记
+- 完成 commit：`ea4f1ff`
