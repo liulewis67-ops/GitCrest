@@ -4022,3 +4022,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；发行版窗口通过 Playwright 带焦点采样同一 fixture，诊断命令完成并因低于 60fps 留下非零验收结果。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-frame-diagnostic-stage361-20261010.json`；GPU 单轮线索见小阶段 341。
 - 限制/后续：空仓库与历史视图帧率相同，反证了提交图虚拟列表或 SVG 路径是该 55fps 差值的直接来源；目前只能将范围收窄到 Electron/Windows/GPU 帧调度，不能据此修改应用绘制逻辑。下一阶段以正式打包版对 `--disable-gpu` 做 20 轮对照，确认它是否稳定达到 ≥60fps 及内存门槛。
+- 完成 commit：`59cc7e0 perf: isolate desktop frame pacing`
