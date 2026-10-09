@@ -164,10 +164,30 @@ impl RepositoryStore {
         })
     }
 
-    pub fn begin_history_index_build(&self, repo_id: &str) -> bool {
-        self.history_index_builds
-            .lock()
-            .is_ok_and(|mut builds| builds.insert(repo_id.to_owned()))
+    pub fn begin_history_index_build(&self, repo_id: &str, refs_fingerprint: &str) -> bool {
+        let Ok(mut builds) = self.history_index_builds.lock() else {
+            return false;
+        };
+        if builds.contains(repo_id) {
+            return false;
+        }
+        let Ok(connection) = self.connection.lock() else {
+            return false;
+        };
+        let indexed_fingerprint = connection
+            .query_row(
+                "SELECT refs_fingerprint FROM history_search_index_state WHERE repo_id=?1",
+                [repo_id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .ok()
+            .flatten();
+        if indexed_fingerprint.as_deref() == Some(refs_fingerprint) {
+            return false;
+        }
+        builds.insert(repo_id.to_owned());
+        true
     }
 
     pub fn finish_history_index_build(&self, repo_id: &str) {
@@ -889,8 +909,8 @@ impl AiProviderSettingsPort for RepositoryStore {
 }
 
 impl HistorySearchIndexPort for RepositoryStore {
-    fn begin_index_build(&self, repo_id: &str) -> bool {
-        RepositoryStore::begin_history_index_build(self, repo_id)
+    fn begin_index_build(&self, repo_id: &str, refs_fingerprint: &str) -> bool {
+        RepositoryStore::begin_history_index_build(self, repo_id, refs_fingerprint)
     }
 
     fn finish_index_build(&self, repo_id: &str) {
@@ -1454,6 +1474,24 @@ mod tests {
             .unwrap()
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn history_index_build_is_deduplicated_by_refs_fingerprint_and_retries_failures() {
+        let store = RepositoryStore::default();
+        store.save_opened(repository("repo", "/repo", 1)).unwrap();
+
+        assert!(store.begin_history_index_build("repo", "refs-a"));
+        assert!(!store.begin_history_index_build("repo", "refs-a"));
+        store.finish_history_index_build("repo");
+        store
+            .replace_history_search_index("repo", "refs-a", &[])
+            .unwrap();
+        assert!(!store.begin_history_index_build("repo", "refs-a"));
+
+        assert!(store.begin_history_index_build("repo", "refs-b"));
+        store.finish_history_index_build("repo");
+        assert!(store.begin_history_index_build("repo", "refs-b"));
     }
 
     #[test]

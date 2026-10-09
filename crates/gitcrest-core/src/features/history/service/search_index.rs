@@ -114,20 +114,23 @@ fn schedule_history_index_build(
     expected_fingerprint: Option<String>,
     store: Arc<dyn HistorySearchIndexPort>,
 ) {
-    if !store.begin_index_build(&repo_id) {
+    let Some(index_fingerprint) = expected_fingerprint.as_deref() else {
+        return;
+    };
+    if !store.begin_index_build(&repo_id, index_fingerprint) {
         return;
     }
     tokio::spawn(async move {
         let started = std::time::Instant::now();
-        let outcome = match build_history_search_index(
+        let result = build_history_search_index(
             &repo_id,
             &repository_path,
             head.as_deref(),
             expected_fingerprint.as_deref(),
             store.clone(),
         )
-        .await
-        {
+        .await;
+        let outcome = match &result {
             Ok(()) => "ready",
             Err(HistoryError::TooLarge) => "skipped-too-large",
             Err(HistoryError::TimedOut) => "timed-out",
