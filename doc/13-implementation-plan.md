@@ -3014,3 +3014,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/execution/tasks.rs`、`crates/gitcrest-core/src/execution/mod.rs`、`crates/gitcrest-core/src/features/tasks/mod.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、8 节。
 - 限制/后续：tasks API handler 及部分 handlers 仍通过 `features/tasks` re-export 访问 TaskService/TaskFailure；后续逐 feature 改用 execution API 并清除兼容出口，同时继续将具体 GitCommandService 写操作拆为 ports/adapter；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`f2c7cec`
+
+### RemoteCommand 写操作经 port 注入 — 小阶段 261
+- 状态：已完成（remote add、set-url、remove、default/upstream 配置任务通过 RemoteCommandPort 调用）
+- 日期：2026-10-09
+- 交付：在 `ports/remotes.rs` 新增 `RemoteCommandPort`，接收领域 `RemoteCommand`、仓库路径与执行上下文；`GitCommandService` 实现该 port，bootstrap 将其绑定并注入 AppState，`submit_remote_command` 改为依赖 port。Git 参数、任务进度/取消、URL 脱敏和默认 remote 二次配置行为保持不变。测试构造器补充新的 AppState 依赖字段，未运行测试。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过。
+- 手工验证：未运行 remote 配置写入流程；本阶段仅调整依赖注入边界。
+- 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：fetch/pull/push、远程分支删除及 remote delete preview 仍使用具体 GitCommandService；RemoteCommandPort 使用 execution TaskContext/TaskFailure 维持任务取消和 waiting-for-input 契约，后续可继续评估 execution port 中立性；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`6e411fd`
