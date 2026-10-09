@@ -1,17 +1,12 @@
 import { lazy, Suspense } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse, RepositoryResponse, StagingRequest, StatusSnapshotResponse, TaskSnapshotResponse } from "../../api/client";
+import type { RepositoryStatusGroup } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadRemoteManager } from "../../features/remotes";
 import type { CredentialEditorRenderer } from "../../shared/ui/credential-editor-renderer";
 
 const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
 const ShelfCenter = lazy(() => import("../../features/shelves").then(({ ShelfCenter }) => ({ default: ShelfCenter })));
-
-type StatusGroup = {
-  category: "staged" | "unstaged" | "untracked" | "conflicted" | "ignored";
-  label: string;
-  files: StatusSnapshotResponse["files"];
-};
 
 type ShelfAfterCreateAction = { switchTarget: string; existingShelfIds: string[] };
 type ShelfSwitchState = { repoId: string; target: string; existingShelfIds: string[] };
@@ -21,7 +16,7 @@ interface WorkspaceNavigationProps {
   activeStatus?: StatusSnapshotResponse;
   activeStatusError?: string;
   activeStatusLoading: boolean;
-  statusGroups: StatusGroup[];
+  statusGroups: RepositoryStatusGroup[];
   workingCount: number;
   stagedCount: number;
   stagingBusy: boolean;

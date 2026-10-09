@@ -4425,3 +4425,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-opening.ts`、`src/app/App.tsx`、`src/api/bridge.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：App 仍保留选中仓库、页面导航和 native bridge 连接装配；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### changes feature 收拢工作区状态分组与汇总 — 小阶段 404
+- 状态：已完成（文件分类、staged/working 数量和冲突判断由 changes model 生成）
+- 日期：2026-10-10
+- 交付：新增 `summarizeRepositoryStatus`，统一从 StatusSnapshot 生成 Staged/Unstaged/Untracked/Conflicted/Ignored 分组、staged/working 计数与冲突状态。App 移除 Git status 分类与计数逻辑；WorkspaceNavigation 使用 changes feature 公开的 `RepositoryStatusGroup`，不再自行定义重复视图类型。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 输出到临时目录；未新增或运行测试。构建仅出现既有 web-tree-sitter `eval` 和 chunk 大小提示。
+- 手工验证：未操作 GUI；对照原实现逐项核对类别标签及基于 `categories` 的 staged、working、conflicted 计数语义保持一致；空 snapshot 仍生成五个空分组且计数为零。
+- 证据：`src/features/changes/model/repository-status-summary.ts`、`src/features/changes/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceNavigation.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：`getSensitiveStagedPaths` 仍由 commits feature 提供并在 App 装配；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

@@ -15,7 +15,7 @@ import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommit
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { loadCredentialEditor } from "../features/credentials";
 import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
-import { useRepositoryStatus, useStagingOperations } from "../features/changes";
+import { summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
 import { loadBranchSwitcherDialog, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
@@ -42,13 +42,6 @@ const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench
 const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
 
 type Page = "welcome" | "workspace";
-const changeGroups = [
-  { category: "staged", label: "Staged" },
-  { category: "unstaged", label: "Unstaged" },
-  { category: "untracked", label: "Untracked" },
-  { category: "conflicted", label: "Conflicted" },
-  { category: "ignored", label: "Ignored" },
-] as const;
 
 function repositoryName(path: string): string {
   return path.replace(/[\\/]+$/, "").split(/[\\/]/).pop() || path;
@@ -315,14 +308,8 @@ function App() {
     commitOid: selectedDiffCommitOid,
   });
   const { state: diffState, activeKey: activeDiffKey } = diffQuery;
-  const statusGroups = changeGroups.map((group) => ({
-    ...group,
-    files: (activeStatus?.files || []).filter((file) => file.categories.includes(group.category)),
-  }));
-  const stagedCount = (activeStatus?.files || []).filter((file) => file.categories.includes("staged")).length;
-  const hasConflicts = (activeStatus?.files || []).some((file) => file.categories.includes("conflicted"));
+  const { groups: statusGroups, stagedCount, hasConflicts, workingCount } = summarizeRepositoryStatus(activeStatus);
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
-  const workingCount = (activeStatus?.files || []).filter((file) => file.categories.some((category) => category === "unstaged" || category === "untracked" || category === "conflicted")).length;
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
   const remoteDisabledReason = !selectedRepository
