@@ -2585,3 +2585,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：`StatusSnapshot`/`StatusFile` 仍位于 status feature，但已不承担 Serde；Diff document/hunk/row 尚待迁入 domain。S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/dto.rs`、`crates/gitcrest-core/src/features/status/handlers.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/api/v1.yaml` Status/Diff schema、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
 - 实施 commit：`1f05c0f`
+
+
+### Diff document/hunk/row 领域模型归属 — 小阶段 218
+- 状态：已完成（Diff 查询模型在 domain 定义一次，API DTO 与消费 feature 直接映射领域类型）
+- 日期：2026-10-09
+- 交付：将 `DiffDocument`、`DiffHunk`、`DiffRow`、`DiffContentStatus`、`DiffRowKind` 迁入 `domain/diff.rs`，其 `change_kind` 直接使用 `domain/status::ChangeKind`；模型不依赖 Serde。Diff DTO 从领域对象转换，settings/shelves/staging 通过领域类型消费，service 保留 patch 选择所需行元数据。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认业务消费者不再从 `features::diff` 导入 document/hunk/row 类型；未运行测试。
+- 限制/后续：领域 DiffRow 仍包含 patch 行定位元数据供局部 patch 选择；Git 读取适配器仍在 feature service 子模块。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/diff.rs`、`crates/gitcrest-core/src/features/diff/dto.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/api/v1.yaml` Diff schemas、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
+- 实施 commit：`10d1ee2`
