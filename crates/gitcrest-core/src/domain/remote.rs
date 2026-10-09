@@ -90,6 +90,38 @@ pub(crate) struct RemotePullState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum PullRecoveryDecision {
+    Cancelled,
+    WaitForInput,
+    VerifyMergeResult,
+    OutcomeUnknown,
+}
+
+pub(crate) fn assess_cancelled_pull(
+    expected: &RemotePullCommand,
+    current: &RemotePullState,
+) -> PullRecoveryDecision {
+    if current.local_oid != expected.local_oid || current.tracking_oid != expected.tracking_oid {
+        PullRecoveryDecision::OutcomeUnknown
+    } else if current.operation_in_progress {
+        PullRecoveryDecision::WaitForInput
+    } else if current.has_conflicts {
+        PullRecoveryDecision::OutcomeUnknown
+    } else if current.is_clean {
+        PullRecoveryDecision::Cancelled
+    } else {
+        PullRecoveryDecision::VerifyMergeResult
+    }
+}
+
+pub(crate) fn pull_state_restored(expected: &RemotePullCommand, current: &RemotePullState) -> bool {
+    current.local_oid == expected.local_oid
+        && current.tracking_oid == expected.tracking_oid
+        && !current.operation_in_progress
+        && !current.has_conflicts
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RemotePullStrategy {
     Merge,
     Rebase,

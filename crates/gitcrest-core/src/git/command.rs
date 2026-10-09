@@ -26,6 +26,7 @@ use crate::{
         branch::BranchCommand,
         error::WorkflowError,
         remote::{
+            assess_cancelled_pull, pull_state_restored, PullRecoveryDecision,
             RemoteBranchDeleteCommand, RemoteCommand, RemotePullCommand, RemotePullStrategy,
             RemotePushCommand,
         },
@@ -486,11 +487,7 @@ impl GitCommandService {
                     .read_pull_state(repository_path, &expected.local_branch)
                 .await
                 .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                if restored.local_oid == expected.local_oid
-                    && restored.tracking_oid == expected.tracking_oid
-                    && !restored.operation_in_progress
-                    && !restored.has_conflicts
-                {
+                if pull_state_restored(expected, &restored) {
                     Err(TaskFailure::Cancelled)
                 } else {
                     Err(TaskFailure::Failed(pull_cancel_outcome_unknown()))
@@ -517,21 +514,17 @@ impl GitCommandService {
             .read_pull_state(repository_path, &expected.local_branch)
             .await
             .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-        if snapshot.local_oid != expected.local_oid
-            || snapshot.tracking_oid != expected.tracking_oid
-        {
-            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
-        }
-        if snapshot.operation_in_progress {
-            return Err(TaskFailure::WaitingForInput(
-                "Pull was cancelled while a Git operation remains active. Continue or abort it from Task Center.".into(),
-            ));
-        }
-        if snapshot.has_conflicts {
-            return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
-        }
-        if snapshot.is_clean {
-            return Err(TaskFailure::Cancelled);
+        match assess_cancelled_pull(expected, &snapshot) {
+            PullRecoveryDecision::OutcomeUnknown => {
+                return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
+            }
+            PullRecoveryDecision::WaitForInput => {
+                return Err(TaskFailure::WaitingForInput(
+                    "Pull was cancelled while a Git operation remains active. Continue or abort it from Task Center.".into(),
+                ));
+            }
+            PullRecoveryDecision::Cancelled => return Err(TaskFailure::Cancelled),
+            PullRecoveryDecision::VerifyMergeResult => {}
         }
 
         let index_tree =
@@ -572,10 +565,7 @@ impl GitCommandService {
             .read_pull_state(repository_path, &expected.local_branch)
             .await
             .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-        if restored.local_oid == expected.local_oid
-            && restored.tracking_oid == expected.tracking_oid
-            && !restored.operation_in_progress
-            && !restored.has_conflicts
+        if pull_state_restored(expected, &restored)
             && capture_git_output(
                 &self.git_program,
                 repository_path,
