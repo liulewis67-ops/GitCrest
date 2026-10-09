@@ -2824,3 +2824,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/git/index.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/git/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节 Git adapter 目录约定。
 - 限制/后续：`git/index.rs` 当前负责暂存与 Shelve patch 的操作转换；后续继续梳理 Git read/write port 覆盖范围与 feature 到 adapter 的依赖方向；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`372009d`
+
+### 共享时间戳归入 domain 并解除 staging 对 shelves feature 的工具依赖 — 小阶段 242
+- 状态：已完成（共享 Unix 毫秒时间戳和暂存/undo 语义由共享领域模块直接提供）
+- 日期：2026-10-09
+- 交付：新增 `domain::time::unix_time_ms`；shelves/staging/workflows handlers 与 shelf id 生成逻辑统一使用领域时间戳。通用 `UnstagePaths` 与 shelf undo patch 操作由 handlers 直接构造 `StagingOperation`，删除 shelves service 中被跨 feature 使用的时间戳、取消暂存与 undo helper；staging handler 不再依赖 shelves feature。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 staging feature 无 `features::shelves` 引用；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；时间戳单位/溢出处理和领域操作到 Git 参数映射保持不变。
+- 证据：`crates/gitcrest-core/src/domain/time.rs`、`crates/gitcrest-core/src/domain/staging.rs`、staging/shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：workflows recovery 仍需读取 shelves feature 的记录查询 helper；该存储访问边界留待后续通过显式 port/service 收敛；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`b69151b`
