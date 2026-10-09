@@ -3953,3 +3953,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-slim-bulk-stage354-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`。
 - 限制/后续：多行 SQL 拼接写入在此环境下没有改善持久化耗时；继续保持单行预编译写入，从降低写入量或提前索引构建等方向寻找方案。完整冷搜索仍远超 <200ms，S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
 - 完成 commit：`787f04d perf: evaluate slim cache batch inserts`
+
+### S7.2 精简缓存仓库索引宽度评估 — 小阶段 355
+- 状态：已完成（完成 20 轮评估并恢复复合排序索引；S7.2 性能目标仍未达标）
+- 日期：2026-10-09
+- 交付：评估将 `history_search_documents(repo_id, sort_order)` 复合索引缩为仅按 `repo_id` 过滤，以减少每行持久化的索引维护成本。基准后恢复原 schema 12 索引，未保留迁移或代码改动。
+- 验证：实验迁移后 Rust 全量测试 143/143、`cargo fmt --check`、Clippy 与 Release build 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 同一 100k fixture 20 轮：窄索引方案完整冷搜索 P50/P95 4,341/4,625ms、文档行写入 P50/P95 2,562/2,833ms；阶段 353 复合索引报告为 4,059/4,945ms 与 2,281/2,440ms。新方案中位冷搜索慢约 7%，行写入 P50/P95 慢约 12%/16%，虽然冷搜索 P95 低约 6%，但没有带来稳定的持久化收益，因此不采用。两组不是交错运行，差异只作方向性参考。报告：`doc/evidence/S7.2/api-win32-cold-repo-index-stage355-20261009.json`。
+- 手工验证：未操作 GUI；每轮使用独立 sidecar/SQLite 和同一 fixture，返回目标提交。基准运行前后 fixture refs 和工作树状态保持不变。
+- 证据：`doc/evidence/S7.2/api-win32-cold-repo-index-stage355-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`。
+- 限制/后续：移除排序复合索引不能稳定改善写入，继续保留当前排序索引与 schema 12；冷搜索仍约 4–5 秒，下一轮从减少 FTS 建索引输入或更早启动构建寻找方案。S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
