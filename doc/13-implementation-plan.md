@@ -3164,3 +3164,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/commits/ui/CommitWorkbench.tsx`、`tests/e2e/desktop.test.ts`、`doc/15-frontend-development-guidelines.md` 第 4.1、8 节。
 - 限制/后续：本阶段验证当前 Windows 环境；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`199a57c`
+
+### Pull recovery abort 失败时 fail-closed — 小阶段 276
+- 状态：已完成（rebase abort port 失败不会被报告为已恢复取消）
+- 日期：2026-10-09
+- 交付：recovery test fixture 支持注入 abort port 错误，新增回归用例验证 abort_rebase 失败时返回“取消结果无法验证”的失败分类，并在失败后不再读取/切换 branch；避免将不确定的仓库状态报告成已安全取消。
+- 验证：目标测试 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml cancelled_rebase_reports_unknown_and_stops_when_abort_fails` 通过；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（126 tests）；`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过。
+- 手工验证：未执行真实 Git 子进程 abort 失败场景；fixture 验证失败结果映射及后续写操作被阻断。
+- 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
+- 限制/后续：目前针对 rebase abort 的错误进行故障注入；其他 recovery port 读取/reset 失败仍需按风险补充覆盖；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待提交

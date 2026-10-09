@@ -155,6 +155,7 @@ mod tests {
     use super::*;
     use crate::{
         domain::{
+            error::WorkflowError,
             remote::RemotePullState,
             workflow::{WorkflowRemoteBranchComparison, WorkflowState},
         },
@@ -236,6 +237,7 @@ mod tests {
         index_tree: String,
         merge_tree: String,
         has_staged_changes: bool,
+        fail_call: Option<&'static str>,
         calls: Mutex<Vec<&'static str>>,
     }
 
@@ -264,12 +266,18 @@ mod tests {
             _repository_path: &'a Path,
             am_rebase: bool,
         ) -> RemotePullRecoveryFuture<'a, ()> {
-            self.record(if am_rebase {
+            let call = if am_rebase {
                 "abort_am"
             } else {
                 "abort_rebase"
-            });
-            Box::pin(async { Ok(()) })
+            };
+            self.record(call);
+            let result = if self.fail_call == Some(call) {
+                Err(WorkflowError::GitFailed)
+            } else {
+                Ok(())
+            };
+            Box::pin(async move { result })
         }
 
         fn read_branch_oid<'a>(
@@ -439,6 +447,31 @@ mod tests {
 
         assert!(matches!(result, Err(TaskFailure::WaitingForInput(_))));
         assert_eq!(recovery.calls(), ["is_am_rebase"]);
+    }
+
+    #[tokio::test]
+    async fn cancelled_rebase_reports_unknown_and_stops_when_abort_fails() {
+        let reads = Reads::new(worktree(Some(WorkflowOperation::Rebase), &[]), Vec::new());
+        let recovery = Recovery {
+            fail_call: Some("abort_rebase"),
+            ..recovery(false, "local", "main", "", "", false)
+        };
+
+        let result = reconcile_cancelled_pull(
+            Path::new("repo"),
+            &expected(),
+            RemotePullStrategy::Rebase,
+            &reads,
+            &recovery,
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            Err(pull_outcome_unknown()),
+            "a failed abort must not report cancellation as recovered"
+        );
+        assert_eq!(recovery.calls(), ["is_am_rebase", "abort_rebase"]);
     }
 
     #[tokio::test]
