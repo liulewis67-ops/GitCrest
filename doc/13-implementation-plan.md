@@ -2793,4 +2793,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；API 与持久化字段保持不变。
 - 证据：`crates/gitcrest-core/src/domain/shelf.rs`、`crates/gitcrest-core/src/features/shelves/service.rs`、`crates/gitcrest-core/src/features/shelves/dto.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、4.2 节。
 - 限制/后续：storage 尚有其他 feature 类型依赖（包括 staging/shelves 之外的记录协作），应继续按模型所有权拆分；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`df60f83`
