@@ -2426,3 +2426,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：测试使用 API mock，真实历史 API 分页与桌面交互仍由集成/E2E 阶段验收；S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`tests/unit/history-model.test.tsx`、`src/features/history/model/`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`668aca9`
+
+### S7.2 — desktop 滚动性能 20 轮分布测量 — 小阶段 201
+- 状态：已完成（基准脚本和 20 轮原始数据已落档；S7.2 整体仍待验收）
+- 日期：2026-10-09
+- 交付：扩展 `scripts/performance/desktop-benchmark.mjs` 的 scroll 模式，按 `GITCREST_BENCH_ITERATIONS` 独立启动/关闭隔离 Electron 实例并重复空闲 RAF、30 秒滚动与进程树 Working Set 测量；输出每轮样本及 P5/P50/P95/max 汇总，逐轮输出进度。
+- 验证：`node --check scripts/performance/desktop-benchmark.mjs` 与 `git diff --check` 通过；在 Windows 11 x64 / Ryzen 7 5800H / Electron 37、100k commit + 1k 行 diff fixture 上运行 20 轮。滚动 P5 FPS 的 20 轮 P5/P50/P95 为 55.2486/55.2486/55.2486；工作阶段进程树 Working Set 峰值的 P5/P50/P95/max 为 469,831,680/476,450,816/493,465,600/493,912,064 bytes（max 471.03 MiB）。
+- 限制/后续：工作阶段内存低于 500 MB 门槛；滚动 FPS 未达到 60 FPS，且 idle process-tree Working Set 仍高于 250 MB。空闲 RAF 与滚动都约 55.25 FPS，推测存在显示刷新同步限制，但本次没有测量显示器刷新率，不能据此判定 FPS 达标。S7.2 保持待验收。
+- 证据：`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-history-scroll-20runs.json`。
+- 实施 commit：待本阶段实现提交后补记。

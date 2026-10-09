@@ -401,7 +401,7 @@ async function runCacheLifecycle() {
   }
 }
 
-async function runScroll() {
+async function runScrollIteration(iteration) {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-scroll-"));
   let app;
   try {
@@ -460,18 +460,44 @@ async function runScroll() {
     } finally {
       await sampler.stop();
     }
-    return { idleAnimationFrame, scroll, workMemorySampleCount: sampler.samples.length, workMemoryPeakBytes: Math.max(...sampler.samples) };
+    return { iteration, idleAnimationFrame, scroll, workMemorySampleCount: sampler.samples.length, workMemoryPeakBytes: Math.max(...sampler.samples) };
   } finally {
     await app?.close();
     await rm(dataDir, { recursive: true, force: true });
   }
 }
 
+function summarizeMeasuredValues(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return {
+    samples: values.length,
+    p5: nearestRank(sorted, 0.05),
+    p50: nearestRank(sorted, 0.5),
+    p95: nearestRank(sorted, 0.95),
+    max: Math.max(...values),
+    samplesValues: values,
+  };
+}
+
+async function runScroll() {
+  const samples = [];
+  for (let iteration = 1; iteration <= iterations; iteration += 1) {
+    process.stdout.write(`Running desktop scroll benchmark ${iteration}/${iterations}…\n`);
+    samples.push(await runScrollIteration(iteration));
+  }
+  return {
+    iterations: samples,
+    idleAnimationFrameP5Fps: summarizeMeasuredValues(samples.map(({ idleAnimationFrame }) => idleAnimationFrame.p5Fps)),
+    scrollP5Fps: summarizeMeasuredValues(samples.map(({ scroll }) => scroll.p5Fps)),
+    workMemoryPeakBytes: summarizeMeasuredValues(samples.map(({ workMemoryPeakBytes }) => workMemoryPeakBytes)),
+  };
+}
+
 const startedAt = new Date().toISOString();
 const scrollOnly = process.env.GITCREST_BENCH_MODE === "scroll";
 const memoryOnly = process.env.GITCREST_BENCH_MODE === "memory";
 const cacheLifecycleOnly = process.env.GITCREST_BENCH_MODE === "cache-lifecycle";
-if (!scrollOnly && !memoryOnly && !cacheLifecycleOnly && iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
+if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
 const memorySnapshot = memoryOnly ? await runMemorySnapshot() : null;
 const repositoryCacheLifecycle = cacheLifecycleOnly ? await runCacheLifecycle() : null;
 const cold = scrollOnly
@@ -489,7 +515,7 @@ const report = {
   host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown", logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
   software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true, memoryMeasurementRoot: "Electron main process and descendants; Playwright launcher excluded" },
   fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath },
-  iterations: scrollOnly || memoryOnly || cacheLifecycleOnly ? 1 : iterations,
+  iterations,
   startedAt,
   startup: summarize(cold.startupMs),
   firstHistoryFrame: summarize(cold.firstHistoryFrameMs),
