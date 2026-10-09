@@ -4058,3 +4058,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 交付：为被 Vitest/TypeScript 测试导入的 Linux `afterPack` `.mjs` hook 增加相邻 `.d.mts` 声明，明确 Electron Builder context 的平台、输出目录和异步返回类型，保持打包 hook 本身可由 Electron Builder 直接加载。
 - 验证：`pnpm exec tsc --noEmit -p tsconfig.test.json` 和 `git diff --check` 通过；修复前检查因 `.mjs` 缺声明失败。
 - 证据：`scripts/inject-linux-update-public-key.d.mts`、`tests/unit/update-manifest-signature.test.ts`。
+- 实施 commit：`f9ca414`。
