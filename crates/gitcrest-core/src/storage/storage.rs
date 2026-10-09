@@ -9,11 +9,13 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
+    commit::CommitSearchEntry,
     diff::DiffScope,
     shelf::{ShelfRecord, ShelfSnapshot},
     undo::{UndoOperation, UndoRecord},
 };
 use crate::ports::branch_favorites::BranchFavoriteStorePort;
+use crate::ports::history::HistorySearchIndexPort;
 use crate::ports::settings::AiProviderSettingsPort;
 use crate::ports::shelves::ShelfStorePort;
 use crate::ports::undo::UndoStorePort;
@@ -119,18 +121,6 @@ pub struct StoredRepository {
     pub availability: String,
 }
 
-#[derive(Clone, Debug)]
-pub struct HistorySearchRow {
-    pub oid: String,
-    pub parents: Vec<String>,
-    pub author_name: String,
-    pub author_email: String,
-    pub committed_at_ms: i64,
-    pub subject: String,
-    pub message: String,
-    pub sort_order: usize,
-}
-
 impl Default for RepositoryStore {
     fn default() -> Self {
         let connection = Connection::open_in_memory().expect("in-memory SQLite opens");
@@ -186,7 +176,7 @@ impl RepositoryStore {
         &self,
         repo_id: &str,
         refs_fingerprint: &str,
-        entries: &[HistorySearchRow],
+        entries: &[CommitSearchEntry],
     ) -> Result<(), String> {
         {
             let mut connection = self
@@ -272,7 +262,7 @@ impl RepositoryStore {
         query: &str,
         offset: usize,
         limit: usize,
-    ) -> Result<Option<Vec<HistorySearchRow>>, String> {
+    ) -> Result<Option<Vec<CommitSearchEntry>>, String> {
         let connection = self
             .connection
             .lock()
@@ -307,7 +297,7 @@ impl RepositoryStore {
                         )
                     })?;
                     let sort_order = row.get::<_, i64>(7)?.max(0) as usize;
-                    Ok(HistorySearchRow {
+                    Ok(CommitSearchEntry {
                         oid: row.get(0)?,
                         parents,
                         author_name: row.get(2)?,
@@ -894,6 +884,45 @@ impl AiProviderSettingsPort for RepositoryStore {
     }
 }
 
+impl HistorySearchIndexPort for RepositoryStore {
+    fn begin_index_build(&self, repo_id: &str) -> bool {
+        RepositoryStore::begin_history_index_build(self, repo_id)
+    }
+
+    fn finish_index_build(&self, repo_id: &str) {
+        RepositoryStore::finish_history_index_build(self, repo_id)
+    }
+
+    fn search_messages(
+        &self,
+        repo_id: &str,
+        refs_fingerprint: &str,
+        query: &str,
+        offset: usize,
+        limit: usize,
+    ) -> Result<Option<Vec<CommitSearchEntry>>, crate::domain::error::RepositoryError> {
+        RepositoryStore::search_history_messages(
+            self,
+            repo_id,
+            refs_fingerprint,
+            query,
+            offset,
+            limit,
+        )
+        .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn replace_index(
+        &self,
+        repo_id: &str,
+        refs_fingerprint: &str,
+        entries: Vec<CommitSearchEntry>,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        RepositoryStore::replace_history_search_index(self, repo_id, refs_fingerprint, &entries)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+}
+
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
     if version > 11 {
@@ -1259,7 +1288,7 @@ mod tests {
         store
             .save_opened(repository("repo-1", "/repo/1", 1))
             .unwrap();
-        let entry = HistorySearchRow {
+        let entry = CommitSearchEntry {
             oid: "a".repeat(40),
             parents: vec!["b".repeat(40)],
             author_name: "GitCrest Author".into(),

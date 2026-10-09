@@ -1,8 +1,8 @@
-use std::{fmt::Write as _, path::Path};
+use std::{fmt::Write as _, path::Path, sync::Arc};
 
 use sha2::{Digest, Sha256};
 
-use crate::storage::{HistorySearchRow, RepositoryStore};
+use crate::{domain::commit::CommitSearchEntry, ports::history::HistorySearchIndexPort};
 
 use super::commit_history::{read_page, valid_filters};
 use super::{
@@ -18,7 +18,7 @@ pub async fn read_page_indexed(
     limit: usize,
     head: Option<&str>,
     filters: &HistoryFilters,
-    store: RepositoryStore,
+    store: Arc<dyn HistorySearchIndexPort>,
 ) -> Result<CommitPage, HistoryError> {
     if limit == 0 || limit > 100 || offset > 1_000_000 || !valid_filters(filters) {
         return Err(HistoryError::InvalidQuery);
@@ -47,7 +47,7 @@ pub async fn read_page_indexed(
         let fingerprint_for_search = fingerprint.clone();
         let message_for_search = message.clone();
         let cached = tokio::task::spawn_blocking(move || {
-            store_for_search.search_history_messages(
+            store_for_search.search_messages(
                 &repo_id_for_search,
                 &fingerprint_for_search,
                 &message_for_search,
@@ -96,7 +96,7 @@ pub async fn read_page_indexed(
     Ok(page)
 }
 
-fn summary_from_search_row(row: HistorySearchRow) -> CommitSummary {
+fn summary_from_search_row(row: CommitSearchEntry) -> CommitSummary {
     CommitSummary {
         oid: row.oid,
         parents: row.parents,
@@ -112,9 +112,9 @@ fn schedule_history_index_build(
     repository_path: std::path::PathBuf,
     head: Option<String>,
     expected_fingerprint: Option<String>,
-    store: RepositoryStore,
+    store: Arc<dyn HistorySearchIndexPort>,
 ) {
-    if !store.begin_history_index_build(&repo_id) {
+    if !store.begin_index_build(&repo_id) {
         return;
     }
     tokio::spawn(async move {
@@ -124,7 +124,7 @@ fn schedule_history_index_build(
             &repository_path,
             head.as_deref(),
             expected_fingerprint.as_deref(),
-            &store,
+            store.clone(),
         )
         .await
         {
@@ -137,7 +137,7 @@ fn schedule_history_index_build(
             "[gitcrest-core] History message index {outcome} in {}ms",
             started.elapsed().as_millis()
         );
-        store.finish_history_index_build(&repo_id);
+        store.finish_index_build(&repo_id);
     });
 }
 
@@ -146,7 +146,7 @@ pub async fn build_history_search_index(
     repository_path: &Path,
     head: Option<&str>,
     expected_fingerprint: Option<&str>,
-    store: &RepositoryStore,
+    store: Arc<dyn HistorySearchIndexPort>,
 ) -> Result<(), HistoryError> {
     let fingerprint = refs_fingerprint(repository_path, head).await?;
     if expected_fingerprint.is_some_and(|expected| expected != fingerprint) {
@@ -171,14 +171,11 @@ pub async fn build_history_search_index(
     if final_fingerprint != fingerprint {
         return Ok(());
     }
-    let store = store.clone();
     let repo_id = repo_id.to_owned();
-    tokio::task::spawn_blocking(move || {
-        store.replace_history_search_index(&repo_id, &fingerprint, &entries)
-    })
-    .await
-    .map_err(|_| HistoryError::GitFailed)?
-    .map_err(|_| HistoryError::GitFailed)
+    tokio::task::spawn_blocking(move || store.replace_index(&repo_id, &fingerprint, entries))
+        .await
+        .map_err(|_| HistoryError::GitFailed)?
+        .map_err(|_| HistoryError::GitFailed)
 }
 
 async fn refs_fingerprint(
@@ -210,7 +207,7 @@ async fn refs_fingerprint(
     Ok(fingerprint)
 }
 
-fn parse_history_search_index(output: &[u8]) -> Result<Vec<HistorySearchRow>, HistoryError> {
+fn parse_history_search_index(output: &[u8]) -> Result<Vec<CommitSearchEntry>, HistoryError> {
     let mut fields = output.split(|byte| *byte == 0).collect::<Vec<_>>();
     if fields.last().is_some_and(|field| field.is_empty()) {
         fields.pop();
@@ -222,7 +219,7 @@ fn parse_history_search_index(output: &[u8]) -> Result<Vec<HistorySearchRow>, Hi
         .chunks_exact(7)
         .enumerate()
         .map(|(sort_order, fields)| {
-            Ok(HistorySearchRow {
+            Ok(CommitSearchEntry {
                 oid: text(fields[0]),
                 parents: split_words(fields[1]),
                 author_name: text(fields[2]),

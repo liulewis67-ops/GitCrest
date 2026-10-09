@@ -47,7 +47,7 @@ pub(super) async fn repository_commits(
             since: query.since,
             until: query.until,
         },
-        state.repositories.store(),
+        state.history_search_index.clone(),
     )
     .await
     .map(CommitPageDto::from)

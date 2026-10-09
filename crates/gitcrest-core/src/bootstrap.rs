@@ -87,6 +87,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         undo_store: Arc::new(repositories.store()),
         branch_favorites: Arc::new(repositories.store()),
         ai_provider_settings: Arc::new(repositories.store()),
+        history_search_index: Arc::new(repositories.store()),
         repositories,
         repository_targets,
         status,

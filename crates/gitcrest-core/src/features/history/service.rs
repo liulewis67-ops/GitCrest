@@ -140,9 +140,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::{path::Path, process::Command as StdCommand};
+    use std::{path::Path, process::Command as StdCommand, sync::Arc};
 
     use crate::features::repositories::repository::RepositoryManager;
+    use crate::ports::history::HistorySearchIndexPort;
 
     use super::*;
 
@@ -291,13 +292,13 @@ mod tests {
 
         let manager = RepositoryManager::default();
         let repository = manager.open_path(path.to_str().unwrap()).await.unwrap();
-        let store = manager.store();
+        let store: Arc<dyn HistorySearchIndexPort> = Arc::new(manager.store());
         build_history_search_index(
             &repository.repo_id,
             path,
             repository.head.as_deref(),
             None,
-            &store,
+            store.clone(),
         )
         .await
         .unwrap();
