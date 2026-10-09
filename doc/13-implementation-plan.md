@@ -3832,4 +3832,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；现有组件用例覆盖 Pull 策略、Push 审阅与 Force-with-lease、目标选择、Remote 管理。
 - 证据：`src/features/remotes/index.ts`、`src/features/remotes/ui/`、`src/features/remotes/model/push-target.ts`、`tests/unit/pull-dialog.test.tsx`、`tests/unit/push-dialog.test.tsx`、`tests/unit/push-target-dialog.test.tsx`、`tests/unit/remote-manager.test.tsx`。
 - 限制/后续：此子阶段只整理 Remotes feature 的界面与类型归属，其余 feature 目录迁移及 S7.2/S7.4/S7.5 整体验收仍未完成。
-- 完成 commit：待提交
+- 完成 commit：`f0c4d29`
