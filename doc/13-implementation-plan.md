@@ -4235,3 +4235,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/windows-vblank-event-sampling.ps1`、`doc/evidence/S7.2/windows-vblank-event-stage384-20261010.json`、阶段 383 活动显示路径映射。
 - 限制/后续：该 API 在当前普通桌面上下文返回 occluded，无法用于当前机器的周期测量；它不推翻阶段 381 Chromium worker trace、阶段 382 DWM 60Hz 或阶段 383 活动显示路径结果。后续需查明 Chromium 何种调用上下文/回退路径产生其 VSync wait cadence，或采用有权限且适用于 DWM 桌面合成态的原生时序事件；不把 occluded 状态当作驱动帧率。S7.2、S7.4、S7.5 仍未验收。
 - 证据 commit：`1352116`。
+
+### S7.2 对照高分辨率计时器下的 Windows Sleep 间隔 — 小阶段 385
+- 状态：已完成（隐藏辅助进程的 Sleep(17ms) 明显受系统默认计时粒度影响；结果不能代替 Electron GPU worker 实测）
+- 日期：2026-10-10
+- 交付：新增 `scripts/performance/windows-vsync-sleep-sampling.ps1`，在同一辅助进程调用 `timeBeginPeriod(1)`，分别以 `Sleep(16ms)` 与 `Sleep(17ms)` 连续采样 QPC 间隔，并在采样完成后配对调用 `timeEndPeriod(1)`；报告只保留样本数量、频率和分布摘要。
+- 验证：PowerShell AST 解析、脚本执行、双组样本断言与 `git diff --check` 通过。每组采样 5 秒；Sleep(16ms) 的间隔 P50/P95 为 17.021/31.781ms（213 个间隔），Sleep(17ms) 为 31.423/32.252ms（159 个间隔）。测量运行在无可见窗口的 PowerShell 辅助进程内；Windows 11 对完全 occluded/minimized/invisible 的 window-owning process 不保证高于默认系统 timer resolution，因此该读数只说明辅助进程受系统计时粒度影响，不能外推到前台 Electron GPU 线程。[Microsoft timeBeginPeriod](https://learn.microsoft.com/en-us/windows/win32/api/timeapi/nf-timeapi-timebeginperiod)。Chromium Windows VSync worker 在 VBlank wait 失败或过早返回时会进入 `Sleep()` fallback；本仓库阶段 384 的 D3DKMT wait 返回 occluded，但本阶段并未直接测量 Electron 内 DXGI wait 或 GPU 进程 timer resolution。[Chromium VSync worker](https://chromium.googlesource.com/chromium/src/+/137.0.7151.68/ui/gl/vsync_thread_win_dxgi.cc)
+- 手工验证：运行 `scripts/performance/windows-vsync-sleep-sampling.ps1 -DurationSecondsPerInterval 5 -OutputPath doc/evidence/S7.2/windows-vsync-sleep-stage385-20261010.json`；无 GUI 交互。
+- 证据：`scripts/performance/windows-vsync-sleep-sampling.ps1`、`doc/evidence/S7.2/windows-vsync-sleep-stage385-20261010.json`；阶段 381 VSync worker trace、阶段 384 occluded 状态。
+- 限制/后续：隐藏 PowerShell 的 Sleep 分布不能解释 Electron 活动窗口下的约 17.7ms VSync wait；阶段 384 的 D3DKMT API 与 Chromium 当前 DXGI `WaitForVBlank` 调用也不是同一入口。下一阶段需要直接读取 Chromium trace 中 fallback 路径可见的状态/时长，或在 Electron 运行进程内关联 timer-resolution 可见性，继续保持诊断配置不进入产品启动参数。S7.2、S7.4、S7.5 仍未验收。
+- 证据 commit：`d96b920`。
