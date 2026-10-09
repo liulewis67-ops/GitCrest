@@ -3283,4 +3283,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright 覆盖 native folder picker 桥接与 API 错误反馈。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：路径不存在、权限不足及初始化写入失败尚未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
-- 完成 commit：待提交
+- 完成 commit：`19f598e`
