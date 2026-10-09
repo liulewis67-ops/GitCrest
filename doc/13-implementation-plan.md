@@ -2723,4 +2723,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未运行 Electron 手工场景；构建完成并通过 TypeScript 检查。
 - 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：App 继续装配当前仓库、任务面板和 branch review 回调；构建仍报告依赖 `eval` 和部分 bundle 超过 500 kB。
-- 完成 commit：待补记
+- 完成 commit：`8386694`
