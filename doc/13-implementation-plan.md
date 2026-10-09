@@ -3004,3 +3004,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/execution/task.rs`、`crates/gitcrest-core/src/features/tasks/service.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：`TaskContext` 仍由 tasks feature 实现并被 Git command adapter 使用；后续需把任务执行上下文与调度/API 生命周期解耦，建立 execution 层执行报告/取消接口，再迁移剩余具体 GitCommandService 写操作；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`67d2b6f`
+
+### 任务调度与 TaskContext 归入 execution — 小阶段 260
+- 状态：已完成（任务受理后的调度、资源锁、取消、进度/日志和终态推进均由 execution 模块实现）
+- 日期：2026-10-09
+- 交付：将任务服务实现从 `features/tasks` 移至 `execution/tasks.rs`，使 `TaskContext` 与队列/worker/仓库锁/任务状态推进由执行层统一持有；Git command adapter 和 staging handler 直接依赖 execution 上下文。`features/tasks` 仅保留 API handler/routes，并为尚待迁移的调用方 re-export TaskService、TaskFailure 与 TaskSubmitError。任务行为及持久化语义未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未执行取消、队列饱和、同仓库串行或任务恢复场景；此阶段为模块归属调整。
+- 证据：`crates/gitcrest-core/src/execution/tasks.rs`、`crates/gitcrest-core/src/execution/mod.rs`、`crates/gitcrest-core/src/features/tasks/mod.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、8 节。
+- 限制/后续：tasks API handler 及部分 handlers 仍通过 `features/tasks` re-export 访问 TaskService/TaskFailure；后续逐 feature 改用 execution API 并清除兼容出口，同时继续将具体 GitCommandService 写操作拆为 ports/adapter；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`f2c7cec`
