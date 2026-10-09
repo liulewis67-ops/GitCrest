@@ -229,9 +229,11 @@ function App() {
   const repositoryTabLifecycle = useRepositoryTabLifecycle({
     sessionRef: workspaceSessionRef,
     setSession: setWorkspaceSession,
+    activateSessionTab: workspaceSessionActions.activateRepository,
     closeSessionTab: workspaceSessionActions.closeTab,
     repositories,
     setSelectedRepository,
+    clearOpenError: () => setOpenError(""),
     invalidateRepositoryUiCache,
     isWorkspacePage: () => page === "workspace",
     setPage,
@@ -572,10 +574,7 @@ function App() {
   }
 
   function activateRepository(repository: RepositoryResponse) {
-    setOpenError("");
-    workspaceSessionActions.activateRepository(repository);
-    setSelectedRepository(repository);
-    setPage("workspace");
+    repositoryTabLifecycle.activate(repository);
   }
 
   function changeWorkspaceMode(nextMode: WorkspaceMode) {

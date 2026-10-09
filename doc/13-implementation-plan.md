@@ -4345,3 +4345,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-tab-lifecycle.ts`、`src/features/repositories/model/use-workspace-session-actions.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：App 仍装配连接恢复后的全量 session restore 与跨 feature 页面导航；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### repositories feature 仓库激活生命周期迁入 model — 小阶段 396
+- 状态：已完成（仓库打开或跨 feature 选择时，session/tab、选中仓库和页面状态由 repositories model 统一激活）
+- 日期：2026-10-10
+- 交付：扩展 `useRepositoryTabLifecycle.activate`，按顺序清除仓库打开错误、调用 workspace session activation、选择仓库并切换到 workspace；App 保留一个转发函数供仓库打开、clone、push/pull 目标选择和凭据恢复等跨 feature 回调复用。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；核对既有激活顺序与 `useWorkspaceSessionActions.activateRepository` 的 HEAD commit 默认值逻辑，应用打开仓库、clone 成功及跨 feature 选仓入口仍调用同一激活动作。
+- 证据：`src/features/repositories/model/use-repository-tab-lifecycle.ts`、`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：App 仍负责连接恢复后的全量 session restore、最近仓库同步和页面装配；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
