@@ -2444,3 +2444,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段是结构调整，未改变状态读取行为；S7.2 的 idle Working Set 与滚动 FPS 指标，以及 S7.4/S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/status/model.rs`、`crates/gitcrest-core/src/features/status/engine.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md`。
 - 实施 commit：`9c8801c`
+
+### history feature 消息搜索索引拆分 — 小阶段 203
+- 状态：已完成（消息索引查询、索引构建、ref 指纹和索引行解析已归入独立子模块）
+- 日期：2026-10-09
+- 交付：新增 `features/history/service/search_index.rs`，承载消息索引命中、异步索引构建调度、索引生成与 ref 指纹校验；通用 history service 通过窄导出保留 handler 使用的索引查询入口。新子模块显式导入其依赖，原有 API 行为不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml features::history::service::tests -- --test-threads=1`（4 passed）和 `git diff --check` 通过。
+- 限制/后续：本阶段保持存储适配调用方式不变，未引入 ports 抽象；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、14 节。
+- 实施 commit：`80e0813`
