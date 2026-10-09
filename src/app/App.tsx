@@ -12,7 +12,7 @@ import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
-import { getRepositoryEventRefreshPlan, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type CommitAction, type WorkspaceMode } from "../features/repositories";
+import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type CommitAction, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
@@ -164,8 +164,8 @@ function App() {
   const openConflictWindow = useOpenConflictWindow({ clearTaskError: () => setTasksError(""), setTaskError: setTasksError });
   const [page, setPage] = useState<Page>("welcome");
   const { session: workspaceSession, setSession: setWorkspaceSession, sessionRef: workspaceSessionRef } = useWorkspaceSessionState();
-  const repositoryCacheGenerationRef = useRef(new Map<string, number>());
-  const repositoryCacheRequestCountRef = useRef(new Map<string, number>());
+  const repositoryCacheLifecycle = useRepositoryCacheLifecycle((repoId) =>
+    workspaceSessionRef.current.openRepoIds.includes(repoId));
   const {
     snapshots: statusSnapshots,
     errors: statusErrors,
@@ -176,9 +176,9 @@ function App() {
   } = useRepositoryStatus({
     getApi: () => apiRef.current,
     isRepositoryOpen: isRepositoryTabOpen,
-    getCacheGeneration: repositoryCacheGeneration,
-    beginCacheRequest: beginRepositoryCacheRequest,
-    finishCacheRequest: finishRepositoryCacheRequest,
+    getCacheGeneration: repositoryCacheLifecycle.getGeneration,
+    beginCacheRequest: repositoryCacheLifecycle.beginRequest,
+    finishCacheRequest: repositoryCacheLifecycle.finishRequest,
   });
   const {
     branches: branchSnapshots,
@@ -195,9 +195,9 @@ function App() {
   } = useRepositoryRefs({
     getApi: () => apiRef.current,
     isRepositoryOpen: isRepositoryTabOpen,
-    getCacheGeneration: repositoryCacheGeneration,
-    beginCacheRequest: beginRepositoryCacheRequest,
-    finishCacheRequest: finishRepositoryCacheRequest,
+    getCacheGeneration: repositoryCacheLifecycle.getGeneration,
+    beginCacheRequest: repositoryCacheLifecycle.beginRequest,
+    finishCacheRequest: repositoryCacheLifecycle.finishRequest,
   });
   const branchSwitcher = useBranchSwitcher({
     getApi: () => apiRef.current,
@@ -275,34 +275,8 @@ function App() {
     return workspaceSessionRef.current.openRepoIds.includes(repoId);
   }
 
-  function repositoryCacheGeneration(repoId: string): number {
-    return repositoryCacheGenerationRef.current.get(repoId) || 0;
-  }
-
-  function beginRepositoryCacheRequest(repoId: string): number {
-    repositoryCacheRequestCountRef.current.set(
-      repoId,
-      (repositoryCacheRequestCountRef.current.get(repoId) || 0) + 1,
-    );
-    return repositoryCacheGeneration(repoId);
-  }
-
-  function finishRepositoryCacheRequest(repoId: string) {
-    const remaining = (repositoryCacheRequestCountRef.current.get(repoId) || 1) - 1;
-    if (remaining > 0) {
-      repositoryCacheRequestCountRef.current.set(repoId, remaining);
-    } else {
-      repositoryCacheRequestCountRef.current.delete(repoId);
-      if (!isRepositoryTabOpen(repoId)) repositoryCacheGenerationRef.current.delete(repoId);
-    }
-  }
-
   function invalidateRepositoryUiCache(repoId: string) {
-    if (repositoryCacheRequestCountRef.current.has(repoId)) {
-      repositoryCacheGenerationRef.current.set(repoId, repositoryCacheGeneration(repoId) + 1);
-    } else {
-      repositoryCacheGenerationRef.current.delete(repoId);
-    }
+    repositoryCacheLifecycle.invalidate(repoId);
     clearRepositoryStatus(repoId);
     clearRepositoryRefs(repoId);
   }
@@ -419,9 +393,9 @@ function App() {
     getApi: () => apiRef.current,
     repoId: selectedRepository?.repoId,
     isRepositoryOpen: isRepositoryTabOpen,
-    getCacheGeneration: repositoryCacheGeneration,
-    beginCacheRequest: beginRepositoryCacheRequest,
-    finishCacheRequest: finishRepositoryCacheRequest,
+    getCacheGeneration: repositoryCacheLifecycle.getGeneration,
+    beginCacheRequest: repositoryCacheLifecycle.beginRequest,
+    finishCacheRequest: repositoryCacheLifecycle.finishRequest,
     setRemoteError,
     onTaskAccepted: (task) => {
       prependTask(task);
