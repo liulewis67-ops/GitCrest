@@ -4515,3 +4515,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/shared/lib/repository-display-name.ts`、`src/app/App.tsx`、`src/pages/welcome/WelcomePage.tsx`、`src/features/branches/ui/BranchSwitcherDialog.tsx`、`src/pages/workspace/WorkspaceDetailsPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
 - 限制/后续：只统一仓库路径的显示名派生，不调整路径解析或仓库身份逻辑；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 评估 libgit2 全量消息扫描 — 小阶段 413
+- 状态：已完成（实测 libgit2 全量 revwalk 不适合作为冷消息搜索的 Git CLI 替代路径）
+- 日期：2026-10-10
+- 交付：新增可复跑的 Release 性能诊断 example，对照 Git `log --grep` 与项目已有 libgit2 `TIME` revwalk 扫描完整提交消息；两者使用同一 100k fixture 和相同 51 条查询限制，测量顺序逐轮交替。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check` 与 `cargo run --release --manifest-path crates/gitcrest-core/Cargo.toml --example diagnose_libgit2_search -- <100k-fixture>` 成功，20 轮。Git CLI P50/P95/max 为 492.571/549.478/618.598ms；libgit2 为 821.815/905.789/929.608ms；当前单匹配查询的 OID 列表一致。未运行测试。
+- 手工验证：使用 E: 盘既有 100k fixture，确认其 `git rev-list --all --count` 为 100000；采样包括打开仓库、创建完整 refs revwalk、读取提交正文并执行 ASCII 固定子串匹配。所有 20 轮按交替顺序运行，以降低固定先后次序造成的缓存偏差。
+- 证据：`crates/gitcrest-core/examples/diagnose_libgit2_search.rs`、`doc/evidence/S7.2/api-win32-libgit2-search-probe-stage413-20261010.json`、`doc/evidence/S7.2/api-win32-git-search-diagnostic-stage410-20261010.json`。
+- 限制/后续：libgit2 候选在此查询上比 Git CLI 慢约 65%（P95），不接入服务搜索路径；单匹配样本的结果一致不能证明多匹配或多分支排序等价。继续优先评估如何缩短持久 FTS 索引就绪时间，并保留冷查询完整结果单独验收；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段诊断代码、证据与台账同一 commit（SHA 可在后续台账更新中补记）。

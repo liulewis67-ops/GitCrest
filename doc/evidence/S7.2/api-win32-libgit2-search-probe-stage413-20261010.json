@@ -1,0 +1,37 @@
+{
+  "generatedAt": "2026-10-10T03:37:18+08:00",
+  "host": {
+    "os": "Windows 11 Home 10.0.26300 x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics",
+    "logicalCpus": 16
+  },
+  "software": {
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "git": "git version 2.37.3.windows.1",
+    "profile": "release"
+  },
+  "fixture": {
+    "commits": 100000,
+    "path": "E:\\gitcrest-stage407-temp\\gitcrest-stage407-100k-fixture",
+    "query": "benchmark commit 099999",
+    "matchingCommits": 1
+  },
+  "iterations": 20,
+  "measurement": {
+    "order": "Git CLI and libgit2 runs alternated which ran first on each iteration.",
+    "gitCli": {
+      "command": "git log --fixed-strings --regexp-ignore-case --grep=<query> --format=%H --max-count=51 HEAD --branches --remotes",
+      "p50Ms": 492.571,
+      "p95Ms": 549.478,
+      "maxMs": 618.598
+    },
+    "libgit2": {
+      "method": "Open Repository, push HEAD plus refs/heads/* and refs/remotes/* into a TIME-sorted revwalk, read each commit message, apply ASCII case-insensitive fixed substring matching, stop after 51 matches.",
+      "p50Ms": 821.815,
+      "p95Ms": 905.789,
+      "maxMs": 929.608
+    },
+    "matchingOidListEqual": true
+  },
+  "interpretation": "On this fixture and query, the libgit2 full-message scan was slower than the Git CLI path. Only one commit matched, so equality does not establish result ordering for multi-match or multi-branch histories. The candidate is not suitable for replacing the service search path based on this measurement."
+}
