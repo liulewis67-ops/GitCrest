@@ -6,8 +6,9 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    domain::remote::RemoteCommand,
     features::{branches, remotes as remote_service},
-    AppState, GitOperation, RemoteCommand, TaskFailure, TaskSnapshot,
+    AppState, GitOperation, TaskFailure, TaskSnapshot,
 };
 
 use super::dto::{

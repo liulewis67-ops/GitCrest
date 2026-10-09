@@ -1,3 +1,27 @@
+#[derive(Clone, Debug)]
+pub(crate) enum RemoteCommand {
+    Add {
+        name: String,
+        url: String,
+    },
+    SetUrl {
+        name: String,
+        url: String,
+    },
+    Remove {
+        name: String,
+        next_default: Option<String>,
+    },
+    SetDefault {
+        name: String,
+    },
+    SetUpstream {
+        local_branch: String,
+        remote_name: String,
+        remote_branch: String,
+    },
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RemoteConfiguration {
     pub(crate) name: String,

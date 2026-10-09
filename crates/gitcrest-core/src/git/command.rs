@@ -22,6 +22,7 @@ use crate::{
     domain::{
         branch::BranchCommand,
         error::WorkflowError,
+        remote::RemoteCommand,
         staging::StagingOperation,
         workflow::{
             WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
@@ -45,30 +46,6 @@ static NEXT_TEMP_REBASE: AtomicU64 = AtomicU64::new(1);
 pub enum GitOperation {
     Fetch,
     FetchPrune,
-}
-
-#[derive(Clone, Debug)]
-pub enum RemoteCommand {
-    Add {
-        name: String,
-        url: String,
-    },
-    SetUrl {
-        name: String,
-        url: String,
-    },
-    Remove {
-        name: String,
-        next_default: Option<String>,
-    },
-    SetDefault {
-        name: String,
-    },
-    SetUpstream {
-        local_branch: String,
-        remote_name: String,
-        remote_branch: String,
-    },
 }
 
 impl GitOperation {

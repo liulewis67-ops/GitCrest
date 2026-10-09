@@ -12,7 +12,7 @@ mod state;
 mod storage;
 
 use features::tasks::{TaskFailure, TaskSnapshot};
-use git::command::{GitOperation, RemoteCommand};
+use git::command::GitOperation;
 use state::{AppState, EventBus};
 
 #[cfg(test)]
