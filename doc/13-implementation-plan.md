@@ -3024,3 +3024,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：fetch/pull/push、远程分支删除及 remote delete preview 仍使用具体 GitCommandService；RemoteCommandPort 使用 execution TaskContext/TaskFailure 维持任务取消和 waiting-for-input 契约，后续可继续评估 execution port 中立性；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`6e411fd`
+
+### Fetch 写操作经 RemoteCommandPort 执行 — 小阶段 262
+- 状态：已完成（fetch 与 fetch-prune 任务不再由 remotes handler 调用 GitCommandService）
+- 日期：2026-10-09
+- 交付：扩展 `RemoteCommandPort::execute_fetch` 接收仓库路径、prune 选项与执行上下文；`GitCommandService` adapter 负责映射到既有 fetch 命令和执行器，remotes handler 仅提交任务并调用 port。任务名称、prune 参数、进度、取消及 Git argv 行为不变；删除不再使用的 `GitOperation` 根模块导入。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未运行 fetch/fetch-prune 的真实远程场景。
+- 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：pull、push 和远程分支删除仍通过具体 GitCommandService；继续将写入模型与预检契约收敛到 domain/ports，保持任务取消、二次预检和 force-with-lease 语义；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`a1944a8`
