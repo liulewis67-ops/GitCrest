@@ -6,7 +6,7 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    features::{history, status},
+    features::history,
     AppState,
 };
 
@@ -15,6 +15,7 @@ use super::{
     service,
 };
 use crate::domain::diff::DiffScope;
+use crate::domain::status::{ChangeCategory, ChangeKind, StatusFile};
 
 pub(super) async fn repository_diff(
     State(state): State<AppState>,
@@ -34,15 +35,15 @@ pub(super) async fn repository_diff(
         .read_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let candidate = status::StatusFile {
+    let candidate = StatusFile {
         path: query.path.clone(),
         original_path: None,
         index_status: ".".into(),
         worktree_status: "M".into(),
-        kind: status::ChangeKind::Modified,
+        kind: ChangeKind::Modified,
         categories: vec![match scope {
-            DiffScope::Index => status::ChangeCategory::Staged,
-            DiffScope::WorkingTree | DiffScope::Commit => status::ChangeCategory::Unstaged,
+            DiffScope::Index => ChangeCategory::Staged,
+            DiffScope::WorkingTree | DiffScope::Commit => ChangeCategory::Unstaged,
         }],
         mode_changed: false,
     };
@@ -75,9 +76,7 @@ pub(super) async fn repository_diff(
         || file.categories.iter().any(|category| {
             matches!(
                 category,
-                status::ChangeCategory::Untracked
-                    | status::ChangeCategory::Ignored
-                    | status::ChangeCategory::Conflicted
+                ChangeCategory::Untracked | ChangeCategory::Ignored | ChangeCategory::Conflicted
             )
         })
     {

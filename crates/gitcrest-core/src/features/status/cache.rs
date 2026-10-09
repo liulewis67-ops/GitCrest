@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use super::{StatusFile, StatusSnapshot};
+use crate::domain::status::{StatusFile, StatusSnapshot};
 
 const MAX_CACHED_STATUS_REPOSITORIES: usize = 8;
 const MAX_CACHED_STATUS_FILES: usize = 10_000;
@@ -262,7 +262,7 @@ fn file_matches_scope(file: &StatusFile, scope: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::features::status::{ChangeCategory, ChangeKind};
+    use crate::domain::status::{ChangeCategory, ChangeKind};
 
     fn file(path: &str, kind: ChangeKind) -> StatusFile {
         StatusFile {

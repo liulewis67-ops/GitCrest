@@ -3,7 +3,7 @@ use std::{path::Path, process::Stdio};
 use git2::{Delta, DiffDelta, Repository, Status, StatusOptions, StatusShow};
 use tokio::process::Command;
 
-use super::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot};
+use crate::domain::status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot};
 
 pub(crate) async fn read(repo_id: String, path: &Path) -> Result<StatusSnapshot, std::io::Error> {
     read_scope(repo_id, path, &[]).await

@@ -5,12 +5,12 @@ use axum::{
 };
 
 use crate::domain::diff::DiffScope;
+use crate::domain::status::{ChangeCategory, StatusSnapshot};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::{
         commits,
         diff::{self, DiffError},
-        status,
         tasks::{TaskFailure, TaskSnapshot},
     },
     ports::diff::DiffGitPort,
@@ -26,7 +26,7 @@ async fn selected_commit_patch(
     git: &impl DiffGitPort,
     repo_id: &str,
     repository_path: &std::path::Path,
-    snapshot: &status::StatusSnapshot,
+    snapshot: &StatusSnapshot,
     selections: &[commits::CommitSelection],
 ) -> Result<Option<Vec<u8>>, CommitPatchError> {
     if selections.is_empty() {
@@ -39,7 +39,7 @@ async fn selected_commit_patch(
             .files
             .iter()
             .find(|file| file.path == selection.path)
-            .filter(|file| file.categories.contains(&status::ChangeCategory::Staged))
+            .filter(|file| file.categories.contains(&ChangeCategory::Staged))
             .ok_or(CommitPatchError::Invalid)?;
         let current = diff::read_with_patch(
             git,
