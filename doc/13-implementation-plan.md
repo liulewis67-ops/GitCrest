@@ -3054,3 +3054,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/features/remotes/push.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：GitCommandService 的 pull/push 二次预检仍调用 remotes feature 的预检函数，后续需将这段执行前校验协调迁至 feature/application service 并让 adapter 只执行 Git 能力；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`0d21c71`
+
+### Push 二次预检移回 remotes feature — 小阶段 265
+- 状态：已完成（Git command adapter 的生产路径不再调用 remotes push feature）
+- 日期：2026-10-09
+- 交付：将队列开始后的 push preflight 重新读取、OID/目标匹配、ahead 检查及非 force 时的 behind 拒绝移入 remotes task closure；复用已注入 BranchGitPort/RemoteGitPort。GitCommandService 只负责把 RemotePushCommand 编译为 Git push 参数并执行，`RemotePushCommand` 去除执行器不需要的 repo_id。Force-with-lease 参数和任务错误语义保持不变，测试构造的预览仍可转换为领域命令。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 GitCommandService 生产 push 执行路径无 remotes feature 调用，剩余引用只在 adapter 单元测试代码中；未运行 Rust 测试。
+- 手工验证：未运行正常 push、远端移动后的 force-with-lease 拒绝或入队期间本地状态变化场景。
+- 证据：`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/features/remotes/push.rs`、`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.1、14 节。
+- 限制/后续：pull 执行及取消恢复仍在 GitCommandService 中调用 remotes feature 预检；继续将 pull 写流程协调放回 feature/application 层，并将 adapter 保持为 Git 能力执行器；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`778852e`
