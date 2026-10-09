@@ -39,20 +39,26 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
   const [error, setError] = useState("");
   const diffRequest = useRef(0);
   const reviewAttempt = useRef(0);
+  const diffController = useRef<AbortController>();
+  const reviewController = useRef<AbortController>();
 
   useEffect(() => {
     const controller = new AbortController();
     diffRequest.current += 1;
     reviewAttempt.current += 1;
     setStatus(undefined); setSelectedIds([]); setSelectedDiff(undefined); setDocument(undefined); setError("");
-    setReviewed([]); setConfirmSend(false); setConfirmed(false); setReply(undefined);
+    setLoading(false); setReviewBusy(false); setReviewed([]); setConfirmSend(false); setConfirmed(false); setReply(undefined);
     if (!repoId) return () => controller.abort();
     void api.withSignal(controller.signal).getRepositoryStatus(repoId).then((snapshot) => {
       if (!controller.signal.aborted) setStatus(snapshot);
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Changed files could not be loaded.");
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      diffController.current?.abort();
+      reviewController.current?.abort();
+    };
   }, [api, repoId]);
 
   useEffect(() => {
@@ -66,46 +72,65 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
   const selected = visibleCandidates.filter((candidate) => selectedIds.includes(candidate.id));
 
   function toggle(candidate: Candidate) {
-    diffRequest.current += 1;
     reviewAttempt.current += 1;
+    reviewController.current?.abort();
+    reviewController.current = undefined;
+    setReviewBusy(false);
     setReviewed([]); setConfirmSend(false); setConfirmed(false); setReply(undefined);
     setSelectedIds((ids) => ids.includes(candidate.id) ? ids.filter((id) => id !== candidate.id) : [...ids, candidate.id]);
-    if (selectedDiff?.id === candidate.id) { setSelectedDiff(undefined); setDocument(undefined); }
+    if (selectedDiff?.id === candidate.id) {
+      diffRequest.current += 1;
+      diffController.current?.abort();
+      diffController.current = undefined;
+      setSelectedDiff(undefined); setDocument(undefined); setLoading(false);
+    }
   }
 
   async function showDiff(candidate: Candidate) {
     if (!repoId) return;
+    diffController.current?.abort();
+    const controller = new AbortController();
+    diffController.current = controller;
     const requestId = ++diffRequest.current;
     setSelectedDiff(candidate); setDocument(undefined); setError(""); setLoading(true);
     try {
-      const result = await api.getFileDiff(repoId, candidate.path, candidate.scope);
-      if (diffRequest.current === requestId) setDocument(result);
+      const result = await api.withSignal(controller.signal).getFileDiff(repoId, candidate.path, candidate.scope);
+      if (!controller.signal.aborted && diffRequest.current === requestId) setDocument(result);
     } catch (reason) {
-      if (diffRequest.current === requestId) setError(reason instanceof Error ? reason.message : "The selected diff could not be previewed.");
-    } finally { if (diffRequest.current === requestId) setLoading(false); }
+      if (!controller.signal.aborted && diffRequest.current === requestId) setError(reason instanceof Error ? reason.message : "The selected diff could not be previewed.");
+    } finally {
+      if (diffController.current === controller) diffController.current = undefined;
+      if (!controller.signal.aborted && diffRequest.current === requestId) setLoading(false);
+    }
   }
 
   async function reviewSelected() {
     if (!repoId || selected.length === 0 || selected.length > 20) return;
+    reviewController.current?.abort();
+    const controller = new AbortController();
+    reviewController.current = controller;
     const attempt = ++reviewAttempt.current;
     setReviewBusy(true); setError(""); setReviewed([]); setConfirmSend(false); setConfirmed(false); setReply(undefined);
     try {
       const documents: Array<{ candidate: Candidate; document: DiffDocumentResponse }> = [];
       let byteCount = 0;
       for (const candidate of selected) {
-        const document = await api.getFileDiff(repoId, candidate.path, candidate.scope);
+        const document = await api.withSignal(controller.signal).getFileDiff(repoId, candidate.path, candidate.scope);
         if (document.status !== "text") throw new Error(`${candidate.path} is ${document.status} and cannot be sent as text.`);
         byteCount += new TextEncoder().encode(diffText(document)).length;
         if (byteCount > 1024 * 1024) throw new Error("The selected text diffs exceed the 1 MiB request limit. Remove files and review again.");
         documents.push({ candidate, document });
       }
-      if (reviewAttempt.current === attempt) {
+      if (!controller.signal.aborted && reviewAttempt.current === attempt) {
         setReviewed(documents);
         setConfirmSend(true);
       }
     } catch (reason) {
-      if (reviewAttempt.current === attempt) setError(reason instanceof Error ? reason.message : "Selected diffs could not be prepared for review.");
-    } finally { setReviewBusy(false); }
+      if (!controller.signal.aborted && reviewAttempt.current === attempt) setError(reason instanceof Error ? reason.message : "Selected diffs could not be prepared for review.");
+    } finally {
+      if (reviewController.current === controller) reviewController.current = undefined;
+      if (!controller.signal.aborted && reviewAttempt.current === attempt) setReviewBusy(false);
+    }
   }
 
   async function sendReviewedDiffs() {

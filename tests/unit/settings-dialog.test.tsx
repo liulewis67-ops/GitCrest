@@ -134,6 +134,34 @@ it("aborts changed-file status loading when the privacy preview unmounts", async
   await act(async () => pending.resolve({ repoId: "repo_fixture", refreshedAtMs: 1, files: [] }));
 });
 
+it("aborts deselected diff previews and batch review reads on unmount", async () => {
+  const status = { repoId: "repo_fixture", refreshedAtMs: 1, files: [{ path: "src/file.ts", indexStatus: " ", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false }] };
+  const document = { repoId: "repo_fixture", path: "src/file.ts", revision: "rev", originalPath: null, scope: "workingTree" as const, changeKind: "modified" as const, status: "text" as const, hunks: [] };
+  const previewDiff = deferred<Awaited<ReturnType<GitCrestApiClient["getFileDiff"]>>>();
+  const reviewDiff = deferred<Awaited<ReturnType<GitCrestApiClient["getFileDiff"]>>>();
+  const signals: AbortSignal[] = [];
+  const api = cancellableApi({
+    getRepositoryStatus: vi.fn().mockResolvedValue(status),
+    getFileDiff: vi.fn().mockReturnValueOnce(previewDiff.promise).mockReturnValueOnce(reviewDiff.promise),
+  }, signals);
+  const settings = { provider: "openAiCompatible" as const, baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true };
+  const view = render(<PrivacyScopePreview api={api} repoId="repo_fixture" settings={settings} />);
+  await screen.findByText("src/file.ts");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Preview diff" }));
+  await waitFor(() => expect(api.getFileDiff).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(signals[1]?.aborted).toBe(true);
+  await act(async () => previewDiff.resolve(document));
+
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Review all selected diffs before sending" }));
+  await waitFor(() => expect(api.getFileDiff).toHaveBeenCalledTimes(2));
+  view.unmount();
+  expect(signals[2]?.aborted).toBe(true);
+  await act(async () => reviewDiff.resolve(document));
+});
+
 it("requires reviewed diff display and an explicit confirmation before provider requests", async () => {
   const document = { repoId: "repo_fixture", path: "src/only.ts", revision: "sha256:reviewed", originalPath: null, scope: "workingTree" as const, changeKind: "modified" as const, status: "text" as const, hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, rows: [{ kind: "change" as const, oldLine: 1, newLine: 1, oldText: "before", newText: "after" }] }] };
   const api = cancellableApi({

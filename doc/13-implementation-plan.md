@@ -3676,3 +3676,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件测试在状态读取 pending 时卸载并验证取消信号。
 - 证据：`src/features/settings/PrivacyScopePreview.tsx`、`tests/unit/settings-dialog.test.tsx`。
 - 限制/后续：diff 预览及批量审阅读取、AI 建议请求后的版本核验、workflow 保存/resolve 后轮询仍未统一取消；S7.2、S7.4、S7.5 验收继续未完成。
+- 完成 commit：`64a6ff7`
+
+### 前端隐私预览 diff 读取生命周期取消 — 小阶段 327
+- 状态：已完成（取消失去选择的单文件 diff 预览及卸载时的批量审阅读取）
+- 日期：2026-10-09
+- 交付：PrivacyScopePreview 为所选文件 diff 预览和发送前逐项 diff 审阅分别管理 AbortController；切换/取消所预览的文件、改变选择集或卸载组件时终止失效读取。旧 preview 和 review attempt 的 generation 隔离继续生效，已取消读取不会进入错误状态；AI 请求只会在完整 diff 审阅及用户确认后提交。
+- 验证：新增用例验证取消 deselect 文件的 diff 预览以及卸载时中止批量审阅；定向 Settings/PrivacyScopePreview 用例通过；完整 `pnpm test` 通过（38 files、177 tests）；`pnpm build`、`pnpm frontend:boundaries` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件自动化驱动挂起的预览/审阅读取并验证取消信号。
+- 证据：`src/features/settings/PrivacyScopePreview.tsx`、`tests/unit/settings-dialog.test.tsx`。
+- 限制/后续：AI 建议请求后的版本核验、workflow 保存/resolve 后轮询、设置/隐私其它读取及 S7.2、S7.4、S7.5 验收仍未完成。
