@@ -1,0 +1,29 @@
+{
+  "timerResolutionRequestMs": 1,
+  "measurements": [
+    {
+      "sleepRequestMs": 16,
+      "durationSecondsMeasured": 5.023,
+      "sampleCount": 213,
+      "observedHz": 42.405,
+      "intervalSummaryMs": {
+        "min": 16.022,
+        "p50": 17.021,
+        "p95": 31.781,
+        "max": 32.755
+      }
+    },
+    {
+      "sleepRequestMs": 17,
+      "durationSecondsMeasured": 5.027,
+      "sampleCount": 159,
+      "observedHz": 31.629,
+      "intervalSummaryMs": {
+        "min": 29.763,
+        "p50": 31.423,
+        "p95": 32.252,
+        "max": 32.591
+      }
+    }
+  ]
+}
