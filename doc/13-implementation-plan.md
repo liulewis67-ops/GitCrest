@@ -2282,3 +2282,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Tag 表单与创建 API 仍由 CommitGraph 视图实现；S7.2/S7.4/S7.5 继续按实施计划验收。
 - 证据：`src/features/history/model/use-commit-tag-request.ts`、`src/features/history/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`6524429`
+
+### history feature 搜索聚焦与 tag editor 请求统一迁入 model — 小阶段 185
+- 状态：已完成（CommitGraph 的搜索聚焦与 tag editor 外部请求由 history model 统一管理）
+- 日期：2026-10-09
+- 交付：将 `useCommitTagRequest` 扩展并整理为 `useHistoryViewRequests`，统一管理搜索聚焦和 tag editor 请求的 repo/OID 上下文、独立递增序号及按序号消费确认；App 通过 history actions 连接快捷入口并把 request/handled 回调传给 WorkspaceMainPanel。
+- 验证：`pnpm build`（TypeScript 检查及 main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：历史刷新失效信号与 CommitGraph 内部筛选输入仍由 App/视图装配；S7.2/S7.4/S7.5 继续按实施计划验收。
+- 证据：`src/features/history/model/use-history-view-requests.ts`、`src/features/history/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`aad42f0`
