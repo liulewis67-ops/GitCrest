@@ -2763,4 +2763,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；本阶段未改变 API 与历史分页行为。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/history/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：RepositoryManager 仍管理仓库打开/初始化、列表和收藏等生命周期操作；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`d469eab`
