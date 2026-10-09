@@ -2904,3 +2904,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/task.rs`、`crates/gitcrest-core/src/ports/tasks.rs`、`crates/gitcrest-core/src/features/tasks/service.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：TaskService 仍负责内存调度、恢复策略和任务状态推进；后续继续评估执行机制与 API DTO 的拆分，同时清理 repositories feature 的存储具体依赖；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`c19b02e`
+
+### Repository catalog CRUD 通过专用 port 注入 — 小阶段 250
+- 状态：已完成（repositories feature 与 target reader 不再直接依赖 RepositoryStore/StoredRepository）
+- 日期：2026-10-09
+- 交付：新增 `domain::repository::RepositoryRecord` 与 `RepositoryCatalogPort`，覆盖仓库打开/访问时间更新、读取、列表、收藏和忘记；SQLite RepositoryStore 实现该 port 并负责 RepositoryRecord/StoredRepository 转换。RepositoryManager 和 RepositoryTargetReader 改为依赖 port，bootstrap 负责打开 SQLite 并注入各存储能力；公开 Repository API 结构、字段命名、列表顺序及目录行为保持不变。测试辅助的内存 RepositoryStore 入口仅保留在 `cfg(test)`。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 repositories 生产实现不再引用 RepositoryStore/StoredRepository；未运行 Rust 测试。
+- 手工验证：未执行 Electron 仓库打开、收藏、忘记或 worktree 路径解析场景；未改变数据库 schema 或 endpoint。
+- 证据：`crates/gitcrest-core/src/domain/repository.rs`、`crates/gitcrest-core/src/ports/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：repository domain record 与 API Repository 保持两种模型；bootstrap 仍通过同一 SQLite adapter 注入其他专用存储 port；继续收敛其他 feature 的存储依赖并按计划验证 S7.2、S7.4、S7.5。
+- 完成 commit：`a644c0e`
