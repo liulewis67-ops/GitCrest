@@ -100,6 +100,36 @@ it("explains that the selected folder is not a Git repository", async () => {
   }
 }, 60_000);
 
+it("reports when the selected repository path disappears before it can be opened", async () => {
+  const selectionRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-open-missing-e2e-root-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-open-missing-e2e-app-data-"));
+  const missingPath = resolve(selectionRoot, "deleted-project");
+  let app: ElectronApplication | undefined;
+
+  try {
+    app = await electron.launch({
+      args: ["."],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await app.evaluate(({ dialog }, destination) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
+    }, missingPath);
+
+    await window.getByRole("button", { name: "Open local repository" }).click();
+    const errorAlert = window.getByRole("alert");
+    await errorAlert.waitFor({ state: "visible" });
+    expect(await errorAlert.innerText()).toBe("The selected repository path no longer exists.");
+    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+  } finally {
+    await app?.close();
+    await rm(selectionRoot, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 60_000);
+
 it("clones a remote from the welcome page and opens the new repository", async () => {
   const source = await createTempGitRepository();
   const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-e2e-remotes-"));

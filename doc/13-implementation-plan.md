@@ -3284,3 +3284,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：路径不存在、权限不足及初始化写入失败尚未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
 - 完成 commit：`19f598e`
+
+### P0 打开时路径已消失的错误反馈 E2E — 小阶段 288
+- 状态：已完成（选择后不存在的路径显示对应错误，不进入工作区）
+- 日期：2026-10-09
+- 交付：新增隔离 Electron E2E，native folder picker 返回不存在的仓库路径，验证后端 `RepositoryPathNotFound` 错误以明确文案呈现，且未进入工作区；准备度矩阵将该场景与非 Git 目录区分列出。
+- 验证：路径缺失场景定向 E2E、`pnpm build`、完整 `pnpm test:e2e`（6 files、22 tests）、`git diff --check` 通过。
+- 手工验证：未执行 GUI 手工操作；Playwright 覆盖 native picker 桥接、路径消失错误契约及页面状态。
+- 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：路径权限不足和初始化写入失败尚未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
+- 完成 commit：待提交
