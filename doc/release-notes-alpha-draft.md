@@ -1,4 +1,4 @@
-# GitCrest Alpha — 内部预览说明（草案，2026-10-09）
+# GitCrest Alpha — 内部预览说明（草案，2026-10-10）
 
 > 本文用于核对 Alpha 预览范围，不代表已签名或可公开分发的安装包。GitCrest 的 GA 发布门槛尚未通过。
 
@@ -32,7 +32,7 @@ GitCrest 是一款面向专业开发者的本地优先 Git 桌面客户端。当
 - Windows 更新器只有在配置可信 `publisherName` 后才会启用。锁定的 Linux AppImage 更新器只校验更新元数据中的 SHA-512，尚无清单来源签名验证链，因此不能作为已验证的 Linux 更新能力发布。
 - HTTPS 认证失败后保存凭据并重试 Fetch/Clone，以及运行中取消 Clone 后清理临时目录，已在 Windows Electron E2E 验证；macOS/Linux 的系统凭据库和 Git 进程取消行为仍需对应 runner 验收。
 - macOS/Linux 原生 runner 尚未提供本机验收结果；需由对应 CI runner 完成构建与 packaged smoke 后再确认平台就绪。
-- Windows S7.2 目标仍未达标：最新隔离 profile 的 20 轮基准中，idle / loaded Working Set 峰值约为 492.7 / 531.6 MiB，30 秒滚动帧率 P5 为 55.25 fps。这里是当前开发主机测量，不代表其他硬件，但不能据此宣称目标通过。
+- Windows S7.2 目标仍未达标：Windows 11 / Ryzen 7 5800H / Electron 37 / 100k 提交 fixture 的 20 轮独立 Release profile 测量中，进程树 Working Set 的 idle P50/P95 为 497.45/500.98 MiB，加载仓库后为 539.52/542.05 MiB，超过 idle <250MB 和 work <500MB 门槛。30 秒滚动的 compositor presented-frame P5 跨轮 P50 为 55.325 fps（P5–P95：55.276–55.356 fps），低于 ≥60 fps 门槛。数据来自当前开发主机；Private Working Set 和 private bytes 是补充计数口径，不替代既定 Working Set 门槛。
 - 发布前仍需在真实屏幕阅读器和高对比度环境进行人工体验检查。
 
 ## 兼容性与迁移
