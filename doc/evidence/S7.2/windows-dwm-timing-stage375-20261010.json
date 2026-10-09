@@ -1,0 +1,33 @@
+{
+  "sampledAt": "2026-10-09T18:09:46.4693031Z",
+  "durationSeconds": 3,
+  "windows": "10.0.26300.0",
+  "dwm": {
+    "refreshHz": 59.99952000383997,
+    "composeHz": 59.99952000383997,
+    "refreshPeriodQpc": 166668,
+    "refreshCountDelta": 1,
+    "frameCountDelta": 1,
+    "framesLate": 0,
+    "framesMissed": 0,
+    "framesDropped": 0
+  },
+  "measurementNotes": [
+    "DWM refreshHz and composeHz are system-level rates, not per-application presentation rates.",
+    "Frame counters are point-in-time DWM values; an idle desktop may not advance them on every hardware refresh."
+  ],
+  "displayDevices": [
+    {
+      "name": "OrayIddDriver Device",
+      "currentRefreshRateHz": null,
+      "horizontalResolution": null,
+      "verticalResolution": null
+    },
+    {
+      "name": "NVIDIA GeForce RTX 3050 Laptop GPU",
+      "currentRefreshRateHz": 60,
+      "horizontalResolution": 1920,
+      "verticalResolution": 1080
+    }
+  ]
+}
