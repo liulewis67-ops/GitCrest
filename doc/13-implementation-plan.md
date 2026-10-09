@@ -3933,3 +3933,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-cold-index-sync-normal-stage352-20261009.json`、`doc/evidence/S7.2/api-win32-cold-index-sync-full-control-stage352-20261009.json`。
 - 限制/后续：该调整降低了索引事务提交时间，但索引构建和完整冷搜索仍需数秒，远超 <200ms 目标；100k 首屏、桌面内存/帧率、S7.4 和 S7.5 仍待验收。下一步继续减少冷索引需要装载和写入的数据量，并维持完整搜索、顺序、分页及断电后可重建语义。
 - 完成 commit：`ef37e97 perf: relax sync for rebuildable history index`
+
+### S7.2 精简历史搜索缓存并按页恢复摘要 — 小阶段 353
+- 状态：已完成（SQLite 仅持久化 OID、顺序和消息；分页命中后从 Git 读取摘要；完整冷搜索仍未达标）
+- 日期：2026-10-09
+- 交付：新增 schema 12 迁移，原子重建可丢弃的历史搜索表与 FTS，只保留 OID、排序位置和提交消息；旧索引 fingerprint 清除，仓库及其它持久化数据保留。冷索引 Git 输出与 SQLite 写入随之减少；搜索页命中后批量读取至多 100 个 OID 的提交摘要，按 SQLite 返回顺序还原，并校验 OID 格式。
+- 验证：新增 schema 11 → 12 升级测试，验证旧缓存失效、仓库记录保留及新缓存可重建；历史搜索集成测试核对完整摘要字段、提交顺序、分页与 ref 更新。定向迁移/搜索测试、`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 与 Release build 通过。完整前端边界和构建通过；首轮 `pnpm check` 中 3 个既有 UI 测试在 39 worker 并行时超 5 秒，单独复跑 3/3 通过，限制 worker 后全量 Vitest 39 files / 188 tests 通过；Rust 143/143、Electron E2E 6 files / 29 tests 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / 同一 100k fixture：专用 20 轮冷搜索 P50/P95 4,059/4,945ms，首次 pending P95 17.886ms；完整 API 20 轮报告冷搜索 P50/P95 4,114/11,876ms（本批有 12.9s 极值），索引 ready 2,680ms，历史首屏 P95 127.149ms，warm 搜索 116.999ms，1k 行 Diff 112.637ms。阶段 352 NORMAL 基线冷搜索 P50 为 4,508ms；行写入 P50 从 2,481ms 降至 2,281ms，索引提交 P50 从 479ms 降至 328ms。报告：`doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`、`doc/evidence/S7.2/api-win32-slim-cache-stage353-20261009.json`。
+- 手工验证：未操作 GUI；两组基准都使用独立 sidecar/SQLite 与既有 fixture，所有搜索轮次返回目标提交；基准运行前后 fixture refs 与工作树状态保持一致。
+- 证据：`crates/gitcrest-core/migrations/0012_history_search_slim_cache.sql`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`tests` 中现有 History/Storage 用例、上述两份性能报告。
+- 限制/后续：schema 升级会丢弃旧搜索缓存并在首次历史页/搜索时重建；索引 ready 的 P50 约 2.7 秒，完整冷搜索仍远超 <200ms，且完整 API 基准有明显系统负载长尾。warm 搜索、首屏与 Diff 达到本机目标；S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
+- 完成 commit：待补记

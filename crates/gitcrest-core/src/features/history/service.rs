@@ -415,6 +415,19 @@ mod tests {
         .unwrap();
         assert_eq!(indexed.commits[0].oid, expected.commits[0].oid);
         assert_eq!(indexed.commits[0].subject, "second NEEDLE entry");
+        assert_eq!(indexed.commits[0].parents, expected.commits[0].parents);
+        assert_eq!(
+            indexed.commits[0].author_name,
+            expected.commits[0].author_name
+        );
+        assert_eq!(
+            indexed.commits[0].author_email,
+            expected.commits[0].author_email
+        );
+        assert_eq!(
+            indexed.commits[0].committed_at_ms,
+            expected.commits[0].committed_at_ms
+        );
         assert_eq!(indexed.next_offset, Some(1));
 
         let short_query = HistoryFilters {
@@ -479,6 +492,18 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(after_ref_change.commits[0].subject, "needle after index");
+        assert_eq!(
+            after_ref_change
+                .commits
+                .iter()
+                .map(|commit| commit.subject.as_str())
+                .collect::<Vec<_>>(),
+            [
+                "needle after index",
+                "second NEEDLE entry",
+                "Feature needle in C++"
+            ]
+        );
     }
 
     #[tokio::test]
