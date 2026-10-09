@@ -22,13 +22,7 @@ pub(super) async fn run_task<F, Fut>(
     F: FnOnce(TaskContext) -> Fut,
     Fut: Future<Output = Result<Option<String>, TaskFailure>>,
 {
-    let repository_lock = {
-        let mut locks = inner.repo_locks.lock().await;
-        locks
-            .entry(resource_key)
-            .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(())))
-            .clone()
-    };
+    let repository_lock = inner.repo_locks.for_resource(&resource_key).await;
     let repo_guard = tokio::select! {
         biased;
         _ = wait_for_cancel(&mut cancellation) => {

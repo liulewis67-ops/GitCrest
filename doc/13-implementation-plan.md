@@ -4794,3 +4794,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/execution/scheduler.rs`、`crates/gitcrest-core/src/execution/tasks/mod.rs`、`crates/gitcrest-core/src/execution/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：S7.2 冷搜索完整结果 P95 仍高于 200ms（现有阶段 409 约 590ms）；本阶段为 execution 目录对齐，不代表性能门槛通过。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段调度边界与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将资源锁表独立并回收空闲锁 — 小阶段 441
+- 状态：已完成（resource key 锁管理归入 `execution/locks.rs`，无活动持有者的锁可回收）
+- 日期：2026-10-10
+- 交付：新增 `ResourceLocks` 管理任务资源锁；登记表使用 `Weak<Mutex<()>>`，取得已有锁时升级为强引用，查找前清理已无等待者/持锁者的条目。scheduler 仍按原 resource key 获取同一把 owned mutex guard，并继续支持排队期间优先取消。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认任务服务默认构造和恢复构造均创建相同 `ResourceLocks`；锁表不会强持有空闲 mutex，任务活动上限 64 约束同时存活的锁对象数量，过期 Weak 条目在后续资源查找时清理。
+- 证据：`crates/gitcrest-core/src/execution/locks.rs`、`crates/gitcrest-core/src/execution/scheduler.rs`、`crates/gitcrest-core/src/execution/tasks/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：该变更限制多仓库切换时锁注册表的长期保留，不宣称已满足 S7.2 桌面 Working Set 门槛；历史冷搜索及桌面 Working Set/帧率仍需专项优化和测量，S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段资源生命周期调整与台账同一 commit（SHA 可在后续台账更新中补记）。

@@ -30,7 +30,7 @@ pub struct TaskService {
 
 pub(super) struct TaskServiceInner {
     pub(super) data: Mutex<TaskData>,
-    pub(super) repo_locks: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    pub(super) repo_locks: super::locks::ResourceLocks,
     pub(super) workers: Arc<Semaphore>,
     pub(super) store: Option<Arc<dyn TaskStorePort>>,
     pub(super) status_invalidator: Option<Arc<StatusInvalidator>>,
@@ -40,7 +40,7 @@ impl Default for TaskServiceInner {
     fn default() -> Self {
         Self {
             data: Mutex::default(),
-            repo_locks: Mutex::default(),
+            repo_locks: super::locks::ResourceLocks::default(),
             workers: Arc::new(Semaphore::new(4)),
             store: None,
             status_invalidator: None,
@@ -119,7 +119,7 @@ impl TaskService {
                     tasks,
                     cancellations: HashMap::new(),
                 }),
-                repo_locks: Mutex::default(),
+                repo_locks: super::locks::ResourceLocks::default(),
                 workers: Arc::new(Semaphore::new(4)),
                 store: Some(store),
                 status_invalidator,
