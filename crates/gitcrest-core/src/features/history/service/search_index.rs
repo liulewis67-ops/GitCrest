@@ -44,7 +44,15 @@ pub async fn read_page_indexed(
             .as_deref()
             .is_some_and(|message| message.chars().count() >= 3)
     {
-        refs_fingerprint(repository_path, head).await.ok()
+        match refs_fingerprint(repository_path, head).await {
+            Ok(fingerprint) => Some(fingerprint),
+            Err(_) => {
+                eprintln!(
+                    "[gitcrest-core] History message index refs fingerprint failed; falling back to Git search"
+                );
+                None
+            }
+        }
     } else {
         None
     };
@@ -54,7 +62,7 @@ pub async fn read_page_indexed(
         let repo_id_for_search = repo_id.clone();
         let fingerprint_for_search = fingerprint.clone();
         let message_for_search = message.clone();
-        let cached = tokio::task::spawn_blocking(move || {
+        let cached = match tokio::task::spawn_blocking(move || {
             store_for_search.search_messages(
                 &repo_id_for_search,
                 &fingerprint_for_search,
@@ -64,9 +72,21 @@ pub async fn read_page_indexed(
             )
         })
         .await
-        .ok()
-        .and_then(Result::ok)
-        .flatten();
+        {
+            Ok(Ok(entries)) => entries,
+            Ok(Err(_)) => {
+                eprintln!(
+                    "[gitcrest-core] History message index storage query failed; falling back to Git search"
+                );
+                None
+            }
+            Err(_) => {
+                eprintln!(
+                    "[gitcrest-core] History message index query task failed; falling back to Git search"
+                );
+                None
+            }
+        };
         if let Some(mut entries) = cached {
             let has_more = entries.len() > limit;
             if has_more {

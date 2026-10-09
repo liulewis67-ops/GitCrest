@@ -4525,3 +4525,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/examples/diagnose_libgit2_search.rs`、`doc/evidence/S7.2/api-win32-libgit2-search-probe-stage413-20261010.json`、`doc/evidence/S7.2/api-win32-git-search-diagnostic-stage410-20261010.json`。
 - 限制/后续：libgit2 候选在此查询上比 Git CLI 慢约 65%（P95），不接入服务搜索路径；单匹配样本的结果一致不能证明多匹配或多分支排序等价。继续优先评估如何缩短持久 FTS 索引就绪时间，并保留冷查询完整结果单独验收；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段诊断代码、证据与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 记录历史 FTS 查询降级原因 — 小阶段 414
+- 状态：已完成（索引访问失败与正常未命中可由 stderr 日志区分；Git fallback 行为保持不变）
+- 日期：2026-10-10
+- 交付：为 refs fingerprint 读取失败、SQLite FTS 查询错误和 `spawn_blocking` join 错误增加独立诊断日志；正常的索引缺失、fingerprint 不匹配或构建中的 `None` 仍不产生错误日志。查询错误仍回退到 Git，避免可重建缓存故障阻断搜索。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、Release 构建与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：检查三个失败分支分别输出固定类别消息；日志不写入仓库路径、搜索词或底层错误文本；所有分支继续将缓存视为不可用并走已有 Git 查询回退。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 12.2 节。
+- 限制/后续：该改动提升 FTS 降级的可观测性，不缩短冷搜索延迟；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。
