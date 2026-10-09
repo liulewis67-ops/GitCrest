@@ -2245,3 +2245,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：dialog 组件仍由 App 懒加载与注入 API/仓库状态；S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/workflows/model/use-workflow-dialog-session.ts`、`src/features/workflows/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`2a3aa4d`
+
+### branches feature remote branch delete dialog session 迁入 model — 小阶段 183
+- 状态：已完成（远程分支删除 dialog 目标、关闭与 task 受理由 branches model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useRemoteBranchDeleteSession`，收口远程分支删除目标状态、dialog 关闭、task 插入、TaskCenter 错误清理及打开；App 从 WorkspaceNavigation 接收打开请求并渲染 branches dialog，移除该操作对 workflows task handler 的复用。
+- 验证：`pnpm build`（TypeScript 检查及 main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：远程分支删除预览和 API 调用仍由 dialog 组件管理；S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/branches/model/use-remote-branch-delete-session.ts`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`f8428bf`
