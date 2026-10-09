@@ -2884,3 +2884,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/settings.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/features/settings/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 4.1 节。
 - 限制/后续：repositories、tasks、history 等 feature 仍需迁移其存储具体依赖；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`183117f`
+
+### History 搜索索引通过 port 注入并将条目模型归入 domain — 小阶段 248
+- 状态：已完成（history search service 不再依赖 RepositoryStore 或 storage row 类型）
+- 日期：2026-10-09
+- 交付：新增 `HistorySearchIndexPort`，覆盖索引构建协调、按 fingerprint 搜索和索引替换；SQLite RepositoryStore 实现该 port，bootstrap/AppState 注入。新增 `domain::commit::CommitSearchEntry` 作为唯一领域条目模型，删除 storage 内重复的 HistorySearchRow 定义。history handler/service 改为使用 port，SQLite FTS 查询、批量写入及索引失效规则不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 history feature 生产代码不再引用 RepositoryStore 或 storage 索引方法；未运行 Rust 测试。
+- 手工验证：未运行临时仓库历史检索场景；现有服务层集成场景保留并可编译，但本阶段未执行测试。
+- 证据：`crates/gitcrest-core/src/ports/history.rs`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
+- 限制/后续：repositories、tasks 等 feature 仍直接持有或使用 RepositoryStore；按职责继续拆分其存储端口；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`ff0cdef`
