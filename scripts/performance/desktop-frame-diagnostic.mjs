@@ -30,6 +30,7 @@ function benchmarkGpuFlags() {
   }
   if (process.env.GITCREST_BENCH_DISABLE_GPU === "1") flags.push("--disable-gpu");
   if (process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1") flags.push("--in-process-gpu");
+  if (process.env.GITCREST_BENCH_DISABLE_FRAME_RATE_LIMIT === "1") flags.push("--disable-frame-rate-limit");
   return flags;
 }
 
