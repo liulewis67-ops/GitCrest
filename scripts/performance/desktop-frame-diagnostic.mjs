@@ -94,10 +94,14 @@ async function sampleAnimationFrames(page, label, durationMs, scroll) {
 async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
   const client = await page.context().newCDPSession(page);
   const traceEvents = [];
+  const detailedTrace = process.env.GITCREST_BENCH_DETAILED_TRACE === "1";
   const complete = new Promise((resolveComplete) => client.once("Tracing.tracingComplete", resolveComplete));
   client.on("Tracing.dataCollected", ({ value }) => traceEvents.push(...value));
   try {
-    await client.send("Tracing.start", { categories: "viz", transferMode: "ReportEvents" });
+    await client.send("Tracing.start", {
+      categories: detailedTrace ? "viz,cc,gpu,benchmark,devtools.timeline" : "viz",
+      transferMode: "ReportEvents",
+    });
     const animationFrames = await sampleAnimationFrames(page, label, durationMs, scroll);
     await client.send("Tracing.end");
     await complete;
@@ -110,6 +114,10 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
     const p95PresentedFrameMs = intervalsMs.length
       ? intervalsMs[Math.max(0, Math.ceil(intervalsMs.length * 0.95) - 1)]
       : null;
+    const pipelineTraceEvents = detailedTrace
+      ? traceEvents.filter((event) => /Begin.*Frame|PipelineReporter|SubmitCompositorFrame|DrawAndSwap|FrameDisplayed|RunTask|FunctionCall|EventDispatch|Paint|Composite|Raster|Activate|Layout|RecalculateStyle/i.test(event.name))
+      : [];
+    const pipelineTraceSummary = Object.groupBy(pipelineTraceEvents, (event) => `${event.cat || "unknown"}:${event.name}`);
     return {
       ...animationFrames,
       presentationTrace: {
@@ -119,6 +127,34 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
         p95FrameMs: p95PresentedFrameMs,
         p5Fps: p95PresentedFrameMs ? 1_000 / p95PresentedFrameMs : null,
         traceEventCount: traceEvents.length,
+        ...(detailedTrace ? {
+          detailedCategories: "viz,cc,gpu,benchmark,devtools.timeline",
+          pipelineEvents: Object.entries(pipelineTraceSummary).map(([name, events]) => {
+            const durationsMs = events
+              .filter((event) => event.ph === "X" && Number.isFinite(event.dur))
+              .map((event) => event.dur / 1_000)
+              .sort((left, right) => left - right);
+            const eventTimestampsMs = events
+              .filter((event) => Number.isFinite(event.ts))
+              .map((event) => event.ts)
+              .sort((left, right) => left - right);
+            const timestampIntervalsMs = eventTimestampsMs
+              .slice(1)
+              .map((timestamp, index) => (timestamp - eventTimestampsMs[index]) / 1_000)
+              .sort((left, right) => left - right);
+            return {
+              name,
+              count: events.length,
+              durationSamples: durationsMs.length,
+              p50DurationMs: durationsMs.length ? durationsMs[Math.ceil(durationsMs.length * 0.5) - 1] : null,
+              p95DurationMs: durationsMs.length ? durationsMs[Math.ceil(durationsMs.length * 0.95) - 1] : null,
+              maxDurationMs: durationsMs.length ? durationsMs[durationsMs.length - 1] : null,
+              timestampIntervalSamples: timestampIntervalsMs.length,
+              p50TimestampIntervalMs: timestampIntervalsMs.length ? timestampIntervalsMs[Math.ceil(timestampIntervalsMs.length * 0.5) - 1] : null,
+              p95TimestampIntervalMs: timestampIntervalsMs.length ? timestampIntervalsMs[Math.ceil(timestampIntervalsMs.length * 0.95) - 1] : null,
+            };
+          }).sort((left, right) => right.count - left.count),
+        } : {}),
       },
     };
   } finally {
