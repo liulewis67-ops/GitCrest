@@ -2675,3 +2675,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：RepositoryManager 仍同时负责仓库 registry、状态元数据和路径解析，后续可按 ownership 拆分；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/ports/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4 节。
 - 实施 commit：`553edd0`
+
+
+### StatusSnapshotCache 迁入 refresh/snapshots — 小阶段 227
+- 状态：已完成（状态快照缓存归入 refresh 边界，与 watcher 共同装配）
+- 日期：2026-10-09
+- 交付：将 `StatusSnapshotCache` 从 status feature 移入 `refresh/snapshots.rs`，新增 `refresh/mod.rs` 聚合 watcher 和 snapshots；status service 直接使用 refresh cache，bootstrap 通过 refresh 模块启动 watcher。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认缓存无 status feature 重导出；未运行测试。
+- 限制/后续：StatusService 仍编排缓存填充和 Git 状态读取，后续可评估是否把刷新协作进一步抽到 refresh；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/refresh/mod.rs`、`crates/gitcrest-core/src/refresh/snapshots.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md` 第 3 节目录结构。
+- 实施 commit：`527a40c`、`e203548`
