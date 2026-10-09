@@ -3313,4 +3313,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未运行真实 Git/ACL 故障；使用 feature port fixture 验证业务失败边界与注册行为。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/api/error.rs`。
 - 限制/后续：故障 fixture 在 Git 写入前返回错误；真实 Git 初始化中途失败遗留部分 `.git` 的清理和 GUI 恢复仍未覆盖；S7.5 保持进行中。
-- 完成 commit：待提交
+- 完成 commit：`81216ce`
