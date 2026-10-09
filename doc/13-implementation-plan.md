@@ -3972,3 +3972,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；每轮使用独立 sidecar/SQLite 和同一 fixture，返回目标提交。基准运行前后 fixture refs 和工作树状态保持不变。
 - 证据：`doc/evidence/S7.2/api-win32-cold-fts-columnsize0-stage356-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`；[SQLite FTS5 columnsize 选项](https://www.sqlite.org/fts5.html#the_columnsize_option)。
 - 限制/后续：该选项减少 FTS 辅助数据和局部 postings 构建耗时，但未证明能缩短端到端冷搜索，暂不引入 schema 迁移；优先寻找能减少 100k 行装载/写入时间的方案。完整冷搜索仍远超 <200ms，S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
+- 完成 commit：`3baea35 perf: evaluate compact history FTS index`
