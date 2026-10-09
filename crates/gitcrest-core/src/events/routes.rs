@@ -8,7 +8,7 @@ use axum::{
 };
 
 use crate::api::error::{ApiError, ApiErrorCode};
-use crate::{state::EventEnvelope, AppState};
+use crate::{events::envelope::EventEnvelope, state::AppState};
 
 pub(crate) async fn events(
     State(state): State<AppState>,

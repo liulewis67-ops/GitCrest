@@ -1,11 +1,7 @@
-use std::{
-    sync::Arc,
-    time::{SystemTime, UNIX_EPOCH},
-};
-
-use serde::Serialize;
+use std::sync::Arc;
 
 use crate::{
+    events::envelope::EventEnvelope,
     features::{
         credentials,
         repositories::{
@@ -77,38 +73,5 @@ impl EventBus {
     ) {
         let event = EventEnvelope::new(repo_id, event_type, payload);
         let _ = self.0.send(event);
-    }
-}
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct EventEnvelope {
-    pub(crate) event_id: String,
-    pub(crate) protocol_version: u8,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(crate) repo_id: Option<String>,
-    #[serde(rename = "type")]
-    pub(crate) event_type: String,
-    pub(crate) occurred_at_ms: u128,
-    pub(crate) payload: serde_json::Value,
-}
-
-impl EventEnvelope {
-    pub(crate) fn new(
-        repo_id: Option<String>,
-        event_type: &str,
-        payload: serde_json::Value,
-    ) -> Self {
-        Self {
-            event_id: String::new(),
-            protocol_version: 1,
-            repo_id,
-            event_type: event_type.to_owned(),
-            occurred_at_ms: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap_or_default()
-                .as_millis(),
-            payload,
-        }
     }
 }

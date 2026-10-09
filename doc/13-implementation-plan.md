@@ -4694,3 +4694,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/api/router.rs`、`crates/gitcrest-core/src/events/mod.rs`、`crates/gitcrest-core/src/events/routes.rs`、`doc/14-backend-development-guidelines.md` 第 3、5 节。
 - 限制/后续：`EventEnvelope` 仍由 `state.rs` 定义，事件发布与协议 envelope 的进一步拆分需结合 state/event bus 边界单独进行。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 拆分 API 事件 envelope — 小阶段 431
+- 状态：已完成（API 协议 EventEnvelope 定义与构造器归入 `events/envelope.rs`）
+- 日期：2026-10-10
+- 交付：将 `EventEnvelope` 的字段、serde 命名/省略规则和构造器从 `state.rs` 移至 `events/envelope.rs`；`EventBus` 与 WebSocket route 改为依赖事件 envelope 模块，event type、protocol version、eventId 初始化和时间戳语义不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认只有 `events/envelope.rs` 定义/构造 `EventEnvelope`，`state::EventBus` 和 `events::routes` 共同消费该类型；既有 JSON 协议字段属性保持原样。
+- 证据：`crates/gitcrest-core/src/events/envelope.rs`、`crates/gitcrest-core/src/events/routes.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 3、5 节。
+- 限制/后续：EventBus 广播实现仍位于 `state.rs`；发布/订阅队列机制是否独立为 `events/publisher.rs` 需先厘清 AppState 装配边界。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
