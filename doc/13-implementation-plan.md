@@ -3224,3 +3224,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/packaged-smoke.mjs`、`doc/evidence/S7.4/windows-package-smoke.json`。
 - 限制/后续：待 `pnpm build`、前端全量测试、Rust 全量测试和 Clippy 重跑后确认；S7.4 其它平台/签名验收仍未完成。
 - 完成 commit：`edbf902`
+
+### WorkflowDialog 异步预检测试等待可执行状态 — 小阶段 282
+- 状态：已完成（测试确认按钮启用前等待预检结果，不再依赖 worker 调度时序）
+- 日期：2026-10-09
+- 交付：将 workflow dialog 测试从“按钮出现在 DOM 即断言已启用”改为等待异步 preflight 完成并观察按钮启用，再验证 start 请求使用最新 HEAD。产品交互不变，消除全量并行单测偶发竞态。
+- 验证：定向 `pnpm exec vitest run --config vitest.config.ts tests/unit/workflow-dialog.test.tsx -t "requires a fresh allowed preflight"` 通过；`pnpm build` 通过；`pnpm test` 通过（34 files、162 tests）；`git diff --check` 通过。
+- 手工验证：不适用；为测试同步条件修复。
+- 证据：`tests/unit/workflow-dialog.test.tsx`。
+- 限制/后续：无；S7.4 其它平台/签名验收仍待完成。
+- 完成 commit：待提交

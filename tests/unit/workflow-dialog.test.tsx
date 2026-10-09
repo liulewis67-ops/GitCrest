@@ -19,7 +19,7 @@ it("requires a fresh allowed preflight before starting a commit workflow", async
   const onStarted = vi.fn();
   render(<WorkflowDialog api={api} repoId="repo_fixture" targetOid={preflight.targetOid} action="merge" onClose={vi.fn()} onStarted={onStarted} />);
   const start = await screen.findByRole("button", { name: "Start merge" });
-  expect(start).not.toHaveProperty("disabled", true);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Start merge" })).not.toHaveProperty("disabled", true));
   fireEvent.click(start);
   await waitFor(() => expect(api.startRepositoryWorkflow).toHaveBeenCalledWith("repo_fixture", {
     action: "merge", targetOid: preflight.targetOid, expectedHeadOid: preflight.headOid,
