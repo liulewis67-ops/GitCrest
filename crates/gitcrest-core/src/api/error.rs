@@ -738,3 +738,28 @@ impl IntoResponse for ApiError {
         (self.status, Json(body)).into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use axum::http::StatusCode;
+    use serde_json::json;
+
+    use crate::domain::error::RepositoryError;
+
+    use super::*;
+
+    #[test]
+    fn repository_access_denied_uses_forbidden_status_and_stable_error_contract() {
+        let error = ApiError::from_repository_error(RepositoryError::PathPermissionDenied);
+
+        assert_eq!(error.status, StatusCode::FORBIDDEN);
+        assert_eq!(
+            serde_json::to_value(error.code).unwrap(),
+            json!("REPOSITORY_ACCESS_DENIED")
+        );
+        assert_eq!(
+            error.message,
+            "GitCrest does not have permission to read the selected repository."
+        );
+    }
+}

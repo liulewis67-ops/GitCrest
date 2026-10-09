@@ -363,6 +363,13 @@ mod tests {
         String::from_utf8_lossy(&output.stdout).trim().to_owned()
     }
 
+    #[test]
+    fn maps_permission_denied_io_errors_to_repository_access_errors() {
+        let error = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
+
+        assert_eq!(map_path_error(error), RepositoryError::PathPermissionDenied);
+    }
+
     #[tokio::test]
     async fn opens_normal_and_empty_repositories_with_stable_ids() {
         let fixture = GitFixture::new();

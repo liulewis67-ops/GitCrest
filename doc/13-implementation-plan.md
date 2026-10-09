@@ -3294,3 +3294,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：路径权限不足和初始化写入失败尚未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
 - 完成 commit：`dbda4c7`
+
+### Repository permission denied 错误契约回归 — 小阶段 289
+- 状态：已完成（后端 I/O 权限错误保持为受控且稳定的 HTTP 403 契约）
+- 日期：2026-10-09
+- 交付：在 repositories feature 单测验证 `PermissionDenied` 被映射为 `PathPermissionDenied`；在 API error 边界验证 HTTP 403、`REPOSITORY_ACCESS_DENIED` 及稳定用户提示，避免泄露底层 OS/Git 错误细节。
+- 验证：两项新增定向 Rust 测试通过；`cargo fmt --check`、Clippy、Rust 全量测试（131/131）通过。
+- 手工验证：未执行 GUI/ACL 拒绝操作；本阶段验证确定性的 I/O→领域错误→API 错误映射。
+- 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/api/error.rs`。
+- 限制/后续：真实 OS ACL 拒绝到 renderer 告警的跨层 E2E 尚未覆盖；初始化 Git 写入失败和副作用清理也仍待验收；S7.5 保持进行中。
+- 完成 commit：待提交
