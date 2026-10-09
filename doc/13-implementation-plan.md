@@ -3943,3 +3943,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/migrations/0012_history_search_slim_cache.sql`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`tests` 中现有 History/Storage 用例、上述两份性能报告。
 - 限制/后续：schema 升级会丢弃旧搜索缓存并在首次历史页/搜索时重建；索引 ready 的 P50 约 2.7 秒，完整冷搜索仍远超 <200ms，且完整 API 基准有明显系统负载长尾。warm 搜索、首屏与 Diff 达到本机目标；S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
 - 完成 commit：`e2824b1 perf: slim history search cache`
+
+### S7.2 精简缓存多行批量插入评估 — 小阶段 354
+- 状态：已完成（完成 20 轮评估并排除多行批量插入；保留阶段 353 单行预编译写入实现，S7.2 性能目标仍未达标）
+- 日期：2026-10-09
+- 交付：在阶段 353 精简历史搜索缓存基础上评估每 100 条拼接 SQL 的 SQLite 多行插入。该方案未保留在产品代码中。
+- 验证：实验分支新增的跨批次顺序用例、Clippy 与 Release build 通过；完成后恢复阶段 353 的单行写入实现。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 同一 100k fixture 20 轮：多行批量方案完整冷搜索 P50/P95 5,711/6,542ms、行写入 P50/P95 3,809/4,404ms、首次 pending P95 23.399ms；阶段 353 同 fixture 专用报告为冷搜索 P50/P95 4,059/4,945ms、行写入 P50/P95 2,281/2,440ms。批量插入令行写入和完整冷搜索都变慢，因此拒绝该实现。报告：`doc/evidence/S7.2/api-win32-cold-slim-bulk-stage354-20261009.json`。
+- 手工验证：未操作 GUI；20 轮均使用同一 100k fixture 和独立 sidecar/SQLite，搜索均返回目标提交。
+- 证据：`doc/evidence/S7.2/api-win32-cold-slim-bulk-stage354-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`。
+- 限制/后续：多行 SQL 拼接写入在此环境下没有改善持久化耗时；继续保持单行预编译写入，从降低写入量或提前索引构建等方向寻找方案。完整冷搜索仍远超 <200ms，S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
