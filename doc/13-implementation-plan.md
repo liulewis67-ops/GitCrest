@@ -4050,3 +4050,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：GitHub Actions workflow 使用 `js-yaml` 解析，确认仅有手动触发入口及 release job；Linux 更新签名/注入定向 Vitest（6/6）、配置与 hook `node --check`、`git diff --check` 通过。本次未触发 GitHub workflow 或创建 release。
 - 证据：`.github/workflows/release-linux.yml`、`package.json`、`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`。
 - 限制/后续：仓库需配置 Actions secret `LINUX_UPDATE_SIGNING_KEY` 并由原生 Linux runner 实跑；标签需要和应用版本一致。发布资产仍缺真实 GitHub runner 的 AppImage 打包、签名和客户端更新安装回归证据；S7.4 与 S7.5 整体未完成。
+- 实施 commit：`effe27d`。
