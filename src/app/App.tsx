@@ -14,7 +14,7 @@ import type { CredentialEditorRenderer } from "../shared/ui/credential-editor-re
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { loadCredentialEditor } from "../features/credentials";
-import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
+import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
@@ -227,6 +227,16 @@ function App() {
     setWorkspaceSession,
   );
   const workspaceSessionActions = useWorkspaceSessionActions(setWorkspaceSession);
+  const repositoryListRefresh = useRepositoryListRefresh({
+    setRepositories,
+    setSelectedRepository,
+    restoreWorkspace: (repositories) => {
+      const restored = workspaceSessionActions.restoreAvailableRepositories(workspaceSessionRef.current, repositories);
+      setWorkspaceSession(restored.session);
+      setSelectedRepository(restored.activeRepository);
+      setPage(restored.activeRepository ? "workspace" : "welcome");
+    },
+  });
   const rememberCommitAction = useWorkspaceCommitAction(selectedRepository?.repoId, setWorkspaceSession);
   const graphViewportRef = useRef<HTMLDivElement>(null);
   const { theme, nextTheme } = useThemePreference();
@@ -635,17 +645,7 @@ function App() {
   }
 
   async function refreshRepositories(api: GitCrestApiClient, restoreWorkspace = false) {
-    const currentRepositories = await api.listRepositories();
-    setRepositories(currentRepositories);
-    if (restoreWorkspace) {
-      const saved = workspaceSessionRef.current;
-      const restored = workspaceSessionActions.restoreAvailableRepositories(saved, currentRepositories);
-      setWorkspaceSession(restored.session);
-      setSelectedRepository(restored.activeRepository);
-      setPage(restored.activeRepository ? "workspace" : "welcome");
-    } else {
-      setSelectedRepository((current) => currentRepositories.find((repository) => repository.repoId === current?.repoId));
-    }
+    await repositoryListRefresh.refresh(api, restoreWorkspace);
   }
 
   useTaskRefreshEffects({
