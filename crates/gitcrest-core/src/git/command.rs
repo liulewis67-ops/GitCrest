@@ -36,7 +36,9 @@ use crate::{
     ports::status::StatusReadPort,
     ports::{
         diff::DiffGitPort,
-        remotes::{RemoteCommandFuture, RemoteCommandPort},
+        remotes::{
+            RemoteCommandFuture, RemoteCommandPort, RemotePreflightFuture, RemotePreflightReadPort,
+        },
     },
 };
 
@@ -1413,6 +1415,49 @@ impl RemoteCommandPort for GitCommandService {
             GitCommandService::execute_push(self, repository_path, &command, force_with_lease, task)
                 .await
         })
+    }
+}
+
+impl RemotePreflightReadPort for GitCommandService {
+    fn resolve_target<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        target: &'a str,
+    ) -> RemotePreflightFuture<'a, String> {
+        Box::pin(
+            async move { GitReadPort::resolve_commit_target(self, repository_path, target).await },
+        )
+    }
+
+    fn read_head<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePreflightFuture<'a, Option<String>> {
+        Box::pin(async move { GitReadPort::read_head_oid(self, repository_path).await })
+    }
+
+    fn compare_delete_impact<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        current_head_oid: Option<&'a str>,
+        target_oid: &'a str,
+    ) -> RemotePreflightFuture<'a, WorkflowRemoteBranchComparison> {
+        Box::pin(async move {
+            GitReadPort::compare_remote_branch_delete(
+                self,
+                repository_path,
+                current_head_oid,
+                target_oid,
+            )
+            .await
+        })
+    }
+
+    fn read_worktree<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePreflightFuture<'a, WorkflowState> {
+        Box::pin(async move { GitReadPort::read_worktree_state(self, repository_path).await })
     }
 }
 

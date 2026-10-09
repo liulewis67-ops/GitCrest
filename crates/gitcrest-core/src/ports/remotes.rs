@@ -1,12 +1,13 @@
 use std::{future::Future, path::Path, pin::Pin};
 
 use crate::domain::{
-    error::GitAdapterError,
+    error::{GitAdapterError, WorkflowError},
     remote::{
         RemoteBranchCommit, RemoteBranchDeleteCommand, RemoteBranchDivergence,
         RemoteBranchUpstream, RemoteCommand, RemoteConfigurationSnapshot, RemotePullCommand,
         RemotePullStrategy, RemotePushCommand,
     },
+    workflow::{WorkflowRemoteBranchComparison, WorkflowState},
 };
 use crate::execution::{TaskContext, TaskFailure};
 
@@ -65,6 +66,34 @@ pub(crate) trait RemoteGitPort: Send + Sync {
         remote_branch: &'a str,
     ) -> RemoteGitFuture<'a, Vec<String>>;
 }
+
+pub(crate) trait RemotePreflightReadPort: Send + Sync {
+    fn resolve_target<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        target: &'a str,
+    ) -> RemotePreflightFuture<'a, String>;
+
+    fn read_head<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePreflightFuture<'a, Option<String>>;
+
+    fn compare_delete_impact<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        current_head_oid: Option<&'a str>,
+        target_oid: &'a str,
+    ) -> RemotePreflightFuture<'a, WorkflowRemoteBranchComparison>;
+
+    fn read_worktree<'a>(
+        &'a self,
+        repository_path: &'a Path,
+    ) -> RemotePreflightFuture<'a, WorkflowState>;
+}
+
+pub(crate) type RemotePreflightFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, WorkflowError>> + Send + 'a>>;
 
 pub(crate) trait RemoteCommandPort: Send + Sync {
     fn execute_fetch<'a>(

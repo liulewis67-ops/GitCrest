@@ -79,7 +79,7 @@ pub(super) async fn preflight_repository_pull(
         metadata.branch.as_deref(),
         metadata.detached,
         state.branch_git.as_ref(),
-        &state.git_commands,
+        state.remote_preflight_read.as_ref(),
         state.remote_git.as_ref(),
     )
     .await
@@ -115,7 +115,7 @@ pub(super) async fn pull_repository(
         metadata.branch.as_deref(),
         metadata.detached,
         state.branch_git.as_ref(),
-        &state.git_commands,
+        state.remote_preflight_read.as_ref(),
         state.remote_git.as_ref(),
     )
     .await
@@ -139,7 +139,7 @@ pub(super) async fn pull_repository(
     let command = state.remote_commands.clone();
     let path = target.repository_path;
     let operation_command = RemotePullCommand::from(&preflight);
-    let git_reader = state.git_commands.clone();
+    let git_reader = state.remote_preflight_read.clone();
     let branch_git = state.branch_git.clone();
     let remote_git = state.remote_git.clone();
     let task_repo_id = repo_id.clone();
@@ -162,7 +162,7 @@ pub(super) async fn pull_repository(
                     Some(&operation_command.local_branch),
                     false,
                     branch_git.as_ref(),
-                    &git_reader,
+                    git_reader.as_ref(),
                     remote_git.as_ref(),
                 )
                 .await
@@ -790,7 +790,7 @@ pub(super) async fn preview_repository_remote_branch_delete(
         .await
         .map_err(ApiError::from_repository_error)?;
     remote_service::read_remote_branch_delete_preview(
-        &state.git_commands,
+        state.remote_preflight_read.as_ref(),
         state.branch_git.as_ref(),
         state.remote_git.as_ref(),
         repo_id,
@@ -829,7 +829,7 @@ pub(super) async fn delete_repository_remote_branch(
         .await
         .map_err(ApiError::from_repository_error)?;
     let preview = remote_service::read_remote_branch_delete_preview(
-        &state.git_commands,
+        state.remote_preflight_read.as_ref(),
         state.branch_git.as_ref(),
         state.remote_git.as_ref(),
         repo_id.clone(),
@@ -855,7 +855,7 @@ pub(super) async fn delete_repository_remote_branch(
             "Finish the active Git operation before deleting a remote branch.",
         ));
     }
-    let git_reader = state.git_commands.clone();
+    let git_reader = state.remote_preflight_read.clone();
     let remote_commands = state.remote_commands.clone();
     let branch_git = state.branch_git.clone();
     let remote_git = state.remote_git.clone();
@@ -876,7 +876,7 @@ pub(super) async fn delete_repository_remote_branch(
             "remoteBranchDelete",
             move |context| async move {
                 let current = remote_service::read_remote_branch_delete_preview(
-                    &git_reader,
+                    git_reader.as_ref(),
                     branch_git.as_ref(),
                     remote_git.as_ref(),
                     task_repo_id.clone(),

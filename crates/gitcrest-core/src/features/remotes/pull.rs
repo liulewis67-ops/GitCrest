@@ -3,7 +3,10 @@ use std::path::Path;
 use crate::{
     domain::error::{GitAdapterError, WorkflowError},
     domain::remote::{RemotePullCommand, RemotePullStrategy},
-    ports::{branches::BranchGitPort, git::GitReadPort, remotes::RemoteGitPort},
+    ports::{
+        branches::BranchGitPort,
+        remotes::{RemoteGitPort, RemotePreflightReadPort},
+    },
 };
 use serde::{Deserialize, Serialize};
 
@@ -66,7 +69,7 @@ pub enum PullError {
     GitFailed,
 }
 
-pub async fn read_pull_preflight<G: GitReadPort>(
+pub async fn read_pull_preflight<G: RemotePreflightReadPort + ?Sized>(
     repo_id: String,
     repository_path: &Path,
     current: Option<&str>,
@@ -132,7 +135,7 @@ pub async fn read_pull_preflight<G: GitReadPort>(
         .await
         .map_err(map_remote_git_error)?;
     let worktree = git_read
-        .read_worktree_state(repository_path)
+        .read_worktree(repository_path)
         .await
         .map_err(map_workflow_error)?;
     let dirty_paths = worktree.dirty_paths;

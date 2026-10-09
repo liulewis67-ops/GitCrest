@@ -5,7 +5,10 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     domain::{error::GitAdapterError, workflow::WorkflowOperation},
-    ports::{branches::BranchGitPort, git::GitReadPort, remotes::RemoteGitPort},
+    ports::{
+        branches::BranchGitPort,
+        remotes::{RemoteGitPort, RemotePreflightReadPort},
+    },
 };
 
 #[cfg(test)]
@@ -55,7 +58,7 @@ pub enum RemoteError {
     GitFailed,
 }
 
-pub async fn read_remote_branch_delete_preview<G: GitReadPort>(
+pub async fn read_remote_branch_delete_preview<G: RemotePreflightReadPort + ?Sized>(
     git: &G,
     branch_git: &dyn BranchGitPort,
     remote_git: &dyn RemoteGitPort,
@@ -86,18 +89,18 @@ pub async fn read_remote_branch_delete_preview<G: GitReadPort>(
         return Err(RemoteError::InvalidName);
     }
     let expected_remote_oid = git
-        .resolve_commit_target(repository_path, &target_ref)
+        .resolve_target(repository_path, &target_ref)
         .await
         .map_err(|error| match error {
             crate::domain::error::WorkflowError::GitFailed => RemoteError::BranchNotFound,
             other => remote_workflow_error(other),
         })?;
     let current_head_oid = git
-        .read_head_oid(repository_path)
+        .read_head(repository_path)
         .await
         .map_err(remote_workflow_error)?;
     let comparison = git
-        .compare_remote_branch_delete(
+        .compare_delete_impact(
             repository_path,
             current_head_oid.as_deref(),
             &expected_remote_oid,
@@ -111,7 +114,7 @@ pub async fn read_remote_branch_delete_preview<G: GitReadPort>(
     let omitted_path_count = affected_paths.len().saturating_sub(200) as u32;
     affected_paths.truncate(200);
     let operation_in_progress = git
-        .read_worktree_state(repository_path)
+        .read_worktree(repository_path)
         .await
         .map_err(|_| RemoteError::GitFailed)?
         .operation;
