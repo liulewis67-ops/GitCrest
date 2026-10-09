@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GitCrestApiError,
   type GitCrestApiClient,
@@ -15,6 +15,8 @@ interface PendingShelfRestore {
   repoId: string;
   remainingShelfIds: string[];
 }
+
+interface ShelfAfterCreateAction { switchTarget: string; existingShelfIds: string[] }
 
 interface BranchSwitchShelfFlowOptions {
   tasks: TaskSnapshotResponse[];
@@ -44,6 +46,8 @@ export function useBranchSwitchShelfFlow({
   setTaskError,
   openTaskCenter,
 }: BranchSwitchShelfFlowOptions) {
+  const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
+  const [shelfComposerAfterSwitch, setShelfComposerAfterSwitch] = useState<BranchSwitchShelfContext>();
   const switchAfterShelfRef = useRef(new Map<string, BranchSwitchShelfContext>());
   const applyAfterSwitchRef = useRef(new Map<string, BranchSwitchShelfContext>());
   const restoreAfterShelfRef = useRef(new Map<string, PendingShelfRestore>());
@@ -71,6 +75,30 @@ export function useBranchSwitchShelfFlow({
   function closeShelfComposer(context: Pick<BranchSwitchShelfContext, "repoId" | "target">) {
     const key = shelfSwitchKey(context.repoId, context.target);
     if (!savedTargetsRef.current.has(key)) shelfBaselineRef.current.delete(key);
+  }
+
+  function requestShelfComposer() {
+    setShelfComposerRequest((request) => request + 1);
+  }
+
+  function requestShelfComposerForBranchSwitch(context: BranchSwitchShelfContext) {
+    setShelfComposerAfterSwitch(context);
+    requestShelfComposer();
+  }
+
+  function onShelfComposerTaskSubmitted(task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) {
+    if (!task || !afterCreate || !shelfComposerAfterSwitch) return;
+    trackShelfSwitchTask(task, {
+      repoId: shelfComposerAfterSwitch.repoId,
+      target: afterCreate.switchTarget,
+      existingShelfIds: afterCreate.existingShelfIds,
+    });
+    setShelfComposerAfterSwitch(undefined);
+  }
+
+  function onShelfComposerClosed() {
+    if (shelfComposerAfterSwitch) closeShelfComposer(shelfComposerAfterSwitch);
+    setShelfComposerAfterSwitch(undefined);
   }
 
   async function continueBranchSwitch(context: BranchSwitchShelfContext) {
@@ -180,5 +208,13 @@ export function useBranchSwitchShelfFlow({
     observeTasks(tasks);
   }, [tasks]);
 
-  return { prepareShelfSwitch, trackShelfSwitchTask, closeShelfComposer };
+  return {
+    prepareShelfSwitch,
+    shelfComposerRequest,
+    shelfComposerAfterSwitch,
+    requestShelfComposer,
+    requestShelfComposerForBranchSwitch,
+    onShelfComposerTaskSubmitted,
+    onShelfComposerClosed,
+  };
 }
