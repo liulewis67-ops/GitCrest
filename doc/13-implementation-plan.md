@@ -4075,3 +4075,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：electron-builder v26.15.3 schema 与官方 v26 文档核对 `win.signtoolOptions.publisherName`、`forceCodeSigning`、macOS notarization 和 GitHub publish provider。Windows/macOS 动态 release 配置分别在隔离环境变量下加载并断言 feed/签名门槛；`release.yml` 经 `js-yaml` 解析，所有 Bash 步骤通过 `bash -n`，配置 MJS `node --check`、`git diff --check` 通过。未触发 workflow、未创建 tag/Release、未在本机生成跨平台签名产物。
 - 证据：`.github/workflows/release.yml`、`electron-builder.desktop-release.mjs`、`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`、`package.json`。本阶段替换并删除先前 Linux-only `.github/workflows/release-linux.yml`。
 - 限制/后续：GitHub Actions 需配置 `WINDOWS_CSC_LINK`、`WINDOWS_CSC_KEY_PASSWORD`、与证书完整 Subject 一致的 `WINDOWS_UPDATE_PUBLISHER_NAME`、`MACOS_CSC_LINK`、`MACOS_CSC_KEY_PASSWORD`、Apple notarization credentials，以及 `LINUX_UPDATE_SIGNING_KEY`。由于本地仓库无 Git remote 且无这些签名 secrets，不能取得三平台 runner 产物、真实发布或自动更新安装/错误签名拒绝结果；S7.4 仍未整体验收。
+- 实施 commit：`67d4f7b`。
