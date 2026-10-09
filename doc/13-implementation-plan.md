@@ -2695,3 +2695,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：scoped status 的 P95 与 Diff API P95 尚未在相同发行构建和 20 轮口径下复测；S7.2 不据此标记通过，新增/删除/未跟踪场景仍可能全量扫描。S7.2、S7.4、S7.5 继续待验收。
 - 证据：`crates/gitcrest-core/src/git/status_snapshot.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`doc/14-backend-development-guidelines.md` 第 4 节、S7.2 性能口径第 12 节。
 - 实施 commit：`3d6223d`
+
+### Tasks 任务完成刷新副作用归入 feature — 小阶段 229
+- 状态：已完成（任务终态计划去重、资源刷新与仓库元数据更新由 tasks feature hook 承担，App 仅组合提交 UI 副作用）
+- 日期：2026-10-09
+- 交付：新增 `useTaskRefreshEffects`，在 tasks feature 内维护 `TaskRefreshPlanner` 并执行 workflow input、终态仓库/状态/分支/remote/history 刷新；`App.tsx` 改为装配 API 与刷新回调，并保留 commit 草稿清理及 commit-and-push 后续动作。clone repository 与 branch-switch shelf 流程仍由 App 分别编排。
+- 验证：`pnpm frontend:build` 与 `git diff --check` 通过；未运行测试。
+- 限制/后续：App 仍承载较多跨 feature 工作流组合，可按实施计划继续逐个下沉；构建输出包含依赖 `eval` 与 bundle 体积提示。
+- 证据：`src/features/tasks/model/use-task-refresh-effects.ts`、`src/features/tasks/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`d08e6b3`
