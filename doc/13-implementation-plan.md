@@ -2844,3 +2844,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/shelves.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：该阶段只抽取 ShelfRecord 读取能力；RepositoryManager.store() 仍用于其他仓库/任务/undo/shelf 写入路径，后续按明确能力拆分进一步替代具体存储访问；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`946e269`
+
+### Shelf CRUD 统一通过 ShelfStorePort — 小阶段 244
+- 状态：已完成（shelves、staging undo 与 workflows recovery 的 ShelfRecord 持久化访问经由 port）
+- 日期：2026-10-09
+- 交付：将 `ShelfRecordReadPort` 扩展为 `ShelfStorePort`，覆盖列表、读取、保存和删除 ShelfRecord/ShelfSnapshot；SQLite RepositoryStore 实现该 port 并统一转换为 `RepositoryError::StorageUnavailable`。bootstrap/AppState 注入 shelf store，shelves handler、staging undo 与 workflows recovery 不再直接通过 RepositoryManager.store() 读写 shelf 数据；任务和 undo 记录仍由其各自现有存储调用处理。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认相关 feature handler 中不再直接调用 `list_shelves/get_shelf/save_shelf/delete_shelf`；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或真实 SQLite 故障场景；NotFound、存储错误及任务失败文案保持现有映射。
+- 证据：`crates/gitcrest-core/src/ports/shelves.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、shelves/staging/workflows handlers、`doc/14-backend-development-guidelines.md` 第 4.1 节。
+- 限制/后续：其他 feature 仍通过 RepositoryManager.store() 访问其各自持久化记录，按业务能力继续分 port；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`7efbfae`
