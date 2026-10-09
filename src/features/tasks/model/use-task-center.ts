@@ -4,6 +4,7 @@ import type { GitCrestApiClient, TaskSnapshotResponse } from "../../../api/clien
 export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [error, setError] = useState("");
+  const [actionId, setActionId] = useState("");
 
   async function refresh() {
     const api = getApi();
@@ -13,6 +14,20 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not read task history.");
+    }
+  }
+
+  async function cancel(taskId: string) {
+    const api = getApi();
+    if (!api) return;
+    setActionId(taskId);
+    try {
+      await api.cancelTask(taskId);
+      await refresh();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not request task cancellation.");
+    } finally {
+      setActionId("");
     }
   }
 
@@ -28,7 +43,10 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
     tasks,
     error,
     setError,
+    actionId,
+    setActionId,
     refresh,
+    cancel,
     prependTask,
     appendTask,
   };

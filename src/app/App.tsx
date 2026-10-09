@@ -108,7 +108,6 @@ function App() {
   const pushTargetsByTask = useRef(new Map<string, PushTarget>());
   const [commitActionMenuOpen, setCommitActionMenuOpen] = useState(false);
   const taskRefreshPlannerRef = useRef(new TaskRefreshPlanner());
-  const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
   const { toggleFavorite, forgetRepository } = useRepositoryMutations({
     getApi: () => apiRef.current,
@@ -159,9 +158,12 @@ function App() {
     tasks,
     error: tasksError,
     setError: setTasksError,
+    actionId: taskActionId,
+    setActionId: setTaskActionId,
     refresh: refreshTasks,
     prependTask,
     appendTask,
+    cancel: cancelTask,
   } = useTaskCenter(() => apiRef.current);
   const [page, setPage] = useState<Page>("welcome");
   const { session: workspaceSession, setSession: setWorkspaceSession, sessionRef: workspaceSessionRef } = useWorkspaceSessionState();
@@ -674,20 +676,6 @@ function App() {
       await refreshTasks();
     } catch (reason) {
       setTasksError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not queue workflow recovery.");
-    } finally {
-      setTaskActionId("");
-    }
-  }
-
-  async function cancelTask(taskId: string) {
-    const api = apiRef.current;
-    if (!api) return;
-    setTaskActionId(taskId);
-    try {
-      await api.cancelTask(taskId);
-      await refreshTasks();
-    } catch (error) {
-      setTasksError(error instanceof Error ? error.message : "Could not request task cancellation.");
     } finally {
       setTaskActionId("");
     }
