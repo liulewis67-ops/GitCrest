@@ -49,6 +49,7 @@ pub async fn read_page_indexed(
         None
     };
 
+    let mut index_build_scheduled = false;
     if let (Some(fingerprint), Some(message)) = (&fingerprint, &filters.message) {
         let store_for_search = store.clone();
         let repo_id_for_search = repo_id.clone();
@@ -83,23 +84,14 @@ pub async fn read_page_indexed(
             });
         }
 
-        if store.is_index_building(&repo_id)
-            || schedule_history_index_build(
+        if !store.is_index_building(&repo_id) {
+            index_build_scheduled = schedule_history_index_build(
                 repo_id.clone(),
                 repository_path.to_owned(),
                 head.map(str::to_owned),
                 Some(fingerprint.clone()),
                 store.clone(),
-            )
-        {
-            return Ok(CommitPage {
-                repo_id,
-                offset,
-                limit,
-                commits: Vec::new(),
-                next_offset: None,
-                search_pending: true,
-            });
+            );
         }
     }
 
@@ -113,7 +105,11 @@ pub async fn read_page_indexed(
     )
     .await?;
 
-    if offset == 0 && (message_only_search || unfiltered_first_page) {
+    if offset == 0
+        && (message_only_search || unfiltered_first_page)
+        && !index_build_scheduled
+        && !store.is_index_building(&repo_id)
+    {
         schedule_history_index_build(
             repo_id,
             repository_path.to_owned(),

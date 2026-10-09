@@ -4465,3 +4465,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-current-stage407-20261010.json`。
 - 限制/后续：100k 冷搜索从请求到结果的 P95 仍高于 <200ms 目标；异步首次响应低于 200ms 不能替代完整结果时延验收。下一阶段应针对 Git 全量消息读取和 SQLite/FTS 写入继续优化并复测。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现、复测证据与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 索引未就绪时返回 Git 搜索结果 — 小阶段 408
+- 状态：已完成（首次搜索不再等待后台 FTS 索引构建完成才显示结果；冷搜索仍未达到 <200ms）
+- 日期：2026-10-10
+- 交付：message-only 查询遇到冷索引或另一请求正在构建索引时，继续用既有 Git `--grep` 路径返回匹配提交；首次查询仍在后台启动索引构建，后续查询可使用 SQLite FTS。已存在有效索引时继续直接走索引查询。性能基准将“结果可用时间”作为冷搜索样本，同时独立等待并记录索引构建阶段，避免把后台准备时间误计为查询结果延迟。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、Release 构建、`node --check scripts/performance/benchmark.mjs`、20 轮 `cold` 基准、报告 JSON 解析与 `git diff --check` 通过；未运行测试。100k 冷搜索 P50/P95/max 为 720.393/823.841/908.679ms，阶段 407 对照为 1623.932/1632.758/1634.522ms；每轮都验证返回 subject `benchmark commit 099999`，首次 response P95 为 823.833ms。索引在后台成功完成，后续阶段耗时仍以 Git 遍历和 SQLite/FTS 写入为主。
+- 手工验证：检查冷查询缓存 miss 会启动一次带 fingerprint 的索引构建后继续走 Git 查询；已有同 RepoId 构建时不重复启动索引任务；索引命中仍从 SQLite 读取并由 Git 对命中 OID 装配提交信息。20 轮报告记录 E: 盘临时 fixture 与数据目录，桌面 packaged app 未被重启或干预。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-search-index-fallback-stage408-20261010.json`、阶段 407 冷搜索报告。
+- 限制/后续：冷搜索结果 P95 仍约为目标的 4.1 倍；Git fallback 改善首次结果到达时间，但不能算作 <200ms 通过。下一阶段应在保留 Git 搜索语义的前提下继续降低 Git 遍历与查询耗时。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现、复测证据与台账同一 commit（SHA 可在后续台账更新中补记）。

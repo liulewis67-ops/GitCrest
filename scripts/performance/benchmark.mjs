@@ -235,7 +235,7 @@ async function startSidecar(executable, databasePath) {
 
 async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
   const samplesMs = [];
-  const pendingResponseSamplesMs = [];
+  const initialResponseSamplesMs = [];
   const phaseSamples = {
     git: [],
     parse: [],
@@ -258,7 +258,7 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
       const startedAt = performance.now();
       const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
       let page = await requestJson(searchUrl, instance.token);
-      pendingResponseSamplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
+      initialResponseSamplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
       const deadline = startedAt + 30_000;
       while (page.searchPending === true) {
         if (performance.now() >= deadline) throw new Error("Cold history search index did not become ready within 30 seconds.");
@@ -272,6 +272,14 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
       samplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
       if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
         throw new Error("Cold history search did not return its matching commit.");
+      }
+      while (!instance.getStderr().includes("History message index ready")) {
+        if (performance.now() >= deadline) throw new Error(`Cold history search index did not become ready within 30 seconds. Sidecar output: ${instance.getStderr().trim()}`);
+        const indexFailure = instance.getStderr().match(/History message index (skipped-too-large|timed-out|failed) in (\d+)ms/);
+        if (indexFailure) {
+          throw new Error(`Cold history search index ${indexFailure[1]} after ${indexFailure[2]}ms. Sidecar output: ${instance.getStderr().trim()}`);
+        }
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
       }
       const buildPhases = instance.getStderr().match(/History index build phases git=([0-9]+)ms parse=([0-9]+)ms verify=([0-9]+)ms persist=([0-9]+)ms/);
       const storePhases = instance.getStderr().match(/History index store phases maintenance=([0-9]+)ms rows=([0-9]+)ms fts=([0-9]+)ms commit=([0-9]+)ms/);
@@ -290,9 +298,9 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
     p95Ms: percentile(samplesMs),
     maxMs: Math.max(...samplesMs),
     samplesMs,
-    pendingResponseP95Ms: percentile(pendingResponseSamplesMs),
-    pendingResponseMaxMs: Math.max(...pendingResponseSamplesMs),
-    pendingResponseSamplesMs,
+    initialResponseP95Ms: percentile(initialResponseSamplesMs),
+    initialResponseMaxMs: Math.max(...initialResponseSamplesMs),
+    initialResponseSamplesMs,
     indexBuildPhases: Object.fromEntries(Object.entries(phaseSamples).map(([name, samples]) => [name, {
       samples: samples.length,
       p50Ms: percentile(samples, 0.5),
