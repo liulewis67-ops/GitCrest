@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   GitCrestApiError,
   type GitCrestApiClient,
@@ -11,7 +11,7 @@ interface RepositoryPushOptions {
   getApi: () => GitCrestApiClient | undefined;
   repoId?: string;
   onSelectRepository: (repoId: string) => void;
-  onTaskAccepted: (task: TaskSnapshotResponse, target: PushTarget, clearTaskError: boolean) => void;
+  onTaskAccepted: (task: TaskSnapshotResponse, clearTaskError: boolean) => void;
 }
 
 export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAccepted }: RepositoryPushOptions) {
@@ -22,6 +22,28 @@ export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAc
   const [error, setError] = useState("");
   const [forceOnly, setForceOnly] = useState(false);
   const [target, setTarget] = useState<PushTarget>();
+  const targetsByTask = useRef(new Map<string, PushTarget>());
+
+  function acceptTask(task: TaskSnapshotResponse, pushTarget: PushTarget, clearTaskError: boolean) {
+    targetsByTask.current.set(task.taskId, pushTarget);
+    if (targetsByTask.current.size > 500) {
+      const oldestTaskId = targetsByTask.current.keys().next().value;
+      if (oldestTaskId) targetsByTask.current.delete(oldestTaskId);
+    }
+    onTaskAccepted(task, clearTaskError);
+  }
+
+  function reviewTask(task: TaskSnapshotResponse, fallbackRepoId?: string) {
+    if (!task.operation.startsWith("push") || task.status !== "failed") return false;
+    const targetRepoId = task.repoId || fallbackRepoId;
+    if (!targetRepoId) return false;
+    openDialog(
+      targetRepoId,
+      targetsByTask.current.get(task.taskId),
+      task.operation.startsWith("pushForceWithLease"),
+    );
+    return true;
+  }
 
   async function refreshPreflight(targetRepoId = repoId, pushTarget: PushTarget | null = target || null) {
     const api = getApi();
@@ -62,7 +84,7 @@ export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAc
         remoteName: preview.remoteName,
         remoteBranch: preview.remoteBranch,
       });
-      onTaskAccepted(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, true);
+      acceptTask(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, true);
       setOpen(false);
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
@@ -99,7 +121,7 @@ export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAc
         remoteName: preview.remoteName,
         remoteBranch: preview.remoteBranch,
       });
-      onTaskAccepted(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, false);
+      acceptTask(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, false);
       setOpen(false);
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
@@ -120,6 +142,7 @@ export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAc
     forceOnly,
     refreshPreflight,
     openDialog,
+    reviewTask,
     submit,
     continueCommitPush,
   };

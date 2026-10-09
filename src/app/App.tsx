@@ -88,7 +88,6 @@ function App() {
     chooseTemplate: chooseCommitTemplate,
   } = useCommitDraft(selectedRepository?.repoId);
   const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
-  const pushTargetsByTask = useRef(new Map<string, PushTarget>());
   const [commitActionMenuOpen, setCommitActionMenuOpen] = useState(false);
   const [openError, setOpenError] = useState("");
   const { toggleFavorite, forgetRepository } = useRepositoryMutations({
@@ -480,8 +479,7 @@ function App() {
         if (repository) activateRepository(repository);
       }
     },
-    onTaskAccepted: (task, target, clearTaskError) => {
-      pushTargetsByTask.current.set(task.taskId, target);
+    onTaskAccepted: (task, clearTaskError) => {
       prependTask(task);
       if (clearTaskError) setTasksError("");
       setTasksOpen(true);
@@ -526,7 +524,7 @@ function App() {
 
   function reviewTaskPush(task: TaskSnapshotResponse) {
     setTasksOpen(false);
-    openPushDialog(task.repoId || selectedRepository?.repoId, pushTargetsByTask.current.get(task.taskId), task.operation.startsWith("pushForceWithLease"));
+    repositoryPush.reviewTask(task, selectedRepository?.repoId);
   }
 
   function runCommitAction(action: CommitAction) {
