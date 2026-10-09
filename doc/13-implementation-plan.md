@@ -3314,3 +3314,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/api/error.rs`。
 - 限制/后续：故障 fixture 在 Git 写入前返回错误；真实 Git 初始化中途失败遗留部分 `.git` 的清理和 GUI 恢复仍未覆盖；S7.5 保持进行中。
 - 完成 commit：`81216ce`
+
+### Windows 仓库访问拒绝端到端验收 — 小阶段 291
+- 状态：已完成（当前用户 ACL 拒绝读取时，sidecar 错误到欢迎页提示闭环）
+- 日期：2026-10-09
+- 交付：新增 Windows 专属 Electron E2E，在隔离临时项目目录上为当前用户设置只读/执行拒绝 ACL，通过欢迎页打开路径并确认显示稳定的权限提示、未进入工作区；测试 finally 移除 deny ACE 后清理临时目录。非 Windows 平台跳过此 OS 专属 fixture。准备度矩阵同步记录该覆盖。
+- 验证：ACL 定向 E2E 通过；`pnpm build` 通过；Windows 完整 `pnpm test:e2e` 通过（6 files、23 tests）；`git diff --check` 通过。
+- 手工验证：未执行 GUI 手工操作；Playwright 在本机真实 Windows ACL 上覆盖权限拒绝、renderer 告警和清理恢复。
+- 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：macOS/Linux 真实权限拒绝行为未在对应 runner 验证；Git 初始化中途失败后的部分 `.git` 清理仍待验收；S7.5 保持进行中。
+- 完成 commit：待提交

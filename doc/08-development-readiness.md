@@ -135,7 +135,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 
 | 场景 | 覆盖文档 | 必测 | 当前自动化覆盖 |
 |---|---|---|---|
-| 打开仓库 | `04-user-flows.md` | 是 | `tests/e2e/desktop.test.ts`、`tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/repository-management.test.ts`（非 Git 目录与选择后消失的路径均显示明确错误且不进入工作区） |
+| 打开仓库 | `04-user-flows.md` | 是 | `tests/e2e/desktop.test.ts`、`tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/repository-management.test.ts`（非 Git 目录、选择后消失的路径及 Windows ACL 拒绝均显示明确错误且不进入工作区） |
 | 初始化仓库 | `02-prd.md` | 是 | `tests/e2e/repository-management.test.ts`（选定项目目录、保留已有文件并打开新仓库） |
 | 克隆仓库 | `02-prd.md` | 是 | `tests/e2e/repository-management.test.ts`（HTTPS 入口、隔离本地 remote、失败后从 Task Center 重试、成功后自动打开） |
 | 基础提交 | `02-prd.md`、`04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |

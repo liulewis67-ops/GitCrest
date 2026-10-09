@@ -130,6 +130,42 @@ it("reports when the selected repository path disappears before it can be opened
   }
 }, 60_000);
 
+it.skipIf(process.platform !== "win32")("reports an access error for a folder denied to the current Windows user", async () => {
+  const projectPath = await mkdtemp(resolve(tmpdir(), "gitcrest-open-denied-e2e-project-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-open-denied-e2e-app-data-"));
+  const identity = await execFileAsync("whoami", ["/user", "/fo", "csv", "/nh"]);
+  const userSid = identity.stdout.match(/S-1-5-[\d-]+/)?.[0];
+  if (!userSid) throw new Error("Could not determine the current Windows user SID for the ACL fixture.");
+  let app: ElectronApplication | undefined;
+  let denyApplied = false;
+
+  try {
+    await execFileAsync("icacls", [projectPath, "/deny", `*${userSid}:(RX)`]);
+    denyApplied = true;
+    app = await electron.launch({
+      args: ["."],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await app.evaluate(({ dialog }, destination) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
+    }, projectPath);
+
+    await window.getByRole("button", { name: "Open local repository" }).click();
+    const errorAlert = window.getByRole("alert");
+    await errorAlert.waitFor({ state: "visible" });
+    expect(await errorAlert.innerText()).toBe("GitCrest does not have permission to read the selected repository.");
+    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+  } finally {
+    await app?.close();
+    if (denyApplied) await execFileAsync("icacls", [projectPath, "/remove:d", `*${userSid}`]);
+    await rm(projectPath, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 60_000);
+
 it("clones a remote from the welcome page and opens the new repository", async () => {
   const source = await createTempGitRepository();
   const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-e2e-remotes-"));
