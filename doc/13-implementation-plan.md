@@ -3963,3 +3963,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-repo-index-stage355-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`。
 - 限制/后续：移除排序复合索引不能稳定改善写入，继续保留当前排序索引与 schema 12；冷搜索仍约 4–5 秒，下一轮从减少 FTS 建索引输入或更早启动构建寻找方案。S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
 - 完成 commit：`b714c7e perf: evaluate history cache index width`
+
+### S7.2 FTS5 文档长度表省略评估 — 小阶段 356
+- 状态：已完成（完成 20 轮评估，未保留 FTS `columnsize=0`；S7.2 性能目标仍未达标）
+- 日期：2026-10-09
+- 交付：评估为 trigram FTS5 配置 `columnsize=0`，省去当前搜索路径未使用的 token 长度 shadow table。实验迁移会清除可重建搜索缓存并在后续查询时重建；基准后恢复 schema 12 默认配置，未保留迁移或代码改动。SQLite FTS5 文档说明此选项省略 `%_docsize` 表，应用不使用其 token 计数 API。
+- 验证：存储相关测试 13/13、`cargo fmt --check`、Clippy 与 Release build 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 同一 100k fixture 20 轮：`columnsize=0` 的 FTS 构建 P50/P95 为 273/322ms，阶段 353 默认配置为 323/374ms；但完整冷搜索为 4,402/5,738ms，较阶段 353 的 4,059/4,945ms 没有整体改善，文档行写入 P50/P95 2,676/3,045ms 仍是主要成本。两组不是交错运行，完整延迟差异仅作方向性参考。报告：`doc/evidence/S7.2/api-win32-cold-fts-columnsize0-stage356-20261009.json`。
+- 手工验证：未操作 GUI；每轮使用独立 sidecar/SQLite 和同一 fixture，返回目标提交。基准运行前后 fixture refs 和工作树状态保持不变。
+- 证据：`doc/evidence/S7.2/api-win32-cold-fts-columnsize0-stage356-20261009.json`；比较基线 `doc/evidence/S7.2/api-win32-cold-slim-cache-stage353-20261009.json`；[SQLite FTS5 columnsize 选项](https://www.sqlite.org/fts5.html#the_columnsize_option)。
+- 限制/后续：该选项减少 FTS 辅助数据和局部 postings 构建耗时，但未证明能缩短端到端冷搜索，暂不引入 schema 迁移；优先寻找能减少 100k 行装载/写入时间的方案。完整冷搜索仍远超 <200ms，S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
