@@ -4010,7 +4010,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`node --check` 与 `git diff --check` 通过；`pnpm electron:build`、`pnpm electron:package` 成功。Windows 11 / Ryzen 7 5800H / Electron 37 / 同一 100k commit 与 1k 行 Diff fixture，正式打包 Release，4 个隔离批次共 20 轮：冷启动 P50/P95 1,055.976/1,253.859ms；100k 历史首帧 P50/P95 390.781/421.659ms；30 秒滚动 P5 的跨轮 P5/P50/P95 为 55.249/55.249/55.249fps；空闲进程树工作集 38 个窗口样本峰值 402,198,528 bytes，打开仓库后 41 个窗口样本峰值 444,047,360 bytes；滚动工作集峰值分布 P50/P95 492,482,560/502,333,440 bytes；NSIS 安装包 108,778,287 bytes（103.74 MiB）。完整汇总及 4 份批次报告见证据路径。
 - 手工验证：未操作 GUI；每轮使用独立临时用户目录，通过发行版可执行文件打开同一 fixture；20 个启动、首帧和 30 秒滚动样本均成功完成。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-benchmark-batches.mjs`、`doc/evidence/S7.2/desktop-win32-post-cache-stage360-batched-20261010.json` 及其 `.batches/batch-01.json` 至 `batch-04.json`；发行包单次内存进程树明细 `doc/evidence/S7.2/desktop-win32-release-memory-stage360-rolefix-20261010.json`。
-- 限制/后续：冷启动 P95、100k 首帧 P95 和安装包体积达到目标；空闲内存约 402MB 超过 <250MB，滚动工作集 P95 约 502MB 略高于 <500MB，滚动 P5 约 55.25fps 低于 ≥60fps。阶段 359 的冷消息搜索 P95 约 2.27s，也仍高于 <200ms。S7.2 保持待验收；S7.4、S7.5 仍待完成。
+- 限制/后续：冷启动 P95、100k 首帧 P95 和安装包体积达到目标；空闲内存约 402MB 超过 <250MB，滚动工作集 P95 约 502MB 略高于 <500MB，滚动 P5 约 55.25fps 低于 ≥60fps。阶段 359 记录的冷搜索等待 P95 约 2.27s；阶段 368 只复测索引就绪后的查询（P95 14.275ms），冷索引端到端等待尚未按 20 轮重测。S7.2 保持待验收；S7.4、S7.5 仍待完成。
 - 完成 commit：`b85938f perf: benchmark packaged desktop release`
 
 ### S7.2 隔离滚动帧率来源 — 小阶段 361
@@ -4076,3 +4076,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`.github/workflows/release.yml`、`electron-builder.desktop-release.mjs`、`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`、`package.json`。本阶段替换并删除先前 Linux-only `.github/workflows/release-linux.yml`。
 - 限制/后续：GitHub Actions 需配置 `WINDOWS_CSC_LINK`、`WINDOWS_CSC_KEY_PASSWORD`、与证书完整 Subject 一致的 `WINDOWS_UPDATE_PUBLISHER_NAME`、`MACOS_CSC_LINK`、`MACOS_CSC_KEY_PASSWORD`、Apple notarization credentials，以及 `LINUX_UPDATE_SIGNING_KEY`。由于本地仓库无 Git remote 且无这些签名 secrets，不能取得三平台 runner 产物、真实发布或自动更新安装/错误签名拒绝结果；S7.4 仍未整体验收。
 - 实施 commit：`67d4f7b`。
+
+### S7.2 使用 libgit2 读取索引命中的提交摘要 — 小阶段 368
+- 状态：已完成（索引就绪后的消息搜索达到 <200ms；冷索引及 S7.2 总体验收仍待完成）
+- 日期：2026-10-10
+- 交付：历史消息 FTS 返回 OID 后，不再为每页最多 50 条提交启动 `git log --no-walk` 子进程；改用 libgit2 在阻塞线程按 OID 读取提交对象，并按 FTS 返回顺序构造摘要。保留提交作者、邮箱、父提交、subject 和原有 `%at` 作者时间语义。性能脚本新增 `search` 模式：等待首次历史索引完成，再对固定查询执行计划要求的 20 次计时。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`node --check scripts/performance/benchmark.mjs`、Release sidecar 构建和 `git diff --check` 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 100k 提交 continuation fixture：首次搜索索引约 1.63 秒就绪；索引就绪后 20 次搜索均返回目标提交，P50/P95 12.689/14.275ms、最大 14.587ms。完整 `run` 基准尝试因 dirty-scope watcher 断言失败而未完成；本阶段使用新增的 search-only 模式采样。报告：`doc/evidence/S7.2/api-win32-indexed-search-stage368.json`。
+- 手工验证：未操作 GUI；运行 `node scripts/performance/benchmark.mjs search <fixture> <report>` 完成 20 次 API 搜索采样。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-indexed-search-stage368.json`。
+- 限制/后续：本阶段验证的是索引就绪后的查询延迟；首次索引建立期间仍显示 pending，约 1.63 秒就绪时间不是 <200ms，且没有复跑 20 轮冷搜索完整耗时。S7.2 的空闲内存、滚动工作集和帧率仍未达标；S7.4、S7.5 继续待验收。
+- 实施 commit：`5a76f4c`。
