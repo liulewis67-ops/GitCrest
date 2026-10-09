@@ -792,13 +792,8 @@ function App() {
 
   function closeRepositoryTab(repoId: string) {
     const current = workspaceSessionRef.current;
-    const openRepoIds = current.openRepoIds.filter((id) => id !== repoId);
-    const closingActive = current.activeRepoId === repoId;
-    const nextActiveRepoId = closingActive
-      ? openRepoIds[openRepoIds.length - 1]
-      : current.activeRepoId;
+    const { session: nextSession, closingActive, nextActiveRepoId } = workspaceSessionActions.closeTab(current, repoId);
     const nextRepository = repositories.find((repository) => repository.repoId === nextActiveRepoId);
-    const nextSession = { ...current, openRepoIds, activeRepoId: nextActiveRepoId };
     workspaceSessionRef.current = nextSession;
     setWorkspaceSession(nextSession);
     invalidateRepositoryUiCache(repoId);

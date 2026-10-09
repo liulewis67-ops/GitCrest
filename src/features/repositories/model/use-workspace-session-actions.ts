@@ -63,5 +63,18 @@ export function useWorkspaceSessionActions(setSession: Dispatch<SetStateAction<W
     }));
   }
 
-  return { activateRepository, changeMode, openFileDiff, openCommitFileDiff };
+  function closeTab(session: WorkspaceSession, repoId: string) {
+    const openRepoIds = session.openRepoIds.filter((id) => id !== repoId);
+    const closingActive = session.activeRepoId === repoId;
+    const nextActiveRepoId = closingActive
+      ? openRepoIds[openRepoIds.length - 1]
+      : session.activeRepoId;
+    return {
+      session: { ...session, openRepoIds, activeRepoId: nextActiveRepoId },
+      closingActive,
+      nextActiveRepoId,
+    };
+  }
+
+  return { activateRepository, changeMode, openFileDiff, openCommitFileDiff, closeTab };
 }
