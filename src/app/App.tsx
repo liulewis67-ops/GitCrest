@@ -14,6 +14,7 @@ import { loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../fea
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { getRepositoryEventRefreshPlan, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type CommitAction, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
+import { useCommitTagRequest } from "../features/history";
 import { loadDiscardChangesDialog } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
@@ -62,7 +63,7 @@ function App() {
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const [historySearchFocusRequest, setHistorySearchFocusRequest] = useState<{ repoId: string; sequence: number }>();
-  const [tagEditorRequest, setTagEditorRequest] = useState<{ repoId: string; oid: string; sequence: number }>();
+  const tagEditor = useCommitTagRequest();
   const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
   const [shelfComposerAfterSwitch, setShelfComposerAfterSwitch] = useState<{ repoId: string; target: string; existingShelfIds: string[] }>();
   const [tasksOpen, setTasksOpen] = useState(false);
@@ -789,7 +790,7 @@ function App() {
     cherryPick: (repoId, targetOid) => workflowDialog.open(repoId, targetOid, "cherryPick"),
     createTag: (repoId, oid) => {
       changeWorkspaceMode("graph");
-      setTagEditorRequest((request) => ({ repoId, oid, sequence: (request?.sequence || 0) + 1 }));
+      tagEditor.open(repoId, oid);
     },
     openSettings: () => setSettingsOpen(true),
     commit: () => { void commitChanges("commit"); },
@@ -1018,12 +1019,12 @@ function App() {
               api={apiRef.current}
               connected={connected}
               hasActiveRepositoryTask={hasActiveRepositoryTask}
-              openTagRequest={tagEditorRequest}
+              openTagRequest={tagEditor.request}
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
               onOpenFile={openCommitFileDiff}
               onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
-              onTagRequestHandled={(sequence) => setTagEditorRequest((request) => request?.sequence === sequence ? undefined : request)}
+              onTagRequestHandled={tagEditor.markHandled}
               onWorkflow={(action, oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, action); }}
             />}
           </div>
