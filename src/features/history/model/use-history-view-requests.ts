@@ -14,6 +14,11 @@ export interface HistorySearchFocusRequest {
 export function useHistoryViewRequests() {
   const [tagEditorRequest, setTagEditorRequest] = useState<CommitTagRequest>();
   const [searchFocusRequest, setSearchFocusRequest] = useState<HistorySearchFocusRequest>();
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  function refresh() {
+    setRefreshKey((current) => current + 1);
+  }
 
   function openTagEditor(repoId: string, oid: string) {
     setTagEditorRequest((current) => ({ repoId, oid, sequence: (current?.sequence || 0) + 1 }));
@@ -33,6 +38,8 @@ export function useHistoryViewRequests() {
 
   return {
     tagEditorRequest,
+    refreshKey,
+    refresh,
     openTagEditor,
     markTagEditorHandled,
     searchFocusRequest,

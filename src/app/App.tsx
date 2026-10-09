@@ -61,7 +61,6 @@ function App() {
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
-  const [historyRefreshKey, setHistoryRefreshKey] = useState(0);
   const historyRequests = useHistoryViewRequests();
   const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
   const [shelfComposerAfterSwitch, setShelfComposerAfterSwitch] = useState<{ repoId: string; target: string; existingShelfIds: string[] }>();
@@ -132,7 +131,7 @@ function App() {
       }
       if (plan.repoId && plan.refreshBranches) void refreshRepositoryBranches(plan.repoId);
       if (plan.repoId && plan.refreshRemotes) void refreshRepositoryRemotes(plan.repoId);
-      if (plan.refreshHistory) setHistoryRefreshKey((current) => current + 1);
+      if (plan.refreshHistory) historyRequests.refresh();
     },
   });
   const {
@@ -414,7 +413,7 @@ function App() {
     refreshTasks,
     refreshRepositoryStatus,
     refreshRepositoryBranches,
-    refreshHistory: () => setHistoryRefreshKey((current) => current + 1),
+    refreshHistory: historyRequests.refresh,
   });
   const remoteMutations = useRemoteMutations({
     getApi: () => apiRef.current,
@@ -719,7 +718,7 @@ function App() {
       if (refreshPlan.repoId && refreshPlan.refreshStatus) void refreshRepositoryStatus(refreshPlan.repoId);
       if (refreshPlan.repoId && refreshPlan.refreshBranches) void refreshRepositoryBranches(refreshPlan.repoId);
       if (refreshPlan.repoId && refreshPlan.refreshRemotes) void refreshRepositoryRemotes(refreshPlan.repoId);
-      if (refreshPlan.refreshHistory) setHistoryRefreshKey((current) => current + 1);
+      if (refreshPlan.refreshHistory) historyRequests.refresh();
       if (refreshPlan.kind === "commit" && task.repoId && task.status === "succeeded" && commitIntent && commitIntent.action !== "commit") {
         void continueCommitPush(task.repoId, commitIntent);
       }
@@ -913,7 +912,7 @@ function App() {
               remoteDisabledReason={remoteDisabledReason}
               api={apiRef.current}
               credentialManagerOpenRequest={credentialManagerOpenRequest}
-              historyRefreshKey={historyRefreshKey}
+              historyRefreshKey={historyRequests.refreshKey}
               shelfComposerRequest={shelfComposerRequest}
               shelfComposerAfterSwitch={shelfComposerAfterSwitch}
               connected={connected}
@@ -966,7 +965,7 @@ function App() {
                 isMacPlatform={isMacPlatform}
                 selectedCommit={selectedCommit}
                 workspaceSession={workspaceSession}
-                historyRefreshKey={historyRefreshKey}
+                historyRefreshKey={historyRequests.refreshKey}
               historySearchFocusRequest={historyRequests.searchFocusRequest}
                 graphViewportRef={graphViewportRef}
                 openingRepository={repositoryOpening.opening}
