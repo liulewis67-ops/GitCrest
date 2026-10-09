@@ -1,6 +1,7 @@
 mod api;
 mod bootstrap;
 mod config;
+mod credentials;
 mod features;
 
 mod domain;

@@ -4734,3 +4734,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/unit/settings-dialog.test.tsx`、`tests/unit/shortcut-preferences.test.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：此项修复此前测试编译中的陈旧模块路径，不增加测试覆盖或改变 Settings 行为；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段导入修复与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 建立独立凭据 adapter 模块入口 — 小阶段 435
+- 状态：已完成（凭据服务由规范约定的 `credentials/` 根模块拥有，API feature 显式复用）
+- 日期：2026-10-10
+- 交付：将凭据服务源文件归并为 `src/credentials/mod.rs`，在 crate root 声明 `credentials` 模块；`features/credentials` 移除跨目录 `#[path]` 声明并通过 crate 内 re-export 使用相同类型和服务。Keyring、Askpass 实现及 API 路由行为未改变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认 feature handler、bootstrap 和 AppState 继续共享同一凭据 manager 类型；生产代码不再从 feature 目录通过路径属性加载外部凭据源文件。
+- 证据：`crates/gitcrest-core/src/lib.rs`、`crates/gitcrest-core/src/credentials/mod.rs`、`crates/gitcrest-core/src/features/credentials/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：`credentials/mod.rs` 仍包含 keyring 与 Askpass 适配实现；后续可按规范拆成 `keyring.rs` 和 `askpass.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段模块边界与台账同一 commit（SHA 可在后续台账更新中补记）。

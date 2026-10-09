@@ -1,8 +1,5 @@
-#[path = "../../credentials/credentials.rs"]
-mod service;
-
 mod dto;
 mod handlers;
 pub(crate) mod routes;
 
-pub(crate) use service::*;
+pub(crate) use crate::credentials::*;
