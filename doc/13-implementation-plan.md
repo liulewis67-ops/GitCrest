@@ -499,6 +499,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - Cold/warm 搜索复测（小阶段 307）：以每轮新建 sidecar 和空数据库测冷索引首次查询，20 轮 P95 631.626ms，未达到 <200ms；warm 索引搜索 P95 92.208ms 达标，但 max 18.343s 有单次异常长尾，需继续定位。索引准备约 16.478s。首页历史 P95 94.911ms、dirty-scope status 14.067ms、强制全量 status 9.508ms、缓存全量/路径 status 0.862/0.806ms、1k 行 Diff 103.547ms。完整证据：`doc/evidence/S7.2/api-win32-cold-warm-search-20261009.json`。这些是本机 Windows Release sidecar API 数据，不代表 Electron 桌面启动、工作集、帧率或安装包目标通过。
 - 索引重复构建修复（小阶段 308）：完成同一 refs fingerprint 的索引后仍有在途旧请求再次触发相同构建，导致重复 Git 扫描和偶发 18 秒长尾。调度时先检查 SQLite 已持久化 fingerprint，并继续用在途集合合并并发请求；refs 改变时允许重建。Release API 20 轮 warm 搜索 P95/max 68.978/71.563ms，历史首页 P95 94.464ms，报告只记录一次索引 ready（14.194s）；之前复现的 warm 搜索 17.979s 与首页 14.786s 尾延迟不再出现。cold search P95 662.208ms，<200ms 目标仍未达到。证据：`doc/evidence/S7.2/api-win32-search-index-dedup-20261009.json`。
 - 首页后台索引（小阶段 309）：无筛选的第一页返回后触发惰性索引构建，索引读写使用独立 SQLite 连接，避免长批量写入阻塞仓库主连接；索引正在重建时，搜索直接回退 Git，不等待 FTS 连接。Windows Release API 20 轮：首次历史页 P95/max 149.158/153.957ms，warm 搜索 P95/max 88.515/88.537ms；索引约 19.676s 就绪，cold miss P95 865.006ms（目标 <200ms 仍未达到）。证据：`doc/evidence/S7.2/api-win32-search-index-background-20261009.json`。
+- 索引原子批量写入（小阶段 310）：将原先每 500 条一笔事务的写入收敛为单笔事务，文档、FTS 触发器和 fingerprint 状态一起原子提交，避免大量 FULL 同步。100k Release API 20 轮索引 ready 从约 19.676s 降至 11.613s；历史首页 P95/max 127.846/130.253ms，warm 搜索 P95/max 59.999/60.680ms，cold miss P95 706.731ms，仍未达 <200ms。证据：`doc/evidence/S7.2/api-win32-search-index-atomic-20261009.json`。
 - Status 进展：只读 Git status 子进程设置 `GIT_OPTIONAL_LOCKS=0`，不修改仓库配置或工作区文件。100k API 基准 20 轮 P95：全量 116ms、路径 scope 129ms（此前 126/140ms）；目标 <100ms 仍未达成。status 单元/集成用例、Clippy 和 Release API 基准通过。证据：`doc/evidence/S7.2/api-win32-status-locks.json`。
 - 状态缓存进展：普通 status API 复用 watcher 失效后的全量/路径快照；watcher 文件事件立即使缓存版本失效，避免并发 Git 读取把旧结果重新写回。缓存最多保留 8 个仓库、每仓库最多 10,000 条文件记录或 256 个路径记录；手动刷新通过 `refresh=true` 强制调用 Git，写操作预检保持强制读取。100k Release API 基准 20 轮缓存命中 P95：全量 0.953ms、路径 scope 0.772ms；首次冷全量读取样本 113.132ms。基准新增强制刷新场景后，`refresh=true` 全量 P95 为 125.634ms，确认缓存命中目标达成，但 watcher 失效或手动强刷的冷读仍未达到 <100ms。直接测试 untracked/ignored/rename 和 index 并行选项未见稳定收益。构建与 Clippy 通过。证据：`doc/evidence/S7.2/api-win32-status-cache.json`、`doc/evidence/S7.2/api-win32-status-forced-refresh.json`。
 - 状态缓存增量修复：watcher 现在按 dirty scope 失效路径快照，保留未受影响的全量快照供非重叠路径读取；受影响 scope 刷新后合并回全量快照。dirty path 超过 256 条时升级为全量失效。TaskService 在仓库任务终止后主动失效该仓库状态缓存，覆盖测试环境和 watcher 尚未发送事件时的 Git 写入；此前 commit API 集成测试暴露了任务完成后读取旧状态的问题。新增覆盖路径合并、目录边界、并发旧刷新和 dirty path 上限的测试。验收：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（106 tests）、`git diff --check` 均通过。尚未对增量失效后的冷读重新跑 100k 基准；S7.2 整体仍待验收。
@@ -3506,3 +3507,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-background-20261009.json`。
 - 限制/后续：索引约需 20 秒完成，期间 cold message search 仍走 Git、P95 高于 200ms；S7.2 其余桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
 - 完成 commit：`de46398`
+
+### S7.2 搜索索引单事务原子替换 — 小阶段 310
+- 状态：已完成（索引行与 ready fingerprint 原子替换，减少 FULL 同步）
+- 日期：2026-10-09
+- 交付：将消息索引表、FTS5 trigram 触发器和 refs fingerprint 状态改为在同一 SQLite 事务内替换。索引构建期间旧状态继续不可用于当前 refs；完成后一次提交对读取方原子可见。减少此前每 500 条记录提交一次的 FULL 同步次数。
+- 验证：存储测试 12/12 通过；完整 `pnpm check` 通过（使用临时 `CARGO_TARGET_DIR` 避开桌面进程占用的 debug sidecar）：前端/Electron build、Vitest 163/163、Rust 139/139、Electron E2E 6 files / 29 tests；`git diff --check` 通过。Windows Release API 20 轮，100k 索引 ready 从约 19.676s 降至 11.613s，首页 P95/max 127.846/130.253ms，warm 搜索 P95/max 59.999/60.680ms，cold 搜索 P95 706.731ms。
+- 手工验证：未执行 GUI 操作；使用隔离的 100k commit / 1k 行 Diff fixture 测当前 Release sidecar API。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-atomic-20261009.json`。
+- 限制/后续：cold search P95 仍高于 200ms，索引仍需约 11.6 秒构建；S7.2 的桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
+- 完成 commit：待补记

@@ -222,71 +222,51 @@ impl RepositoryStore {
         entries: &[CommitSearchEntry],
     ) -> Result<(), String> {
         let history_index_connection = self.history_index_connection();
-        {
-            let mut connection = history_index_connection
-                .lock()
-                .map_err(|_| "repository database lock poisoned".to_string())?;
-            let transaction = connection
-                .transaction()
-                .map_err(|error| error.to_string())?;
-            transaction
-                .execute(
-                    "DELETE FROM history_search_documents WHERE repo_id=?1",
-                    [repo_id],
-                )
-                .map_err(|error| error.to_string())?;
-            transaction
-                .execute(
-                    "DELETE FROM history_search_index_state WHERE repo_id=?1",
-                    [repo_id],
-                )
-                .map_err(|error| error.to_string())?;
-            transaction.commit().map_err(|error| error.to_string())?;
-        }
-
-        for batch in entries.chunks(500) {
-            let mut connection = history_index_connection
-                .lock()
-                .map_err(|_| "repository database lock poisoned".to_string())?;
-            let transaction = connection
-                .transaction()
-                .map_err(|error| error.to_string())?;
-            {
-                let mut statement = transaction
-                    .prepare_cached(
-                        "INSERT INTO history_search_documents (repo_id, oid, sort_order, parents_json, author_name, author_email, committed_at_ms, subject, message) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-                    )
-                    .map_err(|error| error.to_string())?;
-                for entry in batch {
-                    let parents =
-                        serde_json::to_string(&entry.parents).map_err(|error| error.to_string())?;
-                    let sort_order = i64::try_from(entry.sort_order).map_err(|_| {
-                        "history search index position exceeds SQLite limits".to_string()
-                    })?;
-                    statement
-                        .execute(params![
-                            repo_id,
-                            entry.oid,
-                            sort_order,
-                            parents,
-                            entry.author_name,
-                            entry.author_email,
-                            entry.committed_at_ms,
-                            entry.subject,
-                            entry.message,
-                        ])
-                        .map_err(|error| error.to_string())?;
-                }
-            }
-            transaction.commit().map_err(|error| error.to_string())?;
-        }
-
         let mut connection = history_index_connection
             .lock()
             .map_err(|_| "repository database lock poisoned".to_string())?;
         let transaction = connection
             .transaction()
             .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "DELETE FROM history_search_documents WHERE repo_id=?1",
+                [repo_id],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute(
+                "DELETE FROM history_search_index_state WHERE repo_id=?1",
+                [repo_id],
+            )
+            .map_err(|error| error.to_string())?;
+        {
+            let mut statement = transaction
+                .prepare_cached(
+                    "INSERT INTO history_search_documents (repo_id, oid, sort_order, parents_json, author_name, author_email, committed_at_ms, subject, message) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                )
+                .map_err(|error| error.to_string())?;
+            for entry in entries {
+                let parents =
+                    serde_json::to_string(&entry.parents).map_err(|error| error.to_string())?;
+                let sort_order = i64::try_from(entry.sort_order).map_err(|_| {
+                    "history search index position exceeds SQLite limits".to_string()
+                })?;
+                statement
+                    .execute(params![
+                        repo_id,
+                        entry.oid,
+                        sort_order,
+                        parents,
+                        entry.author_name,
+                        entry.author_email,
+                        entry.committed_at_ms,
+                        entry.subject,
+                        entry.message,
+                    ])
+                    .map_err(|error| error.to_string())?;
+            }
+        }
         transaction
             .execute(
                 "INSERT INTO history_search_index_state (repo_id, refs_fingerprint, indexed_at_ms) VALUES (?1, ?2, ?3) ON CONFLICT(repo_id) DO UPDATE SET refs_fingerprint=excluded.refs_fingerprint, indexed_at_ms=excluded.indexed_at_ms",
