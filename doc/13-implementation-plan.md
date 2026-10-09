@@ -2462,3 +2462,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段保留既有 Git 命令适配与错误类型，不改变 API 契约；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/history/service/blame.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、14 节。
 - 实施 commit：`646550a`
+
+### history feature refs 查询拆分 — 小阶段 205
+- 状态：已完成（分支与远端 refs 读取和映射已归入独立子模块）
+- 日期：2026-10-09
+- 交付：新增 `features/history/service/refs.rs`，负责调用 Git 枚举 heads/remotes 并映射为 `RefSnapshot`；history service 通过窄导出保留 handler 使用的 `read_refs` 入口，响应字段和查询语义不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、history service 定向测试（4 passed）和 `git diff --check` 通过。
+- 限制/后续：refs 响应模型暂留 service 模块，后续按模型归属规范审视 DTO 拆分；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/history/service/refs.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`e839c3f`
