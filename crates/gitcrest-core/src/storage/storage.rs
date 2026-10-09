@@ -257,15 +257,12 @@ impl RepositoryStore {
         {
             let mut statement = transaction
                 .prepare_cached(
-                    "INSERT INTO history_search_documents (repo_id, oid, sort_order, message) VALUES (?1, ?2, ?3, ?4)",
+                    "INSERT INTO history_search_documents (repo_id, oid, message) VALUES (?1, ?2, ?3)",
                 )
                 .map_err(|error| error.to_string())?;
             for entry in entries {
-                let sort_order = i64::try_from(entry.sort_order).map_err(|_| {
-                    "history search index position exceeds SQLite limits".to_string()
-                })?;
                 statement
-                    .execute(params![repo_id, entry.oid, sort_order, entry.message,])
+                    .execute(params![repo_id, entry.oid, entry.message,])
                     .map_err(|error| error.to_string())?;
             }
         }
@@ -331,18 +328,16 @@ impl RepositoryStore {
         let match_query = format!("\"{}\"", query.replace('"', "\"\""));
         let mut statement = connection
             .prepare(
-                "SELECT d.oid, d.message, d.sort_order FROM history_search_fts f JOIN history_search_documents d ON d.id=f.rowid WHERE history_search_fts MATCH ?1 AND d.repo_id=?2 ORDER BY d.sort_order LIMIT ?3 OFFSET ?4",
+                "SELECT d.oid, d.message FROM history_search_fts f JOIN history_search_documents d ON d.id=f.rowid WHERE history_search_fts MATCH ?1 AND d.repo_id=?2 ORDER BY d.id LIMIT ?3 OFFSET ?4",
             )
             .map_err(|error| error.to_string())?;
         let rows = statement
             .query_map(
                 params![match_query, repo_id, limit as i64, offset as i64],
                 |row| {
-                    let sort_order = row.get::<_, i64>(2)?.max(0) as usize;
                     Ok(CommitSearchEntry {
                         oid: row.get(0)?,
                         message: row.get(1)?,
-                        sort_order,
                     })
                 },
             )
@@ -1093,7 +1088,7 @@ impl From<RepositoryRecord> for StoredRepository {
 
 fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 13 {
+    if version > 14 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -1153,6 +1148,12 @@ fn migrate(connection: &Connection) -> rusqlite::Result<()> {
             "../../migrations/0013_history_search_drop_oid_unique.sql"
         ))?;
         connection.pragma_update(None, "user_version", 13)?;
+    }
+    if version < 14 {
+        connection.execute_batch(include_str!(
+            "../../migrations/0014_history_search_rowid_order.sql"
+        ))?;
+        connection.pragma_update(None, "user_version", 14)?;
     }
     Ok(())
 }
@@ -1274,7 +1275,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 14).unwrap();
+        connection.pragma_update(None, "user_version", 15).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -1317,7 +1318,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }
@@ -1372,7 +1373,6 @@ mod tests {
         let entry = CommitSearchEntry {
             oid: "b".repeat(40),
             message: "New cache searchable message".into(),
-            sort_order: 0,
         };
         let unique_indexes: i64 = store
             .history_index_connection()
@@ -1385,6 +1385,17 @@ mod tests {
             )
             .unwrap();
         assert_eq!(unique_indexes, 0);
+        let sort_order_columns: i64 = store
+            .history_index_connection()
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT count(*) FROM pragma_table_info('history_search_documents') WHERE name='sort_order'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(sort_order_columns, 0);
         store
             .replace_history_search_index("repo-1", "new-fingerprint", std::slice::from_ref(&entry))
             .unwrap();
@@ -1547,18 +1558,23 @@ mod tests {
         let entry = CommitSearchEntry {
             oid: "a".repeat(40),
             message: "Fix C++ path: \"Needle\" in HEAD".into(),
-            sort_order: 0,
         };
+        let next_entry = CommitSearchEntry {
+            oid: "b".repeat(40),
+            message: "Another needle entry".into(),
+        };
+        let entries = [entry.clone(), next_entry.clone()];
         store
-            .replace_history_search_index("repo-1", "refs-v1", std::slice::from_ref(&entry))
+            .replace_history_search_index("repo-1", "refs-v1", &entries)
             .unwrap();
 
         let matches = store
             .search_history_messages("repo-1", "refs-v1", "nEeDlE", 0, 10)
             .unwrap()
             .unwrap();
-        assert_eq!(matches.len(), 1);
+        assert_eq!(matches.len(), 2);
         assert_eq!(matches[0].oid, entry.oid);
+        assert_eq!(matches[1].oid, next_entry.oid);
         assert!(matches[0].message.contains("Needle"));
         assert!(store
             .search_history_messages("repo-1", "refs-v2", "needle", 0, 10)
@@ -1618,7 +1634,6 @@ mod tests {
         let entry = CommitSearchEntry {
             oid: "c".repeat(40),
             message: "Persistent file-backed search entry".into(),
-            sort_order: 0,
         };
         store
             .replace_history_search_index("repo-1", "refs-v1", std::slice::from_ref(&entry))
@@ -1626,7 +1641,6 @@ mod tests {
         let other_entry = CommitSearchEntry {
             oid: "d".repeat(40),
             message: "Other repository retained message".into(),
-            sort_order: 0,
         };
         store
             .replace_history_search_index(

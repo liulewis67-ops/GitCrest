@@ -3983,3 +3983,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/migrations/0013_history_search_drop_oid_unique.sql`、`crates/gitcrest-core/src/storage/storage.rs`、History 顺序/ref 失效测试、`doc/evidence/S7.2/api-win32-cold-no-oid-unique-stage357-20261009.json`、阶段 353 基线报告。
 - 限制/后续：此优化大幅降低文档行写入，但冷搜索仍约 2.2 秒，主要耗时转为 Git 全量消息扫描、FTS postings 和提交；继续从减少必须扫描的消息量或改变建索引时机寻找改进。S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
 - 完成 commit：`7336d9b perf: remove redundant history oid index`
+
+### S7.2 使用 SQLite 行 ID 保存历史搜索顺序 — 小阶段 358
+- 状态：已完成（搜索缓存以插入顺序保存 Git 顺序，减少冗余排序数据；冷搜索仍未达到 <200ms）
+- 日期：2026-10-09
+- 交付：schema 14 移除 `sort_order` 列及 `(repo_id, sort_order)` 索引，保留 `id` 主键和仓库过滤索引；按 Git revision walk 输出顺序插入文档，索引搜索按 `id` 排序。`CommitSearchEntry` 不再同时携带存储顺序和列表顺序。迁移使可重建的旧搜索缓存失效并惰性重建，应用数据保留。
+- 验证：迁移测试核对旧缓存失效、仓库记录保留、唯一索引和 `sort_order` 列均不存在并能重建搜索；存储测试 13/13、历史 Git 顺序/ref 失效测试 1/1、`cargo fmt --check`、Clippy 与 Release build 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 同一 100k fixture 20 轮：冷搜索 P50/P95 1,949.225/2,209.805ms，行写入 P50/P95 205/256ms，全部返回目标提交。阶段 357 分别为 1,949.838/2,240.190ms 与 222/265ms；行写入中位数降低约 8%，冷搜索 P95 降约 1%。两组不是交错运行，整体差异仅作方向性参考。报告：`doc/evidence/S7.2/api-win32-cold-rowid-order-stage358-20261009.json`。
+- 手工验证：未操作 GUI；20 轮均使用独立 sidecar/SQLite 和同一 fixture，返回目标提交；fixture refs 和工作树状态未被基准改变。
+- 证据：`crates/gitcrest-core/migrations/0014_history_search_rowid_order.sql`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、历史顺序/ref 失效测试、性能报告。
+- 限制/后续：行 ID 保持插入时的 Git 顺序，并移除了重复存储；本次端到端收益很小，主要性能改进仍来自阶段 357 移除 OID 唯一索引。冷消息搜索仍约 2.2 秒，继续分析索引构建时机和 Git 全量消息扫描成本；S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。

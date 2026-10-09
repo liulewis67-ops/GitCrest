@@ -362,7 +362,6 @@ fn parse_history_search_index(output: &[u8]) -> Result<Vec<CommitSearchEntry>, H
         entries.push(CommitSearchEntry {
             oid: text(oid),
             message: text(message),
-            sort_order: entries.len(),
         });
     }
     Ok(entries)
@@ -380,7 +379,7 @@ mod tests {
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].oid, "oid-1");
         assert_eq!(entries[0].message, "first body");
-        assert_eq!(entries[1].sort_order, 1);
+        assert_eq!(entries[1].oid, "oid-2");
     }
 
     #[test]
