@@ -3213,4 +3213,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：Windows 10.0.26300 x64，本机签名证书未配置；自动安装到临时目录、启动/健康检查、关闭/sidecar 退出和卸载均由 packaged smoke 覆盖。
 - 证据：`doc/evidence/S7.4/windows-package-smoke.json`、`scripts/packaged-smoke.mjs`、`dist/GitCrest Setup 0.1.0.exe`（本地产物，未提交）。
 - 限制/后续：此证据仅覆盖 Windows unsigned 安装包；Windows 签名、macOS/Linux 构建与运行、签名验证失败拒绝安装及自动更新仍待实际 runner/凭证验收；S7.4 保持进行中。
-- 完成 commit：待提交
+- 完成 commit：`56defc1`
