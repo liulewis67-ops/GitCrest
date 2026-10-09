@@ -3432,3 +3432,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/check-frontend-import-boundaries.mjs`、`package.json`、`src/features/{credentials,commits,diff,remotes,repositories,workflows}/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2 节。
 - 限制/后续：检查只覆盖 `src/` TypeScript/TSX 源码，不覆盖测试或 Rust 模块依赖；通过公开入口的跨 feature 协作仍需在后续阶段逐步评估是否迁到 app/page 组合层。
 - 完成 commit：`7bb90ae`
+
+### 凭据编辑器由 app 组合层注入 — 小阶段 303
+- 状态：已完成（Clone 与 Remote 管理 feature 不再直接依赖 Credentials feature 的 UI/API）
+- 日期：2026-10-09
+- 交付：将 HTTPS remote 主机解析移至 `shared/lib`，并定义 shared credential editor renderer 类型；由 app 组合层懒加载 Credentials feature 的编辑器，通过 WorkspaceNavigation 将 renderer 注入 RemoteManager，并注入 CloneDialog。组件 feature 不再直接导入或实例化另一个 feature 的凭据 UI，也不再接收其 API client。按 host 为编辑器设置 React key，切换 host 时隔离表单状态。
+- 验证：前端边界检查通过；生产构建通过；定向组件测试 3 个文件、8 项通过；完整 `pnpm check` 通过（前端/Electron build、Rust fmt/build、Vitest 163/163、Rust 137/137、Electron E2E 6 files / 29 tests）；`git diff --check` 通过。构建仅输出既有 web-tree-sitter `eval` 警告。
+- 手工验证：未执行 GUI 手工场景；组件测试验证 clone 对话框将规范化 HTTPS host 与 busy 状态交给组合层，RemoteManager 及 Credentials 编辑器现有行为纳入全量 E2E/测试套件。
+- 证据：`src/app/App.tsx`、`src/features/cloning/CloneDialog.tsx`、`src/features/remotes/RemoteManager.tsx`、`src/shared/lib/https-remote-host.ts`、`src/shared/ui/credential-editor-renderer.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2 节；实现 commit：`c886f16`。
+- 限制/后续：其余通过 feature 公共入口协作的调用点仍待按需评估是否迁至 app/page 组合层；平台发布验收和 S7.5 全量收口未完成。
+- 完成 commit：`c886f16`
