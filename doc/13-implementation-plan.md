@@ -3842,4 +3842,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；现有组件用例覆盖远端分支删除确认、Clone 表单与凭据编辑交互。
 - 证据：三个 feature 的 `index.ts` 与 `ui/` 文件、`tests/unit/remote-branch-delete-dialog.test.tsx`、`tests/unit/clone-dialog.test.tsx`、`tests/unit/credential-editor.test.tsx`。
 - 限制/后续：仅完成三个 feature 的 UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
-- 完成 commit：待提交
+- 完成 commit：`157ca58`
