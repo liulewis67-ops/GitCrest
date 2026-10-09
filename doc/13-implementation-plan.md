@@ -3154,3 +3154,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/workspace/WorkspacePage.tsx`、`tests/e2e/remote-sync.test.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、4.1 节。
 - 限制/后续：提交助手建议文本框的既有 E2E 失败需独立修复；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`58bdd9f`
+
+### 应用提交建议后保留消息内容 — 小阶段 275
+- 状态：已完成（选择 AI commit suggestion 后，plain template 不会清空已选文本）
+- 日期：2026-10-09
+- 交付：调整 CommitWorkbench 的建议应用顺序，先切换 plain template，再将建议消息写入 commit draft，修复模板重置逻辑覆盖建议文本的问题；继续关闭助手面板并保留手工编辑流程。
+- 验证：`pnpm build` 通过；`pnpm exec vitest run --config vitest.e2e.config.ts tests/e2e/desktop.test.ts` 通过；`pnpm test:e2e` 通过（5 个测试文件、16/16 tests）；`git diff --check` 通过。
+- 手工验证：未执行 GUI 手工检查；Playwright Electron 桌面端到端覆盖接受建议后 commit message 内容保留，并验证 provider 请求只包含已审阅的 staged diff。
+- 证据：`src/features/commits/ui/CommitWorkbench.tsx`、`tests/e2e/desktop.test.ts`、`doc/15-frontend-development-guidelines.md` 第 4.1、8 节。
+- 限制/后续：本阶段验证当前 Windows 环境；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待提交
