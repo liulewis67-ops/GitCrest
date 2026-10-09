@@ -2733,4 +2733,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；本阶段未改变 Git status 读取策略与 API 契约。
 - 证据：`crates/gitcrest-core/src/refresh/status.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`crates/gitcrest-core/src/refresh/snapshots.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：refresh service 仍以 RepositoryPathPort 和 StatusReadPort 的具体泛型装配；StatusSnapshotCache 的边界和容量策略未改变；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`208ce8d`
