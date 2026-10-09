@@ -66,7 +66,7 @@ function App() {
   const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const historyRequests = useHistoryViewRequests();
-  const [shelfComposerRequest, setShelfComposerRequest] = useState(0);
+  const [shelfComposerRequest, setShelfComposerRequest] = useState<{ id: number; repoId?: string }>({ id: 0 });
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
@@ -501,7 +501,7 @@ function App() {
         if (!existingShelfIds) return;
         branchSwitchShelfFlow.prepareShelfComposerForBranchSwitch({ repoId: repository.repoId, target, existingShelfIds });
         branchSwitcher.close();
-        setShelfComposerRequest((request) => request + 1);
+        setShelfComposerRequest((request) => ({ id: request.id + 1, repoId: repository.repoId }));
       } catch (error) {
         branchSwitcher.setError(error instanceof Error ? error.message : "Could not prepare the shelf before switching branches.");
       }
@@ -723,7 +723,10 @@ function App() {
       changeWorkspaceMode("graph");
       historyRequests.focusSearch(repoId);
     },
-    openShelfComposer: () => setShelfComposerRequest((request) => request + 1),
+    openShelfComposer: () => {
+      if (!selectedRepository) return;
+      setShelfComposerRequest((request) => ({ id: request.id + 1, repoId: selectedRepository.repoId }));
+    },
     cherryPick: (repoId, targetOid) => workflowDialog.open(repoId, targetOid, "cherryPick"),
     createTag: (repoId, oid) => {
       changeWorkspaceMode("graph");
@@ -876,8 +879,8 @@ function App() {
               renderCredentialEditor={renderCredentialEditor}
               credentialManagerOpenRequest={credentialManagerOpenRequest}
               historyRefreshKey={historyRequests.refreshKey}
-              shelfComposerRequest={shelfComposerRequest}
-              shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch}
+              shelfComposerRequest={shelfComposerRequest.repoId === selectedRepository?.repoId ? shelfComposerRequest.id : 0}
+              shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch?.repoId === selectedRepository?.repoId ? branchSwitchShelfFlow.shelfComposerAfterSwitch : undefined}
               connected={connected}
               connecting={connecting}
               hasActiveRepositoryTask={hasActiveRepositoryTask}
