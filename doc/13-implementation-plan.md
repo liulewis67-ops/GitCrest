@@ -2625,3 +2625,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：少数 handler、缓存和测试仍沿用 status feature 的兼容重导出路径，后续可继续统一引用；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/model.rs`、status DTO/service、commits/diff/staging service、`doc/14-backend-development-guidelines.md` 第 4 节。
 - 实施 commit：`71ce22f`
+
+
+### Status domain 类型消费者统一 — 小阶段 222
+- 状态：已完成（status engine/cache 与跨 feature service 不再通过 status model 访问领域模型）
+- 日期：2026-10-09
+- 交付：删除仅含重导出的 `features/status/model.rs`；status engine/cache、DTO/service 与 diff/commits handlers 直接使用 `domain/status` 类型，status feature 仅保留 `ChangeKind`/`ChangeCategory` 的兼容出口，快照和文件变更模型不再由 feature 暴露。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 `StatusSnapshot` 与 `StatusFile` 仅在 domain 定义且无 `features::status::Status*` 引用；未运行测试。
+- 限制/后续：状态枚举的少数消费者仍使用 status feature 兼容出口；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/mod.rs`、status engine/cache/DTO、diff/commits handlers、`doc/14-backend-development-guidelines.md` 第 4 节。
+- 实施 commit：`5f9089f`
