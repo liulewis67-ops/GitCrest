@@ -320,6 +320,8 @@ mod tests {
         process::Command,
     };
 
+    use crate::ports::git::RepositoryGitFuture;
+
     use super::*;
 
     struct GitFixture {
@@ -345,6 +347,39 @@ mod tests {
             fs::write(self.root.join("README.md"), "fixture\n").unwrap();
             git(&self.root, &["add", "README.md"]);
             git(&self.root, &["commit", "--quiet", "-m", "fixture"]);
+        }
+    }
+
+    struct FailingInitializeGit;
+
+    impl RepositoryGitPort for FailingInitializeGit {
+        fn worktree_root<'a>(&'a self, _path: &'a Path) -> RepositoryGitFuture<'a, PathBuf> {
+            Box::pin(async { Err(RepositoryError::InitializationFailed) })
+        }
+
+        fn head_oid<'a>(
+            &'a self,
+            _repository_path: &'a Path,
+        ) -> RepositoryGitFuture<'a, Option<String>> {
+            Box::pin(async { Err(RepositoryError::InitializationFailed) })
+        }
+
+        fn current_branch<'a>(
+            &'a self,
+            _repository_path: &'a Path,
+        ) -> RepositoryGitFuture<'a, Option<String>> {
+            Box::pin(async { Err(RepositoryError::InitializationFailed) })
+        }
+
+        fn common_dir<'a>(
+            &'a self,
+            _repository_path: &'a Path,
+        ) -> RepositoryGitFuture<'a, PathBuf> {
+            Box::pin(async { Err(RepositoryError::InitializationFailed) })
+        }
+
+        fn initialize<'a>(&'a self, _repository_path: &'a Path) -> RepositoryGitFuture<'a, ()> {
+            Box::pin(async { Err(RepositoryError::InitializationFailed) })
         }
     }
 
@@ -519,6 +554,31 @@ mod tests {
             Err(RepositoryError::AlreadyRepository)
         );
         assert!(!nested_folder.join(".git").exists());
+    }
+
+    #[tokio::test]
+    async fn failed_git_initialization_keeps_folder_contents_and_does_not_register_repository() {
+        let directory = tempfile::tempdir().unwrap();
+        let project = directory.path().join("project");
+        fs::create_dir(&project).unwrap();
+        fs::write(project.join("README.md"), "keep this file\n").unwrap();
+        let store =
+            RepositoryStore::open(&directory.path().join("app-data/gitcrest.sqlite")).unwrap();
+        let manager = RepositoryManager::with_adapters(
+            std::sync::Arc::new(store),
+            std::sync::Arc::new(FailingInitializeGit),
+        );
+
+        assert_eq!(
+            manager.initialize_path(project.to_str().unwrap()).await,
+            Err(RepositoryError::InitializationFailed)
+        );
+        assert_eq!(
+            fs::read_to_string(project.join("README.md")).unwrap(),
+            "keep this file\n"
+        );
+        assert!(!project.join(".git").exists());
+        assert!(manager.list().await.unwrap().is_empty());
     }
 
     #[tokio::test]

@@ -762,4 +762,16 @@ mod tests {
             "GitCrest does not have permission to read the selected repository."
         );
     }
+
+    #[test]
+    fn repository_initialization_failure_uses_unprocessable_status_and_actionable_message() {
+        let error = ApiError::from_repository_error(RepositoryError::InitializationFailed);
+
+        assert_eq!(error.status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(
+            serde_json::to_value(error.code).unwrap(),
+            json!("REPOSITORY_INITIALIZATION_FAILED")
+        );
+        assert_eq!(error.message, "Git could not initialize this folder.");
+    }
 }

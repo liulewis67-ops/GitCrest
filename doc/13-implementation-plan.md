@@ -3304,3 +3304,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/api/error.rs`。
 - 限制/后续：真实 OS ACL 拒绝到 renderer 告警的跨层 E2E 尚未覆盖；初始化 Git 写入失败和副作用清理也仍待验收；S7.5 保持进行中。
 - 完成 commit：`b8ad44e`
+
+### Repository 初始化 Git 失败隔离与错误契约 — 小阶段 290
+- 状态：已完成（注入初始化失败后保留用户文件，且不写入仓库目录）
+- 日期：2026-10-09
+- 交付：通过注入 `RepositoryGitPort::initialize` 失败，验证 `initialize_path` 返回领域错误、既有文件保持不变、未创建 `.git` 且 catalog 中没有仓库记录；API 错误边界验证 422、`REPOSITORY_INITIALIZATION_FAILED` 与稳定提示。
+- 验证：故障注入定向 Rust 测试通过；`cargo fmt --check`、Clippy、Rust 全量测试（133/133）通过。
+- 手工验证：未运行真实 Git/ACL 故障；使用 feature port fixture 验证业务失败边界与注册行为。
+- 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/api/error.rs`。
+- 限制/后续：故障 fixture 在 Git 写入前返回错误；真实 Git 初始化中途失败遗留部分 `.git` 的清理和 GUI 恢复仍未覆盖；S7.5 保持进行中。
+- 完成 commit：待提交
