@@ -4135,3 +4135,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-default-presented-stage373-20261010.json`、`doc/evidence/S7.2/desktop-win32-no-gpu-presented-stage373-20261010.json`。
 - 限制/后续：同机单轮诊断只用于排除简单假设，无法确定默认约 55fps 的呈现节奏根因；`--disable-gpu` 还出现 RAF 与 presented-frame 相反的结果，需要结合 renderer/compositor trace 继续定位。S7.2 及 S7.4、S7.5 验收继续未完成。
 - 证据 commit：`a0c102e`。
+
+### S7.2 采集主线程与 compositor 帧管线耗时 — 小阶段 374
+- 状态：已完成（trace 未发现主线程/绘制阶段占满帧预算；呈现低帧率根因缩小到帧开始/显示节奏，S7.2 仍未达标）
+- 日期：2026-10-10
+- 交付：为 `desktop-frame-diagnostic.mjs` 增加显式环境变量 `GITCREST_BENCH_DETAILED_TRACE=1`，在诊断时启用 Chromium `viz/cc/gpu/benchmark/devtools.timeline` trace 并输出关键帧事件的耗时与时间戳间隔分布；默认基准依然只采 `viz`，避免扩大常规测量开销。
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs`、报告 JSON 解析和 `git diff --check` 通过。Windows 11 / Electron 37 / 默认 GPU / 100k fixture 的 10 秒详细 trace 中，RAF 与 presented P5 均约 55.3fps；FunctionCall P95 0.14ms、Layout P95 1.99ms、`Display::DrawAndSwap` P95 0.315ms，而 `DisplayScheduler::BeginFrame` 和 `Display::FrameDisplayed` 中位时间戳间隔均为 17.845ms（约 56Hz）。当前 Windows 视频控制器报告 60Hz，但 compositor 帧开始间隔约 17.8ms；这轮诊断未识别出上游 cadence 差异的系统级根因。
+- 手工验证：未操作 GUI；运行 `GITCREST_BENCH_DETAILED_TRACE=1 node scripts/performance/desktop-frame-diagnostic.mjs <100k fixture> <report>`，保存完整汇总以便继续分析。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-detailed-frame-trace-stage374-20261010.json`；阶段 370/373 的 RAF 与 presented 对照报告。
+- 限制/后续：详细 trace 期间测得帧率用于诊断，不替代阶段 370 的 20 轮正式 presented-frame 基准；下一步沿 Windows/Electron begin-frame/vsync 调度和显示设备有效刷新信息继续定位，不改变默认启动参数。S7.2、S7.4、S7.5 验收保持未完成。
+- 证据 commit：`9ad490f`。
