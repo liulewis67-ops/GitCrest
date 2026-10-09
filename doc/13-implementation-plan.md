@@ -4724,3 +4724,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/diff/model/inline-diff.ts`、`src/features/diff/model/monaco-language.ts`、`src/features/diff/model/monaco-view-limits.ts`、`src/features/diff/model/tree-sitter.ts`、相关 UI 与测试导入、`doc/15-frontend-development-guidelines.md` 第 3 节。
 - 限制/后续：测试 TypeScript 检查另发现两个 Settings 偏好测试仍引用阶段 417 前的旧路径，将在独立修复阶段处理；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段目录整理与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 修复 Settings 偏好测试旧导入路径 — 小阶段 434
+- 状态：已完成（现有测试 TypeScript 项目不再引用 Settings 搬迁前的 shared 路径）
+- 日期：2026-10-10
+- 交付：将 Settings 对话框与快捷键偏好单元测试的 `shortcut-preferences` 导入更新到 `features/settings/model/shortcut-preferences`；生产代码与 Settings feature API 不变。
+- 验证：`pnpm exec tsc --noEmit -p tsconfig.test.json` 和 `git diff --check` 通过；仅编译测试 TypeScript 项目，未运行 Vitest。
+- 手工验证：全仓测试源码中不再引用 `shared/lib/shortcut-preferences`，默认绑定对象从其实际定义的 Settings model 导入。
+- 证据：`tests/unit/settings-dialog.test.tsx`、`tests/unit/shortcut-preferences.test.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：此项修复此前测试编译中的陈旧模块路径，不增加测试覆盖或改变 Settings 行为；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段导入修复与台账同一 commit（SHA 可在后续台账更新中补记）。
