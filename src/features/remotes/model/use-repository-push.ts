@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   GitCrestApiError,
   type GitCrestApiClient,
@@ -8,13 +8,14 @@ import type { components } from "../../../api/schema";
 import type { PushTarget } from "./push-target";
 
 interface RepositoryPushOptions {
+  tasks: TaskSnapshotResponse[];
   getApi: () => GitCrestApiClient | undefined;
   repoId?: string;
   onSelectRepository: (repoId: string) => void;
   onTaskAccepted: (task: TaskSnapshotResponse, clearTaskError: boolean) => void;
 }
 
-export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAccepted }: RepositoryPushOptions) {
+export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, onTaskAccepted }: RepositoryPushOptions) {
   const [open, setOpen] = useState(false);
   const [preflight, setPreflight] = useState<components["schemas"]["PushPreflight"]>();
   const [loading, setLoading] = useState(false);
@@ -24,12 +25,18 @@ export function useRepositoryPush({ getApi, repoId, onSelectRepository, onTaskAc
   const [target, setTarget] = useState<PushTarget>();
   const targetsByTask = useRef(new Map<string, PushTarget>());
 
+  useEffect(() => {
+    const tasksById = new Map(tasks.map((task) => [task.taskId, task]));
+    for (const taskId of targetsByTask.current.keys()) {
+      const task = tasksById.get(taskId);
+      if (!task || !["queued", "running", "failed"].includes(task.status)) {
+        targetsByTask.current.delete(taskId);
+      }
+    }
+  }, [tasks]);
+
   function acceptTask(task: TaskSnapshotResponse, pushTarget: PushTarget, clearTaskError: boolean) {
     targetsByTask.current.set(task.taskId, pushTarget);
-    if (targetsByTask.current.size > 500) {
-      const oldestTaskId = targetsByTask.current.keys().next().value;
-      if (oldestTaskId) targetsByTask.current.delete(oldestTaskId);
-    }
     onTaskAccepted(task, clearTaskError);
   }
 

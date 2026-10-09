@@ -4325,3 +4325,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`doc/15-frontend-development-guidelines.md` 第 4.2、5 节。
 - 限制/后续：代次保护不取消已经发出的 HTTP 请求，只阻止迟到结果变更 UI/session 状态；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 保留失败 push 的原始目标并按任务生命周期清理 — 小阶段 394
+- 状态：已完成（旧失败任务不会因固定容量淘汰而意外改用默认 push 目标）
+- 日期：2026-10-10
+- 交付：移除阶段 392 的 500 条静默淘汰上限；`useRepositoryPush` 接收当前 TaskCenter task 列表，并在任务成功/取消或从列表移除后删除目标映射。queued/running/failed push 保留原始 remote/branch，failed 任务可准确重开原目标预检。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；检查 task 状态转换时仅 queued/running/failed 保留映射，其余状态及已不存在的 task 清理映射；失败 push review 仍需通过 `reviewTask` 校验。
+- 证据：`src/features/remotes/model/use-repository-push.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 4、5 节。
+- 限制/后续：所有仍可重试的失败 task 都保留小型 target 映射，直到任务从列表移除或应用关闭；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

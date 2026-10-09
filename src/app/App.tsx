@@ -471,6 +471,7 @@ function App() {
     refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
   });
   const repositoryPush = useRepositoryPush({
+    tasks,
     getApi: () => apiRef.current,
     repoId: selectedRepository?.repoId,
     onSelectRepository: (repoId) => {
