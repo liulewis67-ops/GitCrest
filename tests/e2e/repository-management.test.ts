@@ -39,6 +39,37 @@ it("initializes a repository in the selected project folder and keeps its files"
   }
 }, 60_000);
 
+it("leaves the project unchanged when repository initialization is cancelled in the folder picker", async () => {
+  const projectPath = await mkdtemp(resolve(tmpdir(), "gitcrest-init-cancel-e2e-project-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-init-cancel-e2e-app-data-"));
+  const projectFile = resolve(projectPath, "README.md");
+  let app: ElectronApplication | undefined;
+
+  try {
+    await writeFile(projectFile, "# Keep this project unchanged\n");
+    app = await electron.launch({
+      args: ["."],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
+    });
+
+    await window.getByRole("button", { name: "Initialize a repository" }).click();
+    await window.getByRole("button", { name: "Initialize a repository" }).waitFor({ state: "visible" });
+    await expect(execFileAsync("git", ["-C", projectPath, "rev-parse", "--show-toplevel"])).rejects.toThrow();
+    expect(await readFile(projectFile, "utf8")).toBe("# Keep this project unchanged\n");
+    expect(await window.locator(".workspaceCrumb").count()).toBe(0);
+  } finally {
+    await app?.close();
+    await rm(projectPath, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 60_000);
+
 it("clones a remote from the welcome page and opens the new repository", async () => {
   const source = await createTempGitRepository();
   const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-e2e-remotes-"));

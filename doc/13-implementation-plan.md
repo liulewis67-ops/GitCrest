@@ -3264,3 +3264,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：初始化失败/取消路径尚未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
 - 完成 commit：`57509bf`
+
+### P0 初始化仓库取消安全 E2E — 小阶段 286
+- 状态：已完成（取消系统目录选择后保留欢迎页，项目文件和仓库状态不变）
+- 日期：2026-10-09
+- 交付：新增隔离 Electron E2E，模拟 native folder picker 返回取消，确认欢迎页仍可用、没有创建 Git 仓库元数据且既有 README 未改变。
+- 验证：取消场景定向 E2E、`pnpm build`、完整 `pnpm test:e2e`（6 files、20 tests）、`git diff --check` 通过。
+- 手工验证：未执行 GUI 手工操作；Playwright 覆盖取消 picker 后的页面与目录状态。
+- 证据：`tests/e2e/repository-management.test.ts`。
+- 限制/后续：初始化目录权限不足和部分失败后的恢复仍未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
+- 完成 commit：待提交
