@@ -4013,3 +4013,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-benchmark-batches.mjs`、`doc/evidence/S7.2/desktop-win32-post-cache-stage360-batched-20261010.json` 及其 `.batches/batch-01.json` 至 `batch-04.json`；发行包单次内存进程树明细 `doc/evidence/S7.2/desktop-win32-release-memory-stage360-rolefix-20261010.json`。
 - 限制/后续：冷启动 P95、100k 首帧 P95 和安装包体积达到目标；空闲内存约 402MB 超过 <250MB，滚动工作集 P95 约 502MB 略高于 <500MB，滚动 P5 约 55.25fps 低于 ≥60fps。阶段 359 的冷消息搜索 P95 约 2.27s，也仍高于 <200ms。S7.2 保持待验收；S7.4、S7.5 仍待完成。
 - 完成 commit：`b85938f perf: benchmark packaged desktop release`
+
+### S7.2 隔离滚动帧率来源 — 小阶段 361
+- 状态：已完成（确认当前约 55fps 不由提交图滚动独自引起；GPU 路径仍待多轮验证）
+- 日期：2026-10-10
+- 交付：新增 `scripts/performance/desktop-frame-diagnostic.mjs`，在同一个发行版 Electron 窗口中依次测量空仓库界面、加载 100k 历史后的空闲界面和提交图滚动，记录 RAF 间隔、窗口可见/焦点和滚动距离，并在低于 60fps 时保留诊断报告。
+- 验证：Windows 显示器报告刷新率 60Hz。发行版探针测得空仓库、历史空闲和历史滚动三段分别为 55.249、55.249、55.249fps；视图全程 `visible` 且有焦点，历史滚动 10 秒前进 4,528px。与小阶段 360 的 20 轮结果一致。探针报告：`doc/evidence/S7.2/desktop-win32-frame-diagnostic-stage361-20261010.json`。
+- 手工验证：未操作 GUI；发行版窗口通过 Playwright 带焦点采样同一 fixture，诊断命令完成并因低于 60fps 留下非零验收结果。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-frame-diagnostic-stage361-20261010.json`；GPU 单轮线索见小阶段 341。
+- 限制/后续：空仓库与历史视图帧率相同，反证了提交图虚拟列表或 SVG 路径是该 55fps 差值的直接来源；目前只能将范围收窄到 Electron/Windows/GPU 帧调度，不能据此修改应用绘制逻辑。下一阶段以正式打包版对 `--disable-gpu` 做 20 轮对照，确认它是否稳定达到 ≥60fps 及内存门槛。
