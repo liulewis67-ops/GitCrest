@@ -4003,3 +4003,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-post-cache-prune-stage359-20261009.json`。
 - 限制/后续：首页、暖搜索、status 与 Diff 本机 sidecar 指标达到各自目标；冷搜索 P95 约 2.27s，仍需降低冷构建/等待时间。完整 API 数据不能替代 Electron 启动、工作集稳定窗口、30 秒滚动 P5、安装包、跨平台或 S7.4/S7.5 验收。
 - 完成 commit：`3debffb perf: benchmark history cache optimizations`
+
+### S7.2 修正发行版桌面基准并完成 20 轮复测 — 小阶段 360
+- 状态：已完成（完成 packaged Release 桌面 20 轮采样；S7.2 尚未整体达标）
+- 日期：2026-10-10
+- 交付：修正 `scripts/performance/desktop-benchmark.mjs`，通过发行包中的 `GitCrest.exe` 启动应用，不再从仓库目录的 Electron 开发入口启动，因此进程和内存数据对应实际 Release 安装包。新增 `scripts/performance/desktop-benchmark-batches.mjs`，以 5 轮隔离的 Node.js 批次运行并复用已有批次报告，最终汇总为 20 轮结果。此前从开发入口得到的桌面测量不作为发行版证据。
+- 验证：`node --check` 与 `git diff --check` 通过；`pnpm electron:build`、`pnpm electron:package` 成功。Windows 11 / Ryzen 7 5800H / Electron 37 / 同一 100k commit 与 1k 行 Diff fixture，正式打包 Release，4 个隔离批次共 20 轮：冷启动 P50/P95 1,055.976/1,253.859ms；100k 历史首帧 P50/P95 390.781/421.659ms；30 秒滚动 P5 的跨轮 P5/P50/P95 为 55.249/55.249/55.249fps；空闲进程树工作集 38 个窗口样本峰值 402,198,528 bytes，打开仓库后 41 个窗口样本峰值 444,047,360 bytes；滚动工作集峰值分布 P50/P95 492,482,560/502,333,440 bytes；NSIS 安装包 108,778,287 bytes（103.74 MiB）。完整汇总及 4 份批次报告见证据路径。
+- 手工验证：未操作 GUI；每轮使用独立临时用户目录，通过发行版可执行文件打开同一 fixture；20 个启动、首帧和 30 秒滚动样本均成功完成。
+- 证据：`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-benchmark-batches.mjs`、`doc/evidence/S7.2/desktop-win32-post-cache-stage360-batched-20261010.json` 及其 `.batches/batch-01.json` 至 `batch-04.json`；发行包单次内存进程树明细 `doc/evidence/S7.2/desktop-win32-release-memory-stage360-rolefix-20261010.json`。
+- 限制/后续：冷启动 P95、100k 首帧 P95 和安装包体积达到目标；空闲内存约 402MB 超过 <250MB，滚动工作集 P95 约 502MB 略高于 <500MB，滚动 P5 约 55.25fps 低于 ≥60fps。阶段 359 的冷消息搜索 P95 约 2.27s，也仍高于 <200ms。S7.2 保持待验收；S7.4、S7.5 仍待完成。

@@ -1,0 +1,237 @@
+{
+  "mode": "full",
+  "generatedAt": "2026-10-09T16:19:57.367Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         ",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "rendererBuild": "production electron-vite build",
+    "rustProfile": "release",
+    "launchMode": "packaged application",
+    "applicationExecutable": "E:\\personal_projects\\GitCrest\\dist\\win-unpacked\\GitCrest.exe",
+    "launchFlags": [],
+    "electronUserDataProfileIsolatedPerRun": true,
+    "memoryMeasurementRoot": "Electron main process and descendants; Playwright launcher excluded"
+  },
+  "fixture": {
+    "commits": 100000,
+    "diffFileLines": 1000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-20261009-continuation"
+  },
+  "iterations": 5,
+  "startedAt": "2026-10-09T16:15:48.548Z",
+  "startup": {
+    "samples": 5,
+    "p50Ms": 1013.134,
+    "p95Ms": 1055.976,
+    "maxMs": 1055.976,
+    "samplesMs": [
+      1048.015,
+      1013.134,
+      955.862,
+      962.599,
+      1055.976
+    ]
+  },
+  "firstHistoryFrame": {
+    "samples": 5,
+    "p50Ms": 390.79,
+    "p95Ms": 399.607,
+    "maxMs": 399.607,
+    "samplesMs": [
+      387.231,
+      390.79,
+      308.71,
+      399.607,
+      396.632
+    ]
+  },
+  "idleProcessTreeMemory": {
+    "sampleCount": 11,
+    "peakBytes": 401412096,
+    "samplesBytes": [
+      401412096,
+      401412096,
+      401412096,
+      401412096,
+      401412096,
+      401412096,
+      401412096,
+      401412096,
+      401412096,
+      401412096,
+      401412096
+    ]
+  },
+  "loadedRepositoryIdleProcessTreeMemory": {
+    "sampleCount": 11,
+    "peakBytes": 443432960,
+    "samplesBytes": [
+      443432960,
+      443252736,
+      443252736,
+      443252736,
+      443002880,
+      439603200,
+      439603200,
+      434827264,
+      434827264,
+      434827264,
+      434827264
+    ]
+  },
+  "processMemoryBreakdown": null,
+  "repositoryCacheLifecycle": null,
+  "work": {
+    "iterations": [
+      {
+        "iteration": 1,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 281,
+          "p95FrameMs": 18.100000000000023,
+          "p5Fps": 55.248618784530315
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1700,
+          "p95FrameMs": 18.099999999998545,
+          "p5Fps": 55.24861878453483
+        },
+        "workMemorySampleCount": 52,
+        "workMemoryPeakBytes": 496717824
+      },
+      {
+        "iteration": 2,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 286,
+          "p95FrameMs": 18.09999999999991,
+          "p5Fps": 55.24861878453066
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1703,
+          "p95FrameMs": 18.099999999998545,
+          "p5Fps": 55.24861878453483
+        },
+        "workMemorySampleCount": 50,
+        "workMemoryPeakBytes": 475525120
+      },
+      {
+        "iteration": 3,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 284,
+          "p95FrameMs": 18.09999999999991,
+          "p5Fps": 55.24861878453066
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1704,
+          "p95FrameMs": 18.099999999998545,
+          "p5Fps": 55.24861878453483
+        },
+        "workMemorySampleCount": 52,
+        "workMemoryPeakBytes": 491958272
+      },
+      {
+        "iteration": 4,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 282,
+          "p95FrameMs": 18.100000000000136,
+          "p5Fps": 55.24861878452997
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1696,
+          "p95FrameMs": 18.100000000002183,
+          "p5Fps": 55.24861878452372
+        },
+        "workMemorySampleCount": 52,
+        "workMemoryPeakBytes": 493760512
+      },
+      {
+        "iteration": 5,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 283,
+          "p95FrameMs": 18.09999999999991,
+          "p5Fps": 55.24861878453066
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1699,
+          "p95FrameMs": 18.100000000000364,
+          "p5Fps": 55.24861878452928
+        },
+        "workMemorySampleCount": 52,
+        "workMemoryPeakBytes": 495271936
+      }
+    ],
+    "idleAnimationFrameP5Fps": {
+      "samples": 5,
+      "p5": 55.24861878452997,
+      "p50": 55.24861878453066,
+      "p95": 55.24861878453066,
+      "max": 55.24861878453066,
+      "samplesValues": [
+        55.248618784530315,
+        55.24861878453066,
+        55.24861878453066,
+        55.24861878452997,
+        55.24861878453066
+      ]
+    },
+    "scrollP5Fps": {
+      "samples": 5,
+      "p5": 55.24861878452372,
+      "p50": 55.24861878453483,
+      "p95": 55.24861878453483,
+      "max": 55.24861878453483,
+      "samplesValues": [
+        55.24861878453483,
+        55.24861878453483,
+        55.24861878453483,
+        55.24861878452372,
+        55.24861878452928
+      ]
+    },
+    "workMemoryPeakBytes": {
+      "samples": 5,
+      "p5": 475525120,
+      "p50": 493760512,
+      "p95": 496717824,
+      "max": 496717824,
+      "samplesValues": [
+        496717824,
+        475525120,
+        491958272,
+        493760512,
+        495271936
+      ]
+    }
+  },
+  "installer": {
+    "path": "E:\\personal_projects\\GitCrest\\dist\\GitCrest Setup 0.1.0.exe",
+    "bytes": 108778287,
+    "mebibytes": 103.74
+  },
+  "limitations": []
+}

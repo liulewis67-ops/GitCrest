@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -43,12 +44,41 @@ function benchmarkGpuFlags() {
 }
 
 function benchmarkElectronArgs(dataDir) {
-  return [...benchmarkGpuFlags(), `--user-data-dir=${join(dataDir, "user-data")}`, "."];
+  return [...benchmarkGpuFlags(), `--user-data-dir=${join(dataDir, "user-data")}`];
+}
+
+function packagedAppExecutablePath() {
+  const configuredPath = process.env.GITCREST_BENCH_EXECUTABLE;
+  if (configuredPath) return resolve(configuredPath);
+  if (process.platform === "win32") return join(root, "dist", "win-unpacked", "GitCrest.exe");
+  if (process.platform === "linux") return join(root, "dist", "linux-unpacked", "gitcrest");
+  if (process.platform === "darwin") {
+    return ["mac", "mac-arm64", "mac-x64", "mac-universal"]
+      .map((directory) => join(root, "dist", directory, "GitCrest.app", "Contents", "MacOS", "GitCrest"))
+      .find((candidate) => existsSync(candidate))
+      || join(root, "dist", "mac", "GitCrest.app", "Contents", "MacOS", "GitCrest");
+  }
+  throw new Error(`Unsupported desktop benchmark platform: ${process.platform}`);
+}
+
+async function launchDesktopApp(dataDir) {
+  const executablePath = packagedAppExecutablePath();
+  try {
+    await stat(executablePath);
+  } catch {
+    throw new Error(`Packaged GitCrest executable not found at ${executablePath}. Run "pnpm electron:package" first.`);
+  }
+  return electron.launch({
+    executablePath,
+    args: benchmarkElectronArgs(dataDir),
+    cwd: root,
+    env: makeAppEnv(join(dataDir, "gitcrest.sqlite")),
+  });
 }
 
 async function electronProcessRootPid(launcherPid) {
   if (process.platform !== "win32") return launcherPid;
-  const command = `$launcherPid=${launcherPid}; $processes=Get-CimInstance Win32_Process; $ids=@([uint32]$launcherPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $main=@($processes | Where-Object { $ids -contains $_.ProcessId -and $_.Name -ieq 'electron.exe' -and $_.CommandLine -notmatch '--type=' }); if ($main.Count -ne 1) { throw "Expected exactly one Electron main process under launcher PID $launcherPid; found $($main.Count)." }; [uint32]$main[0].ProcessId`;
+  const command = `$launcherPid=${launcherPid}; $processes=Get-CimInstance Win32_Process; $ids=@([uint32]$launcherPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $main=@($processes | Where-Object { $ids -contains $_.ProcessId -and $_.Name -match '^(electron|gitcrest)\.exe$' -and $_.CommandLine -notmatch '--type=' }); if ($main.Count -ne 1) { throw "Expected exactly one Electron main process under launcher PID $launcherPid; found $($main.Count)." }; [uint32]$main[0].ProcessId`;
   const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", command]);
   const pid = Number(stdout.trim());
   if (!Number.isInteger(pid) || pid <= 0) throw new Error("Could not resolve the Electron main process PID for memory measurement.");
@@ -76,7 +106,7 @@ async function processTreeIds(pid) {
 
 async function processTreeMemoryBreakdown(pid) {
   if (process.platform === "win32") {
-    const command = `$rootPid=${pid}; $processes=Get-CimInstance Win32_Process; $perf=Get-CimInstance Win32_PerfFormattedData_PerfProc_Process; $ids=@([uint32]$rootPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $items=@($ids | ForEach-Object { $id=$_; $process=$processes | Where-Object { $_.ProcessId -eq $id } | Select-Object -First 1; $memory=Get-Process -Id $id -ErrorAction SilentlyContinue; $perfProcess=$perf | Where-Object { $_.IDProcess -eq $id } | Select-Object -First 1; $role=if ($process.Name -like 'gitcrest-core*') { 'rust-sidecar' } elseif ($process.CommandLine -match '--type=renderer') { 'renderer' } elseif ($process.CommandLine -match '--type=gpu-process') { 'gpu' } elseif ($process.CommandLine -match '--type=utility') { 'utility' } elseif ($process.Name -ieq 'electron.exe') { 'electron-main' } elseif ($id -eq $rootPid) { 'harness-wrapper' } else { 'electron-child' }; [pscustomobject]@{ pid=$id; role=$role; image=$process.Name; workingSetBytes=[int64]$memory.WorkingSet64; privateWorkingSetBytes=if ($perfProcess) { [int64]$perfProcess.WorkingSetPrivate } else { $null }; privateBytes=[int64]$memory.PrivateMemorySize64 } }); ConvertTo-Json -InputObject $items -Compress`;
+    const command = `$rootPid=${pid}; $processes=Get-CimInstance Win32_Process; $perf=Get-CimInstance Win32_PerfFormattedData_PerfProc_Process; $ids=@([uint32]$rootPid); do { $previousCount=$ids.Count; $ids += @($processes | Where-Object { $ids -contains $_.ParentProcessId } | ForEach-Object { [uint32]$_.ProcessId }); $ids=@($ids | Select-Object -Unique) } while ($ids.Count -gt $previousCount); $items=@($ids | ForEach-Object { $id=$_; $process=$processes | Where-Object { $_.ProcessId -eq $id } | Select-Object -First 1; $memory=Get-Process -Id $id -ErrorAction SilentlyContinue; $perfProcess=$perf | Where-Object { $_.IDProcess -eq $id } | Select-Object -First 1; $role=if ($process.Name -like 'gitcrest-core*') { 'rust-sidecar' } elseif ($process.CommandLine -match '--type=renderer') { 'renderer' } elseif ($process.CommandLine -match '--type=gpu-process') { 'gpu' } elseif ($process.CommandLine -match '--type=utility') { 'utility' } elseif ($id -eq $rootPid -or $process.Name -ieq 'electron.exe') { 'electron-main' } else { 'electron-child' }; [pscustomobject]@{ pid=$id; role=$role; image=$process.Name; workingSetBytes=[int64]$memory.WorkingSet64; privateWorkingSetBytes=if ($perfProcess) { [int64]$perfProcess.WorkingSetPrivate } else { $null }; privateBytes=[int64]$memory.PrivateMemorySize64 } }); ConvertTo-Json -InputObject $items -Compress`;
     const { stdout } = await execFileAsync("powershell.exe", ["-NoProfile", "-Command", command]);
     const parsed = JSON.parse(stdout.trim());
     return (Array.isArray(parsed) ? parsed : [parsed]).sort((left, right) => right.workingSetBytes - left.workingSetBytes);
@@ -174,8 +204,7 @@ async function runColdLaunch() {
     dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-desktop-"));
     const start = performance.now();
     try {
-      const args = benchmarkElectronArgs(dataDir);
-      app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+      app = await launchDesktopApp(dataDir);
       page = await app.firstWindow();
       await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
       await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
@@ -219,8 +248,7 @@ async function runMemorySnapshot() {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-memory-"));
   let app;
   try {
-    const args = benchmarkElectronArgs(dataDir);
-    app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+    app = await launchDesktopApp(dataDir);
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
     await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
@@ -335,7 +363,7 @@ async function runCacheLifecycle() {
       repositoryCount,
       filesPerRepository,
     );
-    app = await electron.launch({ args: benchmarkElectronArgs(dataDir), cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+    app = await launchDesktopApp(dataDir);
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
     await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
@@ -405,8 +433,7 @@ async function runScrollIteration(iteration) {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-scroll-"));
   let app;
   try {
-    const args = benchmarkElectronArgs(dataDir);
-    app = await electron.launch({ args, cwd: root, env: makeAppEnv(join(dataDir, "gitcrest.sqlite")) });
+    app = await launchDesktopApp(dataDir);
     const page = await app.firstWindow();
     await page.waitForLoadState("domcontentloaded");
     await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
@@ -497,7 +524,9 @@ const startedAt = new Date().toISOString();
 const scrollOnly = process.env.GITCREST_BENCH_MODE === "scroll";
 const memoryOnly = process.env.GITCREST_BENCH_MODE === "memory";
 const cacheLifecycleOnly = process.env.GITCREST_BENCH_MODE === "cache-lifecycle";
-if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
+if (iterations < 20 && process.env.GITCREST_BENCH_ALLOW_BATCH !== "1") {
+  throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20 or the batch runner.");
+}
 const memorySnapshot = memoryOnly ? await runMemorySnapshot() : null;
 const repositoryCacheLifecycle = cacheLifecycleOnly ? await runCacheLifecycle() : null;
 const cold = scrollOnly
@@ -513,7 +542,7 @@ const report = {
   mode: scrollOnly ? "scroll-only" : memoryOnly ? "memory-only" : cacheLifecycleOnly ? "cache-lifecycle" : "full",
   generatedAt: new Date().toISOString(),
   host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown", logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
-  software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true, memoryMeasurementRoot: "Electron main process and descendants; Playwright launcher excluded" },
+  software: { electron: process.versions.electron || "37.0.0", node: process.version, rendererBuild: "production electron-vite build", rustProfile: "release", launchMode: "packaged application", applicationExecutable: packagedAppExecutablePath(), launchFlags: benchmarkGpuFlags(), electronUserDataProfileIsolatedPerRun: true, memoryMeasurementRoot: "Electron main process and descendants; Playwright launcher excluded" },
   fixture: { commits: 100_000, diffFileLines: 1_000, path: fixturePath },
   iterations,
   startedAt,
