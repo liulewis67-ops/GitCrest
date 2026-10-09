@@ -2273,3 +2273,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.4/win32-packaged-smoke.json`（包 SHA-256、工具/OS、安装与清理结果）。
 - 限制/后续：macOS/Linux runner 和系统安装流程、签名包与更新签名拒绝仍待验证；S7.4 保持进行中。
 - 实施 commits：`9ed334e`、`1f64ed6`
+
+### history feature tag editor 请求生命周期迁入 model — 小阶段 184
+- 状态：已完成（快捷操作触发的 CommitGraph tag editor 请求和消费确认由 history model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useCommitTagRequest`，封装 tag editor 请求上下文、递增序号和按序号确认消费；App 将命令/快捷入口连接 history feature，并将 request 与 handled 回调传给 WorkspaceMainPanel。
+- 验证：`pnpm build`（TypeScript 检查及 main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：Tag 表单与创建 API 仍由 CommitGraph 视图实现；S7.2/S7.4/S7.5 继续按实施计划验收。
+- 证据：`src/features/history/model/use-commit-tag-request.ts`、`src/features/history/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`6524429`
