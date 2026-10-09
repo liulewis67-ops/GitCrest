@@ -2227,3 +2227,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：branch switch 与 shelf composer 的交互仍由 App 页面装配；S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/features/branches/model/use-branch-switcher.ts`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`845e3ea`
+
+### workflows feature workflow dialog session 与 task 受理迁入 model — 小阶段 181
+- 状态：已完成（WorkflowDialog 的目标上下文、打开/关闭与 task 受理由 workflows model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useWorkflowDialogSession`，管理 workflow action dialog 的 repo/target/action 上下文，并统一 workflow task 受理、关闭当前 dialog、清除 TaskCenter 错误及打开 TaskCenter；App 从图表、快捷操作和 dialog 事件接入 workflows feature。
+- 验证：`pnpm build`（TypeScript 检查及 main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：Rebase/Reset dialog 开关状态仍由 App 装配；S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/workflows/model/use-workflow-dialog-session.ts`、`src/features/workflows/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`53ffdd9`
