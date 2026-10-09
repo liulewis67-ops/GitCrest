@@ -3253,4 +3253,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright 覆盖首次失败、Task Center retry、重新克隆及打开结果。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：凭据认证交互失败/更新凭证后的 clone UI retry 尚未覆盖；S7.5 仍需 P0 全面审计和发布文档收口。
-- 完成 commit：待提交
+- 完成 commit：`4756b80`
