@@ -1,6 +1,6 @@
 import { useState } from "react";
-import type { components } from "../../api/schema";
-import { useDialogFocus } from "../../shared/use-dialog-focus";
+import type { components } from "../../../api/schema";
+import { useDialogFocus } from "../../../shared/use-dialog-focus";
 
 type PullPreflight = components["schemas"]["PullPreflight"];
 type PullStrategy = components["schemas"]["PullRequest"]["strategy"];

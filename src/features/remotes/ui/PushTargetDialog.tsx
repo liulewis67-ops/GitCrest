@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../api/client";
-import { useDialogFocus } from "../../shared/use-dialog-focus";
-
-export type PushTarget = { remoteName: string; remoteBranch: string };
+import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../api/client";
+import { useDialogFocus } from "../../../shared/use-dialog-focus";
+import type { PushTarget } from "../model/push-target";
 
 interface PushTargetDialogProps {
   remotes?: RemoteSnapshotResponse;

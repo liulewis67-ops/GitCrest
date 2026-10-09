@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../src/api/client";
-import { PushTargetDialog } from "../../src/features/remotes/PushTargetDialog";
+import { PushTargetDialog } from "../../src/features/remotes/ui/PushTargetDialog";
 
 afterEach(cleanup);
 

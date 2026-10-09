@@ -3823,3 +3823,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/history/index.ts`、`src/features/history/ui/CommitGraph.tsx`、`src/features/history/ui/CommitDetails.tsx`、`src/features/history/ui/format-commit-date.ts`、`tests/unit/commit-graph.test.tsx`。
 - 限制/后续：此子阶段只收敛 History UI 目录与组件职责，未完成前端规范目标目录的整体迁移或 S7.2/S7.4/S7.5 验收。
 - 完成 commit：`6b366b0`
+
+### Remotes feature UI 目录对齐 — 小阶段 342
+- 状态：已完成（四个远端同步界面组件归入 `ui/`，共享 PushTarget 类型归入 `model/`）
+- 日期：2026-10-09
+- 交付：将 `PullDialog`、`PushDialog`、`PushTargetDialog`、`RemoteManager` 移入 `src/features/remotes/ui/`；更新 feature 懒加载入口。将 `PushTarget` 类型从 UI 文件迁入 `model/push-target.ts`，避免远端提交 model 依赖界面模块。
+- 验证：定向远端组件测试 4 files / 10 tests、`pnpm frontend:boundaries`、`pnpm build` 通过；构建仍输出独立 Pull、Push、PushTarget 和 RemoteManager chunks。只有既有 web-tree-sitter `eval` 构建警告。
+- 手工验证：未操作 GUI；现有组件用例覆盖 Pull 策略、Push 审阅与 Force-with-lease、目标选择、Remote 管理。
+- 证据：`src/features/remotes/index.ts`、`src/features/remotes/ui/`、`src/features/remotes/model/push-target.ts`、`tests/unit/pull-dialog.test.tsx`、`tests/unit/push-dialog.test.tsx`、`tests/unit/push-target-dialog.test.tsx`、`tests/unit/remote-manager.test.tsx`。
+- 限制/后续：此子阶段只整理 Remotes feature 的界面与类型归属，其余 feature 目录迁移及 S7.2/S7.4/S7.5 整体验收仍未完成。
+- 完成 commit：待提交

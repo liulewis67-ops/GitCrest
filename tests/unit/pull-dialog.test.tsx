@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { components } from "../../src/api/schema";
-import { PullDialog } from "../../src/features/remotes/PullDialog";
+import { PullDialog } from "../../src/features/remotes/ui/PullDialog";
 
 afterEach(cleanup);
 

@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../src/api/client";
-import { RemoteManager } from "../../src/features/remotes/RemoteManager";
+import { RemoteManager } from "../../src/features/remotes/ui/RemoteManager";
 
 afterEach(cleanup);
 

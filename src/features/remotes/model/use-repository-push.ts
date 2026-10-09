@@ -5,7 +5,7 @@ import {
   type TaskSnapshotResponse,
 } from "../../../api/client";
 import type { components } from "../../../api/schema";
-import type { PushTarget } from "../PushTargetDialog";
+import type { PushTarget } from "./push-target";
 
 interface RepositoryPushOptions {
   getApi: () => GitCrestApiClient | undefined;

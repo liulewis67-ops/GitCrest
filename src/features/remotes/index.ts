@@ -1,8 +1,8 @@
-export const loadRemoteManager = () => import("./RemoteManager");
-export const loadPushDialog = () => import("./PushDialog");
-export const loadPullDialog = () => import("./PullDialog");
-export const loadPushTargetDialog = () => import("./PushTargetDialog");
-export type { PushTarget } from "./PushTargetDialog";
+export const loadRemoteManager = () => import("./ui/RemoteManager");
+export const loadPushDialog = () => import("./ui/PushDialog");
+export const loadPullDialog = () => import("./ui/PullDialog");
+export const loadPushTargetDialog = () => import("./ui/PushTargetDialog");
+export type { PushTarget } from "./model/push-target";
 export { useRemoteMutations } from "./model/use-remote-mutations";
 export { useRepositoryFetch } from "./model/use-repository-fetch";
 export { useRepositoryPull } from "./model/use-repository-pull";
