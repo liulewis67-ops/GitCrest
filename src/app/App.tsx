@@ -14,7 +14,7 @@ import type { CredentialEditorRenderer } from "../shared/ui/credential-editor-re
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { loadCredentialEditor } from "../features/credentials";
-import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
+import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
@@ -226,6 +226,16 @@ function App() {
     setWorkspaceSession,
   );
   const workspaceSessionActions = useWorkspaceSessionActions(setWorkspaceSession);
+  const repositoryTabLifecycle = useRepositoryTabLifecycle({
+    sessionRef: workspaceSessionRef,
+    setSession: setWorkspaceSession,
+    closeSessionTab: workspaceSessionActions.closeTab,
+    repositories,
+    setSelectedRepository,
+    invalidateRepositoryUiCache,
+    isWorkspacePage: () => page === "workspace",
+    setPage,
+  });
   const repositoryListRefresh = useRepositoryListRefresh({
     setRepositories,
     setSelectedRepository,
@@ -599,14 +609,7 @@ function App() {
   }
 
   function closeRepositoryTab(repoId: string) {
-    const current = workspaceSessionRef.current;
-    const { session: nextSession, closingActive, nextActiveRepoId } = workspaceSessionActions.closeTab(current, repoId);
-    const nextRepository = repositories.find((repository) => repository.repoId === nextActiveRepoId);
-    workspaceSessionRef.current = nextSession;
-    setWorkspaceSession(nextSession);
-    invalidateRepositoryUiCache(repoId);
-    if (closingActive) setSelectedRepository(nextRepository);
-    if (closingActive && page === "workspace") setPage(nextRepository ? "workspace" : "welcome");
+    repositoryTabLifecycle.close(repoId);
   }
 
   async function openLocalRepository() {

@@ -8,6 +8,7 @@ export { useRepositoryCacheLifecycle } from "./model/use-repository-cache-lifecy
 export { useRepositoryMutations } from "./model/use-repository-mutations";
 export { useRepositoryOpening } from "./model/use-repository-opening";
 export { useRepositoryListRefresh } from "./model/use-repository-list-refresh";
+export { useRepositoryTabLifecycle } from "./model/use-repository-tab-lifecycle";
 export { getRepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";
 export type { RepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";
 export type { WorkspaceMode, WorkspaceSession } from "./model/workspace-session";

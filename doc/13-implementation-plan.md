@@ -4335,3 +4335,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/remotes/model/use-repository-push.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 4、5 节。
 - 限制/后续：所有仍可重试的失败 task 都保留小型 target 映射，直到任务从列表移除或应用关闭；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### repositories feature 仓库 tab 关闭与缓存清理迁入 model — 小阶段 395
+- 状态：已完成（关闭 tab 时的 session 更新、仓库缓存失效及活动仓库选择由 repositories model 编排）
+- 日期：2026-10-10
+- 交付：新增 `useRepositoryTabLifecycle.close`，集中更新 WorkspaceSession 与同步 ref、失效关闭仓库的 status/refs 缓存；关闭活动 tab 时选择最近剩余 tab 的仓库，并通过 App 注入的页面状态回调决定留在 workspace 或返回 welcome。App 的 handler 仅转发 RepoId。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；对照原关闭路径确认：session 更新先同步 ref 再 setState，缓存无论是否关闭活动 tab 均失效，非活动 tab 不改变当前选择/页面，关闭活动 tab 时按剩余 tab 顺序选择新活动仓库。
+- 证据：`src/features/repositories/model/use-repository-tab-lifecycle.ts`、`src/features/repositories/model/use-workspace-session-actions.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：App 仍装配连接恢复后的全量 session restore 与跨 feature 页面导航；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
