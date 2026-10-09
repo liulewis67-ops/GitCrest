@@ -3,7 +3,7 @@ use std::{ffi::OsString, path::Component};
 use super::dto::{StagingAction, StagingPatchAction, StagingPatchRequest, StagingRequest};
 use crate::{
     domain::diff::DiffScope,
-    features::status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot},
+    domain::status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot},
 };
 
 #[derive(Debug, PartialEq, Eq)]

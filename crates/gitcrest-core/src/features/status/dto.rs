@@ -1,6 +1,6 @@
 use serde::Serialize;
 
-use super::model::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot};
+use crate::domain::status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot};
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]

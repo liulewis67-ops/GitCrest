@@ -10,10 +10,8 @@ use crate::domain::diff::{
     DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffScope, DiffSelection,
 };
 pub(crate) use crate::domain::error::DiffError;
-use crate::{
-    domain::status::{ChangeCategory, ChangeKind},
-    features::status::StatusFile,
-};
+use crate::domain::status::StatusFile;
+use crate::domain::status::{ChangeCategory, ChangeKind};
 
 #[cfg(test)]
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;

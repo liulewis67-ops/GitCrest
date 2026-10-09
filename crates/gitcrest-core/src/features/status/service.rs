@@ -1,6 +1,7 @@
 use crate::features::repositories::{RepositoryError, RepositoryManager};
 
-use super::{engine, model::StatusSnapshot, StatusSnapshotCache};
+use super::{engine, StatusSnapshotCache};
+use crate::domain::status::StatusSnapshot;
 
 #[derive(Clone)]
 pub(crate) struct StatusService {
