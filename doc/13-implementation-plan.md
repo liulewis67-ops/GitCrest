@@ -2894,3 +2894,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/history.rs`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
 - 限制/后续：repositories、tasks 等 feature 仍直接持有或使用 RepositoryStore；按职责继续拆分其存储端口；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`ff0cdef`
+
+### Task snapshot 持久化通过专用 port 注入并迁入任务领域类型 — 小阶段 249
+- 状态：已完成（TaskService 不再直接持有或调用 RepositoryStore）
+- 日期：2026-10-09
+- 交付：新增 `domain::task`，集中定义 TaskStatus、TaskErrorCategory 与 TaskSnapshot；新增 `TaskStorePort`，由 SQLite RepositoryStore adapter 实现快照读取、序列化和保存。TaskService 启动恢复与任务持久化通过 port 完成，bootstrap 注入具体 adapter。恢复判定、中断任务状态、数据库字段/状态标签与对外 JSON 命名保持现有语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 TaskService 生产路径不再引用 RepositoryStore；未运行 Rust 测试。
+- 手工验证：未执行 SQLite 重启恢复或 Electron 任务场景；adapter 仍以现有 task snapshot JSON 结构读写，运行时行为未通过手工场景复核。
+- 证据：`crates/gitcrest-core/src/domain/task.rs`、`crates/gitcrest-core/src/ports/tasks.rs`、`crates/gitcrest-core/src/features/tasks/service.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：TaskService 仍负责内存调度、恢复策略和任务状态推进；后续继续评估执行机制与 API DTO 的拆分，同时清理 repositories feature 的存储具体依赖；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`c19b02e`
