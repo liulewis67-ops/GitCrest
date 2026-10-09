@@ -2,7 +2,10 @@ use std::{future::Future, path::Path, pin::Pin};
 
 use crate::domain::{
     error::GitAdapterError,
-    remote::{RemoteBranchDivergence, RemoteBranchUpstream, RemoteConfigurationSnapshot},
+    remote::{
+        RemoteBranchCommit, RemoteBranchDivergence, RemoteBranchUpstream,
+        RemoteConfigurationSnapshot,
+    },
 };
 
 pub(crate) trait RemoteGitPort: Send + Sync {
@@ -37,6 +40,28 @@ pub(crate) trait RemoteGitPort: Send + Sync {
         remote_name: &'a str,
         remote_branch: &'a str,
     ) -> RemoteGitFuture<'a, RemoteBranchDivergence>;
+
+    fn resolve_local_commit<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+    ) -> RemoteGitFuture<'a, String>;
+
+    fn list_commits_to_push<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+        remote_name: &'a str,
+        remote_branch: &'a str,
+    ) -> RemoteGitFuture<'a, Vec<RemoteBranchCommit>>;
+
+    fn list_changed_paths_to_push<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+        remote_name: &'a str,
+        remote_branch: &'a str,
+    ) -> RemoteGitFuture<'a, Vec<String>>;
 }
 
 pub(crate) type RemoteGitFuture<'a, T> =

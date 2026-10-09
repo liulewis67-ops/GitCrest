@@ -1,18 +1,12 @@
-use std::{path::Path, process::Stdio, time::Duration};
+use std::path::Path;
 
-use serde::Serialize;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    process::Command,
+use crate::{
+    domain::error::GitAdapterError,
+    ports::{branches::BranchGitPort, remotes::RemoteGitPort},
 };
+use serde::Serialize;
 
-use crate::ports::branches::BranchGitPort;
-use crate::ports::remotes::RemoteGitPort;
-
-const MAX_PUSH_PREVIEW_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PREVIEW_PATHS: usize = 200;
-const MAX_PREVIEW_COMMITS: usize = 50;
-const PUSH_PREVIEW_DEADLINE: Duration = Duration::from_secs(20);
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -122,40 +116,19 @@ pub async fn read_push_preflight_for_target(
         {
             return Err(PushError::InvalidUpstream);
         }
-        let local_oid = run_git(
-            repository_path,
-            &[
-                "rev-parse".into(),
-                "--verify".into(),
-                format!("refs/heads/{local_branch}^{{commit}}").into(),
-            ],
-        )
-        .await?;
-        let local_oid = text(
-            local_oid
-                .split(|byte| *byte == b'\n')
-                .next()
-                .unwrap_or_default(),
-        )?
-        .to_owned();
+        let local_oid = remote_git
+            .resolve_local_commit(repository_path, local_branch)
+            .await
+            .map_err(map_remote_git_error)?;
         (local_oid, remote_name.to_owned(), remote_branch.to_owned())
     } else {
-        let upstream_config = run_git(
-            repository_path,
-            &[
-                "for-each-ref".into(),
-                "--format=%(objectname)%00%(upstream:remotename)%00%(upstream:remoteref)".into(),
-                format!("refs/heads/{local_branch}").into(),
-            ],
-        )
-        .await?;
-        let fields = upstream_config.split(|byte| *byte == 0).collect::<Vec<_>>();
-        if fields.len() < 3 {
-            return Err(PushError::GitFailed);
-        }
-        let local_oid = text(fields[0])?.to_owned();
-        let remote_name = text(fields[1])?.to_owned();
-        let remote_ref = text(fields[2])?.to_owned();
+        let upstream = remote_git
+            .read_branch_upstream(repository_path, local_branch)
+            .await
+            .map_err(map_remote_git_error)?;
+        let local_oid = upstream.local_oid;
+        let remote_name = upstream.remote_name;
+        let remote_ref = upstream.remote_ref;
         if remote_name.is_empty() || remote_ref.is_empty() {
             return Err(PushError::NoUpstream);
         }
@@ -183,91 +156,37 @@ pub async fn read_push_preflight_for_target(
     {
         return Err(PushError::InvalidUpstream);
     }
-    let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
-    let remote_oid = run_git(
-        repository_path,
-        &[
-            "rev-parse".into(),
-            "--verify".into(),
-            format!("{tracking_ref}^{{commit}}").into(),
-        ],
-    )
-    .await
-    .map_err(|error| match error {
-        PushError::GitFailed => PushError::UpstreamGone,
-        other => other,
-    })?;
-    let expected_remote_oid = text(
-        remote_oid
-            .split(|byte| *byte == b'\n')
-            .next()
-            .unwrap_or_default(),
-    )?
-    .to_owned();
-    let counts = run_git(
-        repository_path,
-        &[
-            "rev-list".into(),
-            "--left-right".into(),
-            "--count".into(),
-            format!("{tracking_ref}...refs/heads/{local_branch}").into(),
-        ],
-    )
-    .await?;
-    let counts = std::str::from_utf8(&counts).map_err(|_| PushError::GitFailed)?;
-    let mut counts = counts.split_whitespace();
-    let behind = counts
-        .next()
-        .ok_or(PushError::GitFailed)?
-        .parse::<u32>()
-        .map_err(|_| PushError::GitFailed)?;
-    let ahead = counts
-        .next()
-        .ok_or(PushError::GitFailed)?
-        .parse::<u32>()
-        .map_err(|_| PushError::GitFailed)?;
-    let commit_output = run_git(
-        repository_path,
-        &[
-            "log".into(),
-            "--format=%H%x00%s".into(),
-            format!("-n{MAX_PREVIEW_COMMITS}").into(),
-            format!("{tracking_ref}..refs/heads/{local_branch}").into(),
-        ],
-    )
-    .await?;
-    let commits_to_push = std::str::from_utf8(&commit_output)
-        .map_err(|_| PushError::GitFailed)?
-        .lines()
-        .map(|line| {
-            let (oid, subject) = line.split_once('\0').ok_or(PushError::GitFailed)?;
-            Ok(PushCommit {
-                oid: oid.to_owned(),
-                subject: subject.to_owned(),
-            })
+    let expected_remote_oid = remote_git
+        .resolve_tracking_commit(repository_path, &remote_name, &remote_branch)
+        .await
+        .map_err(|error| match error {
+            GitAdapterError::Failed => PushError::UpstreamGone,
+            other => map_remote_git_error(other),
+        })?
+        .ok_or(PushError::UpstreamGone)?;
+    let divergence = remote_git
+        .compare_tracking_branch(repository_path, local_branch, &remote_name, &remote_branch)
+        .await
+        .map_err(map_remote_git_error)?;
+    let commits_to_push = remote_git
+        .list_commits_to_push(repository_path, local_branch, &remote_name, &remote_branch)
+        .await
+        .map_err(map_remote_git_error)?
+        .into_iter()
+        .map(|commit| PushCommit {
+            oid: commit.oid,
+            subject: commit.subject,
         })
-        .collect::<Result<Vec<_>, PushError>>()?;
-    let path_output = run_git(
-        repository_path,
-        &[
-            "diff".into(),
-            "--name-only".into(),
-            "-z".into(),
-            "--no-renames".into(),
-            tracking_ref.into(),
-            format!("refs/heads/{local_branch}").into(),
-        ],
-    )
-    .await?;
-    let paths = path_output
-        .split(|byte| *byte == 0)
-        .filter(|path| !path.is_empty())
         .collect::<Vec<_>>();
+    let paths = remote_git
+        .list_changed_paths_to_push(repository_path, local_branch, &remote_name, &remote_branch)
+        .await
+        .map_err(map_remote_git_error)?;
     let changed_path_count = u32::try_from(paths.len()).map_err(|_| PushError::TooLarge)?;
     let changed_paths = paths
         .iter()
         .take(MAX_PREVIEW_PATHS)
-        .map(|path| String::from_utf8_lossy(path).into_owned())
+        .cloned()
         .collect::<Vec<_>>();
     Ok(PushPreflight {
         repo_id,
@@ -276,77 +195,23 @@ pub async fn read_push_preflight_for_target(
         remote_branch,
         local_oid,
         expected_remote_oid,
-        ahead,
-        behind,
+        ahead: divergence.ahead,
+        behind: divergence.behind,
         commits_to_push,
-        overwritten_commit_count: behind,
+        overwritten_commit_count: divergence.behind,
         changed_path_count,
         omitted_changed_path_count: changed_path_count.saturating_sub(changed_paths.len() as u32),
         changed_paths,
     })
 }
 
-fn text(bytes: &[u8]) -> Result<&str, PushError> {
-    std::str::from_utf8(bytes)
-        .map(str::trim)
-        .map_err(|_| PushError::GitFailed)
-}
-
-async fn run_git(
-    repository_path: &Path,
-    arguments: &[std::ffi::OsString],
-) -> Result<Vec<u8>, PushError> {
-    let mut command = Command::new("git");
-    command
-        .current_dir(repository_path)
-        .args(arguments)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let mut child = command.spawn().map_err(|_| PushError::GitUnavailable)?;
-    let stdout = child.stdout.take().ok_or(PushError::GitFailed)?;
-    let stderr = child.stderr.take().ok_or(PushError::GitFailed)?;
-    let stdout_reader = tokio::spawn(read_limited(stdout, MAX_PUSH_PREVIEW_OUTPUT));
-    let stderr_reader = tokio::spawn(read_limited(stderr, 16 * 1024));
-    let status = match tokio::time::timeout(PUSH_PREVIEW_DEADLINE, child.wait()).await {
-        Ok(Ok(status)) => status,
-        Ok(Err(_)) => {
-            let _ = child.kill().await;
-            return Err(PushError::GitFailed);
-        }
-        Err(_) => {
-            let _ = child.kill().await;
-            return Err(PushError::TimedOut);
-        }
-    };
-    let stdout = stdout_reader
-        .await
-        .map_err(|_| PushError::GitFailed)?
-        .map_err(|_| PushError::GitFailed)?;
-    let _stderr = stderr_reader
-        .await
-        .map_err(|_| PushError::GitFailed)?
-        .map_err(|_| PushError::GitFailed)?;
-    if stdout.len() > MAX_PUSH_PREVIEW_OUTPUT {
-        return Err(PushError::TooLarge);
+fn map_remote_git_error(error: GitAdapterError) -> PushError {
+    match error {
+        GitAdapterError::Unavailable => PushError::GitUnavailable,
+        GitAdapterError::TimedOut => PushError::TimedOut,
+        GitAdapterError::OutputTooLarge => PushError::TooLarge,
+        GitAdapterError::Failed | GitAdapterError::ReferenceAlreadyExists => PushError::GitFailed,
     }
-    if !status.success() {
-        return Err(PushError::GitFailed);
-    }
-    Ok(stdout)
-}
-
-async fn read_limited<R>(reader: R, maximum: usize) -> Result<Vec<u8>, std::io::Error>
-where
-    R: AsyncRead + Unpin,
-{
-    let mut bytes = Vec::new();
-    reader
-        .take(maximum.saturating_add(1) as u64)
-        .read_to_end(&mut bytes)
-        .await?;
-    Ok(bytes)
 }
 
 #[cfg(test)]

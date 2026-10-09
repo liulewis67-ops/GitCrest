@@ -23,3 +23,9 @@ pub(crate) struct RemoteBranchDivergence {
     pub(crate) ahead: u32,
     pub(crate) behind: u32,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RemoteBranchCommit {
+    pub(crate) oid: String,
+    pub(crate) subject: String,
+}

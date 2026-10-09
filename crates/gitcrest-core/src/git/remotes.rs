@@ -9,7 +9,7 @@ use crate::{
     domain::{
         error::GitAdapterError,
         remote::{
-            RemoteBranchDivergence, RemoteBranchUpstream, RemoteConfiguration,
+            RemoteBranchCommit, RemoteBranchDivergence, RemoteBranchUpstream, RemoteConfiguration,
             RemoteConfigurationSnapshot,
         },
     },
@@ -19,6 +19,7 @@ use crate::{
 const MAX_REMOTE_OUTPUT: usize = 8 * 1024 * 1024;
 const MAX_CONFIG_OUTPUT: usize = 1024;
 const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
+const MAX_PUSH_PREVIEW_COMMITS: usize = 50;
 const MAX_REMOTES: usize = 128;
 const REMOTE_READ_DEADLINE: Duration = Duration::from_secs(20);
 
@@ -205,6 +206,98 @@ impl RemoteGitPort for GitRemoteAdapter {
                 .parse::<u32>()
                 .map_err(|_| GitAdapterError::Failed)?;
             Ok(RemoteBranchDivergence { ahead, behind })
+        })
+    }
+
+    fn resolve_local_commit<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+    ) -> RemoteGitFuture<'a, String> {
+        Box::pin(async move {
+            let reference = format!("refs/heads/{local_branch}^{{commit}}");
+            let output = self
+                .run_git(
+                    repository_path,
+                    &["rev-parse", "--verify", &reference],
+                    false,
+                    MAX_PREFLIGHT_OUTPUT,
+                )
+                .await?
+                .ok_or(GitAdapterError::Failed)?;
+            std::str::from_utf8(&output)
+                .map(str::trim)
+                .map(str::to_owned)
+                .map_err(|_| GitAdapterError::Failed)
+        })
+    }
+
+    fn list_commits_to_push<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+        remote_name: &'a str,
+        remote_branch: &'a str,
+    ) -> RemoteGitFuture<'a, Vec<RemoteBranchCommit>> {
+        Box::pin(async move {
+            let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
+            let local_ref = format!("refs/heads/{local_branch}");
+            let range = format!("{tracking_ref}..{local_ref}");
+            let limit = format!("-n{MAX_PUSH_PREVIEW_COMMITS}");
+            let output = self
+                .run_git(
+                    repository_path,
+                    &["log", "--format=%H%x00%s", &limit, &range],
+                    false,
+                    MAX_PREFLIGHT_OUTPUT,
+                )
+                .await?
+                .ok_or(GitAdapterError::Failed)?;
+            std::str::from_utf8(&output)
+                .map_err(|_| GitAdapterError::Failed)?
+                .lines()
+                .map(|line| {
+                    let (oid, subject) = line.split_once('\0').ok_or(GitAdapterError::Failed)?;
+                    Ok(RemoteBranchCommit {
+                        oid: oid.to_owned(),
+                        subject: subject.to_owned(),
+                    })
+                })
+                .collect()
+        })
+    }
+
+    fn list_changed_paths_to_push<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+        remote_name: &'a str,
+        remote_branch: &'a str,
+    ) -> RemoteGitFuture<'a, Vec<String>> {
+        Box::pin(async move {
+            let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
+            let local_ref = format!("refs/heads/{local_branch}");
+            let output = self
+                .run_git(
+                    repository_path,
+                    &[
+                        "diff",
+                        "--name-only",
+                        "-z",
+                        "--no-renames",
+                        &tracking_ref,
+                        &local_ref,
+                    ],
+                    false,
+                    MAX_PREFLIGHT_OUTPUT,
+                )
+                .await?
+                .ok_or(GitAdapterError::Failed)?;
+            Ok(output
+                .split(|byte| *byte == 0)
+                .filter(|path| !path.is_empty())
+                .map(|path| String::from_utf8_lossy(path).into_owned())
+                .collect())
         })
     }
 }
