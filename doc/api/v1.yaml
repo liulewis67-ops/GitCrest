@@ -3599,6 +3599,9 @@ components:
           type: array
           items: { $ref: "#/components/schemas/CommitSummary" }
         nextOffset: { type: [integer, "null"], minimum: 0 }
+        searchPending:
+          type: boolean
+          description: True when a message search is waiting for the repository history index; retry the same query and offset.
     CommitSummary:
       type: object
       additionalProperties: false

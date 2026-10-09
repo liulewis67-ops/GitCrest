@@ -215,6 +215,12 @@ impl RepositoryStore {
         }
     }
 
+    pub fn is_history_index_building(&self, repo_id: &str) -> bool {
+        self.history_index_builds
+            .lock()
+            .is_ok_and(|builds| builds.contains(repo_id))
+    }
+
     pub fn replace_history_search_index(
         &self,
         repo_id: &str,
@@ -929,6 +935,10 @@ impl AiProviderSettingsPort for RepositoryStore {
 impl HistorySearchIndexPort for RepositoryStore {
     fn begin_index_build(&self, repo_id: &str, refs_fingerprint: &str) -> bool {
         RepositoryStore::begin_history_index_build(self, repo_id, refs_fingerprint)
+    }
+
+    fn is_index_building(&self, repo_id: &str) -> bool {
+        RepositoryStore::is_history_index_building(self, repo_id)
     }
 
     fn finish_index_build(&self, repo_id: &str) {

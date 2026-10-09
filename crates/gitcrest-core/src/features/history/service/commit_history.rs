@@ -26,6 +26,7 @@ pub(super) async fn read_page(
                 limit,
                 commits: Vec::new(),
                 next_offset: None,
+                search_pending: false,
             });
         }
         let resolved = run_git(
@@ -81,6 +82,7 @@ pub(super) async fn read_page(
                 limit,
                 commits: Vec::new(),
                 next_offset: None,
+                search_pending: false,
             });
         }
         arguments.push("--no-walk=unsorted".into());
@@ -157,6 +159,7 @@ pub(super) async fn read_page(
         limit,
         commits,
         next_offset: has_more.then_some(offset + limit),
+        search_pending: false,
     })
 }
 

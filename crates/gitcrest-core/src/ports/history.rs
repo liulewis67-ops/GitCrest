@@ -3,6 +3,8 @@ use crate::domain::{commit::CommitSearchEntry, error::RepositoryError};
 pub(crate) trait HistorySearchIndexPort: Send + Sync {
     fn begin_index_build(&self, repo_id: &str, refs_fingerprint: &str) -> bool;
 
+    fn is_index_building(&self, repo_id: &str) -> bool;
+
     fn finish_index_build(&self, repo_id: &str);
 
     fn search_messages(

@@ -373,7 +373,8 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(cold.commits[0].subject, "second NEEDLE entry");
+        assert!(cold.search_pending);
+        assert!(cold.commits.is_empty());
         let fingerprint = refs_fingerprint(path, repository.head.as_deref())
             .await
             .unwrap();
@@ -437,6 +438,37 @@ mod tests {
         commit(path, "needle after index");
         let after_ref_change = read_page_indexed(
             repository.repo_id.clone(),
+            path,
+            0,
+            10,
+            repository.head.as_deref(),
+            &filters,
+            store.clone(),
+        )
+        .await
+        .unwrap();
+        assert!(after_ref_change.search_pending);
+        let updated_fingerprint = refs_fingerprint(path, repository.head.as_deref())
+            .await
+            .unwrap();
+        let mut updated_index_ready = false;
+        for _ in 0..100 {
+            if store
+                .search_messages(&repository.repo_id, &updated_fingerprint, "needle", 0, 10)
+                .unwrap()
+                .is_some()
+            {
+                updated_index_ready = true;
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert!(
+            updated_index_ready,
+            "a refs change should rebuild the index"
+        );
+        let after_ref_change = read_page_indexed(
+            repository.repo_id,
             path,
             0,
             10,

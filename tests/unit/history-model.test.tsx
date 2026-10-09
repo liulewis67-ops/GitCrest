@@ -85,6 +85,23 @@ describe("history feature models", () => {
     expect((api.getRepositoryCommits as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps a cold message search loading until the complete indexed page is ready", async () => {
+    const messageFilters: CommitHistoryFilters = { message: "needle" };
+    const { api } = cancellableApi({
+      getRepositoryCommits: vi.fn()
+        .mockResolvedValueOnce({ ...page("repo_a", 0, [], null), searchPending: true })
+        .mockResolvedValueOnce(page("repo_a", 0, [commit("match")], null)),
+      getRepositoryRefs: vi.fn().mockResolvedValue(refs("repo_a")),
+    });
+    const { result } = renderHook(() => useRepositoryHistory(api, "repo_a", messageFilters, 0));
+
+    await waitFor(() => expect(result.current.searchPending).toBe(true));
+    expect(result.current.loading).toBe(true);
+    await waitFor(() => expect(result.current.commits.map(({ oid }) => oid)).toEqual(["match"]), { timeout: 3000 });
+    expect(result.current.searchPending).toBe(false);
+    expect((api.getRepositoryCommits as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(2);
+  });
+
   it("ignores a history response from a repository that is no longer selected", async () => {
     const oldPage = deferred<CommitPageResponse>();
     const { api, signals } = cancellableApi({

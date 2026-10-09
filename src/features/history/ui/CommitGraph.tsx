@@ -59,7 +59,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
   const renderedWindowRef = useRef({ first: 0, height: 520 });
   const restoredRepo = useRef<string>();
-  const { commits, refs, loading, loadingMore, error, refsError, loadMore, retry } = useRepositoryHistory(api, repoId, filters, refreshKey);
+  const { commits, refs, loading, loadingMore, searchPending, error, refsError, loadMore, retry } = useRepositoryHistory(api, repoId, filters, refreshKey);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -193,7 +193,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
       <div className="historyFilterActions"><button className="secondaryButton" type="submit">Search</button>{hasFilters && <button className="textButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
     </form>
     <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label="Commit graph view">
-    {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />Loading commit history…</div>
+    {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? "Preparing message search…" : "Loading commit history…"}</div>
       : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={retry}>Retry history</button></div>
         : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p><h2>{hasFilters ? "No matching commits" : "No commits yet"}</h2><p>{hasFilters ? "Adjust or clear the current filters to see more history." : "This repository has no commit history on HEAD or its branches."}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
           : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>

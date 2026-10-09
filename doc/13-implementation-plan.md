@@ -3893,3 +3893,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/diff/index.ts`、`src/features/diff/ui/`、`tests/unit/split-diff.test.tsx`、`tests/unit/inline-diff.test.ts`。
 - 限制/后续：Diff 根目录仍保留算法与 Monaco/tree-sitter 配置模块；其它 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
 - 完成 commit：`08c2af0 refactor: organize diff feature UI`
+
+### S7.2 冷消息搜索等待索引 — 小阶段 349
+- 状态：已完成（索引未就绪时快速返回 pending 并由 UI 等待完整结果；冷搜索 <200ms 目标仍未达成）
+- 日期：2026-10-09
+- 交付：history message-only 查询在 trigram 索引缺失或重建期间返回空提交列表与 `searchPending: true`，不执行同步全历史 `git log --grep`；查询方重复相同 offset 直到索引可用。索引构建通过 store 状态同步占位，保留并发去重；索引完成后仍由 SQLite FTS 返回完整、有序分页。前端保持加载状态，每 500ms 轮询，最多等待 30 秒并可重试。OpenAPI 与生成 TypeScript schema 同步增加可选 `searchPending`。基准脚本分别计量首次响应和完整结果耗时。
+- 验证：Rust 全量测试 142/142、History model 前端测试 6/6、`pnpm frontend:boundaries`、`pnpm build`、`cargo clippy --all-targets -- -D warnings`、Release build、基准脚本 `node --check` 与 `git diff --check` 通过。Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 同一 100k commit fixture 20 轮：首次 pending 响应 P95 18.481ms；从首次查询到完整匹配结果 P95 4,012.574ms、max 4,271.373ms，索引 ready 约 3.94s；warm search P95 9.074ms。完整冷搜索仍远超 <200ms。报告：`doc/evidence/S7.2/api-win32-cold-pending-stage349.json`。
+- 手工验证：未操作 GUI；HTTP 基准验证 pending 重试最终返回正确匹配提交。基准使用隔离 sidecar/SQLite；fixture 原有 `bench-diff.txt` 修改状态在运行前后保持不变。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/ports/history.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/history/dto.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`src/features/history/model/use-repository-history.ts`、`src/features/history/ui/CommitGraph.tsx`、`tests/unit/history-model.test.tsx`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-pending-stage349.json`。
+- 限制/后续：pending 协议降低 API 阻塞并保留完整结果语义，但用户仍需等待索引构建，完整冷搜索未达标；需要继续缩短/提前执行索引构建，并按 20 轮完整结果耗时复测。短于 3 字符和组合过滤仍走 Git 搜索回退。S7.2 其它桌面门槛、S7.4 与 S7.5 仍未验收。
+- 完成 commit：待提交

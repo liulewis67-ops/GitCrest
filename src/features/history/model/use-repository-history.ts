@@ -3,7 +3,22 @@ import type { CommitHistoryFilters, CommitPageResponse, GitCrestApiClient, RefSn
 import type { components } from "../../../api/schema";
 
 const PAGE_SIZE = 50;
+const SEARCH_INDEX_RETRY_MS = 500;
+const SEARCH_INDEX_WAIT_LIMIT_MS = 30_000;
 type CommitSummary = components["schemas"]["CommitSummary"];
+
+function waitForSearchIndex(signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const finish = () => {
+      window.clearTimeout(timer);
+      signal.removeEventListener("abort", finish);
+      resolve();
+    };
+    const timer = window.setTimeout(finish, SEARCH_INDEX_RETRY_MS);
+    signal.addEventListener("abort", finish, { once: true });
+    if (signal.aborted) finish();
+  });
+}
 
 function isCommitSummary(value: unknown): value is CommitSummary {
   if (!value || typeof value !== "object") return false;
@@ -27,6 +42,7 @@ export function useRepositoryHistory(
   const [nextOffset, setNextOffset] = useState<number | null>(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searchPending, setSearchPending] = useState(false);
   const [error, setError] = useState("");
   const [refsError, setRefsError] = useState("");
   const requestGeneration = useRef(0);
@@ -41,7 +57,21 @@ export function useRepositoryHistory(
     else setLoadingMore(true);
     setError("");
     try {
-      const response: unknown = await api.withSignal(signal).getRepositoryCommits(repoId, offset, PAGE_SIZE, filters);
+      const waitStartedAt = Date.now();
+      let response: unknown;
+      while (true) {
+        response = await api.withSignal(signal).getRepositoryCommits(repoId, offset, PAGE_SIZE, filters);
+        if (!response || typeof response !== "object" || (response as Partial<CommitPageResponse>).searchPending !== true) {
+          setSearchPending(false);
+          break;
+        }
+        setSearchPending(true);
+        if (Date.now() - waitStartedAt >= SEARCH_INDEX_WAIT_LIMIT_MS) {
+          throw new Error("History search is taking longer than expected. Try again shortly.");
+        }
+        await waitForSearchIndex(signal);
+        if (signal.aborted) return;
+      }
       if (requestGeneration.current !== generation) return;
       if (!response || typeof response !== "object" || !Array.isArray((response as Partial<CommitPageResponse>).commits)) {
         throw new Error("History response did not contain a commit list.");
@@ -58,6 +88,7 @@ export function useRepositoryHistory(
       if (requestGeneration.current === generation) {
         if (offset === 0) setLoading(false);
         else setLoadingMore(false);
+        setSearchPending(false);
       }
     }
   }, [api, filters, repoId]);
@@ -72,6 +103,7 @@ export function useRepositoryHistory(
     setNextOffset(0);
     setLoading(true);
     setLoadingMore(false);
+    setSearchPending(false);
     setError("");
     setRefsError("");
     void readPage(0, generation, controller.signal);
@@ -105,5 +137,5 @@ export function useRepositoryHistory(
     if (controller && !controller.signal.aborted) void readPage(commits.length, requestGeneration.current, controller.signal);
   }, [commits.length, readPage]);
 
-  return { commits, refs, loading, loadingMore, error, refsError, loadMore, retry };
+  return { commits, refs, loading, loadingMore, searchPending, error, refsError, loadMore, retry };
 }

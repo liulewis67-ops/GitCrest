@@ -5,6 +5,7 @@ pub(crate) struct CommitPage {
     pub limit: usize,
     pub commits: Vec<CommitSummary>,
     pub next_offset: Option<usize>,
+    pub search_pending: bool,
 }
 
 #[derive(Clone, Debug, Default)]

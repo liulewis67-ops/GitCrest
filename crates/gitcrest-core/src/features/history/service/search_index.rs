@@ -78,6 +78,26 @@ pub async fn read_page_indexed(
                 limit,
                 commits: entries.into_iter().map(summary_from_search_row).collect(),
                 next_offset: has_more.then_some(offset + limit),
+                search_pending: false,
+            });
+        }
+
+        if store.is_index_building(&repo_id)
+            || schedule_history_index_build(
+                repo_id.clone(),
+                repository_path.to_owned(),
+                head.map(str::to_owned),
+                Some(fingerprint.clone()),
+                store.clone(),
+            )
+        {
+            return Ok(CommitPage {
+                repo_id,
+                offset,
+                limit,
+                commits: Vec::new(),
+                next_offset: None,
+                search_pending: true,
             });
         }
     }
@@ -121,9 +141,16 @@ fn schedule_history_index_build(
     head: Option<String>,
     expected_fingerprint: Option<String>,
     store: Arc<dyn HistorySearchIndexPort>,
-) {
+) -> bool {
+    let claimed = expected_fingerprint
+        .as_deref()
+        .is_some_and(|fingerprint| store.begin_index_build(&repo_id, fingerprint));
+    if expected_fingerprint.is_some() && !claimed {
+        return false;
+    }
     tokio::spawn(async move {
         let started = std::time::Instant::now();
+        let preclaimed = claimed;
         let index_fingerprint = match expected_fingerprint {
             Some(fingerprint) => Some(fingerprint),
             None => refs_fingerprint(&repository_path, head.as_deref())
@@ -133,7 +160,7 @@ fn schedule_history_index_build(
         let Some(index_fingerprint) = index_fingerprint else {
             return;
         };
-        if !store.begin_index_build(&repo_id, &index_fingerprint) {
+        if !preclaimed && !store.begin_index_build(&repo_id, &index_fingerprint) {
             return;
         }
         let result = build_history_search_index(
@@ -156,6 +183,7 @@ fn schedule_history_index_build(
         );
         store.finish_index_build(&repo_id);
     });
+    claimed
 }
 
 pub async fn build_history_search_index(

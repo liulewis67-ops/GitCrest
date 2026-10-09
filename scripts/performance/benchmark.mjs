@@ -235,6 +235,7 @@ async function startSidecar(executable, databasePath) {
 
 async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
   const samplesMs = [];
+  const pendingResponseSamplesMs = [];
   for (let index = 0; index < iterations; index += 1) {
     const sampleDirectory = join(tempDataPath, `cold-search-${index + 1}`);
     const databasePath = join(sampleDirectory, "gitcrest.sqlite");
@@ -245,10 +246,15 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
       const baseUrl = `http://${instance.address.host}:${instance.address.port}`;
       const repository = await requestJson(`${baseUrl}/api/v1/repositories`, instance.token, "POST", { path: fixturePath });
       const startedAt = performance.now();
-      const page = await requestJson(
-        `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`,
-        instance.token,
-      );
+      const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
+      let page = await requestJson(searchUrl, instance.token);
+      pendingResponseSamplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
+      const deadline = startedAt + 30_000;
+      while (page.searchPending === true) {
+        if (performance.now() >= deadline) throw new Error("Cold history search index did not become ready within 30 seconds.");
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        page = await requestJson(searchUrl, instance.token);
+      }
       samplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
       if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
         throw new Error("Cold history search did not return its matching commit.");
@@ -265,6 +271,9 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
     p95Ms: percentile(samplesMs),
     maxMs: Math.max(...samplesMs),
     samplesMs,
+    pendingResponseP95Ms: percentile(pendingResponseSamplesMs),
+    pendingResponseMaxMs: Math.max(...pendingResponseSamplesMs),
+    pendingResponseSamplesMs,
   };
 }
 
@@ -312,6 +321,10 @@ async function runBenchmark(fixturePath, reportPath) {
       historySearchWarmupAttempts += 1;
       const attemptStarted = performance.now();
       const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`);
+      if (page.searchPending === true) {
+        await new Promise((resolveSleep) => setTimeout(resolveSleep, 500));
+        continue;
+      }
       if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) throw new Error("History search did not return its matching commit.");
       if (started.getStderr().includes("History message index ready")) {
         historySearchIndexReady = true;

@@ -269,7 +269,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Queue a local branch switch when the worktree is clean */
+        /** Queue a local branch switch when local changes do not overlap the target branch */
         post: operations["switchRepositoryBranch"];
         delete?: never;
         options?: never;
@@ -1513,6 +1513,8 @@ export interface components {
             limit: number;
             commits: components["schemas"]["CommitSummary"][];
             nextOffset: number | null;
+            /** @description True when a message search is waiting for the repository history index; retry the same query and offset. */
+            searchPending?: boolean;
         };
         CommitSummary: {
             oid: string;
@@ -2985,7 +2987,7 @@ export interface operations {
                 };
             };
             406: components["responses"]["UnsupportedVersion"];
-            /** @description The target is current or the working tree has changes. */
+            /** @description The target is current or local changes overlap paths changed by the target branch. */
             409: {
                 headers: {
                     [name: string]: unknown;

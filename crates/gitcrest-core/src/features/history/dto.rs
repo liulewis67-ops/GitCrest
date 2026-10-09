@@ -1,5 +1,9 @@
 use serde::{Deserialize, Serialize};
 
+fn is_false(value: &bool) -> bool {
+    !value
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct HistoryQuery {
@@ -29,6 +33,8 @@ pub(super) struct CommitPageDto {
     limit: usize,
     commits: Vec<CommitSummaryDto>,
     next_offset: Option<usize>,
+    #[serde(skip_serializing_if = "is_false")]
+    search_pending: bool,
 }
 
 #[derive(Serialize)]
@@ -122,6 +128,7 @@ impl From<super::model::CommitPage> for CommitPageDto {
             limit: page.limit,
             commits: page.commits.into_iter().map(Into::into).collect(),
             next_offset: page.next_offset,
+            search_pending: page.search_pending,
         }
     }
 }
