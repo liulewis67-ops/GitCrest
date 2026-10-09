@@ -4155,3 +4155,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/windows-display-timing.ps1`、`doc/evidence/S7.2/windows-dwm-timing-stage375-20261010.json`；阶段 374 Chromium 帧管线报告。
 - 限制/后续：此采样确认桌面配置为 60Hz，但仍不能确定 Chromium/viz 为何以约 56Hz 请求 BeginFrame；继续调查 Electron GPU/VSync 设备与输出路径，暂不变更产品 flags。S7.2、S7.4、S7.5 继续未验收。
 - 证据 commit：`820045c`。
+
+### S7.2 记录 Electron 实际 GPU 设备与加速能力 — 小阶段 376
+- 状态：已完成（默认发行版确认使用 RTX 硬件合成；禁用 GPU 会回退到 SwiftShader，实际呈现更慢）
+- 日期：2026-10-10
+- 交付：扩展 packaged frame diagnostic，调用 Electron `app.getGPUFeatureStatus()` 和 `app.getGPUInfo("complete")`，在默认及 `--disable-gpu` 报告中记录 GPU 设备、驱动和加速状态。
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs`、两份报告 JSON 解析和 `git diff --check` 通过。默认配置 active device 为 NVIDIA GeForce RTX 3050 Laptop GPU / driver 32.0.16.1088，ANGLE D3D11，GPU compositing 和 rasterization enabled；presented P5 为 55.31fps。`--disable-gpu` 时 active device 为 SwiftShader，GPU compositing/rasterization disabled，presented P5 为 48.49fps。两组是 10 秒单轮诊断，不代表正式 20 轮验收；结果排除了默认配置意外运行在软件渲染的简单假设。
+- 手工验证：未操作 GUI；运行默认及 `GITCREST_BENCH_DISABLE_GPU=1` 的 packaged frame diagnostic。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-gpu-info-default-stage376-20261010.json`、`doc/evidence/S7.2/desktop-win32-gpu-info-disabled-stage376-20261010.json`。
+- 限制/后续：硬件 GPU 确实启用，但 Electron/viz 的 BeginFrame cadence 与 DWM 60Hz 仍不一致；禁用 GPU 使 presented-frame 更慢，因此不修改产品启动参数。继续检查 Windows/Electron VSync 与 compositor 源头。S7.2、S7.4、S7.5 验收仍未完成。
+- 证据 commit：`ed82cdc`。
