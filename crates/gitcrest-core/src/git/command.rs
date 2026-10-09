@@ -354,6 +354,7 @@ impl GitCommandService {
             Some(&expected.local_branch),
             false,
             &super::refs::GitBranchAdapter,
+            self,
             &super::remotes::GitRemoteAdapter,
         )
         .await
@@ -522,6 +523,7 @@ impl GitCommandService {
                     Some(&expected.local_branch),
                     false,
                     &super::refs::GitBranchAdapter,
+                    self,
                     &super::remotes::GitRemoteAdapter,
                 )
                 .await
@@ -555,6 +557,7 @@ impl GitCommandService {
             Some(&expected.local_branch),
             false,
             &super::refs::GitBranchAdapter,
+            self,
             &super::remotes::GitRemoteAdapter,
         )
         .await
@@ -616,6 +619,7 @@ impl GitCommandService {
             Some(&expected.local_branch),
             false,
             &super::refs::GitBranchAdapter,
+            self,
             &super::remotes::GitRemoteAdapter,
         )
         .await

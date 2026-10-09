@@ -8,13 +8,17 @@ use tokio::{
 use crate::{
     domain::{
         error::GitAdapterError,
-        remote::{RemoteConfiguration, RemoteConfigurationSnapshot},
+        remote::{
+            RemoteBranchDivergence, RemoteBranchUpstream, RemoteConfiguration,
+            RemoteConfigurationSnapshot,
+        },
     },
     ports::remotes::{RemoteGitFuture, RemoteGitPort},
 };
 
 const MAX_REMOTE_OUTPUT: usize = 8 * 1024 * 1024;
 const MAX_CONFIG_OUTPUT: usize = 1024;
+const MAX_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_REMOTES: usize = 128;
 const REMOTE_READ_DEADLINE: Duration = Duration::from_secs(20);
 
@@ -94,6 +98,113 @@ impl RemoteGitPort for GitRemoteAdapter {
             )
             .await
             .map(|output| output.is_some())
+        })
+    }
+
+    fn read_branch_upstream<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+    ) -> RemoteGitFuture<'a, RemoteBranchUpstream> {
+        Box::pin(async move {
+            let reference = format!("refs/heads/{local_branch}");
+            let output = self
+                .run_git(
+                    repository_path,
+                    &[
+                        "for-each-ref",
+                        "--format=%(objectname)%00%(upstream:remotename)%00%(upstream:remoteref)",
+                        &reference,
+                    ],
+                    false,
+                    MAX_PREFLIGHT_OUTPUT,
+                )
+                .await?
+                .ok_or(GitAdapterError::Failed)?;
+            let fields = output.split(|byte| *byte == 0).collect::<Vec<_>>();
+            if fields.len() < 3 {
+                return Err(GitAdapterError::Failed);
+            }
+            let parse_field = |field: &[u8]| {
+                std::str::from_utf8(field)
+                    .map(str::trim)
+                    .map(str::to_owned)
+                    .map_err(|_| GitAdapterError::Failed)
+            };
+            Ok(RemoteBranchUpstream {
+                local_oid: parse_field(fields[0])?,
+                remote_name: parse_field(fields[1])?,
+                remote_ref: parse_field(fields[2])?,
+            })
+        })
+    }
+
+    fn resolve_tracking_commit<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        remote_name: &'a str,
+        remote_branch: &'a str,
+    ) -> RemoteGitFuture<'a, Option<String>> {
+        Box::pin(async move {
+            let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
+            let target = format!("{tracking_ref}^{{commit}}");
+            let output = self
+                .run_git(
+                    repository_path,
+                    &["rev-parse", "--verify", &target],
+                    true,
+                    MAX_PREFLIGHT_OUTPUT,
+                )
+                .await?;
+            output
+                .map(|output| {
+                    std::str::from_utf8(
+                        output
+                            .split(|byte| *byte == b'\n')
+                            .next()
+                            .unwrap_or_default(),
+                    )
+                    .map(str::trim)
+                    .map(str::to_owned)
+                    .map_err(|_| GitAdapterError::Failed)
+                })
+                .transpose()
+        })
+    }
+
+    fn compare_tracking_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+        remote_name: &'a str,
+        remote_branch: &'a str,
+    ) -> RemoteGitFuture<'a, RemoteBranchDivergence> {
+        Box::pin(async move {
+            let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
+            let local_ref = format!("refs/heads/{local_branch}");
+            let range = format!("{tracking_ref}...{local_ref}");
+            let output = self
+                .run_git(
+                    repository_path,
+                    &["rev-list", "--left-right", "--count", &range],
+                    false,
+                    MAX_PREFLIGHT_OUTPUT,
+                )
+                .await?
+                .ok_or(GitAdapterError::Failed)?;
+            let counts = std::str::from_utf8(&output).map_err(|_| GitAdapterError::Failed)?;
+            let mut counts = counts.split_whitespace();
+            let behind = counts
+                .next()
+                .ok_or(GitAdapterError::Failed)?
+                .parse::<u32>()
+                .map_err(|_| GitAdapterError::Failed)?;
+            let ahead = counts
+                .next()
+                .ok_or(GitAdapterError::Failed)?
+                .parse::<u32>()
+                .map_err(|_| GitAdapterError::Failed)?;
+            Ok(RemoteBranchDivergence { ahead, behind })
         })
     }
 }

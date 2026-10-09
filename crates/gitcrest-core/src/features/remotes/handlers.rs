@@ -80,6 +80,7 @@ pub(super) async fn preflight_repository_pull(
         metadata.branch.as_deref(),
         metadata.detached,
         state.branch_git.as_ref(),
+        &state.git_commands,
         state.remote_git.as_ref(),
     )
     .await
@@ -115,6 +116,7 @@ pub(super) async fn pull_repository(
         metadata.branch.as_deref(),
         metadata.detached,
         state.branch_git.as_ref(),
+        &state.git_commands,
         state.remote_git.as_ref(),
     )
     .await
