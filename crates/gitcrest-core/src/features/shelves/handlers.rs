@@ -17,7 +17,7 @@ use crate::{
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging},
     ports::diff::DiffGitPort,
-    ports::status::StatusReadPort,
+    ports::{repository::RepositoryPathPort, status::StatusReadPort},
     state::AppState,
     storage::{UndoOperation, UndoRecord},
 };
@@ -373,9 +373,9 @@ pub(crate) async fn load_shelf_record(
         })
 }
 
-async fn can_shelf_apply_with_conflicts<G: StatusReadPort>(
+async fn can_shelf_apply_with_conflicts<R: RepositoryPathPort, G: StatusReadPort>(
     repositories: &RepositoryManager,
-    status_service: &super::super::status::StatusService<G>,
+    status_service: &super::super::status::StatusService<R, G>,
     repo_id: &str,
     shelf: &shelves::ShelfRecord,
     head_oid: Option<&str>,
@@ -428,9 +428,9 @@ async fn can_shelf_apply_with_conflicts<G: StatusReadPort>(
     }))
 }
 
-async fn shelf_apply_revision<G: StatusReadPort>(
+async fn shelf_apply_revision<R: RepositoryPathPort, G: StatusReadPort>(
     git: &impl DiffGitPort,
-    status_service: &super::super::status::StatusService<G>,
+    status_service: &super::super::status::StatusService<R, G>,
     repo_id: &str,
     repository_path: &std::path::Path,
     shelf: &shelves::ShelfRecord,
@@ -641,9 +641,9 @@ pub(super) async fn create_repository_shelf(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-async fn prepare_shelf_items<G: StatusReadPort>(
+async fn prepare_shelf_items<R: RepositoryPathPort, G: StatusReadPort>(
     git: &impl DiffGitPort,
-    status_service: &super::super::status::StatusService<G>,
+    status_service: &super::super::status::StatusService<R, G>,
     repo_id: &str,
     repository_path: &std::path::Path,
     items: &[ShelfSelectionRequest],

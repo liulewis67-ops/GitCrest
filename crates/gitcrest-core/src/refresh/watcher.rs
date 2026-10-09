@@ -15,7 +15,7 @@ use tokio::{sync::mpsc, time::Instant};
 
 use crate::{
     features::{repositories::RepositoryManager, status::StatusService},
-    ports::status::StatusReadPort,
+    ports::{repository::RepositoryPathPort, status::StatusReadPort},
     EventBus,
 };
 
@@ -92,11 +92,14 @@ struct WatchFailure {
     poll_at: Instant,
 }
 
-pub async fn run<G: StatusReadPort + Clone + 'static>(
+pub async fn run<R, G>(
     repositories: RepositoryManager,
-    status: StatusService<G>,
+    status: StatusService<R, G>,
     events: EventBus,
-) {
+) where
+    R: RepositoryPathPort + Clone + 'static,
+    G: StatusReadPort + Clone + 'static,
+{
     let (sender, mut receiver) = mpsc::channel::<WatchInput>(EVENT_QUEUE_CAPACITY);
     let overflowed = Arc::new(AtomicBool::new(false));
     let mut registrations = HashMap::<String, Registration>::new();
@@ -153,15 +156,18 @@ pub async fn run<G: StatusReadPort + Clone + 'static>(
     }
 }
 
-async fn reconcile_repositories<G: StatusReadPort + Clone + 'static>(
+async fn reconcile_repositories<R, G>(
     repositories: &RepositoryManager,
-    status: &StatusService<G>,
+    status: &StatusService<R, G>,
     sender: &mpsc::Sender<WatchInput>,
     overflowed: &Arc<AtomicBool>,
     registrations: &mut HashMap<String, Registration>,
     failures: &mut HashMap<String, WatchFailure>,
     pending: &mut HashMap<String, DirtyScope>,
-) {
+) where
+    R: RepositoryPathPort + Clone + 'static,
+    G: StatusReadPort + Clone + 'static,
+{
     let Ok(current) = repositories.list().await else {
         return;
     };
@@ -227,13 +233,17 @@ async fn reconcile_repositories<G: StatusReadPort + Clone + 'static>(
     }
 }
 
-async fn create_registration<G: StatusReadPort + Clone + 'static>(
+async fn create_registration<R, G>(
     repo_id: &str,
     root: PathBuf,
-    status: StatusService<G>,
+    status: StatusService<R, G>,
     sender: &mpsc::Sender<WatchInput>,
     overflowed: &Arc<AtomicBool>,
-) -> Result<Registration, ()> {
+) -> Result<Registration, ()>
+where
+    R: RepositoryPathPort + Clone + 'static,
+    G: StatusReadPort + Clone + 'static,
+{
     let root = tokio::fs::canonicalize(&root).await.map_err(|_| ())?;
     let git_dir = git_path(&root, "--git-dir").await?;
     let common_dir = git_path(&root, "--git-common-dir").await?;
@@ -444,8 +454,8 @@ fn classify_path(path: &Path, location: &WatchLocation) -> DirtyScope {
     scope
 }
 
-fn publish_pending<G: StatusReadPort>(
-    status: &StatusService<G>,
+fn publish_pending<R: RepositoryPathPort, G: StatusReadPort>(
+    status: &StatusService<R, G>,
     events: &EventBus,
     pending: &mut HashMap<String, DirtyScope>,
 ) {

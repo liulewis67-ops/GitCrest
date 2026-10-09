@@ -1,29 +1,27 @@
-use crate::features::repositories::{RepositoryError, RepositoryManager};
-
 use super::{scope, StatusSnapshotCache};
-use crate::domain::status::StatusSnapshot;
+use crate::domain::{error::RepositoryError, status::StatusSnapshot};
+use crate::ports::{repository::RepositoryPathPort, status::StatusReadPort};
 #[cfg(test)]
-use crate::git::command::GitCommandService;
-use crate::ports::status::StatusReadPort;
+use crate::{features::repositories::RepositoryManager, git::command::GitCommandService};
 
 #[derive(Clone)]
-pub(crate) struct StatusService<G> {
-    repositories: RepositoryManager,
+pub(crate) struct StatusService<R, G> {
+    repository_paths: R,
     git: G,
     cache: StatusSnapshotCache,
 }
 
 #[cfg(test)]
-impl StatusService<GitCommandService> {
+impl StatusService<RepositoryManager, GitCommandService> {
     pub(crate) fn new(repositories: RepositoryManager) -> Self {
         Self::with_reader(repositories, GitCommandService::default())
     }
 }
 
-impl<G: StatusReadPort> StatusService<G> {
-    pub(crate) fn with_reader(repositories: RepositoryManager, git: G) -> Self {
+impl<R: RepositoryPathPort, G: StatusReadPort> StatusService<R, G> {
+    pub(crate) fn with_reader(repository_paths: R, git: G) -> Self {
         Self {
-            repositories,
+            repository_paths,
             git,
             cache: StatusSnapshotCache::default(),
         }
@@ -58,7 +56,7 @@ impl<G: StatusReadPort> StatusService<G> {
         repo_id: &str,
         version: u64,
     ) -> Result<StatusSnapshot, RepositoryError> {
-        let path = self.repositories.read_target(repo_id).await?;
+        let path = self.repository_paths.read_repository_path(repo_id).await?;
         let snapshot = self
             .git
             .read_status(repo_id.to_owned(), &path, &[])
@@ -97,7 +95,7 @@ impl<G: StatusReadPort> StatusService<G> {
         paths: &[String],
         version: u64,
     ) -> Result<StatusSnapshot, RepositoryError> {
-        let path = self.repositories.read_target(repo_id).await?;
+        let path = self.repository_paths.read_repository_path(repo_id).await?;
         let snapshot = self
             .git
             .read_status(repo_id.to_owned(), &path, paths)

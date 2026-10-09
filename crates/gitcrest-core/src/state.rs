@@ -21,7 +21,7 @@ pub(crate) struct AppState {
     pub(crate) read_only_token: Option<Arc<String>>,
     pub(crate) conflict_token: Option<Arc<String>>,
     pub(crate) repositories: RepositoryManager,
-    pub(crate) status: StatusService<GitCommandService>,
+    pub(crate) status: StatusService<RepositoryManager, GitCommandService>,
     pub(crate) tasks: TaskService,
     pub(crate) git_commands: GitCommandService,
     pub(crate) clones: CloneService,

@@ -8,7 +8,9 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
-use crate::{domain::error::RepositoryError, storage::RepositoryStore};
+use crate::{
+    domain::error::RepositoryError, ports::repository::RepositoryPathPort, storage::RepositoryStore,
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -298,6 +300,12 @@ impl RepositoryManager {
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)
+    }
+}
+
+impl RepositoryPathPort for RepositoryManager {
+    async fn read_repository_path(&self, repo_id: &str) -> Result<PathBuf, RepositoryError> {
+        self.read_target(repo_id).await
     }
 }
 
