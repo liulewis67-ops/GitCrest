@@ -3034,3 +3034,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：pull、push 和远程分支删除仍通过具体 GitCommandService；继续将写入模型与预检契约收敛到 domain/ports，保持任务取消、二次预检和 force-with-lease 语义；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`a1944a8`
+
+### 远程分支删除命令经 RemoteCommandPort 执行 — 小阶段 263
+- 状态：已完成（远程分支删除执行器仅接收 domain 命令模型）
+- 日期：2026-10-09
+- 交付：新增 `domain::remote::RemoteBranchDeleteCommand`，将远程名、分支名、tracking ref 和预期远端 OID 从 feature 预览模型中提取；RemoteCommandPort 增加删除操作，GitCommandService adapter 使用该 domain 命令执行带 `--force-with-lease` 的 push delete 和本地 tracking ref 清理。remotes handler 在任务内重新生成预览并比较 OID/revision/can_delete 后构造命令；元数据刷新与失败日志行为保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未运行真实远程删除、lease 拒绝或本地 tracking ref 清理场景。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.1、14 节。
+- 限制/后续：remote delete preview 查询仍将 GitCommandService 作为 GitReadPort 注入；pull/push 执行仍由 feature DTO 驱动的具体服务完成，后续需继续抽取领域执行条件与可注入 port；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`e247d15`
