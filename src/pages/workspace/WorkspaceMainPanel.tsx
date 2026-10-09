@@ -3,8 +3,9 @@ import type { DiffDocumentResponse, GitCrestApiClient, RepositoryResponse, Statu
 import type { WorkspaceSession } from "../../features/repositories";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadSplitDiff } from "../../features/diff";
+import { loadCommitGraph } from "../../features/history";
 
-const CommitGraph = lazy(() => import("../../features/history").then(({ CommitGraph }) => ({ default: CommitGraph })));
+const CommitGraph = lazy(loadCommitGraph);
 const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));
 
 interface WorkspaceMainPanelProps {

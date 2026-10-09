@@ -2,8 +2,9 @@ import { lazy, Suspense } from "react";
 import type { GitCrestApiClient, RepositoryResponse } from "../../api/client";
 import type { WorkflowAction } from "../../features/workflows/WorkflowDialog";
 import { ariaShortcut, type ShortcutPreferences } from "../../features/settings";
+import { loadCommitDetails } from "../../features/history";
 
-const CommitDetails = lazy(() => import("../../features/history").then(({ CommitDetails }) => ({ default: CommitDetails })));
+const CommitDetails = lazy(loadCommitDetails);
 
 interface WorkspaceDetailsPanelProps {
   repository?: RepositoryResponse;

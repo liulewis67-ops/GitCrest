@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, UIEvent } from "react";
 import type { CommitDetailResponse, CommitHistoryFilters, CommitPageResponse, GitCrestApiClient, RefSnapshotResponse } from "../../api/client";
 import type { components } from "../../api/schema";
@@ -50,9 +50,34 @@ function formatCommitDate(timestamp: number): string {
   return COMMIT_DATE_FORMAT.format(new Date(timestamp));
 }
 
-function describeRefs(refs: RefSnapshotResponse["refs"], oid: string): string[] {
-  return refs.filter((ref) => ref.oid === oid).map((ref) => ref.name);
-}
+const NO_REFS: string[] = [];
+
+const CommitGraphEntry = memo(function CommitGraphEntry({
+  commit,
+  index,
+  lane,
+  refNames,
+  selected,
+  tabIndex,
+  onSelect,
+  onMoveFocus,
+}: {
+  commit: CommitSummary;
+  index: number;
+  lane: number;
+  refNames: string[];
+  selected: boolean;
+  tabIndex: 0 | -1;
+  onSelect: (oid: string) => void;
+  onMoveFocus: (event: KeyboardEvent<HTMLButtonElement>, index: number) => void;
+}) {
+  return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${refNames.length ? `, ${refNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
+    <span className={`commitGraphNode${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
+    <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || "(no subject)"}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
+    <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
+    {refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}
+  </button>;
+});
 
 export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, onScrollPosition, onSelect }: CommitGraphProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -170,6 +195,15 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     });
     return { laneByOid, edgesByFrom, maxLane: Math.max(0, nextLane - 1) };
   }, [commits]);
+  const refNamesByOid = useMemo(() => {
+    const namesByOid = new Map<string, string[]>();
+    for (const ref of refs) {
+      const names = namesByOid.get(ref.oid) || [];
+      names.push(ref.name);
+      namesByOid.set(ref.oid, names);
+    }
+    return namesByOid;
+  }, [refs]);
 
   const firstVisible = Math.max(0, Math.floor(viewport.top / ROW_HEIGHT) - OVERSCAN);
   const visibleCount = Math.ceil(viewport.height / ROW_HEIGHT) + OVERSCAN * 2;
@@ -192,7 +226,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     }
   }
 
-  function moveFocus(event: KeyboardEvent<HTMLButtonElement>, index: number) {
+  const moveFocus = useCallback((event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     const targetIndex = event.key === "ArrowDown" ? index + 1
       : event.key === "ArrowUp" ? index - 1
         : event.key === "Home" ? 0
@@ -209,7 +243,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
       setViewport({ top: node.scrollTop, height });
     }
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-commit-index="${targetIndex}"]`)?.focus());
-  }
+  }, [commits, onSelect]);
 
   const visibleStart = firstVisible * ROW_HEIGHT;
   const visibleEnd = lastVisible * ROW_HEIGHT;
@@ -276,15 +310,19 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
               {visibleCommits.map((commit, visibleIndex) => {
                 const index = firstVisible + visibleIndex;
                 const lane = laneLayout.laneByOid.get(commit.oid) || 0;
-                const refNames = describeRefs(refs, commit.oid);
+                const refNames = refNamesByOid.get(commit.oid) || NO_REFS;
                 const selected = selectedOid === commit.oid;
                 return <div className="commitGraphRow" role="listitem" key={commit.oid} style={{ height: ROW_HEIGHT }}>
-                  <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${refNames.length ? `, ${refNames.join(", ")}` : ""}`} tabIndex={selected || (!selectedOid && index === 0) ? 0 : -1} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => moveFocus(event, index)}>
-                    <span className={`commitGraphNode${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
-                    <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || "(no subject)"}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
-                    <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
-                    {refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}
-                  </button>
+                  <CommitGraphEntry
+                    commit={commit}
+                    index={index}
+                    lane={lane}
+                    refNames={refNames}
+                    selected={selected}
+                    tabIndex={selected || (!selectedOid && index === 0) ? 0 : -1}
+                    onSelect={onSelect}
+                    onMoveFocus={moveFocus}
+                  />
                 </div>;
               })}
               <div className="commitGraphSpacer" aria-hidden="true" style={{ height: Math.max(0, graphHeight - visibleEnd) }} />
