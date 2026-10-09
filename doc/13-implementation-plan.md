@@ -3174,3 +3174,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
 - 限制/后续：目前针对 rebase abort 的错误进行故障注入；其他 recovery port 读取/reset 失败仍需按风险补充覆盖；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`99d46e5`
+
+### Pull merge reset 失败时 fail-closed — 小阶段 277
+- 状态：已完成（merge reset 失败不会被报告为已恢复取消）
+- 日期：2026-10-09
+- 交付：扩展 recovery port fixture 注入 `reset_merge` 失败，新增用例验证 merge index/tree 已匹配但 reset 命令失败时返回 outcome unknown，且不会继续读取恢复后的 pull state 或 staged 状态。
+- 验证：目标测试 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml cancelled_merge_reports_unknown_and_stops_when_reset_fails` 通过；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（127 tests）；`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过。
+- 手工验证：未执行真实 Git merge reset 失败场景；fixture 验证错误分类及恢复后的读取被阻断。
+- 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
+- 限制/后续：其他 recovery port 读取失败仍需按风险补充覆盖；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待提交

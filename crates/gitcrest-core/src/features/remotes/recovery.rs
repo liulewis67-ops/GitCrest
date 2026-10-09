@@ -334,7 +334,12 @@ mod tests {
             _local_oid: &'a str,
         ) -> RemotePullRecoveryFuture<'a, ()> {
             self.record("reset_merge");
-            Box::pin(async { Ok(()) })
+            let result = if self.fail_call == Some("reset_merge") {
+                Err(WorkflowError::GitFailed)
+            } else {
+                Ok(())
+            };
+            Box::pin(async move { result })
         }
 
         fn has_staged_changes<'a>(
@@ -539,6 +544,34 @@ mod tests {
                 "reset_merge",
                 "has_staged_changes"
             ]
+        );
+    }
+
+    #[tokio::test]
+    async fn cancelled_merge_reports_unknown_and_stops_when_reset_fails() {
+        let reads = Reads::new(worktree(None, &[]), vec![pull_state(false, false)]);
+        let recovery = Recovery {
+            fail_call: Some("reset_merge"),
+            ..recovery(false, "", "", "expected-tree", "expected-tree", false)
+        };
+
+        let result = reconcile_cancelled_pull(
+            Path::new("repo"),
+            &expected(),
+            RemotePullStrategy::Merge,
+            &reads,
+            &recovery,
+        )
+        .await;
+
+        assert_eq!(
+            result,
+            Err(pull_outcome_unknown()),
+            "a failed merge reset must not report cancellation as recovered"
+        );
+        assert_eq!(
+            recovery.calls(),
+            ["read_index_tree", "read_merge_tree", "reset_merge"]
         );
     }
 }
