@@ -85,6 +85,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         conflict_token: config.conflict_token.map(Arc::new),
         shelf_store: Arc::new(repositories.store()),
         undo_store: Arc::new(repositories.store()),
+        branch_favorites: Arc::new(repositories.store()),
         repositories,
         repository_targets,
         status,

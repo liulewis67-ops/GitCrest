@@ -15,6 +15,7 @@ use crate::{
         tasks::TaskService,
     },
     git::command::GitCommandService,
+    ports::branch_favorites::BranchFavoriteStorePort,
     ports::shelves::ShelfStorePort,
     ports::undo::UndoStorePort,
 };
@@ -25,6 +26,7 @@ pub(crate) struct AppState {
     pub(crate) read_only_token: Option<Arc<String>>,
     pub(crate) conflict_token: Option<Arc<String>>,
     pub(crate) repositories: RepositoryManager,
+    pub(crate) branch_favorites: Arc<dyn BranchFavoriteStorePort>,
     pub(crate) shelf_store: Arc<dyn ShelfStorePort>,
     pub(crate) undo_store: Arc<dyn UndoStorePort>,
     pub(crate) repository_targets: RepositoryTargetReader,

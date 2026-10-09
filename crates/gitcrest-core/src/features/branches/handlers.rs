@@ -40,12 +40,14 @@ pub(super) async fn repository_branches(
     )
     .await
     .map_err(ApiError::from_branch_error)?;
-    let store = state.repositories.store();
+    let favorites_store = state.branch_favorites.clone();
     let favorite_repo_id = snapshot.repo_id.clone();
-    let favorites = tokio::task::spawn_blocking(move || store.branch_favorites(&favorite_repo_id))
-        .await
-        .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?
-        .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
+    let favorites = tokio::task::spawn_blocking(move || {
+        favorites_store.list_branch_favorites(&favorite_repo_id)
+    })
+    .await
+    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?
+    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
     for branch in &mut snapshot.branches {
         branch.is_favorite = favorites
             .iter()
@@ -80,12 +82,12 @@ pub(super) async fn set_branch_favorite(
             "The branch ref does not exist.",
         ));
     };
-    let store = state.repositories.store();
+    let favorites_store = state.branch_favorites.clone();
     let full_name = request.full_name;
     let favorite = request.favorite;
     let storage_repo_id = repo_id;
     tokio::task::spawn_blocking(move || {
-        store.set_branch_favorite(&storage_repo_id, &full_name, favorite)
+        favorites_store.set_branch_favorite(&storage_repo_id, &full_name, favorite)
     })
     .await
     .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?
@@ -247,7 +249,7 @@ pub(super) async fn rename_repository_branch(
     }
     let path = target.repository_path;
     let command = state.git_commands.clone();
-    let store = state.repositories.store();
+    let favorites_store = state.branch_favorites.clone();
     let repo_for_favorite = repo_id.clone();
     let old_full_name = format!("refs/heads/{}", request.name);
     let new_full_name = format!("refs/heads/{}", request.new_name);
@@ -270,7 +272,11 @@ pub(super) async fn rename_repository_branch(
                     )
                     .await?;
                 tokio::task::spawn_blocking(move || {
-                    store.rename_branch_favorite(&repo_for_favorite, &old_full_name, &new_full_name)
+                    favorites_store.rename_branch_favorite(
+                        &repo_for_favorite,
+                        &old_full_name,
+                        &new_full_name,
+                    )
                 })
                 .await
                 .map_err(|_| TaskFailure::Failed("Branch favorite storage is unavailable.".into()))?
@@ -352,7 +358,7 @@ pub(super) async fn delete_repository_branch(
     }
     let path = target.repository_path;
     let command = state.git_commands.clone();
-    let store = state.repositories.store();
+    let favorites_store = state.branch_favorites.clone();
     let repo_for_favorite = repo_id.clone();
     let full_name = format!("refs/heads/{}", request.name);
     let task = state
@@ -374,7 +380,7 @@ pub(super) async fn delete_repository_branch(
                     )
                     .await?;
                 tokio::task::spawn_blocking(move || {
-                    store.remove_branch_favorite(&repo_for_favorite, &full_name)
+                    favorites_store.remove_branch_favorite(&repo_for_favorite, &full_name)
                 })
                 .await
                 .map_err(|_| TaskFailure::Failed("Branch favorite storage is unavailable.".into()))?

@@ -13,6 +13,7 @@ use crate::domain::{
     shelf::{ShelfRecord, ShelfSnapshot},
     undo::{UndoOperation, UndoRecord},
 };
+use crate::ports::branch_favorites::BranchFavoriteStorePort;
 use crate::ports::shelves::ShelfStorePort;
 use crate::ports::undo::UndoStorePort;
 
@@ -830,6 +831,45 @@ impl UndoStorePort for RepositoryStore {
         operation_task_id: &str,
     ) -> Result<bool, crate::domain::error::RepositoryError> {
         RepositoryStore::delete_undo_record(self, repo_id, operation_task_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+}
+
+impl BranchFavoriteStorePort for RepositoryStore {
+    fn list_branch_favorites(
+        &self,
+        repo_id: &str,
+    ) -> Result<Vec<String>, crate::domain::error::RepositoryError> {
+        RepositoryStore::branch_favorites(self, repo_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn set_branch_favorite(
+        &self,
+        repo_id: &str,
+        full_name: &str,
+        favorite: bool,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        RepositoryStore::set_branch_favorite(self, repo_id, full_name, favorite)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn rename_branch_favorite(
+        &self,
+        repo_id: &str,
+        old_full_name: &str,
+        new_full_name: &str,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        RepositoryStore::rename_branch_favorite(self, repo_id, old_full_name, new_full_name)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn remove_branch_favorite(
+        &self,
+        repo_id: &str,
+        full_name: &str,
+    ) -> Result<(), crate::domain::error::RepositoryError> {
+        RepositoryStore::remove_branch_favorite(self, repo_id, full_name)
             .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
     }
 }
