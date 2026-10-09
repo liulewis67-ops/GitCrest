@@ -3442,3 +3442,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/app/App.tsx`、`src/features/cloning/CloneDialog.tsx`、`src/features/remotes/RemoteManager.tsx`、`src/shared/lib/https-remote-host.ts`、`src/shared/ui/credential-editor-renderer.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2 节；实现 commit：`c886f16`。
 - 限制/后续：其余通过 feature 公共入口协作的调用点仍待按需评估是否迁至 app/page 组合层；平台发布验收和 S7.5 全量收口未完成。
 - 完成 commit：`c886f16`
+
+### 快捷键模型迁至 shared 并解除 feature 依赖 — 小阶段 304
+- 状态：已完成（Diff 与 Commit features 使用 shared 快捷键模型；快捷键设置与持久化行为保持原样）
+- 日期：2026-10-09
+- 交付：将纯快捷键定义、格式解析、冲突检查、事件匹配、显示格式化和 ARIA 格式化从 Settings feature 移至 `shared/lib/shortcut-preferences.ts`。Settings 的设置界面和 localStorage hook 依赖 shared 模型；Diff 与 Commit features 直接依赖 shared，不再导入 Settings feature。保留 Settings barrel 的快捷键公共导出以支持现有 app/page 组合点。
+- 验证：前端边界检查和生产构建通过；快捷键及设置定向测试 2 个文件、11 项通过；完整 `pnpm check` 通过（Vitest 163/163、Rust 137/137、Electron E2E 6 files / 29 tests，含构建与 Rust fmt）；`git diff --check` 通过。构建仅输出既有 web-tree-sitter `eval` 警告。
+- 手工验证：未执行 GUI 手工场景；现有单测覆盖默认快捷键、无效/冲突绑定、键盘匹配、展示与 ARIA 标签，完整构建和 E2E 通过。
+- 证据：`src/shared/lib/shortcut-preferences.ts`、`src/features/settings/SettingsDialog.tsx`、`src/features/settings/model/use-shortcut-preferences.ts`、`src/features/diff/DiffWindow.tsx`、`src/features/commits/ui/CommitWorkbench.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2 节；实现 commit：`538b89c`。
+- 限制/后续：Settings barrel 仍为 app/page 导出快捷键共享 API，符合组合层入口规则；平台发布验收和 S7.5 全量收口仍未完成。
+- 完成 commit：`538b89c`
