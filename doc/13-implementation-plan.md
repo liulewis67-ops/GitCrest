@@ -2575,3 +2575,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Diff document、hunk、row 与 `ChangeKind` 的领域归属仍未完成，OpenAPI DTO 映射目前只覆盖 Diff 和 Shelf 响应；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/domain/diff.rs`、diff/staging/settings/shelves DTO、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/features/shelves/dto.rs`、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
 - 实施 commit：`ceba199`
+
+
+### status 领域枚举与 API 响应 DTO — 小阶段 217
+- 状态：已完成（变更类型/类别归入 domain，status handler 通过 DTO 返回 API 契约）
+- 日期：2026-10-09
+- 交付：新增 `domain/status.rs` 定义无 Serde 的 `ChangeKind` 与 `ChangeCategory`，status feature 继续通过 model 出口提供内部使用；新增 `StatusSnapshotDto`/`StatusFileDto` 及枚举映射，handler 在 HTTP 边界完成转换。Diff service 直接依赖 domain 的变更类型。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml -- --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 和 `git diff --check` 通过；未运行测试。
+- 限制/后续：`StatusSnapshot`/`StatusFile` 仍位于 status feature，但已不承担 Serde；Diff document/hunk/row 尚待迁入 domain。S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/status/dto.rs`、`crates/gitcrest-core/src/features/status/handlers.rs`、`crates/gitcrest-core/src/features/diff/service.rs`、`doc/api/v1.yaml` Status/Diff schema、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
+- 实施 commit：`1f05c0f`
