@@ -28,8 +28,12 @@ function benchmarkGpuFlags() {
   if (process.env.GITCREST_BENCH_DISABLE_GPU === "1" && process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1") {
     throw new Error("Choose either disabled GPU or in-process GPU for a benchmark run.");
   }
+  if (process.env.GITCREST_BENCH_DISABLE_GPU_VSYNC === "1" && (process.env.GITCREST_BENCH_DISABLE_GPU === "1" || process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1")) {
+    throw new Error("The GPU VSync diagnostic requires the default GPU process mode.");
+  }
   if (process.env.GITCREST_BENCH_DISABLE_GPU === "1") flags.push("--disable-gpu");
   if (process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1") flags.push("--in-process-gpu");
+  if (process.env.GITCREST_BENCH_DISABLE_GPU_VSYNC === "1") flags.push("--disable-gpu-vsync");
   if (process.env.GITCREST_BENCH_DISABLE_FRAME_RATE_LIMIT === "1") flags.push("--disable-frame-rate-limit");
   return flags;
 }

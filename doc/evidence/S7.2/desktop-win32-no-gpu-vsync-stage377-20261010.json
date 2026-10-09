@@ -1,0 +1,879 @@
+{
+  "generatedAt": "2026-10-09T18:12:52.816Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         "
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "launchMode": "packaged application",
+    "applicationExecutable": "E:\\personal_projects\\GitCrest\\dist\\win-unpacked\\GitCrest.exe",
+    "launchFlags": [
+      "--disable-gpu-vsync"
+    ],
+    "gpuDiagnostics": {
+      "featureStatus": {
+        "2d_canvas": "enabled",
+        "direct_rendering_display_compositor": "disabled_off_ok",
+        "gpu_compositing": "enabled",
+        "multiple_raster_threads": "enabled_on",
+        "opengl": "enabled_on",
+        "rasterization": "enabled",
+        "raw_draw": "disabled_off_ok",
+        "skia_graphite": "disabled_off",
+        "trees_in_viz": "disabled_off",
+        "video_decode": "enabled",
+        "video_encode": "enabled",
+        "vulkan": "disabled_off",
+        "webgl": "enabled",
+        "webgl2": "enabled",
+        "webgpu": "enabled",
+        "webnn": "disabled_off"
+      },
+      "info": {
+        "auxAttributes": {
+          "amdSwitchable": false,
+          "canSupportThreadedTextureMailbox": false,
+          "directMLFeatureLevel": "Not supported",
+          "displayType": "ANGLE_D3D11",
+          "dx12FeatureLevel": "Not supported",
+          "glExtensions": "GL_AMD_performance_monitor GL_ANGLE_base_vertex_base_instance_shader_builtin GL_ANGLE_blob_cache GL_ANGLE_client_arrays GL_ANGLE_depth_texture GL_ANGLE_framebuffer_blit GL_ANGLE_framebuffer_multisample GL_ANGLE_get_serialized_context_string GL_ANGLE_get_tex_level_parameter GL_ANGLE_instanced_arrays GL_ANGLE_lossy_etc_decode GL_ANGLE_memory_size GL_ANGLE_pack_reverse_row_order GL_ANGLE_polygon_mode GL_ANGLE_program_binary_readiness_query GL_ANGLE_program_cache_control GL_ANGLE_provoking_vertex GL_ANGLE_request_extension GL_ANGLE_robust_client_memory GL_ANGLE_texture_compression_dxt3 GL_ANGLE_texture_compression_dxt5 GL_ANGLE_texture_usage GL_ANGLE_translated_shader_source GL_APPLE_clip_distance GL_ARM_rgba8 GL_CHROMIUM_bind_generates_resource GL_CHROMIUM_bind_uniform_location GL_CHROMIUM_color_buffer_float_rgb GL_CHROMIUM_color_buffer_float_rgba GL_CHROMIUM_copy_compressed_texture GL_CHROMIUM_copy_texture GL_CHROMIUM_lose_context GL_CHROMIUM_sync_query GL_EXT_EGL_image_external_wrap_modes GL_EXT_base_instance GL_EXT_blend_func_extended GL_EXT_blend_minmax GL_EXT_clip_control GL_EXT_color_buffer_half_float GL_EXT_debug_label GL_EXT_debug_marker GL_EXT_depth_clamp GL_EXT_discard_framebuffer GL_EXT_disjoint_timer_query GL_EXT_draw_buffers GL_EXT_draw_elements_base_vertex GL_EXT_float_blend GL_EXT_frag_depth GL_EXT_instanced_arrays GL_EXT_map_buffer_range GL_EXT_multisampled_render_to_texture GL_EXT_occlusion_query_boolean GL_EXT_polygon_offset_clamp GL_EXT_read_format_bgra GL_EXT_robustness GL_EXT_sRGB GL_EXT_shader_texture_lod GL_EXT_texture_border_clamp GL_EXT_texture_compression_bptc GL_EXT_texture_compression_dxt1 GL_EXT_texture_compression_rgtc GL_EXT_texture_compression_s3tc_srgb GL_EXT_texture_filter_anisotropic GL_EXT_texture_format_BGRA8888 GL_EXT_texture_mirror_clamp_to_edge GL_EXT_texture_norm16 GL_EXT_texture_rg GL_EXT_texture_storage GL_EXT_texture_type_2_10_10_10_REV GL_EXT_unpack_subimage GL_KHR_debug GL_KHR_parallel_shader_compile GL_KHR_robustness GL_NV_EGL_stream_consumer_external GL_NV_fence GL_NV_framebuffer_blit GL_NV_pack_subimage GL_NV_pixel_buffer_object GL_OES_EGL_image GL_OES_EGL_image_external GL_OES_compressed_EAC_R11_signed_texture GL_OES_compressed_EAC_R11_unsigned_texture GL_OES_compressed_EAC_RG11_signed_texture GL_OES_compressed_EAC_RG11_unsigned_texture GL_OES_compressed_ETC2_RGB8_texture GL_OES_compressed_ETC2_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_RGBA8_texture GL_OES_compressed_ETC2_punchthroughA_sRGB8_alpha_texture GL_OES_compressed_ETC2_sRGB8_alpha8_texture GL_OES_compressed_ETC2_sRGB8_texture GL_OES_depth24 GL_OES_depth32 GL_OES_draw_elements_base_vertex GL_OES_element_index_uint GL_OES_fbo_render_mipmap GL_OES_get_program_binary GL_OES_mapbuffer GL_OES_packed_depth_stencil GL_OES_required_internalformat GL_OES_rgb8_rgba8 GL_OES_standard_derivatives GL_OES_surfaceless_context GL_OES_texture_border_clamp GL_OES_texture_float GL_OES_texture_float_linear GL_OES_texture_half_float GL_OES_texture_half_float_linear GL_OES_texture_npot GL_OES_vertex_array_object GL_WEBGL_video_texture ",
+          "glImplementationParts": "(gl=egl-angle,angle=d3d11)",
+          "glRenderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3050 Laptop GPU (0x000025E2) Direct3D11 vs_5_0 ps_5_0, D3D11-32.0.16.1088)",
+          "glResetNotificationStrategy": 33362,
+          "glVendor": "Google Inc. (NVIDIA)",
+          "glVersion": "OpenGL ES 2.0.0 (ANGLE 2.1.25517 git hash: d1fb74c940fe)",
+          "glWsExtensions": "EGL_EXT_create_context_robustness EGL_ANGLE_d3d_share_handle_client_buffer EGL_ANGLE_d3d_texture_client_buffer EGL_ANGLE_surface_d3d_texture_2d_share_handle EGL_ANGLE_query_surface_pointer EGL_ANGLE_window_fixed_size EGL_ANGLE_keyed_mutex EGL_ANGLE_surface_orientation EGL_ANGLE_direct_composition EGL_NV_post_sub_buffer EGL_KHR_create_context EGL_KHR_image EGL_KHR_image_base EGL_KHR_gl_texture_2D_image EGL_KHR_gl_texture_cubemap_image EGL_KHR_gl_renderbuffer_image EGL_KHR_get_all_proc_addresses EGL_KHR_stream EGL_KHR_stream_consumer_gltexture EGL_NV_stream_consumer_gltexture_yuv EGL_ANGLE_stream_producer_d3d_texture EGL_ANGLE_create_context_webgl_compatibility EGL_CHROMIUM_create_context_bind_generates_resource EGL_CHROMIUM_sync_control EGL_EXT_pixel_format_float EGL_KHR_surfaceless_context EGL_ANGLE_display_texture_share_group EGL_ANGLE_display_semaphore_share_group EGL_ANGLE_create_context_client_arrays EGL_ANGLE_program_cache_control EGL_ANGLE_robust_resource_initialization EGL_ANGLE_create_context_extensions_enabled EGL_ANDROID_blob_cache EGL_ANDROID_recordable EGL_ANGLE_image_d3d11_texture EGL_ANGLE_create_context_backwards_compatible EGL_KHR_no_config_context EGL_KHR_create_context_no_error EGL_KHR_reusable_sync EGL_ANGLE_memory_usage_report ",
+          "glWsVendor": "Google Inc. (NVIDIA)",
+          "glWsVersion": "1.5 (ANGLE 2.1.25517 git hash: d1fb74c940fe)",
+          "hardwareSupportsVulkan": false,
+          "inProcessGpu": false,
+          "initializationTime": 352.746,
+          "isAsan": false,
+          "isClangCoverage": false,
+          "jpegDecodeAcceleratorSupported": false,
+          "maxMsaaSamples": "8",
+          "optimus": false,
+          "overlayInfo": {
+            "bgra8OverlaySupport": "SOFTWARE",
+            "directComposition": true,
+            "nv12OverlaySupport": "SOFTWARE",
+            "p010OverlaySupport": "SOFTWARE",
+            "rgb10a2OverlaySupport": "SOFTWARE",
+            "supportsOverlays": true,
+            "yuy2OverlaySupport": "SOFTWARE"
+          },
+          "passthroughCmdDecoder": true,
+          "pixelShaderVersion": "5.0",
+          "sandboxed": true,
+          "skiaBackendType": "GaneshGL",
+          "subpixelFontRendering": true,
+          "supportsD3dSharedImages": true,
+          "supportsDirectML": false,
+          "supportsDx12": false,
+          "supportsVulkan": false,
+          "targetCpuBits": 64,
+          "vertexShaderVersion": "5.0",
+          "videoEncodeAcceleratorSupportedProfile": {
+            "maxFramerateDenominator": 1,
+            "maxFramerateNumerator": 30,
+            "maxResolutionHeight": 3840,
+            "maxResolutionWidth": 2160,
+            "minResolutionHeight": 34,
+            "minResolutionWidth": 130,
+            "profile": 16
+          },
+          "visibilityCallbackCallCount": 0,
+          "vulkanVersion": "Not supported"
+        },
+        "gpuDevice": [
+          {
+            "active": true,
+            "deviceId": 9698,
+            "deviceString": "NVIDIA GeForce RTX 3050 Laptop GPU",
+            "driverVendor": "NVIDIA",
+            "driverVersion": "32.0.16.1088",
+            "gpuPreference": 2,
+            "revision": 161,
+            "subSysId": 984553386,
+            "vendorId": 4318
+          },
+          {
+            "active": false,
+            "deviceId": 9698,
+            "deviceString": "NVIDIA GeForce RTX 3050 Laptop GPU",
+            "driverVersion": "32.0.16.1088",
+            "gpuPreference": 0,
+            "revision": 161,
+            "subSysId": 984553386,
+            "vendorId": 4318
+          },
+          {
+            "active": false,
+            "deviceId": 140,
+            "deviceString": "Microsoft Basic Render Driver",
+            "driverVersion": "10.0.26100.9278",
+            "gpuPreference": 0,
+            "revision": 0,
+            "subSysId": 0,
+            "vendorId": 5140
+          }
+        ]
+      }
+    }
+  },
+  "fixture": {
+    "commits": 100000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-20261009-continuation"
+  },
+  "thresholds": {
+    "targetScrollP5Fps": 60,
+    "rafTargetPeriodMs": 16.666666666666668
+  },
+  "samples": [
+    {
+      "label": "empty-workspace-idle",
+      "durationMs": 5000,
+      "frameSamples": 228,
+      "p95FrameMs": 18.100000000000364,
+      "p5Fps": 55.24861878452928,
+      "scrollDistancePx": 0,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      }
+    },
+    {
+      "label": "loaded-history-idle",
+      "durationMs": 5000,
+      "frameSamples": 283,
+      "p95FrameMs": 18.100000000000136,
+      "p5Fps": 55.24861878452997,
+      "scrollDistancePx": 0,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      }
+    },
+    {
+      "label": "loaded-history-scroll",
+      "durationMs": 10000,
+      "frameSamples": 565,
+      "p95FrameMs": 18.100000000000364,
+      "p5Fps": 55.24861878452928,
+      "scrollDistancePx": 4528,
+      "documentVisibilityState": "visible",
+      "documentHasFocus": true,
+      "devicePixelRatio": 1.25,
+      "viewport": {
+        "innerWidth": 1266,
+        "innerHeight": 754,
+        "screenWidth": 1536,
+        "screenHeight": 864
+      },
+      "presentationTrace": {
+        "event": "benchmark,viz:Display::FrameDisplayed",
+        "frameCount": 565,
+        "intervalSamples": 564,
+        "p95FrameMs": 21.679,
+        "p5Fps": 46.12758891092763,
+        "traceEventCount": 223251,
+        "detailedCategories": "viz,cc,gpu,benchmark,devtools.timeline",
+        "pipelineEvents": [
+          {
+            "name": "devtools.timeline:FunctionCall",
+            "count": 5479,
+            "durationSamples": 5479,
+            "p50DurationMs": 0.026,
+            "p95DurationMs": 0.141,
+            "maxDurationMs": 1.014,
+            "timestampIntervalSamples": 5478,
+            "p50TimestampIntervalMs": 0.037,
+            "p95TimestampIntervalMs": 17.432
+          },
+          {
+            "name": "gpu,toplevel.flow:Scheduler::RunTask",
+            "count": 5293,
+            "durationSamples": 1764,
+            "p50DurationMs": 0.298,
+            "p95DurationMs": 0.941,
+            "maxDurationMs": 7.792,
+            "timestampIntervalSamples": 5292,
+            "p50TimestampIntervalMs": 0.012,
+            "p95TimestampIntervalMs": 16.628
+          },
+          {
+            "name": "viz,benchmark:Graphics.Pipeline.DrawAndSwap",
+            "count": 3393,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 3392,
+            "p50TimestampIntervalMs": 0.085,
+            "p95TimestampIntervalMs": 17.391
+          },
+          {
+            "name": "devtools.timeline:EventDispatch",
+            "count": 2694,
+            "durationSamples": 2694,
+            "p50DurationMs": 0.042,
+            "p95DurationMs": 0.159,
+            "maxDurationMs": 0.807,
+            "timestampIntervalSamples": 2693,
+            "p50TimestampIntervalMs": 0.061,
+            "p95TimestampIntervalMs": 17.879
+          },
+          {
+            "name": "viz:DisplayScheduler::ScheduleBeginFrameDeadline",
+            "count": 2262,
+            "durationSamples": 2262,
+            "p50DurationMs": 0.006,
+            "p95DurationMs": 0.012,
+            "maxDurationMs": 0.046,
+            "timestampIntervalSamples": 2261,
+            "p50TimestampIntervalMs": 1.656,
+            "p95TimestampIntervalMs": 14.879
+          },
+          {
+            "name": "cc,benchmark:SendBeginMainFrame",
+            "count": 1698,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1697,
+            "p50TimestampIntervalMs": 0.018,
+            "p95TimestampIntervalMs": 18.033
+          },
+          {
+            "name": "cc,benchmark:ProxyMain::BeginMainFrame",
+            "count": 1698,
+            "durationSamples": 566,
+            "p50DurationMs": 1.26,
+            "p95DurationMs": 4.794,
+            "maxDurationMs": 5.99,
+            "timestampIntervalSamples": 1697,
+            "p50TimestampIntervalMs": 1.23,
+            "p95TimestampIntervalMs": 16.996
+          },
+          {
+            "name": "cc,benchmark:ProxyMain::BeginMainFrame::commit",
+            "count": 1698,
+            "durationSamples": 566,
+            "p50DurationMs": 0.009,
+            "p95DurationMs": 0.012,
+            "maxDurationMs": 0.023,
+            "timestampIntervalSamples": 1697,
+            "p50TimestampIntervalMs": 0.021,
+            "p95TimestampIntervalMs": 18.908
+          },
+          {
+            "name": "cc,benchmark:LayerTreeHostImpl::ActivateSyncTree",
+            "count": 1698,
+            "durationSamples": 566,
+            "p50DurationMs": 0.057,
+            "p95DurationMs": 0.142,
+            "maxDurationMs": 0.212,
+            "timestampIntervalSamples": 1697,
+            "p50TimestampIntervalMs": 0.075,
+            "p95TimestampIntervalMs": 18.816
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoRasterCHROMIUM",
+            "count": 1145,
+            "durationSamples": 1145,
+            "p50DurationMs": 0.131,
+            "p95DurationMs": 0.255,
+            "maxDurationMs": 0.462,
+            "timestampIntervalSamples": 1144,
+            "p50TimestampIntervalMs": 0.914,
+            "p95TimestampIntervalMs": 19.712
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoRasterCHROMIUM::Deserializing",
+            "count": 1145,
+            "durationSamples": 1145,
+            "p50DurationMs": 0.127,
+            "p95DurationMs": 0.25,
+            "maxDurationMs": 0.459,
+            "timestampIntervalSamples": 1144,
+            "p50TimestampIntervalMs": 0.915,
+            "p95TimestampIntervalMs": 19.713
+          },
+          {
+            "name": "cc:RasterSource::PerformSolidColorAnalysis",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.008,
+            "p95DurationMs": 0.014,
+            "maxDurationMs": 0.051,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.039,
+            "p95TimestampIntervalMs": 20.208
+          },
+          {
+            "name": "cc:RasterizerTaskImpl::RunOnWorkerThread",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.116,
+            "p95DurationMs": 0.197,
+            "maxDurationMs": 0.451,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.281,
+            "p95TimestampIntervalMs": 20.046
+          },
+          {
+            "name": "cc,disabled-by-default-devtools.timeline:RasterTask",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.111,
+            "p95DurationMs": 0.188,
+            "maxDurationMs": 0.443,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.277,
+            "p95TimestampIntervalMs": 20.048
+          },
+          {
+            "name": "cc:GpuRasterBuffer::Playback",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.108,
+            "p95DurationMs": 0.182,
+            "maxDurationMs": 0.438,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.275,
+            "p95TimestampIntervalMs": 20.048
+          },
+          {
+            "name": "gpu:RasterImplementation::RasterCHROMIUM",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.098,
+            "p95DurationMs": 0.167,
+            "maxDurationMs": 0.423,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.267,
+            "p95TimestampIntervalMs": 20.052
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoBeginRasterCHROMIUM",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.006,
+            "p95DurationMs": 0.011,
+            "maxDurationMs": 0.07,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.978,
+            "p95TimestampIntervalMs": 19.708
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoEndRasterCHROMIUM",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.202,
+            "p95DurationMs": 0.386,
+            "maxDurationMs": 7.266,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.906,
+            "p95TimestampIntervalMs": 19.81
+          },
+          {
+            "name": "gpu:RasterDecoderImpl::DoEndRasterCHROMIUM::Flush",
+            "count": 1144,
+            "durationSamples": 1144,
+            "p50DurationMs": 0.197,
+            "p95DurationMs": 0.377,
+            "maxDurationMs": 7.258,
+            "timestampIntervalSamples": 1143,
+            "p50TimestampIntervalMs": 0.906,
+            "p95TimestampIntervalMs": 19.811
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:PipelineReporter",
+            "count": 1134,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1133,
+            "p50TimestampIntervalMs": 8.896,
+            "p95TimestampIntervalMs": 15.154
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:BeginImplFrameToSendBeginMainFrame",
+            "count": 1134,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1133,
+            "p50TimestampIntervalMs": 16.973,
+            "p95TimestampIntervalMs": 18.064
+          },
+          {
+            "name": "cc:Scheduler::ScheduleBeginImplFrameDeadline",
+            "count": 1132,
+            "durationSamples": 1132,
+            "p50DurationMs": 0.006,
+            "p95DurationMs": 0.009,
+            "maxDurationMs": 0.03,
+            "timestampIntervalSamples": 1131,
+            "p50TimestampIntervalMs": 6.709,
+            "p95TimestampIntervalMs": 16.523
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:SendBeginMainFrameToCommit",
+            "count": 1132,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1131,
+            "p50TimestampIntervalMs": 11.199,
+            "p95TimestampIntervalMs": 17.004
+          },
+          {
+            "name": "devtools.timeline:AnimationFrame::StyleAndLayout",
+            "count": 1132,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1131,
+            "p50TimestampIntervalMs": 0.611,
+            "p95TimestampIntervalMs": 19.56
+          },
+          {
+            "name": "viz,input.scrolling:ExternalBeginFrameSource::OnBeginFrame",
+            "count": 1131,
+            "durationSamples": 1131,
+            "p50DurationMs": 0.071,
+            "p95DurationMs": 0.113,
+            "maxDurationMs": 0.403,
+            "timestampIntervalSamples": 1130,
+            "p50TimestampIntervalMs": 0.506,
+            "p95TimestampIntervalMs": 17.868
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::RunStyleAndLayoutLifecyclePhases",
+            "count": 1131,
+            "durationSamples": 1131,
+            "p50DurationMs": 0.011,
+            "p95DurationMs": 1.625,
+            "maxDurationMs": 3.408,
+            "timestampIntervalSamples": 1130,
+            "p50TimestampIntervalMs": 4.646,
+            "p95TimestampIntervalMs": 17.557
+          },
+          {
+            "name": "devtools.timeline:PrePaint",
+            "count": 1131,
+            "durationSamples": 1131,
+            "p50DurationMs": 0.04,
+            "p95DurationMs": 0.38,
+            "maxDurationMs": 0.877,
+            "timestampIntervalSamples": 1130,
+            "p50TimestampIntervalMs": 1.531,
+            "p95TimestampIntervalMs": 18.609
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::RunPrePaintLifecyclePhase",
+            "count": 1131,
+            "durationSamples": 1131,
+            "p50DurationMs": 0.035,
+            "p95DurationMs": 0.174,
+            "maxDurationMs": 0.59,
+            "timestampIntervalSamples": 1130,
+            "p50TimestampIntervalMs": 1.321,
+            "p95TimestampIntervalMs": 18.86
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:EndActivateToSubmitCompositorFrame",
+            "count": 1130,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1129,
+            "p50TimestampIntervalMs": 0.804,
+            "p95TimestampIntervalMs": 19.985
+          },
+          {
+            "name": "cc,benchmark,disabled-by-default-devtools.timeline.frame:SubmitCompositorFrameToPresentationCompositorFrame",
+            "count": 1130,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 1129,
+            "p50TimestampIntervalMs": 7.797,
+            "p95TimestampIntervalMs": 19.347
+          },
+          {
+            "name": "devtools.timeline:Paint",
+            "count": 596,
+            "durationSamples": 596,
+            "p50DurationMs": 0.029,
+            "p95DurationMs": 0.95,
+            "maxDurationMs": 1.227,
+            "timestampIntervalSamples": 595,
+            "p50TimestampIntervalMs": 0.329,
+            "p95TimestampIntervalMs": 107.672
+          },
+          {
+            "name": "cc:auto cc::SchedulerStateMachine::SetNeedsBeginMainFrame(bool)::(anonymous class)::operator()()::(anonymous class)::operator()(uint32_t) const",
+            "count": 567,
+            "durationSamples": 566,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.003,
+            "maxDurationMs": 0.014,
+            "timestampIntervalSamples": 566,
+            "p50TimestampIntervalMs": 17.686,
+            "p95TimestampIntervalMs": 20.295
+          },
+          {
+            "name": "viz:DisplayScheduler::BeginFrame",
+            "count": 567,
+            "durationSamples": 567,
+            "p50DurationMs": 0.02,
+            "p95DurationMs": 0.033,
+            "maxDurationMs": 0.318,
+            "timestampIntervalSamples": 566,
+            "p50TimestampIntervalMs": 17.759,
+            "p95TimestampIntervalMs": 18.079
+          },
+          {
+            "name": "viz:SendBeginFrameDecision",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.003,
+            "maxDurationMs": 0.016,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.759,
+            "p95TimestampIntervalMs": 18.083
+          },
+          {
+            "name": "cc,benchmark:Scheduler::BeginFrame",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.048,
+            "p95DurationMs": 0.072,
+            "maxDurationMs": 0.259,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.756,
+            "p95TimestampIntervalMs": 18.136
+          },
+          {
+            "name": "cc,benchmark:Scheduler::BeginImplFrame",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.042,
+            "p95DurationMs": 0.063,
+            "maxDurationMs": 0.248,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.757,
+            "p95TimestampIntervalMs": 18.14
+          },
+          {
+            "name": "cc:auto cc::SchedulerStateMachine::ShouldThrottleSendBeginMainFrame()::(anonymous class)::operator()(uint32_t) const",
+            "count": 566,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.757,
+            "p95TimestampIntervalMs": 18.145
+          },
+          {
+            "name": "cc,benchmark:ProxyImpl::ScheduledActionSendBeginMainFrame",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.013,
+            "p95DurationMs": 0.021,
+            "maxDurationMs": 0.205,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.758,
+            "p95TimestampIntervalMs": 18.146
+          },
+          {
+            "name": "gpu:WidgetBase::WillBeginMainFrame",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.005,
+            "p95DurationMs": 0.007,
+            "maxDurationMs": 0.014,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.761,
+            "p95TimestampIntervalMs": 18.158
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::RunPaintLifecyclePhase",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.396,
+            "p95DurationMs": 1.384,
+            "maxDurationMs": 1.707,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.697,
+            "p95TimestampIntervalMs": 20.248
+          },
+          {
+            "name": "cc:Scheduler::NotifyBeginMainFrameStarted",
+            "count": 566,
+            "durationSamples": 537,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.016,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.631,
+            "p95TimestampIntervalMs": 21.187
+          },
+          {
+            "name": "cc,benchmark:TileManager::IsReadyToActivate",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.003,
+            "p95DurationMs": 0.004,
+            "maxDurationMs": 0.008,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.639,
+            "p95TimestampIntervalMs": 21.159
+          },
+          {
+            "name": "cc,benchmark:ProxyImpl::ReadyToActivate",
+            "count": 566,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.641,
+            "p95TimestampIntervalMs": 21.158
+          },
+          {
+            "name": "cc:ImageAnimationController::WillActivate",
+            "count": 566,
+            "durationSamples": 460,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.006,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.65,
+            "p95TimestampIntervalMs": 21.204
+          },
+          {
+            "name": "cc:ProxyImpl::DidActivateSyncTreeOnImplThread",
+            "count": 566,
+            "durationSamples": 426,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.002,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.653,
+            "p95TimestampIntervalMs": 21.203
+          },
+          {
+            "name": "cc,benchmark:Scheduler::OnBeginImplFrameDeadline",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.008,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.645,
+            "p95TimestampIntervalMs": 21.168
+          },
+          {
+            "name": "viz:Surface::ActivateFrame",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.022,
+            "p95DurationMs": 0.034,
+            "maxDurationMs": 0.058,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.629,
+            "p95TimestampIntervalMs": 21.41
+          },
+          {
+            "name": "viz:Waiting for next BeginFrame",
+            "count": 566,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.671,
+            "p95TimestampIntervalMs": 21.668
+          },
+          {
+            "name": "viz,input.scrolling:DisplayScheduler::OnBeginFrameDeadline",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.232,
+            "p95DurationMs": 0.319,
+            "maxDurationMs": 0.428,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.622,
+            "p95TimestampIntervalMs": 21.406
+          },
+          {
+            "name": "viz:DisplayScheduler::DrawAndSwap",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.229,
+            "p95DurationMs": 0.315,
+            "maxDurationMs": 0.426,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.624,
+            "p95TimestampIntervalMs": 21.405
+          },
+          {
+            "name": "viz:Display::DrawAndSwap",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.226,
+            "p95DurationMs": 0.311,
+            "maxDurationMs": 0.424,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.624,
+            "p95TimestampIntervalMs": 21.405
+          },
+          {
+            "name": "viz:SkiaRenderer::BeginDrawingFrame",
+            "count": 566,
+            "durationSamples": 546,
+            "p50DurationMs": 0.001,
+            "p95DurationMs": 0.002,
+            "maxDurationMs": 0.012,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.626,
+            "p95TimestampIntervalMs": 21.39
+          },
+          {
+            "name": "viz:SkiaOutputSurfaceImplOnGpu::FinishPaintRenderPass",
+            "count": 566,
+            "durationSamples": 566,
+            "p50DurationMs": 0.104,
+            "p95DurationMs": 0.135,
+            "maxDurationMs": 0.29,
+            "timestampIntervalSamples": 565,
+            "p50TimestampIntervalMs": 17.664,
+            "p95TimestampIntervalMs": 21.616
+          },
+          {
+            "name": "benchmark,viz,disabled-by-default-display.framedisplayed:Display::FrameDisplayed",
+            "count": 565,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 564,
+            "p50TimestampIntervalMs": 17.666,
+            "p95TimestampIntervalMs": 21.679
+          },
+          {
+            "name": "blink,devtools.timeline:UpdateLayoutTree",
+            "count": 167,
+            "durationSamples": 167,
+            "p50DurationMs": 0.21,
+            "p95DurationMs": 0.34,
+            "maxDurationMs": 0.542,
+            "timestampIntervalSamples": 166,
+            "p50TimestampIntervalMs": 86.875,
+            "p95TimestampIntervalMs": 107.265
+          },
+          {
+            "name": "blink,benchmark:PaintController::commitNewDisplayItems",
+            "count": 167,
+            "durationSamples": 167,
+            "p50DurationMs": 0.002,
+            "p95DurationMs": 0.004,
+            "maxDurationMs": 0.011,
+            "timestampIntervalSamples": 166,
+            "p50TimestampIntervalMs": 88.883,
+            "p95TimestampIntervalMs": 110.477
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::layout",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 1.445,
+            "p95DurationMs": 2.123,
+            "maxDurationMs": 2.947,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 107.406,
+            "p95TimestampIntervalMs": 124.923
+          },
+          {
+            "name": "devtools.timeline:Layout",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 1.443,
+            "p95DurationMs": 2.119,
+            "maxDurationMs": 2.942,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 107.406,
+            "p95TimestampIntervalMs": 124.924
+          },
+          {
+            "name": "blink,benchmark,rail,disabled-by-default-blink.debug.layout:LocalFrameView::performLayout",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 1.413,
+            "p95DurationMs": 2.08,
+            "maxDurationMs": 2.887,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 107.406,
+            "p95TimestampIntervalMs": 124.928
+          },
+          {
+            "name": "blink,benchmark:LocalFrameView::performPostLayoutTasks",
+            "count": 80,
+            "durationSamples": 80,
+            "p50DurationMs": 0.037,
+            "p95DurationMs": 0.049,
+            "maxDurationMs": 0.057,
+            "timestampIntervalSamples": 79,
+            "p50TimestampIntervalMs": 108.483,
+            "p95TimestampIntervalMs": 125.485
+          },
+          {
+            "name": "cc,benchmark:NeedsBeginFrames",
+            "count": 1,
+            "durationSamples": 0,
+            "p50DurationMs": null,
+            "p95DurationMs": null,
+            "maxDurationMs": null,
+            "timestampIntervalSamples": 0,
+            "p50TimestampIntervalMs": null,
+            "p95TimestampIntervalMs": null
+          }
+        ]
+      }
+    }
+  ],
+  "interpretation": {
+    "emptyWorkspaceAnimationFrameBelow60Fps": true,
+    "loadedHistoryIdleAnimationFrameBelow60Fps": true,
+    "requestAnimationFrameScrollBelow60Fps": true,
+    "presentedScrollBelow60Fps": true,
+    "historyScrollComparedWithEmptyAnimationFrameFps": 0,
+    "visibleAndFocusedForAllSamples": true
+  }
+}
