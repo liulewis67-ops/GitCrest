@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
@@ -24,6 +24,8 @@ if (injectLinuxUnsignedFeed) {
 }
 let appData;
 let installDirectory;
+let diskImageMountPoint;
+let diskImageMounted = false;
 let app;
 let sidecarUrl;
 
@@ -36,6 +38,19 @@ try {
     await runProcess(installer, ["/S", `/D=${installDirectory}`]);
     executable = join(installDirectory, "GitCrest.exe");
     assert.equal(existsSync(executable), true, "the Windows installer should place GitCrest.exe in the requested install directory");
+  } else if (process.platform === "darwin") {
+    installDirectory = join(appData, "installed");
+    diskImageMountPoint = join(appData, "mounted");
+    await mkdir(installDirectory);
+    await mkdir(diskImageMountPoint);
+    await runProcess("hdiutil", ["attach", await findMacDiskImage(output), "-nobrowse", "-readonly", "-mountpoint", diskImageMountPoint]);
+    diskImageMounted = true;
+    const mountedApp = join(diskImageMountPoint, "GitCrest.app");
+    assert.equal(existsSync(mountedApp), true, "the macOS DMG should contain GitCrest.app");
+    const installedApp = join(installDirectory, "GitCrest.app");
+    await cp(mountedApp, installedApp, { recursive: true });
+    executable = join(installedApp, "Contents", "MacOS", "GitCrest");
+    assert.equal(existsSync(executable), true, "the mounted macOS app should copy into the isolated install directory");
   }
   app = await electron.launch({
     executablePath: executable,
@@ -75,20 +90,29 @@ try {
   } finally {
     try {
       if (installDirectory) {
-        const uninstaller = join(installDirectory, "Uninstall GitCrest.exe");
-        if (existsSync(uninstaller)) await runProcess(uninstaller, ["/S"]);
+        if (process.platform === "win32") {
+          const uninstaller = join(installDirectory, "Uninstall GitCrest.exe");
+          if (existsSync(uninstaller)) await runProcess(uninstaller, ["/S"]);
+        }
       }
     } finally {
       try {
-        if (injectLinuxUnsignedFeed) {
-          if (originalLinuxUpdateConfig) await writeFile(linuxUpdateConfigPath, originalLinuxUpdateConfig);
-          else await unlink(linuxUpdateConfigPath);
+        if (diskImageMounted && diskImageMountPoint) {
+          await runProcess("hdiutil", ["detach", diskImageMountPoint]);
+          diskImageMounted = false;
         }
       } finally {
-        if (appData) {
-          await rm(appData, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
-          await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_500));
-          assert.equal(existsSync(appData), false, "the temporary packaged smoke directory should be removed");
+        try {
+          if (injectLinuxUnsignedFeed) {
+            if (originalLinuxUpdateConfig) await writeFile(linuxUpdateConfigPath, originalLinuxUpdateConfig);
+            else await unlink(linuxUpdateConfigPath);
+          }
+        } finally {
+          if (appData) {
+            await rm(appData, { recursive: true, force: true, maxRetries: 10, retryDelay: 250 });
+            await new Promise((resolvePromise) => setTimeout(resolvePromise, 1_500));
+            assert.equal(existsSync(appData), false, "the temporary packaged smoke directory should be removed");
+          }
         }
       }
     }
@@ -127,6 +151,15 @@ async function findWindowsInstaller(distPath) {
     .map((entry) => join(distPath, entry.name));
   assert.ok(installers.length > 0, `a Windows NSIS installer should exist in ${resolve(distPath)}`);
   return installers.sort((left, right) => right.localeCompare(left))[0];
+}
+
+async function findMacDiskImage(distPath) {
+  const entries = await readdir(distPath, { withFileTypes: true });
+  const images = entries
+    .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".dmg"))
+    .map((entry) => join(distPath, entry.name));
+  assert.ok(images.length > 0, `a macOS DMG should exist in ${resolve(distPath)}`);
+  return images.sort((left, right) => right.localeCompare(left))[0];
 }
 
 function runProcess(command, args) {
