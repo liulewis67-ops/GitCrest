@@ -78,6 +78,64 @@ pub(crate) fn is_remote_name_syntactically_valid(name: &str) -> bool {
         && !name.starts_with('-')
 }
 
+pub(crate) fn is_safe_remote_url(remote: &str) -> bool {
+    if remote.is_empty()
+        || remote.len() > 2_048
+        || remote
+            .chars()
+            .any(|character| character.is_control() || character.is_whitespace())
+        || remote.starts_with('-')
+    {
+        return false;
+    }
+    let lower = remote.to_ascii_lowercase();
+    let allowed = lower.starts_with("https://")
+        || lower.starts_with("ssh://")
+        || (cfg!(test) && lower.starts_with("file://"))
+        || is_scp_style_remote(remote);
+    if !allowed
+        || remote.contains(['?', '#'])
+        || lower.contains("access_token=")
+        || lower.contains("?token=")
+        || lower.contains("&token=")
+        || lower.contains("password=")
+    {
+        return false;
+    }
+    if lower.starts_with("https://") {
+        let authority = remote[8..]
+            .split(['/', '?', '#'])
+            .next()
+            .unwrap_or_default();
+        if authority.contains('@') {
+            return false;
+        }
+    }
+    if lower.starts_with("ssh://") {
+        let authority = remote[6..]
+            .split(['/', '?', '#'])
+            .next()
+            .unwrap_or_default();
+        if authority
+            .split_once('@')
+            .is_some_and(|(user, _)| user.contains(':'))
+        {
+            return false;
+        }
+    }
+    true
+}
+
+fn is_scp_style_remote(remote: &str) -> bool {
+    let Some((user, host_path)) = remote.split_once('@') else {
+        return false;
+    };
+    !user.is_empty()
+        && !user.contains(':')
+        && host_path.contains(':')
+        && !host_path.starts_with(':')
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RemotePullState {
     pub(crate) local_oid: String,

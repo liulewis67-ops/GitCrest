@@ -214,61 +214,10 @@ fn is_reserved_windows_name(name: &str) -> bool {
 }
 
 pub(crate) fn validate_remote_url(remote: &str) -> Result<(), CloneError> {
-    if remote.is_empty()
-        || remote.len() > 2_048
-        || remote
-            .chars()
-            .any(|character| character.is_control() || character.is_whitespace())
-        || remote.starts_with('-')
-    {
+    if !crate::domain::remote::is_safe_remote_url(remote) {
         return Err(CloneError::InvalidRemote);
-    }
-    let lower = remote.to_ascii_lowercase();
-    let allowed = lower.starts_with("https://")
-        || lower.starts_with("ssh://")
-        || (cfg!(test) && lower.starts_with("file://"))
-        || is_scp_style_remote(remote);
-    if !allowed
-        || remote.contains(['?', '#'])
-        || lower.contains("access_token=")
-        || lower.contains("?token=")
-        || lower.contains("&token=")
-        || lower.contains("password=")
-    {
-        return Err(CloneError::InvalidRemote);
-    }
-    if lower.starts_with("https://") {
-        let authority = remote[8..]
-            .split(['/', '?', '#'])
-            .next()
-            .unwrap_or_default();
-        if authority.contains('@') {
-            return Err(CloneError::InvalidRemote);
-        }
-    }
-    if lower.starts_with("ssh://") {
-        let authority = remote[6..]
-            .split(['/', '?', '#'])
-            .next()
-            .unwrap_or_default();
-        if authority
-            .split_once('@')
-            .is_some_and(|(user, _)| user.contains(':'))
-        {
-            return Err(CloneError::InvalidRemote);
-        }
     }
     Ok(())
-}
-
-fn is_scp_style_remote(remote: &str) -> bool {
-    let Some((user, host_path)) = remote.split_once('@') else {
-        return false;
-    };
-    !user.is_empty()
-        && !user.contains(':')
-        && host_path.contains(':')
-        && !host_path.starts_with(':')
 }
 
 #[cfg(test)]

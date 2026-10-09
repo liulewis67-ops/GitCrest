@@ -244,8 +244,11 @@ pub async fn read_remotes(
 }
 
 pub fn validate_remote_url(url: &str) -> Result<(), RemoteError> {
-    crate::features::repositories::cloning::validate_remote_url(url)
-        .map_err(|_| RemoteError::InvalidUrl)
+    if crate::domain::remote::is_safe_remote_url(url) {
+        Ok(())
+    } else {
+        Err(RemoteError::InvalidUrl)
+    }
 }
 
 pub fn safe_remote_url(url: &str) -> String {

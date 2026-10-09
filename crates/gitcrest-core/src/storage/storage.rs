@@ -1517,7 +1517,7 @@ mod tests {
             sort_order: 0,
         };
         store
-            .replace_history_search_index("repo-1", "refs-v1", &[entry.clone()])
+            .replace_history_search_index("repo-1", "refs-v1", std::slice::from_ref(&entry))
             .unwrap();
         let other_entry = CommitSearchEntry {
             oid: "d".repeat(40),
@@ -1530,7 +1530,11 @@ mod tests {
             sort_order: 0,
         };
         store
-            .replace_history_search_index("repo-2", "other-refs", &[other_entry.clone()])
+            .replace_history_search_index(
+                "repo-2",
+                "other-refs",
+                std::slice::from_ref(&other_entry),
+            )
             .unwrap();
 
         assert_eq!(
