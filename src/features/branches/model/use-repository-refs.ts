@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type RemoteSnapshotResponse } from "../../../api/client";
 
 interface RepositoryRefsOptions {
@@ -28,25 +28,49 @@ export function useRepositoryRefs({
   const [remotes, setRemotes] = useState<Record<string, RemoteSnapshotResponse>>({});
   const [remoteErrors, setRemoteErrors] = useState<Record<string, string>>({});
   const [remoteLoadingByRepo, setRemoteLoadingByRepo] = useState<Record<string, boolean>>({});
+  const controllersByRepoRef = useRef(new Map<string, Set<AbortController>>());
+
+  useEffect(() => () => {
+    for (const controllers of controllersByRepoRef.current.values()) {
+      for (const controller of controllers) controller.abort();
+    }
+    controllersByRepoRef.current.clear();
+  }, []);
+
+  function createController(repoId: string) {
+    const controller = new AbortController();
+    const controllers = controllersByRepoRef.current.get(repoId) || new Set<AbortController>();
+    controllers.add(controller);
+    controllersByRepoRef.current.set(repoId, controllers);
+    return controller;
+  }
+
+  function releaseController(repoId: string, controller: AbortController) {
+    const controllers = controllersByRepoRef.current.get(repoId);
+    controllers?.delete(controller);
+    if (controllers?.size === 0) controllersByRepoRef.current.delete(repoId);
+  }
 
   async function refreshBranches(repoId: string) {
     if (!isRepositoryOpen(repoId)) return;
     const api = getApi();
     if (!api) return;
+    const controller = createController(repoId);
     const requestGeneration = beginCacheRequest(repoId);
     setBranchLoadingByRepo((current) => ({ ...current, [repoId]: true }));
     setBranchErrors((current) => ({ ...current, [repoId]: "" }));
     try {
-      const snapshot = await api.getRepositoryBranches(repoId);
+      const snapshot = await api.withSignal(controller.signal).getRepositoryBranches(repoId);
       if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
         setBranches((current) => ({ ...current, [repoId]: snapshot }));
       }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
+      if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
         setBranchErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository branches.") }));
       }
     } finally {
+      releaseController(repoId, controller);
       setBranchLoadingByRepo((current) => isRepositoryOpen(repoId)
         ? { ...current, [repoId]: false }
         : withoutRecordKey(current, repoId));
@@ -58,20 +82,22 @@ export function useRepositoryRefs({
     if (!isRepositoryOpen(repoId)) return;
     const api = getApi();
     if (!api) return;
+    const controller = createController(repoId);
     const requestGeneration = beginCacheRequest(repoId);
     setRemoteLoadingByRepo((current) => ({ ...current, [repoId]: true }));
     setRemoteErrors((current) => ({ ...current, [repoId]: "" }));
     try {
-      const snapshot = await api.getRepositoryRemotes(repoId);
+      const snapshot = await api.withSignal(controller.signal).getRepositoryRemotes(repoId);
       if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
         setRemotes((current) => ({ ...current, [repoId]: snapshot }));
       }
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
+      if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
         setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository remotes.") }));
       }
     } finally {
+      releaseController(repoId, controller);
       setRemoteLoadingByRepo((current) => isRepositoryOpen(repoId)
         ? { ...current, [repoId]: false }
         : withoutRecordKey(current, repoId));
@@ -106,6 +132,8 @@ export function useRepositoryRefs({
   }
 
   function clear(repoId: string) {
+    for (const controller of controllersByRepoRef.current.get(repoId) || []) controller.abort();
+    controllersByRepoRef.current.delete(repoId);
     setBranches((current) => withoutRecordKey(current, repoId));
     setBranchErrors((current) => withoutRecordKey(current, repoId));
     setBranchLoadingByRepo((current) => withoutRecordKey(current, repoId));

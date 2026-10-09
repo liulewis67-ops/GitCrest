@@ -3566,6 +3566,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`git log` 与各阶段提交内容核对，确认 311=`ea4f1ff`、312=`587f7f8`、313=`4d40c1c`、314=`e78a597`；`git diff --check` 通过，不运行代码测试。
 - 证据：`doc/13-implementation-plan.md`、对应四个 Git commit。
 - 限制/后续：此台账修正不改变产品代码；后续小阶段继续逐项登记实际 commit SHA。
+- 完成 commit：`4642acf`
 
 ### 前端 status 查询生命周期取消 — 小阶段 316
 - 状态：已完成（关闭仓库缓存或 app hook 卸载会终止活动 status HTTP 请求）
@@ -3575,3 +3576,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；hook 测试验证 abort 信号和关闭后不更新状态/错误。
 - 证据：`src/features/changes/model/use-repository-status.ts`、`tests/unit/repository-status-hook.test.tsx`。
 - 限制/后续：branch/remotes 查询目前仍使用 generation 屏蔽过期响应、没有终止底层 HTTP 请求；其它 App workspace 只读请求和查询缓存/RepoId 清理策略仍需逐项实施。
+- 完成 commit：`c6a0564`
+
+### 前端 branches 与 remotes 只读查询生命周期取消 — 小阶段 317
+- 状态：已完成（关闭仓库缓存时取消 branch 与 remote 查询）
+- 日期：2026-10-09
+- 交付：`useRepositoryRefs` 为每个仓库跟踪并发的 branch、remote 读取 controller；请求通过 `GitCrestApiClient.withSignal` 发送。`clear(repoId)` 会取消该仓库全部活动查询，hook 卸载会取消所有仓库查询；取消错误不会进入 UI 错误状态。branch favorite 写请求保持原行为。
+- 验证：新增 hook 用例同时验证 branch/remotes 并行请求在 cache clear 后 abort、AbortError 不显示为查询错误且缓存保持清空；定向用例通过；完整 `pnpm test` 通过（36 files、165 tests）；`pnpm build`、`pnpm frontend:boundaries`、`git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；自动测试驱动两个并行只读请求并断言各自的 AbortSignal。
+- 证据：`src/features/branches/model/use-repository-refs.ts`、`tests/unit/repository-refs-hook.test.tsx`。
+- 限制/后续：仍需审查 App workspace 其他独立读取及写请求结束后的生命周期；完整查询缓存和统一 RepoId 失效策略尚未实施。
