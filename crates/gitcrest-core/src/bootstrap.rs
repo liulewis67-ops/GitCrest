@@ -18,7 +18,7 @@ use crate::{
     },
     ports::branches::BranchGitPort,
     ports::git::RepositoryGitPort,
-    ports::remotes::RemoteGitPort,
+    ports::remotes::{RemoteCommandPort, RemoteGitPort},
     ports::tags::TagGitPort,
     refresh,
     state::{AppState, EventBus},
@@ -83,6 +83,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         repository_git,
     );
     let git_commands = GitCommandService::default();
+    let remote_commands: Arc<dyn RemoteCommandPort> = Arc::new(git_commands.clone());
     let tag_git: Arc<dyn TagGitPort> = Arc::new(GitTagAdapter);
     let branch_git: Arc<dyn BranchGitPort> = Arc::new(GitBranchAdapter);
     let remote_git: Arc<dyn RemoteGitPort> = Arc::new(GitRemoteAdapter);
@@ -117,6 +118,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         tag_git,
         branch_git,
         remote_git,
+        remote_commands,
         clones,
         credentials: credentials::CredentialManager::system(),
         ai_credentials: credentials::AiCredentialManager::system(),

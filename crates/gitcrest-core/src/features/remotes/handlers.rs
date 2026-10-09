@@ -330,7 +330,7 @@ async fn submit_remote_command(
     operation: RemoteCommand,
 ) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
     let path = target.repository_path;
-    let command = state.git_commands.clone();
+    let command = state.remote_commands.clone();
     let task = state
         .tasks
         .submit(

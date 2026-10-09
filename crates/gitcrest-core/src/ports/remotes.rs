@@ -3,10 +3,11 @@ use std::{future::Future, path::Path, pin::Pin};
 use crate::domain::{
     error::GitAdapterError,
     remote::{
-        RemoteBranchCommit, RemoteBranchDivergence, RemoteBranchUpstream,
+        RemoteBranchCommit, RemoteBranchDivergence, RemoteBranchUpstream, RemoteCommand,
         RemoteConfigurationSnapshot,
     },
 };
+use crate::execution::{TaskContext, TaskFailure};
 
 pub(crate) trait RemoteGitPort: Send + Sync {
     fn read_configuration<'a>(
@@ -63,6 +64,18 @@ pub(crate) trait RemoteGitPort: Send + Sync {
         remote_branch: &'a str,
     ) -> RemoteGitFuture<'a, Vec<String>>;
 }
+
+pub(crate) trait RemoteCommandPort: Send + Sync {
+    fn execute_remote<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        operation: RemoteCommand,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a>;
+}
+
+pub(crate) type RemoteCommandFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<(), TaskFailure>> + Send + 'a>>;
 
 pub(crate) type RemoteGitFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, GitAdapterError>> + Send + 'a>>;

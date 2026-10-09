@@ -29,9 +29,12 @@ use crate::{
             WorkflowRemoteBranchComparison, WorkflowResetComparison, WorkflowState,
         },
     },
-    ports::diff::DiffGitPort,
     ports::git::GitReadPort,
     ports::status::StatusReadPort,
+    ports::{
+        diff::DiffGitPort,
+        remotes::{RemoteCommandFuture, RemoteCommandPort},
+    },
 };
 
 use super::{history, refs, status};
@@ -1402,6 +1405,19 @@ impl GitCommandService {
             task,
         )
         .await
+    }
+}
+
+impl RemoteCommandPort for GitCommandService {
+    fn execute_remote<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        operation: RemoteCommand,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a> {
+        Box::pin(async move {
+            GitCommandService::execute_remote(self, repository_path, operation, task).await
+        })
     }
 }
 
