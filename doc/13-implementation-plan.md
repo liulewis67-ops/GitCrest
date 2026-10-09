@@ -4125,3 +4125,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/release-notes-alpha-draft.md`、`doc/evidence/S7.2/desktop-win32-presented-scroll-stage370-20261010.json`、`doc/evidence/S7.2/desktop-win32-memory-methodology-stage371-20261010.json`。
 - 限制/后续：Alpha 文档仍是内部预览草案，不是公开发布说明；S7.2 性能门槛、S7.4 三平台签名与更新验收、S7.5 P0 全量审计及发布/故障恢复收口仍需完成。
 - 文档 commit：`4716e2a`。
+
+### S7.2 默认 GPU 与禁用 GPU 的实际呈现帧对照 — 小阶段 373
+- 状态：已完成（一轮同机对照不支持将 `--disable-gpu` 作为修复；S7.2 帧率仍未达标）
+- 日期：2026-10-10
+- 交付：使用既有发行版帧诊断脚本，在相同 100k fixture 和 60Hz 显示器环境下，分别测量默认配置与 `--disable-gpu` 的 RAF 及 compositor `Display::FrameDisplayed` 呈现反馈。两个参数均只用于隔离诊断。
+- 验证：执行 `node scripts/performance/desktop-frame-diagnostic.mjs <100k fixture> <report>`，禁用 GPU 时追加 `GITCREST_BENCH_DISABLE_GPU=1`。默认单轮 10 秒滚动 RAF P5 55.249fps、presented P5 55.316fps；禁用 GPU 时 RAF P5 59.880fps，但 presented P5 降至 49.368fps。两轮窗口均可见并获得焦点；默认配置 empty idle、loaded idle 与 scroll 的 RAF P5 均约 55.249fps。该单轮对照显示 RAF 指标不能代替实际呈现帧，且禁用 GPU 未改善呈现结果；不据此修改启动参数。
+- 手工验证：未操作 GUI；分别执行默认和禁用 GPU 的 10 秒 packaged diagnostic，复用同一 100k fixture。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-default-presented-stage373-20261010.json`、`doc/evidence/S7.2/desktop-win32-no-gpu-presented-stage373-20261010.json`。
+- 限制/后续：同机单轮诊断只用于排除简单假设，无法确定默认约 55fps 的呈现节奏根因；`--disable-gpu` 还出现 RAF 与 presented-frame 相反的结果，需要结合 renderer/compositor trace 继续定位。S7.2 及 S7.4、S7.5 验收继续未完成。
+- 证据 commit：`a0c102e`。
