@@ -1,10 +1,13 @@
+import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import { _electron as electron } from "playwright";
 
+const execFileAsync = promisify(execFile);
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const fixturePath = resolve(process.argv[2] || join(os.tmpdir(), "gitcrest-s7.2-100k-fixture"));
 const reportPath = resolve(process.argv[3] || join(root, "doc", "evidence", "S7.2", `desktop-frame-diagnostic-${process.platform}.json`));
@@ -99,6 +102,8 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
   const client = await page.context().newCDPSession(page);
   const traceEvents = [];
   const detailedTrace = process.env.GITCREST_BENCH_DETAILED_TRACE === "1";
+  const sampleWindowsDwm = process.platform === "win32" && process.env.GITCREST_BENCH_SAMPLE_WINDOWS_DWM === "1";
+  let windowsDwmSamplePromise;
   const complete = new Promise((resolveComplete) => client.once("Tracing.tracingComplete", resolveComplete));
   client.on("Tracing.dataCollected", ({ value }) => traceEvents.push(...value));
   try {
@@ -106,9 +111,22 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
       categories: detailedTrace ? "viz,cc,gpu,benchmark,devtools.timeline" : "viz",
       transferMode: "ReportEvents",
     });
+    windowsDwmSamplePromise = sampleWindowsDwm
+      ? execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      join(root, "scripts", "performance", "windows-display-timing.ps1"),
+      "-DurationSeconds",
+      String(Math.ceil(durationMs / 1_000)),
+      ], { timeout: durationMs + 15_000, maxBuffer: 1_000_000 }).then(({ stdout }) => JSON.parse(stdout))
+      : undefined;
     const animationFrames = await sampleAnimationFrames(page, label, durationMs, scroll);
     await client.send("Tracing.end");
     await complete;
+    const windowsDwm = windowsDwmSamplePromise ? await windowsDwmSamplePromise : undefined;
     const presentationTimestamps = traceEvents
       .filter((event) => event.name === "Display::FrameDisplayed" && Number.isFinite(event.ts))
       .map((event) => event.ts)
@@ -164,6 +182,7 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
         p95FrameMs: p95PresentedFrameMs,
         p5Fps: p95PresentedFrameMs ? 1_000 / p95PresentedFrameMs : null,
         traceEventCount: traceEvents.length,
+        ...(windowsDwm ? { windowsDwm } : {}),
         ...(detailedTrace ? {
           beginFrameFeedback: {
             uniqueFrames: beginFrames.length,
@@ -217,6 +236,7 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
       },
     };
   } finally {
+    await windowsDwmSamplePromise?.catch(() => {});
     await client.detach();
   }
 }
