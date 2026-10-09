@@ -245,7 +245,7 @@ async function runColdLaunch() {
   return { startupMs, firstHistoryFrameMs, idleMemorySamplesBytes, repositoryMemorySamplesBytes };
 }
 
-async function runMemorySnapshot() {
+async function runMemorySnapshotIteration(iteration) {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-memory-"));
   let app;
   try {
@@ -275,6 +275,7 @@ async function runMemorySnapshot() {
         : null,
     });
     return {
+      iteration,
       idle,
       loaded,
       idleTotals: total(idle),
@@ -291,6 +292,25 @@ async function runMemorySnapshot() {
     await app?.close();
     await rm(dataDir, { recursive: true, force: true });
   }
+}
+
+async function runMemorySnapshot() {
+  const iterationsResult = [];
+  for (let iteration = 1; iteration <= iterations; iteration += 1) {
+    process.stdout.write(`Running desktop memory benchmark ${iteration}/${iterations}…\n`);
+    iterationsResult.push(await runMemorySnapshotIteration(iteration));
+  }
+  const summary = (select) => summarizeMeasuredValues(iterationsResult.map(select));
+  return {
+    iterations: iterationsResult,
+    idleWorkingSetBytes: summary(({ idleTotals }) => idleTotals.workingSetBytes),
+    idlePrivateWorkingSetBytes: summary(({ privateWorkingSetWindow }) => privateWorkingSetWindow.idlePeakBytes),
+    idlePrivateBytes: summary(({ idleTotals }) => idleTotals.privateBytes),
+    loadedWorkingSetBytes: summary(({ loadedTotals }) => loadedTotals.workingSetBytes),
+    loadedPrivateWorkingSetBytes: summary(({ privateWorkingSetWindow }) => privateWorkingSetWindow.loadedPeakBytes),
+    loadedPrivateBytes: summary(({ loadedTotals }) => loadedTotals.privateBytes),
+    method: "Each sample uses a fresh packaged application profile. Working Set and private bytes are captured after a 5-second settle. Private Working Set uses three process-tree samples per phase with 300ms requested spacing; its peak is reported separately because the plan does not currently define which Windows memory counter is the acceptance metric.",
+  };
 }
 
 async function createCacheLifecycleRepositories(rootPath, repositoryCount, filesPerRepository) {
