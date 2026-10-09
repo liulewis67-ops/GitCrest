@@ -89,11 +89,16 @@ impl GitRepositoryAdapter {
         Self::run_init(repository_path, staging.path(), template_directory).await?;
 
         Self::ensure_git_directory_absent(repository_path).await?;
-        let target_git_directory = repository_path.join(".git");
-        fs::rename(staging.path().join(".git"), target_git_directory)
-            .await
-            .map_err(map_initialization_io_error)?;
+        Self::install_git_directory(staging.path().join(".git"), repository_path)?;
         Ok(())
+    }
+
+    fn install_git_directory(
+        staged_git_directory: PathBuf,
+        repository_path: &Path,
+    ) -> Result<(), RepositoryError> {
+        rename_directory_without_replacement(&staged_git_directory, &repository_path.join(".git"))
+            .map_err(map_initialization_io_error)
     }
 
     async fn ensure_git_directory_absent(repository_path: &Path) -> Result<(), RepositoryError> {
@@ -185,6 +190,45 @@ fn map_initialization_io_error(error: std::io::Error) -> RepositoryError {
     }
 }
 
+fn rename_directory_without_replacement(from: &Path, to: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use rustix::fs::{renameat_with, RenameFlags, CWD};
+
+        return renameat_with(CWD, from, CWD, to, RenameFlags::NOREPLACE)
+            .map_err(std::io::Error::from);
+    }
+
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStrExt;
+        use windows_sys::Win32::Storage::FileSystem::MoveFileW;
+
+        let from = from
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let to = to
+            .as_os_str()
+            .encode_wide()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let moved = unsafe { MoveFileW(from.as_ptr(), to.as_ptr()) };
+        return if moved == 0 {
+            Err(std::io::Error::last_os_error())
+        } else {
+            Ok(())
+        };
+    }
+
+    #[allow(unreachable_code)]
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Unsupported,
+        "exclusive directory rename is unavailable on this platform",
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,5 +266,32 @@ mod tests {
             "keep"
         );
         assert_eq!(std::fs::read_dir(project.path()).unwrap().count(), 1);
+    }
+
+    #[tokio::test]
+    async fn installation_does_not_replace_metadata_created_after_the_last_check() {
+        let project = tempfile::tempdir().unwrap();
+        let staging = tempfile::tempdir_in(project.path()).unwrap();
+        let staged_git_directory = staging.path().join(".git");
+        let competing_git_directory = project.path().join(".git");
+        std::fs::create_dir(&staged_git_directory).unwrap();
+        std::fs::write(staged_git_directory.join("staged-marker"), "staged").unwrap();
+        std::fs::create_dir(&competing_git_directory).unwrap();
+        std::fs::write(competing_git_directory.join("competing-marker"), "keep").unwrap();
+
+        let result = GitRepositoryAdapter::install_git_directory(
+            staged_git_directory.clone(),
+            project.path(),
+        );
+
+        assert_eq!(result, Err(RepositoryError::AlreadyRepository));
+        assert_eq!(
+            std::fs::read_to_string(competing_git_directory.join("competing-marker")).unwrap(),
+            "keep"
+        );
+        assert_eq!(
+            std::fs::read_to_string(staged_git_directory.join("staged-marker")).unwrap(),
+            "staged"
+        );
     }
 }

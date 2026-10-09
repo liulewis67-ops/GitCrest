@@ -736,6 +736,7 @@ dependencies = [
  "notify",
  "reqwest",
  "rusqlite",
+ "rustix",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -745,6 +746,7 @@ dependencies = [
  "tower",
  "tower-http 0.5.2",
  "url",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 
