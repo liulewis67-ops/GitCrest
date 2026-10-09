@@ -10,6 +10,7 @@ use tokio::{io::AsyncWriteExt, process::Command};
 use crate::domain::{
     diff::DiffScope,
     staging::{ShelfPatchAction, StagingOperation},
+    time::unix_time_ms,
 };
 
 pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
@@ -28,19 +29,11 @@ pub enum ShelfError {
 }
 
 pub fn new_shelf_id() -> String {
-    let timestamp = now_ms();
+    let timestamp = unix_time_ms();
     format!(
         "shelf-{timestamp}-{}",
         NEXT_SHELF_ID.fetch_add(1, Ordering::Relaxed)
     )
-}
-
-pub fn now_ms() -> i64 {
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis();
-    i64::try_from(timestamp).unwrap_or(i64::MAX)
 }
 
 pub fn validate_metadata(name: &str, description: &str) -> Result<(), ShelfError> {
@@ -129,24 +122,12 @@ pub fn restore_command(patch: Vec<u8>, scope: DiffScope) -> StagingOperation {
     }
 }
 
-pub fn undo_apply_command(patch: Vec<u8>, scope: DiffScope) -> StagingOperation {
-    StagingOperation::ApplyShelfPatch {
-        patch,
-        scope,
-        action: ShelfPatchAction::UndoRestore,
-    }
-}
-
 pub fn restore_three_way_command(patch: Vec<u8>) -> StagingOperation {
     StagingOperation::ApplyShelfPatch {
         patch,
         scope: DiffScope::Index,
         action: ShelfPatchAction::RestoreThreeWay,
     }
-}
-
-pub fn unstage_paths_command(paths: &[String]) -> StagingOperation {
-    StagingOperation::UnstagePaths(paths.to_vec())
 }
 
 pub async fn check_apply(
@@ -211,7 +192,11 @@ mod tests {
 
     #[test]
     fn shelf_apply_undo_reverses_worktree_or_index_and_worktree_together() {
-        let worktree = undo_apply_command(b"patch".to_vec(), DiffScope::WorkingTree);
+        let worktree = StagingOperation::ApplyShelfPatch {
+            patch: b"patch".to_vec(),
+            scope: DiffScope::WorkingTree,
+            action: ShelfPatchAction::UndoRestore,
+        };
         let (worktree_arguments, worktree_input, _, _) =
             crate::git::index::staging_invocation(worktree);
         let worktree_arguments = worktree_arguments
@@ -221,7 +206,11 @@ mod tests {
         assert_eq!(worktree_arguments, ["apply", "--reverse"]);
         assert_eq!(worktree_input.as_deref(), Some(&b"patch"[..]));
 
-        let index = undo_apply_command(b"patch".to_vec(), DiffScope::Index);
+        let index = StagingOperation::ApplyShelfPatch {
+            patch: b"patch".to_vec(),
+            scope: DiffScope::Index,
+            action: ShelfPatchAction::UndoRestore,
+        };
         let (index_arguments, _, _, _) = crate::git::index::staging_invocation(index);
         let index_arguments = index_arguments
             .iter()

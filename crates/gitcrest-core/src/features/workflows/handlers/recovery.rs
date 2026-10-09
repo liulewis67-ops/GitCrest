@@ -13,6 +13,7 @@ use crate::{
     domain::status::ChangeKind,
     domain::undo::{UndoOperation, UndoRecord},
     domain::workflow::WorkflowRecoveryAction,
+    domain::{staging::StagingOperation, time::unix_time_ms},
     features::shelves,
     features::tasks,
     features::tasks::{TaskFailure, TaskSnapshot},
@@ -199,7 +200,11 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                         .map_err(|_| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?;
                     if shelf.snapshot.scope == Some(DiffScope::WorkingTree) {
                         command
-                            .execute_staging(&path, shelves::unstage_paths_command(&shelf.snapshot.paths), context.clone())
+                            .execute_staging(
+                                &path,
+                                StagingOperation::UnstagePaths(shelf.snapshot.paths.clone()),
+                                context.clone(),
+                            )
                             .await?;
                     }
                     let undo_scope = match shelf.snapshot.scope {
@@ -245,7 +250,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                         let record = UndoRecord {
                             operation_task_id: waiting_task_id.clone(),
                             repo_id: task_repo_id.clone(),
-                            created_at_ms: shelves::now_ms(),
+                            created_at_ms: unix_time_ms(),
                             reverse_patch,
                             operation: UndoOperation::ShelfApply {
                                 scope: undo_scope,

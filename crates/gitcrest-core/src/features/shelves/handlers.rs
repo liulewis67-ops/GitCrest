@@ -13,7 +13,9 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::{DiffContentStatus, DiffScope},
     domain::shelf::{ShelfRecord, ShelfSnapshot},
+    domain::staging::StagingOperation,
     domain::status::{ChangeCategory, ChangeKind},
+    domain::time::unix_time_ms,
     domain::undo::{UndoOperation, UndoRecord},
     features::diff::{self, DiffError},
     features::tasks::{TaskFailure, TaskSnapshot},
@@ -291,7 +293,13 @@ pub(super) async fn apply_repository_shelf(
                     {
                         Ok(()) => {
                             commands
-                                .execute_staging(&task_path, shelves::unstage_paths_command(&current_shelf.snapshot.paths), context.clone())
+                                .execute_staging(
+                                    &task_path,
+                                    StagingOperation::UnstagePaths(
+                                        current_shelf.snapshot.paths.clone(),
+                                    ),
+                                    context.clone(),
+                                )
                                 .await?;
                         }
                         Err(TaskFailure::Failed(message)) | Err(TaskFailure::WaitingForInput(message)) => {
@@ -312,7 +320,7 @@ pub(super) async fn apply_repository_shelf(
                     let undo_record = UndoRecord {
                         operation_task_id: context.task_id().to_owned(),
                         repo_id: task_repo_id.clone(),
-                        created_at_ms: shelves::now_ms(),
+                        created_at_ms: unix_time_ms(),
                         reverse_patch: patch.clone(),
                         operation: UndoOperation::ShelfApply {
                             scope: current_scope,
@@ -598,7 +606,7 @@ pub(super) async fn create_repository_shelf(
                         paths,
                         scope: Some(shelf_scope.into()),
                         head_oid: expected_head_oid,
-                        created_at_ms: shelves::now_ms(),
+                        created_at_ms: unix_time_ms(),
                     },
                     patch,
                 };

@@ -6,13 +6,17 @@ use axum::{
     Json,
 };
 
-use crate::domain::diff::DiffScope;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::undo::{UndoOperation, UndoRecord},
+    domain::{
+        diff::DiffScope,
+        staging::{ShelfPatchAction, StagingOperation},
+        time::unix_time_ms,
+        undo::{UndoOperation, UndoRecord},
+    },
     features::diff::{self, DiffError},
+    features::staging,
     features::tasks::{self, TaskFailure, TaskSnapshot},
-    features::{shelves, staging},
     git::command::GitCommandService,
     state::AppState,
     storage::RepositoryStore,
@@ -322,9 +326,11 @@ pub(crate) async fn undo_recent_operation(
                             &repository_path,
                             match record.operation {
                                 UndoOperation::Staging => staging::undo_command(undo_patch.clone()),
-                            UndoOperation::ShelfApply { scope } => {
-                                shelves::undo_apply_command(undo_patch.clone(), scope)
-                            }
+                            UndoOperation::ShelfApply { scope } => StagingOperation::ApplyShelfPatch {
+                                patch: undo_patch.clone(),
+                                scope,
+                                action: ShelfPatchAction::UndoRestore,
+                            },
                             UndoOperation::WorkspaceDiscard => {
                                 staging::undo_discard_command(undo_patch.clone())
                             }
@@ -393,7 +399,7 @@ async fn persist_staging_undo(
             .save_undo_record(&UndoRecord {
                 operation_task_id: context.task_id().to_owned(),
                 repo_id: repo_id.to_owned(),
-                created_at_ms: shelves::now_ms(),
+                created_at_ms: unix_time_ms(),
                 reverse_patch,
                 operation: UndoOperation::Staging,
                 restore_shelf: None,
@@ -562,7 +568,7 @@ pub(crate) async fn discard_repository_patch(
                     .save_undo_record(&UndoRecord {
                         operation_task_id: context.task_id().to_owned(),
                         repo_id: task_repo_id.clone(),
-                        created_at_ms: shelves::now_ms(),
+                        created_at_ms: unix_time_ms(),
                         reverse_patch: patch,
                         operation: UndoOperation::WorkspaceDiscard,
                         restore_shelf: None,
