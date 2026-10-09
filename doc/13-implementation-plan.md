@@ -3114,3 +3114,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、8、14 节。
 - 限制/后续：取消后的 abort/switch/reset 和 merge-index 复核仍在 GitCommandService 中；继续拆分 workflow orchestration 与适配器 Git 原语；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`8215583`
+
+### Rebase 取消恢复读取能力收口到 preflight port — 小阶段 271
+- 状态：已完成（取消恢复不再直接在 GitCommandService 查询 rebase-apply 元数据或 porcelain 工作树状态）
+- 日期：2026-10-09
+- 交付：RemotePreflightReadPort 新增 `is_am_rebase`，由 GitCommandService adapter 解析 `rebase-apply` 元数据目录并区分 `git am --abort` 与 `git rebase --abort`；非 am rebase 的用户改动检查改用结构化 `WorkflowState` 的 dirty path 和省略计数。Git 查询、元数据路径解析或权限读取失败均按恢复结果未知处理；保留用户改动时等待输入的行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未运行 git am/rebase 中断取消和脏工作树保护场景。
+- 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、8、14 节。
+- 限制/后续：取消恢复中的 abort/switch/reset 和 merge-index 复核仍由 GitCommandService 编排；继续将 workflow 协调与 Git 执行原语拆分；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`a6fed22`
