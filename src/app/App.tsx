@@ -12,7 +12,7 @@ import { useDialogFocus } from "../shared/use-dialog-focus";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { loadCommitWorkbench, useCommitDraft, useCommitSubmission } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
-import { getRepositoryEventRefreshPlan, loadWorkspaceSession, saveWorkspaceSession, useRepositoryMutations, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
+import { getRepositoryEventRefreshPlan, loadWorkspaceSession, saveWorkspaceSession, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, type CommitAction, type WorkspaceMode, type WorkspaceSession } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { loadDiscardChangesDialog } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useRepositoryRefs } from "../features/branches";
@@ -110,11 +110,24 @@ function App() {
   const taskRefreshPlannerRef = useRef(new TaskRefreshPlanner());
   const [taskActionId, setTaskActionId] = useState("");
   const [openError, setOpenError] = useState("");
-  const [openingRepository, setOpeningRepository] = useState(false);
   const { toggleFavorite, forgetRepository } = useRepositoryMutations({
     getApi: () => apiRef.current,
     onRepositoriesChanged: (update) => setRepositories(update),
     onRepositoryForgotten: (repoId) => setSelectedRepository((current) => current?.repoId === repoId ? undefined : current),
+    setError: setOpenError,
+  });
+  const repositoryOpening = useRepositoryOpening({
+    getApi: () => apiRef.current,
+    onRepositoryOpened: (repository, sortByRecentAccess) => {
+      setRepositories((current) => {
+        const next = [repository, ...current.filter((item) => item.repoId !== repository.repoId)];
+        return sortByRecentAccess
+          ? next.sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt)
+          : next;
+      });
+      activateRepository(repository);
+    },
+    refreshRepositories,
     setError: setOpenError,
   });
   const { apiRef, status, version, setStatus } = useCoreConnection({
@@ -841,17 +854,10 @@ function App() {
     try {
       const path = await requireGitCrestBridge().chooseRepository();
       if (!path) return;
-      const api = apiRef.current;
-      if (!api) throw new Error("The Git engine is still starting. Try again in a moment.");
-      setOpeningRepository(true);
-      const repository = await api.openRepository(path);
-      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
-      activateRepository(repository);
+      await repositoryOpening.openAtPath(path);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setOpenError(message || (error instanceof Error ? error.message : "Could not open this repository."));
-    } finally {
-      setOpeningRepository(false);
     }
   }
 
@@ -860,37 +866,15 @@ function App() {
     try {
       const path = await requireGitCrestBridge().chooseRepository();
       if (!path) return;
-      const api = apiRef.current;
-      if (!api) throw new Error("The Git engine is still starting. Try again in a moment.");
-      setOpeningRepository(true);
-      const repository = await api.initializeRepository(path);
-      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
-      activateRepository(repository);
+      await repositoryOpening.initializeAtPath(path);
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setOpenError(message || (error instanceof Error ? error.message : "Could not initialize this folder."));
-    } finally {
-      setOpeningRepository(false);
     }
   }
 
   async function openRecentRepository(repository: RepositoryResponse) {
-    const api = apiRef.current;
-    if (!api || repository.availability !== "available") return;
-    setOpenError("");
-    setOpeningRepository(true);
-    try {
-      const opened = await api.getRepository(repository.repoId);
-      setRepositories((current) => [opened, ...current.filter((item) => item.repoId !== opened.repoId)]
-        .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt));
-      activateRepository(opened);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setOpenError(message || (error instanceof Error ? error.message : "Could not reopen this repository."));
-      void refreshRepositories(api).catch(() => undefined);
-    } finally {
-      setOpeningRepository(false);
-    }
+    await repositoryOpening.openRecent(repository);
   }
 
   async function refreshRepositories(api: GitCrestApiClient, restoreWorkspace = false) {
@@ -1137,7 +1121,7 @@ function App() {
       {page === "welcome" ? (
         <WelcomePage
           repositories={repositories}
-          openingRepository={openingRepository}
+          openingRepository={repositoryOpening.opening}
           connected={connected}
           shortcuts={shortcuts}
           isMacPlatform={isMacPlatform}
@@ -1258,7 +1242,7 @@ function App() {
                 historyRefreshKey={historyRefreshKey}
                 historySearchFocusRequest={historySearchFocusRequest}
                 graphViewportRef={graphViewportRef}
-                openingRepository={openingRepository}
+                openingRepository={repositoryOpening.opening}
                 selectedFilePath={selectedFilePath}
                 selectedFileScope={selectedFileScope}
                 selectedDiffCommitOid={selectedDiffCommitOid}
