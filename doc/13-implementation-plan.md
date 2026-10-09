@@ -3862,4 +3862,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；现有组件测试覆盖设置读取取消、快捷键偏好和 AI 隐私范围预览。
 - 证据：`src/features/settings/index.ts`、`src/features/settings/ui/SettingsDialog.tsx`、`src/features/settings/ui/PrivacyScopePreview.tsx`、`tests/unit/settings-dialog.test.tsx`。
 - 限制/后续：此阶段只收敛 Settings UI 目录归属；其余 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
-- 完成 commit：待提交
+- 完成 commit：`522d4d5 refactor: organize settings feature UI`
