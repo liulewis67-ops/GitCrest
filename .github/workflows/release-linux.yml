@@ -1,0 +1,96 @@
+name: Linux release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: linux-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Verify tag matches application version
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_TYPE" != "tag" ]]; then
+            echo 'The Linux release workflow must be dispatched from a version tag.' >&2
+            exit 1
+          fi
+          version=$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")
+          if [[ "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "Tag $GITHUB_REF_NAME must match package version v$version." >&2
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: crates/gitcrest-core -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build Linux AppImage with release trust key
+        run: pnpm electron:package:linux-release
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          LINUX_UPDATE_SIGNING_KEY: ${{ secrets.LINUX_UPDATE_SIGNING_KEY }}
+
+      - name: Sign and verify Linux update metadata
+        shell: bash
+        env:
+          LINUX_UPDATE_SIGNING_KEY: ${{ secrets.LINUX_UPDATE_SIGNING_KEY }}
+        run: |
+          key_file="$RUNNER_TEMP/gitcrest-linux-update-signing-key.pem"
+          umask 077
+          printf '%s' "$LINUX_UPDATE_SIGNING_KEY" > "$key_file"
+          pnpm release:sign-linux-update-manifest dist/latest-linux.yml "$key_file"
+          node --input-type=module <<'NODE'
+          import { createPrivateKey, createPublicKey } from 'node:crypto';
+          import { readFile } from 'node:fs/promises';
+          import { load } from 'js-yaml';
+          import { verifyLinuxUpdateInfoSignature } from './electron/main/update-manifest-signature-policy.mjs';
+
+          const privateKey = createPrivateKey(process.env.LINUX_UPDATE_SIGNING_KEY);
+          const expectedPublicKey = createPublicKey(privateKey).export({ type: 'spki', format: 'der' }).toString('base64');
+          const packageConfig = await readFile('dist/linux-unpacked/resources/app-update.yml', 'utf8');
+          if (!packageConfig.split(/\r?\n/).includes(`gitcrestUpdatePublicKey: ${expectedPublicKey}`)) {
+            throw new Error('Packaged updater public key does not match the release signing key.');
+          }
+          const manifest = load(await readFile('dist/latest-linux.yml', 'utf8'));
+          if (!verifyLinuxUpdateInfoSignature(manifest, expectedPublicKey)) {
+            throw new Error('Linux update manifest signature verification failed.');
+          }
+          NODE
+
+      - name: Publish signed Linux release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          shopt -s nullglob
+          appimages=(dist/*.AppImage)
+          if (( ${#appimages[@]} != 1 )); then
+            echo "Expected exactly one AppImage, found ${#appimages[@]}." >&2
+            exit 1
+          fi
+          gh release create "$GITHUB_REF_NAME" "${appimages[0]}" dist/latest-linux.yml \
+            --verify-tag --title "$GITHUB_REF_NAME" --generate-notes

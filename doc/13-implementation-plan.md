@@ -4042,3 +4042,11 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`、`tests/unit/update-manifest-signature.test.ts`。
 - 限制/后续：尚未接入 Linux 原生 runner workflow，也未生成并签名真实 AppImage 发布清单或完成更新端到端安装；Linux feed 仍不能视为已验收。Windows/macOS 真实签名发布、跨平台 runner 结果和 S7.5 收口仍待完成。
 - 实施 commit：`deb2f41`。
+
+### S7.4 Linux AppImage 手动签名发布工作流 — 小阶段 364
+- 状态：已完成（发布工作流已配置，尚未由 GitHub Linux runner 执行）
+- 日期：2026-10-10
+- 交付：新增仅由 `workflow_dispatch` 触发的 Linux release workflow，要求从版本 tag 手动触发且 tag 必须与 `package.json` 版本一致；checkout 指定 tag，使用 Ubuntu 原生构建 Release sidecar/AppImage，通过 `LINUX_UPDATE_SIGNING_KEY` 注入与清单签名配对的公钥，先以 `--publish never` 构建，再签名 `latest-linux.yml`。发布前核验 packaged `app-update.yml` 公钥和清单 Ed25519 签名一致，最后用 `gh release create --verify-tag` 上传 AppImage 与签名清单。Release build 命令显式禁止 electron-builder 提前上传未签名元数据。
+- 验证：GitHub Actions workflow 使用 `js-yaml` 解析，确认仅有手动触发入口及 release job；Linux 更新签名/注入定向 Vitest（6/6）、配置与 hook `node --check`、`git diff --check` 通过。本次未触发 GitHub workflow 或创建 release。
+- 证据：`.github/workflows/release-linux.yml`、`package.json`、`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`。
+- 限制/后续：仓库需配置 Actions secret `LINUX_UPDATE_SIGNING_KEY` 并由原生 Linux runner 实跑；标签需要和应用版本一致。发布资产仍缺真实 GitHub runner 的 AppImage 打包、签名和客户端更新安装回归证据；S7.4 与 S7.5 整体未完成。
