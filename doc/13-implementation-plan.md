@@ -2417,3 +2417,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Copy SHA 提示和 tag 表单的 HTML 呈现仍留在 CommitDetails；S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`src/features/history/model/use-commit-tag-creation.ts`、`src/features/history/CommitGraph.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`fed0492`
+
+### history feature model 生命周期回归测试 — 小阶段 200
+- 状态：已完成（history feature 的筛选、分页、提交详情与 tag 创建状态具有独立回归覆盖）
+- 日期：2026-10-09
+- 交付：新增 history model 单测，覆盖筛选草稿应用/清除、分页续载去重、仓库切换后的过期分页响应、提交详情切换后的过期响应，以及 tag 创建成功后的表单清理和选择切换清理。
+- 验证：`pnpm build`（应用和测试 TypeScript 检查、main/preload/renderer 构建）通过；`pnpm test` 全部 162 tests（34 files）通过；`git diff --check` 通过。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：测试使用 API mock，真实历史 API 分页与桌面交互仍由集成/E2E 阶段验收；S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`tests/unit/history-model.test.tsx`、`src/features/history/model/`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`668aca9`
