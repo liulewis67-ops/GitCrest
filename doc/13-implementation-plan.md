@@ -3646,3 +3646,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件自动化测试覆盖替换与卸载两个请求生命周期边界。
 - 证据：`src/features/tasks/TaskCenter.tsx`、`tests/unit/task-center.test.tsx`。
 - 限制/后续：ConflictWindow、ConflictSuggestionPanel、workflow recovery 写操作中的二次预检，以及设置/隐私读取仍需按拥有 feature 的生命周期审查；S7.2、S7.4、S7.5 验收继续未完成。
+- 完成 commit：`91f629e`
+
+### 前端 ConflictWindow 会话与冲突文件读取取消 — 小阶段 324
+- 状态：已完成（窗口关闭/会话切换及文件切换时取消初始预检和冲突文件读取）
+- 日期：2026-10-09
+- 交付：ConflictWindow 的会话恢复预检和所选冲突文件读取均通过 `GitCrestApiClient.withSignal` 绑定 AbortController。任务或窗口生命周期结束时取消会话预检，选择变化或窗口卸载时取消文件读取；通过 restricted conflict window bridge 创建的 API 客户端及写权限边界保持不变，迟到的已取消响应不会更新 UI。
+- 验证：新增会话预检和冲突文件读取的卸载用例，断言底层 fetch AbortSignal 被触发；定向 ConflictWindow 用例通过；完整 `pnpm test` 通过（38 files、174 tests）；`pnpm build`、`pnpm frontend:boundaries` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件自动化测试分别挂起初始会话预检和冲突文件读取，并在窗口卸载时确认取消。
+- 证据：`src/features/workflows/ConflictWindow.tsx`、`tests/unit/conflict-window.test.tsx`。
+- 限制/后续：冲突文件保存/resolve 后轮询、失败恢复预检及 ConflictSuggestionPanel 的设置/版本读取尚未取消；设置/隐私读取与 S7.2、S7.4、S7.5 验收仍待完成。

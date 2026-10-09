@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { ConflictWindow } from "../../src/features/workflows/ConflictWindow";
 
@@ -9,11 +9,76 @@ afterEach(() => {
   delete window.gitcrest;
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
+
 it("shows a desktop-app requirement when the preload bridge is missing", async () => {
   const repoId = `repo_${"a".repeat(64)}`;
   window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-123-1`);
   render(<ConflictWindow />);
   expect(await screen.findByText("GitCrest desktop bridge is unavailable. Open this feature in the GitCrest desktop app.")).toBeTruthy();
+});
+
+it("aborts a conflict file read when the conflict window closes", async () => {
+  const repoId = `repo_${"a".repeat(64)}`;
+  const taskId = "task-123-1";
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=${taskId}`);
+  Object.defineProperty(window, "gitcrest", {
+    configurable: true,
+    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
+  });
+  const fileResponse = deferred<Response>();
+  let fileSignal: AbortSignal | null | undefined;
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation((input, init) => {
+    if (String(input).includes("conflicts/file")) {
+      fileSignal = init?.signal;
+      return fileResponse.promise;
+    }
+    return Promise.resolve(new Response(JSON.stringify({
+      repoId, taskId, operation: "merge", headOid: "a".repeat(40), dirtyPaths: [], omittedDirtyPathCount: 0,
+      conflictedPaths: ["conflict.ts"], omittedConflictedPathCount: 0, canContinue: false, canSkip: false, canAbort: true,
+    }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+  }));
+
+  const view = render(<ConflictWindow />);
+  await waitFor(() => expect(fileSignal).toBeTruthy());
+  view.unmount();
+  expect(fileSignal?.aborted).toBe(true);
+  await act(async () => fileResponse.resolve(new Response(JSON.stringify({
+    repoId, taskId, path: "conflict.ts", operation: "merge", headOid: "a".repeat(40),
+    baseContent: null, oursContent: null, theirsContent: null, resultContent: null, resultRevision: "b".repeat(64), isText: false,
+  }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
+});
+
+it("aborts conflict session preflight when the conflict window closes", async () => {
+  const repoId = `repo_${"b".repeat(64)}`;
+  const taskId = "task-456-1";
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=${taskId}`);
+  Object.defineProperty(window, "gitcrest", {
+    configurable: true,
+    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
+  });
+  const preflightResponse = deferred<Response>();
+  let preflightSignal: AbortSignal | null | undefined;
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation((input, init) => {
+    if (String(input).includes("recovery-preflight")) {
+      preflightSignal = init?.signal;
+      return preflightResponse.promise;
+    }
+    return Promise.reject(new Error("Unexpected request in conflict preflight test."));
+  }));
+
+  const view = render(<ConflictWindow />);
+  await waitFor(() => expect(preflightSignal).toBeTruthy());
+  view.unmount();
+  expect(preflightSignal?.aborted).toBe(true);
+  await act(async () => preflightResponse.resolve(new Response(JSON.stringify({
+    repoId, taskId, operation: "merge", headOid: "b".repeat(40), dirtyPaths: [], omittedDirtyPathCount: 0,
+    conflictedPaths: [], omittedConflictedPathCount: 0, canContinue: true, canSkip: false, canAbort: true,
+  }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
 });
 
 it("edits, saves, and marks a conflict resolved using conflict-scoped window access", async () => {

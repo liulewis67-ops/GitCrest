@@ -29,11 +29,12 @@ export function ConflictWindow() {
   const fileKey = `${sessionKey}:${selectedPath}`;
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     if (!repoId || !/^repo_[a-f0-9]{64}$/.test(repoId) || !taskId) {
       setSession({ key: sessionKey, loading: false, error: "This conflict window request is invalid. Reopen it from Task Center." });
-      return () => { active = false; };
+      return () => controller.abort();
     }
+    setApi(undefined);
     setSession({ key: sessionKey, loading: true });
     const bridge = getGitCrestBridge();
     if (!bridge) {
@@ -42,41 +43,42 @@ export function ConflictWindow() {
         loading: false,
         error: "GitCrest desktop bridge is unavailable. Open this feature in the GitCrest desktop app.",
       });
-      return () => { active = false; };
+      return () => controller.abort();
     }
     void bridge.getSidecarConnection().then(async (connection) => {
+      if (controller.signal.aborted) return;
       if (connection.windowAccess !== "conflictResolution") throw new Error("Conflict review requires its restricted write capability.");
       const client = new GitCrestApiClient(connection.baseUrl, connection.token);
-      const preview = await client.preflightRepositoryWorkflowRecovery(repoId, taskId);
-      if (!active) return;
+      const preview = await client.withSignal(controller.signal).preflightRepositoryWorkflowRecovery(repoId, taskId);
+      if (controller.signal.aborted) return;
       setApi(client);
       setSession({ key: sessionKey, loading: false, data: preview });
       setSelectedPath((current) => preview.conflictedPaths.includes(current) ? current : preview.conflictedPaths[0] || "");
     }).catch((reason: unknown) => {
-      if (active) setSession({ key: sessionKey, loading: false, error: reason instanceof Error ? reason.message : "Could not load the conflict task." });
+      if (!controller.signal.aborted) setSession({ key: sessionKey, loading: false, error: reason instanceof Error ? reason.message : "Could not load the conflict task." });
     });
-    return () => { active = false; };
+    return () => controller.abort();
   }, [repoId, taskId, sessionKey]);
 
   useEffect(() => {
-    let active = true;
+    const controller = new AbortController();
     if (!api || !selectedPath) {
       setFile({ key: fileKey, loading: false });
-      return () => { active = false; };
+      return () => controller.abort();
     }
     setFile({ key: fileKey, loading: true });
     setAction({});
     setSuggestionOpen(false);
     setHasUnsavedChanges(false);
-    void api.getRepositoryWorkflowConflictFile(repoId, taskId, selectedPath).then((response) => {
-      if (active && selectedPathRef.current === selectedPath) {
+    void api.withSignal(controller.signal).getRepositoryWorkflowConflictFile(repoId, taskId, selectedPath).then((response) => {
+      if (!controller.signal.aborted && selectedPathRef.current === selectedPath) {
         setFile({ key: fileKey, loading: false, data: response });
         setDraft(response.resultContent ?? "");
       }
     }).catch((reason: unknown) => {
-      if (active && selectedPathRef.current === selectedPath) setFile({ key: fileKey, loading: false, error: reason instanceof Error ? reason.message : "Could not load the conflict stages." });
+      if (!controller.signal.aborted && selectedPathRef.current === selectedPath) setFile({ key: fileKey, loading: false, error: reason instanceof Error ? reason.message : "Could not load the conflict stages." });
     });
-    return () => { active = false; };
+    return () => controller.abort();
   }, [api, repoId, taskId, selectedPath, fileKey]);
 
   useEffect(() => {
