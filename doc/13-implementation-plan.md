@@ -2814,3 +2814,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/staging.rs`、`crates/gitcrest-core/src/features/staging/service.rs`、`crates/gitcrest-core/src/features/shelves/service.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、4.2 节。
 - 限制/后续：Git command adapter 目前仍包含全部暂存和 Shelve 操作映射；后续按 Git adapter 的 index/workflow 能力边界继续整理；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`8adba41`
+
+### 暂存区 Git 命令适配迁入 git/index.rs — 小阶段 241
+- 状态：已完成（暂存与 Shelve patch 操作映射按 adapter 能力归入 index 模块）
+- 日期：2026-10-09
+- 交付：新增 `git/index.rs` 承载 `StagingOperation` 到 Git argv、stdin 和任务标签的适配；`GitCommandService` 保留执行与进程任务上下文，staging/shelves 的 adapter 输入改走 index 模块。未改变操作参数、路径保护、patch 内容或执行流程。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；本阶段仅调整 Git adapter 的职责归属，不改变 API、持久化或 Git 命令行为。
+- 证据：`crates/gitcrest-core/src/git/index.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/git/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节 Git adapter 目录约定。
+- 限制/后续：`git/index.rs` 当前负责暂存与 Shelve patch 的操作转换；后续继续梳理 Git read/write port 覆盖范围与 feature 到 adapter 的依赖方向；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`372009d`
