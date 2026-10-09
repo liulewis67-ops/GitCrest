@@ -2453,3 +2453,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段保持存储适配调用方式不变，未引入 ports 抽象；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、14 节。
 - 实施 commit：`80e0813`
+
+### history feature blame 查询拆分 — 小阶段 204
+- 状态：已完成（blame 查询校验、Git 调用及 porcelain 解析已归入独立子模块）
+- 日期：2026-10-09
+- 交付：新增 `features/history/service/blame.rs`，承载历史版本和路径输入校验、Git blame 调用及行元数据解析；history service 通过 `read_blame` 保持现有内部调用入口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、history service 定向测试（4 passed）与 `git diff --check` 通过。
+- 限制/后续：本阶段保留既有 Git 命令适配与错误类型，不改变 API 契约；S7.2、S7.4、S7.5 仍待验收。
+- 证据：`crates/gitcrest-core/src/features/history/service/blame.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、14 节。
+- 实施 commit：`646550a`
