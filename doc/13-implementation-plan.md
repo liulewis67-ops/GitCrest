@@ -2191,3 +2191,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：TaskCenter 的 log copy、workflow recovery、credential retry 与 push review 仍由 App 连接相应 feature；后续按 task action 与跨 feature orchestration 边界继续迁移。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/tasks/model/use-task-center.ts`、`src/features/tasks/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`4afe97b`
+
+### branches feature branch switcher 预检与普通切换迁入 model — 小阶段 177
+- 状态：已完成（分支切换 dialog 状态、预检和普通 switch task 由 branches model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useBranchSwitcher`，管理 branch switcher dialog/target/preflight/error/busy、分支列表刷新、目标预检和无潜在覆盖时的 switch task 提交；App 经 branches feature 装配模型。保留 Shelf 创建后的 switch/recovery 为 App 跨 feature 编排，并通过 model review/busy actions 同步弹窗状态。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：branch switch 与 shelf auto-restore 的其余 task 生命周期仍在 App；继续拆分跨 feature workflow 并核对安全门控。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/branches/model/use-branch-switcher.ts`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`16fe128`
