@@ -2336,3 +2336,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：查询 Hook 仍由 App 装配仓库与当前文件上下文；S7.2/S7.4/S7.5 继续按实施计划验收。
 - 证据：`src/features/diff/model/use-repository-diff-query.ts`、`src/features/diff/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`a56bcaa`
+
+### history feature 刷新请求迁入 model — 小阶段 191
+- 状态：已完成（任务与提交流程触发的历史视图刷新由 history model 管理）
+- 日期：2026-10-09
+- 交付：扩展 `useHistoryViewRequests` 管理单调递增的 history refresh key 与 refresh action；App 将任务事件、commit 后续动作的刷新请求统一路由至 history feature，并把 model key 提供给工作区导航和主区历史视图。
+- 验证：`pnpm build`（应用与测试 TypeScript 类型检查、main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：历史数据仍由 CommitGraph 按 refresh key 发起请求，统一查询缓存与失效策略待后续按实施计划推进；S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`src/features/history/model/use-history-view-requests.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`4d2e158`
