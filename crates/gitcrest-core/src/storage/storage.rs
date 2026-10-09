@@ -955,7 +955,10 @@ impl HistorySearchIndexPort for RepositoryStore {
         entries: Vec<CommitSearchEntry>,
     ) -> Result<(), crate::domain::error::RepositoryError> {
         RepositoryStore::replace_history_search_index(self, repo_id, refs_fingerprint, &entries)
-            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+            .map_err(|error| {
+                eprintln!("[gitcrest-core] History search index storage error: {error}");
+                crate::domain::error::RepositoryError::StorageUnavailable
+            })
     }
 }
 

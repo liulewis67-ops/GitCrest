@@ -286,11 +286,21 @@ pub async fn build_history_search_index(
     let verify_elapsed_ms = verify_started.elapsed().as_millis();
     let repo_id = repo_id.to_owned();
     let persist_started = std::time::Instant::now();
-    let persist_result =
-        tokio::task::spawn_blocking(move || store.replace_index(&repo_id, &fingerprint, entries))
-            .await
-            .map_err(|_| HistoryError::GitFailed)?
-            .map_err(|_| HistoryError::GitFailed);
+    let persist_result = match tokio::task::spawn_blocking(move || {
+        store.replace_index(&repo_id, &fingerprint, entries)
+    })
+    .await
+    {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(error)) => {
+            eprintln!("[gitcrest-core] History index persistence failed: {error:?}");
+            Err(HistoryError::GitFailed)
+        }
+        Err(error) => {
+            eprintln!("[gitcrest-core] History index persistence task failed: {error}");
+            Err(HistoryError::GitFailed)
+        }
+    };
     let persist_elapsed_ms = persist_started.elapsed().as_millis();
     eprintln!(
         "[gitcrest-core] History index build phases git={git_elapsed_ms}ms parse={parse_elapsed_ms}ms verify={verify_elapsed_ms}ms persist={persist_elapsed_ms}ms"

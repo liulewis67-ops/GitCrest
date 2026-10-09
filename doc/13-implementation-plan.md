@@ -4455,3 +4455,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/tasks/model/task-operations.ts`、`src/features/tasks/model/task-refresh-planner.ts`、`src/features/tasks/ui/TaskCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4.1、4.2 节。
 - 限制/后续：此阶段只收敛任务操作资格的规则归属，不改变 TaskCenter 与 App 的跨 feature 回调装配；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 history 搜索索引失败诊断与冷路径复测 — 小阶段 407
+- 状态：已完成（冷索引失败可输出存储错误；当前 Release 20 轮复测已记录，冷搜索完整结果仍未达标）
+- 日期：2026-10-10
+- 交付：history 索引构建的持久化失败现在记录存储 adapter 返回的 SQLite 错误和 blocking task join 错误；性能基准在 `searchPending` 期间发现索引构建 failed、timed-out 或 skipped-too-large 时立即结束并附 sidecar 日志，不再空等到 30 秒超时。新建 100k commits fixture 后，在 E: 盘临时目录运行当前 Release sidecar 20 轮冷搜索。
+- 验证：`cargo build --release --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、PowerShell fixture 构建、`node scripts/performance/benchmark.mjs cold <100k-fixture> doc/evidence/S7.2/api-win32-search-index-current-stage407-20261010.json`（20 轮）成功；该轮冷搜索 P50/P95/max 为 1623.932/1632.758/1634.522ms，首次 `searchPending` 响应 P95/max 为 17.980/18.228ms。索引构建 Git/解析/复核/持久化总阶段 P95 分别为 836/18/5/740ms。未运行测试。
+- 手工验证：首次尝试使用 C: 盘临时目录时，索引持久化输出 `database or disk is full`；确认 C: 盘剩余约 0.01GB 后，将 sidecar 数据目录切换到 E: 盘并复测成功。桌面应用继续使用 `dist` 下的另一份 sidecar，未重启或干预其进程。
+- 证据：`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-current-stage407-20261010.json`。
+- 限制/后续：100k 冷搜索从请求到结果的 P95 仍高于 <200ms 目标；异步首次响应低于 200ms 不能替代完整结果时延验收。下一阶段应针对 Git 全量消息读取和 SQLite/FTS 写入继续优化并复测。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现、复测证据与台账同一 commit（SHA 可在后续台账更新中补记）。

@@ -262,6 +262,10 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
       const deadline = startedAt + 30_000;
       while (page.searchPending === true) {
         if (performance.now() >= deadline) throw new Error("Cold history search index did not become ready within 30 seconds.");
+        const indexFailure = instance.getStderr().match(/History message index (skipped-too-large|timed-out|failed) in (\d+)ms/);
+        if (indexFailure) {
+          throw new Error(`Cold history search index ${indexFailure[1]} after ${indexFailure[2]}ms. Sidecar output: ${instance.getStderr().trim()}`);
+        }
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
         page = await requestJson(searchUrl, instance.token);
       }
