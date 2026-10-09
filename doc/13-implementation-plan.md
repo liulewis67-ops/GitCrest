@@ -2209,3 +2209,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workflow conflict window 启动与 workflow dialog 生命周期仍在 App；继续迁移时维持跨窗口 bridge 和 task UI 的边界。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/workflows/model/use-workflow-recovery.ts`、`src/features/workflows/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`dd8cd26`
+
+### workflows feature conflict window bridge action 迁入 model — 小阶段 179
+- 状态：已完成（从 TaskCenter 打开 conflict window 的 bridge 请求与错误反馈由 workflows model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useOpenConflictWindow`，根据 task repo/task ID 调用受控 desktop bridge，成功时清除 TaskCenter 错误，失败时显示 bridge 返回错误；App 只把 TaskCenter action 连接到 workflows feature。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：workflow dialog 的开关与 recovery UI 仍由 App/TaskCenter 装配；继续沿 workflows feature 与 app 页面边界迁移。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/workflows/model/use-open-conflict-window.ts`、`src/features/workflows/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`7a5c7ab`
