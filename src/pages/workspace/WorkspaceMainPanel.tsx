@@ -3,8 +3,7 @@ import type { DiffDocumentResponse, GitCrestApiClient, RepositoryResponse, Statu
 import type { WorkspaceSession } from "../../features/repositories";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadSplitDiff } from "../../features/diff";
-import { loadCommitGraph } from "../../features/history";
-import { isFullGitObjectId } from "../../shared/lib/git-object-id";
+import { isFullGitObjectId, loadCommitGraph } from "../../features/history";
 
 const CommitGraph = lazy(loadCommitGraph);
 const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));

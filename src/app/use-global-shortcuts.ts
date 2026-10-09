@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { matchesShortcut, type ShortcutPreferences } from "../features/settings";
-import { isFullGitObjectId } from "../shared/lib/git-object-id";
+import { isFullGitObjectId } from "../features/history";
 
 type ShortcutRepository = {
   repoId: string;

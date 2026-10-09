@@ -4545,3 +4545,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/shared/hooks/use-dialog-focus.ts`、相关 App/feature UI 导入、`doc/15-frontend-development-guidelines.md` 第 3.1、3.3 节。
 - 限制/后续：只调整通用 Hook 的目录归属，不改变焦点行为；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### history feature 收纳完整 Git 对象 ID 校验 — 小阶段 416
+- 状态：已完成（Git 对象 ID 规则归入 history model 并通过 feature 公开 API 复用）
+- 日期：2026-10-10
+- 交付：将 `isFullGitObjectId` 从 `src/shared/lib/git-object-id.ts` 迁入 `src/features/history/model/git-object-id.ts`，并从 history feature 的 `index.ts` 显式导出。App、快捷键 Hook 和 Workspace 页面改用 feature 公开入口；校验表达式及调用语义不变。
+- 验证：`pnpm exec tsc --noEmit`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir E:\gitcrest-stage416-vite --emptyOutDir`、对象 ID 引用搜索与 `git diff --check` 通过；构建仅出现既有 web-tree-sitter `eval` 和大 chunk 提示。未新增或运行测试。
+- 手工验证：确认 `shared/lib` 不再包含 Git 对象 ID 校验，所有调用方只经 history feature 公开入口导入，不直接访问 feature 私有文件。
+- 证据：`src/features/history/model/git-object-id.ts`、`src/features/history/index.ts`、App 与 Workspace 调用点、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3 节。
+- 限制/后续：只调整 Git 领域校验的模块归属，不改变 40/64 位十六进制规则；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段代码与台账同一 commit（SHA 可在后续台账更新中补记）。

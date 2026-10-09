@@ -2,8 +2,7 @@ import { lazy, Suspense } from "react";
 import type { GitCrestApiClient, RepositoryResponse } from "../../api/client";
 import type { WorkflowAction } from "../../features/workflows";
 import { ariaShortcut, type ShortcutPreferences } from "../../features/settings";
-import { loadCommitDetails } from "../../features/history";
-import { isFullGitObjectId } from "../../shared/lib/git-object-id";
+import { isFullGitObjectId, loadCommitDetails } from "../../features/history";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 
 const CommitDetails = lazy(loadCommitDetails);

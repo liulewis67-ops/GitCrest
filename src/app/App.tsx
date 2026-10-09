@@ -9,7 +9,6 @@ import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel"
 import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShortcutPreferences, useThemePreference } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { useDialogFocus } from "../shared/hooks/use-dialog-focus";
-import { isFullGitObjectId } from "../shared/lib/git-object-id";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import type { CredentialEditorRenderer } from "../shared/ui/credential-editor-renderer";
@@ -18,7 +17,7 @@ import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { loadCredentialEditor } from "../features/credentials";
 import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
-import { useHistoryViewRequests } from "../features/history";
+import { isFullGitObjectId, useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
 import { loadBranchSwitcherDialog, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
