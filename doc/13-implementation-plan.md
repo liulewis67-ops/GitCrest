@@ -4594,3 +4594,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/history_index.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：仓库目录、设置、shelf、undo、任务快照和迁移仍位于 `storage/storage.rs`；后续按职责和共享事务边界逐块拆分，不预建空模块。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### storage 拆分 Shelf 持久化 adapter — 小阶段 421
+- 状态：已完成（Shelf 序列化、CRUD 与 port 实现归入 `storage/shelves.rs`）
+- 日期：2026-10-10
+- 交付：将 Shelf 存储 DTO、scope 转换、列表/读取/保存/删除 SQL 和 `ShelfStorePort` 实现从 `storage/storage.rs` 移至 `storage/shelves.rs`。undo 记录仍复用同一存储 DTO；共享主连接、表结构、SQL、错误映射和事务语义不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认 Shelf adapter 方法和 port 实现在新模块，undo 序列化继续引用相同 DTO，`RepositoryStore` 继续向该模块共享同一 SQLite 连接。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/shelves.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：仓库目录、设置、undo、任务快照和迁移仍在 `storage/storage.rs`；后续按职责和共享事务边界继续拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
