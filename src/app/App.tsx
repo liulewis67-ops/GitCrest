@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
-import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
+import { GitCrestApiError, type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
@@ -15,7 +15,7 @@ import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { getRepositoryEventRefreshPlan, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type CommitAction, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { useHistoryViewRequests } from "../features/history";
-import { loadDiscardChangesDialog } from "../features/diff";
+import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
 import { loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
 import { loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
@@ -69,8 +69,6 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
   const { shortcuts, setShortcuts } = useShortcutPreferences();
-  const [diffState, setDiffState] = useState<{ key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }>({ key: "", loading: false });
-  const [diffRetry, setDiffRetry] = useState(0);
   const {
     message: commitMessage,
     setMessage: setCommitMessage,
@@ -315,9 +313,15 @@ function App() {
   const selectedFileScope = activeTabState?.selectedFileScope;
   const selectedDiffCommitOid = activeTabState?.selectedDiffCommitOid;
   const selectedDiffFile = (activeStatus?.files || []).find((file) => file.path === selectedFilePath);
-  const activeDiffKey = selectedRepository && selectedFilePath && selectedFileScope
-    ? `${selectedRepository.repoId}:${selectedFileScope}:${selectedDiffCommitOid || ""}:${selectedFilePath}`
-    : "";
+  const diffQuery = useRepositoryDiffQuery({
+    api: apiRef.current,
+    mode,
+    repository: selectedRepository,
+    path: selectedFilePath,
+    scope: selectedFileScope,
+    commitOid: selectedDiffCommitOid,
+  });
+  const { state: diffState, activeKey: activeDiffKey } = diffQuery;
   const statusGroups = changeGroups.map((group) => ({
     ...group,
     files: (activeStatus?.files || []).filter((file) => file.categories.includes(group.category)),
@@ -374,7 +378,7 @@ function App() {
     openTaskCenter: () => setTasksOpen(true),
     openPushTargetPicker: () => setPushTargetDialogOpen(true),
     refreshRepositoryStatus: (repoId) => void refreshRepositoryStatus(repoId),
-    retryDiff: () => setDiffRetry((current) => current + 1),
+    retryDiff: diffQuery.retry,
   });
   const commitBusy = commitSubmission.busy;
   const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
@@ -619,7 +623,7 @@ function App() {
     try {
       await requireGitCrestBridge().openDiffWindow({ repoId, path, scope, ...(commitOid ? { commitOid } : {}) });
     } catch (error) {
-      setDiffState((current) => ({ ...current, loading: false, error: error instanceof Error ? error.message : "Could not open the Diff window." }));
+      diffQuery.setWindowError(error);
     }
   }
 
@@ -675,30 +679,6 @@ function App() {
       setSelectedRepository((current) => currentRepositories.find((repository) => repository.repoId === current?.repoId));
     }
   }
-
-  useEffect(() => {
-    if (mode !== "diff" || !selectedRepository || !selectedFilePath || !selectedFileScope) {
-      setDiffState({ key: "", loading: false });
-      return;
-    }
-    const api = apiRef.current;
-    if (!api) return;
-    let active = true;
-    const key = `${selectedRepository.repoId}:${selectedFileScope}:${selectedDiffCommitOid || ""}:${selectedFilePath}`;
-    setDiffState({ key, loading: true });
-    const request = selectedFileScope === "commit" && selectedDiffCommitOid
-      ? api.getRepositoryCommitDiff(selectedRepository.repoId, selectedDiffCommitOid, selectedFilePath)
-      : selectedFileScope === "workingTree" || selectedFileScope === "index"
-        ? api.getFileDiff(selectedRepository.repoId, selectedFilePath, selectedFileScope)
-        : Promise.reject(new Error("The selected commit diff is unavailable."));
-    request
-      .then((document) => { if (active) setDiffState({ key, loading: false, document }); })
-      .catch((error: unknown) => {
-        const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-        if (active) setDiffState({ key, loading: false, error: message || (error instanceof Error ? error.message : "Could not read this file diff.") });
-      });
-    return () => { active = false; };
-  }, [mode, selectedRepository?.repoId, selectedFilePath, selectedFileScope, selectedDiffCommitOid, diffRetry]);
 
   useEffect(() => {
     for (const task of tasks) void cloneSubmission.openClonedRepository(task);
@@ -1005,7 +985,7 @@ function App() {
                 onGraphScrollPosition={rememberGraphScroll}
                 onSelectCommit={selectCommit}
                 onOpenRepository={() => void openLocalRepository()}
-                onRetryDiff={() => setDiffRetry((current) => current + 1)}
+                onRetryDiff={diffQuery.retry}
                 onStageSelection={stageSelectedChanges}
                 onDiscardSelection={requestDiscard}
                 onCommitSelection={addDiffSelectionToCommit}
