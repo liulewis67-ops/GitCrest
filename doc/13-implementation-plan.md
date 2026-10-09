@@ -4215,3 +4215,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`scripts/performance/windows-display-timing.ps1`、`doc/evidence/S7.2/desktop-win32-vblank-during-scroll-stage382-20261010.json`。
 - 限制/后续：系统 DWM timing 仍不能直接解释 GPU VSync worker 的等待来源；现有 trace 显示 VSync wait-event 与应用帧 cadence 同步在约56Hz，而系统 rate 仍为60Hz。继续映射 GPU worker 的 adapter/source 与显示路径，S7.2/S7.4/S7.5 均未验收。
 - 证据 commit：`24d00eb`。
+
+### S7.2 将 D3DKMT VSync 适配器与活动显示路径对应 — 小阶段 383
+- 状态：已完成（GPU VSync 对应到主屏正在使用的 NVIDIA 活动路径；应用约 56Hz cadence 仍未解释）
+- 日期：2026-10-10
+- 交付：新增 `scripts/performance/windows-vsync-display-path.ps1`，通过主屏 GDI DC 调用 `D3DKMTOpenAdapterFromHdc` 读取 adapter LUID / VidPnSourceId，并用 `QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS)` 匹配系统活动 source path；报告源设备名、target adapter PCI 路径、target ID、输出技术、刷新率和状态字段。
+- 验证：PowerShell AST 解析、脚本执行、JSON 解析、唯一匹配断言和 `git diff --check` 通过。当前 `\\.\DISPLAY1` 主屏 bounds 为 1536×864；D3DKMT adapter LUID 为 `00000000:0000F151`、VidPnSourceId 为 0，活动路径唯一匹配相同 LUID/source ID 和 `\\.\DISPLAY1`；target adapter PCI ID 含 NVIDIA `VEN_10DE&DEV_25E2`，活动路径刷新率为 60001/1000（60.001Hz）。
+- 手工验证：运行 `scripts/performance/windows-vsync-display-path.ps1 -OutputPath doc/evidence/S7.2/windows-vsync-display-path-stage383-20261010.json` 只读采集 Windows 显示路径；未操作 GUI。
+- 证据：`scripts/performance/windows-vsync-display-path.ps1`、`doc/evidence/S7.2/windows-vsync-display-path-stage383-20261010.json`；阶段 376/378/381/382 的 GPU、Electron display、VSync worker 与 DWM 采样。
+- 限制/后续：GPU VSync 使用的 source 已匹配到主屏活动 NVIDIA 路径，显示器选错或落到另一 adapter 的解释不成立；该静态路径查询不能测量每次 VBlank 回调到 Chromium worker 的实际时序，也未解释 60Hz 活动路径为何对应约 17.8ms 等待间隔。继续定位驱动 VBlank 通知与 Chromium VSync timebase 的差异；不改变产品 GPU/VSync flags。S7.2、S7.4、S7.5 仍未验收。
+- 证据 commit：`b3003e9`。
