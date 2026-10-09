@@ -33,13 +33,32 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
   const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: string }>>({});
   const [confirmAbortId, setConfirmAbortId] = useState("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
-  const queriedRecoveryTasks = useRef(new Set<string>());
+  const recoveryControllers = useRef(new Map<string, AbortController>());
   const waitingTaskIds = useRef(new Set<string>());
   const tasksRef = useRef(tasks);
   tasksRef.current = tasks;
   const waitingTasks = tasks.filter((task) => task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && task.repoId);
   const recoveryKey = waitingTasks.map((task) => `${task.taskId}:${task.repoId}`).sort().join("|");
   waitingTaskIds.current = new Set(waitingTasks.map((task) => task.taskId));
+
+  function refreshRecoveryPreview(task: TaskSnapshotResponse) {
+    if (!api || !task.repoId) return;
+    recoveryControllers.current.get(task.taskId)?.abort();
+    const controller = new AbortController();
+    recoveryControllers.current.set(task.taskId, controller);
+    setRecovery((current) => ({ ...current, [task.taskId]: { loading: true } }));
+    void api.withSignal(controller.signal).preflightRepositoryWorkflowRecovery(task.repoId, task.taskId).then((snapshot) => {
+      if (!controller.signal.aborted && waitingTaskIds.current.has(task.taskId)) {
+        setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, snapshot } }));
+      }
+    }).catch((reason: unknown) => {
+      if (!controller.signal.aborted && waitingTaskIds.current.has(task.taskId)) {
+        setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : "Could not inspect workflow recovery." } }));
+      }
+    }).finally(() => {
+      if (recoveryControllers.current.get(task.taskId) === controller) recoveryControllers.current.delete(task.taskId);
+    });
+  }
 
   useEffect(() => {
     const currentWaitingTasks = tasksRef.current.filter((task) => task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && task.repoId);
@@ -48,22 +67,14 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
       return;
     }
     setRecovery((current) => Object.fromEntries(currentWaitingTasks.map((task) => [task.taskId, current[task.taskId] || { loading: true }])));
-    const refreshPreview = (task: TaskSnapshotResponse) => {
-      setRecovery((current) => ({ ...current, [task.taskId]: { loading: true } }));
-      void api.preflightRepositoryWorkflowRecovery(task.repoId!, task.taskId).then((snapshot) => {
-        if (waitingTaskIds.current.has(task.taskId)) setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, snapshot } }));
-      }).catch((reason: unknown) => {
-        if (waitingTaskIds.current.has(task.taskId)) setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : "Could not inspect workflow recovery." } }));
-      });
-    };
-    for (const task of currentWaitingTasks) {
-      if (queriedRecoveryTasks.current.has(task.taskId)) continue;
-      queriedRecoveryTasks.current.add(task.taskId);
-      refreshPreview(task);
-    }
-    const refreshAfterWindowFocus = () => currentWaitingTasks.forEach(refreshPreview);
+    currentWaitingTasks.forEach(refreshRecoveryPreview);
+    const refreshAfterWindowFocus = () => currentWaitingTasks.forEach(refreshRecoveryPreview);
     window.addEventListener("focus", refreshAfterWindowFocus);
-    return () => window.removeEventListener("focus", refreshAfterWindowFocus);
+    return () => {
+      window.removeEventListener("focus", refreshAfterWindowFocus);
+      for (const controller of recoveryControllers.current.values()) controller.abort();
+      recoveryControllers.current.clear();
+    };
   }, [api, recoveryKey]);
   return (
     <div className="paletteBackdrop taskBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
@@ -94,7 +105,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
                     {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 && <button className="secondaryButton" type="button" onClick={() => onOpenConflictWindow(task)}>Open conflict resolver</button>}
                     {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 ? <ul className="workflowPathList" aria-label="Conflicted files">{recovery[task.taskId]!.snapshot!.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul> : <p className="cloneHelp">No unresolved conflicts remain.</p>}
                     {recovery[task.taskId]!.snapshot!.omittedConflictedPathCount > 0 && <p className="cloneHelp">And {recovery[task.taskId]!.snapshot!.omittedConflictedPathCount} more conflicted file(s).</p>}
-                    <div className="taskCenterActions"><button className="quietButton compact" type="button" onClick={() => { setRecovery((current) => ({ ...current, [task.taskId]: { loading: true } })); void api?.preflightRepositoryWorkflowRecovery(task.repoId!, task.taskId).then((snapshot) => setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, snapshot } }))).catch((reason: unknown) => setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : "Could not refresh recovery preview." } }))); }}>Refresh preview</button>
+                    <div className="taskCenterActions"><button className="quietButton compact" type="button" onClick={() => refreshRecoveryPreview(task)}>Refresh preview</button>
                       <button className="secondaryButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canContinue || actionId === task.taskId} onClick={() => onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "continue")}>Continue</button>
                       {(task.operation === "cherryPick" || task.operation === "revert" || task.operation === "rebase") && <button className="secondaryButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canSkip || actionId === task.taskId} onClick={() => onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "skip")}>Skip</button>}
                       {confirmAbortId === task.taskId ? <><span className="cloneHelp">Abort this operation?</span><button className="textButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canAbort || actionId === task.taskId} onClick={() => { onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "abort"); setConfirmAbortId(""); }}>Confirm abort</button><button className="textButton" type="button" onClick={() => setConfirmAbortId("")}>Keep resolving</button></> : <button className="textButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canAbort || actionId === task.taskId} onClick={() => setConfirmAbortId(task.taskId)}>Abort…</button>}</div>

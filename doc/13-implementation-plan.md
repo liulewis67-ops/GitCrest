@@ -3636,3 +3636,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件自动化用例在卸载时检查活动请求的取消信号。
 - 证据：`src/features/workflows/RebaseDialog.tsx`、`tests/unit/rebase-dialog.test.tsx`。
 - 限制/后续：workflow recovery、conflict/settings、privacy preview 等独立只读请求仍需审查生命周期；S7.2、S7.4、S7.5 验收继续未完成。
+- 完成 commit：`f3444b7`
+
+### 前端 TaskCenter workflow recovery 预检生命周期取消 — 小阶段 323
+- 状态：已完成（按 taskId 替换恢复预检，并在任务退出等待态或 TaskCenter 卸载时取消）
+- 日期：2026-10-09
+- 交付：TaskCenter 的首次加载、窗口 focus 刷新及手动刷新统一经过按 taskId 管理的 AbortController；同任务刷新会取消旧请求，任务等待键变化及组件卸载会取消活动请求。取消或过期响应不会更新恢复状态；移除一次性 queried 标记，等待任务进入后续等待周期时仍可重新预检。
+- 验证：新增 TaskCenter 用例驱动并发 focus 刷新、旧响应迟到和卸载，断言前一请求及活动请求分别被 abort 且迟到结果被忽略；定向用例通过；完整 `pnpm test` 通过（38 files、172 tests）；`pnpm build`、`pnpm frontend:boundaries` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；组件自动化测试覆盖替换与卸载两个请求生命周期边界。
+- 证据：`src/features/tasks/TaskCenter.tsx`、`tests/unit/task-center.test.tsx`。
+- 限制/后续：ConflictWindow、ConflictSuggestionPanel、workflow recovery 写操作中的二次预检，以及设置/隐私读取仍需按拥有 feature 的生命周期审查；S7.2、S7.4、S7.5 验收继续未完成。

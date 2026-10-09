@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { TaskSnapshotResponse } from "../../src/api/client";
 import { TaskCenter } from "../../src/features/tasks/TaskCenter";
 
 afterEach(cleanup);
+
+function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
+  let api: Record<string, unknown>;
+  api = { ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
+  return api as unknown as import("../../src/api/client").GitCrestApiClient;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
 
 const failedFetch: TaskSnapshotResponse = {
   taskId: "task-auth",
@@ -81,7 +93,7 @@ it("lists workflow conflicts and offers safe recovery actions", async () => {
     canContinue: false, canSkip: false, canAbort: true,
   };
   const resolvedPreflight = { ...preflight, conflictedPaths: [], canContinue: true };
-  const api = { preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValueOnce(preflight).mockResolvedValue(resolvedPreflight) } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const api = cancellableApi({ preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValueOnce(preflight).mockResolvedValue(resolvedPreflight) });
   const onRecoverWorkflow = vi.fn();
   const onOpenConflictWindow = vi.fn();
   render(<TaskCenter api={api} tasks={[waiting]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={onRecoverWorkflow} onOpenConflictWindow={onOpenConflictWindow} />);
@@ -104,7 +116,7 @@ it("offers rebase recovery and skip while a rebase waits for input", async () =>
     dirtyPaths: ["notes.txt"], omittedDirtyPathCount: 0, conflictedPaths: ["notes.txt"], omittedConflictedPathCount: 0,
     canContinue: false, canSkip: true, canAbort: true,
   };
-  const api = { preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValue(preview) } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const api = cancellableApi({ preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValue(preview) });
   const onRecoverWorkflow = vi.fn();
   render(<TaskCenter api={api} tasks={[waiting]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={onRecoverWorkflow} onOpenConflictWindow={vi.fn()} />);
   expect(await screen.findByText("notes.txt")).toBeTruthy();
@@ -120,10 +132,39 @@ it("offers conflict recovery for a pull-merge task", async () => {
     dirtyPaths: ["src/conflict.ts"], omittedDirtyPathCount: 0, conflictedPaths: ["src/conflict.ts"], omittedConflictedPathCount: 0,
     canContinue: false, canSkip: false, canAbort: true,
   };
-  const api = { preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValue(preview) } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const api = cancellableApi({ preflightRepositoryWorkflowRecovery: vi.fn().mockResolvedValue(preview) });
   const onOpenConflictWindow = vi.fn();
   render(<TaskCenter api={api} tasks={[waiting]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={onOpenConflictWindow} />);
   expect(await screen.findByText("src/conflict.ts")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Open conflict resolver" }));
   expect(onOpenConflictWindow).toHaveBeenCalledWith(waiting);
+});
+
+it("aborts replaced workflow recovery previews and cancels on unmount", async () => {
+  const waiting = { ...failedFetch, taskId: "task-merge", operation: "merge", status: "waitingForInput" as const, message: "Resolve conflicts" };
+  const first = deferred<Awaited<ReturnType<import("../../src/api/client").GitCrestApiClient["preflightRepositoryWorkflowRecovery"]>>>();
+  const second = deferred<Awaited<ReturnType<import("../../src/api/client").GitCrestApiClient["preflightRepositoryWorkflowRecovery"]>>>();
+  const signals: AbortSignal[] = [];
+  const preflight = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const api = cancellableApi({ preflightRepositoryWorkflowRecovery: preflight }, signals);
+  const { unmount } = render(<TaskCenter api={api} tasks={[waiting]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  await waitFor(() => expect(preflight).toHaveBeenCalledTimes(1));
+
+  fireEvent.focus(window);
+  await waitFor(() => expect(preflight).toHaveBeenCalledTimes(2));
+  expect(signals[0]?.aborted).toBe(true);
+  await act(async () => first.resolve({
+    repoId: "repo_fixture", taskId: waiting.taskId, operation: "merge", headOid: "a".repeat(40),
+    dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: ["stale.ts"], omittedConflictedPathCount: 0,
+    canContinue: false, canSkip: false, canAbort: true,
+  }));
+  expect(screen.queryByText("stale.ts")).toBeNull();
+
+  unmount();
+  expect(signals[1]?.aborted).toBe(true);
+  await act(async () => second.resolve({
+    repoId: "repo_fixture", taskId: waiting.taskId, operation: "merge", headOid: "a".repeat(40),
+    dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: ["late.ts"], omittedConflictedPathCount: 0,
+    canContinue: false, canSkip: false, canAbort: true,
+  }));
 });
