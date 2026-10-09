@@ -28,7 +28,6 @@ use crate::api::{
 };
 use crate::features::repositories::cloning::CloneService;
 use crate::features::repositories::repository::RepositoryManager;
-use crate::features::repositories::RepositoryTargetReader;
 use crate::features::tasks::TaskService;
 use crate::git::command::GitCommandService;
 
@@ -2569,7 +2568,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             ai_provider_settings: Arc::new(repositories.store()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
-            repository_targets: RepositoryTargetReader::new(repositories.store()),
+            repository_targets: repositories.target_reader(),
             status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             git_commands: GitCommandService::default(),

@@ -9,9 +9,12 @@ use sha2::{Digest, Sha256};
 use tokio::{fs, process::Command, task};
 
 use crate::{
-    domain::error::RepositoryError,
-    storage::{RepositoryStore, StoredRepository},
+    domain::{error::RepositoryError, repository::RepositoryRecord},
+    ports::repository::RepositoryCatalogPort,
 };
+
+#[cfg(test)]
+use crate::storage::RepositoryStore;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,26 +30,41 @@ pub struct Repository {
     pub availability: String,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct RepositoryManager {
-    store: RepositoryStore,
+    catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
+    #[cfg(test)]
+    test_store: Option<RepositoryStore>,
 }
 
 impl RepositoryManager {
+    pub(crate) fn with_catalog(catalog: std::sync::Arc<dyn RepositoryCatalogPort>) -> Self {
+        Self {
+            catalog,
+            #[cfg(test)]
+            test_store: None,
+        }
+    }
+
+    #[cfg(test)]
     pub fn store(&self) -> RepositoryStore {
-        self.store.clone()
+        self.test_store
+            .clone()
+            .expect("test repository manager was created with a store")
     }
 
+    #[cfg(test)]
     pub(crate) fn target_reader(&self) -> super::repository_target::RepositoryTargetReader {
-        super::repository_target::RepositoryTargetReader::new(self.store.clone())
+        super::repository_target::RepositoryTargetReader::new(self.catalog.clone())
     }
 
+    #[cfg(test)]
     pub async fn open_database(path: PathBuf) -> Result<Self, RepositoryError> {
         let store = task::spawn_blocking(move || RepositoryStore::open(&path))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?;
-        Ok(Self { store })
+        Ok(Self::with_test_store(store))
     }
 
     pub async fn open_path(&self, path: &str) -> Result<Repository, RepositoryError> {
@@ -91,8 +109,8 @@ impl RepositoryManager {
             availability: "available".into(),
         };
 
-        let store = self.store.clone();
-        task::spawn_blocking(move || store.save_opened(repository.into()).map(Repository::from))
+        let catalog = self.catalog.clone();
+        task::spawn_blocking(move || catalog.save_opened(repository.into()).map(Repository::from))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)
@@ -149,12 +167,13 @@ impl RepositoryManager {
     }
 
     pub async fn get(&self, repo_id: &str) -> Result<Option<Repository>, RepositoryError> {
-        let store = self.store.clone();
+        let catalog = self.catalog.clone();
         let repo_id = repo_id.to_owned();
-        let Some(repository) = task::spawn_blocking(move || store.mark_opened(&repo_id, now_ms()))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)?
+        let Some(repository) =
+            task::spawn_blocking(move || catalog.mark_opened(&repo_id, now_ms()))
+                .await
+                .map_err(|_| RepositoryError::StorageUnavailable)?
+                .map_err(|_| RepositoryError::StorageUnavailable)?
         else {
             return Ok(None);
         };
@@ -169,9 +188,9 @@ impl RepositoryManager {
     }
 
     pub async fn refresh_metadata(&self, repo_id: &str) -> Result<Repository, RepositoryError> {
-        let store = self.store.clone();
+        let catalog = self.catalog.clone();
         let repo_id = repo_id.to_owned();
-        let repository = task::spawn_blocking(move || store.get(&repo_id))
+        let repository = task::spawn_blocking(move || catalog.get(&repo_id))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?
@@ -180,8 +199,8 @@ impl RepositoryManager {
     }
 
     pub async fn list(&self) -> Result<Vec<Repository>, RepositoryError> {
-        let store = self.store.clone();
-        let stored_repositories = task::spawn_blocking(move || store.list())
+        let catalog = self.catalog.clone();
+        let stored_repositories = task::spawn_blocking(move || catalog.list())
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?;
@@ -205,9 +224,9 @@ impl RepositoryManager {
         repo_id: String,
         favorite: bool,
     ) -> Result<Option<Repository>, RepositoryError> {
-        let store = self.store.clone();
+        let catalog = self.catalog.clone();
         task::spawn_blocking(move || {
-            store
+            catalog
                 .set_favorite(&repo_id, favorite)
                 .map(|repository| repository.map(Repository::from))
         })
@@ -217,16 +236,33 @@ impl RepositoryManager {
     }
 
     pub async fn forget(&self, repo_id: String) -> Result<bool, RepositoryError> {
-        let store = self.store.clone();
-        task::spawn_blocking(move || store.forget(&repo_id))
+        let catalog = self.catalog.clone();
+        task::spawn_blocking(move || catalog.forget(&repo_id))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)
     }
 }
 
-impl From<StoredRepository> for Repository {
-    fn from(repository: StoredRepository) -> Self {
+#[cfg(test)]
+impl RepositoryManager {
+    fn with_test_store(store: RepositoryStore) -> Self {
+        Self {
+            catalog: std::sync::Arc::new(store.clone()),
+            test_store: Some(store),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Default for RepositoryManager {
+    fn default() -> Self {
+        Self::with_test_store(RepositoryStore::default())
+    }
+}
+
+impl From<RepositoryRecord> for Repository {
+    fn from(repository: RepositoryRecord) -> Self {
         Self {
             repo_id: repository.repo_id,
             path: repository.path,
@@ -241,7 +277,7 @@ impl From<StoredRepository> for Repository {
     }
 }
 
-impl From<Repository> for StoredRepository {
+impl From<Repository> for RepositoryRecord {
     fn from(repository: Repository) -> Self {
         Self {
             repo_id: repository.repo_id,

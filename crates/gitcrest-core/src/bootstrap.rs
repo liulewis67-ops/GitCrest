@@ -15,6 +15,7 @@ use crate::{
     git::command::GitCommandService,
     refresh,
     state::{AppState, EventBus},
+    storage::RepositoryStore,
 };
 
 #[derive(Serialize)]
@@ -60,18 +61,24 @@ fn run_git_askpass() -> Result<(), credentials::CredentialError> {
 
 async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::from_env()?;
-    let repositories = RepositoryManager::open_database(config.database_path)
+    let database_path = config.database_path;
+    let store = tokio::task::spawn_blocking(move || RepositoryStore::open(&database_path))
         .await
+        .map_err(|_| "Could not initialize the repository database")?
         .map_err(|_| "Could not initialize the repository database")?;
-    let repository_targets = repositories.target_reader();
+    let repository_catalog: Arc<dyn crate::ports::repository::RepositoryCatalogPort> =
+        Arc::new(store.clone());
+    let repositories = RepositoryManager::with_catalog(repository_catalog.clone());
+    let repository_targets =
+        crate::features::repositories::RepositoryTargetReader::new(repository_catalog);
     let git_commands = GitCommandService::default();
     let status = StatusService::with_reader(repository_targets.clone(), git_commands.clone());
     let task_status = status.clone();
-    let tasks = TaskService::with_store_and_status_invalidator(
-        Arc::new(repositories.store()),
-        move |repo_id| task_status.invalidate(repo_id),
-    )
-    .map_err(|_| "Could not recover background task history")?;
+    let tasks =
+        TaskService::with_store_and_status_invalidator(Arc::new(store.clone()), move |repo_id| {
+            task_status.invalidate(repo_id)
+        })
+        .map_err(|_| "Could not recover background task history")?;
     let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
     let events = EventBus::default();
     tokio::spawn(refresh::run(
@@ -83,11 +90,11 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         read_write_token: Arc::new(config.write_token),
         read_only_token: config.read_only_token.map(Arc::new),
         conflict_token: config.conflict_token.map(Arc::new),
-        shelf_store: Arc::new(repositories.store()),
-        undo_store: Arc::new(repositories.store()),
-        branch_favorites: Arc::new(repositories.store()),
-        ai_provider_settings: Arc::new(repositories.store()),
-        history_search_index: Arc::new(repositories.store()),
+        shelf_store: Arc::new(store.clone()),
+        undo_store: Arc::new(store.clone()),
+        branch_favorites: Arc::new(store.clone()),
+        ai_provider_settings: Arc::new(store.clone()),
+        history_search_index: Arc::new(store),
         repositories,
         repository_targets,
         status,

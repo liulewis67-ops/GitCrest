@@ -11,12 +11,14 @@ use serde::{Deserialize, Serialize};
 use crate::domain::{
     commit::CommitSearchEntry,
     diff::DiffScope,
+    repository::RepositoryRecord,
     shelf::{ShelfRecord, ShelfSnapshot},
     task::{TaskSnapshot, TaskStatus},
     undo::{UndoOperation, UndoRecord},
 };
 use crate::ports::branch_favorites::BranchFavoriteStorePort;
 use crate::ports::history::HistorySearchIndexPort;
+use crate::ports::repository::RepositoryCatalogPort;
 use crate::ports::settings::AiProviderSettingsPort;
 use crate::ports::shelves::ShelfStorePort;
 use crate::ports::tasks::TaskStorePort;
@@ -925,6 +927,57 @@ impl HistorySearchIndexPort for RepositoryStore {
     }
 }
 
+impl RepositoryCatalogPort for RepositoryStore {
+    fn save_opened(
+        &self,
+        repository: RepositoryRecord,
+    ) -> Result<RepositoryRecord, crate::domain::error::RepositoryError> {
+        RepositoryStore::save_opened(self, repository.into())
+            .map(Into::into)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn mark_opened(
+        &self,
+        repo_id: &str,
+        last_accessed_at: i64,
+    ) -> Result<Option<RepositoryRecord>, crate::domain::error::RepositoryError> {
+        RepositoryStore::mark_opened(self, repo_id, last_accessed_at)
+            .map(|repository| repository.map(Into::into))
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn get(
+        &self,
+        repo_id: &str,
+    ) -> Result<Option<RepositoryRecord>, crate::domain::error::RepositoryError> {
+        RepositoryStore::get(self, repo_id)
+            .map(|repository| repository.map(Into::into))
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn list(&self) -> Result<Vec<RepositoryRecord>, crate::domain::error::RepositoryError> {
+        RepositoryStore::list(self)
+            .map(|repositories| repositories.into_iter().map(Into::into).collect())
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn set_favorite(
+        &self,
+        repo_id: &str,
+        favorite: bool,
+    ) -> Result<Option<RepositoryRecord>, crate::domain::error::RepositoryError> {
+        RepositoryStore::set_favorite(self, repo_id, favorite)
+            .map(|repository| repository.map(Into::into))
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
+    fn forget(&self, repo_id: &str) -> Result<bool, crate::domain::error::RepositoryError> {
+        RepositoryStore::forget(self, repo_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+}
+
 impl TaskStorePort for RepositoryStore {
     fn list_task_snapshots(
         &self,
@@ -966,6 +1019,38 @@ fn task_status_label(status: TaskStatus) -> &'static str {
         TaskStatus::Succeeded => "succeeded",
         TaskStatus::Failed => "failed",
         TaskStatus::Cancelled => "cancelled",
+    }
+}
+
+impl From<StoredRepository> for RepositoryRecord {
+    fn from(repository: StoredRepository) -> Self {
+        Self {
+            repo_id: repository.repo_id,
+            path: repository.path,
+            head: repository.head,
+            branch: repository.branch,
+            detached: repository.detached,
+            state: repository.state,
+            is_favorite: repository.is_favorite,
+            last_accessed_at: repository.last_accessed_at,
+            availability: repository.availability,
+        }
+    }
+}
+
+impl From<RepositoryRecord> for StoredRepository {
+    fn from(repository: RepositoryRecord) -> Self {
+        Self {
+            repo_id: repository.repo_id,
+            path: repository.path,
+            head: repository.head,
+            branch: repository.branch,
+            detached: repository.detached,
+            state: repository.state,
+            is_favorite: repository.is_favorite,
+            last_accessed_at: repository.last_accessed_at,
+            availability: repository.availability,
+        }
     }
 }
 

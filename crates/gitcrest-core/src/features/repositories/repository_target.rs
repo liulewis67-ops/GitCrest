@@ -3,9 +3,9 @@ use std::path::PathBuf;
 use tokio::{fs, process::Command, task};
 
 use crate::{
-    domain::error::RepositoryError,
+    domain::{error::RepositoryError, repository::RepositoryRecord},
+    ports::repository::RepositoryCatalogPort,
     ports::repository::RepositoryPathPort,
-    storage::{RepositoryStore, StoredRepository},
 };
 
 #[derive(Clone, Debug)]
@@ -22,12 +22,12 @@ pub struct HistoryTarget {
 
 #[derive(Clone)]
 pub(crate) struct RepositoryTargetReader {
-    store: RepositoryStore,
+    catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
 }
 
 impl RepositoryTargetReader {
-    pub(crate) fn new(store: RepositoryStore) -> Self {
-        Self { store }
+    pub(crate) fn new(catalog: std::sync::Arc<dyn RepositoryCatalogPort>) -> Self {
+        Self { catalog }
     }
 
     pub(crate) async fn task_target(&self, repo_id: &str) -> Result<TaskTarget, RepositoryError> {
@@ -91,10 +91,10 @@ impl RepositoryTargetReader {
     async fn registered_repository(
         &self,
         repo_id: &str,
-    ) -> Result<StoredRepository, RepositoryError> {
-        let store = self.store.clone();
+    ) -> Result<RepositoryRecord, RepositoryError> {
+        let catalog = self.catalog.clone();
         let repo_id = repo_id.to_owned();
-        task::spawn_blocking(move || store.get(&repo_id))
+        task::spawn_blocking(move || catalog.get(&repo_id))
             .await
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?
@@ -103,7 +103,7 @@ impl RepositoryTargetReader {
 
     async fn existing_path(
         &self,
-        repository: &StoredRepository,
+        repository: &RepositoryRecord,
     ) -> Result<PathBuf, RepositoryError> {
         let path = PathBuf::from(&repository.path);
         fs::metadata(&path)
