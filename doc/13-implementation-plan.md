@@ -3804,3 +3804,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-search-index-streaming-stage339.json`。
 - 限制/后续：cold 搜索仍需 Git 扫描完整提交消息，解析临时字段数组的移除没有改变约 4.2 秒索引 ready 时间或达成 <200ms cold search；后续需寻找更早预热或索引构建优化，同时保持完整搜索、排序和分页语义。S7.2 桌面门槛、S7.4、S7.5 仍待完成。
 - 完成 commit：`86dcf2e`
+
+### S7.2 Git cat-file 批量冷搜索评估 — 小阶段 340
+- 状态：已完成（评估方案未采用；冷搜索目标仍未达成）
+- 日期：2026-10-09
+- 交付：在同一 100k commit fixture 上比较 `git log --grep` 与 `git rev-list --topo-order | git cat-file --batch` 后进程内扫描消息。两种查询的首 51 个匹配 OID 顺序一致，但 cat-file 全量扫描没有带来性能改善，故保留当前 Git CLI 路径。
+- 验证：每种查询/引擎各 3 次探索性计时。罕见查询 `benchmark commit 099999`：Git CLI 497–530ms、cat-file 1037–1213ms；常见查询 `benchmark commit`：Git CLI 78–79ms、cat-file 913–1050ms。命令级比较不报告 P95，不替代官方 20 轮 API 基准。
+- 证据：`doc/evidence/S7.2/api-win32-search-cat-file-stage340.json`。
+- 限制/后续：完整读取所有提交对象增加 I/O，且不能缓解索引缺失时的慢查询；继续寻找在提交前预热并保持结果完整、顺序和分页语义的方案。S7.2 桌面门槛、S7.4、S7.5 仍未完成。
+- 完成 commit：待提交
