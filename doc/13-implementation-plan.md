@@ -2834,3 +2834,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/time.rs`、`crates/gitcrest-core/src/domain/staging.rs`、staging/shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：workflows recovery 仍需读取 shelves feature 的记录查询 helper；该存储访问边界留待后续通过显式 port/service 收敛；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`b69151b`
+
+### ShelfRecord 读取通过 port 注入并移除 workflows 对 shelves handler 的依赖 — 小阶段 243
+- 状态：已完成（ShelfRecord 读取由显式 port 定义，SQLite RepositoryStore 实现）
+- 日期：2026-10-09
+- 交付：新增 `ShelfRecordReadPort`，签名仅使用领域 ShelfRecord 与 RepositoryError；SQLite RepositoryStore 实现该 port 并将存储错误映射为 StorageUnavailable。bootstrap 将 reader 注入 AppState，shelves handler 与 workflows recovery 通过 port 读取记录，删除 shelves handler 的跨 feature 公共 helper 与模块再导出。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 workflows recovery 无 shelves feature 依赖；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或真实 SQLite 故障场景；NotFound、存储错误和 join 错误仍按现有 handler 错误语义处理。
+- 证据：`crates/gitcrest-core/src/ports/shelves.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：该阶段只抽取 ShelfRecord 读取能力；RepositoryManager.store() 仍用于其他仓库/任务/undo/shelf 写入路径，后续按明确能力拆分进一步替代具体存储访问；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`946e269`
