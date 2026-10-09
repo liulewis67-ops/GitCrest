@@ -2309,3 +2309,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：需要 Linux Xvfb runner 实际启动 AppImage 并证明 sidecar shutdown；macOS DMG smoke 也待 macOS runner 验证。S7.4 整体保持进行中。
 - 证据：`scripts/packaged-smoke.mjs`、`.github/workflows/ci.yml` 中三平台 package-smoke matrix、`tests/unit/update-config.test.ts`。
 - 实施 commit：`f9ba486`
+
+### changes feature discard selection dialog session 迁入 staging model — 小阶段 188
+- 状态：已完成（选中变更丢弃确认的选择快照与关闭状态由 changes model 管理）
+- 日期：2026-10-09
+- 交付：`useStagingOperations` 管理 discard selection 的 path/revision/hunks 快照、仅接受 working-tree document 的打开请求、清除选择及 task 提交成功后的消费；App 移除本地状态，连接 SplitDiff 选择事件并使用 model 输出渲染 DiscardChangesDialog。
+- 验证：`pnpm build`（TypeScript 检查及 main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：TaskCenter 共用错误文本仍由 App 持有并传入 changes model/dialog；S7.2/S7.4/S7.5 继续按实施计划验收。
+- 证据：`src/features/changes/model/use-staging-operations.ts`、`src/features/changes/index.ts`、`src/app/App.tsx`、`src/features/diff/DiscardChangesDialog.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`dbd8ccc`
