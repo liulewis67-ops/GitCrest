@@ -4664,3 +4664,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/lib.rs`、`crates/gitcrest-core/src/storage/mod.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：连接配置与 migration 编排仍在 `storage/mod.rs`；下一小阶段拆迁移职责到规范约定的 `storage/migrations.rs`。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段目录调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 拆分 SQLite migration 编排 — 小阶段 428
+- 状态：已完成（数据库 schema 版本检查与迁移顺序归入 `storage/migrations.rs`）
+- 日期：2026-10-10
+- 交付：将当前 schema 版本校验及 1–14 号 migration 的顺序执行从 `storage/mod.rs` 移至 `storage/migrations.rs`；in-memory/default 与文件数据库打开流程通过同一 migration 入口升级，SQL 文件路径、版本号和条件保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认两条数据库初始化路径都调用 `migrations::migrate`，迁移脚本相对路径及 schema 上限 14 保持原值。
+- 证据：`crates/gitcrest-core/src/storage/mod.rs`、`crates/gitcrest-core/src/storage/migrations.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：数据库连接参数和双连接创建仍在 `storage/mod.rs`；是否拆为 `database.rs` 需结合实际连接生命周期职责继续收敛。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。

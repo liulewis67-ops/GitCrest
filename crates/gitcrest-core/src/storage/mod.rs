@@ -14,6 +14,7 @@ use crate::domain::{commit::CommitSearchEntry, diff::DiffScope};
 
 mod branch_favorites;
 mod history_index;
+mod migrations;
 mod repositories;
 mod settings;
 mod shelves;
@@ -47,7 +48,7 @@ impl Default for RepositoryStore {
         connection
             .pragma_update(None, "foreign_keys", "ON")
             .expect("in-memory foreign keys enabled");
-        migrate(&connection).expect("in-memory repository schema migrates");
+        migrations::migrate(&connection).expect("in-memory repository schema migrates");
         let connection = Arc::new(Mutex::new(connection));
         Self {
             connection: Arc::clone(&connection),
@@ -75,7 +76,7 @@ impl RepositoryStore {
         connection
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(|error| error.to_string())?;
-        migrate(&connection).map_err(|error| error.to_string())?;
+        migrations::migrate(&connection).map_err(|error| error.to_string())?;
         let history_index_connection = Connection::open(path).map_err(|error| error.to_string())?;
         history_index_connection
             .busy_timeout(std::time::Duration::from_secs(2))
@@ -94,78 +95,6 @@ impl RepositoryStore {
             history_index_builds: Arc::new(Mutex::new(HashSet::new())),
         })
     }
-}
-
-fn migrate(connection: &Connection) -> rusqlite::Result<()> {
-    let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 14 {
-        return Err(rusqlite::Error::InvalidQuery);
-    }
-    if version < 1 {
-        connection.execute_batch(include_str!("../../migrations/0001_repositories.sql"))?;
-        connection.pragma_update(None, "user_version", 1)?;
-    }
-    if version < 2 {
-        connection.execute_batch(include_str!("../../migrations/0002_tasks.sql"))?;
-        connection.pragma_update(None, "user_version", 2)?;
-    }
-    if version < 3 {
-        connection.execute_batch(include_str!("../../migrations/0003_branch_favorites.sql"))?;
-        connection.pragma_update(None, "user_version", 3)?;
-    }
-    if version < 4 {
-        connection.execute_batch(include_str!("../../migrations/0004_shelves.sql"))?;
-        connection.pragma_update(None, "user_version", 4)?;
-    }
-    if version < 5 {
-        connection.execute_batch(include_str!("../../migrations/0005_shelf_scope.sql"))?;
-        connection.pragma_update(None, "user_version", 5)?;
-    }
-    if version < 6 {
-        connection.execute_batch(include_str!(
-            "../../migrations/0006_ai_provider_settings.sql"
-        ))?;
-        connection.pragma_update(None, "user_version", 6)?;
-    }
-    if version < 7 {
-        connection.execute_batch(include_str!("../../migrations/0007_history_search.sql"))?;
-        connection.pragma_update(None, "user_version", 7)?;
-    }
-    if version < 8 {
-        connection.execute_batch(include_str!("../../migrations/0008_staging_undo.sql"))?;
-        connection.pragma_update(None, "user_version", 8)?;
-    }
-    if version < 9 {
-        connection.execute_batch(include_str!("../../migrations/0009_shelf_apply_undo.sql"))?;
-        connection.pragma_update(None, "user_version", 9)?;
-    }
-    if version < 10 {
-        connection.execute_batch(include_str!("../../migrations/0010_undo_shelf_restore.sql"))?;
-        connection.pragma_update(None, "user_version", 10)?;
-    }
-    if version < 11 {
-        connection.execute_batch(include_str!("../../migrations/0011_undo_shelf_patch.sql"))?;
-        connection.pragma_update(None, "user_version", 11)?;
-    }
-    if version < 12 {
-        connection.execute_batch(include_str!(
-            "../../migrations/0012_history_search_slim_cache.sql"
-        ))?;
-        connection.pragma_update(None, "user_version", 12)?;
-    }
-    if version < 13 {
-        connection.execute_batch(include_str!(
-            "../../migrations/0013_history_search_drop_oid_unique.sql"
-        ))?;
-        connection.pragma_update(None, "user_version", 13)?;
-    }
-    if version < 14 {
-        connection.execute_batch(include_str!(
-            "../../migrations/0014_history_search_rowid_order.sql"
-        ))?;
-        connection.pragma_update(None, "user_version", 14)?;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
