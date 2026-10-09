@@ -3785,3 +3785,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/evidence/S7.2/api-win32-search-index-fingerprint-stage337.json`。
 - 限制/后续：warm 搜索已达标且约快 6 倍，但 cold search 仍需 Git 扫描 100k 条消息，P95 约 621ms；需设计冷索引未就绪时保持正确结果、分页和用户反馈的查询策略。S7.2 桌面内存/帧率、S7.4 发布更新与 S7.5 跨平台/完整审计仍未完成。
 - 完成 commit：`ffd7c1b`
+
+### S7.2 libgit2 Revwalk 冷搜索方案评估 — 小阶段 338
+- 状态：已完成（比较原型确认 Revwalk 不适合作为当前搜索替代；冷搜索目标仍未达成）
+- 日期：2026-10-09
+- 交付：在 100k commit fixture 上将 Git CLI `log --grep` 与 libgit2 `Revwalk(TOPOLOGICAL | TIME)` 对比；两种查询的首 51 个 OID 顺序一致，但 Revwalk 需要逐条解压并检查消息，性能显著更差，因此不替换现有搜索路径。实验原型已移除。
+- 验证：5 次探索性计时。罕见查询 Git CLI 502–552ms、Revwalk 805–969ms；常见查询 Git CLI 75–82ms、Revwalk 683–779ms。仅为方向评估，不报告 P95，不替代正式 API 基准。
+- 证据：`doc/evidence/S7.2/api-win32-search-revwalk-stage338.json`。
+- 限制/后续：冷索引查询仍受完整 Git 消息扫描限制，最近正式 API P95 621.200ms；继续寻找利用索引或分批返回、且不改变完整搜索与分页契约的方案。S7.2 桌面门槛、S7.4 与 S7.5 仍待完成。
+- 完成 commit：待提交

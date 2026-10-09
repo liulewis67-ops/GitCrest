@@ -1,0 +1,36 @@
+{
+  "generatedAt": "2026-10-09",
+  "purpose": "Exploratory comparison of Git CLI message search with an in-process libgit2 Revwalk. This is not an official 20-round API acceptance benchmark.",
+  "host": {
+    "os": "Windows 11 10.0.26300",
+    "git": "git version 2.37.3.windows.1",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics"
+  },
+  "fixture": {
+    "commits": 100000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-20261009-continuation"
+  },
+  "method": {
+    "samplesPerEngineAndQuery": 5,
+    "gitCli": "git log --format=%H --grep=<query> --fixed-strings --regexp-ignore-case --max-count=51 --branches --remotes",
+    "libgit2": "Revwalk with TOPOLOGICAL | TIME; pushes HEAD and local/remote refs; case-insensitive message substring; stops after 51 matches",
+    "orderCheck": "Each libgit2 query sample returned the same first 51 OIDs as the Git CLI sample."
+  },
+  "results": [
+    {
+      "query": "benchmark commit 099999",
+      "gitCliMs": [552, 502, 505, 550, 520],
+      "libgit2Ms": [879, 969, 825, 805, 847]
+    },
+    {
+      "query": "benchmark commit",
+      "gitCliMs": [82, 75, 75, 75, 77],
+      "libgit2Ms": [779, 708, 721, 683, 721]
+    }
+  ],
+  "conclusion": "The libgit2 Revwalk prototype preserved result order but was slower for both queries, so it was not adopted.",
+  "limitations": [
+    "Five exploratory samples per case do not establish P95 or a stable performance distribution.",
+    "The Rust prototype was temporary and removed after the experiment."
+  ]
+}
