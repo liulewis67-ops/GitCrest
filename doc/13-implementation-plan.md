@@ -2146,3 +2146,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：仓库 tab 激活/关闭和 workspace session 恢复仍在 App；后续继续迁入 repositories feature session actions。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-repository-opening.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`340f1d6`
+
+### repositories feature workspace session 动作迁入 model — 小阶段 172
+- 状态：已完成（仓库激活、workspace mode 与文件 Diff 选择的 session 更新由 repositories model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useWorkspaceSessionActions`，统一实现 repository tab 激活与 HEAD commit 默认值、workspace mode 切换、working-tree/index diff 选择和 commit diff 选择的 session 更新；App 保留当前 repository/page UI 状态，并在 OID/Diff scope 验证后调用 feature action。经 repositories barrel 暴露。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：repository tab 关闭、viewport 恢复及完整 session 持久化仍由 App 和现有 hooks 协作；后续继续完善 repositories feature 的 session 生命周期。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-workspace-session-actions.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`61f284a`
