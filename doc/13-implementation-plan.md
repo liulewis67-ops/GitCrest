@@ -128,7 +128,7 @@
 
 ## 12. 统一性能与安全验收口径
 
-S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率记录持续 30 秒的 P5，内存取稳定窗口的峰值。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。
+S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率取持续 30 秒的 compositor presented-frame P5（不能只用 requestAnimationFrame 回调率），内存取不启用 trace 的稳定窗口峰值。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。
 
 从第一个写操作开始适用的安全门槛：renderer 不得有 Node/shell 权限；只允许通过受控 API 操作已注册 repoId；同仓写操作串行；高风险操作由后端做预检与确认票据校验；凭据存 Keychain，token 仅在当前会话内存；日志脱敏；Diff 窗口只读，冲突窗口只可写冲突文件。相关阶段未满足这些门槛时不能标已完成。
 
@@ -4010,7 +4010,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：`node --check` 与 `git diff --check` 通过；`pnpm electron:build`、`pnpm electron:package` 成功。Windows 11 / Ryzen 7 5800H / Electron 37 / 同一 100k commit 与 1k 行 Diff fixture，正式打包 Release，4 个隔离批次共 20 轮：冷启动 P50/P95 1,055.976/1,253.859ms；100k 历史首帧 P50/P95 390.781/421.659ms；30 秒滚动 P5 的跨轮 P5/P50/P95 为 55.249/55.249/55.249fps；空闲进程树工作集 38 个窗口样本峰值 402,198,528 bytes，打开仓库后 41 个窗口样本峰值 444,047,360 bytes；滚动工作集峰值分布 P50/P95 492,482,560/502,333,440 bytes；NSIS 安装包 108,778,287 bytes（103.74 MiB）。完整汇总及 4 份批次报告见证据路径。
 - 手工验证：未操作 GUI；每轮使用独立临时用户目录，通过发行版可执行文件打开同一 fixture；20 个启动、首帧和 30 秒滚动样本均成功完成。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-benchmark-batches.mjs`、`doc/evidence/S7.2/desktop-win32-post-cache-stage360-batched-20261010.json` 及其 `.batches/batch-01.json` 至 `batch-04.json`；发行包单次内存进程树明细 `doc/evidence/S7.2/desktop-win32-release-memory-stage360-rolefix-20261010.json`。
-- 限制/后续：冷启动 P95、100k 首帧 P95 和安装包体积达到目标；空闲内存约 402MB 超过 <250MB，滚动工作集 P95 约 502MB 略高于 <500MB，滚动 P5 约 55.25fps 低于 ≥60fps。阶段 359 记录的冷搜索等待 P95 约 2.27s；阶段 368 只复测索引就绪后的查询（P95 14.275ms），冷索引端到端等待尚未按 20 轮重测。S7.2 保持待验收；S7.4、S7.5 仍待完成。
+- 限制/后续：冷启动 P95、100k 首帧 P95 和安装包体积达到目标；空闲内存约 402MB 超过 <250MB，滚动工作集 P95 约 502MB 略高于 <500MB，compositor presented-frame 滚动 P5 为 55.276fps，低于 ≥60fps。阶段 359 记录的冷搜索等待 P95 约 2.27s；阶段 368 只复测索引就绪后的查询（P95 14.275ms），冷索引端到端等待尚未按 20 轮重测。S7.2 保持待验收；S7.4、S7.5 仍待完成。
 - 完成 commit：`b85938f perf: benchmark packaged desktop release`
 
 ### S7.2 隔离滚动帧率来源 — 小阶段 361
@@ -4096,3 +4096,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`scripts/performance/desktop-benchmark.mjs`、`doc/evidence/S7.2/desktop-win32-frame-limit-diagnostic-stage369-20261010.json`、`doc/evidence/S7.2/desktop-win32-frame-limit-scroll-stage369-20261010.json`、`doc/evidence/S7.2/desktop-win32-in-process-gpu-diagnostic-stage369-20261010.json`。
 - 限制/后续：帧率限制参数会在空闲状态继续受约 55fps 影响，并使工作集超标；in-process GPU 造成历史滚动掉到约 30fps。S7.2 仍待进一步调查 Windows/Electron 默认帧调度和内存基线；S7.4/S7.5 保持待验收。
 - 实施 commit：`c17b1a1`。
+
+### S7.2 使用 compositor 呈现反馈复测滚动帧率 — 小阶段 370
+- 状态：已完成（建立 presented-frame 采样并完成 20 轮；实际帧率仍低于目标）
+- 日期：2026-10-10
+- 交付：发行版滚动基准和帧诊断通过 CDP trace 的 `benchmark,viz:Display::FrameDisplayed` 呈现时间戳计算帧间隔与 P5；同时保留 RAF 指标作为对照。默认配置的 presented P5 与 RAF 结果接近。追踪会影响内存读数，报告明确将同轮 `workMemoryPeakBytes` 限定为诊断值，内存门槛须使用无 trace 的独立测量。`--in-process-gpu --disable-frame-rate-limit` 组合候选也完成一轮 30 秒内存检查，但不作为产品配置。
+- 验证：Windows 11 / Ryzen 7 5800H / Electron 37 / 60Hz 显示器 / 打包 Release / 同一 100k fixture，20 轮各持续滚动 30 秒。compositor presented-frame P5 跨轮 P5/P50/P95 为 55.276/55.325/55.356fps（目标 ≥60fps，未达标）；RAF P5 为 55.249fps。单轮诊断 presented P5 为 55.310fps。组合参数一轮 RAF 滚动 P5 212.77fps，但进程树工作集峰值 539,082,752 bytes（目标 <500MB）；未达到组合门槛。脚本 `node --check` 与 `git diff --check` 通过。
+- 手工验证：未操作 GUI；使用打包版可执行文件、独立临时用户 profile 和自动化滚动完成采样。
+- 证据：`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-presented-scroll-stage370-20261010.json`、`doc/evidence/S7.2/desktop-win32-presented-frame-diagnostic-stage370-20261010.json`、`doc/evidence/S7.2/desktop-win32-in-process-unlimited-scroll-stage370-20261010.json`。
+- 限制/后续：本阶段证实默认发行版实际呈现帧率稳定在约 55.3fps，仍不满足 ≥60fps；trace 期间的进程树内存数据不能用于内存验收，已保留阶段360无 trace 的正式数据。S7.2 内存和帧率继续待验收；S7.4/S7.5 继续待完成。
+- 实施 commit：`945c159`。
