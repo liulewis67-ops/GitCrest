@@ -1,11 +1,11 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
-import { createServer as createHttpsServer } from "node:https";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
+import { createAuthenticationFailureServer, type AuthenticationFailureServer } from "../fixtures/authentication-server";
 import { createTempGitRepository } from "../fixtures/temp-repo";
 
 const execFileAsync = promisify(execFile);
@@ -365,45 +365,18 @@ describe("remote sync E2E", () => {
     const fixture = await createTempGitRepository();
     const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-fetch-auth-app-data-"));
     const gitConfigPath = resolve(appDataPath, "gitconfig");
-    const keyPath = resolve(appDataPath, "localhost-key.pem");
-    const certificatePath = resolve(appDataPath, "localhost-cert.pem");
-    let server: ReturnType<typeof createHttpsServer> | undefined;
+    let authenticationServer: AuthenticationFailureServer | undefined;
     let app: ElectronApplication | undefined;
-    let serverListening = false;
 
     try {
-      const gitExecPath = (await execFileAsync("git", ["--exec-path"])).stdout.trim();
-      const opensslPath = resolve(gitExecPath, "..", "..", "bin", "openssl.exe");
-      await execFileAsync(opensslPath, [
-        "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", keyPath,
-        "-out", certificatePath, "-days", "1", "-subj", "/CN=127.0.0.1",
-        "-addext", "subjectAltName=IP:127.0.0.1",
-      ]);
-      server = createHttpsServer({ key: await readFile(keyPath), cert: await readFile(certificatePath) }, (_request, response) => {
-        response.writeHead(401, {
-          "Content-Type": "text/plain",
-          "WWW-Authenticate": 'Basic realm="GitCrest E2E"',
-        });
-        response.end("authentication required\n");
-      });
-
+      authenticationServer = await createAuthenticationFailureServer(appDataPath);
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
       await writeFile(resolve(fixture.path, "src/auth-recovery.ts"), "export const base = true;\n");
       await execFileAsync("git", ["-C", fixture.path, "add", "src/auth-recovery.ts"]);
       await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add auth recovery fixture"]);
       const baselineHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
 
-      await new Promise<void>((resolveListen, rejectListen) => {
-        if (!server) throw new Error("Authentication fixture server was not created");
-        server.once("error", rejectListen);
-        server.listen(0, "127.0.0.1", resolveListen);
-      });
-      serverListening = true;
-      const address = server?.address();
-      if (!address || typeof address === "string") throw new Error("Authentication fixture did not bind a TCP port");
-      const remoteUrl = `https://127.0.0.1:${address.port}/repository.git`;
-      const credentialHost = `127.0.0.1:${address.port}`;
-      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", remoteUrl]);
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", authenticationServer.remoteUrl]);
       await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
 
       app = await electron.launch({
@@ -412,7 +385,7 @@ describe("remote sync E2E", () => {
           ...process.env,
           GIT_CONFIG_GLOBAL: gitConfigPath,
           GIT_CONFIG_NOSYSTEM: "1",
-          GIT_SSL_CAINFO: certificatePath,
+          GIT_SSL_CAINFO: authenticationServer.certificatePath,
           ELECTRON_RENDERER_URL: "",
           GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite"),
         },
@@ -454,7 +427,7 @@ describe("remote sync E2E", () => {
       const remoteDialog = window.getByRole("dialog", { name: "Manage remotes" });
       await remoteDialog.getByRole("heading", { name: "HTTPS credentials" }).waitFor();
       try {
-        await remoteDialog.getByRole("article", { name: `HTTPS credential for ${credentialHost}` }).waitFor({ timeout: 5_000 });
+        await remoteDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` }).waitFor({ timeout: 5_000 });
       } catch {
         throw new Error(`Expected the failed remote host credential card; credential section showed: ${await remoteDialog.locator(".credentialSection").innerText()}`);
       }
@@ -464,8 +437,7 @@ describe("remote sync E2E", () => {
     } finally {
       await app?.close();
       app = undefined;
-      const serverToClose = server;
-      if (serverListening && serverToClose) await new Promise<void>((resolveClose) => serverToClose.close(() => resolveClose()));
+      await authenticationServer?.close();
       await fixture.cleanup();
       await rm(appDataPath, { recursive: true, force: true });
     }

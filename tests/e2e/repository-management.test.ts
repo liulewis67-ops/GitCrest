@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { promisify } from "node:util";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { expect, it } from "vitest";
+import { createAuthenticationFailureServer, type AuthenticationFailureServer } from "../fixtures/authentication-server";
 import { createTempGitRepository } from "../fixtures/temp-repo";
 
 const execFileAsync = promisify(execFile);
@@ -338,6 +339,62 @@ it("retries a failed clone from Task Center after the remote becomes available",
     await app?.close();
     await source.cleanup();
     await rm(remoteRoot, { recursive: true, force: true });
+    await rm(cloneParent, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 60_000);
+
+it("opens HTTPS credentials when retrying a clone that failed authentication", async () => {
+  const cloneParent = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-auth-parent-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-auth-app-data-"));
+  const gitConfigPath = resolve(appDataPath, "gitconfig");
+  let authenticationServer: AuthenticationFailureServer | undefined;
+  let app: ElectronApplication | undefined;
+
+  try {
+    authenticationServer = await createAuthenticationFailureServer(appDataPath);
+    await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
+    app = await electron.launch({
+      args: ["."],
+      env: {
+        ...process.env,
+        GIT_CONFIG_GLOBAL: gitConfigPath,
+        GIT_CONFIG_NOSYSTEM: "1",
+        GIT_SSL_CAINFO: authenticationServer.certificatePath,
+        ELECTRON_RENDERER_URL: "",
+        GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite"),
+      },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await app.evaluate(({ dialog }, destination) => {
+      dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
+    }, cloneParent);
+
+    await window.getByRole("button", { name: "Clone repository", exact: true }).click();
+    const cloneDialog = window.getByRole("dialog", { name: "Clone repository" });
+    await cloneDialog.getByRole("textbox", { name: "Remote URL" }).fill(authenticationServer.remoteUrl);
+    await cloneDialog.getByRole("button", { name: "Choose folder" }).click();
+    await cloneDialog.getByText(cloneParent, { exact: true }).waitFor();
+    await cloneDialog.getByRole("textbox", { name: "Folder name" }).fill("private-project");
+    await cloneDialog.getByRole("button", { name: "Start clone" }).click();
+
+    const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+    const cloneTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).last();
+    await cloneTask.waitFor({ state: "visible" });
+    await cloneTask.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
+    await cloneTask.getByText("authentication:", { exact: false }).waitFor();
+    await cloneTask.getByRole("button", { name: "Retry clone" }).click();
+
+    const retryDialog = window.getByRole("dialog", { name: "Clone repository" });
+    expect(await retryDialog.getByRole("textbox", { name: "Remote URL" }).inputValue()).toBe(authenticationServer.remoteUrl);
+    expect(await retryDialog.getByRole("textbox", { name: "Folder name" }).inputValue()).toBe("private-project");
+    expect(await retryDialog.getByRole("button", { name: "Start clone" }).isEnabled()).toBe(true);
+    await retryDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` }).waitFor();
+  } finally {
+    await app?.close();
+    await authenticationServer?.close();
     await rm(cloneParent, { recursive: true, force: true });
     await rm(appDataPath, { recursive: true, force: true });
   }

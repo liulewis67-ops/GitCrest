@@ -3354,3 +3354,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：未保存真实凭据或执行修复后的成功 Fetch；验证目标是认证失败到凭据修复 UI 的路由及失败不改仓库状态。S7.5 仍保持进行中。
 - 完成 commit：`f29a848`
+
+### P0 Clone 认证失败后凭据修复入口 E2E — 小阶段 295
+- 状态：已完成（Clone 因 HTTPS 认证失败后，重试表单显示同一主机的凭据编辑器）
+- 日期：2026-10-09
+- 交付：将本机 HTTPS 401 fixture 抽到 `tests/fixtures/authentication-server.ts`，复用于 Fetch/Clone。新增 Clone 认证失败 E2E，核对 task 错误类别、Task Center Retry clone 打开保留 remote URL 和目录名的对话框、目标路径仍可提交，且凭据编辑器对应失败 remote 的 HTTPS 主机。没有保存系统凭据或再次执行 Clone。
+- 验证：两个认证恢复定向 E2E 通过；`pnpm build` 通过；Windows 完整 `pnpm test:e2e` 通过（6 files、26 tests）；`git diff --check` 通过。首次完整 E2E 有一个键盘工作流用例因 15 秒内未连接 sidecar 失败；该用例单独重跑通过，完整套件重跑通过。
+- 手工验证：未执行 GUI 手工操作；Playwright 验证真实 HTTPS 401、clone task 状态、重试表单保留值和凭据 host。
+- 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/repository-management.test.ts`、`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：未保存真实凭据或验证更新凭据后的 Clone 成功；当前确认失败路径可到达正确凭据编辑器。S7.5 仍保持进行中。
+- 完成 commit：随本条阶段记录提交。

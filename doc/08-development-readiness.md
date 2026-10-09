@@ -137,7 +137,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 |---|---|---|---|
 | 打开仓库 | `04-user-flows.md` | 是 | `tests/e2e/desktop.test.ts`、`tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/repository-management.test.ts`（非 Git 目录、选择后消失的路径及 Windows ACL 拒绝均显示明确错误且不进入工作区） |
 | 初始化仓库 | `02-prd.md` | 是 | `tests/e2e/repository-management.test.ts`（成功初始化并保留文件；取消选择不改动项目；Git template 失败后保留文件且不留下 `.git`） |
-| 克隆仓库 | `02-prd.md` | 是 | `tests/e2e/repository-management.test.ts`（HTTPS 入口、隔离本地 remote、失败后从 Task Center 重试、成功后自动打开） |
+| 克隆仓库 | `02-prd.md` | 是 | `tests/e2e/repository-management.test.ts`（HTTPS 入口、隔离本地 remote、remote 恢复后从 Task Center 重试、认证失败后重试并显示对应 HTTPS 凭据编辑器、成功后自动打开） |
 | 基础提交 | `02-prd.md`、`04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
 | 查看历史 | `03-information-architecture.md`、`05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
 | Diff 浏览 | `05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
