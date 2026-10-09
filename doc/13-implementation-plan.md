@@ -2507,3 +2507,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：本阶段只迁移规则归属，敏感文件识别仍是名称启发式提醒，不能替代用户审查或内容扫描；App 仍承载其他 workspace 状态编排。S7.2、S7.4、S7.5 继续待验收。
 - 证据：`src/features/commits/model/sensitive-staged-paths.ts`、`src/features/commits/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`ce57d40`
+
+### repositories feature 仓库请求代次生命周期迁入 model — 小阶段 210
+- 状态：已完成（仓库关闭、并发请求及失效代次的生命周期由 repositories model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useRepositoryCacheLifecycle`，集中维护每仓库缓存代次与进行中请求计数，提供请求开始/结束、代次读取和失效动作；App 将 status、refs 与 remote mutation 请求都接入该 hook，关闭仓库时仍清除各 feature 快照并使迟到响应失效。
+- 验证：`pnpm build` 通过，包含应用与测试 TypeScript 检查及 Electron main/preload/renderer production build；保留 web-tree-sitter `eval` 构建警告。`git diff --check` 通过。
+- 限制/后续：status/refs 快照清理仍由 App 在仓库 tab 关闭时调用相应 feature 清理入口；App 其余 session 恢复和页面编排仍待按职责收敛。S7.2、S7.4、S7.5 继续待验收。
+- 证据：`src/features/repositories/model/use-repository-cache-lifecycle.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、5 节。
+- 实施 commit：`afc15c5`
