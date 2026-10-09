@@ -168,8 +168,10 @@ impl RepositoryStore {
         history_index_connection
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(|error| error.to_string())?;
+        // This connection only writes rebuildable search cache data. Keep the
+        // durable application records on the primary FULL-synchronous connection.
         history_index_connection
-            .pragma_update(None, "synchronous", "FULL")
+            .pragma_update(None, "synchronous", "NORMAL")
             .map_err(|error| error.to_string())?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
@@ -1521,6 +1523,34 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let store = RepositoryStore::open(&database).unwrap();
+        let main_synchronous = store
+            .connection
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA synchronous", [], |row| row.get::<_, i64>(0))
+            .unwrap();
+        let history_synchronous = store
+            .history_index_connection()
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA synchronous", [], |row| row.get::<_, i64>(0))
+            .unwrap();
+        let main_journal_mode = store
+            .connection
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))
+            .unwrap();
+        let history_journal_mode = store
+            .history_index_connection()
+            .lock()
+            .unwrap()
+            .query_row("PRAGMA journal_mode", [], |row| row.get::<_, String>(0))
+            .unwrap();
+        assert_eq!(main_synchronous, 2, "application records keep FULL sync");
+        assert_eq!(history_synchronous, 1, "rebuildable index uses NORMAL sync");
+        assert_eq!(main_journal_mode, "wal");
+        assert_eq!(history_journal_mode, "wal");
         store
             .save_opened(repository("repo-1", "/repo/1", 1))
             .unwrap();

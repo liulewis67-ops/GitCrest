@@ -3923,3 +3923,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-bulk-inserts-stage351.json`、`doc/evidence/S7.2/api-win32-cold-bulk-inserts-borrowed-stage351-20261009.json`、`doc/evidence/S7.2/api-win32-cold-bulk-index-rebuild-stage351-20261009.json`。
 - 限制/后续：本阶段未缩短冷索引构建；单行预编译写入仍是当前已测的较快实现，下一步需从减少数据装载/持久化量或改变索引构建时机寻找方案。首次 pending 响应已低于 200ms，但完整冷搜索仍约 5–6 秒；S7.2 桌面内存/帧率等门槛、S7.4 和 S7.5 仍待验收。
 - 完成 commit：`6e6e19d perf: evaluate batched history index writes`
+
+### S7.2 可重建历史搜索缓存使用 WAL NORMAL 同步 — 小阶段 352
+- 状态：已完成（历史索引写连接使用 NORMAL；应用数据主连接继续 FULL；完整冷搜索仍未达标）
+- 日期：2026-10-09
+- 交付：文件库的历史索引专用 SQLite 连接改用 `synchronous=NORMAL`；主连接仍为 `FULL`，两连接使用 WAL。索引文档、FTS postings 与 fingerprint 在同一事务提交，发生系统断电后可回滚最近的缓存事务并在 fingerprint 缺失/不匹配时重建。该取舍只作用于可重建索引，不改变仓库、任务、设置等应用数据的持久性策略。
+- 验证：存储测试断言主/索引连接各自的 `PRAGMA synchronous` 为 FULL/NORMAL 且 `journal_mode` 均为 WAL；定向用例、`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings`、Release build 和完整 `pnpm check` 通过（Vitest 39 files / 188 tests、Rust 142 tests、Electron E2E 6 files / 29 tests）。Windows 11 10.0.26300、Ryzen 7 5800H、Git 2.37.3、同一 100k fixture，NORMAL 组 20 轮：完整冷搜索 P50/P95 4,508/4,549ms，索引事务提交 P50/P95 479/549ms；独立 FULL 对照 20 轮分别为 5,072/6,733ms 与 531/611ms。FULL 组存在 7.0s 最大值；批次非交错，整段冷搜索差异仅作方向性参考。SQLite 官方文档确认 WAL + NORMAL 保持一致性，但断电后最近一次提交可能回滚；应用进程崩溃仍可恢复。[SQLite synchronous pragma](https://www.sqlite.org/pragma.html#pragma_synchronous)、[WAL](https://www.sqlite.org/wal.html)。
+- 手工验证：未操作 GUI；基准每轮使用隔离 sidecar/SQLite，全部返回期望的目标提交；fixture refs 和工作树未改动。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-cold-index-sync-normal-stage352-20261009.json`、`doc/evidence/S7.2/api-win32-cold-index-sync-full-control-stage352-20261009.json`。
+- 限制/后续：该调整降低了索引事务提交时间，但索引构建和完整冷搜索仍需数秒，远超 <200ms 目标；100k 首屏、桌面内存/帧率、S7.4 和 S7.5 仍待验收。下一步继续减少冷索引需要装载和写入的数据量，并维持完整搜索、顺序、分页及断电后可重建语义。
+- 完成 commit：待补记
