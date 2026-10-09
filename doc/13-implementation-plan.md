@@ -3104,3 +3104,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 3、4、8、14 节。
 - 限制/后续：取消恢复中的 Git 操作编排仍在 GitCommandService；后续继续拆分 feature workflow 与 Git 恢复命令端口，并补充对应故障场景验收；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`a31ed19`
+
+### Rebase 取消恢复读取活动操作状态经 preflight port — 小阶段 270
+- 状态：已完成（pull rebase 取消恢复不再直接调用 git::status::read_operation）
+- 日期：2026-10-09
+- 交付：rebase 取消恢复改用 `RemotePreflightReadPort::read_worktree` 读取工作树状态及活动 Git 操作，再沿用原有 Rebase/其他操作/无操作分支决策；读取失败仍标记结果未知。取消时是否 abort、用户改动保护、branch OID 恢复和后续 pull 状态核验未变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未运行 rebase/am 取消、活动 merge 冲突或读状态失败场景。
+- 证据：`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、8、14 节。
+- 限制/后续：取消后的 abort/switch/reset 和 merge-index 复核仍在 GitCommandService 中；继续拆分 workflow orchestration 与适配器 Git 原语；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`8215583`
