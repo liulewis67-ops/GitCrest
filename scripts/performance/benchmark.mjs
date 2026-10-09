@@ -16,7 +16,7 @@ const iterations = Number(process.env.GITCREST_BENCH_ITERATIONS || 20);
 const args = process.argv.slice(2);
 
 function usage() {
-  process.stdout.write("Usage:\n  node scripts/performance/benchmark.mjs prepare [fixture-path]\n  node scripts/performance/benchmark.mjs cold [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs run [fixture-path] [report-path]\n");
+  process.stdout.write("Usage:\n  node scripts/performance/benchmark.mjs prepare [fixture-path]\n  node scripts/performance/benchmark.mjs cold [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs run [fixture-path] [report-path]\n");
 }
 
 async function git(cwd, args, options = {}) {
@@ -299,6 +299,62 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
   };
 }
 
+async function runIndexedHistorySearchBenchmark(fixturePath, reportPath) {
+  const executable = join(root, "crates", "gitcrest-core", "target", "release", process.platform === "win32" ? "gitcrest-core.exe" : "gitcrest-core");
+  const tempData = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-search-data-"));
+  let child;
+  try {
+    const started = await startSidecar(executable, join(tempData, "gitcrest.sqlite"));
+    child = started.child;
+    const baseUrl = `http://${started.address.host}:${started.address.port}`;
+    const repository = await requestJson(`${baseUrl}/api/v1/repositories`, started.token, "POST", { path: fixturePath });
+    const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
+    const indexStartedAt = performance.now();
+    let attempts = 0;
+    let page;
+    while (attempts < 120) {
+      attempts += 1;
+      page = await requestJson(searchUrl, started.token);
+      if (page.searchPending !== true && started.getStderr().includes("History message index ready")) break;
+      if (page.searchPending !== true && !started.getStderr().includes("History message index ready")) {
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        continue;
+      }
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+    }
+    const indexReadyMs = Number((performance.now() - indexStartedAt).toFixed(3));
+    if (page?.searchPending === true || !started.getStderr().includes("History message index ready")) {
+      throw new Error("History search index did not become ready within 30 seconds.");
+    }
+    if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+      throw new Error("Indexed history search did not return its matching commit.");
+    }
+    const indexedSearch = await measure("historySearch100kIndexed", async () => {
+      const result = await requestJson(searchUrl, started.token);
+      if (!result.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+        throw new Error("Indexed history search did not return its matching commit.");
+      }
+    });
+    const report = {
+      generatedAt: new Date().toISOString(),
+      host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: await cpuModel(), logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
+      software: { node: process.version, git: (await execFileAsync("git", ["--version"])).stdout.trim(), rustProfile: "release", executable, executableBytes: (await stat(executable)).size },
+      fixture: { commits: 100_000, path: fixturePath, searchQuery: "message contains benchmark commit 099999" },
+      iterations,
+      searchIndexWarmup: { ready: true, attempts, elapsedMs: indexReadyMs },
+      results: [indexedSearch],
+      limitations: ["Measures only indexed message search through the local sidecar API; does not claim cold-index build or other S7.2 targets."],
+      stderr: started.getStderr().trim() || undefined,
+    };
+    await mkdir(dirname(reportPath), { recursive: true });
+    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
+  } finally {
+    if (child) await stop(child);
+    await rm(tempData, { recursive: true, force: true });
+  }
+}
+
 async function runColdBenchmark(fixturePath, reportPath) {
   const executable = join(root, "crates", "gitcrest-core", "target", "release", process.platform === "win32" ? "gitcrest-core.exe" : "gitcrest-core");
   const tempData = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-cold-data-"));
@@ -453,6 +509,10 @@ if (command === "prepare") {
   if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
   const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}-cold.json`));
   await runColdBenchmark(fixturePath, reportPath);
+} else if (command === "search") {
+  if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
+  const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}-indexed-search.json`));
+  await runIndexedHistorySearchBenchmark(fixturePath, reportPath);
 } else if (command === "run") {
   if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
   const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}.json`));

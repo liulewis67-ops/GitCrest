@@ -1,0 +1,72 @@
+{
+  "generatedAt": "2026-10-09T17:16:08.748Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "node": "v22.19.0",
+    "git": "git version 2.37.3.windows.1",
+    "rustProfile": "release",
+    "executable": "E:\\personal_projects\\GitCrest\\crates\\gitcrest-core\\target\\release\\gitcrest-core.exe",
+    "executableBytes": 17925120
+  },
+  "fixture": {
+    "commits": 100000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-20261009-continuation",
+    "searchQuery": "message contains benchmark commit 099999"
+  },
+  "iterations": 20,
+  "searchIndexWarmup": {
+    "ready": true,
+    "attempts": 7,
+    "elapsedMs": 1627.617
+  },
+  "results": [
+    {
+      "name": "historySearch100kIndexed",
+      "samples": 20,
+      "p50Ms": 12.689,
+      "p95Ms": 14.275,
+      "maxMs": 14.587,
+      "samplesMs": [
+        13.827,
+        12.47,
+        11.871,
+        12.192,
+        13.411,
+        12.689,
+        11.779,
+        14.587,
+        13.513,
+        14.275,
+        12.272,
+        12.973,
+        13.493,
+        11.832,
+        11.808,
+        13.285,
+        12.854,
+        12.15,
+        11.638,
+        13.615
+      ]
+    }
+  ],
+  "limitations": [
+    "Measures only indexed message search through the local sidecar API; does not claim cold-index build or other S7.2 targets."
+  ],
+  "stderr": "[gitcrest-core] History index store phases maintenance=0ms rows=190ms fts=300ms commit=215ms\n[gitcrest-core] History index build phases git=762ms parse=14ms verify=4ms persist=712ms\n[gitcrest-core] History message index ready in 1499ms"
+}

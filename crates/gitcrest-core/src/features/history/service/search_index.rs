@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Write as _, path::Path, sync::Arc};
+use std::{fmt::Write as _, path::Path, sync::Arc};
 
 use git2::Repository;
 use sha2::{Digest, Sha256};
@@ -7,9 +7,8 @@ use crate::{domain::commit::CommitSearchEntry, ports::history::HistorySearchInde
 
 use super::commit_history::{read_page, valid_filters};
 use super::{
-    parse_timestamp, run_git, run_git_with_deadline, split_words, text, CommitPage, CommitSummary,
-    HistoryError, HistoryFilters, HISTORY_INDEX_DEADLINE, MAX_HISTORY_INDEX_OUTPUT,
-    MAX_HISTORY_OUTPUT,
+    run_git_with_deadline, text, CommitPage, CommitSummary, HistoryError, HistoryFilters,
+    HISTORY_INDEX_DEADLINE, MAX_HISTORY_INDEX_OUTPUT,
 };
 
 pub async fn read_page_indexed(
@@ -139,43 +138,41 @@ async fn summaries_for_search_entries(
     }) {
         return Err(HistoryError::GitFailed);
     }
-    let mut arguments = vec![
-        "log".into(),
-        "--no-walk=unsorted".into(),
-        "--format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%s".into(),
-    ];
-    arguments.extend(entries.iter().map(|entry| entry.oid.clone().into()));
-    let output = run_git(repository_path, &arguments, MAX_HISTORY_OUTPUT).await?;
-    let mut summaries_by_oid = HashMap::with_capacity(entries.len());
-    for record in output
-        .split(|byte| *byte == b'\n')
-        .filter(|record| !record.is_empty())
-    {
-        let fields = record.splitn(6, |byte| *byte == 0).collect::<Vec<_>>();
-        if fields.len() != 6 {
-            return Err(HistoryError::GitFailed);
-        }
-        let oid = text(fields[0]);
-        let summary = CommitSummary {
-            oid: oid.clone(),
-            parents: split_words(fields[1]),
-            author_name: text(fields[2]),
-            author_email: text(fields[3]),
-            committed_at_ms: parse_timestamp(fields[4])?,
-            subject: text(fields[5]),
-        };
-        if summaries_by_oid.insert(oid, summary).is_some() {
-            return Err(HistoryError::GitFailed);
-        }
-    }
-    entries
-        .iter()
-        .map(|entry| {
-            summaries_by_oid
-                .remove(&entry.oid)
-                .ok_or(HistoryError::GitFailed)
-        })
-        .collect()
+    let repository_path = repository_path.to_owned();
+    let entries = entries.to_vec();
+    tokio::task::spawn_blocking(move || {
+        let repository = Repository::open(repository_path).map_err(|_| HistoryError::GitFailed)?;
+        entries
+            .iter()
+            .map(|entry| {
+                let oid = git2::Oid::from_str(&entry.oid).map_err(|_| HistoryError::GitFailed)?;
+                let commit = repository
+                    .find_commit(oid)
+                    .map_err(|_| HistoryError::GitFailed)?;
+                let author = commit.author();
+                let committed_at_ms = author
+                    .when()
+                    .seconds()
+                    .checked_mul(1_000)
+                    .ok_or(HistoryError::GitFailed)?;
+                let author_name = text(author.name_bytes());
+                let author_email = text(author.email_bytes());
+                Ok(CommitSummary {
+                    oid: entry.oid.clone(),
+                    parents: commit
+                        .parent_ids()
+                        .map(|parent| parent.to_string())
+                        .collect(),
+                    author_name,
+                    author_email,
+                    committed_at_ms,
+                    subject: text(commit.summary_bytes().unwrap_or_default()),
+                })
+            })
+            .collect()
+    })
+    .await
+    .map_err(|_| HistoryError::GitFailed)?
 }
 
 fn schedule_history_index_build(
