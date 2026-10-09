@@ -15,11 +15,10 @@ import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { getRepositoryEventRefreshPlan, useRepositoryMutations, useRepositoryOpening, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type CommitAction, type WorkspaceMode } from "../features/repositories";
 import { useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { loadDiscardChangesDialog } from "../features/diff";
-import { loadRemoteBranchDeleteDialog, useRepositoryRefs } from "../features/branches";
+import { loadRemoteBranchDeleteDialog, useBranchSwitcher, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, TaskRefreshPlanner, useTaskCenter, useTaskRefreshLifecycle } from "../features/tasks";
 import { loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, type WorkflowAction } from "../features/workflows";
-import type { components } from "../api/schema";
 import type { UpdateStatus } from "../api/update-status";
 import "../App.css";
 
@@ -71,12 +70,6 @@ function App() {
   const autoRestoreAfterShelfRef = useRef(new Map<string, { repoId: string; remainingShelfIds: string[] }>());
   const shelfSwitchBaselineRef = useRef(new Map<string, string[]>());
   const savedShelfSwitchTargetsRef = useRef(new Set<string>());
-  const [branchSwitcherOpen, setBranchSwitcherOpen] = useState(false);
-  const [switchTargetName, setSwitchTargetName] = useState("");
-  const [switchPreflight, setSwitchPreflight] = useState<components["schemas"]["BranchSwitchPreflight"]>();
-  const [switchError, setSwitchError] = useState("");
-  const [switchBusy, setSwitchBusy] = useState(false);
-  const { dialogRef: branchSwitcherRef, onKeyDown: onBranchSwitcherKeyDown } = useDialogFocus<HTMLElement>(() => setBranchSwitcherOpen(false), switchBusy, undefined, branchSwitcherOpen);
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
@@ -202,6 +195,14 @@ function App() {
     beginCacheRequest: beginRepositoryCacheRequest,
     finishCacheRequest: finishRepositoryCacheRequest,
   });
+  const branchSwitcher = useBranchSwitcher({
+    getApi: () => apiRef.current,
+    getRepository: () => selectedRepository,
+    refreshBranches: refreshRepositoryBranches,
+    onTaskAccepted: prependTask,
+    openTaskCenter: () => setTasksOpen(true),
+  });
+  const { dialogRef: branchSwitcherRef, onKeyDown: onBranchSwitcherKeyDown } = useDialogFocus<HTMLElement>(branchSwitcher.close, branchSwitcher.busy, undefined, branchSwitcher.open);
   const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
   const rememberGraphScroll = useWorkspaceGraphScroll(selectedRepository?.repoId, mode, setWorkspaceSession);
   const { selectedCommit, selectCommit } = useWorkspaceCommitSelection(
@@ -491,49 +492,6 @@ function App() {
     continueCommitPush,
   } = repositoryPush;
 
-  function openBranchSwitcher() {
-    if (!selectedRepository || selectedRepository.availability !== "available") return;
-    setSwitchTargetName("");
-    setSwitchPreflight(undefined);
-    setSwitchError("");
-    setBranchSwitcherOpen(true);
-    void refreshRepositoryBranches(selectedRepository.repoId);
-  }
-
-  async function inspectBranchSwitch(name: string) {
-    const api = apiRef.current;
-    if (!api || !selectedRepository) return;
-    setSwitchTargetName(name);
-    setSwitchPreflight(undefined);
-    setSwitchError("");
-    try {
-      setSwitchPreflight(await api.preflightRepositoryBranchSwitch(selectedRepository.repoId, name));
-    } catch (error) {
-      setSwitchError(error instanceof Error ? error.message : "Could not check this branch switch.");
-    }
-  }
-
-  async function continueBranchSwitch() {
-    const api = apiRef.current;
-    const repository = selectedRepository;
-    if (!api || !repository || !switchTargetName) return;
-    setSwitchBusy(true);
-    setSwitchError("");
-    try {
-      const preflight = await api.preflightRepositoryBranchSwitch(repository.repoId, switchTargetName);
-      setSwitchPreflight(preflight);
-      if (preflight.potentiallyOverwrittenPaths.length > 0) return;
-      const task = await api.switchRepositoryBranch(repository.repoId, switchTargetName);
-      prependTask(task);
-      setBranchSwitcherOpen(false);
-      setTasksOpen(true);
-    } catch (error) {
-      setSwitchError(error instanceof GitCrestApiError ? error.body.error.message : error instanceof Error ? error.message : "Could not switch branches.");
-    } finally {
-      setSwitchBusy(false);
-    }
-  }
-
   async function continueBranchSwitchAfterShelf(repoId: string, target: string, existingShelfIds: string[]) {
     const api = apiRef.current;
     if (!api) return;
@@ -541,10 +499,7 @@ function App() {
       const preflight = await api.preflightRepositoryBranchSwitch(repoId, target);
       if (preflight.potentiallyOverwrittenPaths.length > 0) {
         if (selectedRepository?.repoId === repoId) {
-          setSwitchTargetName(target);
-          setSwitchPreflight(preflight);
-          setSwitchError("Some changes remain on paths the target branch updates. Shelve or commit them, then review the switch again.");
-          setBranchSwitcherOpen(true);
+          branchSwitcher.reviewAfterShelf(target, preflight, "Some changes remain on paths the target branch updates. Shelve or commit them, then review the switch again.");
         } else {
           setTasksError(`The shelf was created, but ${preflight.potentiallyOverwrittenPaths.length} remaining path(s) still overlap ${target}. Reopen that repository to review the switch.`);
         }
@@ -615,29 +570,25 @@ function App() {
   async function openShelfComposerForBranchSwitch() {
     const repository = selectedRepository;
     const api = apiRef.current;
-    if (!repository || !api || !switchTargetName) return;
-    setSwitchBusy(true);
-    setSwitchError("");
-    try {
-      const baselineKey = JSON.stringify([repository.repoId, switchTargetName]);
-      let existingShelfIds = shelfSwitchBaselineRef.current.get(baselineKey);
-      if (!existingShelfIds) {
-        const shelves = await api.listRepositoryShelves(repository.repoId);
-        existingShelfIds = shelves.map((shelf) => shelf.shelfId);
-        shelfSwitchBaselineRef.current.set(baselineKey, existingShelfIds);
+    const target = branchSwitcher.targetName;
+    if (!repository || !api || !target) return;
+    await branchSwitcher.runWhileBusy(async () => {
+      branchSwitcher.setError("");
+      try {
+        const baselineKey = JSON.stringify([repository.repoId, target]);
+        let existingShelfIds = shelfSwitchBaselineRef.current.get(baselineKey);
+        if (!existingShelfIds) {
+          const shelves = await api.listRepositoryShelves(repository.repoId);
+          existingShelfIds = shelves.map((shelf) => shelf.shelfId);
+          shelfSwitchBaselineRef.current.set(baselineKey, existingShelfIds);
+        }
+        setShelfComposerAfterSwitch({ repoId: repository.repoId, target, existingShelfIds });
+        branchSwitcher.close();
+        setShelfComposerRequest((request) => request + 1);
+      } catch (error) {
+        branchSwitcher.setError(error instanceof Error ? error.message : "Could not prepare the shelf before switching branches.");
       }
-      setShelfComposerAfterSwitch({
-        repoId: repository.repoId,
-        target: switchTargetName,
-        existingShelfIds,
-      });
-      setBranchSwitcherOpen(false);
-      setShelfComposerRequest((request) => request + 1);
-    } catch (error) {
-      setSwitchError(error instanceof Error ? error.message : "Could not prepare the shelf before switching branches.");
-    } finally {
-      setSwitchBusy(false);
-    }
+    });
   }
 
   async function startWorkflowTask(task: TaskSnapshotResponse) {
@@ -973,7 +924,7 @@ function App() {
     commitAndPush: () => { void commitChanges("commitAndPush"); },
     pull: openPullDialog,
     rebase: () => setRebaseDialogOpen(true),
-    openBranchSwitcher,
+    openBranchSwitcher: branchSwitcher.openSwitcher,
     toggleCommandPalette: () => {
       setPaletteOpen((open) => !open);
       setPaletteQuery("");
@@ -1081,7 +1032,7 @@ function App() {
           onOpenPushDialog={openPushDialog}
           onOpenPullDialog={openPullDialog}
           onFetchRepository={() => void fetchRepository()}
-          onOpenBranchSwitcher={openBranchSwitcher}
+          onOpenBranchSwitcher={branchSwitcher.openSwitcher}
         >
           <div className={`workArea${mode === "diff" ? " diffMode" : ""}`}>
             <WorkspaceNavigation
@@ -1239,27 +1190,27 @@ function App() {
         </WorkspacePage>
       )}
 
-      {branchSwitcherOpen && selectedRepository && (
-        <div className="paletteBackdrop branchSwitcherBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !switchBusy) setBranchSwitcherOpen(false); }}>
+      {branchSwitcher.open && selectedRepository && (
+        <div className="paletteBackdrop branchSwitcherBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !branchSwitcher.busy) branchSwitcher.close(); }}>
           <section ref={branchSwitcherRef} className="branchSwitcherDialog" role="dialog" aria-modal="true" aria-labelledby="branch-switcher-title" onKeyDown={onBranchSwitcherKeyDown}>
-            <div className="dialogHeading"><div><span className="sectionEyebrow">BRANCHES · {repositoryName(selectedRepository.path)}</span><h2 id="branch-switcher-title">Switch branch</h2></div><button className="dialogClose" type="button" aria-label="Close branch switcher" disabled={switchBusy} onClick={() => setBranchSwitcherOpen(false)}>×</button></div>
+            <div className="dialogHeading"><div><span className="sectionEyebrow">BRANCHES · {repositoryName(selectedRepository.path)}</span><h2 id="branch-switcher-title">Switch branch</h2></div><button className="dialogClose" type="button" aria-label="Close branch switcher" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>×</button></div>
             <p className="branchSwitcherCurrent">Current branch: <strong>{selectedRepository.detached ? `Detached · ${selectedRepository.head?.slice(0, 7)}` : selectedRepository.branch || "Unborn branch"}</strong></p>
-            {switchTargetName ? (
+            {branchSwitcher.targetName ? (
               <div className="branchSwitchDetails">
-                <button className="textButton" type="button" disabled={switchBusy} onClick={() => { setSwitchTargetName(""); setSwitchPreflight(undefined); setSwitchError(""); }}>← Choose another branch</button>
-                <h3>{switchTargetName}</h3>
-                {switchBusy && !switchPreflight && <p role="status">Checking the working tree…</p>}
-                {switchError && <p className="dialogError" role="alert">{switchError}</p>}
-                {switchPreflight?.isClean && <p className="branchCleanNotice" role="status">The working tree is clean. GitCrest can switch to this branch.</p>}
-                {switchPreflight && !switchPreflight.isClean && <>
+                <button className="textButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.chooseAnother}>← Choose another branch</button>
+                <h3>{branchSwitcher.targetName}</h3>
+                {branchSwitcher.busy && !branchSwitcher.preflight && <p role="status">Checking the working tree…</p>}
+                {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
+                {branchSwitcher.preflight?.isClean && <p className="branchCleanNotice" role="status">The working tree is clean. GitCrest can switch to this branch.</p>}
+                {branchSwitcher.preflight && !branchSwitcher.preflight.isClean && <>
                   <p className="branchDirtyNotice" role="alert">Commit or shelve these changes before switching.</p>
                   <div className="branchDirtyFiles" aria-label="Uncommitted files">
-                    {switchPreflight.dirtyFiles.map((path) => <div className="branchDirtyFile" key={path}><span aria-hidden="true">•</span><span>{path}</span>{switchPreflight.potentiallyOverwrittenPaths.includes(path) && <strong>May be overwritten</strong>}</div>)}
+                    {branchSwitcher.preflight.dirtyFiles.map((path) => <div className="branchDirtyFile" key={path}><span aria-hidden="true">•</span><span>{path}</span>{branchSwitcher.preflight?.potentiallyOverwrittenPaths.includes(path) && <strong>May be overwritten</strong>}</div>)}
                   </div>
                   <div className="branchSwitchOptions">
-                    <button className="secondaryButton" type="button" onClick={() => { setBranchSwitcherOpen(false); requestAnimationFrame(() => document.getElementById("commit-message")?.focus()); }}>Commit changes</button>
-                    <button className="secondaryButton" type="button" disabled={switchBusy || !connected || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.shelve, isMacPlatform)} title={`Shelve selected changes, then switch to ${switchTargetName} (${displayShortcut(shortcuts.shelve, isMacPlatform)})`} onClick={() => void openShelfComposerForBranchSwitch()}>Shelve &amp; switch</button>
-                    <button className="secondaryButton" type="button" disabled={switchBusy || switchPreflight.potentiallyOverwrittenPaths.length > 0} title={switchPreflight.potentiallyOverwrittenPaths.length > 0 ? "The target branch changes one or more listed paths" : "Switch branches while keeping these non-overlapping changes"} onClick={() => void continueBranchSwitch()}>Continue</button>
+                    <button className="secondaryButton" type="button" onClick={() => { branchSwitcher.close(); requestAnimationFrame(() => document.getElementById("commit-message")?.focus()); }}>Commit changes</button>
+                    <button className="secondaryButton" type="button" disabled={branchSwitcher.busy || !connected || hasActiveRepositoryTask} aria-keyshortcuts={ariaShortcut(shortcuts.shelve, isMacPlatform)} title={`Shelve selected changes, then switch to ${branchSwitcher.targetName} (${displayShortcut(shortcuts.shelve, isMacPlatform)})`} onClick={() => void openShelfComposerForBranchSwitch()}>Shelve &amp; switch</button>
+                    <button className="secondaryButton" type="button" disabled={branchSwitcher.busy || (branchSwitcher.preflight?.potentiallyOverwrittenPaths.length ?? 1) > 0} title={(branchSwitcher.preflight?.potentiallyOverwrittenPaths.length ?? 1) > 0 ? "The target branch changes one or more listed paths" : "Switch branches while keeping these non-overlapping changes"} onClick={() => void branchSwitcher.continueSwitch()}>Continue</button>
                   </div>
                 </>}
               </div>
@@ -1269,11 +1220,11 @@ function App() {
                 {!activeBranches && activeBranchesLoading && <p role="status">Loading branches…</p>}
                 {activeBranchError && <p className="dialogError" role="alert">{activeBranchError}</p>}
                 {activeBranches && orderedBranches.filter((branch) => branch.kind === "local" && !branch.isCurrent).length === 0 && <p className="navEmpty">There are no other local branches.</p>}
-                {orderedBranches.filter((branch) => branch.kind === "local" && !branch.isCurrent).map((branch) => <button className="branchChoice" type="button" key={branch.fullName} disabled={switchBusy} onClick={() => { setSwitchBusy(true); void inspectBranchSwitch(branch.name).finally(() => setSwitchBusy(false)); }}><span className="branchItemGlyph" aria-hidden="true">⑂</span><span>{branch.name}</span>{branch.isFavorite && <span className="branchFavoriteMark" aria-label="Favorite">★</span>}<span className="actionArrow" aria-hidden="true">→</span></button>)}
+                {orderedBranches.filter((branch) => branch.kind === "local" && !branch.isCurrent).map((branch) => <button className="branchChoice" type="button" key={branch.fullName} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}><span className="branchItemGlyph" aria-hidden="true">⑂</span><span>{branch.name}</span>{branch.isFavorite && <span className="branchFavoriteMark" aria-label="Favorite">★</span>}<span className="actionArrow" aria-hidden="true">→</span></button>)}
                 {orderedBranches.some((branch) => branch.kind === "remote") && <p className="branchRemoteNote">Remote branches are shown in navigation. Check out a local tracking branch before switching to a remote branch.</p>}
               </div>
             )}
-            <div className="dialogActions"><button className="secondaryButton" type="button" disabled={switchBusy} onClick={() => setBranchSwitcherOpen(false)}>Cancel</button>{switchTargetName && switchPreflight?.isClean && <button className="primaryButton" type="button" disabled={switchBusy} onClick={() => void continueBranchSwitch()}>{switchBusy ? "Switching…" : `Switch to ${switchTargetName}`}</button>}</div>
+            <div className="dialogActions"><button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>Cancel</button>{branchSwitcher.targetName && branchSwitcher.preflight?.isClean && <button className="primaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.continueSwitch()}>{branchSwitcher.busy ? "Switching…" : `Switch to ${branchSwitcher.targetName}`}</button>}</div>
             <div className="branchSwitcherHint"><kbd>{displayShortcut(shortcuts.branchSwitcher, isMacPlatform)}</kbd> opens this switcher <span>Esc closes</span></div>
           </section>
         </div>
