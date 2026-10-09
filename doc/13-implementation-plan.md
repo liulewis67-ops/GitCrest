@@ -4012,3 +4012,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；每轮使用独立临时用户目录，通过发行版可执行文件打开同一 fixture；20 个启动、首帧和 30 秒滚动样本均成功完成。
 - 证据：`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-benchmark-batches.mjs`、`doc/evidence/S7.2/desktop-win32-post-cache-stage360-batched-20261010.json` 及其 `.batches/batch-01.json` 至 `batch-04.json`；发行包单次内存进程树明细 `doc/evidence/S7.2/desktop-win32-release-memory-stage360-rolefix-20261010.json`。
 - 限制/后续：冷启动 P95、100k 首帧 P95 和安装包体积达到目标；空闲内存约 402MB 超过 <250MB，滚动工作集 P95 约 502MB 略高于 <500MB，滚动 P5 约 55.25fps 低于 ≥60fps。阶段 359 的冷消息搜索 P95 约 2.27s，也仍高于 <200ms。S7.2 保持待验收；S7.4、S7.5 仍待完成。
+- 完成 commit：`b85938f perf: benchmark packaged desktop release`
