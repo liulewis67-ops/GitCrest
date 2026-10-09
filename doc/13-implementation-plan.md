@@ -3203,4 +3203,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行真实 merge tree 查询失败场景；fixture 验证失败分类与后续 reset 被阻断。
 - 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
 - 限制/后续：read_pull_state、branch metadata 和 staged-state 查询失败仍需持续审查；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待提交
+- 完成 commit：`0af4fbc`
