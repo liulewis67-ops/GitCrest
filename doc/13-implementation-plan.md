@@ -2164,3 +2164,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：workspace session 的存储恢复与滚动 viewport 生命周期仍分散在 App/ref/hooks；继续按 repositories feature 与页面职责逐步整合。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`8de2c63`
+
+### repositories feature workspace session 持久化生命周期集中管理 — 小阶段 174
+- 状态：已完成（workspace session 的加载、同步引用与本地存储持久化由 repositories hook 管理）
+- 日期：2026-10-09
+- 交付：新增 `useWorkspaceSessionState`，封装 session 初始化加载、同步 ref 更新和变更后的持久化；App 使用 feature 返回的 session/setter/ref，移除重复的状态装配及保存 Effect。底层存储故障时保留本地 session 的既有容错逻辑。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：连接恢复后按可用 repository 修剪 session 并选择活动页的逻辑仍在 App；后续继续迁移 session restore 和 tab/cache 协作。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-workspace-session-state.ts`、`src/features/repositories/model/workspace-session.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`c1a5e22`
