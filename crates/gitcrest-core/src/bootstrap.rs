@@ -12,8 +12,9 @@ use crate::{
         status::StatusService,
         tasks::TaskService,
     },
-    git::{command::GitCommandService, repository::GitRepositoryAdapter},
+    git::{command::GitCommandService, repository::GitRepositoryAdapter, tags::GitTagAdapter},
     ports::git::RepositoryGitPort,
+    ports::tags::TagGitPort,
     refresh,
     state::{AppState, EventBus},
     storage::RepositoryStore,
@@ -77,6 +78,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         repository_git,
     );
     let git_commands = GitCommandService::default();
+    let tag_git: Arc<dyn TagGitPort> = Arc::new(GitTagAdapter);
     let status = StatusService::with_reader(repository_targets.clone(), git_commands.clone());
     let task_status = status.clone();
     let tasks =
@@ -105,6 +107,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         status,
         tasks,
         git_commands,
+        tag_git,
         clones,
         credentials: credentials::CredentialManager::system(),
         ai_credentials: credentials::AiCredentialManager::system(),

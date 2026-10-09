@@ -19,6 +19,7 @@ use crate::{
     ports::history::HistorySearchIndexPort,
     ports::settings::AiProviderSettingsPort,
     ports::shelves::ShelfStorePort,
+    ports::tags::TagGitPort,
     ports::undo::UndoStorePort,
 };
 
@@ -37,6 +38,7 @@ pub(crate) struct AppState {
     pub(crate) status: StatusService<RepositoryTargetReader, GitCommandService>,
     pub(crate) tasks: TaskService,
     pub(crate) git_commands: GitCommandService,
+    pub(crate) tag_git: Arc<dyn TagGitPort>,
     pub(crate) clones: CloneService,
     pub(crate) credentials: credentials::CredentialManager,
     pub(crate) ai_credentials: credentials::AiCredentialManager,

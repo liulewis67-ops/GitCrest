@@ -48,3 +48,12 @@ pub(crate) enum WorkflowError {
     TooLarge,
     GitFailed,
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum GitAdapterError {
+    Unavailable,
+    TimedOut,
+    OutputTooLarge,
+    Failed,
+    ReferenceAlreadyExists,
+}

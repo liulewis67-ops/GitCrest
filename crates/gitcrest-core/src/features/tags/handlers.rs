@@ -39,6 +39,7 @@ pub(crate) async fn create_repository_commit_tag(
             oid,
             message: request.message,
         },
+        state.tag_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_tag_error)?;
