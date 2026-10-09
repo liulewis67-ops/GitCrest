@@ -3527,6 +3527,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；以隔离 100k commit / 1k 行 Diff fixture 测 Windows Release sidecar API。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-bulk-fts-20261009.json`。
 - 限制/后续：索引仍需约 4.6 秒构建，cold search P95 仍高于 200ms；S7.2 桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
+- 完成 commit：`ea4f1ff`
 
 ### 前端 history 只读请求生命周期取消 — 小阶段 312
 - 状态：已完成（提交历史分页、refs 与提交详情读取在查询失效或卸载时取消底层 HTTP 请求）
@@ -3536,6 +3537,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；history hook 与 CommitGraph 组件自动化用例覆盖仓库变更取消、提交选择取消、分页、筛选和详情行为。
 - 证据：`src/features/history/model/use-repository-history.ts`、`src/features/history/model/use-repository-commit-detail.ts`、`tests/unit/history-model.test.tsx`、`tests/unit/commit-graph.test.tsx`。
 - 限制/后续：此阶段仅覆盖 history feature 只读请求；App workspace 的 status/branches/remotes 读取及其它独立读取仍需按各自 feature 生命周期逐项传播 AbortSignal，查询缓存与统一 RepoId 清理策略仍待实施。
+- 完成 commit：`587f7f8`
 
 ### 后端 remote URL 规则归入 domain — 小阶段 313
 - 状态：已完成（repositories 与 remotes features 共用领域 URL 安全校验，不再跨 feature 调用私有实现）
@@ -3545,6 +3547,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；Clone 现有 URL 校验单测覆盖 HTTPS、SSH、SCP、本地测试 fixture 和凭证/危险参数拒绝，远程 API 使用同一领域规则。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/features/repositories/cloning.rs`、`crates/gitcrest-core/src/features/remotes/service.rs`、`crates/gitcrest-core/src/storage/storage.rs`。
 - 限制/后续：其他跨 feature 的实现依赖仍需逐项迁移或通过明确的公开边界收敛；API DTO/Domain 分离与 feature 级集成测试组织仍待逐步完善。
+- 完成 commit：`4d40c1c`
 
 ### 后端 repositories feature 公共出口 — 小阶段 314
 - 状态：已完成（业务 feature 通过 repositories 模块出口共享仓库模型和任务目标类型）
@@ -3554,4 +3557,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；编译与 Rust 全量测试验证 feature 公共出口的所有使用方。
 - 证据：`crates/gitcrest-core/src/features/repositories/mod.rs`、`crates/gitcrest-core/src/features/{branches,remotes,workflows}/`。
 - 限制/后续：其他跨 feature 子模块路径与 route composition 仍需逐步审查；API DTO/Domain 分离及 feature 级集成测试组织仍待完善。
-- 完成 commit：`ea4f1ff`
+- 完成 commit：`e78a597`
+
+### 实施台账 commit 引用核对 — 小阶段 315
+- 状态：已完成（小阶段 311–314 的 commit 引用与 Git 历史一致）
+- 日期：2026-10-09
+- 交付：逐项对照 Git 历史修正阶段 312、313、314 的完成 commit SHA，并为阶段 311 补上遗漏的完成 SHA；本次仅修复实施台账追溯信息。
+- 验证：`git log` 与各阶段提交内容核对，确认 311=`ea4f1ff`、312=`587f7f8`、313=`4d40c1c`、314=`e78a597`；`git diff --check` 通过，不运行代码测试。
+- 证据：`doc/13-implementation-plan.md`、对应四个 Git commit。
+- 限制/后续：此台账修正不改变产品代码；后续小阶段继续逐项登记实际 commit SHA。
