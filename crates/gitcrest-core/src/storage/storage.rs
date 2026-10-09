@@ -240,6 +240,9 @@ impl RepositoryStore {
                 [repo_id],
             )
             .map_err(|error| error.to_string())?;
+        transaction
+            .execute_batch("DROP TRIGGER IF EXISTS history_search_documents_insert;")
+            .map_err(|error| error.to_string())?;
         {
             let mut statement = transaction
                 .prepare_cached(
@@ -267,6 +270,17 @@ impl RepositoryStore {
                     .map_err(|error| error.to_string())?;
             }
         }
+        transaction
+            .execute(
+                "INSERT INTO history_search_fts(rowid, message) SELECT id, message FROM history_search_documents WHERE repo_id=?1",
+                [repo_id],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction
+            .execute_batch(
+                "CREATE TRIGGER history_search_documents_insert AFTER INSERT ON history_search_documents BEGIN INSERT INTO history_search_fts(rowid, message) VALUES (new.id, new.message); END;",
+            )
+            .map_err(|error| error.to_string())?;
         transaction
             .execute(
                 "INSERT INTO history_search_index_state (repo_id, refs_fingerprint, indexed_at_ms) VALUES (?1, ?2, ?3) ON CONFLICT(repo_id) DO UPDATE SET refs_fingerprint=excluded.refs_fingerprint, indexed_at_ms=excluded.indexed_at_ms",
@@ -1488,29 +1502,67 @@ mod tests {
         store
             .save_opened(repository("repo-1", "/repo/1", 1))
             .unwrap();
-
         store
-            .replace_history_search_index("repo-1", "refs-v1", &[])
+            .save_opened(repository("repo-2", "/repo/2", 2))
+            .unwrap();
+
+        let entry = CommitSearchEntry {
+            oid: "c".repeat(40),
+            parents: Vec::new(),
+            author_name: "GitCrest Author".into(),
+            author_email: "author@example.invalid".into(),
+            committed_at_ms: 123,
+            subject: "Persistent file-backed entry".into(),
+            message: "Persistent file-backed search entry".into(),
+            sort_order: 0,
+        };
+        store
+            .replace_history_search_index("repo-1", "refs-v1", &[entry.clone()])
+            .unwrap();
+        let other_entry = CommitSearchEntry {
+            oid: "d".repeat(40),
+            parents: Vec::new(),
+            author_name: "Other Author".into(),
+            author_email: "other@example.invalid".into(),
+            committed_at_ms: 456,
+            subject: "Other repository retained entry".into(),
+            message: "Other repository retained message".into(),
+            sort_order: 0,
+        };
+        store
+            .replace_history_search_index("repo-2", "other-refs", &[other_entry.clone()])
             .unwrap();
 
         assert_eq!(
             store
-                .search_history_messages("repo-1", "refs-v1", "needle", 0, 10)
+                .search_history_messages("repo-1", "refs-v1", "persistent", 0, 10)
                 .unwrap()
                 .unwrap()
-                .len(),
-            0
+                .first()
+                .unwrap()
+                .oid,
+            entry.oid
         );
         assert_eq!(store.get("repo-1").unwrap().unwrap().path, "/repo/1");
 
-        assert!(store.begin_history_index_build("repo-1", "refs-v2"));
+        store
+            .replace_history_search_index("repo-1", "refs-v2", &[])
+            .unwrap();
+        assert!(store
+            .search_history_messages("repo-2", "other-refs", "retained", 0, 10)
+            .unwrap()
+            .unwrap()
+            .iter()
+            .any(|result| result.oid == other_entry.oid));
+
+        assert!(store.begin_history_index_build("repo-1", "refs-v3"));
         let index_connection = store.history_index_connection();
         let _index_lock = index_connection.lock().unwrap();
         let store_for_search = store.clone();
         let (send, receive) = std::sync::mpsc::channel();
         let search = std::thread::spawn(move || {
             let result =
-                store_for_search.search_history_messages("repo-1", "refs-v1", "needle", 0, 10);
+                store_for_search.search_history_messages("repo-1", "refs-v2", "persistent", 0, 10);
             send.send(result).unwrap();
         });
         let result = receive
