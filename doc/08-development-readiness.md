@@ -136,7 +136,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 | 场景 | 覆盖文档 | 必测 | 当前自动化覆盖 |
 |---|---|---|---|
 | 打开仓库 | `04-user-flows.md` | 是 | `tests/e2e/desktop.test.ts`、`tests/e2e/keyboard-workflow.test.ts` |
-| 克隆仓库 | `02-prd.md` | 是 | `tests/e2e/repository-management.test.ts`（HTTPS 入口、隔离本地 remote、克隆后自动打开） |
+| 克隆仓库 | `02-prd.md` | 是 | `tests/e2e/repository-management.test.ts`（HTTPS 入口、隔离本地 remote、失败后从 Task Center 重试、成功后自动打开） |
 | 基础提交 | `02-prd.md`、`04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
 | 查看历史 | `03-information-architecture.md`、`05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
 | Diff 浏览 | `05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |

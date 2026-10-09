@@ -3244,3 +3244,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前覆盖本地 bare remote 的成功克隆；凭据认证失败、取消和 clone UI retry 仍可在 S7.5 风险矩阵中继续补齐。
 - 完成 commit：`d7b8386`
+
+### P0 克隆失败后从任务中心重试 — 小阶段 284
+- 状态：已完成（克隆失败保留目标参数，远程恢复后可重试并打开仓库）
+- 日期：2026-10-09
+- 交付：新增克隆恢复 Electron E2E：首次将合法 HTTPS URL 映射到不存在的本地 remote 并确认 clone task 失败；从 Task Center 点击 Retry clone，验证 URL、目标目录和文件夹名保留；将仅供测试使用的 URL rewrite 更新为有效 bare remote 后重试，最终检查 clone HEAD、文件内容和自动打开路径。
+- 验证：定向 `pnpm exec vitest run --config vitest.e2e.config.ts tests/e2e/repository-management.test.ts -t "retries a failed clone"` 通过；`pnpm build` 通过；`pnpm test:e2e` 通过（6 files、18 tests）；`pnpm test` 通过（34 files、162 tests）；`git diff --check` 通过。Rust 全量测试 129/129 在前置小阶段 283 对相同后端源通过，本阶段仅新增 renderer E2E 与文档映射，未改 Rust 源码。
+- 手工验证：未执行 GUI 手工操作；Playwright 覆盖首次失败、Task Center retry、重新克隆及打开结果。
+- 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：凭据认证交互失败/更新凭证后的 clone UI retry 尚未覆盖；S7.5 仍需 P0 全面审计和发布文档收口。
+- 完成 commit：待提交
