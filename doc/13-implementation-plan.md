@@ -2924,3 +2924,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/git.rs`、`crates/gitcrest-core/src/git/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
 - 限制/后续：其他 features 仍有 Git CLI 调用或具体 `GitCommandService` 注入，需按能力迁入 git adapter/ports；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`0f047be`
+
+### Tag 创建 Git 命令迁入 Git adapter 并由 port 注入 — 小阶段 252
+- 状态：已完成（tags service 不再自行创建或管理 Git 子进程）
+- 日期：2026-10-09
+- 交付：新增 `TagGitPort` 与 `git/tags.rs::GitTagAdapter`，由 adapter 执行 ref 格式校验、commit 对象识别、tag ref 查询和 annotated tag 写入；Git 进程超时、输出上限、stdin 注解内容及并发重复 tag 识别由 adapter 统一负责。tags service 保留请求校验与业务错误映射，AppState/bootstrap 注入 adapter，API 成功响应和错误分类保持现有语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 tags service 的生产实现不再直接启动 Git 子进程；未运行 Rust 测试。
+- 手工验证：未执行真实 tag 创建、重复 ref 竞争、无效 commit 或 Git 超时场景；临时仓库服务场景未手工复核。
+- 证据：`crates/gitcrest-core/src/ports/tags.rs`、`crates/gitcrest-core/src/git/tags.rs`、`crates/gitcrest-core/src/features/tags/service.rs`、`crates/gitcrest-core/src/features/tags/handlers.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1 节。
+- 限制/后续：其它 feature 仍含 Git CLI 调用和具体 GitCommandService 注入，继续逐项迁入 adapter/port；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`6f1c9ed`
