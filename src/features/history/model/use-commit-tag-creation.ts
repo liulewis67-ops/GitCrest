@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 
 export function useCommitTagCreation(api: GitCrestApiClient, repoId: string, oid?: string) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [message, setMessage] = useState("");
   const generation = useRef(0);
 
   useEffect(() => {
@@ -12,18 +15,38 @@ export function useCommitTagCreation(api: GitCrestApiClient, repoId: string, oid
     setBusy(false);
     setStatus("");
     setError("");
+    setEditorOpen(false);
+    setName("");
+    setMessage("");
   }, [oid, repoId]);
 
-  async function createTag(name: string, message: string) {
+  const openEditor = useCallback(() => {
+    setError("");
+    setEditorOpen(true);
+  }, []);
+
+  const toggleEditor = useCallback(() => {
+    setError("");
+    setEditorOpen((current) => !current);
+  }, []);
+
+  const closeEditor = useCallback(() => {
+    setEditorOpen(false);
+    setName("");
+    setMessage("");
+  }, []);
+
+  const createTag = useCallback(async () => {
     if (!oid || busy) return false;
     const requestGeneration = generation.current;
     setBusy(true);
     setError("");
     setStatus("");
     try {
-      const tag = await api.createRepositoryCommitTag(repoId, oid, name, message);
+      const tag = await api.createRepositoryCommitTag(repoId, oid, name.trim(), message);
       if (generation.current !== requestGeneration) return false;
       setStatus(`Annotated tag ${tag.name} created at ${oid.slice(0, 12)}.`);
+      closeEditor();
       return true;
     } catch (reason) {
       if (generation.current === requestGeneration) {
@@ -33,7 +56,7 @@ export function useCommitTagCreation(api: GitCrestApiClient, repoId: string, oid
     } finally {
       if (generation.current === requestGeneration) setBusy(false);
     }
-  }
+  }, [api, busy, closeEditor, message, name, oid, repoId]);
 
-  return { busy, status, error, setError, createTag };
+  return { busy, status, error, editorOpen, name, message, setName, setMessage, openEditor, toggleEditor, createTag };
 }

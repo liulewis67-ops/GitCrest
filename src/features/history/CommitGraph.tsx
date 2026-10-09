@@ -269,23 +269,16 @@ export function CommitDetails({
 }) {
   const state = useRepositoryCommitDetail(api, repoId, oid);
   const [copyMessage, setCopyMessage] = useState("");
-  const [tagEditorOpen, setTagEditorOpen] = useState(false);
-  const [tagName, setTagName] = useState("");
-  const [tagMessage, setTagMessage] = useState("");
   const tagCreation = useCommitTagCreation(api, repoId, oid);
   useEffect(() => {
-    setTagEditorOpen(false);
-    setTagName("");
-    setTagMessage("");
     setCopyMessage("");
   }, [oid]);
 
   useEffect(() => {
     if (openTagRequest?.repoId !== repoId || openTagRequest.oid !== oid) return;
-    tagCreation.setError("");
-    setTagEditorOpen(true);
+    tagCreation.openEditor();
     onTagRequestHandled?.(openTagRequest.sequence);
-  }, [oid, onTagRequestHandled, openTagRequest, repoId, tagCreation.setError]);
+  }, [oid, onTagRequestHandled, openTagRequest, repoId, tagCreation.openEditor]);
 
   if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div>;
   if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">Loading commit details…</div>;
@@ -304,23 +297,19 @@ export function CommitDetails({
   }
   async function createAnnotatedTag(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (await tagCreation.createTag(tagName.trim(), tagMessage)) {
-      setTagEditorOpen(false);
-      setTagName("");
-      setTagMessage("");
-    }
+    await tagCreation.createTag();
   }
   return <div className="commitDetails">
     <div className="repositoryFact"><span>COMMIT</span><strong className="monoText" title={detail.oid}>{detail.oid.slice(0, 12)}</strong></div>
     <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>Copy SHA</button>
     {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
-    <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={() => { tagCreation.setError(""); setTagEditorOpen((current) => !current); }}>{tagEditorOpen ? "Cancel tag" : "Create tag"}</button>
+    <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={tagCreation.toggleEditor}>{tagCreation.editorOpen ? "Cancel tag" : "Create tag"}</button>
     {onWorkflow && <div className="commitWorkflowActions" aria-label="Commit actions"><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>Merge</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} aria-keyshortcuts={cherryPickShortcut} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>Cherry-pick</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>Revert</button></div>}
-    {tagEditorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
-      <label>Tag name<input aria-label="Tag name" value={tagName} maxLength={255} required onChange={(event) => setTagName(event.target.value)} placeholder="v1.0.0" /></label>
-      <label>Annotation message<textarea aria-label="Tag annotation" value={tagMessage} maxLength={8192} onChange={(event) => setTagMessage(event.target.value)} placeholder="Describe this release" /></label>
+    {tagCreation.editorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
+      <label>Tag name<input aria-label="Tag name" value={tagCreation.name} maxLength={255} required onChange={(event) => tagCreation.setName(event.target.value)} placeholder="v1.0.0" /></label>
+      <label>Annotation message<textarea aria-label="Tag annotation" value={tagCreation.message} maxLength={8192} onChange={(event) => tagCreation.setMessage(event.target.value)} placeholder="Describe this release" /></label>
       {tagCreation.error && <p className="commitTagError" role="alert">{tagCreation.error}</p>}
-      <button className="secondaryButton" type="submit" disabled={tagCreation.busy || !tagName.trim()}>{tagCreation.busy ? "Creating tag…" : "Create annotated tag"}</button>
+      <button className="secondaryButton" type="submit" disabled={tagCreation.busy || !tagCreation.name.trim()}>{tagCreation.busy ? "Creating tag…" : "Create annotated tag"}</button>
     </form>}
     {tagCreation.status && <p className="commitCopyStatus" role="status">{tagCreation.status}</p>}
     <div className="repositoryFact"><span>AUTHOR</span><strong>{detail.authorName}</strong></div>
