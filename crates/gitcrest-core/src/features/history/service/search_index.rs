@@ -4,10 +4,11 @@ use sha2::{Digest, Sha256};
 
 use crate::storage::{HistorySearchRow, RepositoryStore};
 
+use super::commit_history::{read_page, valid_filters};
 use super::{
-    parse_timestamp, read_page, run_git, run_git_with_deadline, split_words, text, valid_filters,
-    CommitPage, CommitSummary, HistoryError, HistoryFilters, HISTORY_INDEX_DEADLINE,
-    MAX_HISTORY_INDEX_OUTPUT, MAX_HISTORY_OUTPUT,
+    parse_timestamp, run_git, run_git_with_deadline, split_words, text, CommitPage, CommitSummary,
+    HistoryError, HistoryFilters, HISTORY_INDEX_DEADLINE, MAX_HISTORY_INDEX_OUTPUT,
+    MAX_HISTORY_OUTPUT,
 };
 
 pub async fn read_page_indexed(
