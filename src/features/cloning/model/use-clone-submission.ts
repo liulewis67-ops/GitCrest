@@ -68,6 +68,13 @@ export function useCloneSubmission({
     setError("");
   }
 
+  function retryFromTask(task: TaskSnapshotResponse) {
+    if (task.operation !== "clone" || (task.status !== "failed" && task.status !== "cancelled")) return;
+    prepareRetry(task.targetPath);
+    closeTaskCenter();
+    openDialog();
+  }
+
   function openDialog() {
     setError("");
     setDialogOpen(true);
@@ -104,5 +111,5 @@ export function useCloneSubmission({
     for (const task of tasks) void openClonedRepositoryRef.current?.(task);
   }, [tasks]);
 
-  return { busy, error, draft, dialogOpen, submit, prepareRetry, openDialog, closeDialog };
+  return { busy, error, draft, dialogOpen, submit, prepareRetry, retryFromTask, openDialog, closeDialog };
 }
