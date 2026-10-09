@@ -2498,3 +2498,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：feature 内部模型仍有少量 crate 范围可见性，供 diff feature 消费 commit 文件与父提交信息；S7.2、S7.4、S7.5 仍待验收。
 - 证据：`crates/gitcrest-core/src/features/history/model.rs`、`crates/gitcrest-core/src/features/history/dto.rs`、`crates/gitcrest-core/src/features/history/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 5、6、14 节。
 - 实施 commit：`d7de31b`
+
+### commits feature 敏感暂存路径规则迁入 model — 小阶段 209
+- 状态：已完成（敏感暂存文件识别规则归属 commits feature）
+- 日期：2026-10-09
+- 交付：新增 `src/features/commits/model/sensitive-staged-paths.ts`，按 staged 状态和既有路径模式计算需要提示复核的文件；App 通过 commits feature 公开入口调用，UI 告警内容和提交行为不变。
+- 验证：`pnpm build` 通过，包含应用与测试 TypeScript 检查及 Electron main/preload/renderer production build；保留 web-tree-sitter `eval` 构建警告。`git diff --check` 通过。
+- 限制/后续：本阶段只迁移规则归属，敏感文件识别仍是名称启发式提醒，不能替代用户审查或内容扫描；App 仍承载其他 workspace 状态编排。S7.2、S7.4、S7.5 继续待验收。
+- 证据：`src/features/commits/model/sensitive-staged-paths.ts`、`src/features/commits/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`ce57d40`
