@@ -4195,3 +4195,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-pipeline-reporters-stage380-20261010.json`。
 - 限制/后续：该 trace 没有直接说明 BeginFrame 时间戳为何每次晚于名义周期约 1.1ms；继续确认 Electron/Chromium 的 Windows VSync timebase、系统计时器/显示驱动交互，避免改历史列表做无效优化。S7.2、S7.4、S7.5 仍待验收。
 - 证据 commit：`2299a71`。
+
+### S7.2 采样 Windows GPU VSync worker 等待节奏 — 小阶段 381
+- 状态：已完成（BeginFrame cadence 与 GPU VSync worker wait-event 同步在约 56Hz；低帧根因进一步定位到 Windows VSync 等待路径）
+- 日期：2026-10-10
+- 交付：详细 trace 摘要增加 Chromium GPU/VSync provider 事件，包含事件所属进程、线程、执行耗时与时间戳间隔，保留 VSync provider 参数样例。
+- 验证：`node --check scripts/performance/desktop-frame-diagnostic.mjs`、报告 JSON 解析及 `git diff --check` 通过。Windows 11 / Electron 37 / RTX 3050 / 100k fixture 10 秒 trace 中，`gpu:WinVSyncProvider::GetVSyncIntervalIfAvailable` 在 GPU Process 的 `GpuVSyncThread` 上采样 566 次，事件间隔 P50/P95 为 17.779/18.091ms，调用自身耗时 P50/P95 0.033/0.153ms；`gpu:WaitForVSync Sleep` 等待时长 P50/P95 为 17.705/18.004ms。它与 BeginFrame frame-time 17.793ms 和 presented P5 55.28fps 一致，说明慢节奏位于 VSync wait-event 周期，而不是查询或绘制调用耗时。
+- 手工验证：未操作 GUI；运行默认 GPU packaged app 的详细 trace 并分析 GPU VSync 线程事件。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-vsync-provider-stage381-20261010.json`；阶段 374/380 的帧时序证据。
+- 限制/后续：trace 暴露了 VSync worker 的等待周期，但没有提供 D3DKMT adapter/source ID 与实际 vblank 来源，尚不能决定应修复应用调度、驱动路径还是主机显示配置；下一步映射 GPU worker 使用的输出源与 Electron 窗口匹配显示器。S7.2、S7.4、S7.5 继续未验收。
+- 证据 commit：`aa20b9f`。
