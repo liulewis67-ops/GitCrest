@@ -498,6 +498,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 搜索索引进展：SQLite FTS5 trigram 持久索引在首次 message 搜索后后台惰性构建，索引未就绪及短查询继续走 Git；refs/HEAD 快照变化会使旧索引失效。Release API 100k fixture 20 轮复测：消息搜索 P95 87ms，首屏历史 P95 144ms；索引构建约 14.4s。`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（102 tests）、`cargo fmt --check`、Clippy 和 `git diff --check` 通过。证据：`doc/evidence/S7.2/api-win32-search-index-headfast.json`。
 - Cold/warm 搜索复测（小阶段 307）：以每轮新建 sidecar 和空数据库测冷索引首次查询，20 轮 P95 631.626ms，未达到 <200ms；warm 索引搜索 P95 92.208ms 达标，但 max 18.343s 有单次异常长尾，需继续定位。索引准备约 16.478s。首页历史 P95 94.911ms、dirty-scope status 14.067ms、强制全量 status 9.508ms、缓存全量/路径 status 0.862/0.806ms、1k 行 Diff 103.547ms。完整证据：`doc/evidence/S7.2/api-win32-cold-warm-search-20261009.json`。这些是本机 Windows Release sidecar API 数据，不代表 Electron 桌面启动、工作集、帧率或安装包目标通过。
 - 索引重复构建修复（小阶段 308）：完成同一 refs fingerprint 的索引后仍有在途旧请求再次触发相同构建，导致重复 Git 扫描和偶发 18 秒长尾。调度时先检查 SQLite 已持久化 fingerprint，并继续用在途集合合并并发请求；refs 改变时允许重建。Release API 20 轮 warm 搜索 P95/max 68.978/71.563ms，历史首页 P95 94.464ms，报告只记录一次索引 ready（14.194s）；之前复现的 warm 搜索 17.979s 与首页 14.786s 尾延迟不再出现。cold search P95 662.208ms，<200ms 目标仍未达到。证据：`doc/evidence/S7.2/api-win32-search-index-dedup-20261009.json`。
+- 首页后台索引（小阶段 309）：无筛选的第一页返回后触发惰性索引构建，索引读写使用独立 SQLite 连接，避免长批量写入阻塞仓库主连接；索引正在重建时，搜索直接回退 Git，不等待 FTS 连接。Windows Release API 20 轮：首次历史页 P95/max 149.158/153.957ms，warm 搜索 P95/max 88.515/88.537ms；索引约 19.676s 就绪，cold miss P95 865.006ms（目标 <200ms 仍未达到）。证据：`doc/evidence/S7.2/api-win32-search-index-background-20261009.json`。
 - Status 进展：只读 Git status 子进程设置 `GIT_OPTIONAL_LOCKS=0`，不修改仓库配置或工作区文件。100k API 基准 20 轮 P95：全量 116ms、路径 scope 129ms（此前 126/140ms）；目标 <100ms 仍未达成。status 单元/集成用例、Clippy 和 Release API 基准通过。证据：`doc/evidence/S7.2/api-win32-status-locks.json`。
 - 状态缓存进展：普通 status API 复用 watcher 失效后的全量/路径快照；watcher 文件事件立即使缓存版本失效，避免并发 Git 读取把旧结果重新写回。缓存最多保留 8 个仓库、每仓库最多 10,000 条文件记录或 256 个路径记录；手动刷新通过 `refresh=true` 强制调用 Git，写操作预检保持强制读取。100k Release API 基准 20 轮缓存命中 P95：全量 0.953ms、路径 scope 0.772ms；首次冷全量读取样本 113.132ms。基准新增强制刷新场景后，`refresh=true` 全量 P95 为 125.634ms，确认缓存命中目标达成，但 watcher 失效或手动强刷的冷读仍未达到 <100ms。直接测试 untracked/ignored/rename 和 index 并行选项未见稳定收益。构建与 Clippy 通过。证据：`doc/evidence/S7.2/api-win32-status-cache.json`、`doc/evidence/S7.2/api-win32-status-forced-refresh.json`。
 - 状态缓存增量修复：watcher 现在按 dirty scope 失效路径快照，保留未受影响的全量快照供非重叠路径读取；受影响 scope 刷新后合并回全量快照。dirty path 超过 256 条时升级为全量失效。TaskService 在仓库任务终止后主动失效该仓库状态缓存，覆盖测试环境和 watcher 尚未发送事件时的 Git 写入；此前 commit API 集成测试暴露了任务完成后读取旧状态的问题。新增覆盖路径合并、目录边界、并发旧刷新和 dirty path 上限的测试。验收：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1`（106 tests）、`git diff --check` 均通过。尚未对增量失效后的冷读重新跑 100k 基准；S7.2 整体仍待验收。
@@ -3495,3 +3496,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/ports/history.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-dedup-20261009.json`。
 - 限制/后续：cold message search P95 仍高于 200ms；S7.2 其余桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
 - 完成 commit：`f9184e3`
+
+### S7.2 历史页后台预建消息索引并隔离 SQLite — 小阶段 309
+- 状态：已完成（首页后台启动搜索索引；索引写入不再阻塞主 SQLite 连接）
+- 日期：2026-10-09
+- 交付：首次无筛选历史页返回后后台启动消息索引构建。文件数据库为 History FTS index 使用独立 SQLite 连接，维持 WAL 读写；内存 store 仍复用同一连接。索引重建期间 FTS 查询先检查在途状态并快速回退 Git，不排队等待索引连接。保留同 fingerprint 在途/持久化去重与 refs 更新重建。
+- 验证：History index 单测、文件库双连接检索与索引重建期快速回退测试通过；完整 `pnpm check` 通过（使用临时 `CARGO_TARGET_DIR` 避开桌面进程占用的 debug sidecar）：前端/Electron build、Vitest 163/163、Rust 139/139、Electron E2E 6 files / 29 tests；`git diff --check` 通过。Windows Release API 20 轮：首次历史页 P95/max 149.158/153.957ms，warm 搜索 P95/max 88.515/88.537ms，cold miss P95 865.006ms；索引约 19.676s ready。
+- 手工验证：未执行 GUI 操作；以隔离 100k commit / 1k 行 Diff fixture 测量当前 Release sidecar API。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`doc/evidence/S7.2/api-win32-search-index-background-20261009.json`。
+- 限制/后续：索引约需 20 秒完成，期间 cold message search 仍走 Git、P95 高于 200ms；S7.2 其余桌面内存/帧率目标及 S7.4、S7.5 仍未完成。
+- 完成 commit：待补记

@@ -109,6 +109,7 @@ fn now_ms() -> i64 {
 #[derive(Clone)]
 pub struct RepositoryStore {
     connection: Arc<Mutex<Connection>>,
+    history_index_connection: Arc<Mutex<Connection>>,
     history_index_builds: Arc<Mutex<HashSet<String>>>,
 }
 
@@ -132,8 +133,10 @@ impl Default for RepositoryStore {
             .pragma_update(None, "foreign_keys", "ON")
             .expect("in-memory foreign keys enabled");
         migrate(&connection).expect("in-memory repository schema migrates");
+        let connection = Arc::new(Mutex::new(connection));
         Self {
-            connection: Arc::new(Mutex::new(connection)),
+            connection: Arc::clone(&connection),
+            history_index_connection: connection,
             history_index_builds: Arc::new(Mutex::new(HashSet::new())),
         }
     }
@@ -158,10 +161,25 @@ impl RepositoryStore {
             .pragma_update(None, "foreign_keys", "ON")
             .map_err(|error| error.to_string())?;
         migrate(&connection).map_err(|error| error.to_string())?;
+        let history_index_connection = Connection::open(path).map_err(|error| error.to_string())?;
+        history_index_connection
+            .busy_timeout(std::time::Duration::from_secs(2))
+            .map_err(|error| error.to_string())?;
+        history_index_connection
+            .pragma_update(None, "foreign_keys", "ON")
+            .map_err(|error| error.to_string())?;
+        history_index_connection
+            .pragma_update(None, "synchronous", "FULL")
+            .map_err(|error| error.to_string())?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
+            history_index_connection: Arc::new(Mutex::new(history_index_connection)),
             history_index_builds: Arc::new(Mutex::new(HashSet::new())),
         })
+    }
+
+    fn history_index_connection(&self) -> Arc<Mutex<Connection>> {
+        Arc::clone(&self.history_index_connection)
     }
 
     pub fn begin_history_index_build(&self, repo_id: &str, refs_fingerprint: &str) -> bool {
@@ -171,7 +189,8 @@ impl RepositoryStore {
         if builds.contains(repo_id) {
             return false;
         }
-        let Ok(connection) = self.connection.lock() else {
+        let history_index_connection = self.history_index_connection();
+        let Ok(connection) = history_index_connection.lock() else {
             return false;
         };
         let indexed_fingerprint = connection
@@ -202,9 +221,9 @@ impl RepositoryStore {
         refs_fingerprint: &str,
         entries: &[CommitSearchEntry],
     ) -> Result<(), String> {
+        let history_index_connection = self.history_index_connection();
         {
-            let mut connection = self
-                .connection
+            let mut connection = history_index_connection
                 .lock()
                 .map_err(|_| "repository database lock poisoned".to_string())?;
             let transaction = connection
@@ -226,8 +245,7 @@ impl RepositoryStore {
         }
 
         for batch in entries.chunks(500) {
-            let mut connection = self
-                .connection
+            let mut connection = history_index_connection
                 .lock()
                 .map_err(|_| "repository database lock poisoned".to_string())?;
             let transaction = connection
@@ -263,8 +281,7 @@ impl RepositoryStore {
             transaction.commit().map_err(|error| error.to_string())?;
         }
 
-        let mut connection = self
-            .connection
+        let mut connection = history_index_connection
             .lock()
             .map_err(|_| "repository database lock poisoned".to_string())?;
         let transaction = connection
@@ -287,8 +304,15 @@ impl RepositoryStore {
         offset: usize,
         limit: usize,
     ) -> Result<Option<Vec<CommitSearchEntry>>, String> {
-        let connection = self
-            .connection
+        let builds = self
+            .history_index_builds
+            .lock()
+            .map_err(|_| "history index build state lock poisoned".to_string())?;
+        if builds.contains(repo_id) {
+            return Ok(None);
+        }
+        let history_index_connection = self.history_index_connection();
+        let connection = history_index_connection
             .lock()
             .map_err(|_| "repository database lock poisoned".to_string())?;
         let fingerprint = connection
@@ -1474,6 +1498,49 @@ mod tests {
             .unwrap()
             .unwrap()
             .is_empty());
+    }
+
+    #[test]
+    fn file_backed_history_index_uses_its_own_database_connection() {
+        let directory = tempfile::tempdir().unwrap();
+        let database = directory.path().join("gitcrest.sqlite");
+        let store = RepositoryStore::open(&database).unwrap();
+        store
+            .save_opened(repository("repo-1", "/repo/1", 1))
+            .unwrap();
+
+        store
+            .replace_history_search_index("repo-1", "refs-v1", &[])
+            .unwrap();
+
+        assert_eq!(
+            store
+                .search_history_messages("repo-1", "refs-v1", "needle", 0, 10)
+                .unwrap()
+                .unwrap()
+                .len(),
+            0
+        );
+        assert_eq!(store.get("repo-1").unwrap().unwrap().path, "/repo/1");
+
+        assert!(store.begin_history_index_build("repo-1", "refs-v2"));
+        let index_connection = store.history_index_connection();
+        let _index_lock = index_connection.lock().unwrap();
+        let store_for_search = store.clone();
+        let (send, receive) = std::sync::mpsc::channel();
+        let search = std::thread::spawn(move || {
+            let result =
+                store_for_search.search_history_messages("repo-1", "refs-v1", "needle", 0, 10);
+            send.send(result).unwrap();
+        });
+        let result = receive
+            .recv_timeout(std::time::Duration::from_millis(100))
+            .expect("search should bypass the index connection while it is rebuilding")
+            .unwrap();
+        assert!(result.is_none());
+        drop(_index_lock);
+        search.join().unwrap();
+        store.finish_history_index_build("repo-1");
     }
 
     #[test]

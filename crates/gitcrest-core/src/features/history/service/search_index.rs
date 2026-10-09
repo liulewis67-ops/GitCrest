@@ -30,6 +30,14 @@ pub async fn read_page_indexed(
         && filters.path.is_none()
         && filters.since.is_none()
         && filters.until.is_none();
+    let unfiltered_first_page = offset == 0
+        && filters.sha.is_none()
+        && filters.author.is_none()
+        && filters.message.is_none()
+        && filters.branch.is_none()
+        && filters.path.is_none()
+        && filters.since.is_none()
+        && filters.until.is_none();
     let fingerprint = if message_only_search
         && filters
             .message
@@ -84,7 +92,7 @@ pub async fn read_page_indexed(
     )
     .await?;
 
-    if offset == 0 && message_only_search {
+    if offset == 0 && (message_only_search || unfiltered_first_page) {
         schedule_history_index_build(
             repo_id,
             repository_path.to_owned(),
@@ -114,19 +122,25 @@ fn schedule_history_index_build(
     expected_fingerprint: Option<String>,
     store: Arc<dyn HistorySearchIndexPort>,
 ) {
-    let Some(index_fingerprint) = expected_fingerprint.as_deref() else {
-        return;
-    };
-    if !store.begin_index_build(&repo_id, index_fingerprint) {
-        return;
-    }
     tokio::spawn(async move {
         let started = std::time::Instant::now();
+        let index_fingerprint = match expected_fingerprint {
+            Some(fingerprint) => Some(fingerprint),
+            None => refs_fingerprint(&repository_path, head.as_deref())
+                .await
+                .ok(),
+        };
+        let Some(index_fingerprint) = index_fingerprint else {
+            return;
+        };
+        if !store.begin_index_build(&repo_id, &index_fingerprint) {
+            return;
+        }
         let result = build_history_search_index(
             &repo_id,
             &repository_path,
             head.as_deref(),
-            expected_fingerprint.as_deref(),
+            Some(&index_fingerprint),
             store.clone(),
         )
         .await;

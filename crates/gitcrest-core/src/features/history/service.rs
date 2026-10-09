@@ -293,6 +293,18 @@ mod tests {
         let manager = RepositoryManager::default();
         let repository = manager.open_path(path.to_str().unwrap()).await.unwrap();
         let store: Arc<dyn HistorySearchIndexPort> = Arc::new(manager.store());
+        let initial_page = read_page_indexed(
+            repository.repo_id.clone(),
+            path,
+            0,
+            1,
+            repository.head.as_deref(),
+            &HistoryFilters::default(),
+            store.clone(),
+        )
+        .await
+        .unwrap();
+        assert_eq!(initial_page.commits[0].subject, "second NEEDLE entry");
         let filters = HistoryFilters {
             message: Some("nEeDlE".into()),
             ..HistoryFilters::default()
@@ -323,7 +335,7 @@ mod tests {
         }
         assert!(
             index_ready,
-            "a cold message search should start index building"
+            "the initial history page should schedule index building"
         );
 
         let indexed = read_page_indexed(
