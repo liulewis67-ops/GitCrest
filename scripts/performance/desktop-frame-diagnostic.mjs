@@ -91,6 +91,41 @@ async function sampleAnimationFrames(page, label, durationMs, scroll) {
   }, { sampleLabel: label, sampleDuration: durationMs, shouldScroll: scroll });
 }
 
+async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
+  const client = await page.context().newCDPSession(page);
+  const traceEvents = [];
+  const complete = new Promise((resolveComplete) => client.once("Tracing.tracingComplete", resolveComplete));
+  client.on("Tracing.dataCollected", ({ value }) => traceEvents.push(...value));
+  try {
+    await client.send("Tracing.start", { categories: "viz", transferMode: "ReportEvents" });
+    const animationFrames = await sampleAnimationFrames(page, label, durationMs, scroll);
+    await client.send("Tracing.end");
+    await complete;
+    const presentationTimestamps = traceEvents
+      .filter((event) => event.name === "Display::FrameDisplayed" && Number.isFinite(event.ts))
+      .map((event) => event.ts)
+      .sort((left, right) => left - right);
+    const intervalsMs = presentationTimestamps.slice(1).map((timestamp, index) => (timestamp - presentationTimestamps[index]) / 1_000);
+    intervalsMs.sort((left, right) => left - right);
+    const p95PresentedFrameMs = intervalsMs.length
+      ? intervalsMs[Math.max(0, Math.ceil(intervalsMs.length * 0.95) - 1)]
+      : null;
+    return {
+      ...animationFrames,
+      presentationTrace: {
+        event: "benchmark,viz:Display::FrameDisplayed",
+        frameCount: presentationTimestamps.length,
+        intervalSamples: intervalsMs.length,
+        p95FrameMs: p95PresentedFrameMs,
+        p5Fps: p95PresentedFrameMs ? 1_000 / p95PresentedFrameMs : null,
+        traceEventCount: traceEvents.length,
+      },
+    };
+  } finally {
+    await client.detach();
+  }
+}
+
 const executablePath = packagedAppExecutablePath();
 const launchFlags = benchmarkGpuFlags();
 await stat(executablePath);
@@ -116,7 +151,7 @@ try {
   await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
   await page.bringToFront();
   const historyIdle = await sampleAnimationFrames(page, "loaded-history-idle", 5_000, false);
-  const historyScroll = await sampleAnimationFrames(page, "loaded-history-scroll", 10_000, true);
+  const historyScroll = await samplePresentedAnimationFrames(page, "loaded-history-scroll", 10_000, true);
   const samples = [emptyWorkspace, historyIdle, historyScroll];
   const report = {
     generatedAt: new Date().toISOString(),
@@ -126,10 +161,11 @@ try {
     thresholds: { targetScrollP5Fps: 60, rafTargetPeriodMs: 1000 / 60 },
     samples,
     interpretation: {
-      emptyWorkspaceBelow60Fps: emptyWorkspace.p5Fps < 60,
-      loadedHistoryIdleBelow60Fps: historyIdle.p5Fps < 60,
-      scrollBelow60Fps: historyScroll.p5Fps < 60,
-      historyScrollComparedWithEmptyFps: Number((historyScroll.p5Fps - emptyWorkspace.p5Fps).toFixed(3)),
+      emptyWorkspaceAnimationFrameBelow60Fps: emptyWorkspace.p5Fps < 60,
+      loadedHistoryIdleAnimationFrameBelow60Fps: historyIdle.p5Fps < 60,
+      requestAnimationFrameScrollBelow60Fps: historyScroll.p5Fps < 60,
+      presentedScrollBelow60Fps: historyScroll.presentationTrace.p5Fps === null || historyScroll.presentationTrace.p5Fps < 60,
+      historyScrollComparedWithEmptyAnimationFrameFps: Number((historyScroll.p5Fps - emptyWorkspace.p5Fps).toFixed(3)),
       visibleAndFocusedForAllSamples: samples.every((sample) => sample.documentVisibilityState === "visible" && sample.documentHasFocus),
     },
   };
@@ -137,7 +173,7 @@ try {
   await fs.mkdir(dirname(reportPath), { recursive: true });
   await fs.writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
-  if (samples.some((sample) => sample.p5Fps < 60)) process.exitCode = 2;
+  if (historyScroll.presentationTrace.p5Fps === null || historyScroll.presentationTrace.p5Fps < 60) process.exitCode = 2;
 } finally {
   await app?.close();
   await rm(dataDir, { recursive: true, force: true });

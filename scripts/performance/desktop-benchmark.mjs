@@ -430,6 +430,60 @@ async function runCacheLifecycle() {
   }
 }
 
+async function measurePresentedScroll(page, durationMs) {
+  const client = await page.context().newCDPSession(page);
+  const traceEvents = [];
+  const complete = new Promise((resolveComplete) => client.once("Tracing.tracingComplete", resolveComplete));
+  client.on("Tracing.dataCollected", ({ value }) => traceEvents.push(...value));
+  try {
+    await client.send("Tracing.start", { categories: "viz", transferMode: "ReportEvents" });
+    const animationFrameSample = await page.evaluate(async (sampleDuration) => {
+      const viewport = document.querySelector(".graphViewport");
+      if (!viewport) throw new Error("Commit graph viewport is missing.");
+      const deltas = [];
+      const end = performance.now() + sampleDuration;
+      let previous = 0;
+      await new Promise((resolveScroll) => {
+        const frame = (now) => {
+          if (previous) deltas.push(now - previous);
+          previous = now;
+          viewport.scrollTop = Math.min(viewport.scrollTop + 8, viewport.scrollHeight - viewport.clientHeight);
+          if (now < end) requestAnimationFrame(frame);
+          else resolveScroll();
+        };
+        requestAnimationFrame(frame);
+      });
+      deltas.sort((left, right) => left - right);
+      const p95FrameMs = deltas[Math.max(0, Math.ceil(deltas.length * 0.95) - 1)];
+      return { durationMs: sampleDuration, frameSamples: deltas.length, p95FrameMs, p5Fps: p95FrameMs ? 1_000 / p95FrameMs : null };
+    }, durationMs);
+    await client.send("Tracing.end");
+    await complete;
+    const presentationTimestamps = traceEvents
+      .filter((event) => event.name === "Display::FrameDisplayed" && Number.isFinite(event.ts))
+      .map((event) => event.ts)
+      .sort((left, right) => left - right);
+    const intervalsMs = presentationTimestamps.slice(1).map((timestamp, index) => (timestamp - presentationTimestamps[index]) / 1_000);
+    if (intervalsMs.length === 0) throw new Error("Chromium trace did not report presented frames for the scroll sample.");
+    intervalsMs.sort((left, right) => left - right);
+    const p95PresentedFrameMs = intervalsMs[Math.max(0, Math.ceil(intervalsMs.length * 0.95) - 1)];
+    return {
+      ...animationFrameSample,
+      requestAnimationFrameP5Fps: animationFrameSample.p5Fps,
+      p95FrameMs: p95PresentedFrameMs,
+      p5Fps: 1_000 / p95PresentedFrameMs,
+      presentationTrace: {
+        event: "benchmark,viz:Display::FrameDisplayed",
+        frameCount: presentationTimestamps.length,
+        intervalSamples: intervalsMs.length,
+        traceEventCount: traceEvents.length,
+      },
+    };
+  } finally {
+    await client.detach();
+  }
+}
+
 async function runScrollIteration(iteration) {
   const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-scroll-"));
   let app;
@@ -465,26 +519,7 @@ async function runScrollIteration(iteration) {
     const sampler = await startProcessTreeMemorySampler(await electronProcessRootPid(app.process().pid), 500);
     let scroll;
     try {
-      scroll = await page.evaluate(async () => {
-      const viewport = document.querySelector(".graphViewport");
-      if (!viewport) throw new Error("Commit graph viewport is missing.");
-      const deltas = [];
-      const end = performance.now() + 30_000;
-      let previous = 0;
-      await new Promise((resolveScroll) => {
-        const frame = (now) => {
-          if (previous) deltas.push(now - previous);
-          previous = now;
-          viewport.scrollTop = Math.min(viewport.scrollTop + 8, viewport.scrollHeight - viewport.clientHeight);
-          if (now < end) requestAnimationFrame(frame);
-          else resolveScroll();
-        };
-        requestAnimationFrame(frame);
-      });
-      deltas.sort((left, right) => left - right);
-      const p95FrameMs = deltas[Math.max(0, Math.ceil(deltas.length * 0.95) - 1)];
-      return { durationMs: 30_000, frameSamples: deltas.length, p95FrameMs, p5Fps: p95FrameMs ? 1000 / p95FrameMs : null };
-      });
+      scroll = await measurePresentedScroll(page, 30_000);
     } finally {
       await sampler.stop();
     }
@@ -517,6 +552,7 @@ async function runScroll() {
     iterations: samples,
     idleAnimationFrameP5Fps: summarizeMeasuredValues(samples.map(({ idleAnimationFrame }) => idleAnimationFrame.p5Fps)),
     scrollP5Fps: summarizeMeasuredValues(samples.map(({ scroll }) => scroll.p5Fps)),
+    scrollRequestAnimationFrameP5Fps: summarizeMeasuredValues(samples.map(({ scroll }) => scroll.requestAnimationFrameP5Fps)),
     workMemoryPeakBytes: summarizeMeasuredValues(samples.map(({ workMemoryPeakBytes }) => workMemoryPeakBytes)),
   };
 }
@@ -554,6 +590,7 @@ const report = {
   processMemoryBreakdown: memorySnapshot,
   repositoryCacheLifecycle,
   work: scroll,
+  measurementNotes: scroll ? ["Scroll P5 uses Chromium compositor Display::FrameDisplayed timestamps via CDP tracing. Trace collection is active during work-memory sampling, so workMemoryPeakBytes from this report is diagnostic only; use a run without tracing for memory acceptance."] : [],
   installer: { path: installerBytes === null ? null : installerPath, bytes: installerBytes, mebibytes: installerBytes === null ? null : Number((installerBytes / (1024 * 1024)).toFixed(2)) },
   limitations: installerBytes === null ? ["Installer size is unavailable because electron-builder did not produce an installer."] : [],
 };
