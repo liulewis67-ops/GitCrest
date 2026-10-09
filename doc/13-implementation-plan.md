@@ -3364,3 +3364,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/repository-management.test.ts`、`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：未保存真实凭据或验证更新凭据后的 Clone 成功；当前确认失败路径可到达正确凭据编辑器。S7.5 仍保持进行中。
 - 完成 commit：`75592fa`
+
+### Git askpass 凭据读取隔离验证 — 小阶段 296
+- 状态：已完成（askpass 将 HTTPS 用户名/密码提示映射到匹配主机的凭据存储条目；未知主机失败关闭）
+- 日期：2026-10-09
+- 交付：将 askpass prompt 解析与凭据读取提取为接收 `CredentialManager` 的边界，生产入口仍注入系统凭据库；新增内存凭据库单测，验证带端口主机的 username/password 响应和不匹配主机拒绝，避免为了测试写入系统 Keychain。
+- 验证：定向 askpass 测试通过；Rust 全量测试（137/137）、`cargo fmt --check`、Clippy、debug build、release `pnpm core:build` 与 `git diff --check` 通过。
+- 手工验证：未访问系统 Keychain；使用内存 store fixture 直接验证凭据读取与 host 匹配边界。
+- 证据：`crates/gitcrest-core/src/credentials/credentials.rs`；实现 commit：`2145d18`。
+- 限制/后续：未在真实系统凭据库中运行保存后 Fetch/Clone 成功闭环；S7.5 仍保持进行中。
+- 完成 commit：`2145d18`
