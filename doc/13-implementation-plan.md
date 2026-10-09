@@ -2753,4 +2753,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Electron 或临时仓库场景；保留原 common Git directory 规范化与失效路径错误分类实现。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository_target.rs`、`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/state.rs`、相关 feature handlers、`doc/14-backend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：HistoryTarget 查询仍留在 RepositoryManager；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`752978a`
