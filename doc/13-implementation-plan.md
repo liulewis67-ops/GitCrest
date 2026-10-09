@@ -3124,3 +3124,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、8、14 节。
 - 限制/后续：取消恢复中的 abort/switch/reset 和 merge-index 复核仍由 GitCommandService 编排；继续将 workflow 协调与 Git 执行原语拆分；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`a6fed22`
+
+### Pull 取消恢复编排迁入 remotes feature — 小阶段 272
+- 状态：已完成（GitCommandService 仅执行 pull 与 recovery port 原语，取消后的状态协调由 remotes recovery service 负责）
+- 日期：2026-10-09
+- 交付：新增 `features/remotes/recovery.rs`，将 rebase/am abort 分流、活动操作与用户改动保护、branch OID/当前分支核对、merge index tree 比较、`reset --merge` 和最终状态验证迁至 feature workflow。新增并注入 `RemotePullRecoveryPort`，将必要的 Git 元操作留在 GitCommandService adapter；RemoteCommandPort.pull 不再接收 preflight reader。保留原取消/等待输入/结果未知分类、用户可见错误文案及 task closure 的入队后复检。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 GitCommandService 生产代码不再编排 cancelled pull；未运行 Rust 测试。
+- 手工验证：未运行正常取消、am/rebase abort、merge index 校验、冲突等待或 Git 恢复命令失败场景。
+- 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、7.2、7.4、14 节。
+- 限制/后续：尚未为恢复 workflow 的状态分支及 Git port 故障注入建立验收覆盖；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`ae13df7`
