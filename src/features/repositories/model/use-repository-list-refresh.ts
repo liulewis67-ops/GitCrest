@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useRef, type Dispatch, type SetStateAction } from "react";
 import type { GitCrestApiClient, RepositoryResponse } from "../../../api/client";
 
 interface RepositoryListRefreshOptions {
@@ -12,8 +12,12 @@ export function useRepositoryListRefresh({
   setSelectedRepository,
   restoreWorkspace,
 }: RepositoryListRefreshOptions) {
+  const refreshGenerationRef = useRef(0);
+
   async function refresh(api: GitCrestApiClient, restoreSavedWorkspace = false) {
+    const generation = ++refreshGenerationRef.current;
     const repositories = await api.listRepositories();
+    if (refreshGenerationRef.current !== generation) return;
     setRepositories(repositories);
     if (restoreSavedWorkspace) {
       restoreWorkspace(repositories);

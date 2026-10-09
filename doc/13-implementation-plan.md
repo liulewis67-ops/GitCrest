@@ -4315,3 +4315,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/remotes/model/use-repository-push.ts`、`src/app/App.tsx`、`src/features/tasks/ui/TaskCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：TaskCenter 凭据修复和 workflow recovery 仍由 App 组合 tasks 与各 feature；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：`7f25f0f`。
+
+### repositories 列表并发刷新忽略迟到响应 — 小阶段 393
+- 状态：已完成（只有最近发起的仓库列表刷新可以提交仓库列表与 session 恢复状态）
+- 日期：2026-10-10
+- 交付：`useRepositoryListRefresh` 为每次刷新分配递增代次；较早请求即使在较新请求之后才返回，也不会覆盖仓库列表、当前选择或已恢复的 WorkspaceSession。API 错误仍沿调用方现有错误路径传播。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；通过代码路径检查确认刷新成功响应在写 React 状态前比较代次，过期响应直接返回。
+- 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`doc/15-frontend-development-guidelines.md` 第 4.2、5 节。
+- 限制/后续：代次保护不取消已经发出的 HTTP 请求，只阻止迟到结果变更 UI/session 状态；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
