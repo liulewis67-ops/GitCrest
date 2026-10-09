@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { _electron as electron } from "playwright";
@@ -8,7 +9,7 @@ import { isUpdateFeedConfigured } from "../electron/main/update-config-policy.mj
 
 const root = process.cwd();
 const output = resolve(process.env.GITCREST_PACKAGED_OUTPUT ?? join(root, "dist"));
-const executable = await findPackagedExecutable(output);
+let executable = await findPackagedExecutable(output);
 await assertReleaseArtifactSizes(output);
 const injectLinuxUnsignedFeed = process.platform === "linux" && process.env.GITCREST_PACKAGED_LINUX_UNSIGNED_FEED === "1";
 const linuxUpdateConfigPath = join(output, "linux-unpacked", "resources", "app-update.yml");
@@ -22,11 +23,20 @@ if (injectLinuxUnsignedFeed) {
   await writeFile(linuxUpdateConfigPath, "provider: generic\nurl: https://updates.invalid\n");
 }
 let appData;
+let installDirectory;
 let app;
 let sidecarUrl;
 
 try {
   appData = await mkdtemp(join(tmpdir(), "gitcrest-package-smoke-"));
+  if (process.platform === "win32") {
+    installDirectory = join(appData, "installed");
+    await mkdir(installDirectory);
+    const installer = await findWindowsInstaller(output);
+    await runProcess(installer, ["/S", `/D=${installDirectory}`]);
+    executable = join(installDirectory, "GitCrest.exe");
+    assert.equal(existsSync(executable), true, "the Windows installer should place GitCrest.exe in the requested install directory");
+  }
   app = await electron.launch({
     executablePath: executable,
     args: [],
@@ -63,11 +73,18 @@ try {
     await app?.close();
   } finally {
     try {
-      if (appData) await rm(appData, { recursive: true, force: true });
+      if (installDirectory) {
+        const uninstaller = join(installDirectory, "Uninstall GitCrest.exe");
+        if (existsSync(uninstaller)) await runProcess(uninstaller, ["/S"]);
+      }
     } finally {
-      if (injectLinuxUnsignedFeed) {
-        if (originalLinuxUpdateConfig) await writeFile(linuxUpdateConfigPath, originalLinuxUpdateConfig);
-        else await unlink(linuxUpdateConfigPath);
+      try {
+        if (appData) await rm(appData, { recursive: true, force: true });
+      } finally {
+        if (injectLinuxUnsignedFeed) {
+          if (originalLinuxUpdateConfig) await writeFile(linuxUpdateConfigPath, originalLinuxUpdateConfig);
+          else await unlink(linuxUpdateConfigPath);
+        }
       }
     }
   }
@@ -88,7 +105,7 @@ if (sidecarUrl) {
   assert.equal(exited, true, "sidecar should stop when the packaged Electron app closes");
 }
 
-console.log(`Packaged startup and sidecar shutdown passed: ${executable}`);
+console.log(`Packaged installation, startup and sidecar shutdown passed: ${executable}`);
 
 async function assertReleaseArtifactSizes(distPath) {
   const entries = await readdir(distPath, { withFileTypes: true });
@@ -111,4 +128,29 @@ async function findPackagedExecutable(distPath) {
     if (macDirectory) return join(distPath, macDirectory.name, "GitCrest.app", "Contents", "MacOS", "GitCrest");
   }
   throw new Error(`No packaged GitCrest executable was found for ${process.platform} in ${resolve(distPath)}.`);
+}
+
+async function findWindowsInstaller(distPath) {
+  const entries = await readdir(distPath, { withFileTypes: true });
+  const installers = entries
+    .filter((entry) => entry.isFile() && /^GitCrest Setup .*\.exe$/i.test(entry.name))
+    .map((entry) => join(distPath, entry.name));
+  assert.ok(installers.length > 0, `a Windows NSIS installer should exist in ${resolve(distPath)}`);
+  return installers.sort((left, right) => right.localeCompare(left))[0];
+}
+
+function runProcess(command, args) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const child = spawn(command, args, { stdio: "inherit", windowsHide: true });
+    const timeout = setTimeout(() => child.kill(), 120_000);
+    child.once("error", (error) => {
+      clearTimeout(timeout);
+      rejectPromise(error);
+    });
+    child.once("exit", (code, signal) => {
+      clearTimeout(timeout);
+      if (code === 0) resolvePromise();
+      else rejectPromise(new Error(`${command} exited with code ${code ?? "null"} and signal ${signal ?? "none"}`));
+    });
+  });
 }
