@@ -3383,4 +3383,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；自动化实际使用 Windows Credential Manager 和本机 HTTPS/Git HTTP backend，未访问外网。
 - 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前闭环在 Windows Git 2.37.3 与 Windows Credential Manager 验证；Clone 认证保存后成功仍未端到端覆盖，macOS/Linux 系统凭据库闭环留待相应 runner。S7.5 仍保持进行中。
-- 完成 commit：随本条阶段记录提交。
+- 完成 commit：`7faf367`
