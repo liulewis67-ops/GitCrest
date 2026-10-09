@@ -331,32 +331,6 @@ impl GitCommandService {
         strategy: RemotePullStrategy,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let current = crate::features::remotes::pull::read_pull_preflight(
-            expected.repo_id.clone(),
-            repository_path,
-            Some(&expected.local_branch),
-            false,
-            &super::refs::GitBranchAdapter,
-            self,
-            &super::remotes::GitRemoteAdapter,
-        )
-        .await
-        .map_err(|_| {
-            TaskFailure::Failed(
-                "Pull preflight could not be revalidated. Refresh and review the repository state."
-                    .into(),
-            )
-        })?;
-        if current.local_oid != expected.local_oid
-            || current.tracking_oid != expected.tracking_oid
-            || current.remote_name != expected.remote_name
-            || current.remote_branch != expected.remote_branch
-            || !current.is_clean
-        {
-            return Err(TaskFailure::Failed(
-                "Pull preflight became stale or the worktree is no longer clean. Review repository state before pulling.".into(),
-            ));
-        }
         let strategy_flag = match strategy {
             RemotePullStrategy::Merge => "--no-rebase",
             RemotePullStrategy::Rebase => "--rebase",

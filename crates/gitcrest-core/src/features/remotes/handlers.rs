@@ -139,6 +139,10 @@ pub(super) async fn pull_repository(
     let command = state.remote_commands.clone();
     let path = target.repository_path;
     let operation_command = RemotePullCommand::from(&preflight);
+    let git_reader = state.git_commands.clone();
+    let branch_git = state.branch_git.clone();
+    let remote_git = state.remote_git.clone();
+    let task_repo_id = repo_id.clone();
     let strategy = RemotePullStrategy::from(request.strategy);
     let operation = match strategy {
         RemotePullStrategy::Merge => "pullMerge",
@@ -152,6 +156,33 @@ pub(super) async fn pull_repository(
             target.resource_key,
             operation,
             move |context| async move {
+                let current = pull::read_pull_preflight(
+                    task_repo_id,
+                    &path,
+                    Some(&operation_command.local_branch),
+                    false,
+                    branch_git.as_ref(),
+                    &git_reader,
+                    remote_git.as_ref(),
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed(
+                        "Pull preflight could not be revalidated. Refresh and review the repository state."
+                            .into(),
+                    )
+                })?;
+                if current.local_oid != operation_command.local_oid
+                    || current.tracking_oid != operation_command.tracking_oid
+                    || current.remote_name != operation_command.remote_name
+                    || current.remote_branch != operation_command.remote_branch
+                    || !current.is_clean
+                {
+                    return Err(TaskFailure::Failed(
+                        "Pull preflight became stale or the worktree is no longer clean. Review repository state before pulling."
+                            .into(),
+                    ));
+                }
                 command
                     .pull(&path, operation_command, strategy, context)
                     .await
