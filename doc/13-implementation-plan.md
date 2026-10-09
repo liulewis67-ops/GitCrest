@@ -2974,3 +2974,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/remotes.rs`、`crates/gitcrest-core/src/features/remotes/pull.rs`、`crates/gitcrest-core/src/git/status.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
 - 限制/后续：push preflight 仍在 feature 中直接运行 Git 子进程；pull/push 实际写操作仍由 GitCommandService 协调；继续迁移并验证远程操作行为，S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`a83ae28`
+
+### Push preflight 读取迁入 RemoteGitPort — 小阶段 257
+- 状态：已完成（push preflight 不再在 remotes feature 中启动 Git 子进程）
+- 日期：2026-10-09
+- 交付：扩展 `RemoteGitPort` 读取本地 commit、跟踪 remote commit、ahead/behind、最多 50 条待推提交和待推路径；push service 负责既有业务校验、错误映射、最多 200 条路径的预览截断与 API 响应组装。保留 2 MiB 输出上限和 20 秒期限，未改变 push 执行与 force-with-lease 预检条件。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 push feature 生产路径不再运行 Git 命令；未运行 Rust 测试。
+- 手工验证：未执行 upstream/显式目标两种预检、分叉/无待推提交、提交和路径截断等场景；运行时行为尚未手工复核。
+- 证据：`crates/gitcrest-core/src/domain/remote.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/remotes.rs`、`crates/gitcrest-core/src/features/remotes/push.rs`、`doc/14-backend-development-guidelines.md` 第 3、4.1、14 节。
+- 限制/后续：push/pull 实际写操作与 fetch/remote 配置写操作仍由现有 GitCommandService 执行；继续拆分写入能力并完成运行时验收；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`5a1d9c8`
