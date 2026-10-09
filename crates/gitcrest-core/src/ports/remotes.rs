@@ -3,8 +3,8 @@ use std::{future::Future, path::Path, pin::Pin};
 use crate::domain::{
     error::GitAdapterError,
     remote::{
-        RemoteBranchCommit, RemoteBranchDivergence, RemoteBranchUpstream, RemoteCommand,
-        RemoteConfigurationSnapshot,
+        RemoteBranchCommit, RemoteBranchDeleteCommand, RemoteBranchDivergence,
+        RemoteBranchUpstream, RemoteCommand, RemoteConfigurationSnapshot,
     },
 };
 use crate::execution::{TaskContext, TaskFailure};
@@ -77,6 +77,13 @@ pub(crate) trait RemoteCommandPort: Send + Sync {
         &'a self,
         repository_path: &'a Path,
         operation: RemoteCommand,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a>;
+
+    fn delete_remote_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        command: RemoteBranchDeleteCommand,
         task: TaskContext,
     ) -> RemoteCommandFuture<'a>;
 }

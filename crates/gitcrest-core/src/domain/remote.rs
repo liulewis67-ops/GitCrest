@@ -53,3 +53,11 @@ pub(crate) struct RemoteBranchCommit {
     pub(crate) oid: String,
     pub(crate) subject: String,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RemoteBranchDeleteCommand {
+    pub(crate) remote_name: String,
+    pub(crate) remote_branch: String,
+    pub(crate) target_ref: String,
+    pub(crate) expected_remote_oid: String,
+}

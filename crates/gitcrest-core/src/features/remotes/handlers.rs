@@ -6,7 +6,7 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::remote::RemoteCommand,
+    domain::remote::{RemoteBranchDeleteCommand, RemoteCommand},
     features::{branches, remotes as remote_service},
     AppState, TaskFailure, TaskSnapshot,
 };
@@ -787,7 +787,8 @@ pub(super) async fn delete_repository_remote_branch(
             "Finish the active Git operation before deleting a remote branch.",
         ));
     }
-    let command = state.git_commands.clone();
+    let git_reader = state.git_commands.clone();
+    let remote_commands = state.remote_commands.clone();
     let branch_git = state.branch_git.clone();
     let remote_git = state.remote_git.clone();
     let repositories = state.repositories.clone();
@@ -807,7 +808,7 @@ pub(super) async fn delete_repository_remote_branch(
             "remoteBranchDelete",
             move |context| async move {
                 let current = remote_service::read_remote_branch_delete_preview(
-                    &command,
+                    &git_reader,
                     branch_git.as_ref(),
                     remote_git.as_ref(),
                     task_repo_id.clone(),
@@ -830,8 +831,14 @@ pub(super) async fn delete_repository_remote_branch(
                     ));
                 }
                 let task_context = context.clone();
-                let result = command
-                    .execute_remote_branch_delete(&path, &current, context)
+                let delete_command = RemoteBranchDeleteCommand {
+                    remote_name: current.remote_name,
+                    remote_branch: current.remote_branch,
+                    target_ref: current.target_ref,
+                    expected_remote_oid: current.expected_remote_oid,
+                };
+                let result = remote_commands
+                    .delete_remote_branch(&path, delete_command, context)
                     .await;
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context

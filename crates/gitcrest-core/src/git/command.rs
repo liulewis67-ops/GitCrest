@@ -22,7 +22,7 @@ use crate::{
     domain::{
         branch::BranchCommand,
         error::WorkflowError,
-        remote::RemoteCommand,
+        remote::{RemoteBranchDeleteCommand, RemoteCommand},
         staging::StagingOperation,
         workflow::{
             WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
@@ -1216,13 +1216,13 @@ impl GitCommandService {
     pub async fn execute_remote_branch_delete(
         &self,
         repository_path: &Path,
-        preview: &crate::features::remotes::RemoteBranchDeletePreview,
+        command: &RemoteBranchDeleteCommand,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let remote_ref = format!("refs/heads/{}", preview.remote_branch);
+        let remote_ref = format!("refs/heads/{}", command.remote_branch);
         let lease = format!(
             "--force-with-lease={remote_ref}:{}",
-            preview.expected_remote_oid
+            command.expected_remote_oid
         );
         run_command(
             &self.git_program,
@@ -1232,14 +1232,14 @@ impl GitCommandService {
                 "--porcelain".into(),
                 lease.into(),
                 "--".into(),
-                preview.remote_name.clone().into(),
+                command.remote_name.clone().into(),
                 format!(":{remote_ref}").into(),
             ],
             Some(format!(
                 "git push --delete {} {} with lease {}",
-                preview.remote_name,
-                preview.remote_branch,
-                &preview.expected_remote_oid[..7.min(preview.expected_remote_oid.len())]
+                command.remote_name,
+                command.remote_branch,
+                &command.expected_remote_oid[..7.min(command.expected_remote_oid.len())]
             )),
             None,
             Vec::new(),
@@ -1254,8 +1254,8 @@ impl GitCommandService {
             vec![
                 "update-ref".into(),
                 "-d".into(),
-                preview.target_ref.clone().into(),
-                preview.expected_remote_oid.clone().into(),
+                command.target_ref.clone().into(),
+                command.expected_remote_oid.clone().into(),
             ],
             None,
             None,
@@ -1433,6 +1433,18 @@ impl RemoteCommandPort for GitCommandService {
     ) -> RemoteCommandFuture<'a> {
         Box::pin(async move {
             GitCommandService::execute_remote(self, repository_path, operation, task).await
+        })
+    }
+
+    fn delete_remote_branch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        command: RemoteBranchDeleteCommand,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a> {
+        Box::pin(async move {
+            GitCommandService::execute_remote_branch_delete(self, repository_path, &command, task)
+                .await
         })
     }
 }
