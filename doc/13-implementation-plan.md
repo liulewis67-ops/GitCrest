@@ -4365,3 +4365,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`src/app/App.tsx`、`src/features/repositories/model/use-repository-opening.ts`、`src/features/cloning/model/use-clone-submission.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：仓库列表由 sidecar 刷新时的 session 恢复与页面切换仍通过 App 回调装配；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### repositories feature 刷新后的 WorkspaceSession 恢复迁入 model — 小阶段 398
+- 状态：已完成（最近仓库刷新可由 repositories model 按可用 RepoId 恢复打开 tabs 和活动仓库）
+- 日期：2026-10-10
+- 交付：扩展 `useRepositoryListRefresh` 的恢复分支：调用现有 `restoreAvailableRepositories` 过滤不可用 tab 并选择有效活动仓库，同步更新 session ref/state、选中仓库及页面；App 仅注入 session action、setter 和页面状态回调。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；检查 restore 仍只保留 availability 为 available 的已打开 RepoId；原活动 RepoId 仍有效时优先恢复，否则选择剩余 tabs 中最后一个可用仓库；没有可恢复仓库时切换 welcome。
+- 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：页面路由仍由 App 通过 setter 装配；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

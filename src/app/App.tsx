@@ -236,12 +236,10 @@ function App() {
   const repositoryListRefresh = useRepositoryListRefresh({
     setRepositories,
     setSelectedRepository,
-    restoreWorkspace: (repositories) => {
-      const restored = workspaceSessionActions.restoreAvailableRepositories(workspaceSessionRef.current, repositories);
-      setWorkspaceSession(restored.session);
-      setSelectedRepository(restored.activeRepository);
-      setPage(restored.activeRepository ? "workspace" : "welcome");
-    },
+    sessionRef: workspaceSessionRef,
+    setSession: setWorkspaceSession,
+    restoreAvailableRepositories: workspaceSessionActions.restoreAvailableRepositories,
+    setPage,
   });
   const rememberCommitAction = useWorkspaceCommitAction(selectedRepository?.repoId, setWorkspaceSession);
   const graphViewportRef = useRef<HTMLDivElement>(null);
