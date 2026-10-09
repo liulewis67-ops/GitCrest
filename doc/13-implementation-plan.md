@@ -3153,4 +3153,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工检查；Playwright Electron E2E 覆盖 Push 预览与提交以及 Pull 预览/集成。
 - 证据：`src/pages/workspace/WorkspacePage.tsx`、`tests/e2e/remote-sync.test.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、4.1 节。
 - 限制/后续：提交助手建议文本框的既有 E2E 失败需独立修复；S7.2、S7.4、S7.5 仍待验收。
-- 完成 commit：待提交
+- 完成 commit：`58bdd9f`
