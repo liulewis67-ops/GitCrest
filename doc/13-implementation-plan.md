@@ -3942,4 +3942,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；两组基准都使用独立 sidecar/SQLite 与既有 fixture，所有搜索轮次返回目标提交；基准运行前后 fixture refs 与工作树状态保持一致。
 - 证据：`crates/gitcrest-core/migrations/0012_history_search_slim_cache.sql`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`tests` 中现有 History/Storage 用例、上述两份性能报告。
 - 限制/后续：schema 升级会丢弃旧搜索缓存并在首次历史页/搜索时重建；索引 ready 的 P50 约 2.7 秒，完整冷搜索仍远超 <200ms，且完整 API 基准有明显系统负载长尾。warm 搜索、首屏与 Diff 达到本机目标；S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
-- 完成 commit：待补记
+- 完成 commit：`e2824b1 perf: slim history search cache`
