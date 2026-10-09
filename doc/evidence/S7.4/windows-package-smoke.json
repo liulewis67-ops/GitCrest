@@ -1,0 +1,24 @@
+{
+  "testedAt": "2026-10-09T13:43:24+08:00",
+  "os": "Microsoft Windows 10.0.26300",
+  "architecture": "x64",
+  "package": {
+    "installer": "GitCrest Setup 0.1.0.exe",
+    "bytes": 108743818,
+    "maxBytes": 157286400,
+    "signatureStatus": "NotSigned"
+  },
+  "sidecar": {
+    "resource": "resources/bin/gitcrest-core.exe",
+    "bytes": 17831936
+  },
+  "smoke": {
+    "installedToIsolatedDirectory": true,
+    "packagedElectronLaunch": true,
+    "sidecarHealth": true,
+    "sidecarStoppedAfterAppClose": true,
+    "updaterStateMatchedUnsignedBuildPolicy": true,
+    "result": "passed"
+  },
+  "notes": "First packaged-smoke run failed its temporary-directory removal assertion; immediate full rerun passed. No signing certificate was configured, so this confirms unsigned Windows packaging only."
+}
