@@ -49,7 +49,6 @@ pub async fn read_page_indexed(
         None
     };
 
-    let mut index_build_scheduled = false;
     if let (Some(fingerprint), Some(message)) = (&fingerprint, &filters.message) {
         let store_for_search = store.clone();
         let repo_id_for_search = repo_id.clone();
@@ -83,16 +82,6 @@ pub async fn read_page_indexed(
                 search_pending: false,
             });
         }
-
-        if !store.is_index_building(&repo_id) {
-            index_build_scheduled = schedule_history_index_build(
-                repo_id.clone(),
-                repository_path.to_owned(),
-                head.map(str::to_owned),
-                Some(fingerprint.clone()),
-                store.clone(),
-            );
-        }
     }
 
     let page = read_page(
@@ -107,7 +96,6 @@ pub async fn read_page_indexed(
 
     if offset == 0
         && (message_only_search || unfiltered_first_page)
-        && !index_build_scheduled
         && !store.is_index_building(&repo_id)
     {
         schedule_history_index_build(

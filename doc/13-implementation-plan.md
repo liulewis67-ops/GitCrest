@@ -4475,3 +4475,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-search-index-fallback-stage408-20261010.json`、阶段 407 冷搜索报告。
 - 限制/后续：冷搜索结果 P95 仍约为目标的 4.1 倍；Git fallback 改善首次结果到达时间，但不能算作 <200ms 通过。下一阶段应在保留 Git 搜索语义的前提下继续降低 Git 遍历与查询耗时。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现、复测证据与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### S7.2 Git 冷查询完成后再启动 FTS 索引 — 小阶段 409
+- 状态：已完成（避免冷 Git 搜索与全量索引构建并行争用同一对象库；冷搜索仍未达到 <200ms）
+- 日期：2026-10-10
+- 交付：对 message-only 冷搜索先运行既有 Git 查询并返回结果，再调度带 refs fingerprint 的后台索引构建；同 RepoId 已有索引任务时不重复调度，索引命中路径不变。对照阶段 408，消除了同一首次请求中 Git 全量消息筛选和 `git log` 索引扫描并行访问对象库的争用。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、Release 构建、`node --check scripts/performance/benchmark.mjs`、20 轮冷搜索基准、报告 JSON 解析与 `git diff --check` 通过；未运行测试。100k 冷搜索 P50/P95/max 为 510.462/590.397/603.543ms，较阶段 408 的 720.393/823.841/908.679ms 改善约 28%（P95）；每轮结果均匹配目标提交，后台索引成功完成。
+- 手工验证：检查索引 miss 时 Git fallback `read_page` 在调度索引构建前完成；build lease 的 fingerprint 去重仍在调度时执行；索引命中仍直接读取 FTS 并装配匹配的 Git commits。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-search-index-git-first-stage409-20261010.json`、阶段 408 冷搜索报告。
+- 限制/后续：冷搜索完整结果 P95 仍约 590ms，未达 <200ms；下一步需优化 Git message scan 本身或将冷搜索定义在后台索引已预热后的实际用户流程中，并保持首次冷查询单独报告。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现、复测证据与台账同一 commit（SHA 可在后续台账更新中补记）。
