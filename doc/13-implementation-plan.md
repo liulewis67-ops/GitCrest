@@ -2390,3 +2390,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：提交详情没有跨仓库/选择的共享缓存；tag 创建和 detail 的视图交互仍在 CommitDetails。S7.2/S7.4/S7.5 继续按计划验收。
 - 证据：`src/features/history/model/use-repository-commit-detail.ts`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`4eeaa59`
+
+### history feature annotated tag 创建迁入 model — 小阶段 197
+- 状态：已完成（创建 annotated tag 的 API 调用及 busy/error/success 状态由 history model 管理）
+- 日期：2026-10-09
+- 交付：新增 `useCommitTagCreation`，接管 tag 创建请求、提交中状态、结果消息和错误状态；按 repoId/OID 变更递增请求代次，忽略旧提交响应，避免切换提交后旧结果覆盖当前详情。CommitDetails 保留表单输入与打开/关闭交互。
+- 验证：`pnpm build`（应用与测试 TypeScript 检查、main/preload/renderer 构建）与 `git diff --check` 通过；构建保留 web-tree-sitter eval 警告，未运行测试。
+- 限制/后续：tag 表单字段和编辑器展开状态仍由 CommitDetails 视图管理；S7.2/S7.4/S7.5 继续按计划验收。
+- 证据：`src/features/history/model/use-commit-tag-creation.ts`、`src/features/history/CommitGraph.tsx`、`src/features/history/index.ts`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`b2b4b94`
