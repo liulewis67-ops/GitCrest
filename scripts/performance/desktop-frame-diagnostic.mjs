@@ -185,6 +185,26 @@ try {
     featureStatus: electronApp.getGPUFeatureStatus(),
     info: await electronApp.getGPUInfo("complete"),
   }));
+  const displayDiagnostics = await app.evaluate(({ screen, BrowserWindow }) => {
+    const window = BrowserWindow.getAllWindows()[0];
+    const windowBounds = window?.getBounds();
+    const describeDisplay = (display) => ({
+      id: display.id,
+      bounds: display.bounds,
+      scaleFactor: display.scaleFactor,
+      rotation: display.rotation,
+      internal: display.internal,
+      displayFrequency: display.displayFrequency,
+      colorDepth: display.colorDepth,
+      label: display.label,
+    });
+    return {
+      windowBounds,
+      primaryDisplay: describeDisplay(screen.getPrimaryDisplay()),
+      matchingDisplay: windowBounds ? describeDisplay(screen.getDisplayMatching(windowBounds)) : null,
+      displays: screen.getAllDisplays().map(describeDisplay),
+    };
+  });
   await page.bringToFront();
   const emptyWorkspace = await sampleAnimationFrames(page, "empty-workspace-idle", 5_000, false);
 
@@ -204,6 +224,7 @@ try {
     applicationExecutable: executablePath,
     launchFlags,
     gpuDiagnostics,
+    displayDiagnostics,
   };
   const report = {
     generatedAt: new Date().toISOString(),
