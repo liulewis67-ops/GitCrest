@@ -4023,3 +4023,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、`doc/evidence/S7.2/desktop-win32-frame-diagnostic-stage361-20261010.json`；GPU 单轮线索见小阶段 341。
 - 限制/后续：空仓库与历史视图帧率相同，反证了提交图虚拟列表或 SVG 路径是该 55fps 差值的直接来源；目前只能将范围收窄到 Electron/Windows/GPU 帧调度，不能据此修改应用绘制逻辑。下一阶段以正式打包版对 `--disable-gpu` 做 20 轮对照，确认它是否稳定达到 ≥60fps 及内存门槛。
 - 完成 commit：`59cc7e0 perf: isolate desktop frame pacing`
+
+### S7.2 GPU 禁用路径对照 — 小阶段 362
+- 状态：已完成（单轮 30 秒诊断拒绝 `--disable-gpu`；保留默认 GPU 路径）
+- 日期：2026-10-10
+- 交付：扩展 `scripts/performance/desktop-frame-diagnostic.mjs`，支持在打包版中选择 `--disable-gpu` 或 `--in-process-gpu` 做短时 RAF 隔离测量；同时用正式滚动采样器完成一轮 30 秒 `--disable-gpu` 对照。
+- 验证：同一 Windows 11 / Ryzen 7 5800H / 打包 Release / 100k fixture 下，禁用 GPU 的独立探针测得空仓库和历史空闲 59.880fps、10 秒滚动 59.524fps；30 秒正式滚动样本测得 P5 59.880fps，工作集峰值 576,208,896 bytes。帧率仍低于 ≥60fps，工作集超过 <500MB，因此该候选路径在两个目标上都未通过。诊断报告：`doc/evidence/S7.2/desktop-win32-disable-gpu-frame-diagnostic-stage362-20261010.json`、`doc/evidence/S7.2/desktop-win32-disable-gpu-scroll-diagnostic-stage362-20261010.json`。
+- 手工验证：未操作 GUI；采样器使用独立临时用户目录，实际滚动持续 30 秒并成功完成。
+- 证据：`scripts/performance/desktop-frame-diagnostic.mjs`、两份 stage362 报告；默认 GPU 的 20 轮基线见小阶段 360。
+- 限制/后续：禁用 GPU 虽将帧率提高至接近 60，但并未达到 60，且工作集显著恶化；不改变发行版 GPU 启动参数。继续从 Electron 基线工作集及默认合成路径调查优化，S7.2 仍待验收。

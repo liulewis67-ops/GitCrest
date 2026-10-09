@@ -23,6 +23,16 @@ function packagedAppExecutablePath() {
   throw new Error(`Unsupported desktop benchmark platform: ${process.platform}`);
 }
 
+function benchmarkGpuFlags() {
+  const flags = [];
+  if (process.env.GITCREST_BENCH_DISABLE_GPU === "1" && process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1") {
+    throw new Error("Choose either disabled GPU or in-process GPU for a benchmark run.");
+  }
+  if (process.env.GITCREST_BENCH_DISABLE_GPU === "1") flags.push("--disable-gpu");
+  if (process.env.GITCREST_BENCH_IN_PROCESS_GPU === "1") flags.push("--in-process-gpu");
+  return flags;
+}
+
 async function registerFixture(page) {
   const result = await page.evaluate(async (path) => {
     const connection = await window.gitcrest.getSidecarConnection();
@@ -81,13 +91,14 @@ async function sampleAnimationFrames(page, label, durationMs, scroll) {
 }
 
 const executablePath = packagedAppExecutablePath();
+const launchFlags = benchmarkGpuFlags();
 await stat(executablePath);
 const dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-frame-diagnostic-"));
 let app;
 try {
   app = await electron.launch({
     executablePath,
-    args: [`--user-data-dir=${join(dataDir, "user-data")}`],
+    args: [...launchFlags, `--user-data-dir=${join(dataDir, "user-data")}`],
     cwd: root,
     env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: join(dataDir, "gitcrest.sqlite") },
   });
@@ -109,7 +120,7 @@ try {
   const report = {
     generatedAt: new Date().toISOString(),
     host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model || "unknown" },
-    software: { electron: process.versions.electron || "37.0.0", node: process.version, launchMode: "packaged application", applicationExecutable: executablePath },
+    software: { electron: process.versions.electron || "37.0.0", node: process.version, launchMode: "packaged application", applicationExecutable: executablePath, launchFlags },
     fixture: { commits: 100_000, path: fixturePath },
     thresholds: { targetScrollP5Fps: 60, rafTargetPeriodMs: 1000 / 60 },
     samples,
