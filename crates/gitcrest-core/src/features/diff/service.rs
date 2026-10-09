@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 mod read;
 use read::parse_hunk_header;
 #[cfg(test)]
@@ -17,9 +15,8 @@ use crate::{
     features::status::StatusFile,
 };
 
+#[cfg(test)]
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
-const MAX_ERROR_BYTES: usize = 16 * 1024;
-const DIFF_DEADLINE: Duration = Duration::from_secs(10);
 
 pub struct DiffRead {
     pub document: DiffDocument,

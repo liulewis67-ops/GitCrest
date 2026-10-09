@@ -1,13 +1,6 @@
-use std::{
-    path::{Component, Path},
-    process::Stdio,
-};
+use std::path::{Component, Path};
 
 use sha2::{Digest, Sha256};
-use tokio::{
-    io::{AsyncRead, AsyncReadExt},
-    process::Command,
-};
 
 use super::*;
 
@@ -33,69 +26,14 @@ pub async fn read_commit_file(
     if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(DiffError::InvalidPath);
     }
-    let mut command = Command::new("git");
-    command.arg("-C").arg(repository_path).args([
-        "--literal-pathspecs",
-        if parent_oid.is_some() {
-            "diff"
-        } else {
-            "diff-tree"
-        },
-        "--no-ext-diff",
-        "--no-color",
-        "--unified=3",
-    ]);
-    if let Some(parent_oid) = parent_oid {
-        command.arg(parent_oid).arg(oid);
-    } else {
-        command.args(["--root", "--no-commit-id", "-p", "-r", oid]);
-    }
-    command
-        .arg("--")
-        .arg(relative_path)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env("GIT_PAGER", "cat")
-        .kill_on_drop(true);
-    let mut child = command.spawn().map_err(|_| DiffError::GitUnavailable)?;
-    let stdout = child.stdout.take().ok_or(DiffError::GitFailed)?;
-    let stderr = child.stderr.take().ok_or(DiffError::GitFailed)?;
-    let stdout_reader = tokio::spawn(read_capped(stdout, MAX_DIFF_BYTES));
-    let stderr_reader = tokio::spawn(read_capped(stderr, MAX_ERROR_BYTES));
-    let result = tokio::time::timeout(DIFF_DEADLINE, async {
-        let status = child.wait().await.map_err(|_| DiffError::GitFailed)?;
-        let stdout = stdout_reader
-            .await
-            .map_err(|_| DiffError::GitFailed)?
-            .map_err(|_| DiffError::GitFailed)?;
-        let stderr = stderr_reader
-            .await
-            .map_err(|_| DiffError::GitFailed)?
-            .map_err(|_| DiffError::GitFailed)?;
-        Ok::<_, DiffError>((status, stdout, stderr))
-    })
-    .await;
-    let (status, stdout, stderr) = match result {
-        Ok(result) => result?,
-        Err(_) => {
-            let _ = child.kill().await;
-            return Err(DiffError::TimedOut);
-        }
-    };
-    if stdout.overflowed {
-        return Err(DiffError::TooLarge);
-    }
-    if !status.success() {
-        return Err(classify_git_error(
-            &String::from_utf8_lossy(&stderr.bytes).to_ascii_lowercase(),
-        ));
-    }
-    let parsed = parse_diff(&stdout.bytes);
+    let patch =
+        crate::git::diff::read_commit_file_patch(repository_path, oid, parent_oid, relative_path)
+            .await?;
+    let parsed = parse_diff(&patch);
     let mut document = DiffDocument {
         repo_id,
         path: relative_path.to_owned(),
-        revision: revision_for(DiffScope::Commit, relative_path, &stdout.bytes),
+        revision: revision_for(DiffScope::Commit, relative_path, &patch),
         original_path: None,
         scope: DiffScope::Commit,
         change_kind: ChangeKind::Modified,
@@ -185,73 +123,12 @@ pub async fn read_with_patch(
         FilePathState::Regular | FilePathState::Missing => {}
     }
 
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(repository_path)
-        .args([
-            "--literal-pathspecs",
-            "diff",
-            "--no-ext-diff",
-            "--no-color",
-            "--unified=3",
-        ])
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env("GIT_PAGER", "cat")
-        .kill_on_drop(true);
-    if scope == DiffScope::Index {
-        command.arg("--cached");
-    } else if file.categories.contains(&ChangeCategory::Untracked) {
-        command.arg("--no-index");
-    }
-    command.arg("--");
-    if scope == DiffScope::WorkingTree && file.categories.contains(&ChangeCategory::Untracked) {
-        command.arg("/dev/null");
-    }
-    command.arg(&file.path);
-
-    let mut child = command.spawn().map_err(|error| match error.kind() {
-        std::io::ErrorKind::NotFound => DiffError::GitUnavailable,
-        std::io::ErrorKind::PermissionDenied => DiffError::PermissionDenied,
-        _ => DiffError::GitUnavailable,
-    })?;
-    let stdout = child.stdout.take().ok_or(DiffError::GitFailed)?;
-    let stderr = child.stderr.take().ok_or(DiffError::GitFailed)?;
-    let stdout_reader = tokio::spawn(read_capped(stdout, MAX_DIFF_BYTES));
-    let stderr_reader = tokio::spawn(read_capped(stderr, MAX_ERROR_BYTES));
-    let result = tokio::time::timeout(DIFF_DEADLINE, async {
-        let status = child.wait().await.map_err(|_| DiffError::GitFailed)?;
-        let stdout = stdout_reader
-            .await
-            .map_err(|_| DiffError::GitFailed)?
-            .map_err(|_| DiffError::GitFailed)?;
-        let stderr = stderr_reader
-            .await
-            .map_err(|_| DiffError::GitFailed)?
-            .map_err(|_| DiffError::GitFailed)?;
-        Ok::<_, DiffError>((status, stdout, stderr))
-    })
-    .await;
-    let (status, stdout, stderr) = match result {
-        Ok(result) => result?,
-        Err(_) => {
-            let _ = child.kill().await;
-            return Err(DiffError::TimedOut);
-        }
-    };
-    if stdout.overflowed {
-        return Err(DiffError::TooLarge);
-    }
-    let expected_no_index_diff =
+    let untracked =
         scope == DiffScope::WorkingTree && file.categories.contains(&ChangeCategory::Untracked);
-    if !(status.success() || (expected_no_index_diff && status.code() == Some(1))) {
-        let error = String::from_utf8_lossy(&stderr.bytes).to_ascii_lowercase();
-        return Err(classify_git_error(&error));
-    }
-    document.revision = revision_for(scope, &file.path, &stdout.bytes);
-    let parsed = parse_diff(&stdout.bytes);
+    let patch =
+        crate::git::diff::read_file_patch(repository_path, &file.path, scope, untracked).await?;
+    document.revision = revision_for(scope, &file.path, &patch);
+    let parsed = parse_diff(&patch);
     document.status = if parsed.binary {
         DiffContentStatus::Binary
     } else if parsed.hunks.is_empty() {
@@ -260,10 +137,7 @@ pub async fn read_with_patch(
         DiffContentStatus::Text
     };
     document.hunks = parsed.hunks;
-    Ok(DiffRead {
-        document,
-        patch: stdout.bytes,
-    })
+    Ok(DiffRead { document, patch })
 }
 
 fn revision_for(scope: DiffScope, path: &str, patch: &[u8]) -> String {
@@ -277,41 +151,6 @@ fn revision_for(scope: DiffScope, path: &str, patch: &[u8]) -> String {
     hash.update([0]);
     hash.update(patch);
     format!("sha256:{:x}", hash.finalize())
-}
-
-fn classify_git_error(error: &str) -> DiffError {
-    if error.contains("permission denied") || error.contains("access is denied") {
-        DiffError::PermissionDenied
-    } else if error.contains("could not access") || error.contains("no such file") {
-        DiffError::PathNotFound
-    } else {
-        DiffError::GitFailed
-    }
-}
-
-async fn read_capped<R: AsyncRead + Unpin>(
-    mut stream: R,
-    limit: usize,
-) -> std::io::Result<CappedOutput> {
-    let mut bytes = Vec::with_capacity(limit.min(64 * 1024));
-    let mut chunk = [0_u8; 8192];
-    let mut overflowed = false;
-    loop {
-        let count = stream.read(&mut chunk).await?;
-        if count == 0 {
-            break;
-        }
-        let available = limit.saturating_sub(bytes.len());
-        let kept = available.min(count);
-        bytes.extend_from_slice(&chunk[..kept]);
-        overflowed |= kept != count;
-    }
-    Ok(CappedOutput { bytes, overflowed })
-}
-
-struct CappedOutput {
-    bytes: Vec<u8>,
-    overflowed: bool,
 }
 
 enum FilePathState {
