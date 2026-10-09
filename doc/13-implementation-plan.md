@@ -3303,4 +3303,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI/ACL 拒绝操作；本阶段验证确定性的 I/O→领域错误→API 错误映射。
 - 证据：`crates/gitcrest-core/src/features/repositories/repository.rs`、`crates/gitcrest-core/src/api/error.rs`。
 - 限制/后续：真实 OS ACL 拒绝到 renderer 告警的跨层 E2E 尚未覆盖；初始化 Git 写入失败和副作用清理也仍待验收；S7.5 保持进行中。
-- 完成 commit：待提交
+- 完成 commit：`b8ad44e`
