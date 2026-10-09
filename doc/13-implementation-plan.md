@@ -3143,4 +3143,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行真实中断的 pull merge/rebase/am 取消场景；端到端取消和命令失败路径留待 S7.5 故障验收。
 - 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
 - 限制/后续：单测使用 recovery/read port fixture，不验证真实 Git 子进程中断、工作树保留和跨平台行为；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`02be1c5`
+
+### Workspace Push/Pull 点击回调隔离 React 事件 — 小阶段 274
+- 状态：已完成（工作区工具栏不会把 React click event 当作 repoId 传给 Push/Pull workflow）
+- 日期：2026-10-09
+- 交付：WorkspacePage 的 Push、Pull 按钮通过无参数包装函数调用回调，避免 DOM click handler 自动传入的 React 事件占据 useRepositoryPush/useRepositoryPull 的可选 repoId 参数，导致请求路径包含 `[object Object]` 并返回仓库不存在。没有改变功能层接口和仓库选择行为。
+- 验证：`pnpm build` 通过；重建后的 `pnpm exec vitest run --config vitest.e2e.config.ts tests/e2e/remote-sync.test.ts -t "reviews and pushes a local commit"` 通过；同配置 `-t "fetches a remote-only commit"` 通过；`pnpm test:e2e` 中 remote-sync 12 项全部通过，整个 E2E 为 15/16，唯一失败仍是 desktop.test.ts 提交助手选择建议后文本框为空（该问题在本次修复前的全量 E2E 已出现，本阶段与其无关）。
+- 手工验证：未执行 GUI 手工检查；Playwright Electron E2E 覆盖 Push 预览与提交以及 Pull 预览/集成。
+- 证据：`src/pages/workspace/WorkspacePage.tsx`、`tests/e2e/remote-sync.test.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、4.1 节。
+- 限制/后续：提交助手建议文本框的既有 E2E 失败需独立修复；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：待提交
