@@ -1,15 +1,15 @@
 use super::scope;
-use crate::domain::{error::RepositoryError, status::StatusSnapshot};
-use crate::ports::{repository::RepositoryPathPort, status::StatusReadPort};
-use crate::refresh::snapshots::StatusSnapshotCache;
+use crate::{
+    domain::{error::RepositoryError, status::StatusSnapshot},
+    ports::{repository::RepositoryPathPort, status::StatusReadPort},
+    refresh::status::StatusSnapshotRefreshService,
+};
 #[cfg(test)]
 use crate::{features::repositories::RepositoryManager, git::command::GitCommandService};
 
 #[derive(Clone)]
 pub(crate) struct StatusService<R, G> {
-    repository_paths: R,
-    git: G,
-    cache: StatusSnapshotCache,
+    refresh: StatusSnapshotRefreshService<R, G>,
 }
 
 #[cfg(test)]
@@ -22,9 +22,7 @@ impl StatusService<RepositoryManager, GitCommandService> {
 impl<R: RepositoryPathPort, G: StatusReadPort> StatusService<R, G> {
     pub(crate) fn with_reader(repository_paths: R, git: G) -> Self {
         Self {
-            repository_paths,
-            git,
-            cache: StatusSnapshotCache::default(),
+            refresh: StatusSnapshotRefreshService::new(repository_paths, git),
         }
     }
 
@@ -33,38 +31,18 @@ impl<R: RepositoryPathPort, G: StatusReadPort> StatusService<R, G> {
     }
 
     pub(crate) fn invalidate_scope(&self, repo_id: &str, paths: &[String]) {
-        self.cache.invalidate(repo_id, paths.is_empty(), paths);
+        self.refresh.invalidate(repo_id, paths);
     }
 
     pub(crate) async fn snapshot(&self, repo_id: &str) -> Result<StatusSnapshot, RepositoryError> {
-        let version = self.cache.version(repo_id);
-        self.read_full(repo_id, version).await
+        self.refresh.snapshot(repo_id).await
     }
 
     pub(crate) async fn snapshot_cached(
         &self,
         repo_id: &str,
     ) -> Result<StatusSnapshot, RepositoryError> {
-        let version = self.cache.version(repo_id);
-        if let Some(snapshot) = self.cache.full(repo_id) {
-            return Ok(snapshot);
-        }
-        self.read_full(repo_id, version).await
-    }
-
-    async fn read_full(
-        &self,
-        repo_id: &str,
-        version: u64,
-    ) -> Result<StatusSnapshot, RepositoryError> {
-        let path = self.repository_paths.read_repository_path(repo_id).await?;
-        let snapshot = self
-            .git
-            .read_status(repo_id.to_owned(), &path, &[])
-            .await
-            .map_err(map_status_error)?;
-        self.cache.store_full(repo_id, version, &snapshot);
-        Ok(snapshot)
+        self.refresh.snapshot_cached(repo_id).await
     }
 
     pub(crate) async fn snapshot_paths(
@@ -73,8 +51,7 @@ impl<R: RepositoryPathPort, G: StatusReadPort> StatusService<R, G> {
         paths: &[String],
     ) -> Result<StatusSnapshot, RepositoryError> {
         scope::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
-        let version = self.cache.version(repo_id);
-        self.read_paths(repo_id, paths, version).await
+        self.refresh.snapshot_paths(repo_id, paths).await
     }
 
     pub(crate) async fn snapshot_paths_cached(
@@ -83,27 +60,7 @@ impl<R: RepositoryPathPort, G: StatusReadPort> StatusService<R, G> {
         paths: &[String],
     ) -> Result<StatusSnapshot, RepositoryError> {
         scope::validate_paths(paths).map_err(|_| RepositoryError::InvalidPath)?;
-        let version = self.cache.version(repo_id);
-        if let Some(snapshot) = self.cache.paths(repo_id, paths) {
-            return Ok(snapshot);
-        }
-        self.read_paths(repo_id, paths, version).await
-    }
-
-    async fn read_paths(
-        &self,
-        repo_id: &str,
-        paths: &[String],
-        version: u64,
-    ) -> Result<StatusSnapshot, RepositoryError> {
-        let path = self.repository_paths.read_repository_path(repo_id).await?;
-        let snapshot = self
-            .git
-            .read_status(repo_id.to_owned(), &path, paths)
-            .await
-            .map_err(map_status_error)?;
-        self.cache.store_paths(repo_id, version, paths, &snapshot);
-        Ok(snapshot)
+        self.refresh.snapshot_paths_cached(repo_id, paths).await
     }
 }
 
@@ -117,13 +74,4 @@ pub(crate) async fn read(
     GitCommandService::default()
         .read_status(repo_id, path, &[])
         .await
-}
-
-fn map_status_error(error: std::io::Error) -> RepositoryError {
-    match error.kind() {
-        std::io::ErrorKind::InvalidInput => RepositoryError::InvalidPath,
-        std::io::ErrorKind::NotFound => RepositoryError::GitUnavailable,
-        std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
-        _ => RepositoryError::StatusFailed,
-    }
 }

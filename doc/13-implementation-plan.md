@@ -2724,3 +2724,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：App 继续装配当前仓库、任务面板和 branch review 回调；构建仍报告依赖 `eval` 和部分 bundle 超过 500 kB。
 - 完成 commit：`8386694`
+
+### Status 快照刷新协调迁入 refresh — 小阶段 232
+- 状态：已完成（status feature 保留路径校验与用例入口，缓存读穿和 Git 状态刷新编排归入 refresh）
+- 日期：2026-10-09
+- 交付：新增 `refresh::status::StatusSnapshotRefreshService`，集中管理全量/路径快照的缓存查询、RepositoryPathPort 路径获取、StatusReadPort 读取、版本化缓存写入及底层错误到 RepositoryError 的映射；status feature service 仅校验 scoped paths 并调用 refresh 服务，保留独立 cached/uncached 方法语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；未运行 Rust 测试。
+- 手工验证：未执行 Electron 或临时仓库场景；本阶段未改变 Git status 读取策略与 API 契约。
+- 证据：`crates/gitcrest-core/src/refresh/status.rs`、`crates/gitcrest-core/src/features/status/service.rs`、`crates/gitcrest-core/src/refresh/snapshots.rs`、`doc/14-backend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：refresh service 仍以 RepositoryPathPort 和 StatusReadPort 的具体泛型装配；StatusSnapshotCache 的边界和容量策略未改变；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待补记
