@@ -3254,3 +3254,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：凭据认证交互失败/更新凭证后的 clone UI retry 尚未覆盖；S7.5 仍需 P0 全面审计和发布文档收口。
 - 完成 commit：`4756b80`
+
+### P0 初始化仓库 Electron E2E — 小阶段 285
+- 状态：已完成（从欢迎页初始化用户选定目录，保留原有文件并进入新仓库工作区）
+- 日期：2026-10-09
+- 交付：新增隔离 Electron E2E，初始化一个包含既有 README 的项目目录；通过临时 app data 和 native folder picker stub 选择路径，验证工作区自动打开、Git 根目录正确且 README 内容保留。更新 `08-development-readiness.md` E2E 映射，单列 PRD 的初始化仓库场景。
+- 验证：初始化定向 E2E 通过；完整 `pnpm test:e2e` 通过（6 files、19 tests）；`pnpm build` 通过；`pnpm test` 通过（34 files、162 tests）；`git diff --check` 通过。断言统一 Git 和 Windows 的路径分隔符。
+- 手工验证：未执行 GUI 手工操作；Playwright 覆盖欢迎页入口、目录选择桥接、仓库初始化及已有文件保留。
+- 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：初始化失败/取消路径尚未单独覆盖；S7.5 P0 全量审计与发布验收仍进行中。
+- 完成 commit：待提交
