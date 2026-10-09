@@ -3656,3 +3656,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件自动化测试分别挂起初始会话预检和冲突文件读取，并在窗口卸载时确认取消。
 - 证据：`src/features/workflows/ConflictWindow.tsx`、`tests/unit/conflict-window.test.tsx`。
 - 限制/后续：冲突文件保存/resolve 后轮询、失败恢复预检及 ConflictSuggestionPanel 的设置/版本读取尚未取消；设置/隐私读取与 S7.2、S7.4、S7.5 验收仍待完成。
+- 完成 commit：`c0d8d3f`
+
+### 前端冲突建议 AI 设置读取生命周期取消 — 小阶段 325
+- 状态：已完成（关闭 AI conflict suggestion panel 时中止 AI provider 设置读取）
+- 日期：2026-10-09
+- 交付：ConflictSuggestionPanel 加载仓库 AI provider 设置时通过 `GitCrestApiClient.withSignal` 绑定 AbortController；面板卸载或仓库变化会取消读取，已取消请求不会更新设置或错误状态。用户提交的 AI 建议请求行为不变。
+- 验证：新增延迟设置响应的卸载用例，断言 AbortSignal 被触发；定向 ConflictSuggestionPanel 用例通过；完整 `pnpm test` 通过（38 files、175 tests）；`pnpm build` 与 `git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；面板组件测试在设置请求 pending 时卸载并检查取消。
+- 证据：`src/features/workflows/ConflictSuggestionPanel.tsx`、`tests/unit/conflict-suggestion-panel.test.tsx`。
+- 限制/后续：AI 建议请求完成后的冲突文件版本核验仍为同一操作流程中的读取；ConflictWindow 保存/resolve 后轮询与错误恢复查询、设置/隐私读取以及 S7.2、S7.4、S7.5 验收仍待完成。

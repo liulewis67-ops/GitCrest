@@ -17,12 +17,14 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onClose 
   const [error, setError] = useState("");
 
   useEffect(() => {
-    let active = true;
-    void api.getRepositoryWorkflowConflictAiSettings(file.repoId).then((value) => { if (active) setSettings(value); }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : "AI provider settings could not be loaded.");
+    const controller = new AbortController();
+    void api.withSignal(controller.signal).getRepositoryWorkflowConflictAiSettings(file.repoId).then((value) => {
+      if (!controller.signal.aborted) setSettings(value);
+    }).catch((reason: unknown) => {
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "AI provider settings could not be loaded.");
     });
-    return () => { active = false; };
-  }, [api]);
+    return () => controller.abort();
+  }, [api, file.repoId]);
 
   async function requestSuggestion() {
     if (!settings || settings.provider === "none" || !confirmed || busy || hasUnsavedChanges) return;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient, WorkflowConflictFileResponse } from "../../src/api/client";
 import { ConflictSuggestionPanel } from "../../src/features/workflows/ConflictSuggestionPanel";
@@ -21,11 +21,20 @@ const conflict: WorkflowConflictFileResponse = {
 };
 
 function makeApi(request = vi.fn().mockResolvedValue({ provider: "ollama", model: "qwen", response: "merged result\n", files: ["src/conflict.ts [base/ours/theirs/result]"] })) {
-  return {
+  let api: Record<string, unknown>;
+  api = {
+    withSignal: vi.fn(() => api),
     getRepositoryWorkflowConflictAiSettings: vi.fn().mockResolvedValue({ provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false }),
     requestRepositoryWorkflowConflictSuggestion: request,
     getRepositoryWorkflowConflictFile: vi.fn().mockResolvedValue(conflict),
-  } as unknown as GitCrestApiClient;
+  };
+  return api as unknown as GitCrestApiClient;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
 }
 
 it("reviews conflict sources and requires consent before showing a suggestion without editing the result", async () => {
@@ -52,13 +61,31 @@ it("reviews conflict sources and requires consent before showing a suggestion wi
 });
 
 it("keeps manual conflict editing available when AI is disabled or the local result has unsaved changes", async () => {
-  const api = {
-    ...makeApi(),
-    getRepositoryWorkflowConflictAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
-  } as unknown as GitCrestApiClient;
+  const api = makeApi();
+  api.withSignal = vi.fn(() => api);
+  api.getRepositoryWorkflowConflictAiSettings = vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false });
   render(<ConflictSuggestionPanel api={api} file={conflict} hasUnsavedChanges onClose={vi.fn()} />);
   expect(await screen.findByText(/Save or discard your local editor changes/)).toBeTruthy();
   expect(screen.getByText(/Choose an AI provider in Settings/)).toBeTruthy();
   expect(screen.getByRole("button", { name: "Request conflict suggestion" })).toHaveProperty("disabled", true);
   expect(api.requestRepositoryWorkflowConflictSuggestion).not.toHaveBeenCalled();
+});
+
+it("aborts AI settings lookup when the suggestion panel closes", async () => {
+  const pending = deferred<Awaited<ReturnType<GitCrestApiClient["getRepositoryWorkflowConflictAiSettings"]>>>();
+  const signals: AbortSignal[] = [];
+  let api: Record<string, unknown>;
+  api = {
+    withSignal: vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return api;
+    }),
+    getRepositoryWorkflowConflictAiSettings: vi.fn(() => pending.promise),
+  };
+  const client = api as unknown as GitCrestApiClient;
+  const { unmount } = render(<ConflictSuggestionPanel api={client} file={conflict} hasUnsavedChanges={false} onClose={vi.fn()} />);
+  await waitFor(() => expect(signals).toHaveLength(1));
+  unmount();
+  expect(signals[0]?.aborted).toBe(true);
+  await act(async () => pending.resolve({ provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false }));
 });
