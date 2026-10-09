@@ -3993,3 +3993,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/migrations/0014_history_search_rowid_order.sql`、`crates/gitcrest-core/src/domain/commit.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/storage.rs`、历史顺序/ref 失效测试、性能报告。
 - 限制/后续：行 ID 保持插入时的 Git 顺序，并移除了重复存储；本次端到端收益很小，主要性能改进仍来自阶段 357 移除 OID 唯一索引。冷消息搜索仍约 2.2 秒，继续分析索引构建时机和 Git 全量消息扫描成本；S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
 - 完成 commit：`dfe7b41 perf: use row ids for history search order`
+
+### S7.2 历史索引优化后完整 API 回归 — 小阶段 359
+- 状态：已完成（完成 Release sidecar API 20 轮回归；冷搜索仍未达标，S7.2 总体验收继续）
+- 日期：2026-10-09
+- 交付：在阶段 357/358 缓存表优化后重新运行完整 API 基准，覆盖 sidecar ready、冷搜索、首页、暖搜索、dirty/full/cached status、1k 行 Diff 和 sidecar 工作集。
+- 验证：Windows 11 / Ryzen 7 5800H / Git 2.37.3 / Release sidecar / 同一 100k commit 与 1k 行 Diff fixture，20 轮：冷搜索 P50/P95 1,965/2,273ms；历史首页 94/133ms；暖搜索 88/115ms；dirty-scope status 9/13ms；强制全量 status 10/13ms；缓存全量/路径 status 0.56/0.79ms；1k 行 Diff 81/106ms；sidecar ready P95 46ms。索引 ready P50 约 1.84s（报告记录该轮日志）。sidecar 单次工作集采样约 19.6MB，不代表 Electron 桌面进程树或稳定窗口。完整报告：`doc/evidence/S7.2/api-win32-post-cache-prune-stage359-20261009.json`。
+- 手工验证：未操作 GUI；20 轮均完成目标提交搜索；status/Diff 检查成功；基准结束后恢复 `bench-diff.txt` 原始内容。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-post-cache-prune-stage359-20261009.json`。
+- 限制/后续：首页、暖搜索、status 与 Diff 本机 sidecar 指标达到各自目标；冷搜索 P95 约 2.27s，仍需降低冷构建/等待时间。完整 API 数据不能替代 Electron 启动、工作集稳定窗口、30 秒滚动 P5、安装包、跨平台或 S7.4/S7.5 验收。
