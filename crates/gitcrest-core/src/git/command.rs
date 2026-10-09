@@ -1409,6 +1409,22 @@ impl GitCommandService {
 }
 
 impl RemoteCommandPort for GitCommandService {
+    fn execute_fetch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        prune: bool,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a> {
+        Box::pin(async move {
+            let operation = if prune {
+                GitOperation::FetchPrune
+            } else {
+                GitOperation::Fetch
+            };
+            GitCommandService::execute(self, repository_path, operation, task).await
+        })
+    }
+
     fn execute_remote<'a>(
         &'a self,
         repository_path: &'a Path,

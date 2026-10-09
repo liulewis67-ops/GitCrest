@@ -14,7 +14,6 @@ mod storage;
 
 use execution::TaskFailure;
 use features::tasks::TaskSnapshot;
-use git::command::GitOperation;
 use state::{AppState, EventBus};
 
 #[cfg(test)]

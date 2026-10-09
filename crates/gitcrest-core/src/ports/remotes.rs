@@ -66,6 +66,13 @@ pub(crate) trait RemoteGitPort: Send + Sync {
 }
 
 pub(crate) trait RemoteCommandPort: Send + Sync {
+    fn execute_fetch<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        prune: bool,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a>;
+
     fn execute_remote<'a>(
         &'a self,
         repository_path: &'a Path,

@@ -8,7 +8,7 @@ use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::remote::RemoteCommand,
     features::{branches, remotes as remote_service},
-    AppState, GitOperation, TaskFailure, TaskSnapshot,
+    AppState, TaskFailure, TaskSnapshot,
 };
 
 use super::dto::{
@@ -35,12 +35,7 @@ pub(super) async fn fetch_repository(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let operation = if request.prune {
-        GitOperation::FetchPrune
-    } else {
-        GitOperation::Fetch
-    };
-    let command = state.git_commands.clone();
+    let command = state.remote_commands.clone();
     let path = target.repository_path;
     let task = state
         .tasks
@@ -51,7 +46,7 @@ pub(super) async fn fetch_repository(
             if request.prune { "fetchPrune" } else { "fetch" },
             move |context| async move {
                 command
-                    .execute(&path, operation, context)
+                    .execute_fetch(&path, request.prune, context)
                     .await
                     .map(|()| None)
             },
