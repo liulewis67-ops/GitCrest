@@ -3686,3 +3686,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；组件自动化驱动挂起的预览/审阅读取并验证取消信号。
 - 证据：`src/features/settings/PrivacyScopePreview.tsx`、`tests/unit/settings-dialog.test.tsx`。
 - 限制/后续：AI 建议请求后的版本核验、workflow 保存/resolve 后轮询、设置/隐私其它读取及 S7.2、S7.4、S7.5 验收仍未完成。
+
+### S7.2 Release API 基线复测 — 小阶段 328
+- 状态：已完成（刷新 100k Release API 20 轮基线；S7.2 整体仍待验收）
+- 日期：2026-10-09
+- 交付：在 Windows 11 10.0.26300、Ryzen 7 5800H、Git 2.37.3.windows.1 上生成独立 100k commit / 1k 行 diff fixture，重新构建当前 Release sidecar 并运行既有 20 轮基准脚本。当前 P95：sidecar ready 52.476ms、100k 首屏历史 126.761ms、首次 cold-index message search 669.049ms、warm search 68.927ms、watcher dirty-scope status 16.225ms、强制全量 status 10.488ms、缓存全量/路径 status 0.850/0.784ms、1k 行工作树 Diff 87.294ms。搜索索引在主服务 warmup 约 3.117s ready；fresh sidecar + empty SQLite cold search P95 仍超过 <200ms 目标。sidecar 单样本工作集约 19MB 不代表 Electron 桌面工作集验收。
+- 验证：`cargo build --release --manifest-path crates/gitcrest-core/Cargo.toml` 通过；`pnpm exec node scripts/performance/benchmark.mjs run <独立 100k fixture> doc/evidence/S7.2/api-win32-stage328-20261009.json` 完成 20 轮且每轮验证目标提交在结果页中。
+- 手工验证：未操作 GUI；100k fixture 存于系统 TEMP，由基准脚本停止 sidecar 并清理临时数据库。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-stage328-20261009.json`。
+- 限制/后续：冷搜索走 Git fallback，P95 669ms；索引 ready 约 5s（本次 benchmark stderr），需优化首次 cold path 并以同一 20 轮基准复测。桌面 idle/loaded Working Set、滚动帧率及 S7.4、S7.5 验收仍未完成。本测量只更新证据，不代表 S7.2 达标。
