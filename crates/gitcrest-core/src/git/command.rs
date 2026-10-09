@@ -395,7 +395,11 @@ impl GitCommandService {
         expected: &RemotePullCommand,
         preflight_read: &dyn RemotePreflightReadPort,
     ) -> Result<(), TaskFailure> {
-        match status::read_operation(&self.git_program, repository_path).await {
+        match preflight_read
+            .read_worktree(repository_path)
+            .await
+            .map(|state| state.operation)
+        {
             Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
                 let rebase_apply = capture_git_output(
                     &self.git_program,
