@@ -3374,3 +3374,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/credentials/credentials.rs`；实现 commit：`2145d18`。
 - 限制/后续：未在真实系统凭据库中运行保存后 Fetch/Clone 成功闭环；S7.5 仍保持进行中。
 - 完成 commit：`2145d18`
+
+### P0 HTTPS 凭据修复后 Fetch 成功闭环 E2E — 小阶段 297
+- 状态：已完成（真实 Git askpass 从 Windows Credential Manager 读取新凭据，本机 HTTPS 401 fixture 认证后 Fetch 成功）
+- 日期：2026-10-09
+- 交付：扩展认证 fixture，在本机 TLS 401 服务验证 Basic 凭据后通过 Git for Windows `git-http-backend` 服务隔离 bare remote。E2E 首次 Fetch 因认证失败；从凭据管理 UI 保存临时 host:port 凭据后 Retry Fetch，验证新请求携带正确认证、task succeeded、remote-tracking ref 到达远端 ahead commit、HEAD 与工作树保持基线。检查任务日志不含 token，并在 finally 通过凭据 API 删除条目、读取状态确认已清理。
+- 验证：定向完整凭据恢复 E2E 通过；`pnpm build` 通过；Windows 完整 `pnpm test:e2e` 通过（6 files、27 tests）；`git diff --check` 通过。
+- 手工验证：未执行 GUI 手工操作；自动化实际使用 Windows Credential Manager 和本机 HTTPS/Git HTTP backend，未访问外网。
+- 证据：`tests/fixtures/authentication-server.ts`、`tests/e2e/remote-sync.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：当前闭环在 Windows Git 2.37.3 与 Windows Credential Manager 验证；Clone 认证保存后成功仍未端到端覆盖，macOS/Linux 系统凭据库闭环留待相应 runner。S7.5 仍保持进行中。
+- 完成 commit：随本条阶段记录提交。

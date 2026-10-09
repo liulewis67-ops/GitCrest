@@ -443,6 +443,139 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
+  it("stores a repaired HTTPS credential and uses it to fetch the remote", async () => {
+    const fixture = await createTempGitRepository();
+    const remoteRoot = await mkdtemp(resolve(tmpdir(), "gitcrest-fetch-auth-success-remote-"));
+    const bareRemotePath = resolve(remoteRoot, "repository.git");
+    const remotePeerPath = resolve(remoteRoot, "peer");
+    const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-fetch-auth-success-app-data-"));
+    const gitConfigPath = resolve(appDataPath, "gitconfig");
+    const username = "gitcrest-e2e-user";
+    const token = `test-token-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    let authenticationServer: AuthenticationFailureServer | undefined;
+    let app: ElectronApplication | undefined;
+    let credentialSaved = false;
+
+    const removeSavedCredential = async () => {
+      if (!credentialSaved || !app || !authenticationServer) return;
+      const removed = await (await app.firstWindow()).evaluate(async (host: string) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const headers = { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" };
+        const query = new URLSearchParams({ host });
+        const result = await fetch(new URL(`/api/v1/credentials?${query}`, connection.baseUrl), { method: "DELETE", headers });
+        const verify = await fetch(new URL(`/api/v1/credentials?${query}`, connection.baseUrl), { headers });
+        const status = await verify.json() as { isConfigured: boolean };
+        return result.status === 204 && !status.isConfigured;
+      }, authenticationServer.host);
+      if (!removed) throw new Error(`Could not remove temporary credential for ${authenticationServer.host}`);
+      credentialSaved = false;
+    };
+
+    try {
+      await mkdir(resolve(fixture.path, "src"), { recursive: true });
+      await writeFile(resolve(fixture.path, "src/auth-success.ts"), "export const remote = true;\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src/auth-success.ts"]);
+      await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "authenticated fetch fixture"]);
+      await execFileAsync("git", ["init", "--bare", "--quiet", "--initial-branch=main", bareRemotePath]);
+      await execFileAsync("git", ["-C", fixture.path, "push", "--quiet", bareRemotePath, "HEAD:refs/heads/main"]);
+      await execFileAsync("git", ["clone", "--quiet", bareRemotePath, remotePeerPath]);
+      await execFileAsync("git", ["-C", remotePeerPath, "config", "user.name", "GitCrest Peer Test"]);
+      await execFileAsync("git", ["-C", remotePeerPath, "config", "user.email", "gitcrest-peer@example.invalid"]);
+      await writeFile(resolve(remotePeerPath, "remote-auth-success.ts"), "export const fetched = true;\n");
+      await execFileAsync("git", ["-C", remotePeerPath, "add", "remote-auth-success.ts"]);
+      await execFileAsync("git", ["-C", remotePeerPath, "commit", "--quiet", "-m", "remote-only authenticated fetch commit"]);
+      await execFileAsync("git", ["-C", remotePeerPath, "push", "--quiet", "origin", "HEAD:refs/heads/main"]);
+      const remoteHead = (await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", "refs/heads/main"])).stdout.trim();
+      const localHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
+      expect(remoteHead).not.toBe(localHead);
+      authenticationServer = await createAuthenticationFailureServer(appDataPath, { projectRoot: remoteRoot, username, token });
+      await execFileAsync("git", ["-C", fixture.path, "remote", "add", "origin", authenticationServer.remoteUrl]);
+      await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
+
+      app = await electron.launch({
+        args: ["."],
+        env: {
+          ...process.env,
+          GIT_CONFIG_GLOBAL: gitConfigPath,
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_SSL_CAINFO: authenticationServer.certificatePath,
+          ELECTRON_RENDERER_URL: "",
+          GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite"),
+        },
+      });
+      const window = await app.firstWindow();
+      await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      const opened = await window.evaluate(async (repositoryPath) => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${connection.token}`,
+            "X-GitCrest-API-Version": "1",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ path: repositoryPath }),
+        });
+        return response.status;
+      }, fixture.path);
+      expect(opened).toBe(200);
+
+      await window.reload();
+      await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+      await window.locator(".repositoryRowOpen").click();
+      await window.locator(".workspaceCrumb").waitFor();
+      await window.getByRole("button", { name: "Workspace", exact: true }).click();
+      await window.getByRole("button", { name: "Fetch", exact: true }).click();
+
+      const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
+      const failedFetch = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) }).last();
+      await failedFetch.waitFor({ state: "visible" });
+      await failedFetch.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
+      await failedFetch.getByText("authentication:", { exact: false }).waitFor();
+      expect(authenticationServer.authenticatedRequestCount()).toBe(0);
+      await failedFetch.getByRole("button", { name: "Configure credentials" }).click();
+
+      const remoteDialog = window.getByRole("dialog", { name: "Manage remotes" });
+      const credentialCard = remoteDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
+      await credentialCard.getByLabel("Username").fill(username);
+      await credentialCard.getByLabel("Token or password").fill(token);
+      await credentialCard.getByRole("button", { name: "Save credential" }).click();
+      await credentialCard.getByText("Credential saved to the system credential store.").waitFor();
+      credentialSaved = true;
+      await remoteDialog.getByRole("button", { name: "Retry fetch" }).click();
+
+      const readFetchTasks = () => window.evaluate(async () => {
+        const connection = await (globalThis.window as unknown as Window & {
+          gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+        }).gitcrest.getSidecarConnection();
+        const response = await fetch(new URL("/api/v1/tasks", connection.baseUrl), {
+          headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1" },
+        });
+        const tasks = await response.json() as Array<{ taskId: string; operation: string; status: string; logs: string[] }>;
+        return tasks.filter((task) => task.operation === "fetch");
+      });
+      await expect.poll(async () => (await readFetchTasks()).find((task) => task.status === "succeeded")?.status, { timeout: 20_000 }).toBe("succeeded");
+      expect(authenticationServer.authenticatedRequestCount()).toBeGreaterThan(0);
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "refs/remotes/origin/main"])).stdout.trim()).toBe(remoteHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(localHead);
+      expect((await execFileAsync("git", ["-C", fixture.path, "show", "refs/remotes/origin/main:remote-auth-success.ts"])).stdout).toBe("export const fetched = true;\n");
+      expect((await readFetchTasks()).flatMap((task) => task.logs).join("\n")).not.toContain(token);
+      await removeSavedCredential();
+    } finally {
+      await removeSavedCredential();
+      await app?.close();
+      await authenticationServer?.close();
+      await fixture.cleanup();
+      await rm(remoteRoot, { recursive: true, force: true });
+      await rm(appDataPath, { recursive: true, force: true });
+    }
+  }, 90_000);
+
   it("cancels an active fetch and a queued pull before repository state changes", async () => {
     const fixture = await createTempGitRepository();
     const bareRemotePath = await mkdtemp(resolve(tmpdir(), "gitcrest-e2e-fetch-cancel-remote-"));
