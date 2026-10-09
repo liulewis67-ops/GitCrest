@@ -2318,3 +2318,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：TaskCenter 共用错误文本仍由 App 持有并传入 changes model/dialog；S7.2/S7.4/S7.5 继续按实施计划验收。
 - 证据：`src/features/changes/model/use-staging-operations.ts`、`src/features/changes/index.ts`、`src/app/App.tsx`、`src/features/diff/DiscardChangesDialog.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`dbd8ccc`
+
+### changes feature discard confirmation 绑定原始 repository — 小阶段 189
+- 状态：已完成（discard 预览快照绑定发起 Diff 的 repository，避免切换标签后误作用于当前仓库）
+- 日期：2026-10-09
+- 交付：discard request capture `DiffDocument.repoId` 与 repository path；确认时使用该 repoId 调用 API，并按目标仓库 queued/running task 禁止并发请求。确认 dialog 同时展示仓库路径和文件路径；request 创建时校验 document/repository 一致且为 working-tree scope。
+- 验证：`pnpm build`（含应用及 test TypeScript 类型检查、main/preload/renderer 构建）与 `git diff --check` 通过；未运行测试。构建保留 web-tree-sitter eval 警告。
+- 限制/后续：真实仓库切换并发 discard 场景未运行 Electron 手工/E2E；S7.2/S7.4/S7.5 继续按实施计划验收。
+- 证据：`src/features/changes/model/use-staging-operations.ts`、`src/features/diff/DiscardChangesDialog.tsx`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
+- 实施 commit：`cb03256`
