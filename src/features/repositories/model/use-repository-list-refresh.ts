@@ -14,6 +14,15 @@ export function useRepositoryListRefresh({
 }: RepositoryListRefreshOptions) {
   const refreshGenerationRef = useRef(0);
 
+  function registerOpenedRepository(repository: RepositoryResponse, sortByRecentAccess = false) {
+    setRepositories((current) => {
+      const next = [repository, ...current.filter((item) => item.repoId !== repository.repoId)];
+      return sortByRecentAccess
+        ? next.sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt)
+        : next;
+    });
+  }
+
   async function refresh(api: GitCrestApiClient, restoreSavedWorkspace = false) {
     const generation = ++refreshGenerationRef.current;
     const repositories = await api.listRepositories();
@@ -26,5 +35,5 @@ export function useRepositoryListRefresh({
     setSelectedRepository((current) => repositories.find((repository) => repository.repoId === current?.repoId));
   }
 
-  return { refresh };
+  return { refresh, registerOpenedRepository };
 }

@@ -99,12 +99,7 @@ function App() {
   const repositoryOpening = useRepositoryOpening({
     getApi: () => apiRef.current,
     onRepositoryOpened: (repository, sortByRecentAccess) => {
-      setRepositories((current) => {
-        const next = [repository, ...current.filter((item) => item.repoId !== repository.repoId)];
-        return sortByRecentAccess
-          ? next.sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt)
-          : next;
-      });
+      repositoryListRefresh.registerOpenedRepository(repository, sortByRecentAccess);
       activateRepository(repository);
     },
     refreshRepositories,
@@ -448,7 +443,7 @@ function App() {
       setTasksError("");
     },
     onRepositoryOpened: (repository) => {
-      setRepositories((current) => [repository, ...current.filter((item) => item.repoId !== repository.repoId)]);
+      repositoryListRefresh.registerOpenedRepository(repository);
       activateRepository(repository);
     },
     closeTaskCenter: () => setTasksOpen(false),

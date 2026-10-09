@@ -4355,3 +4355,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/repositories/model/use-repository-tab-lifecycle.ts`、`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：App 仍负责连接恢复后的全量 session restore、最近仓库同步和页面装配；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### repositories feature 仓库打开后的最近列表排序迁入 model — 小阶段 397
+- 状态：已完成（本地打开、重开最近仓库和 clone 完成后统一由 repositories model 更新最近仓库列表）
+- 日期：2026-10-10
+- 交付：`useRepositoryListRefresh.registerOpenedRepository` 负责去重插入打开的仓库；最近访问打开按收藏优先、`lastAccessedAt` 降序排列，本地打开与 clone 完成则保持新仓库置顶。App 的 repository-opening 和 clone 成功回调改为调用该 action，随后继续执行 repository activation。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir；未运行测试。
+- 手工验证：未操作 GUI；对照原 App updater 确认 RepoId 去重、favorites/last-access 排序仅用于重开最近仓库，本地打开与 clone 仍将刚打开仓库插到列表首位。
+- 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`src/app/App.tsx`、`src/features/repositories/model/use-repository-opening.ts`、`src/features/cloning/model/use-clone-submission.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：仓库列表由 sidecar 刷新时的 session 恢复与页面切换仍通过 App 回调装配；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
