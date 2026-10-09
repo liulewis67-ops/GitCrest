@@ -2173,3 +2173,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：连接恢复后按可用 repository 修剪 session 并选择活动页的逻辑仍在 App；后续继续迁移 session restore 和 tab/cache 协作。S7.2/S7.4/S7.5 仍待验收。
 - 证据：`src/features/repositories/model/use-workspace-session-state.ts`、`src/features/repositories/model/workspace-session.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 实施 commit：`c1a5e22`
+
+### repositories feature workspace session 恢复选择迁入 model — 小阶段 175
+- 状态：已完成（启动/重连后可恢复 tab 及活动仓库的推导由 repositories model 管理）
+- 日期：2026-10-09
+- 交付：扩展 `useWorkspaceSessionActions.restoreAvailableRepositories`，根据当前仓库清单过滤不可用/已移除 tab，保留仍可用的活动仓库或回退到最近打开的 tab，并返回恢复后的 session 与活动 repository；App 保留仓库列表请求和页面/选择状态提交。
+- 验证：`pnpm build`（renderer/main/preload 构建及 TypeScript 检查）与 `git diff --check` 通过；未运行测试。web-tree-sitter eval 警告仍存在。
+- 限制/后续：session migration/parse 与 UI 恢复行为尚未单独验证；workspace tab 生命周期其余缓存刷新仍由 App 编排。S7.2/S7.4/S7.5 仍待验收。
+- 证据：`src/features/repositories/model/use-workspace-session-actions.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 实施 commit：`840e899`
