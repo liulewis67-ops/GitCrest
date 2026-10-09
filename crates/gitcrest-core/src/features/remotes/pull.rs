@@ -31,7 +31,6 @@ pub struct PullPreflight {
 impl From<&PullPreflight> for RemotePullCommand {
     fn from(preflight: &PullPreflight) -> Self {
         Self {
-            repo_id: preflight.repo_id.clone(),
             local_branch: preflight.local_branch.clone(),
             remote_name: preflight.remote_name.clone(),
             remote_branch: preflight.remote_branch.clone(),

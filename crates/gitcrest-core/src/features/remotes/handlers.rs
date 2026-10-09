@@ -184,7 +184,7 @@ pub(super) async fn pull_repository(
                     ));
                 }
                 command
-                    .pull(&path, operation_command, strategy, context)
+                    .pull(&path, operation_command, strategy, git_reader, context)
                     .await
                     .map(|()| None)
             },

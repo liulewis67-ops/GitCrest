@@ -5,7 +5,7 @@ use crate::domain::{
     remote::{
         RemoteBranchCommit, RemoteBranchDeleteCommand, RemoteBranchDivergence,
         RemoteBranchUpstream, RemoteCommand, RemoteConfigurationSnapshot, RemotePullCommand,
-        RemotePullStrategy, RemotePushCommand,
+        RemotePullState, RemotePullStrategy, RemotePushCommand,
     },
     workflow::{WorkflowRemoteBranchComparison, WorkflowState},
 };
@@ -90,6 +90,12 @@ pub(crate) trait RemotePreflightReadPort: Send + Sync {
         &'a self,
         repository_path: &'a Path,
     ) -> RemotePreflightFuture<'a, WorkflowState>;
+
+    fn read_pull_state<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+    ) -> RemotePreflightFuture<'a, RemotePullState>;
 }
 
 pub(crate) type RemotePreflightFuture<'a, T> =
@@ -122,6 +128,7 @@ pub(crate) trait RemoteCommandPort: Send + Sync {
         repository_path: &'a Path,
         command: RemotePullCommand,
         strategy: RemotePullStrategy,
+        preflight_read: std::sync::Arc<dyn RemotePreflightReadPort>,
         task: TaskContext,
     ) -> RemoteCommandFuture<'a>;
 

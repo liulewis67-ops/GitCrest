@@ -64,12 +64,29 @@ pub(crate) struct RemoteBranchDeleteCommand {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RemotePullCommand {
-    pub(crate) repo_id: String,
     pub(crate) local_branch: String,
     pub(crate) remote_name: String,
     pub(crate) remote_branch: String,
     pub(crate) local_oid: String,
     pub(crate) tracking_oid: String,
+}
+
+pub(crate) fn is_remote_name_syntactically_valid(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 255
+        && !name.chars().any(char::is_control)
+        && !name.starts_with('-')
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RemotePullState {
+    pub(crate) local_oid: String,
+    pub(crate) remote_name: String,
+    pub(crate) remote_branch: String,
+    pub(crate) tracking_oid: String,
+    pub(crate) is_clean: bool,
+    pub(crate) has_conflicts: bool,
+    pub(crate) operation_in_progress: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

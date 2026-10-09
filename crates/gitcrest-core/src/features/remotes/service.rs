@@ -213,11 +213,7 @@ pub async fn validate_remote_name_with_git(
     name: &str,
     remote_git: &dyn RemoteGitPort,
 ) -> Result<(), RemoteError> {
-    if name.is_empty()
-        || name.len() > 255
-        || name.chars().any(char::is_control)
-        || name.starts_with('-')
-    {
+    if !crate::domain::remote::is_remote_name_syntactically_valid(name) {
         return Err(RemoteError::InvalidName);
     }
     match remote_git

@@ -1,4 +1,7 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -35,9 +38,11 @@ use crate::{
     ports::git::GitReadPort,
     ports::status::StatusReadPort,
     ports::{
+        branches::BranchGitPort,
         diff::DiffGitPort,
         remotes::{
-            RemoteCommandFuture, RemoteCommandPort, RemotePreflightFuture, RemotePreflightReadPort,
+            RemoteCommandFuture, RemoteCommandPort, RemoteGitPort, RemotePreflightFuture,
+            RemotePreflightReadPort,
         },
     },
 };
@@ -331,6 +336,7 @@ impl GitCommandService {
         repository_path: &Path,
         expected: &RemotePullCommand,
         strategy: RemotePullStrategy,
+        preflight_read: &dyn RemotePreflightReadPort,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let strategy_flag = match strategy {
@@ -370,13 +376,13 @@ impl GitCommandService {
         if strategy == RemotePullStrategy::Rebase && matches!(&result, Err(TaskFailure::Cancelled))
         {
             return self
-                .reconcile_cancelled_pull_rebase(repository_path, expected)
+                .reconcile_cancelled_pull_rebase(repository_path, expected, preflight_read)
                 .await;
         }
         let result = workflow_command_result(&self.git_program, repository_path, result).await;
         if matches!(&result, Err(TaskFailure::Cancelled)) {
             return self
-                .reconcile_cancelled_pull(repository_path, expected)
+                .reconcile_cancelled_pull(repository_path, expected, preflight_read)
                 .await;
         }
         result
@@ -386,6 +392,7 @@ impl GitCommandService {
         &self,
         repository_path: &Path,
         expected: &RemotePullCommand,
+        preflight_read: &dyn RemotePreflightReadPort,
     ) -> Result<(), TaskFailure> {
         match status::read_operation(&self.git_program, repository_path).await {
             Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
@@ -475,15 +482,8 @@ impl GitCommandService {
                     .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
                 }
 
-                let restored = crate::features::remotes::pull::read_pull_preflight(
-                    expected.repo_id.clone(),
-                    repository_path,
-                    Some(&expected.local_branch),
-                    false,
-                    &super::refs::GitBranchAdapter,
-                    self,
-                    &super::remotes::GitRemoteAdapter,
-                )
+                let restored = preflight_read
+                    .read_pull_state(repository_path, &expected.local_branch)
                 .await
                 .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
                 if restored.local_oid == expected.local_oid
@@ -499,7 +499,10 @@ impl GitCommandService {
             Ok(Some(_)) => Err(TaskFailure::WaitingForInput(
                 "Pull rebase was cancelled while another Git operation remains active. Review repository state before continuing.".into(),
             )),
-            Ok(None) => self.reconcile_cancelled_pull(repository_path, expected).await,
+            Ok(None) => {
+                self.reconcile_cancelled_pull(repository_path, expected, preflight_read)
+                    .await
+            }
             Err(_) => Err(TaskFailure::Failed(pull_cancel_outcome_unknown())),
         }
     }
@@ -508,18 +511,12 @@ impl GitCommandService {
         &self,
         repository_path: &Path,
         expected: &RemotePullCommand,
+        preflight_read: &dyn RemotePreflightReadPort,
     ) -> Result<(), TaskFailure> {
-        let snapshot = crate::features::remotes::pull::read_pull_preflight(
-            expected.repo_id.clone(),
-            repository_path,
-            Some(&expected.local_branch),
-            false,
-            &super::refs::GitBranchAdapter,
-            self,
-            &super::remotes::GitRemoteAdapter,
-        )
-        .await
-        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+        let snapshot = preflight_read
+            .read_pull_state(repository_path, &expected.local_branch)
+            .await
+            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
         if snapshot.local_oid != expected.local_oid
             || snapshot.tracking_oid != expected.tracking_oid
         {
@@ -571,17 +568,10 @@ impl GitCommandService {
             return Err(TaskFailure::Failed(pull_cancel_outcome_unknown()));
         }
 
-        let restored = crate::features::remotes::pull::read_pull_preflight(
-            expected.repo_id.clone(),
-            repository_path,
-            Some(&expected.local_branch),
-            false,
-            &super::refs::GitBranchAdapter,
-            self,
-            &super::remotes::GitRemoteAdapter,
-        )
-        .await
-        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+        let restored = preflight_read
+            .read_pull_state(repository_path, &expected.local_branch)
+            .await
+            .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
         if restored.local_oid == expected.local_oid
             && restored.tracking_oid == expected.tracking_oid
             && !restored.operation_in_progress
@@ -1397,10 +1387,19 @@ impl RemoteCommandPort for GitCommandService {
         repository_path: &'a Path,
         command: RemotePullCommand,
         strategy: RemotePullStrategy,
+        preflight_read: Arc<dyn RemotePreflightReadPort>,
         task: TaskContext,
     ) -> RemoteCommandFuture<'a> {
         Box::pin(async move {
-            GitCommandService::execute_pull(self, repository_path, &command, strategy, task).await
+            GitCommandService::execute_pull(
+                self,
+                repository_path,
+                &command,
+                strategy,
+                preflight_read.as_ref(),
+                task,
+            )
+            .await
         })
     }
 
@@ -1458,6 +1457,95 @@ impl RemotePreflightReadPort for GitCommandService {
         repository_path: &'a Path,
     ) -> RemotePreflightFuture<'a, WorkflowState> {
         Box::pin(async move { GitReadPort::read_worktree_state(self, repository_path).await })
+    }
+
+    fn read_pull_state<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        local_branch: &'a str,
+    ) -> RemotePreflightFuture<'a, crate::domain::remote::RemotePullState> {
+        Box::pin(async move {
+            let branch_git = super::refs::GitBranchAdapter;
+            let remote_git = super::remotes::GitRemoteAdapter;
+            if !crate::domain::branch::is_branch_name_syntactically_valid(local_branch)
+                || !branch_git
+                    .validate_name(repository_path, local_branch)
+                    .await
+                    .map_err(map_remote_git_workflow_error)?
+            {
+                return Err(WorkflowError::InvalidTarget);
+            }
+            let upstream = remote_git
+                .read_branch_upstream(repository_path, local_branch)
+                .await
+                .map_err(map_remote_git_workflow_error)?;
+            if upstream.remote_name.is_empty()
+                || upstream.remote_name == "."
+                || !crate::domain::remote::is_remote_name_syntactically_valid(&upstream.remote_name)
+                || !upstream.remote_ref.starts_with("refs/heads/")
+            {
+                return Err(WorkflowError::InvalidTarget);
+            }
+            if !remote_git
+                .validate_name(repository_path, &upstream.remote_name)
+                .await
+                .map_err(map_remote_git_workflow_error)?
+            {
+                return Err(WorkflowError::InvalidTarget);
+            }
+            let remote_branch = upstream
+                .remote_ref
+                .strip_prefix("refs/heads/")
+                .filter(|branch| !branch.is_empty())
+                .ok_or(WorkflowError::InvalidTarget)?;
+            if !crate::domain::branch::is_branch_name_syntactically_valid(remote_branch)
+                || !branch_git
+                    .validate_name(repository_path, remote_branch)
+                    .await
+                    .map_err(map_remote_git_workflow_error)?
+            {
+                return Err(WorkflowError::InvalidTarget);
+            }
+            let tracking_oid = remote_git
+                .resolve_tracking_commit(repository_path, &upstream.remote_name, remote_branch)
+                .await
+                .map_err(map_remote_git_workflow_error)?
+                .ok_or(WorkflowError::CommitNotFound)?;
+            remote_git
+                .compare_tracking_branch(
+                    repository_path,
+                    local_branch,
+                    &upstream.remote_name,
+                    remote_branch,
+                )
+                .await
+                .map_err(map_remote_git_workflow_error)?;
+            let worktree = GitReadPort::read_worktree_state(self, repository_path).await?;
+            let has_conflicts =
+                !worktree.conflicted_paths.is_empty() || worktree.omitted_conflicted_path_count > 0;
+            let operation_in_progress = worktree.operation.is_some();
+            Ok(crate::domain::remote::RemotePullState {
+                local_oid: upstream.local_oid,
+                remote_name: upstream.remote_name,
+                remote_branch: remote_branch.to_owned(),
+                tracking_oid,
+                is_clean: worktree.dirty_paths.is_empty()
+                    && !has_conflicts
+                    && !operation_in_progress,
+                has_conflicts,
+                operation_in_progress,
+            })
+        })
+    }
+}
+
+fn map_remote_git_workflow_error(error: crate::domain::error::GitAdapterError) -> WorkflowError {
+    match error {
+        crate::domain::error::GitAdapterError::Unavailable => WorkflowError::GitUnavailable,
+        crate::domain::error::GitAdapterError::TimedOut => WorkflowError::TimedOut,
+        crate::domain::error::GitAdapterError::OutputTooLarge => WorkflowError::TooLarge,
+        crate::domain::error::GitAdapterError::Failed
+        | crate::domain::error::GitAdapterError::ReferenceAlreadyExists => WorkflowError::GitFailed,
     }
 }
 
