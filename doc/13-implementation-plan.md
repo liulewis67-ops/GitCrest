@@ -3194,3 +3194,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
 - 限制/后续：其他 recovery port 读取失败仍需按风险补充覆盖；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`9f44024`
+
+### Pull merge tree 读取失败时禁止 reset — 小阶段 279
+- 状态：已完成（merge recovery 无法读取预期 merge tree 时不执行 reset）
+- 日期：2026-10-09
+- 交付：扩展 recovery fixture 注入 merge tree 读取失败；新增用例验证读取 index tree 成功但预期 merge tree 读取失败时，恢复以 outcome unknown 结束且不调用 reset_merge。
+- 验证：目标测试 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml cancelled_merge_does_not_reset_when_merge_tree_read_fails` 通过；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（129 tests）；`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过。
+- 手工验证：未执行真实 merge tree 查询失败场景；fixture 验证失败分类与后续 reset 被阻断。
+- 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
+- 限制/后续：read_pull_state、branch metadata 和 staged-state 查询失败仍需持续审查；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待提交
