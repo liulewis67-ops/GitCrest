@@ -4415,3 +4415,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/features/branches/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
 - 限制/后续：App 仍负责将 feature 的弹窗请求映射到当前窗口 UI 状态；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### repositories feature 接管本地打开、初始化和最近仓库入口 — 小阶段 403
+- 状态：已完成（仓库选择与打开/初始化错误处理归入 repositories model，App 仅装配桌面 bridge）
+- 日期：2026-10-10
+- 交付：扩展 `useRepositoryOpening`，注入桌面目录选择回调，并在 feature 内编排“选择目录后打开”与“选择目录后初始化”及其错误呈现；保留 `openRecent` 作为最近仓库动作。App 删除两个本地仓库处理器和最近仓库转发 wrapper，菜单、快捷键、Welcome、仓库 tab 与 workspace 入口直接调用 repositories actions。feature hook 仅公开这些用户级动作，不再公开路径级实现细节。
+- 验证：`pnpm exec tsc`、`pnpm frontend:boundaries`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 输出到临时目录；未新增或运行测试。构建仅出现既有 web-tree-sitter `eval` 和 chunk 大小提示。
+- 手工验证：未操作 GUI；检查取消目录选择时不调用 API、选择失败时显示对应操作的通用错误、路径打开/初始化继续走 feature 既有 API 错误映射、最近仓库仅对 `available` 记录执行 reopen 并在失败后刷新列表。
+- 证据：`src/features/repositories/model/use-repository-opening.ts`、`src/app/App.tsx`、`src/api/bridge.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：App 仍保留选中仓库、页面导航和 native bridge 连接装配；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段实现与台账同一 commit（SHA 可在后续台账更新中补记）。

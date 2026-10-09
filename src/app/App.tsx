@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
+import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
@@ -98,6 +98,7 @@ function App() {
   });
   const repositoryOpening = useRepositoryOpening({
     getApi: () => apiRef.current,
+    chooseRepository: () => requireGitCrestBridge().chooseRepository(),
     onRepositoryOpened: (repository, sortByRecentAccess) => {
       repositoryListRefresh.registerOpenedRepository(repository, sortByRecentAccess);
       activateRepository(repository);
@@ -588,34 +589,6 @@ function App() {
     repositoryTabLifecycle.close(repoId);
   }
 
-  async function openLocalRepository() {
-    setOpenError("");
-    try {
-      const path = await requireGitCrestBridge().chooseRepository();
-      if (!path) return;
-      await repositoryOpening.openAtPath(path);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setOpenError(message || (error instanceof Error ? error.message : "Could not open this repository."));
-    }
-  }
-
-  async function initializeLocalRepository() {
-    setOpenError("");
-    try {
-      const path = await requireGitCrestBridge().chooseRepository();
-      if (!path) return;
-      await repositoryOpening.initializeAtPath(path);
-    } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setOpenError(message || (error instanceof Error ? error.message : "Could not initialize this folder."));
-    }
-  }
-
-  async function openRecentRepository(repository: RepositoryResponse) {
-    await repositoryOpening.openRecent(repository);
-  }
-
   async function refreshRepositories(api: GitCrestApiClient, restoreWorkspace = false) {
     await repositoryListRefresh.refresh(api, restoreWorkspace);
   }
@@ -674,9 +647,9 @@ function App() {
     commitBusy,
     hasActiveBranches: Boolean(activeBranches),
   }, {
-    openRepository: () => { void openLocalRepository(); },
+    openRepository: () => { void repositoryOpening.chooseAndOpenLocal(); },
     cloneRepository: () => cloneSubmission.openDialog(),
-    initializeRepository: () => { void initializeLocalRepository(); },
+    initializeRepository: () => { void repositoryOpening.chooseAndInitializeLocal(); },
     stageAll: () => { void stageChanges("stageAll"); },
     undoRecentOperation: () => { void undoRecentOperation(); },
     fetch: () => { void fetchRepository(); },
@@ -725,7 +698,7 @@ function App() {
     { id: "welcome", label: "Go to Welcome", detail: "Return to recent repositories and quick actions", available: true, run: () => setPage("welcome") },
     { id: "workspace", label: "Go to Workspace", detail: "Open the Changes, Graph, and Commit workspace", available: true, run: () => setPage("workspace") },
     { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`, available: true, run: nextTheme },
-    { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void openLocalRepository(); } },
+    { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void repositoryOpening.chooseAndOpenLocal(); } },
     { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
     { id: "pull", label: "Pull current branch", detail: "Review worktree state and choose merge or rebase", available: Boolean(selectedRepository), run: () => openPullDialog() },
     { id: "rebase", label: "Interactive rebase", detail: `Review, reorder, and edit the current branch commit sequence (${displayShortcut(shortcuts.rebase, isMacPlatform)})`, available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openRebase },
@@ -755,7 +728,7 @@ function App() {
             const active = selectedRepository?.repoId === repoId;
             return (
               <div className={active ? "repositoryTab active" : "repositoryTab"} key={repoId}>
-                <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (!active) void openRecentRepository(repository); }}>
+                <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (!active) void repositoryOpening.openRecent(repository); }}>
                   {repositoryName(repository.path)}
                 </button>
                 <button type="button" className="closeRepositoryTab" aria-label={`Close ${repositoryName(repository.path)} tab`} title="Close tab" onClick={() => closeRepositoryTab(repoId)}>×</button>
@@ -789,11 +762,11 @@ function App() {
           isMacPlatform={isMacPlatform}
           openError={openError}
           version={version}
-          onOpenLocalRepository={() => void openLocalRepository()}
+          onOpenLocalRepository={() => void repositoryOpening.chooseAndOpenLocal()}
           onCloneRepository={() => cloneSubmission.openDialog()}
           onNavigateWorkspace={() => setPage("workspace")}
-          onInitializeRepository={() => void initializeLocalRepository()}
-          onOpenRepository={(repository) => void openRecentRepository(repository)}
+          onInitializeRepository={() => void repositoryOpening.chooseAndInitializeLocal()}
+          onOpenRepository={(repository) => void repositoryOpening.openRecent(repository)}
           onToggleFavorite={(repository) => void toggleFavorite(repository)}
           onForgetRepository={(repository) => void forgetRepository(repository)}
         />
@@ -903,7 +876,7 @@ function App() {
               onFocusSearchHandled={historyRequests.markSearchFocusHandled}
                 onGraphScrollPosition={rememberGraphScroll}
                 onSelectCommit={selectCommit}
-                onOpenRepository={() => void openLocalRepository()}
+                onOpenRepository={() => void repositoryOpening.chooseAndOpenLocal()}
                 onRetryDiff={diffQuery.retry}
                 onStageSelection={stageSelectedChanges}
                 onDiscardSelection={requestDiscard}

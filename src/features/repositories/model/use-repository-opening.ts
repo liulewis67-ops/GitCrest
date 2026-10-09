@@ -7,6 +7,7 @@ import {
 
 interface RepositoryOpeningOptions {
   getApi: () => GitCrestApiClient | undefined;
+  chooseRepository: () => Promise<string | undefined>;
   onRepositoryOpened: (repository: RepositoryResponse, sortByRecentAccess: boolean) => void;
   refreshRepositories: (api: GitCrestApiClient) => Promise<void>;
   setError: (message: string) => void;
@@ -17,7 +18,7 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
-export function useRepositoryOpening({ getApi, onRepositoryOpened, refreshRepositories, setError }: RepositoryOpeningOptions) {
+export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpened, refreshRepositories, setError }: RepositoryOpeningOptions) {
   const [opening, setOpening] = useState(false);
 
   async function openAtPath(path: string) {
@@ -69,5 +70,25 @@ export function useRepositoryOpening({ getApi, onRepositoryOpened, refreshReposi
     }
   }
 
-  return { opening, openAtPath, initializeAtPath, openRecent };
+  async function chooseAndOpenLocal() {
+    setError("");
+    try {
+      const path = await chooseRepository();
+      if (path) await openAtPath(path);
+    } catch (error) {
+      setError(errorMessage(error, "Could not open this repository."));
+    }
+  }
+
+  async function chooseAndInitializeLocal() {
+    setError("");
+    try {
+      const path = await chooseRepository();
+      if (path) await initializeAtPath(path);
+    } catch (error) {
+      setError(errorMessage(error, "Could not initialize this folder."));
+    }
+  }
+
+  return { opening, openRecent, chooseAndOpenLocal, chooseAndInitializeLocal };
 }
