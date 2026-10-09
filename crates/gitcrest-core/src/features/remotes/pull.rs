@@ -6,6 +6,8 @@ use tokio::{
     process::Command,
 };
 
+use crate::ports::branches::BranchGitPort;
+
 const MAX_PULL_PREFLIGHT_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_DIRTY_PATHS: usize = 200;
 const PULL_PREFLIGHT_DEADLINE: Duration = Duration::from_secs(20);
@@ -52,14 +54,19 @@ pub async fn read_pull_preflight(
     repository_path: &Path,
     current: Option<&str>,
     detached: bool,
+    branch_git: &dyn BranchGitPort,
 ) -> Result<PullPreflight, PullError> {
     if detached || current.is_none() {
         return Err(PullError::NoCurrentBranch);
     }
     let local_branch = current.ok_or(PullError::NoCurrentBranch)?;
-    crate::features::branches::validate_branch_name(repository_path, local_branch)
-        .await
-        .map_err(|_| PullError::NoCurrentBranch)?;
+    crate::features::branches::validate_branch_name_with_git(
+        repository_path,
+        local_branch,
+        branch_git,
+    )
+    .await
+    .map_err(|_| PullError::NoCurrentBranch)?;
     let config = run_git(
         repository_path,
         &[
@@ -89,9 +96,13 @@ pub async fn read_pull_preflight(
         .strip_prefix("refs/heads/")
         .filter(|name| !name.is_empty())
         .ok_or(PullError::InvalidUpstream)?;
-    crate::features::branches::validate_branch_name(repository_path, remote_branch)
-        .await
-        .map_err(|_| PullError::InvalidUpstream)?;
+    crate::features::branches::validate_branch_name_with_git(
+        repository_path,
+        remote_branch,
+        branch_git,
+    )
+    .await
+    .map_err(|_| PullError::InvalidUpstream)?;
     let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
     let tracking_oid = run_git(
         repository_path,

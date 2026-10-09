@@ -360,6 +360,7 @@ impl GitCommandService {
             repository_path,
             Some(&expected.local_branch),
             false,
+            &super::refs::GitBranchAdapter,
         )
         .await
         .map_err(|_| {
@@ -526,6 +527,7 @@ impl GitCommandService {
                     repository_path,
                     Some(&expected.local_branch),
                     false,
+                    &super::refs::GitBranchAdapter,
                 )
                 .await
                 .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
@@ -557,6 +559,7 @@ impl GitCommandService {
             repository_path,
             Some(&expected.local_branch),
             false,
+            &super::refs::GitBranchAdapter,
         )
         .await
         .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
@@ -616,6 +619,7 @@ impl GitCommandService {
             repository_path,
             Some(&expected.local_branch),
             false,
+            &super::refs::GitBranchAdapter,
         )
         .await
         .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
@@ -1159,6 +1163,7 @@ impl GitCommandService {
             Some(&expected.local_branch),
             false,
             Some((&expected.remote_name, &expected.remote_branch)),
+            &super::refs::GitBranchAdapter,
         )
         .await
         .map_err(|_| {

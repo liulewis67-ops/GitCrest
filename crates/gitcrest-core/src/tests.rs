@@ -91,6 +91,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         status,
         tasks,
         tag_git: Arc::new(crate::git::tags::GitTagAdapter),
+        branch_git: Arc::new(crate::git::refs::GitBranchAdapter),
         git_commands,
     };
     app_router(state, cors_origin.map(|origin| origin.parse().unwrap()))
@@ -241,6 +242,7 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             tag_git: Arc::new(crate::git::tags::GitTagAdapter),
+            branch_git: Arc::new(crate::git::refs::GitBranchAdapter),
             git_commands: commands.clone(),
             clones: CloneService::new(tasks.clone(), commands, RepositoryManager::default()),
         },
@@ -632,6 +634,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             tag_git: Arc::new(crate::git::tags::GitTagAdapter),
+            branch_git: Arc::new(crate::git::refs::GitBranchAdapter),
             git_commands: commands.clone(),
             clones: CloneService::new(tasks, commands, repositories.clone()),
             credentials: test_credentials(),
@@ -1598,6 +1601,7 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             tag_git: Arc::new(crate::git::tags::GitTagAdapter),
+            branch_git: Arc::new(crate::git::refs::GitBranchAdapter),
             git_commands,
         },
         None,
@@ -2576,6 +2580,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             tag_git: Arc::new(crate::git::tags::GitTagAdapter),
+            branch_git: Arc::new(crate::git::refs::GitBranchAdapter),
             git_commands: GitCommandService::default(),
             clones: CloneService::new(
                 tasks.clone(),
@@ -2710,6 +2715,7 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             tag_git: Arc::new(crate::git::tags::GitTagAdapter),
+            branch_git: Arc::new(crate::git::refs::GitBranchAdapter),
             git_commands: GitCommandService::default(),
             clones: CloneService::new(
                 tasks.clone(),

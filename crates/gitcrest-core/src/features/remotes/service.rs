@@ -7,6 +7,7 @@ use tokio::{
     process::Command,
 };
 
+use crate::ports::branches::BranchGitPort;
 use crate::{domain::workflow::WorkflowOperation, ports::git::GitReadPort};
 
 const MAX_REMOTE_OUTPUT: usize = 8 * 1024 * 1024;
@@ -58,15 +59,20 @@ pub enum RemoteError {
 
 pub async fn read_remote_branch_delete_preview<G: GitReadPort>(
     git: &G,
+    branch_git: &dyn BranchGitPort,
     repo_id: String,
     repository_path: &Path,
     remote_name: &str,
     remote_branch: &str,
 ) -> Result<RemoteBranchDeletePreview, RemoteError> {
     validate_remote_name(repository_path, remote_name).await?;
-    crate::features::branches::validate_branch_name(repository_path, remote_branch)
-        .await
-        .map_err(|_| RemoteError::InvalidName)?;
+    crate::features::branches::validate_branch_name_with_git(
+        repository_path,
+        remote_branch,
+        branch_git,
+    )
+    .await
+    .map_err(|_| RemoteError::InvalidName)?;
     if !read_remotes(repo_id.clone(), repository_path)
         .await?
         .remotes

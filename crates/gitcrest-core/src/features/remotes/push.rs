@@ -6,6 +6,8 @@ use tokio::{
     process::Command,
 };
 
+use crate::ports::branches::BranchGitPort;
+
 const MAX_PUSH_PREVIEW_OUTPUT: usize = 2 * 1024 * 1024;
 const MAX_PREVIEW_PATHS: usize = 200;
 const MAX_PREVIEW_COMMITS: usize = 50;
@@ -55,7 +57,15 @@ pub async fn read_push_preflight(
     current: Option<&str>,
     detached: bool,
 ) -> Result<PushPreflight, PushError> {
-    read_push_preflight_for_target(repo_id, repository_path, current, detached, None).await
+    read_push_preflight_for_target(
+        repo_id,
+        repository_path,
+        current,
+        detached,
+        None,
+        &crate::git::refs::GitBranchAdapter,
+    )
+    .await
 }
 
 pub async fn read_push_preflight_for_target(
@@ -64,14 +74,19 @@ pub async fn read_push_preflight_for_target(
     current: Option<&str>,
     detached: bool,
     target: Option<(&str, &str)>,
+    branch_git: &dyn BranchGitPort,
 ) -> Result<PushPreflight, PushError> {
     if detached || current.is_none() {
         return Err(PushError::NoCurrentBranch);
     }
     let local_branch = current.ok_or(PushError::NoCurrentBranch)?;
-    crate::features::branches::validate_branch_name(repository_path, local_branch)
-        .await
-        .map_err(|_| PushError::NoCurrentBranch)?;
+    crate::features::branches::validate_branch_name_with_git(
+        repository_path,
+        local_branch,
+        branch_git,
+    )
+    .await
+    .map_err(|_| PushError::NoCurrentBranch)?;
     let (local_oid, remote_name, remote_branch) = if let Some((remote_name, remote_branch)) = target
     {
         crate::features::remotes::validate_remote_name(repository_path, remote_name)
@@ -87,9 +102,13 @@ pub async fn read_push_preflight_for_target(
         {
             return Err(PushError::InvalidUpstream);
         }
-        crate::features::branches::validate_branch_name(repository_path, remote_branch)
-            .await
-            .map_err(|_| PushError::InvalidUpstream)?;
+        crate::features::branches::validate_branch_name_with_git(
+            repository_path,
+            remote_branch,
+            branch_git,
+        )
+        .await
+        .map_err(|_| PushError::InvalidUpstream)?;
         let local_oid = run_git(
             repository_path,
             &[
@@ -139,9 +158,13 @@ pub async fn read_push_preflight_for_target(
     crate::features::remotes::validate_remote_name(repository_path, &remote_name)
         .await
         .map_err(|_| PushError::InvalidUpstream)?;
-    crate::features::branches::validate_branch_name(repository_path, &remote_branch)
-        .await
-        .map_err(|_| PushError::InvalidUpstream)?;
+    crate::features::branches::validate_branch_name_with_git(
+        repository_path,
+        &remote_branch,
+        branch_git,
+    )
+    .await
+    .map_err(|_| PushError::InvalidUpstream)?;
     let tracking_ref = format!("refs/remotes/{remote_name}/{remote_branch}");
     let remote_oid = run_git(
         repository_path,

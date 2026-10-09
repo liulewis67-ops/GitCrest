@@ -79,6 +79,7 @@ pub(super) async fn preflight_repository_pull(
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        state.branch_git.as_ref(),
     )
     .await
     .map(Json)
@@ -112,6 +113,7 @@ pub(super) async fn pull_repository(
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_pull_error)?;
@@ -197,6 +199,7 @@ pub(super) async fn preflight_repository_push(
         metadata.branch.as_deref(),
         metadata.detached,
         target_ref,
+        state.branch_git.as_ref(),
     )
     .await
     .map(Json)
@@ -232,6 +235,7 @@ pub(super) async fn push_repository(
         metadata.branch.as_deref(),
         metadata.detached,
         target_ref,
+        state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_push_error)?;
@@ -578,15 +582,23 @@ pub(super) async fn set_branch_upstream(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    branches::validate_branch_name(&target.repository_path, &request.local_branch)
-        .await
-        .map_err(ApiError::from_branch_error)?;
+    branches::validate_branch_name_with_git(
+        &target.repository_path,
+        &request.local_branch,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     remote_service::validate_remote_name(&target.repository_path, &request.remote_name)
         .await
         .map_err(ApiError::from_remote_error)?;
-    branches::validate_branch_name(&target.repository_path, &request.remote_branch)
-        .await
-        .map_err(ApiError::from_branch_error)?;
+    branches::validate_branch_name_with_git(
+        &target.repository_path,
+        &request.remote_branch,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     let remotes_snapshot = remote_service::read_remotes(repo_id.clone(), &target.repository_path)
         .await
         .map_err(ApiError::from_remote_error)?;
@@ -606,11 +618,12 @@ pub(super) async fn set_branch_upstream(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let branches_snapshot = branches::read_branches(
+    let branches_snapshot = branches::read_branches_with_git(
         repo_id.clone(),
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?;
@@ -664,6 +677,7 @@ pub(super) async fn preview_repository_remote_branch_delete(
         .map_err(ApiError::from_repository_error)?;
     remote_service::read_remote_branch_delete_preview(
         &state.git_commands,
+        state.branch_git.as_ref(),
         repo_id,
         &target.repository_path,
         &query.remote_name,
@@ -701,6 +715,7 @@ pub(super) async fn delete_repository_remote_branch(
         .map_err(ApiError::from_repository_error)?;
     let preview = remote_service::read_remote_branch_delete_preview(
         &state.git_commands,
+        state.branch_git.as_ref(),
         repo_id.clone(),
         &target.repository_path,
         &request.remote_name,
@@ -725,6 +740,7 @@ pub(super) async fn delete_repository_remote_branch(
         ));
     }
     let command = state.git_commands.clone();
+    let branch_git = state.branch_git.clone();
     let repositories = state.repositories.clone();
     let task_repo_id = repo_id.clone();
     let path = target.repository_path;
@@ -743,6 +759,7 @@ pub(super) async fn delete_repository_remote_branch(
             move |context| async move {
                 let current = remote_service::read_remote_branch_delete_preview(
                     &command,
+                    branch_git.as_ref(),
                     task_repo_id.clone(),
                     &path,
                     &remote_name,

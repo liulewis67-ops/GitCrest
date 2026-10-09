@@ -1,3 +1,4 @@
+pub(crate) mod branch;
 pub(crate) mod commit;
 pub(crate) mod diff;
 pub(crate) mod error;

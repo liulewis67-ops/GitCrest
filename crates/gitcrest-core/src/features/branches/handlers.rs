@@ -32,11 +32,12 @@ pub(super) async fn repository_branches(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let mut snapshot = branches::read_branches(
+    let mut snapshot = branches::read_branches_with_git(
         repo_id,
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?;
@@ -113,9 +114,13 @@ pub(super) async fn create_repository_branch(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    branches::validate_branch_name(&target.repository_path, &request.name)
-        .await
-        .map_err(ApiError::from_branch_error)?;
+    branches::validate_branch_name_with_git(
+        &target.repository_path,
+        &request.name,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     let metadata = state
         .repositories
         .refresh_metadata(&repo_id)
@@ -128,11 +133,12 @@ pub(super) async fn create_repository_branch(
             "Create an initial commit before creating a branch.",
         ));
     }
-    let existing = branches::read_branches(
+    let existing = branches::read_branches_with_git(
         repo_id.clone(),
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?;
@@ -183,19 +189,24 @@ async fn branch_for_mutation(
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    branches::validate_branch_name(&target.repository_path, name)
-        .await
-        .map_err(ApiError::from_branch_error)?;
+    branches::validate_branch_name_with_git(
+        &target.repository_path,
+        name,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     let metadata = state
         .repositories
         .refresh_metadata(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    if !branches::read_branches(
+    if !branches::read_branches_with_git(
         repo_id.to_owned(),
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
+        state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?
@@ -225,9 +236,13 @@ pub(super) async fn rename_repository_branch(
         )
     })?;
     let (target, _) = branch_for_mutation(&state, &repo_id, &request.name).await?;
-    branches::validate_branch_name(&target.repository_path, &request.new_name)
-        .await
-        .map_err(ApiError::from_branch_error)?;
+    branches::validate_branch_name_with_git(
+        &target.repository_path,
+        &request.new_name,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     if request.name == request.new_name {
         return Err(ApiError::new(
             StatusCode::BAD_REQUEST,
@@ -235,9 +250,15 @@ pub(super) async fn rename_repository_branch(
             "Choose a different branch name.",
         ));
     }
-    let snapshot = branches::read_branches(repo_id.clone(), &target.repository_path, None, false)
-        .await
-        .map_err(ApiError::from_branch_error)?;
+    let snapshot = branches::read_branches_with_git(
+        repo_id.clone(),
+        &target.repository_path,
+        None,
+        false,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     if snapshot.branches.iter().any(|branch| {
         matches!(branch.kind, branches::BranchKind::Local) && branch.name == request.new_name
     }) {
@@ -306,11 +327,14 @@ pub(super) async fn preview_repository_branch_delete(
     let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
     let is_current = metadata.branch.as_deref() == Some(request.name.as_str());
     let unmerged_commit_count = match metadata.branch.as_deref() {
-        Some(current) if !metadata.detached => {
-            branches::unmerged_commit_count(&target.repository_path, current, &request.name)
-                .await
-                .map_err(ApiError::from_branch_error)?
-        }
+        Some(current) if !metadata.detached => branches::unmerged_commit_count_with_git(
+            &target.repository_path,
+            current,
+            &request.name,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?,
         _ => 0,
     };
     Ok(Json(BranchDeletePreview {
@@ -342,11 +366,14 @@ pub(super) async fn delete_repository_branch(
         ));
     }
     let unmerged = match metadata.branch.as_deref() {
-        Some(current) if !metadata.detached => {
-            branches::unmerged_commit_count(&target.repository_path, current, &request.name)
-                .await
-                .map_err(ApiError::from_branch_error)?
-        }
+        Some(current) if !metadata.detached => branches::unmerged_commit_count_with_git(
+            &target.repository_path,
+            current,
+            &request.name,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?,
         _ => 0,
     };
     if unmerged > 0 && !request.allow_unmerged {
@@ -425,9 +452,14 @@ pub(super) async fn preflight_branch_switch(
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
     let changed_in_target = match metadata.head.as_deref() {
-        Some(head) => branches::paths_changed_between(&target.repository_path, head, &request.name)
-            .await
-            .map_err(ApiError::from_branch_error)?,
+        Some(head) => branches::paths_changed_between_with_git(
+            &target.repository_path,
+            head,
+            &request.name,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?,
         None => Vec::new(),
     };
     let potentially_overwritten_paths = dirty_files
@@ -488,6 +520,7 @@ pub(super) async fn switch_repository_branch(
         metadata.head.as_deref(),
         &request.name,
         &dirty_files,
+        state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?
@@ -504,6 +537,7 @@ pub(super) async fn switch_repository_branch(
     let repositories = state.repositories.clone();
     let status_service = state.status.clone();
     let command = state.git_commands.clone();
+    let branch_git = state.branch_git.clone();
     let task = state
         .tasks
         .submit(Some(repo_id), None, target.resource_key, "branchSwitch", move |context| async move {
@@ -520,7 +554,7 @@ pub(super) async fn switch_repository_branch(
                 .filter(|file| !file.categories.iter().all(|category| matches!(category, ChangeCategory::Ignored)))
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
-            if dirty_paths_overlap_branch_target(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths)
+            if dirty_paths_overlap_branch_target(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths, branch_git.as_ref())
                 .await
                 .map_err(|_| TaskFailure::Failed("Could not verify whether local edits overlap the target branch.".into()))?
             {
@@ -541,6 +575,7 @@ async fn dirty_paths_overlap_branch_target(
     current_head: Option<&str>,
     target: &str,
     dirty_paths: &[String],
+    git: &dyn crate::ports::branches::BranchGitPort,
 ) -> Result<bool, branches::BranchError> {
     if dirty_paths.is_empty() {
         return Ok(false);
@@ -549,6 +584,7 @@ async fn dirty_paths_overlap_branch_target(
         return Ok(false);
     };
     let changed_paths =
-        branches::paths_changed_between(repository_path, current_head, target).await?;
+        branches::paths_changed_between_with_git(repository_path, current_head, target, git)
+            .await?;
     Ok(dirty_paths.iter().any(|path| changed_paths.contains(path)))
 }
