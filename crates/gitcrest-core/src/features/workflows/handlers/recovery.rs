@@ -14,7 +14,6 @@ use crate::{
     domain::undo::{UndoOperation, UndoRecord},
     domain::workflow::WorkflowRecoveryAction,
     domain::{staging::StagingOperation, time::unix_time_ms},
-    features::shelves,
     features::tasks,
     features::tasks::{TaskFailure, TaskSnapshot},
     ports::git::GitReadPort,
@@ -148,6 +147,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
 
     let command = state.git_commands.clone();
     let repositories = state.repositories.clone();
+    let shelf_records = state.shelf_records.clone();
     let status_service = state.status.clone();
     let tasks = state.tasks.clone();
     let task_repo_id = repo_id.clone();
@@ -195,9 +195,15 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task no longer identifies its saved patch.".into()))?;
                     let before_tree = crate::features::workflows::recovery::shelf_apply_before_tree(&waiting_task_operation)
                         .ok_or_else(|| TaskFailure::Failed("The shelf apply task has no safe pre-apply index snapshot. The shelf was retained.".into()))?;
-                    let shelf = shelves::load_shelf_record(&repositories, &task_repo_id, shelf_id)
-                        .await
-                        .map_err(|_| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?;
+                    let shelf_repo_id = task_repo_id.clone();
+                    let shelf_record_id = shelf_id.to_owned();
+                    let shelf = tokio::task::spawn_blocking(move || {
+                        shelf_records.read_shelf_record(&shelf_repo_id, &shelf_record_id)
+                    })
+                    .await
+                    .map_err(|_| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?
+                    .map_err(|_| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?
+                    .ok_or_else(|| TaskFailure::Failed("The saved shelf is unavailable. Conflicts remain in the working tree.".into()))?;
                     if shelf.snapshot.scope == Some(DiffScope::WorkingTree) {
                         command
                             .execute_staging(

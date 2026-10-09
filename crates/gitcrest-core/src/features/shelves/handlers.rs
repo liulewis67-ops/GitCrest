@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use axum::{
     extract::{rejection::JsonRejection, Path, State},
     http::StatusCode,
@@ -21,6 +23,7 @@ use crate::{
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging},
     ports::diff::DiffGitPort,
+    ports::shelves::ShelfRecordReadPort,
     ports::{repository::RepositoryPathPort, status::StatusReadPort},
     state::AppState,
 };
@@ -120,7 +123,7 @@ pub(super) async fn preflight_repository_shelf_apply(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let shelf = load_shelf_record(&state.repositories, &repo_id, &shelf_id).await?;
+    let shelf = load_shelf_record(state.shelf_records.clone(), &repo_id, &shelf_id).await?;
     let scope = shelf.snapshot.scope.ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
@@ -185,7 +188,7 @@ pub(super) async fn apply_repository_shelf(
             staging::StagingError::StaleSelection,
         ));
     }
-    let shelf = load_shelf_record(&state.repositories, &repo_id, &shelf_id).await?;
+    let shelf = load_shelf_record(state.shelf_records.clone(), &repo_id, &shelf_id).await?;
     let scope = shelf.snapshot.scope.ok_or_else(|| {
         ApiError::new(
             StatusCode::CONFLICT,
@@ -220,6 +223,7 @@ pub(super) async fn apply_repository_shelf(
         })?;
 
     let repositories = state.repositories.clone();
+    let shelf_records = state.shelf_records.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
     let task_repo_id = repo_id.clone();
@@ -246,7 +250,7 @@ pub(super) async fn apply_repository_shelf(
                 if current_repository.head != expected_head_oid {
                     return Err(TaskFailure::Failed("Repository HEAD changed after shelf preview. Preview the shelf again.".into()));
                 }
-                let current_shelf = load_shelf_record(&repositories, &task_repo_id, &task_shelf_id)
+                let current_shelf = load_shelf_record(shelf_records, &task_repo_id, &task_shelf_id)
                     .await
                     .map_err(|_| TaskFailure::Failed("The reviewed shelf is no longer available.".into()))?;
                 let current_scope = current_shelf.snapshot.scope.ok_or_else(|| TaskFailure::Failed("This shelf has no safe restore scope.".into()))?;
@@ -361,15 +365,14 @@ pub(super) async fn apply_repository_shelf(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
-pub(crate) async fn load_shelf_record(
-    repositories: &RepositoryManager,
+async fn load_shelf_record(
+    shelf_records: Arc<dyn ShelfRecordReadPort>,
     repo_id: &str,
     shelf_id: &str,
 ) -> Result<ShelfRecord, ApiError> {
-    let store = repositories.store();
     let repo_id = repo_id.to_owned();
     let shelf_id = shelf_id.to_owned();
-    tokio::task::spawn_blocking(move || store.get_shelf(&repo_id, &shelf_id))
+    tokio::task::spawn_blocking(move || shelf_records.read_shelf_record(&repo_id, &shelf_id))
         .await
         .map_err(|_| ApiError::task_storage_unavailable())?
         .map_err(|_| ApiError::task_storage_unavailable())?

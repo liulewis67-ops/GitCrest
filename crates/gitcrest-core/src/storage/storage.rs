@@ -13,6 +13,7 @@ use crate::domain::{
     shelf::{ShelfRecord, ShelfSnapshot},
     undo::{UndoOperation, UndoRecord},
 };
+use crate::ports::shelves::ShelfRecordReadPort;
 
 const MAX_UNDO_PATCH_BYTES: usize = 20 * 1024 * 1024;
 const MAX_UNDO_RECORDS_PER_REPOSITORY: i64 = 100;
@@ -766,6 +767,17 @@ impl RepositoryStore {
             )
             .map(|changed| changed > 0)
             .map_err(|error| error.to_string())
+    }
+}
+
+impl ShelfRecordReadPort for RepositoryStore {
+    fn read_shelf_record(
+        &self,
+        repo_id: &str,
+        shelf_id: &str,
+    ) -> Result<Option<ShelfRecord>, crate::domain::error::RepositoryError> {
+        self.get_shelf(repo_id, shelf_id)
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
     }
 }
 

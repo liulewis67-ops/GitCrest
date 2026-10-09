@@ -15,6 +15,7 @@ use crate::{
         tasks::TaskService,
     },
     git::command::GitCommandService,
+    ports::shelves::ShelfRecordReadPort,
 };
 
 #[derive(Clone)]
@@ -23,6 +24,7 @@ pub(crate) struct AppState {
     pub(crate) read_only_token: Option<Arc<String>>,
     pub(crate) conflict_token: Option<Arc<String>>,
     pub(crate) repositories: RepositoryManager,
+    pub(crate) shelf_records: Arc<dyn ShelfRecordReadPort>,
     pub(crate) repository_targets: RepositoryTargetReader,
     pub(crate) status: StatusService<RepositoryTargetReader, GitCommandService>,
     pub(crate) tasks: TaskService,

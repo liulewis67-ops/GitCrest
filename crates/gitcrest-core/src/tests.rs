@@ -81,6 +81,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         credentials: test_credentials(),
         ai_credentials: test_ai_credentials(),
         events: EventBus::default(),
+        shelf_records: Arc::new(repositories.store()),
         clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
         repository_targets: repositories.target_reader(),
         repositories,
@@ -226,6 +227,7 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
             events: EventBus::default(),
+            shelf_records: Arc::new(repositories.store()),
             repositories: repositories.clone(),
             repository_targets: repositories.target_reader(),
             status: features::status::StatusService::new(repositories.clone()),
@@ -612,6 +614,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             conflict_token: None,
             repositories: repositories.clone(),
+            shelf_records: Arc::new(repositories.store()),
             repository_targets: repositories.target_reader(),
             status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
@@ -1570,6 +1573,7 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
             events: EventBus::default(),
+            shelf_records: Arc::new(repositories.store()),
             clones: CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone()),
             repositories: repositories.clone(),
             repository_targets: repositories.target_reader(),
@@ -2534,6 +2538,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
         )
         .await
         .unwrap();
+    let repositories = RepositoryManager::default();
     let app = app_router(
         AppState {
             read_write_token: Arc::new(WRITE_TOKEN.to_string()),
@@ -2542,9 +2547,10 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
             events: EventBus::default(),
-            repositories: RepositoryManager::default(),
-            repository_targets: RepositoryTargetReader::new(RepositoryManager::default().store()),
-            status: features::status::StatusService::new(RepositoryManager::default()),
+            shelf_records: Arc::new(repositories.store()),
+            repositories: repositories.clone(),
+            repository_targets: RepositoryTargetReader::new(repositories.store()),
+            status: features::status::StatusService::new(repositories.clone()),
             tasks: tasks.clone(),
             git_commands: GitCommandService::default(),
             clones: CloneService::new(
@@ -2670,6 +2676,7 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
             events: EventBus::default(),
+            shelf_records: Arc::new(repositories.store()),
             repositories: repositories.clone(),
             repository_targets: repositories.target_reader(),
             status: features::status::StatusService::new(repositories.clone()),
