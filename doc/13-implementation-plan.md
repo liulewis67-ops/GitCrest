@@ -4624,3 +4624,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/tasks.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
 - 限制/后续：仓库目录、branch favorites、undo 和 migration 仍位于 `storage/storage.rs`；后续继续按持久化职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### storage 拆分 undo 持久化 adapter — 小阶段 424
+- 状态：已完成（undo 记录 SQL、操作映射与 `UndoStorePort` 实现归入 `storage/undo.rs`）
+- 日期：2026-10-10
+- 交付：将 undo 记录保存、读取、删除、`UndoStorePort` 适配及 operation/scope 存储映射从 `storage/storage.rs` 移至 `storage/undo.rs`；沿用相同 SQLite transaction、记录/patch 限制和 Shelf 恢复快照 DTO。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core` 与 `git diff --check` 通过，编译无 warning；未新增或运行测试。
+- 手工验证：确认保存仍在同一个 unchecked transaction 中插入并裁剪记录，读取仍映射原 operation/scope 字符串，port 继续将错误归一为 `StorageUnavailable`。
+- 证据：`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/storage/undo.rs`、`doc/14-backend-development-guidelines.md` 第 3 节。
+- 限制/后续：仓库目录、branch favorites 和迁移仍位于 `storage/storage.rs`；后续继续按持久化职责拆分。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段结构调整与台账同一 commit（SHA 可在后续台账更新中补记）。
