@@ -3892,4 +3892,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；现有用例覆盖 Diff 选择和只读视图，边界与构建检查验证 Diff 窗口入口及 Monaco worker 资源解析。
 - 证据：`src/features/diff/index.ts`、`src/features/diff/ui/`、`tests/unit/split-diff.test.tsx`、`tests/unit/inline-diff.test.ts`。
 - 限制/后续：Diff 根目录仍保留算法与 Monaco/tree-sitter 配置模块；其它 feature 目录演进与 S7.2/S7.4/S7.5 整体验收仍待继续。
-- 完成 commit：待提交
+- 完成 commit：`08c2af0 refactor: organize diff feature UI`
