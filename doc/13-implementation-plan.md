@@ -3735,4 +3735,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 Linux AppImage runner 或下载；当前包无 update config 和公钥，策略继续返回 `notConfigured`。
 - 证据：`electron/main/update-manifest-signature.ts`、`electron/main/update-config-policy.mjs`、`electron/main/index.ts`、`tests/unit/update-manifest-signature.test.ts`。
 - 限制/后续：CI 仍需将受控公钥写入 Linux 包配置、使用 GitHub Secret 私钥给 `latest-linux.yml` 签名并发布；还需在原生 Linux runner 验证签名成功下载及缺失/错误签名拒绝。当前阶段只建立运行时验证链，不代表 S7.4 完成。
-- 完成 commit：待补记
+- 完成 commit：`691452d`
