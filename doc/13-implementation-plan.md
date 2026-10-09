@@ -4285,3 +4285,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/tasks/model/use-task-center.ts`、`src/app/App.tsx`、`src/features/tasks/ui/TaskCenter.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4.1、5.3 节。
 - 限制/后续：Clone 重试、凭据修复、push review 和跨 feature workflow recovery 仍由 App 装配；后续继续沿 tasks model 与应用组合边界拆分。S7.2、S7.4、S7.5 仍未验收。
 - 实施 commit：`c4567ec`。
+
+### repositories feature 最近仓库列表刷新迁入 model — 小阶段 390
+- 状态：已完成（最近仓库查询及选中仓库同步由 repositories model 执行；App 保留 WorkspaceSession 恢复与页面状态装配）
+- 日期：2026-10-10
+- 交付：新增 `useRepositoryListRefresh`，集中执行最近仓库列表 API 请求、仓库列表写入，以及普通刷新后按 RepoId 保留或清除当前选择；恢复已保存 workspace 时通过回调交给 App 更新 session 与页面状态。经 repositories feature barrel 导出。
+- 验证：`pnpm exec tsc`、`pnpm exec vite build --outDir <temp> --emptyOutDir` 与 `git diff --check` 通过；Vite 使用临时 outDir，避免清理仍由 packaged app 占用的发行目录；未运行测试。
+- 手工验证：未操作 GUI；检查普通刷新和恢复 session 两条路径，普通刷新仅保留仍在列表中的当前 RepoId，恢复分支仍使用 `restoreAvailableRepositories` 过滤不可用仓库并选择有效活动仓库。
+- 证据：`src/features/repositories/model/use-repository-list-refresh.ts`、`src/features/repositories/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3.2、4、5 节。
+- 限制/后续：桌面目录选择器、open/initialize 错误状态和 workspace session 的页面激活仍由 App 装配；后续继续评估跨页面边界迁移。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：`586688f`。
