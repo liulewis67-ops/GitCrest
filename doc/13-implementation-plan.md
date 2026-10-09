@@ -3483,4 +3483,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 操作；独立 sidecar harness 在隔离 100k Git fixture 上执行 20 轮冷/热查询，并核对响应。曾尝试首次历史页触发后台预热，但首页请求出现 13–18 秒长尾，已撤回该改动；当前首页不触发索引构建。
 - 证据：`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`doc/evidence/S7.2/api-win32-cold-warm-search-20261009.json`。
 - 限制/后续：冷索引查询仍超过 200ms；warm 查询 max 的 18.343 秒异常样本尚未归因；索引构建约 16.5 秒。S7.2 的桌面内存、帧率等指标仍未达标，S7.2、S7.4、S7.5 均未整体完成。
-- 完成 commit：待补记
+- 完成 commit：`06d0959`
