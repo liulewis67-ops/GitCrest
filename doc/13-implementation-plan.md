@@ -2864,3 +2864,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/undo.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、staging/shelves/workflows handlers、`doc/14-backend-development-guidelines.md` 第 4.1 节。
 - 限制/后续：其他 feature 的仓库、任务、设置、history 数据访问仍有 RepositoryStore 直接调用，继续按能力拆分端口；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`c8d098b`
+
+### Branch favorite 持久化通过专用 port 注入 — 小阶段 246
+- 状态：已完成（branches feature 不再直接通过 RepositoryManager.store() 访问 branch_favorites）
+- 日期：2026-10-09
+- 交付：新增 `BranchFavoriteStorePort`，覆盖收藏列表、设置、分支重命名迁移和删除时清理；SQLite RepositoryStore 实现该 port，bootstrap/AppState 注入。branches handler 改用 port，数据库查询排序、事务及 Git 分支操作顺序保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；静态搜索确认 branches handler 不再依赖 RepositoryStore；未运行 Rust 测试。
+- 手工验证：未执行真实 SQLite 故障或分支重命名流程；存储失败仍映射为 StorageUnavailable/任务失败。
+- 证据：`crates/gitcrest-core/src/ports/branch_favorites.rs`、`crates/gitcrest-core/src/storage/storage.rs`、`crates/gitcrest-core/src/state.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 4.1 节。
+- 限制/后续：repositories、settings、tasks、history 等 feature 仍有持久化适配直接依赖，继续按能力拆分；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：`bdf52ea`
