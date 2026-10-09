@@ -1,24 +1,13 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, UIEvent } from "react";
-import type { CommitDetailResponse, CommitHistoryFilters, CommitPageResponse, GitCrestApiClient, RefSnapshotResponse } from "../../api/client";
+import type { CommitDetailResponse, CommitHistoryFilters, GitCrestApiClient } from "../../api/client";
 import type { components } from "../../api/schema";
+import { useRepositoryHistory } from "./model/use-repository-history";
 
-const PAGE_SIZE = 50;
 const ROW_HEIGHT = 52;
 const OVERSCAN = 8;
 const COMMIT_DATE_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
 type CommitSummary = components["schemas"]["CommitSummary"];
-
-function isCommitSummary(value: unknown): value is CommitSummary {
-  if (!value || typeof value !== "object") return false;
-  const commit = value as Partial<CommitSummary>;
-  return typeof commit.oid === "string"
-    && Array.isArray(commit.parents) && commit.parents.every((parent) => typeof parent === "string")
-    && typeof commit.authorName === "string"
-    && typeof commit.authorEmail === "string"
-    && typeof commit.committedAtMs === "number"
-    && typeof commit.subject === "string";
-}
 
 function isCommitDetail(value: unknown): value is CommitDetailResponse {
   if (!value || typeof value !== "object") return false;
@@ -82,72 +71,12 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
 export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, onScrollPosition, onSelect }: CommitGraphProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
-  const [commits, setCommits] = useState<CommitSummary[]>([]);
-  const [refs, setRefs] = useState<RefSnapshotResponse["refs"]>([]);
-  const [nextOffset, setNextOffset] = useState<number | null>(0);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState("");
-  const [refsError, setRefsError] = useState("");
   const [draftFilters, setDraftFilters] = useState<CommitHistoryFilters>({});
   const [filters, setFilters] = useState<CommitHistoryFilters>({});
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
   const renderedWindowRef = useRef({ first: 0, height: 520 });
-  const requestGeneration = useRef(0);
-  const offsetsInFlight = useRef(new Set<number>());
   const restoredRepo = useRef<string>();
-
-  const readPage = useCallback(async (offset: number, generation: number) => {
-    if (offsetsInFlight.current.has(offset)) return;
-    offsetsInFlight.current.add(offset);
-    if (offset === 0) setLoading(true);
-    else setLoadingMore(true);
-    setError("");
-    try {
-      const response: unknown = await api.getRepositoryCommits(repoId, offset, PAGE_SIZE, filters);
-      if (requestGeneration.current !== generation) return;
-      if (!response || typeof response !== "object" || !Array.isArray((response as Partial<CommitPageResponse>).commits)) {
-        throw new Error("History response did not contain a commit list.");
-      }
-      const page = response as CommitPageResponse;
-      if (!page.commits.every(isCommitSummary)) throw new Error("History response contained an invalid commit.");
-      setCommits((current) => offset === 0 ? page.commits : [...current, ...page.commits]);
-      setNextOffset(typeof page.nextOffset === "number" && Number.isSafeInteger(page.nextOffset) ? page.nextOffset : null);
-    } catch (reason) {
-      if (requestGeneration.current !== generation) return;
-      setError(reason instanceof Error ? reason.message : "Could not read commit history.");
-    } finally {
-      offsetsInFlight.current.delete(offset);
-      if (requestGeneration.current === generation) {
-        if (offset === 0) setLoading(false);
-        else setLoadingMore(false);
-      }
-    }
-  }, [api, filters, repoId]);
-
-  useEffect(() => {
-    const generation = ++requestGeneration.current;
-    offsetsInFlight.current.clear();
-    setCommits([]);
-    setRefs([]);
-    setNextOffset(0);
-    setLoading(true);
-    setLoadingMore(false);
-    setError("");
-    setRefsError("");
-    void readPage(0, generation);
-    return () => { requestGeneration.current += 1; };
-  }, [api, repoId, readPage, refreshKey]);
-
-  useEffect(() => {
-    let active = true;
-    void api.getRepositoryRefs(repoId).then((snapshot) => {
-      if (active) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
-    }).catch((reason: unknown) => {
-      if (active) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
-    });
-    return () => { active = false; };
-  }, [api, repoId, refreshKey]);
+  const { commits, refs, loading, loadingMore, error, refsError, loadMore, retry } = useRepositoryHistory(api, repoId, filters, refreshKey);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -212,7 +141,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const graphHeight = commits.length * ROW_HEIGHT;
   const graphWidth = Math.max(112, laneLayout.maxLane * 20 + 44);
 
-  async function onScroll(event: UIEvent<HTMLDivElement>) {
+  function onScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
     const top = node.scrollTop;
     const height = node.clientHeight || 520;
@@ -221,8 +150,8 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
       renderedWindowRef.current = { first, height };
       setViewport({ top, height });
     }
-    if (nextOffset !== null && !loadingMore && node.scrollHeight - node.scrollTop - node.clientHeight < ROW_HEIGHT * 10) {
-      await readPage(nextOffset, requestGeneration.current);
+    if (!loadingMore && node.scrollHeight - node.scrollTop - node.clientHeight < ROW_HEIGHT * 10) {
+      loadMore();
     }
   }
 
@@ -292,7 +221,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     </form>
     <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label="Commit graph view">
     {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />Loading commit history…</div>
-      : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={() => void readPage(commits.length, requestGeneration.current)}>Retry history</button></div>
+      : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={retry}>Retry history</button></div>
         : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p><h2>{hasFilters ? "No matching commits" : "No commits yet"}</h2><p>{hasFilters ? "Adjust or clear the current filters to see more history." : "This repository has no commit history on HEAD or its branches."}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
           : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>
             <svg className="commitGraphEdges" aria-hidden="true" width={graphWidth} height={visibleEnd - visibleStart} viewBox={`0 ${visibleStart} ${graphWidth} ${visibleEnd - visibleStart}`} style={{ top: visibleStart }}>
