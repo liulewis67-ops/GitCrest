@@ -91,6 +91,8 @@ pub(crate) trait RemotePreflightReadPort: Send + Sync {
         repository_path: &'a Path,
     ) -> RemotePreflightFuture<'a, WorkflowState>;
 
+    fn is_am_rebase<'a>(&'a self, repository_path: &'a Path) -> RemotePreflightFuture<'a, bool>;
+
     fn read_pull_state<'a>(
         &'a self,
         repository_path: &'a Path,

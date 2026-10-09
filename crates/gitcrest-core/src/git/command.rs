@@ -401,24 +401,11 @@ impl GitCommandService {
             .map(|state| state.operation)
         {
             Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
-                let rebase_apply = capture_git_output(
-                    &self.git_program,
-                    repository_path,
-                    ["rev-parse", "--git-path", "rebase-apply"],
-                    4096,
-                )
-                .await
-                .ok()
-                .and_then(|output| String::from_utf8(output).ok())
-                .map(|path| PathBuf::from(path.trim()))
-                .map(|path| {
-                    if path.is_absolute() {
-                        path
-                    } else {
-                        repository_path.join(path)
-                    }
-                });
-                if rebase_apply.is_some_and(|path| path.is_dir()) {
+                let is_am_rebase = preflight_read
+                    .is_am_rebase(repository_path)
+                    .await
+                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                if is_am_rebase {
                     capture_git_output_args(
                         &self.git_program,
                         repository_path,
@@ -428,15 +415,11 @@ impl GitCommandService {
                     .await
                     .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
                 } else {
-                    let status = capture_git_output(
-                        &self.git_program,
-                        repository_path,
-                        ["status", "--porcelain=v1", "--untracked-files=all"],
-                        2 * 1024 * 1024,
-                    )
-                    .await
-                    .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
-                    if !status.is_empty() {
+                    let worktree = preflight_read
+                        .read_worktree(repository_path)
+                        .await
+                        .map_err(|_| TaskFailure::Failed(pull_cancel_outcome_unknown()))?;
+                    if !worktree.dirty_paths.is_empty() || worktree.omitted_dirty_path_count > 0 {
                         return Err(TaskFailure::WaitingForInput(
                             "Pull rebase was cancelled while user changes remain in the worktree. Review the changes before aborting the rebase.".into(),
                         ));
@@ -1451,6 +1434,31 @@ impl RemotePreflightReadPort for GitCommandService {
         repository_path: &'a Path,
     ) -> RemotePreflightFuture<'a, WorkflowState> {
         Box::pin(async move { GitReadPort::read_worktree_state(self, repository_path).await })
+    }
+
+    fn is_am_rebase<'a>(&'a self, repository_path: &'a Path) -> RemotePreflightFuture<'a, bool> {
+        Box::pin(async move {
+            let output = capture_git_output(
+                &self.git_program,
+                repository_path,
+                ["rev-parse", "--git-path", "rebase-apply"],
+                4096,
+            )
+            .await
+            .map_err(|_| WorkflowError::GitFailed)?;
+            let path = std::str::from_utf8(&output).map_err(|_| WorkflowError::GitFailed)?;
+            let path = PathBuf::from(path.trim());
+            let path = if path.is_absolute() {
+                path
+            } else {
+                repository_path.join(path)
+            };
+            match tokio::fs::metadata(path).await {
+                Ok(metadata) => Ok(metadata.is_dir()),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+                Err(_) => Err(WorkflowError::GitFailed),
+            }
+        })
     }
 
     fn read_pull_state<'a>(
