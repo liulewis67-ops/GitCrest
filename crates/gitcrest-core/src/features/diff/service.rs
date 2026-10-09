@@ -10,7 +10,10 @@ use std::path::Path;
 
 use crate::domain::diff::{DiffScope, DiffSelection};
 pub(crate) use crate::domain::error::DiffError;
-use crate::features::status::{ChangeCategory, ChangeKind, StatusFile};
+use crate::{
+    domain::status::{ChangeCategory, ChangeKind},
+    features::status::StatusFile,
+};
 
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ERROR_BYTES: usize = 16 * 1024;

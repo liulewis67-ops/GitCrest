@@ -9,13 +9,13 @@ use crate::{
     AppState,
 };
 
-use super::StatusSnapshot;
+use super::dto::StatusSnapshotDto;
 
 pub(super) async fn repository_status(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
     RawQuery(raw_query): RawQuery,
-) -> Result<Json<StatusSnapshot>, ApiError> {
+) -> Result<Json<StatusSnapshotDto>, ApiError> {
     let mut paths = Vec::new();
     let mut force_refresh = false;
     if let Some(raw_query) = raw_query {
@@ -60,13 +60,15 @@ pub(super) async fn repository_status(
         } else {
             state.status.snapshot_cached(&repo_id).await
         };
-        snapshot.map(Json).map_err(ApiError::from_repository_error)
+        snapshot
+            .map(|snapshot| Json(snapshot.into()))
+            .map_err(ApiError::from_repository_error)
     } else {
         state
             .status
             .snapshot_paths_cached(&repo_id, &paths)
             .await
-            .map(Json)
+            .map(|snapshot| Json(snapshot.into()))
             .map_err(ApiError::from_repository_error)
     }
 }
