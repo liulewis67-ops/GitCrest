@@ -4041,3 +4041,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：更新清单签名/策略定向 Vitest（6/6）通过；生成临时 Ed25519 keypair，执行实际 `afterPack` hook 并确认包内公钥与私钥对应公钥相同，且 Linux updater policy 因受信公钥启用；缺失私钥时按预期失败。两个新增 MJS 文件 `node --check`、release config 用临时仓库名加载和 `git diff --check` 通过。未在 Windows 主机尝试生成 AppImage。
 - 证据：`electron-builder.linux-release.mjs`、`scripts/inject-linux-update-public-key.mjs`、`tests/unit/update-manifest-signature.test.ts`。
 - 限制/后续：尚未接入 Linux 原生 runner workflow，也未生成并签名真实 AppImage 发布清单或完成更新端到端安装；Linux feed 仍不能视为已验收。Windows/macOS 真实签名发布、跨平台 runner 结果和 S7.5 收口仍待完成。
+- 实施 commit：`deb2f41`。
