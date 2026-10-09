@@ -3393,4 +3393,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未执行 GUI 手工操作；Playwright 使用 Git for Windows `git-http-backend` 和本机 HTTPS server，凭据闭环实际经过 Windows Credential Manager 与 Git askpass，未访问外网。
 - 证据：`tests/e2e/repository-management.test.ts`、`tests/fixtures/authentication-server.ts`、`doc/08-development-readiness.md` 第 5 节。
 - 限制/后续：当前系统凭据库闭环在 Windows Git 2.37.3 与 Windows Credential Manager 验证；macOS/Linux 系统凭据库闭环留待对应 runner。S7.5 仍保持进行中。
-- 完成 commit：待提交
+- 完成 commit：`bb6fe6c`
