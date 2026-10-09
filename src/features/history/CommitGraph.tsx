@@ -1,8 +1,9 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, UIEvent } from "react";
-import type { CommitHistoryFilters, GitCrestApiClient } from "../../api/client";
+import type { GitCrestApiClient } from "../../api/client";
 import type { components } from "../../api/schema";
 import { useCommitTagCreation } from "./model/use-commit-tag-creation";
+import { useHistoryFilters } from "./model/use-history-filters";
 import { useRepositoryCommitDetail } from "./model/use-repository-commit-detail";
 import { useRepositoryHistory } from "./model/use-repository-history";
 
@@ -60,8 +61,7 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
 export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, onScrollPosition, onSelect }: CommitGraphProps) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
-  const [draftFilters, setDraftFilters] = useState<CommitHistoryFilters>({});
-  const [filters, setFilters] = useState<CommitHistoryFilters>({});
+  const { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, resetFilters } = useHistoryFilters();
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
   const renderedWindowRef = useRef({ first: 0, height: 520 });
   const restoredRepo = useRef<string>();
@@ -170,18 +170,9 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     return laneLayout.edgesByFrom[from].filter((edge) => edge.to * ROW_HEIGHT >= visibleStart && edge.to * ROW_HEIGHT <= visibleEnd)
       .map((edge) => ({ from, ...edge }));
   });
-  const hasFilters = Object.values(filters).some((value) => typeof value === "string" && value.length > 0);
-
-  function setFilter<K extends keyof CommitHistoryFilters>(key: K, value: string) {
-    setDraftFilters((current) => ({ ...current, [key]: value || undefined }));
-  }
-
   function submitFilters(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const next = Object.fromEntries(
-      Object.entries(draftFilters).filter(([, value]) => typeof value === "string" && value.trim().length > 0),
-    ) as CommitHistoryFilters;
-    setFilters(next);
+    applyFilters();
     const node = viewportRef.current;
     if (node) node.scrollTop = 0;
     setViewport((current) => ({ ...current, top: 0 }));
@@ -189,8 +180,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   }
 
   function clearFilters() {
-    setDraftFilters({});
-    setFilters({});
+    resetFilters();
     const node = viewportRef.current;
     if (node) node.scrollTop = 0;
     setViewport((current) => ({ ...current, top: 0 }));
@@ -199,13 +189,13 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
 
   return <div className="historyWorkspace">
     <form className="historyFilters" aria-label="Commit history filters" onSubmit={submitFilters}>
-      <label>SHA<input aria-label="Filter by SHA" value={draftFilters.sha || ""} onChange={(event) => setFilter("sha", event.target.value)} placeholder="Prefix or full object ID" /></label>
-      <label>Author<input aria-label="Filter by author" value={draftFilters.author || ""} onChange={(event) => setFilter("author", event.target.value)} placeholder="Name or email" /></label>
-      <label>Message<input ref={messageSearchRef} aria-label="Filter by message" aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setFilter("message", event.target.value)} placeholder="Contains text" /></label>
-      <label>Branch<select aria-label="Filter by branch" value={draftFilters.branch || ""} onChange={(event) => setFilter("branch", event.target.value)}><option value="">All branches</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
-      <label>Path<input aria-label="Filter by path" value={draftFilters.path || ""} onChange={(event) => setFilter("path", event.target.value)} placeholder="Exact repository path" /></label>
-      <label>Since<input aria-label="Filter since date" type="date" value={draftFilters.since || ""} onChange={(event) => setFilter("since", event.target.value)} /></label>
-      <label>Until<input aria-label="Filter until date" type="date" value={draftFilters.until || ""} onChange={(event) => setFilter("until", event.target.value)} /></label>
+      <label>SHA<input aria-label="Filter by SHA" value={draftFilters.sha || ""} onChange={(event) => setDraftFilter("sha", event.target.value)} placeholder="Prefix or full object ID" /></label>
+      <label>Author<input aria-label="Filter by author" value={draftFilters.author || ""} onChange={(event) => setDraftFilter("author", event.target.value)} placeholder="Name or email" /></label>
+      <label>Message<input ref={messageSearchRef} aria-label="Filter by message" aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setDraftFilter("message", event.target.value)} placeholder="Contains text" /></label>
+      <label>Branch<select aria-label="Filter by branch" value={draftFilters.branch || ""} onChange={(event) => setDraftFilter("branch", event.target.value)}><option value="">All branches</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
+      <label>Path<input aria-label="Filter by path" value={draftFilters.path || ""} onChange={(event) => setDraftFilter("path", event.target.value)} placeholder="Exact repository path" /></label>
+      <label>Since<input aria-label="Filter since date" type="date" value={draftFilters.since || ""} onChange={(event) => setDraftFilter("since", event.target.value)} /></label>
+      <label>Until<input aria-label="Filter until date" type="date" value={draftFilters.until || ""} onChange={(event) => setDraftFilter("until", event.target.value)} /></label>
       <div className="historyFilterActions"><button className="secondaryButton" type="submit">Search</button>{hasFilters && <button className="textButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
     </form>
     <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label="Commit graph view">
