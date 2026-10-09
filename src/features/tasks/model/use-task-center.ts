@@ -1,19 +1,38 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse } from "../../../api/client";
 
 export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
   const [error, setError] = useState("");
   const [actionId, setActionId] = useState("");
+  const refreshControllerRef = useRef<AbortController>();
+  const refreshGenerationRef = useRef(0);
+
+  useEffect(() => () => {
+    refreshGenerationRef.current += 1;
+    refreshControllerRef.current?.abort();
+    refreshControllerRef.current = undefined;
+  }, []);
 
   async function refresh() {
     const api = getApi();
     if (!api) return;
+    refreshControllerRef.current?.abort();
+    const controller = new AbortController();
+    const generation = ++refreshGenerationRef.current;
+    refreshControllerRef.current = controller;
     try {
-      setTasks(await api.listTasks());
-      setError("");
+      const currentTasks = await api.withSignal(controller.signal).listTasks();
+      if (!controller.signal.aborted && refreshGenerationRef.current === generation) {
+        setTasks(currentTasks);
+        setError("");
+      }
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not read task history.");
+      if (!controller.signal.aborted && refreshGenerationRef.current === generation) {
+        setError(reason instanceof Error ? reason.message : "Could not read task history.");
+      }
+    } finally {
+      if (refreshControllerRef.current === controller) refreshControllerRef.current = undefined;
     }
   }
 

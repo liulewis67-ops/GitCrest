@@ -3586,3 +3586,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；自动测试驱动两个并行只读请求并断言各自的 AbortSignal。
 - 证据：`src/features/branches/model/use-repository-refs.ts`、`tests/unit/repository-refs-hook.test.tsx`。
 - 限制/后续：仍需审查 App workspace 其他独立读取及写请求结束后的生命周期；完整查询缓存和统一 RepoId 失效策略尚未实施。
+- 完成 commit：`405cb5f`
+
+### 前端任务中心查询生命周期取消 — 小阶段 318
+- 状态：已完成（轮询刷新取消旧读取并在 hook 卸载时中止活动请求）
+- 日期：2026-10-09
+- 交付：`useTaskCenter.refresh` 使用 AbortController 和递增 generation；新一轮列表刷新会中止上一轮并且只应用最新结果，hook 卸载使 generation 失效并取消活动请求。取消不会展示为任务历史错误；cancel task 写请求不自动取消。
+- 验证：新增 useTaskCenter model 测试覆盖并发刷新旧请求取消/旧结果忽略，以及卸载时取消；定向用例通过；完整 `pnpm test` 通过（37 files、167 tests）；`pnpm build`、`pnpm frontend:boundaries`、`git diff --check` 通过。构建仅出现既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；hook 自动化测试驱动延迟的任务列表响应并检查 AbortSignal 和状态结果。
+- 证据：`src/features/tasks/model/use-task-center.ts`、`tests/unit/task-center-model.test.tsx`。
+- 限制/后续：terminal-task 后的 repository metadata 查询以及 TaskRefreshEffects 触发的其它 workspace 读取尚未统一取消；查询缓存和 RepoId 失效策略仍需继续落实。
