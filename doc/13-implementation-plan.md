@@ -2291,3 +2291,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：历史刷新失效信号与 CommitGraph 内部筛选输入仍由 App/视图装配；S7.2/S7.4/S7.5 继续按实施计划验收。
 - 证据：`src/features/history/model/use-history-view-requests.ts`、`src/features/history/index.ts`、`src/app/App.tsx`、`src/pages/workspace/WorkspaceMainPanel.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4、5 节。
 - 实施 commit：`aad42f0`
+
+### S7.4 — macOS DMG 安装 smoke 接入 — 小阶段 186
+- 状态：待验收（macOS 实现已接入三平台 package-smoke；本机 Windows 构建与回归通过，DMG 流程需 macOS runner 实际执行）
+- 日期：2026-10-09
+- 交付：扩展 `scripts/packaged-smoke.mjs`：macOS 上挂载构建的 DMG，将 `GitCrest.app` 复制到隔离临时目录并从复制后的安装路径启动；检查 sidecar 和更新状态，退出后确认 sidecar 停止、卸载 DMG 并清理临时目录。清理结构保证启动或复制失败时仍尝试卸载。
+- 验证：本机运行 `node --check scripts/packaged-smoke.mjs`、`pnpm electron:package`、`pnpm test:packaged` 与 `git diff --check` 通过；本次包基于当前源码的 Windows NSIS。macOS 专属 hdiutil/DMG 路径未在 Windows 执行。
+- 限制/后续：需 macOS CI runner 证明 DMG 挂载、复制、启动与 detach；Linux 仍以 `linux-unpacked` + Xvfb 运行 smoke。S7.4 整体保持进行中。
+- 证据：`scripts/packaged-smoke.mjs`、`.github/workflows/ci.yml` 中 package-smoke matrix。
+- 实施 commit：`d6d00b9`
