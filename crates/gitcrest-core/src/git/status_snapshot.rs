@@ -19,9 +19,11 @@ async fn read_scope(
     paths: &[String],
 ) -> Result<StatusSnapshot, std::io::Error> {
     let native_path = path.to_owned();
-    let native_files = tokio::task::spawn_blocking(move || read_libgit2(&native_path))
-        .await
-        .map_err(|_| std::io::Error::other("Git status worker failed"))?;
+    let native_paths = paths.to_vec();
+    let native_files =
+        tokio::task::spawn_blocking(move || read_libgit2(&native_path, &native_paths))
+            .await
+            .map_err(|_| std::io::Error::other("Git status worker failed"))?;
     let files = match native_files {
         Ok(Some(files)) => filter_paths(files, paths),
         Ok(None) | Err(_) => read_git_cli(path, paths).await?,
@@ -38,7 +40,7 @@ async fn read_scope(
     })
 }
 
-fn read_libgit2(path: &Path) -> Result<Option<Vec<StatusFile>>, git2::Error> {
+fn read_libgit2(path: &Path, paths: &[String]) -> Result<Option<Vec<StatusFile>>, git2::Error> {
     let repo = Repository::open(path)?;
     let mut options = StatusOptions::new();
     options
@@ -50,6 +52,12 @@ fn read_libgit2(path: &Path) -> Result<Option<Vec<StatusFile>>, git2::Error> {
         .renames_head_to_index(true)
         .renames_index_to_workdir(true)
         .update_index(false);
+    if !paths.is_empty() {
+        options.disable_pathspec_match(true);
+        for path in paths {
+            options.pathspec(path.as_str());
+        }
+    }
 
     let statuses = repo.statuses(Some(&mut options))?;
     let mut files = Vec::with_capacity(statuses.len());
@@ -63,6 +71,18 @@ fn read_libgit2(path: &Path) -> Result<Option<Vec<StatusFile>>, git2::Error> {
         if let Some(file) = convert_status_entry(&entry) {
             files.push(file);
         }
+    }
+    if !paths.is_empty()
+        && files.iter().any(|file| {
+            matches!(
+                file.kind,
+                ChangeKind::Added | ChangeKind::Deleted | ChangeKind::Untracked
+            )
+        })
+    {
+        // A pathspec can hide the opposite side of a rename. Re-run the
+        // complete status only for scopes where rename identity is ambiguous.
+        return read_libgit2(path, &[]);
     }
     Ok(Some(files))
 }
@@ -464,7 +484,7 @@ mod tests {
         fs::write(root.path().join("ignored-dir/deep/inside.txt"), "ignored\n").unwrap();
         git(root.path(), &["mv", "rename-old.txt", "rename-new.txt"]);
 
-        let native = sorted(read_libgit2(root.path()).unwrap().unwrap());
+        let native = sorted(read_libgit2(root.path(), &[]).unwrap().unwrap());
         let cli = sorted(read_git_cli(root.path(), &[]).await.unwrap());
         assert_eq!(native, cli);
 
@@ -518,7 +538,7 @@ mod tests {
             .unwrap();
         assert!(!output.status.success());
 
-        assert!(read_libgit2(root.path()).unwrap().is_none());
+        assert!(read_libgit2(root.path(), &[]).unwrap().is_none());
         let via_status_service = read_scope("repo-test".into(), root.path(), &[])
             .await
             .unwrap()
