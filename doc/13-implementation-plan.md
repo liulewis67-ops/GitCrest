@@ -3216,13 +3216,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 完成 commit：`56defc1`
 
 ### S7.4 Packaged smoke 临时目录清理重试 — 小阶段 281
-- 状态：待验收（packaged smoke 重试通过；全量前端单测发现一个无关的 workflow dialog 异步断言竞态，待修复后重跑统一门禁）
+- 状态：已完成（packaged smoke 清理改为有界重试，统一构建与测试门禁通过）
 - 日期：2026-10-09
 - 交付：将 packaged smoke 临时目录清理改为最多 5 秒的有界重试，覆盖 Windows 安装器/应用释放文件句柄的时序，超时仍保留明确失败。
-- 验证：`pnpm test:packaged` 在修改后通过；修改前的 Windows packaged smoke 首次因临时目录仍存在失败、重跑通过。`pnpm test` 为 161/162，单独重跑失败测试通过，具体竞态另记小阶段处理。
+- 验证：`pnpm electron:package` 成功；修复后 `pnpm test:packaged` 通过；`pnpm build` 通过；`pnpm test` 通过（34 files、162 tests）；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（129 tests）；Clippy 与 `git diff --check` 通过。修复前首次 packaged smoke 因清理断言失败，立即重跑通过；修复后再次运行通过。全量前端单测曾发现 workflow dialog 测试时序竞态，已由小阶段 282 修复。
 - 手工验证：Windows 10.0.26300 x64，通过隔离安装目录 smoke；未手工操作。
 - 证据：`scripts/packaged-smoke.mjs`、`doc/evidence/S7.4/windows-package-smoke.json`。
-- 限制/后续：待 `pnpm build`、前端全量测试、Rust 全量测试和 Clippy 重跑后确认；S7.4 其它平台/签名验收仍未完成。
+- 限制/后续：本机验收仅覆盖 Windows unsigned installer；Windows 代码签名、macOS/Linux runner、签名验证拒绝安装和更新签名/发布流程仍未验收，S7.4 保持进行中。
 - 完成 commit：`edbf902`
 
 ### WorkflowDialog 异步预检测试等待可执行状态 — 小阶段 282
@@ -3233,4 +3233,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：不适用；为测试同步条件修复。
 - 证据：`tests/unit/workflow-dialog.test.tsx`。
 - 限制/后续：无；S7.4 其它平台/签名验收仍待完成。
-- 完成 commit：待提交
+- 完成 commit：`8588ad4`
