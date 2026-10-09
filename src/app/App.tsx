@@ -206,6 +206,7 @@ function App() {
     openTaskCenter: () => setTasksOpen(true),
   });
   const branchSwitchShelfFlow = useBranchSwitchShelfFlow({
+    tasks,
     getApi: () => apiRef.current,
     getSelectedRepositoryId: () => selectedRepository?.repoId,
     onBranchSwitchReview: branchSwitcher.reviewAfterShelf,
@@ -652,10 +653,6 @@ function App() {
       setSelectedRepository((current) => currentRepositories.find((repository) => repository.repoId === current?.repoId));
     }
   }
-
-  useEffect(() => {
-    branchSwitchShelfFlow.observeTasks(tasks);
-  }, [tasks]);
 
   useTaskRefreshEffects({
     tasks,

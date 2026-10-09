@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import {
   GitCrestApiError,
   type GitCrestApiClient,
@@ -17,6 +17,7 @@ interface PendingShelfRestore {
 }
 
 interface BranchSwitchShelfFlowOptions {
+  tasks: TaskSnapshotResponse[];
   getApi: () => GitCrestApiClient | undefined;
   getSelectedRepositoryId: () => string | undefined;
   onBranchSwitchReview: (target: string, preflight: Awaited<ReturnType<GitCrestApiClient["preflightRepositoryBranchSwitch"]>>, message: string) => void;
@@ -35,6 +36,7 @@ function shelfSwitchKey(repoId: string, target: string) {
 }
 
 export function useBranchSwitchShelfFlow({
+  tasks,
   getApi,
   getSelectedRepositoryId,
   onBranchSwitchReview,
@@ -174,5 +176,9 @@ export function useBranchSwitchShelfFlow({
     }
   }
 
-  return { prepareShelfSwitch, trackShelfSwitchTask, closeShelfComposer, observeTasks };
+  useEffect(() => {
+    observeTasks(tasks);
+  }, [tasks]);
+
+  return { prepareShelfSwitch, trackShelfSwitchTask, closeShelfComposer };
 }

@@ -2714,3 +2714,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/cloning/model/use-clone-submission.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
 - 限制/后续：App 仍负责跨 feature 的仓库激活回调装配；Vite 构建仍提示 web-tree-sitter 使用 `eval` 和部分 bundle 超过 500 kB。
 - 完成 commit：`e3e3b40`
+
+### Branch switch shelf 恢复任务生命周期迁入 feature — 小阶段 231
+- 状态：已完成（分支切换前 shelf、切换后恢复 shelf 的异步任务观察由 branches feature 管理）
+- 日期：2026-10-09
+- 交付：`useBranchSwitchShelfFlow` 接收 tasks 快照并在 feature 内观察 shelf 创建、branch switch、shelf apply 的终态，原有串行恢复与失败提示保持不变；App 移除直接调用 `observeTasks` 的任务 Effect，Hook 不再暴露该内部生命周期方法。
+- 验证：`pnpm frontend:build` 与 `git diff --check` 通过；未运行测试。
+- 手工验证：未运行 Electron 手工场景；构建完成并通过 TypeScript 检查。
+- 证据：`src/features/branches/model/use-branch-switch-shelf-flow.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、4 节。
+- 限制/后续：App 继续装配当前仓库、任务面板和 branch review 回调；构建仍报告依赖 `eval` 和部分 bundle 超过 500 kB。
+- 完成 commit：待补记
