@@ -3813,3 +3813,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-search-cat-file-stage340.json`。
 - 限制/后续：完整读取所有提交对象增加 I/O，且不能缓解索引缺失时的慢查询；继续寻找在提交前预热并保持结果完整、顺序和分页语义的方案。S7.2 桌面门槛、S7.4、S7.5 仍未完成。
 - 完成 commit：`2b639de`
+
+### History feature UI 按职责拆分 — 小阶段 341
+- 状态：已完成（提交图与提交详情各自独立，并归入 feature 的 `ui/` 目录）
+- 日期：2026-10-09
+- 交付：将虚拟提交图和右侧提交详情从单个 `CommitGraph.tsx` 拆为 `ui/CommitGraph.tsx` 与 `ui/CommitDetails.tsx`；将共享日期格式化函数放入 `ui/format-commit-date.ts`。feature 入口分别懒加载两个组件，避免拆分后影响主界面加载边界。
+- 验证：`pnpm exec vitest run --config vitest.config.ts tests/unit/commit-graph.test.tsx`（1 file / 6 tests）、`pnpm frontend:boundaries`、`pnpm build` 均通过。production 输出仍包含独立 `CommitGraph`（20.95 kB）与 `CommitDetails`（11.26 kB）异步 chunk；共享日期 helper 0.24 kB。构建只有既有 web-tree-sitter `eval` 警告。
+- 手工验证：未操作 GUI；现有组件测试覆盖图、搜索焦点、滚动状态、详情展示及标签创建行为。
+- 证据：`src/features/history/index.ts`、`src/features/history/ui/CommitGraph.tsx`、`src/features/history/ui/CommitDetails.tsx`、`src/features/history/ui/format-commit-date.ts`、`tests/unit/commit-graph.test.tsx`。
+- 限制/后续：此子阶段只收敛 History UI 目录与组件职责，未完成前端规范目标目录的整体迁移或 S7.2/S7.4/S7.5 验收。
+- 完成 commit：待提交

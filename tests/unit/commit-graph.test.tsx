@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
-import { CommitDetails, CommitGraph } from "../../src/features/history/CommitGraph";
+import { CommitGraph } from "../../src/features/history/ui/CommitGraph";
+import { CommitDetails } from "../../src/features/history/ui/CommitDetails";
 
 afterEach(cleanup);
 
