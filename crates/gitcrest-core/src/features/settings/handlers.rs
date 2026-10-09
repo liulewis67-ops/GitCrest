@@ -7,6 +7,7 @@ use axum::{
 use super::{dto as ai_dto, service as ai};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    domain::diff::DiffScope,
     features::{credentials, diff, status},
     state::AppState,
 };
@@ -209,6 +210,7 @@ pub(super) async fn request_ai(
     );
     let mut files = Vec::with_capacity(request.files.len());
     for selection in request.files {
+        let scope: DiffScope = selection.scope.into();
         let file = snapshot
             .files
             .iter()
@@ -220,13 +222,13 @@ pub(super) async fn request_ai(
                     "A reviewed file is no longer present in the current change snapshot. Review the files again.",
                 )
             })?;
-        let allowed = match selection.scope {
-            diff::DiffScope::Index => file.categories.contains(&status::ChangeCategory::Staged),
-            diff::DiffScope::WorkingTree => {
+        let allowed = match scope {
+            DiffScope::Index => file.categories.contains(&status::ChangeCategory::Staged),
+            DiffScope::WorkingTree => {
                 file.categories.contains(&status::ChangeCategory::Unstaged)
                     || file.categories.contains(&status::ChangeCategory::Untracked)
             }
-            diff::DiffScope::Commit => false,
+            DiffScope::Commit => false,
         };
         if !allowed
             || file.categories.contains(&status::ChangeCategory::Ignored)
@@ -240,14 +242,9 @@ pub(super) async fn request_ai(
                 "A reviewed file scope is no longer eligible. Review the files again.",
             ));
         }
-        let read = diff::read_with_patch(
-            repo_id.clone(),
-            &target.repository_path,
-            file,
-            selection.scope,
-        )
-        .await
-        .map_err(ApiError::from_diff_error)?;
+        let read = diff::read_with_patch(repo_id.clone(), &target.repository_path, file, scope)
+            .await
+            .map_err(ApiError::from_diff_error)?;
         if read.document.revision != selection.revision
             || read.document.status != diff::DiffContentStatus::Text
         {
@@ -260,10 +257,10 @@ pub(super) async fn request_ai(
         let label = format!(
             "{} [{}]",
             selection.path,
-            match selection.scope {
-                diff::DiffScope::Index => "index",
-                diff::DiffScope::WorkingTree => "worktree",
-                diff::DiffScope::Commit => "commit",
+            match scope {
+                DiffScope::Index => "index",
+                DiffScope::WorkingTree => "worktree",
+                DiffScope::Commit => "commit",
             }
         );
         let text = match selection.selections.as_deref() {

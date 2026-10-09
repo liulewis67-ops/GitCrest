@@ -547,7 +547,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
         repository.repo_id.clone(),
         &repository_path,
         selected_file,
-        features::diff::DiffScope::WorkingTree,
+        domain::diff::DiffScope::WorkingTree,
     )
     .await
     .unwrap();

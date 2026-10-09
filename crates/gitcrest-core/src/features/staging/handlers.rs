@@ -6,9 +6,10 @@ use axum::{
     Json,
 };
 
+use crate::domain::diff::DiffScope;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    features::diff::{self, DiffError, DiffScope},
+    features::diff::{self, DiffError},
     features::tasks::{self, TaskFailure, TaskSnapshot},
     features::{shelves, staging},
     git::command::GitCommandService,
@@ -128,7 +129,7 @@ pub(crate) async fn stage_repository_patch(
         repo_id.clone(),
         &target.repository_path,
         file,
-        request.scope,
+        request.scope.into(),
     )
     .await
     .map_err(ApiError::from_diff_error)?;
@@ -194,7 +195,7 @@ pub(crate) async fn stage_repository_patch(
                     task_repo_id.clone(),
                     &repository_path,
                     file,
-                    request.scope,
+                    request.scope.into(),
                 )
                 .await
                 .map_err(|_| {
@@ -442,7 +443,7 @@ pub(crate) async fn discard_repository_patch(
     let selection = staging::StagingPatchRequest {
         action: staging::StagingPatchAction::Stage,
         path: request.path.clone(),
-        scope: DiffScope::WorkingTree,
+        scope: staging::StagingDiffScope::WorkingTree,
         revision: request.revision.clone(),
         selections: request.selections.clone(),
     };
@@ -514,7 +515,7 @@ pub(crate) async fn discard_repository_patch(
                 let selection = staging::StagingPatchRequest {
                     action: staging::StagingPatchAction::Stage,
                     path: path.clone(),
-                    scope: DiffScope::WorkingTree,
+                    scope: staging::StagingDiffScope::WorkingTree,
                     revision: revision.clone(),
                     selections: selection_dtos.clone(),
                 };

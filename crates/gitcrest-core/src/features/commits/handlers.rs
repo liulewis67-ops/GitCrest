@@ -4,11 +4,12 @@ use axum::{
     Json,
 };
 
+use crate::domain::diff::DiffScope;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     features::{
         commits,
-        diff::{self, DiffError, DiffScope},
+        diff::{self, DiffError},
         status,
         tasks::{TaskFailure, TaskSnapshot},
     },

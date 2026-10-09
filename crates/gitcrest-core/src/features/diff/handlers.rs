@@ -12,8 +12,9 @@ use crate::{
 
 use super::{
     dto::{CommitDiffQuery, DiffDocumentDto, DiffQuery},
-    service::{self, DiffScope},
+    service,
 };
+use crate::domain::diff::DiffScope;
 
 pub(super) async fn repository_diff(
     State(state): State<AppState>,
@@ -27,6 +28,7 @@ pub(super) async fn repository_diff(
             "A changed file path and diff scope are required.",
         )
     })?;
+    let scope: DiffScope = query.scope.into();
     let repository_path = state
         .repositories
         .read_target(&repo_id)
@@ -38,7 +40,7 @@ pub(super) async fn repository_diff(
         index_status: ".".into(),
         worktree_status: "M".into(),
         kind: status::ChangeKind::Modified,
-        categories: vec![match query.scope {
+        categories: vec![match scope {
             DiffScope::Index => status::ChangeCategory::Staged,
             DiffScope::WorkingTree | DiffScope::Commit => status::ChangeCategory::Unstaged,
         }],
@@ -48,7 +50,7 @@ pub(super) async fn repository_diff(
         state
             .status
             .snapshot_paths(&repo_id, std::slice::from_ref(&query.path),),
-        service::read(repo_id.clone(), &repository_path, &candidate, query.scope),
+        service::read(repo_id.clone(), &repository_path, &candidate, scope),
     );
     let snapshot = snapshot.map_err(ApiError::from_repository_error)?;
     let file = snapshot
@@ -62,7 +64,7 @@ pub(super) async fn repository_diff(
                 "The selected path is not present in the latest change snapshot.",
             )
         })?;
-    if query.scope == DiffScope::Commit
+    if scope == DiffScope::Commit
         || file.original_path.is_some()
         || file.categories.iter().any(|category| {
             matches!(
@@ -73,7 +75,7 @@ pub(super) async fn repository_diff(
             )
         })
     {
-        return service::read(repo_id, &repository_path, file, query.scope)
+        return service::read(repo_id, &repository_path, file, scope)
             .await
             .map(DiffDocumentDto::from)
             .map(Json)

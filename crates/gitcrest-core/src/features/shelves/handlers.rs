@@ -7,11 +7,12 @@ use sha2::{Digest, Sha256};
 
 use super::dto::{
     ShelfApplyPreviewResponse, ShelfApplyRequest, ShelfCreateRequest, ShelfDetailResponse,
-    ShelfSelectionRequest,
+    ShelfSelectionRequest, ShelfSnapshotDto,
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    features::diff::{self, DiffError, DiffScope},
+    domain::diff::DiffScope,
+    features::diff::{self, DiffError},
     features::tasks::{TaskFailure, TaskSnapshot},
     features::{repositories::repository::RepositoryManager, shelves, staging, status},
     state::AppState,
@@ -27,7 +28,7 @@ struct PreparedShelfItem {
 pub(super) async fn list_repository_shelves(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
-) -> Result<Json<Vec<shelves::ShelfSnapshot>>, ApiError> {
+) -> Result<Json<Vec<ShelfSnapshotDto>>, ApiError> {
     state
         .repositories
         .task_target(&repo_id)
@@ -38,7 +39,7 @@ pub(super) async fn list_repository_shelves(
         .await
         .map_err(|_| ApiError::task_storage_unavailable())?
         .map_err(|_| ApiError::task_storage_unavailable())?;
-    Ok(Json(shelves))
+    Ok(Json(shelves.into_iter().map(Into::into).collect()))
 }
 
 pub(super) async fn get_repository_shelf(
@@ -70,7 +71,7 @@ pub(super) async fn get_repository_shelf(
         )
     })?;
     Ok(Json(ShelfDetailResponse {
-        shelf: shelf.snapshot,
+        shelf: shelf.snapshot.into(),
         patch,
     }))
 }
@@ -142,7 +143,7 @@ pub(super) async fn preflight_repository_shelf_apply(
         )
         .await?;
     Ok(Json(ShelfApplyPreviewResponse {
-        shelf: shelf.snapshot,
+        shelf: shelf.snapshot.into(),
         expected_head_oid: repository.head,
         preview_revision,
         can_apply_cleanly,
@@ -585,7 +586,7 @@ pub(super) async fn create_repository_shelf(
                         name,
                         description,
                         paths,
-                        scope: Some(shelf_scope),
+                        scope: Some(shelf_scope.into()),
                         head_oid: expected_head_oid,
                         created_at_ms: shelves::now_ms(),
                     },
@@ -644,7 +645,8 @@ async fn prepare_shelf_items(
         .map_err(ApiError::from_repository_error)?;
     let mut prepared = Vec::with_capacity(items.len());
     for item in items {
-        if item.scope == DiffScope::Commit || !paths.insert(item.path.as_str()) {
+        let scope: DiffScope = item.scope.into();
+        if scope == DiffScope::Commit || !paths.insert(item.path.as_str()) {
             return Err(ApiError::from_shelf_error(
                 shelves::ShelfError::EmptySelection,
             ));
@@ -654,7 +656,7 @@ async fn prepare_shelf_items(
             .iter()
             .find(|file| file.path == item.path)
             .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
-        let current = diff::read_with_patch(repo_id.to_owned(), repository_path, file, item.scope)
+        let current = diff::read_with_patch(repo_id.to_owned(), repository_path, file, scope)
             .await
             .map_err(ApiError::from_diff_error)?;
         if current.document.revision != item.revision {
@@ -693,7 +695,7 @@ async fn prepare_shelf_items(
         }
         prepared.push(PreparedShelfItem {
             path: item.path.clone(),
-            scope: item.scope,
+            scope,
             patch,
         });
     }

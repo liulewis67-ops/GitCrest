@@ -1,9 +1,9 @@
 use std::{ffi::OsString, path::Component};
 
 use super::dto::{StagingAction, StagingPatchAction, StagingPatchRequest, StagingRequest};
-use crate::features::{
-    diff::DiffScope,
-    status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot},
+use crate::{
+    domain::diff::DiffScope,
+    features::status::{ChangeCategory, ChangeKind, StatusFile, StatusSnapshot},
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -97,7 +97,7 @@ pub fn validate_patch_request(
     {
         return Err(StagingError::ConflictMustBeResolvedFirst);
     }
-    match (request.action, request.scope) {
+    match (request.action, request.scope.into()) {
         (StagingPatchAction::Stage, DiffScope::WorkingTree)
             if file.categories.iter().any(|category| {
                 matches!(

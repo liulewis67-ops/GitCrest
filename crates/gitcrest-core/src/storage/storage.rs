@@ -6,8 +6,9 @@ use std::{
 };
 
 use rusqlite::{params, Connection, OptionalExtension};
+use serde::{Deserialize, Serialize};
 
-use crate::features::diff::DiffScope;
+use crate::domain::diff::DiffScope;
 use crate::features::repositories::repository::Repository;
 use crate::features::shelves::{ShelfRecord, ShelfSnapshot};
 
@@ -30,6 +31,77 @@ pub enum UndoOperation {
     Staging,
     ShelfApply { scope: DiffScope },
     WorkspaceDiscard,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredShelfSnapshot {
+    shelf_id: String,
+    repo_id: String,
+    name: String,
+    description: String,
+    paths: Vec<String>,
+    scope: Option<StoredDiffScope>,
+    head_oid: Option<String>,
+    created_at_ms: i64,
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+enum StoredDiffScope {
+    WorkingTree,
+    Index,
+    Commit,
+}
+
+impl From<&ShelfSnapshot> for StoredShelfSnapshot {
+    fn from(snapshot: &ShelfSnapshot) -> Self {
+        Self {
+            shelf_id: snapshot.shelf_id.clone(),
+            repo_id: snapshot.repo_id.clone(),
+            name: snapshot.name.clone(),
+            description: snapshot.description.clone(),
+            paths: snapshot.paths.clone(),
+            scope: snapshot.scope.map(Into::into),
+            head_oid: snapshot.head_oid.clone(),
+            created_at_ms: snapshot.created_at_ms,
+        }
+    }
+}
+
+impl From<DiffScope> for StoredDiffScope {
+    fn from(scope: DiffScope) -> Self {
+        match scope {
+            DiffScope::WorkingTree => Self::WorkingTree,
+            DiffScope::Index => Self::Index,
+            DiffScope::Commit => Self::Commit,
+        }
+    }
+}
+
+impl From<StoredDiffScope> for DiffScope {
+    fn from(scope: StoredDiffScope) -> Self {
+        match scope {
+            StoredDiffScope::WorkingTree => Self::WorkingTree,
+            StoredDiffScope::Index => Self::Index,
+            StoredDiffScope::Commit => Self::Commit,
+        }
+    }
+}
+
+impl From<StoredShelfSnapshot> for ShelfSnapshot {
+    fn from(snapshot: StoredShelfSnapshot) -> Self {
+        Self {
+            shelf_id: snapshot.shelf_id,
+            repo_id: snapshot.repo_id,
+            name: snapshot.name,
+            description: snapshot.description,
+            paths: snapshot.paths,
+            scope: snapshot.scope.map(Into::into),
+            head_oid: snapshot.head_oid,
+            created_at_ms: snapshot.created_at_ms,
+        }
+    }
 }
 
 fn now_ms() -> i64 {
@@ -636,7 +708,7 @@ impl RepositoryStore {
         transaction
             .execute(
                 "INSERT INTO staging_undo_records (operation_task_id, repo_id, created_at_ms, reverse_patch, operation_kind, scope, restore_shelf_json, restore_shelf_patch) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                params![record.operation_task_id, record.repo_id, record.created_at_ms, record.reverse_patch, record.operation.kind(), record.operation.scope(), record.restore_shelf.as_ref().map(serde_json::to_string).transpose().map_err(|error| error.to_string())?, record.restore_shelf_patch],
+                params![record.operation_task_id, record.repo_id, record.created_at_ms, record.reverse_patch, record.operation.kind(), record.operation.scope(), record.restore_shelf.as_ref().map(StoredShelfSnapshot::from).as_ref().map(serde_json::to_string).transpose().map_err(|error| error.to_string())?, record.restore_shelf_patch],
             )
             .map_err(|error| error.to_string())?;
         transaction
@@ -663,7 +735,7 @@ impl RepositoryStore {
                     let scope: Option<String> = row.get(5)?;
                     let restore_shelf_json: Option<String> = row.get(6)?;
                     let restore_shelf = restore_shelf_json
-                        .map(|json| serde_json::from_str(&json))
+                        .map(|json| serde_json::from_str::<StoredShelfSnapshot>(&json).map(Into::into))
                         .transpose()
                         .map_err(|error| rusqlite::Error::FromSqlConversionFailure(6, rusqlite::types::Type::Text, Box::new(error)))?;
                     Ok(UndoRecord {
@@ -797,13 +869,11 @@ impl UndoOperation {
     }
 }
 
-fn parse_shelf_scope(
-    value: Option<String>,
-) -> Result<Option<crate::features::diff::DiffScope>, String> {
+fn parse_shelf_scope(value: Option<String>) -> Result<Option<DiffScope>, String> {
     match value.as_deref() {
         None => Ok(None),
-        Some("Index") => Ok(Some(crate::features::diff::DiffScope::Index)),
-        Some("WorkingTree") => Ok(Some(crate::features::diff::DiffScope::WorkingTree)),
+        Some("Index") => Ok(Some(DiffScope::Index)),
+        Some("WorkingTree") => Ok(Some(DiffScope::WorkingTree)),
         Some(_) => Err("invalid shelf scope".into()),
     }
 }
@@ -1142,7 +1212,7 @@ mod tests {
                 name: "before refactor".into(),
                 description: "unfinished function".into(),
                 paths: vec!["src/lib.rs".into(), "notes.md".into()],
-                scope: Some(crate::features::diff::DiffScope::WorkingTree),
+                scope: Some(DiffScope::WorkingTree),
                 head_oid: Some("a".repeat(40)),
                 created_at_ms: 123,
             },

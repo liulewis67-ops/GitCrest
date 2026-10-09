@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use super::service::{DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffScope};
+use super::service::{DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind};
+use crate::domain::diff::DiffScope;
 use crate::features::status::ChangeKind;
 
 #[derive(Serialize)]
@@ -31,9 +32,9 @@ impl From<DiffDocument> for DiffDocumentDto {
     }
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
-enum DiffScopeDto {
+pub(super) enum DiffScopeDto {
     WorkingTree,
     Index,
     Commit,
@@ -45,6 +46,16 @@ impl From<DiffScope> for DiffScopeDto {
             DiffScope::WorkingTree => Self::WorkingTree,
             DiffScope::Index => Self::Index,
             DiffScope::Commit => Self::Commit,
+        }
+    }
+}
+
+impl From<DiffScopeDto> for DiffScope {
+    fn from(scope: DiffScopeDto) -> Self {
+        match scope {
+            DiffScopeDto::WorkingTree => Self::WorkingTree,
+            DiffScopeDto::Index => Self::Index,
+            DiffScopeDto::Commit => Self::Commit,
         }
     }
 }
@@ -169,7 +180,7 @@ impl From<DiffRow> for DiffRowDto {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct DiffQuery {
     pub(super) path: String,
-    pub(super) scope: DiffScope,
+    pub(super) scope: DiffScopeDto,
 }
 
 #[derive(Deserialize)]

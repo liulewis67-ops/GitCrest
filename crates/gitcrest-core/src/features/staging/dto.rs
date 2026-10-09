@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::features::diff::DiffScope;
-
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum StagingAction {
@@ -23,9 +21,27 @@ pub enum StagingPatchAction {
 pub struct StagingPatchRequest {
     pub action: StagingPatchAction,
     pub path: String,
-    pub scope: DiffScope,
+    pub scope: StagingDiffScope,
     pub revision: String,
     pub selections: Vec<StagingDiffSelection>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum StagingDiffScope {
+    WorkingTree,
+    Index,
+    Commit,
+}
+
+impl From<StagingDiffScope> for crate::domain::diff::DiffScope {
+    fn from(scope: StagingDiffScope) -> Self {
+        match scope {
+            StagingDiffScope::WorkingTree => Self::WorkingTree,
+            StagingDiffScope::Index => Self::Index,
+            StagingDiffScope::Commit => Self::Commit,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]

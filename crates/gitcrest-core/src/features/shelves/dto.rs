@@ -1,12 +1,68 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{features::diff::DiffScope, features::shelves};
+use crate::features::shelves;
+
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum ShelfDiffScope {
+    WorkingTree,
+    Index,
+    Commit,
+}
+
+impl From<ShelfDiffScope> for crate::domain::diff::DiffScope {
+    fn from(scope: ShelfDiffScope) -> Self {
+        match scope {
+            ShelfDiffScope::WorkingTree => Self::WorkingTree,
+            ShelfDiffScope::Index => Self::Index,
+            ShelfDiffScope::Commit => Self::Commit,
+        }
+    }
+}
+
+impl From<crate::domain::diff::DiffScope> for ShelfDiffScope {
+    fn from(scope: crate::domain::diff::DiffScope) -> Self {
+        match scope {
+            crate::domain::diff::DiffScope::WorkingTree => Self::WorkingTree,
+            crate::domain::diff::DiffScope::Index => Self::Index,
+            crate::domain::diff::DiffScope::Commit => Self::Commit,
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ShelfSnapshotDto {
+    shelf_id: String,
+    repo_id: String,
+    name: String,
+    description: String,
+    paths: Vec<String>,
+    scope: Option<ShelfDiffScope>,
+    head_oid: Option<String>,
+    created_at_ms: i64,
+}
+
+impl From<shelves::ShelfSnapshot> for ShelfSnapshotDto {
+    fn from(snapshot: shelves::ShelfSnapshot) -> Self {
+        Self {
+            shelf_id: snapshot.shelf_id,
+            repo_id: snapshot.repo_id,
+            name: snapshot.name,
+            description: snapshot.description,
+            paths: snapshot.paths,
+            scope: snapshot.scope.map(Into::into),
+            head_oid: snapshot.head_oid,
+            created_at_ms: snapshot.created_at_ms,
+        }
+    }
+}
 
 #[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct ShelfSelectionRequest {
     pub(super) path: String,
-    pub(super) scope: DiffScope,
+    pub(super) scope: ShelfDiffScope,
     pub(super) revision: String,
     #[serde(default)]
     pub(super) selections: Vec<ShelfDiffSelection>,
@@ -41,14 +97,14 @@ pub(super) struct ShelfCreateRequest {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ShelfDetailResponse {
-    pub(super) shelf: shelves::ShelfSnapshot,
+    pub(super) shelf: ShelfSnapshotDto,
     pub(super) patch: String,
 }
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ShelfApplyPreviewResponse {
-    pub(super) shelf: shelves::ShelfSnapshot,
+    pub(super) shelf: ShelfSnapshotDto,
     pub(super) expected_head_oid: Option<String>,
     pub(super) preview_revision: String,
     pub(super) can_apply_cleanly: bool,

@@ -1,7 +1,5 @@
 use std::time::Duration;
 
-use serde::{Deserialize, Serialize};
-
 mod read;
 use read::parse_hunk_header;
 #[cfg(test)]
@@ -10,21 +8,13 @@ pub use read::{read, read_commit_file, read_with_patch};
 #[cfg(test)]
 use std::path::Path;
 
-use crate::domain::diff::DiffSelection;
+use crate::domain::diff::{DiffScope, DiffSelection};
 pub(crate) use crate::domain::error::DiffError;
 use crate::features::status::{ChangeCategory, ChangeKind, StatusFile};
 
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ERROR_BYTES: usize = 16 * 1024;
 const DIFF_DEADLINE: Duration = Duration::from_secs(10);
-
-#[derive(Clone, Copy, Debug, Deserialize, Hash, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum DiffScope {
-    WorkingTree,
-    Index,
-    Commit,
-}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DiffContentStatus {

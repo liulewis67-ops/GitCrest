@@ -6,17 +6,15 @@ use std::{
     time::Duration,
 };
 
-use serde::{Deserialize, Serialize};
 use tokio::{io::AsyncWriteExt, process::Command};
 
-use crate::features::{diff::DiffScope, staging::StagingCommand};
+use crate::{domain::diff::DiffScope, features::staging::StagingCommand};
 
 pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
 const APPLY_CHECK_DEADLINE: Duration = Duration::from_secs(10);
 static NEXT_SHELF_ID: AtomicU64 = AtomicU64::new(1);
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ShelfSnapshot {
     pub shelf_id: String,
     pub repo_id: String,

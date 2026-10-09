@@ -3,8 +3,9 @@ use std::{collections::HashSet, net::IpAddr, time::Duration};
 
 use super::dto::{AiProvider, AiRequest, AiSettingsRequest};
 use crate::{
+    domain::diff::DiffScope,
     domain::diff::DiffSelection,
-    features::diff::{DiffDocument, DiffRowKind, DiffScope},
+    features::diff::{DiffDocument, DiffRowKind},
 };
 
 pub const MAX_REQUEST_FILES: usize = 20;
@@ -32,12 +33,13 @@ pub fn validate_request(request: &AiRequest) -> Result<(), AiRequestError> {
     }
     let mut selected = HashSet::new();
     for file in &request.files {
+        let scope: DiffScope = file.scope.into();
         if file.path.is_empty()
             || file.path.len() > 4096
             || file.path.chars().any(char::is_control)
             || file.revision.is_empty()
-            || !matches!(file.scope, DiffScope::Index | DiffScope::WorkingTree)
-            || !selected.insert((file.path.as_str(), file.scope))
+            || !matches!(scope, DiffScope::Index | DiffScope::WorkingTree)
+            || !selected.insert((file.path.as_str(), scope))
             || file.selections.as_ref().is_some_and(|selections| {
                 selections.is_empty()
                     || selections.len() > 500

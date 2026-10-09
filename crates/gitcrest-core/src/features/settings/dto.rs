@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::features::diff::DiffScope;
-
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub enum AiProvider {
@@ -37,10 +35,28 @@ pub struct AiCredentialRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AiFileSelection {
     pub path: String,
-    pub scope: DiffScope,
+    pub scope: AiDiffScope,
     pub revision: String,
     #[serde(default)]
     pub selections: Option<Vec<AiDiffSelection>>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AiDiffScope {
+    WorkingTree,
+    Index,
+    Commit,
+}
+
+impl From<AiDiffScope> for crate::domain::diff::DiffScope {
+    fn from(scope: AiDiffScope) -> Self {
+        match scope {
+            AiDiffScope::WorkingTree => Self::WorkingTree,
+            AiDiffScope::Index => Self::Index,
+            AiDiffScope::Commit => Self::Commit,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
