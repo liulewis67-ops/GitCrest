@@ -119,7 +119,7 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
       ? intervalsMs[Math.max(0, Math.ceil(intervalsMs.length * 0.95) - 1)]
       : null;
     const pipelineTraceEvents = detailedTrace
-      ? traceEvents.filter((event) => /Begin.*Frame|PipelineReporter|SubmitCompositorFrame|DrawAndSwap|FrameDisplayed|RunTask|FunctionCall|EventDispatch|Paint|Composite|Raster|Activate|Layout|RecalculateStyle/i.test(event.name))
+      ? traceEvents.filter((event) => /VSync|vsync|Begin.*Frame|PipelineReporter|SubmitCompositorFrame|DrawAndSwap|FrameDisplayed|RunTask|FunctionCall|EventDispatch|Paint|Composite|Raster|Activate|Layout|RecalculateStyle/i.test(event.name))
       : [];
     const pipelineTraceSummary = Object.groupBy(pipelineTraceEvents, (event) => `${event.cat || "unknown"}:${event.name}`);
     const processNames = new Map(traceEvents
@@ -200,7 +200,7 @@ async function samplePresentedAnimationFrames(page, label, durationMs, scroll) {
               timestampIntervalSamples: timestampIntervalsMs.length,
               p50TimestampIntervalMs: timestampIntervalsMs.length ? timestampIntervalsMs[Math.ceil(timestampIntervalsMs.length * 0.5) - 1] : null,
               p95TimestampIntervalMs: timestampIntervalsMs.length ? timestampIntervalsMs[Math.ceil(timestampIntervalsMs.length * 0.95) - 1] : null,
-              ...( /Begin.*Frame|PipelineReporter|FrameDisplayed/i.test(name) ? {
+              ...( /VSync|vsync|Begin.*Frame|PipelineReporter|FrameDisplayed/i.test(name) ? {
                 eventSamples: events.slice(0, 3).map((event) => ({
                   timestampMs: Number.isFinite(event.ts) ? event.ts / 1_000 : null,
                   phase: event.ph,
