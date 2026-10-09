@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { BranchSnapshotResponse, RebasePreviewResponse, TaskSnapshotResponse } from "../../src/api/client";
 import { RebaseDialog } from "../../src/features/workflows/RebaseDialog";
 
 afterEach(cleanup);
+
+function cancellableApi(methods: Record<string, unknown>) {
+  let api: Record<string, unknown>;
+  api = { ...methods, withSignal: vi.fn(() => api) };
+  return api as unknown as import("../../src/api/client").GitCrestApiClient;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((resolvePromise) => { resolve = resolvePromise; });
+  return { promise, resolve };
+}
 
 const branches: BranchSnapshotResponse = {
   repoId: "repo_fixture",
@@ -40,11 +52,11 @@ const backups = {
 };
 
 it("reviews an editable todo and requires confirmation for drops and published rewrites", async () => {
-  const api = {
+  const api = cancellableApi({
     getRepositoryRebaseBackups: vi.fn().mockResolvedValue(backups),
     preflightRepositoryRebase: vi.fn().mockResolvedValue(preview),
     startRepositoryRebase: vi.fn().mockResolvedValue(task),
-  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  });
   const onStarted = vi.fn();
   render(<RebaseDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
 
@@ -81,10 +93,10 @@ it("reviews an editable todo and requires confirmation for drops and published r
 });
 
 it("requires a separate confirmation before restoring a saved backup", async () => {
-  const api = {
+  const api = cancellableApi({
     getRepositoryRebaseBackups: vi.fn().mockResolvedValue(backups),
     rollbackRepositoryRebase: vi.fn().mockResolvedValue(task),
-  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  });
   const onStarted = vi.fn();
   render(<RebaseDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
 
@@ -105,9 +117,9 @@ it("requires a separate confirmation before restoring a saved backup", async () 
 
 it("moves focus into the rebase dialog and closes it with Escape", async () => {
   const onClose = vi.fn();
-  const api = {
+  const api = cancellableApi({
     getRepositoryRebaseBackups: vi.fn().mockResolvedValue({ ...backups, backups: [] }),
-  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  });
   render(<RebaseDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={onClose} onStarted={vi.fn()} />);
   const dialog = screen.getByRole("dialog", { name: "Interactive rebase" });
   const close = screen.getByRole("button", { name: "Close" });
@@ -115,4 +127,23 @@ it("moves focus into the rebase dialog and closes it with Escape", async () => {
 
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("aborts a rebase backup read when the dialog unmounts", async () => {
+  const pending = deferred<Awaited<ReturnType<import("../../src/api/client").GitCrestApiClient["getRepositoryRebaseBackups"]>>>();
+  const signals: AbortSignal[] = [];
+  let api: Record<string, unknown>;
+  api = {
+    withSignal: vi.fn((signal: AbortSignal) => {
+      signals.push(signal);
+      return api;
+    }),
+    getRepositoryRebaseBackups: vi.fn(() => pending.promise),
+  };
+  const client = api as unknown as import("../../src/api/client").GitCrestApiClient;
+  const { unmount } = render(<RebaseDialog api={client} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  await waitFor(() => expect(signals).toHaveLength(1));
+  unmount();
+  expect(signals[0]?.aborted).toBe(true);
+  await act(async () => pending.resolve({ ...backups, backups: [] }));
 });

@@ -42,15 +42,15 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
-    let active = true;
-    void api.getRepositoryRebaseBackups(repoId).then((snapshot) => {
-      if (!active) return;
+    const controller = new AbortController();
+    void api.withSignal(controller.signal).getRepositoryRebaseBackups(repoId).then((snapshot) => {
+      if (controller.signal.aborted) return;
       setBackupSnapshot(snapshot);
       setSelectedBackup(snapshot.backups[0]?.reference || "");
     }).catch((reason) => {
-      if (active) setError(reason instanceof GitCrestApiError ? reason.body.error.message : "Could not load rebase backups.");
+      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? reason.body.error.message : "Could not load rebase backups.");
     });
-    return () => { active = false; };
+    return () => controller.abort();
   }, [api, repoId]);
 
   useEffect(() => {
