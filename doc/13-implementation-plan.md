@@ -3234,3 +3234,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`tests/unit/workflow-dialog.test.tsx`。
 - 限制/后续：无；S7.4 其它平台/签名验收仍待完成。
 - 完成 commit：`8588ad4`
+
+### P0 仓库克隆 Electron E2E — 小阶段 283
+- 状态：已完成（欢迎页 clone 流程通过，clone 成功后自动打开注册仓库）
+- 日期：2026-10-09
+- 交付：新增 repository-management Electron E2E，从欢迎页启动 Clone、选择隔离目标目录、用合法 HTTPS remote 完成克隆，并校验克隆仓库自动打开、HEAD 与源 remote 一致且文件内容存在；Git URL rewrite 配置仅写入测试临时目录，不依赖网络或用户级 Git 配置。同步在 `08-development-readiness.md` 的 E2E 映射表中加入克隆场景。
+- 验证：定向 `pnpm exec vitest run --config vitest.e2e.config.ts tests/e2e/repository-management.test.ts` 通过；`pnpm build` 通过；`pnpm test` 通过（34 files、162 tests）；`pnpm test:e2e` 通过（6 files、17 tests）；`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（129 tests）；`git diff --check` 通过。首次 fixture 使用本地路径被前端正确拒绝，改为 HTTPS 入口的本地 URL rewrite 后通过。
+- 手工验证：未执行 GUI 手工操作；Playwright Electron E2E 覆盖 clone 对话框、native folder picker 桥接、异步任务及自动打开结果。
+- 证据：`tests/e2e/repository-management.test.ts`、`doc/08-development-readiness.md` 第 5 节。
+- 限制/后续：当前覆盖本地 bare remote 的成功克隆；凭据认证失败、取消和 clone UI retry 仍可在 S7.5 风险矩阵中继续补齐。
+- 完成 commit：待提交
