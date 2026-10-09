@@ -3982,3 +3982,4 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 手工验证：未操作 GUI；20 轮均用独立 sidecar/SQLite 和同一 fixture，返回目标提交；fixture refs 和工作树未由基准修改。
 - 证据：`crates/gitcrest-core/migrations/0013_history_search_drop_oid_unique.sql`、`crates/gitcrest-core/src/storage/storage.rs`、History 顺序/ref 失效测试、`doc/evidence/S7.2/api-win32-cold-no-oid-unique-stage357-20261009.json`、阶段 353 基线报告。
 - 限制/后续：此优化大幅降低文档行写入，但冷搜索仍约 2.2 秒，主要耗时转为 Git 全量消息扫描、FTS postings 和提交；继续从减少必须扫描的消息量或改变建索引时机寻找改进。S7.2 桌面工作集/滚动帧率及 S7.4、S7.5 仍待验收。
+- 完成 commit：`7336d9b perf: remove redundant history oid index`
