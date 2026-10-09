@@ -3134,3 +3134,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`crates/gitcrest-core/src/features/remotes/handlers.rs`、`crates/gitcrest-core/src/ports/remotes.rs`、`crates/gitcrest-core/src/git/command.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、7.2、7.4、14 节。
 - 限制/后续：尚未为恢复 workflow 的状态分支及 Git port 故障注入建立验收覆盖；S7.2、S7.4、S7.5 仍待验收。
 - 完成 commit：`ae13df7`
+
+### Pull 取消恢复 workflow 验收覆盖 — 小阶段 273
+- 状态：已完成（新增恢复状态与写操作顺序测试，Rust 全量测试通过）
+- 日期：2026-10-09
+- 交付：为 remotes recovery service 增加 5 个异步用例，覆盖 rebase abort 后 branch/ref 恢复核对、脏工作树下等待输入且不 abort、am rebase 使用 `git am --abort`、merge index 与预期 tree 不符时禁止 reset，以及 tree 匹配后 reset 并核验 index 无 staged changes。
+- 验证：`cargo test --manifest-path crates/gitcrest-core/Cargo.toml -- --test-threads=1` 通过（125 tests）；`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过。初次 Clippy 因测试模块未用导入失败，清理后重跑通过。
+- 手工验证：未执行真实中断的 pull merge/rebase/am 取消场景；端到端取消和命令失败路径留待 S7.5 故障验收。
+- 证据：`crates/gitcrest-core/src/features/remotes/recovery.rs`、`doc/14-backend-development-guidelines.md` 第 7.2、7.4、14 节。
+- 限制/后续：单测使用 recovery/read port fixture，不验证真实 Git 子进程中断、工作树保留和跨平台行为；S7.2、S7.4、S7.5 仍待验收。
+- 完成 commit：待提交
