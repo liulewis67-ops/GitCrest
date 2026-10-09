@@ -2,6 +2,7 @@ use std::path::Path;
 
 use crate::{
     domain::error::{GitAdapterError, WorkflowError},
+    domain::remote::{RemotePullCommand, RemotePullStrategy},
     ports::{branches::BranchGitPort, git::GitReadPort, remotes::RemoteGitPort},
 };
 use serde::{Deserialize, Serialize};
@@ -24,11 +25,33 @@ pub struct PullPreflight {
     pub operation_in_progress: bool,
 }
 
+impl From<&PullPreflight> for RemotePullCommand {
+    fn from(preflight: &PullPreflight) -> Self {
+        Self {
+            repo_id: preflight.repo_id.clone(),
+            local_branch: preflight.local_branch.clone(),
+            remote_name: preflight.remote_name.clone(),
+            remote_branch: preflight.remote_branch.clone(),
+            local_oid: preflight.local_oid.clone(),
+            tracking_oid: preflight.tracking_oid.clone(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum PullStrategy {
     Merge,
     Rebase,
+}
+
+impl From<PullStrategy> for RemotePullStrategy {
+    fn from(strategy: PullStrategy) -> Self {
+        match strategy {
+            PullStrategy::Merge => Self::Merge,
+            PullStrategy::Rebase => Self::Rebase,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]

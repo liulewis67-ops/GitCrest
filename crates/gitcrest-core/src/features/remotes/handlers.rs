@@ -6,7 +6,10 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::remote::{RemoteBranchDeleteCommand, RemoteCommand},
+    domain::remote::{
+        RemoteBranchDeleteCommand, RemoteCommand, RemotePullCommand, RemotePullStrategy,
+        RemotePushCommand,
+    },
     features::{branches, remotes as remote_service},
     AppState, TaskFailure, TaskSnapshot,
 };
@@ -133,13 +136,13 @@ pub(super) async fn pull_repository(
             "Pull requires a clean worktree with no unresolved conflicts or Git operation in progress. Review the preflight paths first.",
         ));
     }
-    let command = state.git_commands.clone();
+    let command = state.remote_commands.clone();
     let path = target.repository_path;
-    let preflight_for_task = preflight.clone();
-    let strategy = request.strategy;
+    let operation_command = RemotePullCommand::from(&preflight);
+    let strategy = RemotePullStrategy::from(request.strategy);
     let operation = match strategy {
-        pull::PullStrategy::Merge => "pullMerge",
-        pull::PullStrategy::Rebase => "pullRebase",
+        RemotePullStrategy::Merge => "pullMerge",
+        RemotePullStrategy::Rebase => "pullRebase",
     };
     let task = state
         .tasks
@@ -150,7 +153,7 @@ pub(super) async fn pull_repository(
             operation,
             move |context| async move {
                 command
-                    .execute_pull(&path, &preflight_for_task, strategy, context)
+                    .pull(&path, operation_command, strategy, context)
                     .await
                     .map(|()| None)
             },
@@ -266,10 +269,11 @@ pub(super) async fn push_repository(
             "The remote contains commits missing locally. Fetch and review before a normal push.",
         ));
     }
-    let command = state.git_commands.clone();
+    let command = state.remote_commands.clone();
     let path = target.repository_path;
-    let preflight_for_task = preflight.clone();
-    let operation = if request.force_with_lease {
+    let operation_command = RemotePushCommand::from(&preflight);
+    let force_with_lease = request.force_with_lease;
+    let operation = if force_with_lease {
         "pushForceWithLease"
     } else {
         "push"
@@ -283,12 +287,7 @@ pub(super) async fn push_repository(
             operation,
             move |context| async move {
                 command
-                    .execute_push(
-                        &path,
-                        &preflight_for_task,
-                        request.force_with_lease,
-                        context,
-                    )
+                    .push(&path, operation_command, force_with_lease, context)
                     .await
                     .map(|()| None)
             },

@@ -22,7 +22,10 @@ use crate::{
     domain::{
         branch::BranchCommand,
         error::WorkflowError,
-        remote::{RemoteBranchDeleteCommand, RemoteCommand},
+        remote::{
+            RemoteBranchDeleteCommand, RemoteCommand, RemotePullCommand, RemotePullStrategy,
+            RemotePushCommand,
+        },
         staging::StagingOperation,
         workflow::{
             WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
@@ -324,8 +327,8 @@ impl GitCommandService {
     pub async fn execute_pull(
         &self,
         repository_path: &Path,
-        expected: &crate::features::remotes::pull::PullPreflight,
-        strategy: crate::features::remotes::pull::PullStrategy,
+        expected: &RemotePullCommand,
+        strategy: RemotePullStrategy,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let current = crate::features::remotes::pull::read_pull_preflight(
@@ -355,8 +358,8 @@ impl GitCommandService {
             ));
         }
         let strategy_flag = match strategy {
-            crate::features::remotes::pull::PullStrategy::Merge => "--no-rebase",
-            crate::features::remotes::pull::PullStrategy::Rebase => "--rebase",
+            RemotePullStrategy::Merge => "--no-rebase",
+            RemotePullStrategy::Rebase => "--rebase",
         };
         let result = run_command(
             &self.git_program,
@@ -370,10 +373,10 @@ impl GitCommandService {
                 expected.remote_branch.clone().into(),
             ],
             Some(match strategy {
-                crate::features::remotes::pull::PullStrategy::Merge => {
+                RemotePullStrategy::Merge => {
                     format!("pull --no-rebase {}", expected.remote_name)
                 }
-                crate::features::remotes::pull::PullStrategy::Rebase => {
+                RemotePullStrategy::Rebase => {
                     format!("pull --rebase {}", expected.remote_name)
                 }
             }),
@@ -382,14 +385,13 @@ impl GitCommandService {
             askpass_environment()?,
             Some(repository_path),
             match strategy {
-                crate::features::remotes::pull::PullStrategy::Merge => "Pull with merge",
-                crate::features::remotes::pull::PullStrategy::Rebase => "Pull with rebase",
+                RemotePullStrategy::Merge => "Pull with merge",
+                RemotePullStrategy::Rebase => "Pull with rebase",
             },
             task,
         )
         .await;
-        if strategy == crate::features::remotes::pull::PullStrategy::Rebase
-            && matches!(&result, Err(TaskFailure::Cancelled))
+        if strategy == RemotePullStrategy::Rebase && matches!(&result, Err(TaskFailure::Cancelled))
         {
             return self
                 .reconcile_cancelled_pull_rebase(repository_path, expected)
@@ -407,7 +409,7 @@ impl GitCommandService {
     async fn reconcile_cancelled_pull_rebase(
         &self,
         repository_path: &Path,
-        expected: &crate::features::remotes::pull::PullPreflight,
+        expected: &RemotePullCommand,
     ) -> Result<(), TaskFailure> {
         match status::read_operation(&self.git_program, repository_path).await {
             Ok(Some(crate::domain::workflow::WorkflowOperation::Rebase)) => {
@@ -529,7 +531,7 @@ impl GitCommandService {
     async fn reconcile_cancelled_pull(
         &self,
         repository_path: &Path,
-        expected: &crate::features::remotes::pull::PullPreflight,
+        expected: &RemotePullCommand,
     ) -> Result<(), TaskFailure> {
         let snapshot = crate::features::remotes::pull::read_pull_preflight(
             expected.repo_id.clone(),
@@ -1134,7 +1136,7 @@ impl GitCommandService {
     pub async fn execute_push(
         &self,
         repository_path: &Path,
-        expected: &crate::features::remotes::push::PushPreflight,
+        expected: &RemotePushCommand,
         force_with_lease: bool,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
@@ -1444,6 +1446,31 @@ impl RemoteCommandPort for GitCommandService {
     ) -> RemoteCommandFuture<'a> {
         Box::pin(async move {
             GitCommandService::execute_remote_branch_delete(self, repository_path, &command, task)
+                .await
+        })
+    }
+
+    fn pull<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        command: RemotePullCommand,
+        strategy: RemotePullStrategy,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a> {
+        Box::pin(async move {
+            GitCommandService::execute_pull(self, repository_path, &command, strategy, task).await
+        })
+    }
+
+    fn push<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        command: RemotePushCommand,
+        force_with_lease: bool,
+        task: TaskContext,
+    ) -> RemoteCommandFuture<'a> {
+        Box::pin(async move {
+            GitCommandService::execute_push(self, repository_path, &command, force_with_lease, task)
                 .await
         })
     }
@@ -2202,7 +2229,12 @@ mod tests {
                 "push",
                 move |context| async move {
                     command
-                        .execute_push(&path, &preview, false, context)
+                        .execute_push(
+                            &path,
+                            &crate::domain::remote::RemotePushCommand::from(&preview),
+                            false,
+                            context,
+                        )
                         .await
                         .map(|()| None)
                 },
@@ -2270,7 +2302,12 @@ mod tests {
                 "pushForceWithLease",
                 move |context| async move {
                     command
-                        .execute_push(&path, &stale_preview, true, context)
+                        .execute_push(
+                            &path,
+                            &crate::domain::remote::RemotePushCommand::from(&stale_preview),
+                            true,
+                            context,
+                        )
                         .await
                         .map(|()| None)
                 },
@@ -2319,7 +2356,12 @@ mod tests {
                 "pushForceWithLease",
                 move |context| async move {
                     command
-                        .execute_push(&path, &force_preview, true, context)
+                        .execute_push(
+                            &path,
+                            &crate::domain::remote::RemotePushCommand::from(&force_preview),
+                            true,
+                            context,
+                        )
                         .await
                         .map(|()| None)
                 },

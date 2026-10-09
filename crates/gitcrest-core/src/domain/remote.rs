@@ -61,3 +61,29 @@ pub(crate) struct RemoteBranchDeleteCommand {
     pub(crate) target_ref: String,
     pub(crate) expected_remote_oid: String,
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RemotePullCommand {
+    pub(crate) repo_id: String,
+    pub(crate) local_branch: String,
+    pub(crate) remote_name: String,
+    pub(crate) remote_branch: String,
+    pub(crate) local_oid: String,
+    pub(crate) tracking_oid: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RemotePullStrategy {
+    Merge,
+    Rebase,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct RemotePushCommand {
+    pub(crate) repo_id: String,
+    pub(crate) local_branch: String,
+    pub(crate) remote_name: String,
+    pub(crate) remote_branch: String,
+    pub(crate) local_oid: String,
+    pub(crate) expected_remote_oid: String,
+}
