@@ -5454,3 +5454,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-indexed-search-current-stage506-20261010.json`、stage466 的冷查询验收记录。
 - 限制/后续：冷完整 Git 结果只有一个样本且为 514.866ms，不替代 `cold` 20 轮测量，也未达到 <200ms；stage466 20 轮冷搜索 P95 仍为 600.226ms。S7.2 其它性能门槛及 S7.4/S7.5 发布验收仍未完成。
 - 实施 commit：本阶段基准修复、复测证据与台账同一 commit。
+
+### 复测 history 冷搜索与索引构建阶段 — 小阶段 507
+- 状态：已完成（取得当前 100k 冷路径 20 轮基线；性能目标仍未达标）
+- 日期：2026-10-10
+- 交付：使用 stage506 修复后的 `cold` 基准，在既有 100k commit fixture 上独立重启 sidecar/数据库 20 轮，记录冷 Git 完整结果延迟、索引就绪时延和 Git/SQLite 分阶段耗时；每轮核验目标提交 subject。
+- 验证：`node scripts/performance/benchmark.mjs cold E:\gitcrest-stage407-temp\gitcrest-stage407-100k-fixture doc/evidence/S7.2/api-win32-cold-current-stage507-20261010.json`（20 轮）成功。Windows 10.0.26300、Ryzen 7 5800H、Node 22.19、Git 2.37.3；冷结果 P50/P95/max 582.396/702.117/724.681ms；索引 ready P95 2516.585ms；索引 build Git/parse/verify/persist P95 为 1038/21/4/865ms，persist 的 rows/FTS/commit P95 为 357/307/259ms。
+- 手工验证：20/20 轮冷查询首响均包含目标 `benchmark commit 099999`，索引就绪后再次查询也通过 FTS 返回该提交；临时 DB 位于 D:，fixture 位于 E:。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-current-stage507-20261010.json`、stage466 冷搜索基线。
+- 限制/后续：冷完整结果 P95 为 702.117ms，未达到 <200ms，且本轮比 stage466 的 600.226ms 更慢；需继续确认遍历成本和不同运行条件的影响，再优化后复测。索引构建的 Git 遍历与持久化均显著耗时；S7.2 其它性能门槛及 S7.4/S7.5 验收仍未完成。
+- 实施 commit：本阶段测量报告与台账同一 commit。
