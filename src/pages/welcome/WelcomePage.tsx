@@ -54,7 +54,7 @@ export function WelcomePage({
               <button className="textButton" type="button" onClick={() => onNavigateWorkspace()}>Preview workspace</button>
             </div>
           </div>
-          {openError && <div className="openRepositoryError" role="alert">{openError}</div>}
+          {openError && <div className="max-w-[720px] mt-[13px] border border-[color-mix(in_srgb,var(--danger),transparent_55%)] rounded-[5px] bg-[color-mix(in_srgb,var(--danger),transparent_93%)] px-[11px] py-[9px] text-danger text-[10px]" role="alert">{openError}</div>}
           <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
             <section className="recentSection min-w-0" aria-labelledby="recent-heading">
               <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">

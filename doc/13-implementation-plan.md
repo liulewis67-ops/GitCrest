@@ -5344,3 +5344,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 主操作按钮仍复用跨页面 `.primaryButton` 基础组件样式，空态插图继续依赖伪元素 CSS；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 仓库打开错误提示迁移到 Tailwind — 小阶段 496
+- 状态：已完成（错误提示布局和 danger token 通过静态 utility 表达）
+- 日期：2026-10-10
+- 交付：将唯一的 `.openRepositoryError` 使用点改为静态 Tailwind utility，映射原有最大宽度、上间距、边框/背景 `color-mix`、圆角、padding、danger 色与字号；删除全局 CSS 规则，继续使用 `role="alert"`。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage496-browser` 及 `git diff --check` 通过；生产 CSS 包含两种 danger `color-mix` 与原尺寸值，源码无 `.openRepositoryError` 引用。构建保留既有 eval/chunk size 提示。
+- 手工验证：组件仍只在打开仓库失败时渲染并暴露 alert 语义；原有颜色混合比例和布局尺寸完整保留。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 主操作按钮继续复用跨页面 `.primaryButton` 基础组件样式，空态插图继续依赖复杂伪元素 CSS；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
