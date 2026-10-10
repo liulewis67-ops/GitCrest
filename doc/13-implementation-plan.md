@@ -5134,3 +5134,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 空状态插图与操作链接样式仍由全局 CSS 管理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 仓库列表容器迁移到 Tailwind — 小阶段 475
+- 状态：已完成（列表容器的布局和顶部间距由静态 utility 提供）
+- 日期：2026-10-10
+- 交付：将 Welcome 仓库列表容器的 `display: grid` 和 5px 顶部留白迁入 JSX utility；删除仅用于该容器的 `.repositoryList` 全局规则，仓库行规则和交互不变。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage475-browser`、`git diff --check` 通过；浏览器生产构建成功，保留既有 web-tree-sitter eval、chunk size 及外部 outDir 提示。未新增或运行测试。
+- 手工验证：检查生成 CSS 包含 grid 布局和 5px 顶部间距；源码已无 `.repositoryList` 全局规则。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 仓库行和其它业务组件样式仍需逐步迁移；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。

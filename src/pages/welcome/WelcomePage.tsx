@@ -64,7 +64,7 @@ export function WelcomePage({
                   <button className="inlineAction" type="button" onClick={() => void onOpenLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
                 </div>
               ) : (
-                <div className="repositoryList">
+                <div className="repositoryList grid pt-[5px]">
                   {repositories.map((repository) => (
                     <div key={repository.repoId} className={`repositoryRow ${repository.availability === "missing" ? "repositoryMissing" : ""}`}>
                       <span className="repoStatusGlyph" aria-hidden="true">{repository.availability === "missing" ? "!" : "●"}</span>
