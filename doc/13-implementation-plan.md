@@ -4904,3 +4904,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`。
 - 限制/后续：Welcome 页其它自定义类仍逐项迁移；需在后续发行包中回归深/浅色、响应式与表单交互。S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段 Welcome 简介样式迁移与台账同一 commit。
+
+### Welcome 操作按钮组布局迁移到 Tailwind — 小阶段 452
+- 状态：已完成（按钮组使用 Tailwind flex、wrap、alignment、gap 和 top spacing）
+- 日期：2026-10-10
+- 交付：将 Welcome 主操作按钮组的 flex 布局、垂直对齐、换行、9px 间距和 22px 顶边距迁到静态 Tailwind utility，并删除 `.welcomeActions` 全局规则；按钮自身 variant 与交互保持不变。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出至 `E:/gitcrest-stage452-browser`）与 `git diff --check` 通过；构建 CSS 生成 `flex`、`flex-wrap`、`items-center`、`gap-[9px]`、`mt-[22px]` 对应规则，源码和全局 CSS 不再包含 `welcomeActions`；未新增或运行测试。
+- 手工验证：核对生成规则分别保持 `display:flex`、`flex-wrap:wrap`、`align-items:center`、9px gap 与 22px 顶边距；按钮样式类未改动。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、Tailwind v4 小阶段 448。
+- 限制/后续：仅移除 Welcome 按钮组布局规则；各按钮外观仍由现有共享样式负责，页面其他结构及响应式仍需迁移与发行版回归。S7.2、S7.4、S7.5 验收仍未全部完成。
+- 实施 commit：本阶段 Welcome 按钮组布局迁移与台账同一 commit。

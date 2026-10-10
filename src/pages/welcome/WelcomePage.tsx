@@ -41,7 +41,7 @@ export function WelcomePage({
             <p className="sectionEyebrow">LOCAL GIT WORKSPACE</p>
             <h1 id="welcome-title">Your repositories,<br /><span>in good order.</span></h1>
             <p className="mt-[15px] max-w-[450px] text-[13px] leading-[1.7] text-foreground-secondary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
-            <div className="welcomeActions">
+            <div className="mt-[22px] flex flex-wrap items-center gap-[9px]">
               <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()}>
                 <span aria-hidden="true">＋</span> {openingRepository ? "Opening repository…" : "Open a repository"}
               </button>
