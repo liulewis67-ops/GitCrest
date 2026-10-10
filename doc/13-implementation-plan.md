@@ -5394,3 +5394,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支命令的任务提交/执行上下文及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
+
+### 分支切换安全约束统一到 feature service — 小阶段 501
+- 状态：已完成（当前分支保护与脏路径重叠规则在 service 层复用）
+- 日期：2026-10-10
+- 交付：新增 `ensure_branch_not_current` 和 `ensure_no_dirty_path_overlap_with_git`，移除 switch handler 的当前分支比较和“交集非空”业务判断；受理前与后台执行前均调用同一脏路径规则。新增 `BranchError::AlreadyCurrent` / `WorktreeDirty`，映射到既有 API 409 错误码和受理期消息；后台因工作区变化产生重叠时仍返回原恢复提示。预检继续返回重叠路径列表，不拒绝用户查看预检结果。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（6 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：切换到当前分支返回 `AlreadyCurrent`；fixture 中目标分支修改的 `file.txt` 返回 `WorktreeDirty`，未修改的 `unrelated.txt` 通过；空 dirty list/无 HEAD 继续跳过 diff 查询。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支命令的任务提交/执行上下文及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向测试与台账同一 commit。

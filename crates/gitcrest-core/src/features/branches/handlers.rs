@@ -398,13 +398,8 @@ pub(super) async fn switch_repository_branch(
         )
     })?;
     let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
-    if metadata.branch.as_deref() == Some(request.name.as_str()) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::BranchCurrent,
-            "This branch is already checked out.",
-        ));
-    }
+    branches::ensure_branch_not_current(metadata.branch.as_deref(), &request.name)
+        .map_err(ApiError::from_branch_error)?;
     let status = state
         .status
         .snapshot(&repo_id)
@@ -423,7 +418,7 @@ pub(super) async fn switch_repository_branch(
         .collect::<Vec<_>>();
     let expected_head = metadata.head.clone();
     let expected_branch = metadata.branch.clone();
-    if !branches::overlapping_dirty_paths_with_git(
+    branches::ensure_no_dirty_path_overlap_with_git(
         &target.repository_path,
         metadata.head.as_deref(),
         &request.name,
@@ -431,15 +426,7 @@ pub(super) async fn switch_repository_branch(
         state.branch_git.as_ref(),
     )
     .await
-    .map_err(ApiError::from_branch_error)?
-    .is_empty()
-    {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::BranchWorktreeDirty,
-            "The target branch changes paths with local edits. Commit or shelve those changes before switching.",
-        ));
-    }
+    .map_err(ApiError::from_branch_error)?;
     let path = target.repository_path;
     let target_name = request.name;
     let repo_for_check = repo_id.clone();
@@ -463,12 +450,10 @@ pub(super) async fn switch_repository_branch(
                 .filter(|file| !file.categories.iter().all(|category| matches!(category, ChangeCategory::Ignored)))
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
-            if !branches::overlapping_dirty_paths_with_git(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths, branch_git.as_ref())
-                .await
-                .map_err(|_| TaskFailure::Failed("Could not verify whether local edits overlap the target branch.".into()))?
-                .is_empty()
-            {
-                return Err(TaskFailure::Failed("The working tree changed and now overlaps the target branch. Commit or shelve the listed changes before retrying.".into()));
+            match branches::ensure_no_dirty_path_overlap_with_git(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths, branch_git.as_ref()).await {
+                Ok(()) => {}
+                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::Failed("The working tree changed and now overlaps the target branch. Commit or shelve the listed changes before retrying.".into())),
+                Err(_) => return Err(TaskFailure::Failed("Could not verify whether local edits overlap the target branch.".into())),
             }
             command.execute_branch(&path, BranchCommand::Switch { name: target_name }, context).await?;
             repositories

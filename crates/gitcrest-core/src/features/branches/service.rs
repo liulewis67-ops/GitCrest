@@ -66,6 +66,8 @@ pub enum BranchError {
     RequiresCommit,
     Current,
     Unmerged(u32),
+    AlreadyCurrent,
+    WorktreeDirty,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -277,6 +279,31 @@ pub async fn overlapping_dirty_paths_with_git(
         .filter(|path| changed_paths.contains(path))
         .cloned()
         .collect())
+}
+
+pub fn ensure_branch_not_current(current: Option<&str>, target: &str) -> Result<(), BranchError> {
+    if current == Some(target) {
+        Err(BranchError::AlreadyCurrent)
+    } else {
+        Ok(())
+    }
+}
+
+pub async fn ensure_no_dirty_path_overlap_with_git(
+    repository_path: &Path,
+    current_head: Option<&str>,
+    target: &str,
+    dirty_paths: &[String],
+    git: &dyn BranchGitPort,
+) -> Result<(), BranchError> {
+    if overlapping_dirty_paths_with_git(repository_path, current_head, target, dirty_paths, git)
+        .await?
+        .is_empty()
+    {
+        Ok(())
+    } else {
+        Err(BranchError::WorktreeDirty)
+    }
 }
 
 pub async fn read_branches_with_git(
@@ -575,6 +602,31 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(overlaps, vec!["file.txt"]);
+        assert!(matches!(
+            ensure_no_dirty_path_overlap_with_git(
+                &path,
+                Some(&current_head),
+                &default,
+                &["file.txt".to_owned()],
+                &GitBranchAdapter,
+            )
+            .await,
+            Err(BranchError::WorktreeDirty)
+        ));
+        ensure_no_dirty_path_overlap_with_git(
+            &path,
+            Some(&current_head),
+            &default,
+            &["unrelated.txt".to_owned()],
+            &GitBranchAdapter,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(
+            ensure_branch_not_current(Some("feature/one"), "feature/one"),
+            Err(BranchError::AlreadyCurrent)
+        ));
+        ensure_branch_not_current(Some("main"), "feature/one").unwrap();
         let delete_preview = preview_branch_delete_with_git(
             &path,
             Some(&default),

@@ -547,6 +547,16 @@ impl ApiError {
                 ApiErrorCode::BranchUnmerged,
                 format!("The branch has {unmerged} commit(s) not reachable from the current branch; confirm deletion to continue."),
             ),
+            branches::BranchError::AlreadyCurrent => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::BranchCurrent,
+                "This branch is already checked out.",
+            ),
+            branches::BranchError::WorktreeDirty => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::BranchWorktreeDirty,
+                "The target branch changes paths with local edits. Commit or shelve those changes before switching.",
+            ),
             branches::BranchError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,
