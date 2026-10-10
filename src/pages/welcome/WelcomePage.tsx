@@ -44,7 +44,7 @@ export function WelcomePage({
 <section className="welcomePage flex min-h-0 flex-col overflow-y-auto px-[clamp(30px,8vw,112px)] pt-[clamp(30px,6vh,64px)] pb-[20px] max-[1120px]:px-[clamp(26px,6vw,72px)] max-[900px]:px-[24px] max-[900px]:pt-[30px] max-[900px]:pb-[16px]" aria-labelledby="welcome-title">
           <div className="welcomeIntro max-w-[710px]">
             <p className="m-0 mb-[10px] text-muted text-[9px] font-[750] tracking-[.14em]">LOCAL GIT WORKSPACE</p>
-            <h1 id="welcome-title" className="m-0 text-[clamp(32px,4.2vw,49px)] font-[610] tracking-[-0.055em] leading-[1.07]">Your repositories,<br /><span className="text-foreground-secondary font-[480]">in good order.</span></h1>
+            <h1 id="welcome-title" className="m-0 text-[clamp(32px,4.2vw,49px)] font-[610] tracking-[-0.055em] leading-[1.07] max-[900px]:text-[35px]">Your repositories,<br /><span className="text-foreground-secondary font-[480]">in good order.</span></h1>
             <p className="mt-[15px] max-w-[450px] text-[13px] leading-[1.7] text-foreground-secondary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
             <div className="mt-[22px] flex flex-wrap items-center gap-[9px]">
               <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()}>

@@ -5464,3 +5464,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-current-stage507-20261010.json`、stage466 冷搜索基线。
 - 限制/后续：冷完整结果 P95 为 702.117ms，未达到 <200ms，且本轮比 stage466 的 600.226ms 更慢；需继续确认遍历成本和不同运行条件的影响，再优化后复测。索引构建的 Git 遍历与持久化均显著耗时；S7.2 其它性能门槛及 S7.4/S7.5 验收仍未完成。
 - 实施 commit：本阶段测量报告与台账同一 commit。
+
+### Welcome 标题窄屏字号迁移到 Tailwind — 小阶段 508
+- 状态：已完成（900px 断点标题字号由组件 utility 管理）
+- 日期：2026-10-10
+- 交付：Welcome 页面 h1 增加 `max-[900px]:text-[35px]`，删除全局 `.welcomeIntro h1` 媒体规则；保留原 900px 断点和 35px 字号，样式职责随页面组件归属。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage508-browser` 与 `git diff --check` 通过；构建输出 CSS 包含生成的 900px 最大宽度 35px utility。构建有既有 outDir、web-tree-sitter eval 和 chunk size 提示，不影响成功；未新增或运行测试。
+- 手工验证：确认组件 utility 与删除前 `.welcomeIntro h1 { font-size: 35px; }` 具有相同断点和字号，桌面基础 `clamp(32px,4.2vw,49px)` 保持不变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 页面仍有全局 CSS 负责的业务视觉样式，需按规范逐步迁移；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段组件样式迁移与台账同一 commit。

@@ -687,7 +687,6 @@ button:disabled { cursor: not-allowed; }
   .connectionBadge { min-width: 10px; }
   .workArea { grid-template-columns: minmax(0, 1fr); }
   .navigationPanel, .resizeSeparator[aria-label="Resize repository navigation"] { display: none; }
-  .welcomeIntro h1 { font-size: 35px; }
   .workbench { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .commitSection { display: none; }
 }
