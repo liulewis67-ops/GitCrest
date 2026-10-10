@@ -5234,3 +5234,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.2、6.3 节。
 - 限制/后续：快捷操作箭头和 footnote 仍需迁移；S7.2、S7.4、S7.5 验收仍未完成。
 - 实施 commit：本阶段图标样式迁移与台账同一 commit。
+
+### 补齐 Warning 运行时 Token 与 Tailwind 映射 — 小阶段 485
+- 状态：已完成（主题化 warning token 补齐，修复既有 warning 文案颜色无效）
+- 日期：2026-10-10
+- 交付：在深/浅主题中定义 `--warning: var(--amber)`，并将 Tailwind `text-warning` 映射到该运行时 token。Welcome 缺失仓库 glyph/路径改用 `text-warning`；提交与 amend advisory 原有 `var(--warning)` 现在也能正确解析。设计语言文档记录当前 warning/amber 语义及两套主题值。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage485-browser`、`git diff --check` 通过；生成 CSS 检查确认 `text-warning` 和 `--warning → --amber` 存在。未新增或运行测试；构建保留已知 web-tree-sitter eval、chunk size、外部 outDir 提示。
+- 手工验证：源码中原本使用 `var(--warning)` 的 commit/advisory 文案现有有效主题 token；缺失仓库 warning 和正常 green 状态分开表达。
+- 证据：`src/styles/tokens.css`、`src/styles/globals.css`、`src/pages/welcome/WelcomePage.tsx`、`doc/06-design-language.md`、`doc/15-frontend-development-guidelines.md` 第 6.2 节。
+- 限制/后续：其它 warning/error/success token 覆盖仍需按 S7.3 可访问性规范检查；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段 token、消费者、设计记录与台账同一 commit。

@@ -44,6 +44,8 @@ GitCrest 的视觉语言应体现“安静、精确、可靠”。它不是炫�
 | `--color-text-muted` | `#5D6878` | 次级文本 |
 | `--color-accent` | `#2563EB` | 主操作和焦点 |
 
+当前 renderer 的主题 token 中，`--warning` 指向 `--amber`：深色主题为 `#D4B477`，浅色主题为 `#8A641F`。Tailwind `text-warning` 映射到该运行时 token；普通警告和缺失仓库提示共用此语义色。
+
 ### 2.2 Git 状态色
 
 | 状态 | Token | 色值 | 用途 |
@@ -212,4 +214,3 @@ GitCrest 的视觉语言应体现“安静、精确、可靠”。它不是炫�
 - 菜单出现：80ms opacity。
 - 选中行：背景色即时变化。
 - 后台任务：状态栏轻量进度。
-

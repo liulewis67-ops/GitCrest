@@ -19,6 +19,7 @@
   --color-green: var(--green);
   --color-green-soft: var(--green-soft);
   --color-amber: var(--amber);
+  --color-warning: var(--warning);
   --color-danger: var(--danger);
   --shadow-panel: var(--shadow);
   --font-sans: Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
