@@ -8,7 +8,6 @@ use super::{dto as ai_dto, service as ai};
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::{DiffContentStatus, DiffScope},
-    domain::status::ChangeCategory,
     features::{credentials, diff},
     state::AppState,
 };
@@ -225,14 +224,7 @@ pub(super) async fn request_ai(
                     "A reviewed file is no longer present in the current change snapshot. Review the files again.",
                 )
             })?;
-        let allowed = match scope {
-            DiffScope::Index => file.categories.contains(&ChangeCategory::Staged),
-            DiffScope::WorkingTree => {
-                file.categories.contains(&ChangeCategory::Unstaged)
-                    || file.categories.contains(&ChangeCategory::Untracked)
-            }
-            DiffScope::Commit => false,
-        };
+        let allowed = file.has_changes_for_scope(scope);
         if !allowed || file.is_ignored() || file.is_conflicted() {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,

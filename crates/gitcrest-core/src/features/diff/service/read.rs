@@ -88,20 +88,7 @@ pub async fn read_with_patch<G: DiffGitPort + ?Sized>(
             patch: Vec::new(),
         });
     }
-    if scope == DiffScope::Index && !file.categories.contains(&ChangeCategory::Staged) {
-        return Ok(DiffRead {
-            document,
-            patch: Vec::new(),
-        });
-    }
-    if scope == DiffScope::WorkingTree
-        && !file.categories.iter().any(|category| {
-            matches!(
-                category,
-                ChangeCategory::Unstaged | ChangeCategory::Untracked
-            )
-        })
-    {
+    if scope != DiffScope::Commit && !file.has_changes_for_scope(scope) {
         return Ok(DiffRead {
             document,
             patch: Vec::new(),

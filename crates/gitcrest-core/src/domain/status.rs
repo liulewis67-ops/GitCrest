@@ -1,3 +1,5 @@
+use super::diff::DiffScope;
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum ChangeKind {
     Modified,
@@ -59,6 +61,22 @@ impl StatusFile {
                 .iter()
                 .any(|category| matches!(category, ChangeCategory::Conflicted))
     }
+
+    pub(crate) fn has_changes_for_scope(&self, scope: DiffScope) -> bool {
+        match scope {
+            DiffScope::Index => self
+                .categories
+                .iter()
+                .any(|category| matches!(category, ChangeCategory::Staged)),
+            DiffScope::WorkingTree => self.categories.iter().any(|category| {
+                matches!(
+                    category,
+                    ChangeCategory::Unstaged | ChangeCategory::Untracked
+                )
+            }),
+            DiffScope::Commit => false,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -104,5 +122,16 @@ mod tests {
     fn ignored_semantics_read_status_categories() {
         assert!(file_with_categories(vec![ChangeCategory::Ignored]).is_ignored());
         assert!(!file_with_categories(vec![ChangeCategory::Unstaged]).is_ignored());
+    }
+
+    #[test]
+    fn scope_semantics_match_staged_and_working_tree_categories() {
+        let file = file_with_categories(vec![ChangeCategory::Staged, ChangeCategory::Untracked]);
+        assert!(file.has_changes_for_scope(DiffScope::Index));
+        assert!(file.has_changes_for_scope(DiffScope::WorkingTree));
+        assert!(!file.has_changes_for_scope(DiffScope::Commit));
+
+        let staged_only = file_with_categories(vec![ChangeCategory::Staged]);
+        assert!(!staged_only.has_changes_for_scope(DiffScope::WorkingTree));
     }
 }

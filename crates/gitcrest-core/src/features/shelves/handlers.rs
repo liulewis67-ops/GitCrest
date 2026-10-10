@@ -16,7 +16,6 @@ use crate::{
     domain::diff::{DiffContentStatus, DiffScope},
     domain::shelf::{ShelfRecord, ShelfSnapshot},
     domain::staging::StagingOperation,
-    domain::status::ChangeCategory,
     domain::time::unix_time_ms,
     domain::undo::{UndoOperation, UndoRecord},
     features::diff::{self, DiffError},
@@ -414,13 +413,8 @@ async fn can_shelf_apply_with_conflicts<R: RepositoryPathPort, G: StatusReadPort
             .is_none_or(|file| {
                 !file.is_conflicted()
                     && match scope {
-                        DiffScope::WorkingTree => {
-                            !file.categories.contains(&ChangeCategory::Staged)
-                        }
-                        DiffScope::Index => {
-                            !file.categories.contains(&ChangeCategory::Unstaged)
-                                && !file.categories.contains(&ChangeCategory::Untracked)
-                        }
+                        DiffScope::WorkingTree => !file.has_changes_for_scope(DiffScope::Index),
+                        DiffScope::Index => !file.has_changes_for_scope(DiffScope::WorkingTree),
                         DiffScope::Commit => false,
                     }
             })

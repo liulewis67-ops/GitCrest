@@ -1,5 +1,5 @@
 use super::dto::CommitSelection;
-use crate::domain::status::{ChangeCategory, StatusSnapshot};
+use crate::domain::status::StatusSnapshot;
 
 const MAX_COMMIT_MESSAGE_BYTES: usize = 64 * 1024;
 
@@ -35,7 +35,7 @@ pub fn validate_snapshot(snapshot: &StatusSnapshot) -> Result<(), CommitError> {
     if !snapshot
         .files
         .iter()
-        .any(|file| file.categories.contains(&ChangeCategory::Staged))
+        .any(|file| file.has_changes_for_scope(crate::domain::diff::DiffScope::Index))
     {
         return Err(CommitError::NoStagedChanges);
     }

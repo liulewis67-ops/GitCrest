@@ -5415,6 +5415,16 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：分支任务提交/执行上下文及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段领域语义、调用点与台账同一 commit。
 
+### StatusFile 冲突与忽略语义归入 domain — 小阶段 503
+- 状态：已完成（staging、diff、commit、settings 共用状态文件语义）
+- 日期：2026-10-10
+- 交付：新增 `StatusFile::is_conflicted` 和 `StatusFile::is_ignored`。冲突判断同时覆盖 `ChangeKind::Conflicted` 与 `ChangeCategory::Conflicted`，忽略判断由分类统一提供；staging、diff read、commit snapshot 校验和 settings AI diff 校验改为调用 domain 方法，删除重复判断。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、domain status（3 passed）、staging（5 passed）、diff（4 passed）、commits（1 passed）、settings（2 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：覆盖冲突仅由 kind 表达、仅由 category 表达，以及 ignored / 非 ignored 分类。
+- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/{staging/service.rs,diff/service/read.rs,commits/service.rs,settings/handlers.rs}`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
+- 限制/后续：diff 路由仍基于分类决定读取策略，shelves 仍依赖具体冲突类型处理恢复流程；需结合各自 feature 语义单独评估是否下沉。S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段领域语义、调用点与台账同一 commit。
+
 ### shelves 冲突状态统一使用 StatusFile domain 语义 — 小阶段 504
 - 状态：已完成（shelf 预览、冲突恢复判定复用统一冲突语义）
 - 日期：2026-10-10
@@ -5425,12 +5435,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：当前 shelves handler 编排仍较大，后续可按 feature service 边界继续拆分；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段调用点与台账同一 commit。
 
-### StatusFile 冲突与忽略语义归入 domain — 小阶段 503
-- 状态：已完成（staging、diff、commit、settings 共用状态文件语义）
+### StatusFile 按 DiffScope 统一变化资格语义 — 小阶段 505
+- 状态：已完成（Index 与 WorkingTree 的状态分类资格由 domain 统一判断）
 - 日期：2026-10-10
-- 交付：新增 `StatusFile::is_conflicted` 和 `StatusFile::is_ignored`。冲突判断同时覆盖 `ChangeKind::Conflicted` 与 `ChangeCategory::Conflicted`，忽略判断由分类统一提供；staging、diff read、commit snapshot 校验和 settings AI diff 校验改为调用 domain 方法，删除重复判断。
-- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、domain status（3 passed）、staging（5 passed）、diff（4 passed）、commits（1 passed）、settings（2 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
-- 手工验证：覆盖冲突仅由 kind 表达、仅由 category 表达，以及 ignored / 非 ignored 分类。
-- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/{staging/service.rs,diff/service/read.rs,commits/service.rs,settings/handlers.rs}`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
-- 限制/后续：diff 路由仍基于分类决定读取策略，shelves 仍依赖具体冲突类型处理恢复流程；需结合各自 feature 语义单独评估是否下沉。S7.2、S7.4、S7.5 验收继续未完成。
+- 交付：新增 `StatusFile::has_changes_for_scope`，统一 Index 对应 Staged、WorkingTree 对应 Unstaged/Untracked、Commit 不属于工作区状态变化的规则。commits 的暂存区校验、diff read 的空范围快速返回、settings AI diff 资格和 shelves scope 重叠预检改用该方法；diff 的 Commit 读取路径继续跳过工作区状态过滤。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、domain status（4 passed）、diff（4 passed）、commits（1 passed）、settings（2 passed）、shelves（2 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：检查同时含 Staged/Untracked、仅 Staged 和 Commit scope 的判定，并保留历史 Commit diff 查询路径。
+- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/{commits/service.rs,diff/service/read.rs,settings/handlers.rs,shelves/handlers.rs}`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
+- 限制/后续：diff route 的候选后端策略和 staging patch 的具体类别组合仍由各 feature 按用途筛选；S7.2 冷搜索门槛以及 S7.4/S7.5 平台发布验收仍未完成。
 - 实施 commit：本阶段领域语义、调用点与台账同一 commit。
+
