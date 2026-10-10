@@ -4954,3 +4954,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 2.1、6.1 节。
 - 限制/后续：Welcome 页面仍有自定义外观和响应式规则待迁移；发行包深浅主题与窄屏验收仍需完成。S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段双栏布局迁移与台账同一 commit。
+
+### 修复历史搜索基准生命周期并复测 S7.2 — 小阶段 457
+- 状态：已完成（修复基准误差并取得可复现的冷/热搜索数据；S7.2 性能目标仍待验收）
+- 日期：2026-10-10
+- 交付：性能脚本启动 sidecar 时保留 stdin 管道，避免 benchmark 因 stdin EOF 触发服务自身的 graceful shutdown；等待异步历史索引就绪时读取 sidecar 的索引状态日志，不再每 250ms 重发会触发完整 Git 搜索回退的请求。冷搜索基准在索引 ready 后补发一次查询验证结果。基准临时数据库改由 `TEMP`/`TMP` 指向空间充足的 E 盘目录，避开当时已满的 C 盘。
+- 验证：`node --check scripts/performance/benchmark.mjs` 通过；使用新生成的 100,000 commit / 1,000 行 synthetic fixture，在 Windows 10.0.26300、Ryzen 7 5800H、Node 22.19、Git 2.37.3、release sidecar 上运行 20 次索引已就绪搜索：P50 11.121ms、P95 13.632ms，索引预热 2,166ms；20 个全新数据库的冷搜索完整结果 P50 2,232.072ms、P95 2,324.525ms，首个回退响应 P95 595.728ms。未新增或运行测试。
+- 手工验证：检查报告每次均返回目标提交；冷索引分阶段 P95 为 Git 遍历 924ms、索引持久化 838ms，其中 FTS 构建 397ms、document rows 写入 241ms、事务提交 230ms。确认索引等待期间只发起首次 message search，ready 后另发一次验证查询。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-indexed-search-stage457.json`、`doc/evidence/S7.2/api-win32-cold-index-stage457.json`。
+- 限制/后续：warm-index message search 已低于 200ms，但冷搜索初次响应及完整结果仍分别超目标约 3 倍和 11.6 倍；S7.2 继续待验收。S7.4/S7.5 跨平台和发布验收仍未全部完成。
+- 实施 commit：本阶段基准修复、测量证据与台账同一 commit。

@@ -224,13 +224,26 @@ async function startSidecar(executable, databasePath) {
   const token = `benchmark-${randomUUID()}`;
   const child = spawn(executable, [], {
     cwd: root,
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["pipe", "pipe", "pipe"],
     env: makeSidecarEnv(token, databasePath),
   });
   let stderr = "";
   child.stderr.setEncoding("utf8").on("data", (chunk) => { stderr += chunk; });
   const address = await waitReady(child, 15_000, () => stderr);
   return { child, address, token, getStderr: () => stderr };
+}
+
+async function waitForHistoryIndex(instance, deadline, intervalMs = 50) {
+  while (!instance.getStderr().includes("History message index ready")) {
+    const indexFailure = instance.getStderr().match(/History message index (skipped-too-large|timed-out|failed) in (\d+)ms/);
+    if (indexFailure) {
+      throw new Error(`History search index ${indexFailure[1]} after ${indexFailure[2]}ms. Sidecar output: ${instance.getStderr().trim()}`);
+    }
+    if (performance.now() >= deadline) {
+      throw new Error(`History search index did not become ready within the allotted time. Sidecar output: ${instance.getStderr().trim()}`);
+    }
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, intervalMs));
+  }
 }
 
 async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
@@ -257,30 +270,18 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
       const repository = await requestJson(`${baseUrl}/api/v1/repositories`, instance.token, "POST", { path: fixturePath });
       const startedAt = performance.now();
       const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
-      let page = await requestJson(searchUrl, instance.token);
+      const initialPage = await requestJson(searchUrl, instance.token);
       initialResponseSamplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
       const deadline = startedAt + 30_000;
-      while (page.searchPending === true) {
-        if (performance.now() >= deadline) throw new Error("Cold history search index did not become ready within 30 seconds.");
-        const indexFailure = instance.getStderr().match(/History message index (skipped-too-large|timed-out|failed) in (\d+)ms/);
-        if (indexFailure) {
-          throw new Error(`Cold history search index ${indexFailure[1]} after ${indexFailure[2]}ms. Sidecar output: ${instance.getStderr().trim()}`);
-        }
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
-        page = await requestJson(searchUrl, instance.token);
-      }
-      samplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
-      if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+      if (!initialPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
         throw new Error("Cold history search did not return its matching commit.");
       }
-      while (!instance.getStderr().includes("History message index ready")) {
-        if (performance.now() >= deadline) throw new Error(`Cold history search index did not become ready within 30 seconds. Sidecar output: ${instance.getStderr().trim()}`);
-        const indexFailure = instance.getStderr().match(/History message index (skipped-too-large|timed-out|failed) in (\d+)ms/);
-        if (indexFailure) {
-          throw new Error(`Cold history search index ${indexFailure[1]} after ${indexFailure[2]}ms. Sidecar output: ${instance.getStderr().trim()}`);
-        }
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 50));
+      await waitForHistoryIndex(instance, deadline);
+      const indexedPage = await requestJson(searchUrl, instance.token);
+      if (!indexedPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+        throw new Error("Indexed history search did not return its matching commit.");
       }
+      samplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
       const buildPhases = instance.getStderr().match(/History index build phases git=([0-9]+)ms parse=([0-9]+)ms verify=([0-9]+)ms persist=([0-9]+)ms/);
       const storePhases = instance.getStderr().match(/History index store phases maintenance=([0-9]+)ms rows=([0-9]+)ms fts=([0-9]+)ms commit=([0-9]+)ms/);
       if (!buildPhases || !storePhases) throw new Error("Cold history search completed without index phase timings.");
@@ -365,22 +366,14 @@ async function runIndexedHistorySearchBenchmark(fixturePath, reportPath) {
     const repository = await requestJson(`${baseUrl}/api/v1/repositories`, started.token, "POST", { path: fixturePath });
     const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
     const indexStartedAt = performance.now();
-    let attempts = 0;
-    let page;
-    while (attempts < 120) {
-      attempts += 1;
-      page = await requestJson(searchUrl, started.token);
-      if (page.searchPending !== true && started.getStderr().includes("History message index ready")) break;
-      if (page.searchPending !== true && !started.getStderr().includes("History message index ready")) {
-        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
-        continue;
-      }
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+    const initialPage = await requestJson(searchUrl, started.token);
+    if (!initialPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+      throw new Error("Initial history search did not return its matching commit.");
     }
+    await waitForHistoryIndex(started, indexStartedAt + 30_000);
+    const attempts = 1;
     const indexReadyMs = Number((performance.now() - indexStartedAt).toFixed(3));
-    if (page?.searchPending === true || !started.getStderr().includes("History message index ready")) {
-      throw new Error("History search index did not become ready within 30 seconds.");
-    }
+    const page = await requestJson(searchUrl, started.token);
     if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
       throw new Error("Indexed history search did not return its matching commit.");
     }
@@ -468,27 +461,17 @@ async function runBenchmark(fixturePath, reportPath) {
       if (page.commits.length !== 50) throw new Error(`Expected 50 history entries, got ${page.commits.length}`);
     });
     const historySearchWarmupStarted = performance.now();
-    let historySearchWarmupAttempts = 0;
-    let historySearchWarmupMs = null;
-    let historySearchIndexReady = false;
-    for (let attempt = 0; attempt < 60; attempt += 1) {
-      historySearchWarmupAttempts += 1;
-      const attemptStarted = performance.now();
-      const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`);
-      if (page.searchPending === true) {
-        await new Promise((resolveSleep) => setTimeout(resolveSleep, 500));
-        continue;
-      }
-      if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) throw new Error("History search did not return its matching commit.");
-      if (started.getStderr().includes("History message index ready")) {
-        historySearchIndexReady = true;
-        historySearchWarmupMs = Number((performance.now() - historySearchWarmupStarted).toFixed(3));
-        break;
-      }
-      await new Promise((resolveSleep) => setTimeout(resolveSleep, 500));
+    const historySearchUrl = `/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
+    const initialHistorySearch = await fetchJson(historySearchUrl);
+    if (!initialHistorySearch.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+      throw new Error("Initial history search did not return its matching commit.");
     }
+    await waitForHistoryIndex(started, historySearchWarmupStarted + 30_000);
+    const historySearchWarmupAttempts = 1;
+    const historySearchWarmupMs = Number((performance.now() - historySearchWarmupStarted).toFixed(3));
+    const historySearchIndexReady = true;
     const historySearch = await measure("historySearch100k", async () => {
-      const page = await fetchJson(`/api/v1/repositories/${repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`);
+      const page = await fetchJson(historySearchUrl);
       if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) throw new Error("History search did not return its matching commit.");
     });
     const diffPath = join(fixturePath, "bench-diff.txt");
