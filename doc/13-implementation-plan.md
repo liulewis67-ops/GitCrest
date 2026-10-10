@@ -4834,3 +4834,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/execution/tasks/mod.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`electron/main/sidecar.ts`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.2 节。
 - 限制/后续：5 秒后强制取消仍不能回滚已经完成的 Git 副作用；对应 queued/running 持久化状态由下次启动恢复为结果未知。当前变化未运行真实 Electron 退出故障注入或平台 runner 验收；S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段 worker 生命周期、API 契约、Electron 超时与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将全局样式入口归入 styles — 小阶段 445
+- 状态：已完成（桌面主窗口、Diff 窗口与冲突窗口统一导入 `src/styles/globals.css`）
+- 日期：2026-10-10
+- 交付：将原 `src/App.css` 移入前端规范定义的 `src/styles/globals.css`，并更新三个 renderer 入口的导入路径；CSS 内容与窗口样式行为保持原样，不在本阶段迁移 Tailwind 或主题 token。
+- 验证：`pnpm frontend:boundaries`、`pnpm frontend:build` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：全仓源码检索确认旧 `App.css` 路径不再被引用；三个 renderer 样式导入均解析到同一全局样式文件。
+- 证据：`src/styles/globals.css`、`src/app/App.tsx`、`src/features/diff/ui/DiffWindow.tsx`、`src/features/workflows/ui/ConflictWindow.tsx`、`doc/15-frontend-development-guidelines.md` 第 3 节。
+- 限制/后续：该阶段只对齐全局样式目录；CSS utility 体系与独立 tokens 仍按规范渐进接入。S7.2 冷搜索、Working Set、滚动帧率以及 S7.4/S7.5 验收仍未完成。
+- 实施 commit：本阶段样式路径调整与台账同一 commit（SHA 可在后续台账更新中补记）。
