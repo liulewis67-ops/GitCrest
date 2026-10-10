@@ -5444,4 +5444,3 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/{commits/service.rs,diff/service/read.rs,settings/handlers.rs,shelves/handlers.rs}`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
 - 限制/后续：diff route 的候选后端策略和 staging patch 的具体类别组合仍由各 feature 按用途筛选；S7.2 冷搜索门槛以及 S7.4/S7.5 平台发布验收仍未完成。
 - 实施 commit：本阶段领域语义、调用点与台账同一 commit。
-
