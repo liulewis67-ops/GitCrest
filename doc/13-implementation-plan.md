@@ -5474,3 +5474,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 页面仍有全局 CSS 负责的业务视觉样式，需按规范逐步迁移；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段组件样式迁移与台账同一 commit。
+
+### Welcome 空仓库插图改为语义色 SVG — 小阶段 509
+- 状态：已完成（空仓库插图从全局伪元素 CSS 移入 Welcome 组件）
+- 日期：2026-10-10
+- 交付：用内联装饰 SVG 替换 Welcome 空仓库状态的三层伪元素插图；尺寸、卡片位置/角度和勾线保持原意，填充与描边改用 surface、raised、line-strong、accent 语义 token，删除 `.emptyGlyph` 全局规则和硬编码色值。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage509-browser`、`git diff --check` 通过；未新增或运行测试。构建有既有 outDir、web-tree-sitter eval 和 chunk size 提示，不影响成功。
+- 手工验证：SVG 保持原 52×42 视口及 13px 下间距，aria-hidden 保持装饰内容不进入无障碍名称；卡片填充/描边与勾线颜色由主题语义 token 提供。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.2、6.3 节。
+- 限制/后续：Welcome 页面主按钮及其它跨页面视觉规则仍在全局样式；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段 SVG 迁移与台账同一 commit。

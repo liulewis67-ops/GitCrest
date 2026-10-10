@@ -63,7 +63,12 @@ export function WelcomePage({
               </div>
               {repositories.length === 0 ? (
                 <div className="emptyRepositories grid justify-items-center px-[22px] pt-[42px] pb-[34px] text-center max-[900px]:px-[12px] max-[900px]:py-[25px]">
-                  <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
+                  <svg className="mb-[13px] h-[42px] w-[52px] flex-none" viewBox="0 0 52 42" aria-hidden="true">
+                    <rect x="9" y="1" width="31" height="23" rx="5" transform="rotate(-8 24.5 12.5)" className="fill-surface stroke-line-strong" strokeWidth="1" />
+                    <rect x="13" y="6" width="31" height="23" rx="5" transform="rotate(5 28.5 17.5)" className="fill-surface stroke-line-strong" strokeWidth="1" />
+                    <rect x="10" y="11" width="31" height="23" rx="5" className="fill-raised stroke-line-strong" strokeWidth="1" />
+                    <path d="m17 23 6-1.5 6 5.5" className="fill-none stroke-accent" strokeWidth="1" />
+                  </svg>
                   <h3 className="m-0 text-[12px] font-[620]">No repositories yet</h3>
                   <p className="m-[7px_0_9px] max-w-[310px] text-[11px] leading-[1.6] text-muted">Open a local Git repository to see its changes, branches, and history here.</p>
                   <button className="border-0 bg-transparent p-[3px] text-accent-strong text-[10px]" type="button" onClick={() => void onOpenLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
