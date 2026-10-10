@@ -4894,3 +4894,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`。
 - 限制/后续：仅迁移空仓库说明文字颜色，Welcome 和其它 feature 的结构/排版类仍逐步迁移；发行包及完整双主题验收继续待做。S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段 Welcome 空态文字迁移与台账同一 commit。
+
+### Welcome 简介段落样式完整迁移到 Tailwind — 小阶段 451
+- 状态：已完成（简介段落不再依赖 `welcomeSummary` 全局样式规则）
+- 日期：2026-10-10
+- 交付：将 Welcome 简介的宽度、上边距、字号、行高和次级文本颜色全部迁为静态 Tailwind utility，删除 `.welcomeSummary` 规则；保留相同 450px 最大宽度、15px 顶间距、13px 字号、1.7 行高与主题变量颜色。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出至 `E:/gitcrest-stage451-browser`）与 `git diff --check` 通过；构建 CSS 含对应 max-width、margin、font-size、line-height 和 `text-foreground-secondary` 规则，源码及全局 CSS 不再包含 `welcomeSummary`；未新增或运行测试。
+- 手工验证：对照 Tailwind 生成值与迁移前 CSS 的 450px、15px、13px、1.7 及 `--text-secondary` 值一致。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`。
+- 限制/后续：Welcome 页其它自定义类仍逐项迁移；需在后续发行包中回归深/浅色、响应式与表单交互。S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段 Welcome 简介样式迁移与台账同一 commit。
