@@ -139,7 +139,6 @@ button:disabled { cursor: not-allowed; }
 .repositoryRowOpen:disabled { cursor: default; }
 .repositoryRowAction:hover { border-color: var(--line-strong); color: var(--text); }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
-.repositoryBranch { max-width: 112px; overflow: hidden; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .inlineAction { padding: 3px; background: transparent; color: var(--accent-strong); font-size: 10px; }
 .inlineAction:disabled { color: var(--text-muted); }
 .actionRow { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; align-items: center; width: 100%; min-height: 58px; padding: 8px 4px; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }

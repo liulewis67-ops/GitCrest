@@ -5194,3 +5194,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/13-implementation-plan.md` 小阶段479修订记录、`doc/15-frontend-development-guidelines.md` 第6.2、6.3节。
 - 限制/后续：分支标签和剩余 Welcome 业务视觉仍待迁移；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段状态色修复与台账同一 commit。
+
+### Welcome 仓库分支标签迁移到 Tailwind — 小阶段 481
+- 状态：已完成（分支名称宽度与单行省略使用静态 utility）
+- 日期：2026-10-10
+- 交付：将 Welcome 仓库行分支标签 112px 最大宽度、溢出隐藏、muted 颜色、9px 字号、ellipsis 和 nowrap 迁入 JSX utility；删除 `.repositoryBranch` 全局规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage481-browser`、`git diff --check` 通过；源码检索确认 `.repositoryBranch` 只保留 utility 标记，无同名 CSS 规则。未新增或运行测试；生产构建保留已知提示。
+- 手工验证：分支、detached、unborn、missing 标签均继续使用同一 112px 单行截断容器。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：仓库行 hover/按钮状态和 Welcome 快捷操作区仍有 CSS 规则待迁移；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
