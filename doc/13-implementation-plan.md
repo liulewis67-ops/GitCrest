@@ -5415,6 +5415,16 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：分支任务提交/执行上下文及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段领域语义、调用点与台账同一 commit。
 
+### shelves 冲突状态统一使用 StatusFile domain 语义 — 小阶段 504
+- 状态：已完成（shelf 预览、冲突恢复判定复用统一冲突语义）
+- 日期：2026-10-10
+- 交付：shelf apply 失败后的冲突恢复提示、冲突可恢复预检和预览 revision 计算均通过 `StatusFile::is_conflicted` 判断冲突，移除 handler 对 `ChangeKind::Conflicted` 的直接读取，确保 kind/category 两种冲突表达一致处理。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、shelves 定向测试（2 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：确认原有 shelf path/scope 过滤与错误提示不变，冲突判断委托到 `StatusFile::is_conflicted`。
+- 证据：`crates/gitcrest-core/src/features/shelves/handlers.rs`、`crates/gitcrest-core/src/domain/status.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
+- 限制/后续：当前 shelves handler 编排仍较大，后续可按 feature service 边界继续拆分；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段调用点与台账同一 commit。
+
 ### StatusFile 冲突与忽略语义归入 domain — 小阶段 503
 - 状态：已完成（staging、diff、commit、settings 共用状态文件语义）
 - 日期：2026-10-10

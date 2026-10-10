@@ -16,7 +16,7 @@ use crate::{
     domain::diff::{DiffContentStatus, DiffScope},
     domain::shelf::{ShelfRecord, ShelfSnapshot},
     domain::staging::StagingOperation,
-    domain::status::{ChangeCategory, ChangeKind},
+    domain::status::ChangeCategory,
     domain::time::unix_time_ms,
     domain::undo::{UndoOperation, UndoRecord},
     features::diff::{self, DiffError},
@@ -302,7 +302,7 @@ pub(super) async fn apply_repository_shelf(
                                 .snapshot(&task_repo_id)
                                 .await
                                 .map_err(|_| TaskFailure::Failed("Git reported an apply failure and conflict state could not be inspected. The shelf was retained.".into()))?;
-                            if status.files.iter().any(|file| file.kind == ChangeKind::Conflicted && current_shelf.snapshot.paths.contains(&file.path)) {
+                            if status.files.iter().any(|file| file.is_conflicted() && current_shelf.snapshot.paths.contains(&file.path)) {
                                 return Err(TaskFailure::WaitingForInput("The shelf has conflicts. Resolve the affected files, then continue to keep the changes unstaged.".into()));
                             }
                             return Err(TaskFailure::Failed(format!("{message}. The shelf was retained.")));
@@ -403,11 +403,7 @@ async fn can_shelf_apply_with_conflicts<R: RepositoryPathPort, G: StatusReadPort
         .snapshot(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    if status
-        .files
-        .iter()
-        .any(|file| file.kind == ChangeKind::Conflicted)
-    {
+    if status.files.iter().any(|file| file.is_conflicted()) {
         return Ok(false);
     }
     Ok(shelf.snapshot.paths.iter().all(|path| {
@@ -416,7 +412,7 @@ async fn can_shelf_apply_with_conflicts<R: RepositoryPathPort, G: StatusReadPort
             .iter()
             .find(|file| file.path == *path)
             .is_none_or(|file| {
-                file.kind != ChangeKind::Conflicted
+                !file.is_conflicted()
                     && match scope {
                         DiffScope::WorkingTree => {
                             !file.categories.contains(&ChangeCategory::Staged)
@@ -457,7 +453,7 @@ async fn shelf_apply_revision<R: RepositoryPathPort, G: StatusReadPort>(
         digest.update(path.as_bytes());
         digest.update([0]);
         if let Some(file) = status.files.iter().find(|file| file.path == *path) {
-            if file.kind == ChangeKind::Conflicted {
+            if file.is_conflicted() {
                 return Err(ApiError::new(
                     StatusCode::CONFLICT,
                     ApiErrorCode::WorkflowNoActiveOperation,
