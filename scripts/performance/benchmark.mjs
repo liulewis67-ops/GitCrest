@@ -447,9 +447,17 @@ async function runBenchmark(fixturePath, reportPath) {
     const address = started.address;
     const token = started.token;
     const baseUrl = `http://${address.host}:${address.port}`;
+    eventSocket = await openEventSocket(baseUrl, token);
     const repository = await requestJson(`${baseUrl}/api/v1/repositories`, token, "POST", { path: fixturePath });
     const repoId = repository.repoId;
-    eventSocket = await openEventSocket(baseUrl, token);
+    // Drain the initial full watcher attachment before measuring path-scoped events.
+    await waitForEvent(
+      eventSocket,
+      (event) => event.type === "status.changed"
+        && event.repoId === repoId
+        && event.payload?.full === true
+        && event.payload?.reasons?.includes("watcherAttached"),
+    );
     const headers = { Authorization: `Bearer ${token}`, "X-GitCrest-API-Version": "1" };
     const fetchJson = async (url) => {
       const response = await fetch(`${baseUrl}${url}`, { headers });

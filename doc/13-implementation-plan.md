@@ -4964,3 +4964,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-indexed-search-stage457.json`、`doc/evidence/S7.2/api-win32-cold-index-stage457.json`。
 - 限制/后续：warm-index message search 已低于 200ms，但冷搜索初次响应及完整结果仍分别超目标约 3 倍和 11.6 倍；S7.2 继续待验收。S7.4/S7.5 跨平台和发布验收仍未全部完成。
 - 实施 commit：本阶段基准修复、测量证据与台账同一 commit。
+
+### 同步 watcher 注册并复测 S7.2 API 指标 — 小阶段 458
+- 状态：已完成（全量 API 基准通过；S7.2 整体仍待验收）
+- 日期：2026-10-10
+- 交付：完整性能基准先订阅事件再打开仓库，并等待 `watcherAttached` 的初始全量状态事件排空后测路径级 dirty-scope；避免首次文件修改和 watcher 初始全量通知合并，导致基准误判为路径刷新失败。复用阶段 457 的单请求索引等待逻辑和 E 盘临时数据库设置。
+- 验证：`node --check scripts/performance/benchmark.mjs`、`git diff --check` 与完整 `node scripts/performance/benchmark.mjs run ...`（20 次）通过。Windows 10.0.26300、Ryzen 7 5800H、Node 22.19、Git 2.37.3、release sidecar、100k commit/1k 行 synthetic fixture：sidecar ready P95 35.227ms；100k 历史首屏 124.111ms；warm message search 13.18ms；dirty-scope status 9.178ms、forced full status 7.994ms、cached full status 0.727ms、cached incremental status 0.808ms；1k 行 working-tree Diff 119.909ms。冷搜索完整结果 P95 2,137.961ms、首个 Git 回退响应 P95 572.099ms，仍未达 <200ms。未新增或运行测试。
+- 手工验证：报告 20 个样本均返回预期提交/变更；fixture 文件在测量结束后恢复到 1,000 行原始文本。sidecar Working Set 单次样本 19,275,776 bytes 只代表 Rust 进程，不替代 Electron process-tree 内存门槛。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-full-stage458.json`。
+- 限制/后续：当前 API 指标中的冷搜索仍失败，且完整桌面 Working Set、30 秒 compositor presented-frame P5、安装包大小和跨平台性能尚未通过发行版复测；S7.2、S7.4、S7.5 仍进行中。
+- 实施 commit：本阶段 benchmark watcher 同步修复、20 次 API 报告与台账同一 commit。
