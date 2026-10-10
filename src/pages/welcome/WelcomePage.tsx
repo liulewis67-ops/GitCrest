@@ -39,7 +39,7 @@ export function WelcomePage({
 <section className="welcomePage" aria-labelledby="welcome-title">
           <div className="welcomeIntro">
             <p className="sectionEyebrow">LOCAL GIT WORKSPACE</p>
-            <h1 id="welcome-title">Your repositories,<br /><span>in good order.</span></h1>
+            <h1 id="welcome-title" className="m-0 text-[clamp(32px,4.2vw,49px)] font-[610] tracking-[-0.055em] leading-[1.07]">Your repositories,<br /><span className="text-foreground-secondary font-[480]">in good order.</span></h1>
             <p className="mt-[15px] max-w-[450px] text-[13px] leading-[1.7] text-foreground-secondary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
             <div className="mt-[22px] flex flex-wrap items-center gap-[9px]">
               <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()}>

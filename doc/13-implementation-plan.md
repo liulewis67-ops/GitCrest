@@ -4934,3 +4934,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/app/layouts/AppTitlebar.tsx`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、3.2、4.1 节。
 - 限制/后续：本阶段只抽取窗口标题栏；App 的其余工作台组合与业务协调仍需依据实际边界逐步拆分。S7.2 性能门槛和 S7.4/S7.5 验收仍未全部通过。
 - 实施 commit：本阶段布局组件与台账同一 commit。
+
+### Welcome 主标题排版迁移到 Tailwind — 小阶段 455
+- 状态：已完成（基础标题与强调行使用静态 utility）
+- 日期：2026-10-10
+- 交付：将 Welcome 主标题的 margin、clamp 字号、字重、字距和行高迁到 JSX 静态 Tailwind utility；强调行使用语义次级文字 Token 与原字重。保留 900px 以下的 35px 媒体查询规则，窄视口字号行为不变。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出至 `E:/gitcrest-stage455-browser`）与 `git diff --check` 通过；构建 CSS 确认含 `clamp(32px,4.2vw,49px)`、610/480 字重、`-.055em` 字距、1.07 行高与语义颜色；未新增或运行测试。构建仅有既有的外部 outDir、web-tree-sitter eval 和 chunk size 提示。
+- 手工验证：源码检索确认基础 h1/span 规则已从全局样式移除，保留 `.welcomeIntro h1` 的 max-width:900px 响应式字号覆盖。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`、前端规范第 2.1、6.1 节。
+- 限制/后续：Welcome 页面仍有多项自定义视觉规则待按组件语义逐步迁移；需在发行包中回归深浅主题与窄屏布局。S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段标题排版迁移与台账同一 commit。
