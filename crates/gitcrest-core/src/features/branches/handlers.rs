@@ -412,22 +412,15 @@ pub(super) async fn preflight_branch_switch(
         })
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
-    let changed_in_target = match metadata.head.as_deref() {
-        Some(head) => branches::paths_changed_between_with_git(
-            &target.repository_path,
-            head,
-            &request.name,
-            state.branch_git.as_ref(),
-        )
-        .await
-        .map_err(ApiError::from_branch_error)?,
-        None => Vec::new(),
-    };
-    let potentially_overwritten_paths = dirty_files
-        .iter()
-        .filter(|path| changed_in_target.contains(path))
-        .cloned()
-        .collect();
+    let potentially_overwritten_paths = branches::overlapping_dirty_paths_with_git(
+        &target.repository_path,
+        metadata.head.as_deref(),
+        &request.name,
+        &dirty_files,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     Ok(Json(BranchSwitchPreflight {
         repo_id,
         current: metadata.branch,
@@ -476,7 +469,7 @@ pub(super) async fn switch_repository_branch(
         .collect::<Vec<_>>();
     let expected_head = metadata.head.clone();
     let expected_branch = metadata.branch.clone();
-    if dirty_paths_overlap_branch_target(
+    if !branches::overlapping_dirty_paths_with_git(
         &target.repository_path,
         metadata.head.as_deref(),
         &request.name,
@@ -485,6 +478,7 @@ pub(super) async fn switch_repository_branch(
     )
     .await
     .map_err(ApiError::from_branch_error)?
+    .is_empty()
     {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
@@ -515,9 +509,10 @@ pub(super) async fn switch_repository_branch(
                 .filter(|file| !file.categories.iter().all(|category| matches!(category, ChangeCategory::Ignored)))
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
-            if dirty_paths_overlap_branch_target(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths, branch_git.as_ref())
+            if !branches::overlapping_dirty_paths_with_git(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths, branch_git.as_ref())
                 .await
                 .map_err(|_| TaskFailure::Failed("Could not verify whether local edits overlap the target branch.".into()))?
+                .is_empty()
             {
                 return Err(TaskFailure::Failed("The working tree changed and now overlaps the target branch. Commit or shelve the listed changes before retrying.".into()));
             }
@@ -529,23 +524,4 @@ pub(super) async fn switch_repository_branch(
             Ok(None)
         }).await.map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))
-}
-
-async fn dirty_paths_overlap_branch_target(
-    repository_path: &std::path::Path,
-    current_head: Option<&str>,
-    target: &str,
-    dirty_paths: &[String],
-    git: &dyn crate::ports::branches::BranchGitPort,
-) -> Result<bool, branches::BranchError> {
-    if dirty_paths.is_empty() {
-        return Ok(false);
-    }
-    let Some(current_head) = current_head else {
-        return Ok(false);
-    };
-    let changed_paths =
-        branches::paths_changed_between_with_git(repository_path, current_head, target, git)
-            .await?;
-    Ok(dirty_paths.iter().any(|path| changed_paths.contains(path)))
 }

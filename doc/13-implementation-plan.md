@@ -5304,3 +5304,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 rename/delete 与其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向验证与台账同一 commit。
+
+### 分支切换脏路径重叠判断下沉到 feature service — 小阶段 492
+- 状态：已完成（切换预检和执行复核共享 service 的路径重叠用例）
+- 日期：2026-10-10
+- 交付：新增 `overlapping_dirty_paths_with_git`，集中计算当前工作区脏路径与目标分支变更路径的交集；切换预检返回该交集，切换受理及后台执行前复核都使用同一规则。无脏路径或仓库尚无 HEAD 时不触发 Git diff 查询，避免 handler 持有业务交集逻辑。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。测试使用 D: 临时目录避开系统 C: 临时盘空间不足。
+- 手工验证：分支 fixture 以 `file.txt` 为变更路径、混入未改动的 `unrelated.txt`，服务只返回 `file.txt`；无 HEAD 的路径场景返回空交集。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 rename/delete 与其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向验证与台账同一 commit。

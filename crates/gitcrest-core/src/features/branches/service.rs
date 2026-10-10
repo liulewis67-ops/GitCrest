@@ -116,6 +116,28 @@ pub async fn paths_changed_between_with_git(
         .map_err(map_git_error)
 }
 
+pub async fn overlapping_dirty_paths_with_git(
+    repository_path: &Path,
+    current_head: Option<&str>,
+    target: &str,
+    dirty_paths: &[String],
+    git: &dyn BranchGitPort,
+) -> Result<Vec<String>, BranchError> {
+    if dirty_paths.is_empty() {
+        return Ok(Vec::new());
+    }
+    let Some(current_head) = current_head else {
+        return Ok(Vec::new());
+    };
+    let changed_paths =
+        paths_changed_between_with_git(repository_path, current_head, target, git).await?;
+    Ok(dirty_paths
+        .iter()
+        .filter(|path| changed_paths.contains(path))
+        .cloned()
+        .collect())
+}
+
 pub async fn read_branches_with_git(
     repo_id: String,
     repository_path: &Path,
@@ -390,6 +412,27 @@ mod tests {
         assert_eq!(current.upstream.as_deref(), Some("origin/feature/one"));
         assert_eq!(current.ahead, Some(1));
         assert_eq!(current.behind, Some(0));
+        let current_head = git(&path, &["rev-parse", "HEAD"]);
+        let overlaps = overlapping_dirty_paths_with_git(
+            &path,
+            Some(&current_head),
+            &default,
+            &["file.txt".to_owned(), "unrelated.txt".to_owned()],
+            &GitBranchAdapter,
+        )
+        .await
+        .unwrap();
+        assert_eq!(overlaps, vec!["file.txt"]);
+        assert!(overlapping_dirty_paths_with_git(
+            &path,
+            None,
+            &default,
+            &["file.txt".to_owned()],
+            &GitBranchAdapter,
+        )
+        .await
+        .unwrap()
+        .is_empty());
         assert!(snapshot
             .branches
             .iter()
