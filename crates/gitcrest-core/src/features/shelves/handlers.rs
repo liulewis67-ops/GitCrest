@@ -129,9 +129,14 @@ pub(super) async fn preflight_repository_shelf_apply(
         repository.head.as_deref(),
     )
     .await?;
-    let can_apply_cleanly = shelves::check_apply(&target.repository_path, &shelf.patch, scope)
-        .await
-        .map_err(ApiError::from_shelf_error)?;
+    let can_apply_cleanly = shelves::check_apply(
+        state.shelf_patch_checker.as_ref(),
+        &target.repository_path,
+        &shelf.patch,
+        scope,
+    )
+    .await
+    .map_err(ApiError::from_shelf_error)?;
     let can_apply_with_conflicts = !can_apply_cleanly
         && can_shelf_apply_with_conflicts(
             &state.repositories,
@@ -216,6 +221,7 @@ pub(super) async fn apply_repository_shelf(
     let undo_store = state.undo_store.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
+    let patch_checker = state.shelf_patch_checker.clone();
     let task_repo_id = repo_id.clone();
     let task_shelf_id = shelf_id;
     let task_path = target.repository_path;
@@ -260,9 +266,14 @@ pub(super) async fn apply_repository_shelf(
                 if current_revision != preview_revision {
                     return Err(TaskFailure::Failed("The working tree changed after shelf preview. Preview the shelf again.".into()));
                 }
-                let can_apply = shelves::check_apply(&task_path, &patch, current_scope)
-                    .await
-                    .map_err(|_| TaskFailure::Failed("Git could not recheck the reviewed shelf patch.".into()))?;
+                let can_apply = shelves::check_apply(
+                    patch_checker.as_ref(),
+                    &task_path,
+                    &patch,
+                    current_scope,
+                )
+                .await
+                .map_err(|_| TaskFailure::Failed("Git could not recheck the reviewed shelf patch.".into()))?;
                 let clean_apply = if can_apply {
                     commands
                         .execute_staging(&task_path, shelves::restore_command(patch.clone(), current_scope), context.clone())

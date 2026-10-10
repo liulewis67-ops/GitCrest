@@ -76,7 +76,7 @@ impl GitOperation {
 
 #[derive(Clone, Debug)]
 pub struct GitCommandService {
-    git_program: String,
+    pub(super) git_program: String,
 }
 
 impl Default for GitCommandService {

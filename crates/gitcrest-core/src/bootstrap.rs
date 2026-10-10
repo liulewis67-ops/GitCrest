@@ -100,6 +100,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         read_only_token: config.read_only_token.map(Arc::new),
         conflict_token: config.conflict_token.map(Arc::new),
         shelf_store: Arc::new(store.clone()),
+        shelf_patch_checker: Arc::new(git_commands.clone()),
         undo_store: Arc::new(store.clone()),
         branch_favorites: Arc::new(store.clone()),
         ai_provider_settings: Arc::new(store.clone()),

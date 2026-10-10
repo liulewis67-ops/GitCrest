@@ -5494,3 +5494,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/shelf.rs`、`crates/gitcrest-core/src/features/shelves/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1、4.2 节。
 - 限制/后续：shelf apply 的任务副作用与恢复编排仍较多地留在 handler，后续按 feature service/ports 边界拆分；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段领域规则、调用点、定向验证与台账同一 commit。
+
+### Shelf Git patch 检查移入 Git adapter port — 小阶段 511
+- 状态：已完成（feature service 通过 port 使用 Git apply 预检）
+- 日期：2026-10-10
+- 交付：新增 `ShelfPatchCheckPort` 与中立 `GitAdapterError` 结果，由 `git/shelves.rs` 执行有 10 秒期限的 `git apply --check`；shelves feature service 只调用 port 并映射错误，handler 通过 AppState 注入同一 GitCommandService。API 仍区分 Git 不可用、超时与其他执行失败；Index scope 继续加 `--index`。
+- 验证：`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、shelf API 用例（2 passed）、冲突 apply/resolver 集成用例（1 passed）及 `git diff --check` 通过。确认 `features/shelves/service.rs` 不再包含 Git 子进程调用。`cargo clippy --all-targets -- -D warnings` 被既有 `features/branches/service.rs` 两个 lint 阻断（8 参数函数及 clone-to-slice）；该既有问题记录为下一小阶段修复。
+- 手工验证：Shelf create 对 working-tree 与 Index scope 的 `apply --check` 均由注入的 adapter 执行；非干净应用仍进入既有冲突处理流程。
+- 证据：`crates/gitcrest-core/src/ports/shelves.rs`、`crates/gitcrest-core/src/git/shelves.rs`、`crates/gitcrest-core/src/features/shelves/{service,handlers}.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、7.1 节。
+- 限制/后续：Clippy 发现的 branch favorite service 参数聚合与一个测试 lint 在小阶段 512 处理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：port、adapter、注入、错误映射与台账同一 commit。

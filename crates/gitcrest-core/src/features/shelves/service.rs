@@ -1,20 +1,17 @@
 use std::{
     path::Path,
-    process::Stdio,
     sync::atomic::{AtomicU64, Ordering},
-    time::Duration,
 };
-
-use tokio::{io::AsyncWriteExt, process::Command};
 
 use crate::domain::{
     diff::DiffScope,
+    error::GitAdapterError,
     staging::{ShelfPatchAction, StagingOperation},
     time::unix_time_ms,
 };
+use crate::ports::shelves::ShelfPatchCheckPort;
 
 pub const MAX_PATCH_BYTES: usize = 10 * 1024 * 1024;
-const APPLY_CHECK_DEADLINE: Duration = Duration::from_secs(10);
 static NEXT_SHELF_ID: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug, PartialEq, Eq)]
@@ -26,6 +23,7 @@ pub enum ShelfError {
     MixedScopes,
     GitUnavailable,
     GitTimedOut,
+    GitFailed,
 }
 
 pub fn new_shelf_id() -> String {
@@ -131,37 +129,21 @@ pub fn restore_three_way_command(patch: Vec<u8>) -> StagingOperation {
 }
 
 pub async fn check_apply(
+    checker: &(impl ShelfPatchCheckPort + ?Sized),
     repository_path: &Path,
     patch: &[u8],
     scope: DiffScope,
 ) -> Result<bool, ShelfError> {
-    let mut command = Command::new("git");
-    command
-        .arg("-C")
-        .arg(repository_path)
-        .args(["apply", "--check"])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-    if scope == DiffScope::Index {
-        command.arg("--index");
-    }
-    let mut child = command.spawn().map_err(|_| ShelfError::GitUnavailable)?;
-    if let Some(mut stdin) = child.stdin.take() {
-        stdin
-            .write_all(patch)
-            .await
-            .map_err(|_| ShelfError::GitUnavailable)?;
-    }
-    match tokio::time::timeout(APPLY_CHECK_DEADLINE, child.wait()).await {
-        Ok(Ok(status)) => Ok(status.success()),
-        Ok(Err(_)) => Err(ShelfError::GitUnavailable),
-        Err(_) => {
-            let _ = child.kill().await;
-            Err(ShelfError::GitTimedOut)
-        }
-    }
+    checker
+        .check_shelf_patch(repository_path, patch, scope)
+        .await
+        .map_err(|error| match error {
+            GitAdapterError::Unavailable => ShelfError::GitUnavailable,
+            GitAdapterError::TimedOut => ShelfError::GitTimedOut,
+            GitAdapterError::Failed
+            | GitAdapterError::OutputTooLarge
+            | GitAdapterError::ReferenceAlreadyExists => ShelfError::GitFailed,
+        })
 }
 
 #[cfg(test)]

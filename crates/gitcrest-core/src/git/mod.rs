@@ -6,6 +6,7 @@ pub(crate) mod process;
 pub(crate) mod refs;
 pub(crate) mod remote;
 pub(crate) mod repository;
+pub(crate) mod shelves;
 pub(crate) mod status;
 pub(crate) mod status_snapshot;
 pub(crate) mod tags;

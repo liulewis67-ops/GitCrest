@@ -423,6 +423,11 @@ impl ApiError {
                 ApiErrorCode::DiffUnavailable,
                 "Checking this shelf against the working tree timed out.",
             ),
+            shelves::ShelfError::GitFailed => Self::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::InternalError,
+                "Git could not check whether the shelf applies to this working tree.",
+            ),
         }
     }
 
