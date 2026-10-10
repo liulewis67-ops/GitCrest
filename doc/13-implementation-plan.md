@@ -4924,3 +4924,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`.github/workflows/ci.yml`、`package.json`、前端规范第 2.1、6.1 节。
 - 限制/后续：该 CI 步骤验证浏览器 renderer 编译和产物生成，不替代发行包页面的人工外观验收；S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段 CI 浏览器构建门禁与台账同一 commit。
+
+### 将桌面窗口标题栏归入 app/layouts — 小阶段 454
+- 状态：已完成（应用根组件通过 props 组合 `AppTitlebar`）
+- 日期：2026-10-10
+- 交付：按前端规范在 `src/app/layouts/AppTitlebar.tsx` 建立实际使用的窗口壳组件，将品牌、页面导航、打开仓库标签、命令搜索、主题、任务中心、设置和连接状态展示从 `App.tsx` 拆出。仓库打开/关闭、页面导航、快捷键与主题状态仍由应用根组件管理，并以数据和回调传入布局。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出至 `E:/gitcrest-stage454-browser`）与 `git diff --check` 通过；未新增或运行测试。构建有既有的 web-tree-sitter eval、块体积及外部 outDir 提示，不影响构建成功。
+- 手工验证：检查标题栏按钮的回调仍连接原有 App 操作，仓库 tab 顺序仍取自已打开仓库 session，活动任务数仍只统计 queued/running 状态；标题栏显示文本和 class 保持原有值。
+- 证据：`src/app/layouts/AppTitlebar.tsx`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md` 第 3、3.2、4.1 节。
+- 限制/后续：本阶段只抽取窗口标题栏；App 的其余工作台组合与业务协调仍需依据实际边界逐步拆分。S7.2 性能门槛和 S7.4/S7.5 验收仍未全部通过。
+- 实施 commit：本阶段布局组件与台账同一 commit。

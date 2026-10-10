@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
+import { AppTitlebar, type AppPage } from "./layouts/AppTitlebar";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
@@ -39,8 +40,6 @@ const DiscardChangesDialog = lazy(() => loadDiscardChangesDialog().then(({ Disca
 const SettingsDialog = lazy(() => loadSettingsDialog().then(({ SettingsDialog }) => ({ default: SettingsDialog })));
 const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
 const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
-
-type Page = "welcome" | "workspace";
 
 function App() {
   const isMacPlatform = navigator.platform.toLowerCase().includes("mac");
@@ -144,7 +143,7 @@ function App() {
     refreshTasks,
   });
   const openConflictWindow = useOpenConflictWindow({ clearTaskError: () => setTasksError(""), setTaskError: setTasksError });
-  const [page, setPage] = useState<Page>("welcome");
+  const [page, setPage] = useState<AppPage>("welcome");
   const { session: workspaceSession, setSession: setWorkspaceSession, sessionRef: workspaceSessionRef } = useWorkspaceSessionState();
   const repositoryCacheLifecycle = useRepositoryCacheLifecycle((repoId) =>
     workspaceSessionRef.current.openRepoIds.includes(repoId));
@@ -257,7 +256,6 @@ function App() {
   }, []);
   const connected = status === "Connected to local Rust core";
   const connecting = status.startsWith("Starting");
-  const connectionLabel = connected ? "Core connected" : connecting ? "Starting core" : "Core unavailable";
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
   const activeStatusError = selectedRepository ? statusErrors[selectedRepository.repoId] : undefined;
   const activeStatusLoading = selectedRepository ? statusLoadingByRepo[selectedRepository.repoId] === true : false;
@@ -668,46 +666,25 @@ function App() {
 
   return (
     <main className="appShell" style={layoutStyle}>
-      <header className="titlebar">
-        <button className="brandButton" type="button" onClick={() => setPage("welcome")} aria-label="Go to Welcome">
-          <span className="brandMark" aria-hidden="true">G</span>
-          <span className="brandName">GitCrest</span>
-        </button>
-        <nav className="pageTabs" aria-label="Primary navigation">
-          <button type="button" className={page === "welcome" ? "pageTab active" : "pageTab"} onClick={() => setPage("welcome")}>Welcome</button>
-          <button type="button" className={page === "workspace" ? "pageTab active" : "pageTab"} onClick={() => setPage("workspace")}>Workspace</button>
-        </nav>
-        <div className="repositoryTabs" role="tablist" aria-label="Open repositories">
-          {workspaceSession.openRepoIds.map((repoId) => {
-            const repository = repositories.find((item) => item.repoId === repoId);
-            if (!repository) return null;
-            const active = selectedRepository?.repoId === repoId;
-            return (
-              <div className={active ? "repositoryTab active" : "repositoryTab"} key={repoId}>
-                <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (!active) void repositoryOpening.openRecent(repository); }}>
-                  {getRepositoryDisplayName(repository.path)}
-                </button>
-                <button type="button" className="closeRepositoryTab" aria-label={`Close ${getRepositoryDisplayName(repository.path)} tab`} title="Close tab" onClick={() => closeRepositoryTab(repoId)}>×</button>
-              </div>
-            );
-          })}
-        </div>
-        <div className="titlebarSpacer" />
-        <button className="quietButton searchShortcut" type="button" onClick={() => setPaletteOpen(true)} aria-keyshortcuts={ariaShortcut(shortcuts.commandPalette, isMacPlatform)}>
-          <span aria-hidden="true">⌕</span><span>Search commands</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>
-        </button>
-        <button className="quietButton themeButton" type="button" onClick={nextTheme} aria-label={`Color theme: ${theme}. Activate to cycle theme`} title={`Theme: ${theme}`}>
-          <span aria-hidden="true">◐</span><span>{theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light"}</span>
-        </button>
-        <button className="quietButton taskCenterButton" type="button" onClick={() => setTasksOpen(true)} aria-label={`Background tasks, ${tasks.filter((task) => task.status === "queued" || task.status === "running").length} active`}>
-          Tasks <span className="countBadge">{tasks.filter((task) => task.status === "queued" || task.status === "running").length}</span>
-        </button>
-        <button className="quietButton" type="button" onClick={() => setSettingsOpen(true)} aria-keyshortcuts={ariaShortcut(shortcuts.settings, isMacPlatform)} title={`Settings (${displayShortcut(shortcuts.settings, isMacPlatform)})`}>Settings</button>
-        <div className={`connectionBadge ${connected ? "connected" : ""}`} role="status" aria-live="polite" aria-label={status} title={status}>
-          <span className="connectionDot" aria-hidden="true" />
-          <span>{connectionLabel}</span>
-        </div>
-      </header>
+      <AppTitlebar
+        page={page}
+        openRepoIds={workspaceSession.openRepoIds}
+        repositories={repositories}
+        selectedRepository={selectedRepository}
+        shortcuts={shortcuts}
+        theme={theme}
+        status={status}
+        connected={connected}
+        activeTaskCount={tasks.filter((task) => task.status === "queued" || task.status === "running").length}
+        isMacPlatform={isMacPlatform}
+        onPageChange={setPage}
+        onSelectRepository={(repository) => void repositoryOpening.openRecent(repository)}
+        onCloseRepository={closeRepositoryTab}
+        onOpenCommandPalette={() => setPaletteOpen(true)}
+        onCycleTheme={nextTheme}
+        onOpenTasks={() => setTasksOpen(true)}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
 
       {page === "welcome" ? (
         <WelcomePage
