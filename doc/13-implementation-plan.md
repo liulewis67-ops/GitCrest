@@ -4844,3 +4844,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/styles/globals.css`、`src/app/App.tsx`、`src/features/diff/ui/DiffWindow.tsx`、`src/features/workflows/ui/ConflictWindow.tsx`、`doc/15-frontend-development-guidelines.md` 第 3 节。
 - 限制/后续：该阶段只对齐全局样式目录；CSS utility 体系与独立 tokens 仍按规范渐进接入。S7.2 冷搜索、Working Set、滚动帧率以及 S7.4/S7.5 验收仍未完成。
 - 实施 commit：本阶段样式路径调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将现有主题变量归入 tokens.css — 小阶段 446
+- 状态：已完成（深色/浅色主题的既有 CSS 自定义属性集中在 `src/styles/tokens.css`）
+- 日期：2026-10-10
+- 交付：将现有 `:root` 与 `:root[data-theme="light"]` 主题变量从全局样式拆入 `tokens.css`，由 `globals.css` 在首条规则处导入；保留属性名、取值、主题选择器和样式顺序，不改变视觉配置。
+- 验证：`pnpm frontend:boundaries`、`pnpm frontend:build` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：对照迁移前后的变量名和值，确认深色与浅色主题变量完整且无重复定义。
+- 证据：`src/styles/tokens.css`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 3 节。
+- 限制/后续：本阶段只拆分既有主题 token；Tailwind CSS 与组件级设计系统仍按需渐进接入。S7.2 性能门槛和 S7.4/S7.5 验收仍未完成。
+- 实施 commit：本阶段主题 token 拆分与台账同一 commit（SHA 可在后续台账更新中补记）。

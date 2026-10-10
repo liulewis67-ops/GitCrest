@@ -1,3 +1,5 @@
+@import "./tokens.css";
+
 :root {
   font-family: Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
@@ -6,46 +8,8 @@
   -moz-osx-font-smoothing: grayscale;
   font-optical-sizing: auto;
   color-scheme: dark;
-  --canvas: #171b21;
-  --surface: #1d232b;
-  --surface-raised: #232a33;
-  --surface-soft: #20262e;
-  --line: #333b46;
-  --line-strong: #424c59;
-  --text: #e6eaf0;
-  --text-secondary: #a4afbd;
-  --text-muted: #7c8998;
-  --accent: #6db6d8;
-  --accent-strong: #81c8e8;
-  --accent-soft: rgb(109 182 216 / 13%);
-  --green: #8fcba0;
-  --green-soft: rgb(95 172 117 / 12%);
-  --amber: #d4b477;
-  --danger: #d98787;
-  --shadow: 0 18px 56px rgb(0 0 0 / 32%);
   color: var(--text);
   background: var(--canvas);
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-  --canvas: #f1f3f5;
-  --surface: #fafbfc;
-  --surface-raised: #fff;
-  --surface-soft: #f4f6f8;
-  --line: #dfe4e9;
-  --line-strong: #cbd3dc;
-  --text: #1d2732;
-  --text-secondary: #596675;
-  --text-muted: #788493;
-  --accent: #147ba5;
-  --accent-strong: #086d98;
-  --accent-soft: rgb(20 123 165 / 9%);
-  --green: #287b46;
-  --green-soft: rgb(57 148 82 / 9%);
-  --amber: #8a641f;
-  --danger: #ab4d4d;
-  --shadow: 0 18px 56px rgb(35 48 60 / 18%);
 }
 
 * { box-sizing: border-box; }
