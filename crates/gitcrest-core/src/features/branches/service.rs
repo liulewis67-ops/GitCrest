@@ -54,6 +54,7 @@ pub enum BranchKind {
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchError {
     InvalidName,
+    NameUnchanged,
     AlreadyExists,
     LocalNotFound,
     NotFound,
@@ -119,6 +120,19 @@ pub async fn ensure_local_branch_name_available_with_git(
     } else {
         Ok(())
     }
+}
+
+pub async fn validate_branch_rename_with_git(
+    repository_path: &Path,
+    old_name: &str,
+    new_name: &str,
+    git: &dyn BranchGitPort,
+) -> Result<(), BranchError> {
+    validate_branch_name_with_git(repository_path, new_name, git).await?;
+    if old_name == new_name {
+        return Err(BranchError::NameUnchanged);
+    }
+    ensure_local_branch_name_available_with_git(repository_path, new_name, git).await
 }
 
 pub async fn unmerged_commit_count_with_git(
@@ -517,6 +531,19 @@ mod tests {
         ensure_local_branch_name_available_with_git(&path, "new-branch", &GitBranchAdapter)
             .await
             .unwrap();
+        validate_branch_rename_with_git(&path, "feature/one", "new-branch", &GitBranchAdapter)
+            .await
+            .unwrap();
+        assert!(matches!(
+            validate_branch_rename_with_git(&path, "feature/one", "feature/one", &GitBranchAdapter)
+                .await,
+            Err(BranchError::NameUnchanged)
+        ));
+        assert!(matches!(
+            validate_branch_rename_with_git(&path, "feature/one", &default, &GitBranchAdapter)
+                .await,
+            Err(BranchError::AlreadyExists)
+        ));
         assert!(matches!(
             ensure_local_branch_name_available_with_git(&path, &default, &GitBranchAdapter).await,
             Err(BranchError::AlreadyExists)

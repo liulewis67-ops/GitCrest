@@ -5354,3 +5354,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 主操作按钮继续复用跨页面 `.primaryButton` 基础组件样式，空态插图继续依赖复杂伪元素 CSS；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### 分支重命名预检规则下沉到 feature service — 小阶段 497
+- 状态：已完成（service 编排目标名有效性、未改名校验与本地冲突检查）
+- 日期：2026-10-10
+- 交付：新增 `validate_branch_rename_with_git`，将 rename handler 的新名称校验、原名/新名相同拒绝和本地名称冲突检查组合成一个 service 用例；新增 `BranchError::NameUnchanged` 并映射到原有 `BranchNameInvalid`/400 消息。维持原先错误优先级：先 Git 名称验证，再拒绝同名，最后检查已存在目标。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：临时 Git fixture 验证 `feature/one` → `new-branch` 可用、原名不变返回 `NameUnchanged`、改为已存在默认分支返回 `AlreadyExists`。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向测试与台账同一 commit。

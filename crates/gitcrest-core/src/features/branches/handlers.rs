@@ -186,22 +186,9 @@ pub(super) async fn rename_repository_branch(
         )
     })?;
     let (target, _) = branch_for_mutation(&state, &repo_id, &request.name).await?;
-    branches::validate_branch_name_with_git(
+    branches::validate_branch_rename_with_git(
         &target.repository_path,
-        &request.new_name,
-        state.branch_git.as_ref(),
-    )
-    .await
-    .map_err(ApiError::from_branch_error)?;
-    if request.name == request.new_name {
-        return Err(ApiError::new(
-            StatusCode::BAD_REQUEST,
-            ApiErrorCode::BranchNameInvalid,
-            "Choose a different branch name.",
-        ));
-    }
-    branches::ensure_local_branch_name_available_with_git(
-        &target.repository_path,
+        &request.name,
         &request.new_name,
         state.branch_git.as_ref(),
     )
