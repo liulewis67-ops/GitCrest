@@ -40,7 +40,7 @@ export function WelcomePage({
           <div className="welcomeIntro">
             <p className="sectionEyebrow">LOCAL GIT WORKSPACE</p>
             <h1 id="welcome-title">Your repositories,<br /><span>in good order.</span></h1>
-            <p className="welcomeSummary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
+            <p className="welcomeSummary text-foreground-secondary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
             <div className="welcomeActions">
               <button className="primaryButton" type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()}>
                 <span aria-hidden="true">＋</span> {openingRepository ? "Opening repository…" : "Open a repository"}

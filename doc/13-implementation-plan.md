@@ -4874,3 +4874,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`package.json`、`pnpm-lock.yaml`、`vite.config.ts`、`electron.vite.config.ts`、`src/styles/globals.css`、`src/styles/tokens.css`、官方 [Vite 安装说明](https://tailwindcss.com/docs/installation/using-vite) 与 [source detection](https://tailwindcss.com/docs/detecting-classes-in-source-files)。
 - 限制/后续：需验证 Preflight 与现有 CSS 的实际交互，业务组件仍未迁移到 Tailwind utility；生产打包后的页面验收另行完成。S7.2、S7.4、S7.5 仍未全部验收。
 - 实施 commit：本阶段依赖、双构建插件、主题映射和台账同一 commit。
+
+### Welcome 摘要文字迁移到语义 Tailwind Token — 小阶段 449
+- 状态：已完成（Welcome 简介文本使用 `text-foreground-secondary` utility，颜色由现有主题 token 提供）
+- 日期：2026-10-10
+- 交付：将 `.welcomeSummary` 的次级文字颜色由全局 CSS 规则迁移到 Tailwind `text-foreground-secondary`；保留最大宽度、间距、字号和行高，验证 `@theme inline` 颜色映射被扫描并生成 utility。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出至 `E:/gitcrest-stage449-browser`）与 `git diff --check` 通过；构建 CSS 中生成 `.text-foreground-secondary{color:var(--text-secondary)}`；未新增或运行测试。
+- 手工验证：核对生成 utility 使用与旧规则相同的 `--text-secondary` 运行时变量；字号、间距和行高继续由原 `.welcomeSummary` 规则控制。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`、Tailwind v4 小阶段 448。
+- 限制/后续：仅完成一处低风险样式迁移；其它页面/组件仍需按功能逐步消费 Token，且需在发行包中回归双主题与表单状态。S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段 Welcome 组件样式迁移与台账同一 commit。
