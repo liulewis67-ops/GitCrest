@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 14 {
+    if version > 15 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -68,6 +68,12 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
             "../../migrations/0014_history_search_rowid_order.sql"
         ))?;
         connection.pragma_update(None, "user_version", 14)?;
+    }
+    if version < 15 {
+        connection.execute_batch(include_str!(
+            "../../migrations/0015_history_search_detail_none.sql"
+        ))?;
+        connection.pragma_update(None, "user_version", 15)?;
     }
     Ok(())
 }

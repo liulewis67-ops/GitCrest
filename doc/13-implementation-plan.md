@@ -5005,15 +5005,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：仅迁移底部信息栏常规排版和窄屏隐藏规则；Welcome 页面外壳、section eyebrow 及业务内容样式仍待逐项迁移，S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
 
-### Welcome 简介容器宽度迁移到 Tailwind — 小阶段 463
-- 状态：已完成（简介内容最大宽度使用静态 utility）
-- 日期：2026-10-10
-- 交付：将 Welcome 简介容器的 710px 最大宽度迁至静态 `max-w-[710px]` utility，并移除 `.welcomeIntro` 全局规则。
-- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage463-browser` 与 `git diff --check` 通过；构建 CSS 生成 `max-width:710px` 规则，源码及全局 CSS 不再包含 `.welcomeIntro` 的基础宽度规则；未新增或运行测试。构建有既有 web-tree-sitter eval、chunk size 与外部 outDir 提示，不影响成功结果。
-- 手工验证：核对 `max-w-[710px]` 等价于原最大宽度；900px 以下的 `.welcomeIntro h1` 响应式字号规则保留不变。
-- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 6 节。
-- 限制/后续：Welcome 简介中的 eyebrow 及其它业务组件样式仍待迁移，发行版主题/窄屏验收和 S7.2、S7.4、S7.5 验收仍未全部通过。
-- 实施 commit：本阶段样式迁移与台账同一 commit。
+
 
 ### Welcome 页面外壳布局迁移到 Tailwind — 小阶段 462
 - 状态：已完成（页面外壳布局、滚动与响应式内边距使用静态 utility）
@@ -5024,3 +5016,23 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 6 节。
 - 限制/后续：Welcome 外壳的背景效果及其它组件样式仍在全局 CSS；发行版主题/窄屏验收与 S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 简介容器宽度迁移到 Tailwind — 小阶段 463
+- 状态：已完成（简介内容最大宽度使用静态 utility）
+- 日期：2026-10-10
+- 交付：将 Welcome 简介容器的 710px 最大宽度迁至静态 `max-w-[710px]` utility，并移除 `.welcomeIntro` 全局规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage463-browser` 与 `git diff --check` 通过；构建 CSS 生成 `max-width:710px` 规则，源码及全局 CSS 不再包含 `.welcomeIntro` 的基础宽度规则；未新增或运行测试。构建有既有 web-tree-sitter eval、chunk size 与外部 outDir 提示，不影响成功结果。
+- 手工验证：核对 `max-w-[710px]` 等价于原最大宽度；900px 以下的 `.welcomeIntro h1` 响应式字号规则保留不变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 6 节。
+- 限制/后续：Welcome 简介中的 eyebrow 及其它业务组件样式仍待迁移，发行版主题/窄屏验收和 S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### 缩减冷历史搜索 FTS 索引写入 — 小阶段 464
+- 状态：已完成（FTS 建索引成本降低；冷搜索仍未达到 <200ms）
+- 日期：2026-10-10
+- 交付：持久 FTS5 trigram 表改用 `detail=none`，通过 3 字符 trigram AND 匹配候选，再用 ASCII 不区分大小写的精确子串过滤保留现有消息搜索语义；非 ASCII、短查询沿用 Git 路径。schema 15 migration 仅清除可重建的历史搜索缓存，不修改仓库目录或业务记录。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、定向 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml search -- --test-threads=1`（5 passed）、`cargo build --release --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`git diff --check` 通过。Windows 10.0.26300、Ryzen 7 5800H、Git 2.37.3、Release sidecar、100k commit fixture 20 轮冷搜索 P50/P95/max 1,457.745/1,643.681/1,697.910ms，首次 pending P95 16.100ms；warm search P95 15.221ms。相较 stage459 冷结果 P95 1,778.623ms，本阶段降低约 7.6%；FTS 构建 P95 由 379ms 降至 265ms、整个 persist P95 由 779ms 降至 678ms。冷基准 20 轮均在索引就绪后返回目标提交。
+- 手工验证：在 SQLite 3.44.2 shell 上以 100k 行 SQL 探针确认 `detail=none` + AND trigram 返回目标候选（FTS 建索引约 182ms，对照 detail=full 约 361ms）；应用层基于 bundled SQLite 的定向索引测试继续确认 mixed-case 子串命中、Git 顺序和 refs 变化失效。
+- 证据：`crates/gitcrest-core/migrations/0015_history_search_detail_none.sql`、`crates/gitcrest-core/src/storage/history_index.rs`、`crates/gitcrest-core/src/storage/migrations.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-cold-detail-none-stage464.json`、`doc/evidence/S7.2/api-win32-indexed-search-detail-none-stage464.json`。
+- 限制/后续：冷搜索完整结果 P95 仍为 1.64s，未满足 <200ms；Git 全量历史扫描 P95 924ms 是剩余最大阶段，需继续处理真实遍历成本。S7.2 其它桌面/发布指标及 S7.4/S7.5 跨平台验收仍未完成。
+- 实施 commit：本阶段实现、测量证据与台账同一 commit。

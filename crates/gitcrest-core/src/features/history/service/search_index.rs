@@ -23,7 +23,10 @@ pub async fn read_page_indexed(
     if limit == 0 || limit > 100 || offset > 1_000_000 || !valid_filters(filters) {
         return Err(HistoryError::InvalidQuery);
     }
-    let message_only_search = filters.message.is_some()
+    let indexable_message_search = filters
+        .message
+        .as_deref()
+        .is_some_and(|message| message.is_ascii() && message.chars().count() >= 3)
         && filters.sha.is_none()
         && filters.author.is_none()
         && filters.branch.is_none()
@@ -38,12 +41,7 @@ pub async fn read_page_indexed(
         && filters.path.is_none()
         && filters.since.is_none()
         && filters.until.is_none();
-    let fingerprint = if message_only_search
-        && filters
-            .message
-            .as_deref()
-            .is_some_and(|message| message.chars().count() >= 3)
-    {
+    let fingerprint = if indexable_message_search {
         match refs_fingerprint(repository_path, head).await {
             Ok(fingerprint) => Some(fingerprint),
             Err(_) => {
@@ -127,7 +125,7 @@ pub async fn read_page_indexed(
         }
     }
 
-    if message_only_search && offset == 0 {
+    if indexable_message_search && offset == 0 {
         if store.is_index_building(&repo_id) {
             return Ok(CommitPage {
                 repo_id,
@@ -170,7 +168,7 @@ pub async fn read_page_indexed(
     .await?;
 
     if offset == 0
-        && (message_only_search || unfiltered_first_page)
+        && (indexable_message_search || unfiltered_first_page)
         && !store.is_index_building(&repo_id)
     {
         schedule_history_index_build(

@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    sync::{Arc, Mutex},
+};
 
 use rusqlite::{params, Connection, OptionalExtension};
 
@@ -130,6 +133,9 @@ impl RepositoryStore {
         offset: usize,
         limit: usize,
     ) -> Result<Option<Vec<CommitSearchEntry>>, String> {
+        let Some(match_query) = trigram_match_query(query) else {
+            return Ok(None);
+        };
         let builds = self
             .history_index_builds
             .lock()
@@ -152,27 +158,69 @@ impl RepositoryStore {
         if fingerprint.as_deref() != Some(refs_fingerprint) {
             return Ok(None);
         }
-        let match_query = format!("\"{}\"", query.replace('"', "\"\""));
         let mut statement = connection
             .prepare(
-                "SELECT d.oid, d.message FROM history_search_fts f JOIN history_search_documents d ON d.id=f.rowid WHERE history_search_fts MATCH ?1 AND d.repo_id=?2 ORDER BY d.id LIMIT ?3 OFFSET ?4",
+                "SELECT d.oid, d.message FROM history_search_fts f JOIN history_search_documents d ON d.id=f.rowid WHERE history_search_fts MATCH ?1 AND d.repo_id=?2 ORDER BY d.id",
             )
             .map_err(|error| error.to_string())?;
         let rows = statement
-            .query_map(
-                params![match_query, repo_id, limit as i64, offset as i64],
-                |row| {
-                    Ok(CommitSearchEntry {
-                        oid: row.get(0)?,
-                        message: row.get(1)?,
-                    })
-                },
-            )
+            .query_map(params![match_query, repo_id], |row| {
+                Ok(CommitSearchEntry {
+                    oid: row.get(0)?,
+                    message: row.get(1)?,
+                })
+            })
             .map_err(|error| error.to_string())?;
-        rows.collect::<Result<Vec<_>, _>>()
-            .map(Some)
-            .map_err(|error| error.to_string())
+        let needle = query.as_bytes();
+        let mut matched_count = 0;
+        let mut entries = Vec::with_capacity(limit.min(100));
+        for row in rows {
+            let entry = row.map_err(|error| error.to_string())?;
+            if !entry
+                .message
+                .as_bytes()
+                .windows(needle.len())
+                .any(|window| window.eq_ignore_ascii_case(needle))
+            {
+                continue;
+            }
+            if matched_count >= offset {
+                entries.push(entry);
+                if entries.len() == limit {
+                    break;
+                }
+            }
+            matched_count += 1;
+        }
+        Ok(Some(entries))
     }
+}
+
+fn trigram_match_query(query: &str) -> Option<String> {
+    if !query.is_ascii() || query.len() < 3 {
+        return None;
+    }
+    let mut seen = HashSet::new();
+    let mut match_query = String::with_capacity(query.len().saturating_mul(8));
+    for trigram in query.as_bytes().windows(3) {
+        let trigram = std::str::from_utf8(trigram).ok()?;
+        if !seen.insert(trigram) {
+            continue;
+        }
+        if !match_query.is_empty() {
+            match_query.push_str(" AND ");
+        }
+        match_query.push('"');
+        for byte in trigram.bytes() {
+            if byte == b'"' {
+                match_query.push_str("\"\"");
+            } else {
+                match_query.push(char::from(byte));
+            }
+        }
+        match_query.push('"');
+    }
+    Some(match_query)
 }
 
 impl HistorySearchIndexPort for RepositoryStore {
