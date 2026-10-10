@@ -5154,3 +5154,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：仓库行内部按钮与文本样式及 hover 仍需渐进迁移；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 仓库行主按钮布局迁移到 Tailwind — 小阶段 477
+- 状态：已完成（主按钮结构布局和基础重置样式由静态 utility 提供）
+- 日期：2026-10-10
+- 交付：将仓库行主按钮的两列 grid、居中对齐、9px gap、最小宽高、边框/背景重置、水平/垂直 padding、左对齐和 pointer cursor 迁入 JSX utility；保留 CSS 中的 disabled cursor 与 focus-visible 反馈。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage477-browser`、`git diff --check` 通过；构建生成对应 grid、尺寸和样式重置规则。未新增或运行测试；构建保留已知 web-tree-sitter eval、chunk size 和外部 outDir 提示。
+- 手工验证：确认按钮保持 `minmax(0,1fr) auto` 两列、42px 最小高度、4px 垂直/0px 水平 padding；缺失仓库仍 disabled，CSS disabled 及 focus-visible 状态继续有效。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：仓库行内文本、branch label 和操作按钮视觉规则尚未迁移；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。

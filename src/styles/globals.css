@@ -136,7 +136,6 @@ button:disabled { cursor: not-allowed; }
 .emptyGlyph span:nth-child(3) { top: 11px; left: 10px; border-color: #557487; background: var(--surface-raised); }
 .emptyGlyph span:nth-child(3)::after { position: absolute; top: 6px; left: 6px; width: 8px; height: 5px; border-left: 1px solid var(--accent); border-bottom: 1px solid var(--accent); transform: skew(-20deg); content: ""; }
 .repositoryRow:hover { background: var(--surface-soft); }
-.repositoryRowOpen { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 9px; min-width: 0; min-height: 42px; padding: 4px 0; border: 0; background: transparent; text-align: left; cursor: pointer; }
 .repositoryRowOpen:disabled { cursor: default; }
 .repositoryRowAction { min-height: 28px; padding: 0 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 9px; cursor: pointer; }
 .repositoryRowAction:hover { border-color: var(--line-strong); color: var(--text); }
