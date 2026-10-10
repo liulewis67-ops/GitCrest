@@ -5284,3 +5284,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/service.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支写操作及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
+
+### 分支收藏写用例下沉到 feature service — 小阶段 490
+- 状态：已完成（handler 解析请求并提供仓库上下文，service 校验分支、持久化收藏并返回更新快照）
+- 日期：2026-10-10
+- 交付：新增 `set_branch_favorite_with_git`，将分支快照读取、完整 ref 存在性校验、收藏 storage port 写入和返回快照更新统一到 branch feature service。handler 不再调用其他 handler，也不再直接访问收藏存储；新增 `BranchError::NotFound` 并沿用 `BranchNotFound`/404 API envelope，存储失败继续映射为 `DatabaseUnavailable`。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。
+- 手工验证：fake storage port 确认收藏写入后快照标志为 true；不存在的 ref 返回 `BranchError::NotFound`，且不执行写入。按规范第 4.1、5.2 节，handler 仅保留协议解析与上下文适配。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 rename/delete 与其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向测试与台账同一 commit。

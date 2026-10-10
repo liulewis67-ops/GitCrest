@@ -47,6 +47,7 @@ pub enum BranchKind {
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchError {
     InvalidName,
+    NotFound,
     GitUnavailable,
     TimedOut,
     TooLarge,
@@ -142,6 +143,43 @@ pub async fn read_branches_with_favorites(
     Ok(snapshot)
 }
 
+pub async fn set_branch_favorite_with_git(
+    repo_id: String,
+    repository_path: &Path,
+    current: Option<&str>,
+    detached: bool,
+    full_name: &str,
+    favorite: bool,
+    git: &dyn BranchGitPort,
+    favorites_store: Arc<dyn BranchFavoriteStorePort>,
+) -> Result<BranchSnapshot, BranchError> {
+    let mut snapshot = read_branches_with_favorites(
+        repo_id.clone(),
+        repository_path,
+        current,
+        detached,
+        git,
+        favorites_store.clone(),
+    )
+    .await?;
+    let Some(branch) = snapshot
+        .branches
+        .iter_mut()
+        .find(|branch| branch.full_name == full_name)
+    else {
+        return Err(BranchError::NotFound);
+    };
+    let storage_full_name = full_name.to_owned();
+    tokio::task::spawn_blocking(move || {
+        favorites_store.set_branch_favorite(&repo_id, &storage_full_name, favorite)
+    })
+    .await
+    .map_err(|_| BranchError::StorageUnavailable)?
+    .map_err(|_| BranchError::StorageUnavailable)?;
+    branch.is_favorite = favorite;
+    Ok(snapshot)
+}
+
 fn map_branch_reference(branch: BranchReference, current: Option<&str>) -> BranchRef {
     let kind = if branch.full_name.starts_with("refs/heads/") {
         BranchKind::Local
@@ -215,6 +253,50 @@ mod tests {
             _full_name: &str,
             _favorite: bool,
         ) -> Result<(), crate::domain::error::RepositoryError> {
+            Ok(())
+        }
+
+        fn rename_branch_favorite(
+            &self,
+            _repo_id: &str,
+            _old_full_name: &str,
+            _new_full_name: &str,
+        ) -> Result<(), crate::domain::error::RepositoryError> {
+            Ok(())
+        }
+
+        fn remove_branch_favorite(
+            &self,
+            _repo_id: &str,
+            _full_name: &str,
+        ) -> Result<(), crate::domain::error::RepositoryError> {
+            Ok(())
+        }
+    }
+
+    #[derive(Default)]
+    struct RecordingBranchFavorites(std::sync::Mutex<Vec<String>>);
+
+    impl BranchFavoriteStorePort for RecordingBranchFavorites {
+        fn list_branch_favorites(
+            &self,
+            _repo_id: &str,
+        ) -> Result<Vec<String>, crate::domain::error::RepositoryError> {
+            Ok(self.0.lock().unwrap().clone())
+        }
+
+        fn set_branch_favorite(
+            &self,
+            _repo_id: &str,
+            full_name: &str,
+            favorite: bool,
+        ) -> Result<(), crate::domain::error::RepositoryError> {
+            let mut favorites = self.0.lock().unwrap();
+            if favorite && !favorites.iter().any(|value| value == full_name) {
+                favorites.push(full_name.to_owned());
+            } else if !favorite {
+                favorites.retain(|value| value != full_name);
+            }
             Ok(())
         }
 
@@ -325,6 +407,62 @@ mod tests {
             .iter()
             .find(|branch| branch.name == current)
             .is_some_and(|branch| branch.is_favorite));
+    }
+
+    #[tokio::test]
+    async fn sets_branch_favorite_in_service_and_returns_updated_snapshot() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        git(path, &["init", "--quiet"]);
+        git(path, &["config", "user.name", "Branch Test"]);
+        git(path, &["config", "user.email", "branch@example.invalid"]);
+        std::fs::write(path.join("file.txt"), "base\n").unwrap();
+        git(path, &["add", "file.txt"]);
+        git(path, &["commit", "--quiet", "-m", "base"]);
+        let current = git(path, &["branch", "--show-current"]);
+        let full_name = format!("refs/heads/{current}");
+        let store = Arc::new(RecordingBranchFavorites::default());
+
+        let snapshot = set_branch_favorite_with_git(
+            "repo_fixture".into(),
+            path,
+            Some(&current),
+            false,
+            &full_name,
+            true,
+            &GitBranchAdapter,
+            store.clone(),
+        )
+        .await
+        .unwrap();
+
+        assert!(snapshot
+            .branches
+            .iter()
+            .find(|branch| branch.full_name == full_name)
+            .is_some_and(|branch| branch.is_favorite));
+        assert_eq!(store.0.lock().unwrap().as_slice(), &[full_name]);
+    }
+
+    #[tokio::test]
+    async fn setting_favorite_for_unknown_branch_returns_not_found() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        git(path, &["init", "--quiet"]);
+
+        let result = set_branch_favorite_with_git(
+            "repo_fixture".into(),
+            path,
+            None,
+            true,
+            "refs/heads/missing",
+            true,
+            &GitBranchAdapter,
+            Arc::new(RecordingBranchFavorites::default()),
+        )
+        .await;
+
+        assert!(matches!(result, Err(BranchError::NotFound)));
     }
 
     #[test]

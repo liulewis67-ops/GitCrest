@@ -512,6 +512,11 @@ impl ApiError {
                 ApiErrorCode::BranchNameInvalid,
                 "The branch name is not valid according to Git ref rules.",
             ),
+            branches::BranchError::NotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::BranchNotFound,
+                "The branch ref does not exist.",
+            ),
             branches::BranchError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,

@@ -6,8 +6,8 @@ use axum::{
 
 use crate::{
     api::error::{ApiError, ApiErrorCode},
+    domain::branch::BranchCommand,
     domain::status::ChangeCategory,
-    domain::{branch::BranchCommand, error::RepositoryError},
     features::branches,
     features::repositories::{Repository, TaskTarget},
     AppState, TaskFailure, TaskSnapshot,
@@ -58,31 +58,28 @@ pub(super) async fn set_branch_favorite(
             "A branch ref and favorite state are required.",
         )
     })?;
-    let mut snapshot = repository_branches(State(state.clone()), Path(repo_id.clone()))
-        .await?
-        .0;
-    let Some(branch) = snapshot
-        .branches
-        .iter_mut()
-        .find(|branch| branch.full_name == request.full_name)
-    else {
-        return Err(ApiError::new(
-            StatusCode::NOT_FOUND,
-            ApiErrorCode::BranchNotFound,
-            "The branch ref does not exist.",
-        ));
-    };
-    let favorites_store = state.branch_favorites.clone();
-    let full_name = request.full_name;
-    let favorite = request.favorite;
-    let storage_repo_id = repo_id;
-    tokio::task::spawn_blocking(move || {
-        favorites_store.set_branch_favorite(&storage_repo_id, &full_name, favorite)
-    })
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let snapshot = branches::set_branch_favorite_with_git(
+        repo_id,
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+        &request.full_name,
+        request.favorite,
+        state.branch_git.as_ref(),
+        state.branch_favorites.clone(),
+    )
     .await
-    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?
-    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
-    branch.is_favorite = favorite;
+    .map_err(ApiError::from_branch_error)?;
     Ok(Json(snapshot))
 }
 
