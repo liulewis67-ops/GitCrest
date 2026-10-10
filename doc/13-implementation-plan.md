@@ -5144,3 +5144,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 仓库行和其它业务组件样式仍需逐步迁移；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 仓库行布局迁移到 Tailwind — 小阶段 476
+- 状态：已完成（仓库行网格与基础间距使用静态 utility）
+- 日期：2026-10-10
+- 交付：将仓库行的五列网格、对齐、7px 间距、54px 最小高度、内边距和主题底边线迁入 JSX utility；保留 `.repositoryRow` 语义类处理 hover，保留 `.repositoryMissing` 状态类。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage476-browser`、`git diff --check` 通过；构建成功并生成指定五列 grid utility。未新增或运行测试；已知 web-tree-sitter eval、chunk size 与外部 outDir 提示仍存在。
+- 手工验证：核对 grid 列为 15px / minmax(0,1fr) / auto / auto / auto，行最小高度 54px、gap 7px、垂直/水平 padding 5px/4px，底边使用 `--line` token；缺失状态仍通过原状态类呈现。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：仓库行内部按钮与文本样式及 hover 仍需渐进迁移；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。

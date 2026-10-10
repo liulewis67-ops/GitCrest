@@ -66,7 +66,7 @@ export function WelcomePage({
               ) : (
                 <div className="repositoryList grid pt-[5px]">
                   {repositories.map((repository) => (
-                    <div key={repository.repoId} className={`repositoryRow ${repository.availability === "missing" ? "repositoryMissing" : ""}`}>
+                    <div key={repository.repoId} className={`repositoryRow grid grid-cols-[15px_minmax(0,1fr)_auto_auto_auto] items-center gap-[7px] min-h-[54px] px-[4px] py-[5px] border-b border-line ${repository.availability === "missing" ? "repositoryMissing" : ""}`}>
                       <span className="repoStatusGlyph" aria-hidden="true">{repository.availability === "missing" ? "!" : "●"}</span>
                       <button className="repositoryRowOpen" type="button" disabled={openingRepository || repository.availability === "missing"} onClick={() => void onOpenRepository(repository)}>
                         <span className="repositoryRowText"><strong>{getRepositoryDisplayName(repository.path)}{repository.isFavorite ? " · Favorite" : ""}</strong><small>{repository.availability === "missing" ? `Unavailable · ${repository.path}` : repository.path}</small></span>
