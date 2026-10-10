@@ -5404,3 +5404,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支命令的任务提交/执行上下文及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
+
+### StatusFile 脏路径语义归入 domain — 小阶段 502
+- 状态：已完成（忽略文件判定由中立 status domain 类型统一提供）
+- 日期：2026-10-10
+- 交付：新增 `StatusFile::has_unignored_changes`，把“所有分类均为 Ignored 才视为非脏文件”的语义归入 domain；分支预检、切换受理和后台复核移除重复分类遍历及对 `ChangeCategory` 的 handler 级依赖。空分类仍保持原有非脏语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、领域 status 定向测试（1 passed）、branch service 定向测试（6 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：Ignored-only 返回 false；Ignored 与 Unstaged 混合返回 true；空分类返回 false，保持旧 `all(Ignored)` 判断行为。
+- 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
+- 限制/后续：分支任务提交/执行上下文及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段领域语义、调用点与台账同一 commit。

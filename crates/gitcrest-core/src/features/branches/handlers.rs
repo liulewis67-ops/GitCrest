@@ -7,7 +7,6 @@ use axum::{
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::branch::BranchCommand,
-    domain::status::ChangeCategory,
     features::branches,
     features::repositories::{Repository, TaskTarget},
     AppState, TaskFailure, TaskSnapshot,
@@ -358,12 +357,7 @@ pub(super) async fn preflight_branch_switch(
     let dirty_files = snapshot
         .files
         .iter()
-        .filter(|file| {
-            !file
-                .categories
-                .iter()
-                .all(|category| matches!(category, ChangeCategory::Ignored))
-        })
+        .filter(|file| file.has_unignored_changes())
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
     let potentially_overwritten_paths = branches::overlapping_dirty_paths_with_git(
@@ -408,12 +402,7 @@ pub(super) async fn switch_repository_branch(
     let dirty_files = status
         .files
         .iter()
-        .filter(|file| {
-            !file
-                .categories
-                .iter()
-                .all(|category| matches!(category, ChangeCategory::Ignored))
-        })
+        .filter(|file| file.has_unignored_changes())
         .map(|file| file.path.clone())
         .collect::<Vec<_>>();
     let expected_head = metadata.head.clone();
@@ -447,7 +436,7 @@ pub(super) async fn switch_repository_branch(
             let fresh_status = status_service.snapshot(&repo_for_check).await
                 .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
             let fresh_dirty_paths = fresh_status.files.iter()
-                .filter(|file| !file.categories.iter().all(|category| matches!(category, ChangeCategory::Ignored)))
+                .filter(|file| file.has_unignored_changes())
                 .map(|file| file.path.clone())
                 .collect::<Vec<_>>();
             match branches::ensure_no_dirty_path_overlap_with_git(&path, fresh_repository.head.as_deref(), &target_name, &fresh_dirty_paths, branch_git.as_ref()).await {
