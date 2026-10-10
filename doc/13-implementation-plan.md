@@ -5484,3 +5484,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.2、6.3 节。
 - 限制/后续：Welcome 页面主按钮及其它跨页面视觉规则仍在全局样式；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段 SVG 迁移与台账同一 commit。
+
+### Shelf 三路应用资格规则下沉到 domain — 小阶段 510
+- 状态：已完成（HEAD、仓库状态、冲突与 scope 重叠规则由 ShelfSnapshot 统一判断）
+- 日期：2026-10-10
+- 交付：为 `ShelfSnapshot` 增加三路应用资格和冲突安全判定，统一检查索引/工作树 scope、HEAD、正常仓库状态、已有冲突，以及所选路径与另一 scope 的重叠；shelf handler 保留仓库/状态读取和 API 错误映射，不再自行遍历状态文件组合业务规则。不可三路应用的 scope/无 HEAD 继续在读取 repository/status 前快速返回。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、domain shelf 定向用例（2 passed）、shelf apply 定向用例（2 passed，含冲突解决集成流程）及 `git diff --check` 通过；测试链接使用 D: 临时目录。
+- 手工验证：覆盖 Index/WorkingTree 对应的安全非重叠路径、跨 scope 重叠拒绝、任意既有冲突拒绝、非 normal 仓库/无 HEAD 拒绝，以及 Commit/缺失 scope 拒绝；既有三路冲突应用集成用例通过。
+- 证据：`crates/gitcrest-core/src/domain/shelf.rs`、`crates/gitcrest-core/src/features/shelves/handlers.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1、4.2 节。
+- 限制/后续：shelf apply 的任务副作用与恢复编排仍较多地留在 handler，后续按 feature service/ports 边界拆分；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段领域规则、调用点、定向验证与台账同一 commit。

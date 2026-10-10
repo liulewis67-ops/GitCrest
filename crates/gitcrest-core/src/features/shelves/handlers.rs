@@ -382,10 +382,7 @@ async fn can_shelf_apply_with_conflicts<R: RepositoryPathPort, G: StatusReadPort
     shelf: &ShelfRecord,
     head_oid: Option<&str>,
 ) -> Result<bool, ApiError> {
-    let Some(scope @ (DiffScope::WorkingTree | DiffScope::Index)) = shelf.snapshot.scope else {
-        return Ok(false);
-    };
-    if head_oid.is_none() {
+    if !shelf.snapshot.supports_three_way_apply(head_oid.is_some()) {
         return Ok(false);
     }
     let Some(repository) = repositories
@@ -395,30 +392,15 @@ async fn can_shelf_apply_with_conflicts<R: RepositoryPathPort, G: StatusReadPort
     else {
         return Ok(false);
     };
-    if repository.state != "normal" {
-        return Ok(false);
-    }
     let status = status_service
         .snapshot(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    if status.files.iter().any(|file| file.is_conflicted()) {
-        return Ok(false);
-    }
-    Ok(shelf.snapshot.paths.iter().all(|path| {
-        status
-            .files
-            .iter()
-            .find(|file| file.path == *path)
-            .is_none_or(|file| {
-                !file.is_conflicted()
-                    && match scope {
-                        DiffScope::WorkingTree => !file.has_changes_for_scope(DiffScope::Index),
-                        DiffScope::Index => !file.has_changes_for_scope(DiffScope::WorkingTree),
-                        DiffScope::Commit => false,
-                    }
-            })
-    }))
+    Ok(shelf.snapshot.can_apply_with_conflicts(
+        repository.state == "normal",
+        head_oid.is_some(),
+        &status.files,
+    ))
 }
 
 async fn shelf_apply_revision<R: RepositoryPathPort, G: StatusReadPort>(
