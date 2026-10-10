@@ -59,8 +59,8 @@ export function WelcomePage({
               {repositories.length === 0 ? (
                 <div className="emptyRepositories grid justify-items-center px-[22px] pt-[42px] pb-[34px] text-center max-[900px]:px-[12px] max-[900px]:py-[25px]">
                   <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
-                  <h3>No repositories yet</h3>
-                  <p className="text-muted">Open a local Git repository to see its changes, branches, and history here.</p>
+                  <h3 className="m-0 text-[12px] font-[620]">No repositories yet</h3>
+                  <p className="m-[7px_0_9px] max-w-[310px] text-[11px] leading-[1.6] text-muted">Open a local Git repository to see its changes, branches, and history here.</p>
                   <button className="inlineAction" type="button" onClick={() => void onOpenLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
                 </div>
               ) : (

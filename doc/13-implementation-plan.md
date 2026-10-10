@@ -5124,3 +5124,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 空仓库态的图形、标题与操作链接仍依赖全局组件规则；其它页面 Tailwind 迁移及 S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 空仓库态标题与说明迁移到 Tailwind — 小阶段 474
+- 状态：已完成（空状态标题和说明文字排版使用静态 utility）
+- 日期：2026-10-10
+- 交付：将空仓库标题的 margin/字号/字重，以及说明文字的宽度、上下间距、字号、行高和 muted 颜色迁到 JSX 静态 utility；删除 `.emptyRepositories h3` 和 `.emptyRepositories p` 全局规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage474-browser`、`git diff --check` 通过；生产构建成功，保留已知 web-tree-sitter eval、chunk size 与外部 outDir 提示。未新增或运行测试。
+- 手工验证：核对标题 12px/620 且无外边距；说明保持 310px 最大宽度、7px/9px 上下间距、11px 字号、1.6 行高和 `--text-muted`。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 空状态插图与操作链接样式仍由全局 CSS 管理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
