@@ -5244,3 +5244,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/styles/tokens.css`、`src/styles/globals.css`、`src/pages/welcome/WelcomePage.tsx`、`doc/06-design-language.md`、`doc/15-frontend-development-guidelines.md` 第 6.2 节。
 - 限制/后续：其它 warning/error/success token 覆盖仍需按 S7.3 可访问性规范检查；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段 token、消费者、设计记录与台账同一 commit。
+
+### Welcome Quick actions 箭头迁移到 Tailwind — 小阶段 486
+- 状态：已完成（快捷操作箭头使用共享静态 utility）
+- 日期：2026-10-10
+- 交付：三个 Quick actions 箭头复用 `QUICK_ACTION_ARROW_CLASS_NAME`，使用 muted Token 和 13px 字号；删除 `.actionArrow` 全局规则，箭头继续作为 aria-hidden 装饰。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage486-browser`、`git diff --check` 通过；源码检索确认无 `.actionArrow` 规则/类引用，生产构建成功。未新增或运行测试；保留已知构建提示。
+- 手工验证：三个操作行均共享同一静态 class 常量，箭头内容和按钮语义不变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Quick actions footnote 和空态插图仍需要保留/迁移各自样式；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段箭头迁移与台账同一 commit。
