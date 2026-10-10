@@ -5444,3 +5444,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/domain/status.rs`、`crates/gitcrest-core/src/features/{commits/service.rs,diff/service/read.rs,settings/handlers.rs,shelves/handlers.rs}`、`doc/14-backend-development-guidelines.md` 第 4.1、4.2 节。
 - 限制/后续：diff route 的候选后端策略和 staging patch 的具体类别组合仍由各 feature 按用途筛选；S7.2 冷搜索门槛以及 S7.4/S7.5 平台发布验收仍未完成。
 - 实施 commit：本阶段领域语义、调用点与台账同一 commit。
+
+### 修复 history search 基准与当前冷查询策略不一致 — 小阶段 506
+- 状态：已完成（`search` 基准现在验证完整冷 Git 响应并测量 warm FTS）
+- 日期：2026-10-10
+- 交付：基准 `search` 子命令不再要求已被 stage466 移除的 `searchPending` 首响；现在确认冷 Git 首响包含目标 commit、等待后台索引就绪，再测量索引查询。报告同时列出冷首响单样本、索引就绪耗时和 warm 查询 20 轮统计，完整冷路径仍由 `cold` 命令按 20 轮验收。
+- 验证：`node --check scripts/performance/benchmark.mjs`、`cargo build --release --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`node scripts/performance/benchmark.mjs search E:\gitcrest-stage407-temp\gitcrest-stage407-100k-fixture doc/evidence/S7.2/api-win32-indexed-search-current-stage506-20261010.json`（20 warm samples）、`git diff --check` 通过。Windows 10.0.26300、Ryzen 7 5800H、Node 22.19、Git 2.37.3；冷首响单样本 514.866ms、索引就绪 2059.871ms、warm FTS P50/P95/max 15.536/17.276/22.183ms。
+- 手工验证：每次查询均核对目标 subject `benchmark commit 099999`；Release sidecar 对真实 100,000 commit fixture 返回完整冷结果，随后 20 次查询均通过索引返回目标 commit。sidecar 临时数据库位于 D: 盘，fixture 位于 E: 盘。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-indexed-search-current-stage506-20261010.json`、stage466 的冷查询验收记录。
+- 限制/后续：冷完整 Git 结果只有一个样本且为 514.866ms，不替代 `cold` 20 轮测量，也未达到 <200ms；stage466 20 轮冷搜索 P95 仍为 600.226ms。S7.2 其它性能门槛及 S7.4/S7.5 发布验收仍未完成。
+- 实施 commit：本阶段基准修复、复测证据与台账同一 commit。

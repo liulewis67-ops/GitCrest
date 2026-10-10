@@ -388,8 +388,9 @@ async function runIndexedHistorySearchBenchmark(fixturePath, reportPath) {
     const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
     const indexStartedAt = performance.now();
     const initialPage = await requestJson(searchUrl, started.token);
-    if (initialPage.searchPending !== true || initialPage.commits.length !== 0) {
-      throw new Error("Initial history search should return an empty pending page while its index builds.");
+    const coldFirstResponseMs = Number((performance.now() - indexStartedAt).toFixed(3));
+    if (initialPage.searchPending === true || !initialPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+      throw new Error("Cold Git history search did not return its matching commit before index construction.");
     }
     await waitForHistoryIndex(started, indexStartedAt + 30_000);
     const attempts = 1;
@@ -411,8 +412,18 @@ async function runIndexedHistorySearchBenchmark(fixturePath, reportPath) {
       fixture: { commits: 100_000, path: fixturePath, searchQuery: "message contains benchmark commit 099999" },
       iterations,
       searchIndexWarmup: { ready: true, attempts, elapsedMs: indexReadyMs },
-      results: [indexedSearch],
-      limitations: ["Measures only indexed message search through the local sidecar API; does not claim cold-index build or other S7.2 targets."],
+      results: [
+        {
+          name: "historySearch100kColdGitFallbackFirstResponse",
+          samples: 1,
+          p50Ms: coldFirstResponseMs,
+          p95Ms: coldFirstResponseMs,
+          maxMs: coldFirstResponseMs,
+          samplesMs: [coldFirstResponseMs],
+        },
+        indexedSearch,
+      ],
+      limitations: ["Cold Git fallback is a single diagnostic sample; use the cold command for the required 20-run cold-search measurement. This command measures indexed search and does not claim other S7.2 targets."],
       stderr: started.getStderr().trim() || undefined,
     };
     await mkdir(dirname(reportPath), { recursive: true });
