@@ -5224,3 +5224,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Quick actions 图标、箭头和 footnote 样式仍在全局 CSS；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段文案迁移与台账同一 commit。
+
+### Welcome Quick actions 图标迁移到 Tailwind — 小阶段 484
+- 状态：已完成（3 个快捷操作图标共用静态布局与颜色类）
+- 日期：2026-10-10
+- 交付：将 Quick actions 图标盒子的 grid 居中、24×24 尺寸、line 边框、6px 圆角、accent-strong 颜色与 14px 字号移入共享 `QUICK_ACTION_ICON_CLASS_NAME`；删除 `.actionIcon` 全局规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage484-browser`、`git diff --check` 通过；源码确认无 `.actionIcon` CSS 规则，生产构建成功。未新增或运行测试；保留已知构建提示。
+- 手工验证：三个图标均共用同一静态 utility；装饰标记仍 `aria-hidden`，图标字符和 DOM 次序不变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.2、6.3 节。
+- 限制/后续：快捷操作箭头和 footnote 仍需迁移；S7.2、S7.4、S7.5 验收仍未完成。
+- 实施 commit：本阶段图标样式迁移与台账同一 commit。
