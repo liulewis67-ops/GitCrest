@@ -5056,3 +5056,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-git-fallback-stage466.json`。
 - 限制/后续：完整搜索结果 P95 仍为 600ms，未达到 <200ms；索引就绪变为后台总时延、不会阻塞首个结果。下一阶段评估 Git 搜索与索引并行的端到端权衡。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段查询行为、基准语义、测量证据与台账同一 commit。
+
+### 并行运行冷 Git 搜索与索引构建的权衡 — 小阶段 467
+- 状态：已完成（对照测量后保留顺序策略）
+- 日期：2026-10-10
+- 交付：尝试在 message-only Git 查询前启动历史索引构建，让完整 Git 搜索与 FTS 构建并行；测量后撤回该实现，保留 stage466 的“先返回完整搜索结果，再构建索引”顺序。
+- 验证：Release sidecar、Windows 10.0.26300、Ryzen 7 5800H、Git 2.37.3、100k commit fixture，20 轮交错环境不变的测试：并发时完整搜索结果 P50/P95 732.245/831.270ms，索引就绪 P95 1,621.089ms；顺序方案完整结果 P95 为 600.226ms、索引就绪 P95 为 2,028.198ms。并发令首个完整结果慢约 38.5%，虽令后台索引提早约 20%，但首结果是本阶段优先指标，因此未保留代码改动。
+- 手工验证：20 轮冷查询均返回目标提交，随后均由 warm FTS 查询再次命中；实验代码已撤回，生产代码仍为 stage466 顺序策略。
+- 证据：`doc/evidence/S7.2/api-win32-cold-concurrent-index-stage467.json`、`doc/evidence/S7.2/api-win32-cold-git-fallback-stage466.json`。
+- 限制/后续：顺序策略下搜索结果 P95 仍约 600ms，冷搜索 <200ms 目标未达成；继续优化 Git message scan 本身及实际打开历史页后的并发路径。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段对照报告与台账同一 commit；未保留并发实现。
