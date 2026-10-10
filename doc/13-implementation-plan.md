@@ -5046,3 +5046,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-commit-graph-probe-stage465.json`。
 - 限制/后续：commit-graph 不是当前 0.9s Git 扫描瓶颈的有效解法；继续评估不改变提交消息完整性、refs 覆盖和 Git 顺序的替代扫描方式。S7.2、S7.4、S7.5 仍未全部验收。
 - 实施 commit：本阶段对照测量、结果报告与台账同一 commit。
+
+### 冷查询优先返回完整 Git 搜索结果 — 小阶段 466
+- 状态：已完成（完整结果 P95 降低约 63%；仍未达到 <200ms）
+- 日期：2026-10-10
+- 交付：长 ASCII message-only 搜索在索引未命中或重建期间不再返回空 pending 页面，而是使用现有 `git log --grep` 返回完整、有序结果；查询完成后再后台构建持久索引。历史搜索定向用例更新为验证冷查询及 refs 变化后的首个查询均返回完整 Git 结果。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、定向 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml indexed_message_search_matches_git_order_and_invalidates_after_ref_changes -- --exact features::history::service::tests::indexed_message_search_matches_git_order_and_invalidates_after_ref_changes`（1 passed）、Release sidecar 构建、`node --check scripts/performance/benchmark.mjs`、`git diff --check` 通过。Windows 10.0.26300、Ryzen 7 5800H、Git 2.37.3、Release sidecar、100k commit fixture 20 轮：完整冷结果 P50/P95/max 510.101/600.226/600.660ms；后台索引就绪总时延 P50/P95/max 1,934.242/2,028.198/2,102.542ms。完整结果相较 stage459 P95 1,643.681ms 改善约 63.5%。
+- 手工验证：所有 20 个冷查询都在首个 HTTP 响应中返回目标提交；索引构建之后再次查询仍由 FTS 命中目标提交。Release 日志分阶段 P95：Git 804ms、parse 18ms、refs verify 4ms、持久化 767ms（其中 FTS 264ms、SQLite commit 219ms）。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/features/history/service.rs`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-git-fallback-stage466.json`。
+- 限制/后续：完整搜索结果 P95 仍为 600ms，未达到 <200ms；索引就绪变为后台总时延、不会阻塞首个结果。下一阶段评估 Git 搜索与索引并行的端到端权衡。S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段查询行为、基准语义、测量证据与台账同一 commit。

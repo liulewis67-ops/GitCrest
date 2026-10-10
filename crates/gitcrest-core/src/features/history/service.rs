@@ -373,8 +373,8 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(cold.search_pending);
-        assert!(cold.commits.is_empty());
+        assert!(!cold.search_pending);
+        assert_eq!(cold.commits[0].subject, "second NEEDLE entry");
         let fingerprint = refs_fingerprint(path, repository.head.as_deref())
             .await
             .unwrap();
@@ -460,7 +460,8 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(after_ref_change.search_pending);
+        assert!(!after_ref_change.search_pending);
+        assert_eq!(after_ref_change.commits[0].subject, "needle after index");
         let updated_fingerprint = refs_fingerprint(path, repository.head.as_deref())
             .await
             .unwrap();
