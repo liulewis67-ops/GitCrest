@@ -128,9 +128,6 @@ button:disabled { cursor: not-allowed; }
 .secondaryButton:disabled { color: var(--text-secondary); opacity: .72; }
 .textButton { display: inline-flex; align-items: center; gap: 6px; padding: 5px; background: transparent; color: var(--accent-strong); font-size: 11px; cursor: pointer; }
 .textButton:hover { text-decoration: underline; text-underline-offset: 3px; }
-.recentSection, .quickActions { min-width: 0; }
-.sectionHeading { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
-.sectionHeading h2 { margin: 0; font-size: 13px; font-weight: 620; letter-spacing: -.02em; }
 .compact { min-height: 26px; padding-inline: 7px; font-size: 10px; }
 .emptyRepositories { display: grid; justify-items: center; padding: 42px 22px 34px; text-align: center; }
 .emptyGlyph { position: relative; width: 52px; height: 42px; margin-bottom: 13px; }

@@ -5104,3 +5104,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：仅迁移 Welcome 三处 eyebrow；其它页面共用的 `.sectionEyebrow` 样式仍待按组件逐步迁移。S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 区域标题样式迁移到 Tailwind — 小阶段 472
+- 状态：已完成（Welcome 区域标题布局与标题排版由静态 utility 承担）
+- 日期：2026-10-10
+- 交付：将 Recent repositories 和 Quick actions 标题的 flex 对齐、42px 最小高度、底部间距、主题分隔线及 h2 排版迁入 JSX 静态 Tailwind utility；两列内容的 `min-width: 0` 也直接由 `min-w-0` 提供。删除仅服务 Welcome 的 `.recentSection`、`.quickActions`、`.sectionHeading` 全局规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage472-browser`、`git diff --check` 通过；构建成功并生成对应 42px、1px border、line token 与 h2 字体 utility。未新增或运行测试。构建保留已知 web-tree-sitter eval、chunk size 与外部 outDir 提示。
+- 手工验证：确认两个 section header 均保留原 flex/justify/alignment、42px 高度、11px 底部留白、`--line` 边线以及 13px/620/-.02em 标题样式；响应式双列布局和页面内容不变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 剩余业务组件与空态/仓库列表规则仍待渐进迁移；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。

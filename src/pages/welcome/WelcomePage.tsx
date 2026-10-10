@@ -51,9 +51,9 @@ export function WelcomePage({
           </div>
           {openError && <div className="openRepositoryError" role="alert">{openError}</div>}
           <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
-            <section className="recentSection" aria-labelledby="recent-heading">
-              <div className="sectionHeading">
-                <div><p className="m-0 mb-[5px] text-muted text-[9px] font-[750] tracking-[.14em]">YOUR LIBRARY</p><h2 id="recent-heading">Recent repositories</h2></div>
+            <section className="recentSection min-w-0" aria-labelledby="recent-heading">
+              <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">
+                <div><p className="m-0 mb-[5px] text-muted text-[9px] font-[750] tracking-[.14em]">YOUR LIBRARY</p><h2 id="recent-heading" className="m-0 text-[13px] font-[620] tracking-[-.02em]">Recent repositories</h2></div>
                 <span className="quietButton compact" aria-label="Favorites first, then most recently opened">Favorites first</span>
               </div>
               {repositories.length === 0 ? (
@@ -80,8 +80,10 @@ export function WelcomePage({
                 </div>
               )}
             </section>
-            <aside className="quickActions" aria-labelledby="quick-heading">
-              <div className="sectionHeading"><div><p className="m-0 mb-[5px] text-muted text-[9px] font-[750] tracking-[.14em]">GET STARTED</p><h2 id="quick-heading">Quick actions</h2></div></div>
+            <aside className="quickActions min-w-0" aria-labelledby="quick-heading">
+              <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">
+                <div><p className="m-0 mb-[5px] text-muted text-[9px] font-[750] tracking-[.14em]">GET STARTED</p><h2 id="quick-heading" className="m-0 text-[13px] font-[620] tracking-[-.02em]">Quick actions</h2></div>
+              </div>
                 <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={`Open local repository (${displayShortcut(shortcuts.openRepository, isMacPlatform)})`}>
                 <span className="actionIcon" aria-hidden="true">↗</span><span><strong>Open local repository</strong><small>Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
