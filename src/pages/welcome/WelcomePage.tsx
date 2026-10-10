@@ -2,8 +2,8 @@ import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 
-const REPOSITORY_ROW_ACTION_CLASS_NAME = "repositoryRowAction min-h-[28px] rounded-[4px] border border-transparent bg-transparent px-[5px] text-muted text-[9px] cursor-pointer";
-const QUICK_ACTION_CLASS_NAME = "actionRow grid grid-cols-[31px_minmax(0,1fr)_auto] items-center w-full min-h-[58px] border-b border-line bg-transparent px-[4px] py-[8px] text-left";
+const REPOSITORY_ROW_ACTION_CLASS_NAME = "repositoryRowAction min-h-[28px] rounded-[4px] border border-transparent bg-transparent px-[5px] text-muted text-[9px] cursor-pointer hover:border-line-strong hover:text-foreground";
+const QUICK_ACTION_CLASS_NAME = "actionRow grid grid-cols-[31px_minmax(0,1fr)_auto] items-center w-full min-h-[58px] border-b border-line bg-transparent px-[4px] py-[8px] text-left enabled:hover:bg-surface-soft";
 const QUICK_ACTION_ICON_CLASS_NAME = "actionIcon grid place-items-center w-[24px] h-[24px] border border-line rounded-[6px] text-accent-strong text-[14px]";
 const QUICK_ACTION_ARROW_CLASS_NAME = "text-muted text-[13px]";
 
@@ -71,9 +71,9 @@ export function WelcomePage({
               ) : (
                 <div className="repositoryList grid pt-[5px]">
                   {repositories.map((repository) => (
-                    <div key={repository.repoId} className="repositoryRow grid grid-cols-[15px_minmax(0,1fr)_auto_auto_auto] items-center gap-[7px] min-h-[54px] px-[4px] py-[5px] border-b border-line">
+                    <div key={repository.repoId} className="repositoryRow grid grid-cols-[15px_minmax(0,1fr)_auto_auto_auto] items-center gap-[7px] min-h-[54px] px-[4px] py-[5px] border-b border-line hover:bg-surface-soft">
                       <span className={`text-[8px] ${repository.availability === "missing" ? "text-warning" : "text-green"}`} aria-hidden="true">{repository.availability === "missing" ? "!" : "●"}</span>
-                      <button className="repositoryRowOpen grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[9px] min-w-0 min-h-[42px] border-0 bg-transparent px-0 py-[4px] text-left cursor-pointer" type="button" disabled={openingRepository || repository.availability === "missing"} onClick={() => void onOpenRepository(repository)}>
+                      <button className="repositoryRowOpen grid grid-cols-[minmax(0,1fr)_auto] items-center gap-[9px] min-w-0 min-h-[42px] border-0 bg-transparent px-0 py-[4px] text-left cursor-pointer disabled:cursor-default" type="button" disabled={openingRepository || repository.availability === "missing"} onClick={() => void onOpenRepository(repository)}>
                         <span className="min-w-0"><strong className="block overflow-hidden text-ellipsis whitespace-nowrap text-foreground-secondary text-[10px] font-[620]">{getRepositoryDisplayName(repository.path)}{repository.isFavorite ? " · Favorite" : ""}</strong><small className={`mt-[3px] block overflow-hidden text-ellipsis whitespace-nowrap text-[9px] ${repository.availability === "missing" ? "text-warning" : "text-muted"}`}>{repository.availability === "missing" ? `Unavailable · ${repository.path}` : repository.path}</small></span>
                         <span className="repositoryBranch max-w-[112px] overflow-hidden text-muted text-[9px] text-ellipsis whitespace-nowrap">{repository.availability === "missing" ? "Missing" : repository.detached ? "Detached" : repository.branch || "Unborn"}</span>
                       </button>

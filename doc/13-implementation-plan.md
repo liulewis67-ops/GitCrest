@@ -5264,3 +5264,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 主操作按钮样式、仓库 hover/focus 与空态插图仍依赖 CSS；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段 footnote/icon 迁移与台账同一 commit。
+
+### Welcome 列表与快捷操作状态迁移到 Tailwind — 小阶段 488
+- 状态：已完成（hover/disabled 状态使用 Tailwind variant，焦点反馈仍显式保留）
+- 日期：2026-10-10
+- 交付：仓库行 hover 背景、仓库操作 hover 边框/文字色、仓库主按钮 disabled cursor、Quick actions 仅 enabled 时的 hover 背景迁到静态 Tailwind variants；删除对应局部 CSS 状态规则，保留仓库操作与主按钮的 `:focus-visible` 外框。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage488-browser`、`git diff --check` 通过；生产 CSS 确认生成 enabled/hover、disabled 和语义色规则。未新增或运行测试；保留既有构建提示。
+- 手工验证：disabled 的 Quick actions 不匹配 `enabled:hover`；缺失仓库主按钮仍使用 `disabled:cursor-default`；键盘焦点仍显示 2px accent-strong 外框。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3、8 节。
+- 限制/后续：Welcome 主操作按钮状态规则和复杂空态插图仍留 CSS；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段交互状态迁移与台账同一 commit。

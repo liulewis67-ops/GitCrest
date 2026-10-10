@@ -136,14 +136,10 @@ button:disabled { cursor: not-allowed; }
 .emptyGlyph span:nth-child(2) { top: 6px; left: 13px; transform: rotate(5deg); }
 .emptyGlyph span:nth-child(3) { top: 11px; left: 10px; border-color: #557487; background: var(--surface-raised); }
 .emptyGlyph span:nth-child(3)::after { position: absolute; top: 6px; left: 6px; width: 8px; height: 5px; border-left: 1px solid var(--accent); border-bottom: 1px solid var(--accent); transform: skew(-20deg); content: ""; }
-.repositoryRow:hover { background: var(--surface-soft); }
-.repositoryRowOpen:disabled { cursor: default; }
-.repositoryRowAction:hover { border-color: var(--line-strong); color: var(--text); }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 .inlineAction { padding: 3px; background: transparent; color: var(--accent-strong); font-size: 10px; }
 .inlineAction:disabled { color: var(--text-muted); }
 .actionRow:not(:disabled) { cursor: pointer; }
-.actionRow:not(:disabled):hover { background: var(--surface-soft); }
 .footerDivider { width: 1px; height: 11px; background: var(--line-strong); }
 
 .workspacePage { display: grid; grid-template-rows: 40px minmax(0, 1fr) 6px var(--workbench-height) 25px; min-height: 0; }
