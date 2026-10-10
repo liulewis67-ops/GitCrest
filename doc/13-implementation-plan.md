@@ -5294,3 +5294,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 rename/delete 与其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
+
+### 本地分支存在性校验下沉到 feature service — 小阶段 491
+- 状态：已完成（分支变更 handler 通过 service 校验 ref 名和本地 ref 存在性）
+- 日期：2026-10-10
+- 交付：新增 `require_local_branch_with_git`，将多个分支变更 handler 重复的分支名校验和 refs 读取/筛选集中到 branch service；handler 不再遍历 `BranchSnapshot` DTO 判断本地分支是否存在。为保留既有 API 响应，新增 `BranchError::LocalNotFound` 映射到原有 `BranchNotFound`/404 消息。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。首次测试链接因系统 C: 临时盘无可用空间报 LNK1108；将 TEMP/TMP 指向有空间的 D: 临时目录后重跑通过。
+- 手工验证：既有临时 Git fixture 中 `feature/one` 校验成功，`missing` 返回 `BranchError::LocalNotFound`；同一测试保留原有 upstream/ahead/behind 断言。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 rename/delete 与其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向验证与台账同一 commit。

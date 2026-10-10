@@ -47,6 +47,7 @@ pub enum BranchKind {
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchError {
     InvalidName,
+    LocalNotFound,
     NotFound,
     GitUnavailable,
     TimedOut,
@@ -70,6 +71,26 @@ pub async fn validate_branch_name_with_git(
     {
         true => Ok(()),
         false => Err(BranchError::InvalidName),
+    }
+}
+
+pub async fn require_local_branch_with_git(
+    repository_path: &Path,
+    name: &str,
+    git: &dyn BranchGitPort,
+) -> Result<(), BranchError> {
+    validate_branch_name_with_git(repository_path, name, git).await?;
+    let references = git
+        .list_references(repository_path)
+        .await
+        .map_err(map_git_error)?;
+    if references
+        .iter()
+        .any(|branch| branch.full_name == format!("refs/heads/{name}"))
+    {
+        Ok(())
+    } else {
+        Err(BranchError::LocalNotFound)
     }
 }
 
@@ -377,6 +398,13 @@ mod tests {
             .branches
             .iter()
             .any(|branch| branch.name == default && !branch.is_current));
+        require_local_branch_with_git(&path, "feature/one", &GitBranchAdapter)
+            .await
+            .unwrap();
+        assert!(matches!(
+            require_local_branch_with_git(&path, "missing", &GitBranchAdapter).await,
+            Err(BranchError::LocalNotFound)
+        ));
     }
 
     #[tokio::test]

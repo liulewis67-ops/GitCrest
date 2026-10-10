@@ -517,6 +517,11 @@ impl ApiError {
                 ApiErrorCode::BranchNotFound,
                 "The branch ref does not exist.",
             ),
+            branches::BranchError::LocalNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::BranchNotFound,
+                "The local branch does not exist.",
+            ),
             branches::BranchError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,

@@ -169,7 +169,7 @@ async fn branch_for_mutation(
         .task_target(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    branches::validate_branch_name_with_git(
+    branches::require_local_branch_with_git(
         &target.repository_path,
         name,
         state.branch_git.as_ref(),
@@ -181,25 +181,6 @@ async fn branch_for_mutation(
         .refresh_metadata(repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    if !branches::read_branches_with_git(
-        repo_id.to_owned(),
-        &target.repository_path,
-        metadata.branch.as_deref(),
-        metadata.detached,
-        state.branch_git.as_ref(),
-    )
-    .await
-    .map_err(ApiError::from_branch_error)?
-    .branches
-    .iter()
-    .any(|branch| matches!(branch.kind, branches::BranchKind::Local) && branch.name == name)
-    {
-        return Err(ApiError::new(
-            StatusCode::NOT_FOUND,
-            ApiErrorCode::BranchNotFound,
-            "The local branch does not exist.",
-        ));
-    }
     Ok((target, metadata))
 }
 
