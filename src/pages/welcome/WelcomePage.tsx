@@ -57,7 +57,7 @@ export function WelcomePage({
                 <span className="quietButton compact" aria-label="Favorites first, then most recently opened">Favorites first</span>
               </div>
               {repositories.length === 0 ? (
-                <div className="emptyRepositories">
+                <div className="emptyRepositories grid justify-items-center px-[22px] pt-[42px] pb-[34px] text-center max-[900px]:px-[12px] max-[900px]:py-[25px]">
                   <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
                   <h3>No repositories yet</h3>
                   <p className="text-muted">Open a local Git repository to see its changes, branches, and history here.</p>

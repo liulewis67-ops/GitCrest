@@ -5114,3 +5114,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Welcome 剩余业务组件与空态/仓库列表规则仍待渐进迁移；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 空仓库态容器迁移到 Tailwind — 小阶段 473
+- 状态：已完成（容器布局、间距和窄屏覆盖使用静态 utility）
+- 日期：2026-10-10
+- 交付：将空仓库引导容器的 grid/居中对齐、基础 42px 42px 34px 内边距、文本居中，以及 900px 以下 25px 12px 内边距覆盖迁到 JSX utility；移除对应两条 `.emptyRepositories` 全局规则，内容、插图和文字视觉保持原样。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage473-browser`、`git diff --check` 通过；构建成功，保留已知 web-tree-sitter eval、chunk size 和外部 outDir 提示。未新增或运行测试。
+- 手工验证：核对基础 padding 顺序为 top/right/bottom/left 的 42/22/34/22px，900px 以下改为 25/12/25/12px；宽屏及窄屏响应式规则在生成产物中均存在。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 空仓库态的图形、标题与操作链接仍依赖全局组件规则；其它页面 Tailwind 迁移及 S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
