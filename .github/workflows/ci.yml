@@ -27,6 +27,9 @@ jobs:
 
       - run: pnpm check
 
+      - name: Build browser renderer
+        run: pnpm frontend:build
+
   package-smoke:
     name: Package smoke (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

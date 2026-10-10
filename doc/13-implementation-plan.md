@@ -4914,3 +4914,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、Tailwind v4 小阶段 448。
 - 限制/后续：仅移除 Welcome 按钮组布局规则；各按钮外观仍由现有共享样式负责，页面其他结构及响应式仍需迁移与发行版回归。S7.2、S7.4、S7.5 验收仍未全部完成。
 - 实施 commit：本阶段 Welcome 按钮组布局迁移与台账同一 commit。
+
+### 将浏览器 renderer 构建纳入 CI — 小阶段 453
+- 状态：已完成（CI 在现有 Electron/全量检查后额外构建浏览器 renderer）
+- 日期：2026-10-10
+- 交付：在 Windows 主 CI 的 `pnpm check` 后增加 `pnpm frontend:build` 步骤，确保 Tailwind v4 的 browser Vite 插件、CSS 入口、静态 class 扫描和浏览器打包不会只依赖本地验证；跨平台 packaged smoke 流程保持原样。
+- 验证：`js-yaml` 成功解析 `.github/workflows/ci.yml`，静态检查确认 `pnpm frontend:build` 紧跟主 `pnpm check`；`git diff --check` 通过；未新增或运行测试。
+- 手工验证：确认浏览器构建只增加在 Windows 主 CI job 中；Windows/macOS/Linux packaged smoke matrix 和发布签名流程未改动。
+- 证据：`.github/workflows/ci.yml`、`package.json`、前端规范第 2.1、6.1 节。
+- 限制/后续：该 CI 步骤验证浏览器 renderer 编译和产物生成，不替代发行包页面的人工外观验收；S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段 CI 浏览器构建门禁与台账同一 commit。
