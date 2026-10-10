@@ -5274,3 +5274,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3、8 节。
 - 限制/后续：Welcome 主操作按钮状态规则和复杂空态插图仍留 CSS；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段交互状态迁移与台账同一 commit。
+
+### 分支收藏快照组合下沉到 feature service — 小阶段 489
+- 状态：已完成（handler 负责提供端口并映射 API 错误，service 编排分支与收藏读取）
+- 日期：2026-10-10
+- 交付：新增 `read_branches_with_favorites`，在 branch feature service 中依次读取 Git 分支并从 `BranchFavoriteStorePort` 加载收藏标记，统一返回 `BranchSnapshot`；handler 不再直接执行 storage port 查询或遍历 DTO。store/join 失败映射为既有 Repository StorageUnavailable API 错误。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、定向 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml includes_saved_favorites_in_branch_snapshot -- --exact features::branches::service::tests::includes_saved_favorites_in_branch_snapshot`（1 passed）及 `git diff --check` 通过。
+- 手工验证：临时 Git 仓库创建 main commit，fake favorite store 返回 `refs/heads/<current>`；服务响应中对应 `BranchRef.is_favorite` 为 true。storage error 继续复用 `DatabaseUnavailable` API envelope。
+- 证据：`crates/gitcrest-core/src/features/branches/service.rs`、`crates/gitcrest-core/src/features/branches/handlers.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支写操作及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向测试与台账同一 commit。

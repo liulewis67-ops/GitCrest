@@ -532,6 +532,9 @@ impl ApiError {
                 ApiErrorCode::BranchesUnavailable,
                 "Git could not read the repository branches.",
             ),
+            branches::BranchError::StorageUnavailable => {
+                Self::from_repository_error(RepositoryError::StorageUnavailable)
+            }
         }
     }
 

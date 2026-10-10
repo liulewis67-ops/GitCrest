@@ -33,28 +33,16 @@ pub(super) async fn repository_branches(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    let mut snapshot = branches::read_branches_with_git(
+    let snapshot = branches::read_branches_with_favorites(
         repo_id,
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
         state.branch_git.as_ref(),
+        state.branch_favorites.clone(),
     )
     .await
     .map_err(ApiError::from_branch_error)?;
-    let favorites_store = state.branch_favorites.clone();
-    let favorite_repo_id = snapshot.repo_id.clone();
-    let favorites = tokio::task::spawn_blocking(move || {
-        favorites_store.list_branch_favorites(&favorite_repo_id)
-    })
-    .await
-    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?
-    .map_err(|_| ApiError::from_repository_error(RepositoryError::StorageUnavailable))?;
-    for branch in &mut snapshot.branches {
-        branch.is_favorite = favorites
-            .iter()
-            .any(|full_name| full_name == &branch.full_name);
-    }
     Ok(Json(snapshot))
 }
 

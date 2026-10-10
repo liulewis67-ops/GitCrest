@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 use serde::Serialize;
 
@@ -7,7 +7,7 @@ use crate::{
         branch::{is_branch_name_syntactically_valid, BranchReference},
         error::GitAdapterError,
     },
-    ports::branches::BranchGitPort,
+    ports::{branch_favorites::BranchFavoriteStorePort, branches::BranchGitPort},
 };
 
 #[cfg(test)]
@@ -51,6 +51,7 @@ pub enum BranchError {
     TimedOut,
     TooLarge,
     GitFailed,
+    StorageUnavailable,
 }
 
 pub async fn validate_branch_name_with_git(
@@ -116,6 +117,31 @@ pub async fn read_branches_with_git(
     })
 }
 
+pub async fn read_branches_with_favorites(
+    repo_id: String,
+    repository_path: &Path,
+    current: Option<&str>,
+    detached: bool,
+    git: &dyn BranchGitPort,
+    favorites_store: Arc<dyn BranchFavoriteStorePort>,
+) -> Result<BranchSnapshot, BranchError> {
+    let mut snapshot =
+        read_branches_with_git(repo_id, repository_path, current, detached, git).await?;
+    let favorite_repo_id = snapshot.repo_id.clone();
+    let favorites = tokio::task::spawn_blocking(move || {
+        favorites_store.list_branch_favorites(&favorite_repo_id)
+    })
+    .await
+    .map_err(|_| BranchError::StorageUnavailable)?
+    .map_err(|_| BranchError::StorageUnavailable)?;
+    for branch in &mut snapshot.branches {
+        branch.is_favorite = favorites
+            .iter()
+            .any(|full_name| full_name == &branch.full_name);
+    }
+    Ok(snapshot)
+}
+
 fn map_branch_reference(branch: BranchReference, current: Option<&str>) -> BranchRef {
     let kind = if branch.full_name.starts_with("refs/heads/") {
         BranchKind::Local
@@ -172,6 +198,43 @@ fn parse_track(value: &str) -> Result<(Option<u32>, Option<u32>, bool), BranchEr
 mod tests {
     use super::*;
     use std::{path::Path, process::Command as StdCommand};
+
+    struct BranchFavorites(Vec<String>);
+
+    impl BranchFavoriteStorePort for BranchFavorites {
+        fn list_branch_favorites(
+            &self,
+            _repo_id: &str,
+        ) -> Result<Vec<String>, crate::domain::error::RepositoryError> {
+            Ok(self.0.clone())
+        }
+
+        fn set_branch_favorite(
+            &self,
+            _repo_id: &str,
+            _full_name: &str,
+            _favorite: bool,
+        ) -> Result<(), crate::domain::error::RepositoryError> {
+            Ok(())
+        }
+
+        fn rename_branch_favorite(
+            &self,
+            _repo_id: &str,
+            _old_full_name: &str,
+            _new_full_name: &str,
+        ) -> Result<(), crate::domain::error::RepositoryError> {
+            Ok(())
+        }
+
+        fn remove_branch_favorite(
+            &self,
+            _repo_id: &str,
+            _full_name: &str,
+        ) -> Result<(), crate::domain::error::RepositoryError> {
+            Ok(())
+        }
+    }
 
     fn git(path: &Path, args: &[&str]) -> String {
         let output = StdCommand::new("git")
@@ -232,6 +295,36 @@ mod tests {
             .branches
             .iter()
             .any(|branch| branch.name == default && !branch.is_current));
+    }
+
+    #[tokio::test]
+    async fn includes_saved_favorites_in_branch_snapshot() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        git(path, &["init", "--quiet"]);
+        git(path, &["config", "user.name", "Branch Test"]);
+        git(path, &["config", "user.email", "branch@example.invalid"]);
+        std::fs::write(path.join("file.txt"), "base\n").unwrap();
+        git(path, &["add", "file.txt"]);
+        git(path, &["commit", "--quiet", "-m", "base"]);
+        let current = git(path, &["branch", "--show-current"]);
+
+        let snapshot = read_branches_with_favorites(
+            "repo_fixture".into(),
+            path,
+            Some(&current),
+            false,
+            &GitBranchAdapter,
+            Arc::new(BranchFavorites(vec![format!("refs/heads/{current}")])),
+        )
+        .await
+        .unwrap();
+
+        assert!(snapshot
+            .branches
+            .iter()
+            .find(|branch| branch.name == current)
+            .is_some_and(|branch| branch.is_favorite));
     }
 
     #[test]
