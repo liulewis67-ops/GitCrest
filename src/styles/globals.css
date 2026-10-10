@@ -116,7 +116,6 @@ button:disabled { cursor: not-allowed; }
     radial-gradient(ellipse at 18% 20%, rgb(83 127 151 / 8%), transparent 34%),
     var(--canvas);
 }
-.welcomeIntro { max-width: 710px; }
 .sectionEyebrow { margin: 0 0 10px; color: var(--text-muted); font-size: 9px; font-weight: 750; letter-spacing: .14em; }
 .openRepositoryError { max-width: 720px; margin-top: 13px; padding: 9px 11px; border: 1px solid color-mix(in srgb, var(--danger), transparent 55%); border-radius: 5px; background: color-mix(in srgb, var(--danger), transparent 93%); color: var(--danger); font-size: 10px; }
 .primaryButton, .secondaryButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-raised); color: var(--text); font-size: 11px; font-weight: 600; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, transform .12s ease; }
