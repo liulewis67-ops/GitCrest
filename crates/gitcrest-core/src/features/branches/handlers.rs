@@ -194,6 +194,10 @@ pub(super) async fn rename_repository_branch(
     let repo_for_favorite = repo_id.clone();
     let old_full_name = format!("refs/heads/{}", request.name);
     let new_full_name = format!("refs/heads/{}", request.new_name);
+    let favorite_mutation = branches::BranchFavoriteMutation::Rename {
+        old_full_name,
+        new_full_name,
+    };
     let task = state
         .tasks
         .submit(
@@ -202,27 +206,29 @@ pub(super) async fn rename_repository_branch(
             target.resource_key,
             "branchRename",
             move |context| async move {
-                command
-                    .execute_branch(
-                        &path,
-                        BranchCommand::Rename {
-                            old_name: request.name,
-                            new_name: request.new_name,
-                        },
-                        context,
-                    )
-                    .await?;
-                tokio::task::spawn_blocking(move || {
-                    favorites_store.rename_branch_favorite(
-                        &repo_for_favorite,
-                        &old_full_name,
-                        &new_full_name,
-                    )
-                })
+                branches::execute_branch_and_update_favorites(
+                    repo_for_favorite,
+                    favorite_mutation,
+                    favorites_store,
+                    || async move {
+                        command
+                            .execute_branch(
+                                &path,
+                                BranchCommand::Rename {
+                                    old_name: request.name,
+                                    new_name: request.new_name,
+                                },
+                                context,
+                            )
+                            .await
+                    },
+                )
                 .await
-                .map_err(|_| TaskFailure::Failed("Branch favorite storage is unavailable.".into()))?
-                .map_err(|_| {
-                    TaskFailure::Failed("Branch favorite storage is unavailable.".into())
+                .map_err(|failure| match failure {
+                    branches::BranchTaskFailure::Command(failure) => failure,
+                    branches::BranchTaskFailure::StorageUnavailable => {
+                        TaskFailure::Failed("Branch favorite storage is unavailable.".into())
+                    }
                 })?;
                 Ok(None)
             },
@@ -290,6 +296,7 @@ pub(super) async fn delete_repository_branch(
     let favorites_store = state.branch_favorites.clone();
     let repo_for_favorite = repo_id.clone();
     let full_name = format!("refs/heads/{}", request.name);
+    let favorite_mutation = branches::BranchFavoriteMutation::Remove { full_name };
     let task = state
         .tasks
         .submit(
@@ -298,23 +305,29 @@ pub(super) async fn delete_repository_branch(
             target.resource_key,
             "branchDelete",
             move |context| async move {
-                command
-                    .execute_branch(
-                        &path,
-                        BranchCommand::Delete {
-                            name: request.name,
-                            allow_unmerged: request.allow_unmerged,
-                        },
-                        context,
-                    )
-                    .await?;
-                tokio::task::spawn_blocking(move || {
-                    favorites_store.remove_branch_favorite(&repo_for_favorite, &full_name)
-                })
+                branches::execute_branch_and_update_favorites(
+                    repo_for_favorite,
+                    favorite_mutation,
+                    favorites_store,
+                    || async move {
+                        command
+                            .execute_branch(
+                                &path,
+                                BranchCommand::Delete {
+                                    name: request.name,
+                                    allow_unmerged: request.allow_unmerged,
+                                },
+                                context,
+                            )
+                            .await
+                    },
+                )
                 .await
-                .map_err(|_| TaskFailure::Failed("Branch favorite storage is unavailable.".into()))?
-                .map_err(|_| {
-                    TaskFailure::Failed("Branch favorite storage is unavailable.".into())
+                .map_err(|failure| match failure {
+                    branches::BranchTaskFailure::Command(failure) => failure,
+                    branches::BranchTaskFailure::StorageUnavailable => {
+                        TaskFailure::Failed("Branch favorite storage is unavailable.".into())
+                    }
                 })?;
                 Ok(None)
             },

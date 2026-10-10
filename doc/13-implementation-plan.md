@@ -5384,3 +5384,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
+
+### 分支写任务与收藏存储一致性编排下沉 — 小阶段 500
+- 状态：已完成（rename/delete 任务在 Git 写入成功后才更新收藏存储）
+- 日期：2026-10-10
+- 交付：新增 `execute_branch_and_update_favorites`，统一编排异步分支命令和同步 favorites storage port：Git 命令失败时立即返回、不触碰收藏；Git 命令成功后才在线程池中执行 rename/remove 收藏更新。rename/delete handlers 不再直接处理 `spawn_blocking`、storage port 或 Git/storage 顺序。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（6 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：fake command 的失败路径保留旧收藏；成功 rename 将收藏 ref 更新到新名称；成功 delete 移除对应收藏。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支命令的任务提交/执行上下文及其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向测试与台账同一 commit。

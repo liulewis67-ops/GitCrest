@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{future::Future, path::Path, sync::Arc};
 
 use serde::Serialize;
 
@@ -66,6 +66,51 @@ pub enum BranchError {
     RequiresCommit,
     Current,
     Unmerged(u32),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum BranchFavoriteMutation {
+    Rename {
+        old_full_name: String,
+        new_full_name: String,
+    },
+    Remove {
+        full_name: String,
+    },
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum BranchTaskFailure<E> {
+    Command(E),
+    StorageUnavailable,
+}
+
+pub async fn execute_branch_and_update_favorites<E, F, Fut>(
+    repo_id: String,
+    mutation: BranchFavoriteMutation,
+    favorites_store: Arc<dyn BranchFavoriteStorePort>,
+    execute_command: F,
+) -> Result<(), BranchTaskFailure<E>>
+where
+    E: Send,
+    F: FnOnce() -> Fut + Send,
+    Fut: Future<Output = Result<(), E>> + Send,
+{
+    execute_command()
+        .await
+        .map_err(BranchTaskFailure::Command)?;
+    tokio::task::spawn_blocking(move || match mutation {
+        BranchFavoriteMutation::Rename {
+            old_full_name,
+            new_full_name,
+        } => favorites_store.rename_branch_favorite(&repo_id, &old_full_name, &new_full_name),
+        BranchFavoriteMutation::Remove { full_name } => {
+            favorites_store.remove_branch_favorite(&repo_id, &full_name)
+        }
+    })
+    .await
+    .map_err(|_| BranchTaskFailure::StorageUnavailable)?
+    .map_err(|_| BranchTaskFailure::StorageUnavailable)
 }
 
 pub async fn validate_branch_name_with_git(
@@ -442,17 +487,28 @@ mod tests {
         fn rename_branch_favorite(
             &self,
             _repo_id: &str,
-            _old_full_name: &str,
-            _new_full_name: &str,
+            old_full_name: &str,
+            new_full_name: &str,
         ) -> Result<(), crate::domain::error::RepositoryError> {
+            let mut favorites = self.0.lock().unwrap();
+            if let Some(favorite) = favorites
+                .iter_mut()
+                .find(|value| value.as_str() == old_full_name)
+            {
+                *favorite = new_full_name.to_owned();
+            }
             Ok(())
         }
 
         fn remove_branch_favorite(
             &self,
             _repo_id: &str,
-            _full_name: &str,
+            full_name: &str,
         ) -> Result<(), crate::domain::error::RepositoryError> {
+            self.0
+                .lock()
+                .unwrap()
+                .retain(|favorite| favorite != full_name);
             Ok(())
         }
     }
@@ -718,6 +774,54 @@ mod tests {
         .await;
 
         assert!(matches!(result, Err(BranchError::NotFound)));
+    }
+
+    #[tokio::test]
+    async fn updates_favorites_only_after_branch_command_succeeds() {
+        let old_full_name = "refs/heads/feature/one".to_owned();
+        let new_full_name = "refs/heads/feature/two".to_owned();
+        let store = Arc::new(RecordingBranchFavorites(std::sync::Mutex::new(vec![
+            old_full_name.clone(),
+        ])));
+
+        let failed = execute_branch_and_update_favorites(
+            "repo_fixture".into(),
+            BranchFavoriteMutation::Rename {
+                old_full_name: old_full_name.clone(),
+                new_full_name: new_full_name.clone(),
+            },
+            store.clone(),
+            || async { Err("git failed") },
+        )
+        .await;
+
+        assert_eq!(failed, Err(BranchTaskFailure::Command("git failed")));
+        assert_eq!(store.0.lock().unwrap().as_slice(), &[old_full_name]);
+
+        execute_branch_and_update_favorites(
+            "repo_fixture".into(),
+            BranchFavoriteMutation::Rename {
+                old_full_name: "refs/heads/feature/one".into(),
+                new_full_name: new_full_name.clone(),
+            },
+            store.clone(),
+            || async { Ok::<(), &str>(()) },
+        )
+        .await
+        .unwrap();
+        assert_eq!(store.0.lock().unwrap().as_slice(), &[new_full_name.clone()]);
+
+        execute_branch_and_update_favorites(
+            "repo_fixture".into(),
+            BranchFavoriteMutation::Remove {
+                full_name: new_full_name,
+            },
+            store.clone(),
+            || async { Ok::<(), &str>(()) },
+        )
+        .await
+        .unwrap();
+        assert!(store.0.lock().unwrap().is_empty());
     }
 
     #[test]
