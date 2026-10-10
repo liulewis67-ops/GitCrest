@@ -4994,3 +4994,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`src/features/history/model/use-repository-history.ts`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-pending-stage459.json`、`doc/evidence/S7.2/api-win32-indexed-search-stage459.json`。
 - 限制/后续：pending 初次响应已低于 200ms，但用户可见完整结果仍需约 1.78s P95；Git 遍历与 SQLite/FTS 索引构建仍是冷路径主要成本，不能据此宣称 S7.2 搜索结果门槛通过。S7.2、S7.4、S7.5 仍未全部完成。
 - 实施 commit：本阶段 pending 契约、基准更新、两份测量报告与台账同一 commit。
+
+### Welcome 底部信息栏迁移到 Tailwind — 小阶段 461
+- 状态：已完成（底部信息栏的布局、间距、文字样式与窄屏隐藏规则使用静态 utility）
+- 日期：2026-10-10
+- 交付：将 Welcome 底部信息栏的 flex 布局、自动顶部留白、内边距、间距、文字尺寸/颜色，以及 560px 下的信息项隐藏迁到 JSX；保留 divider 的全局边线样式与 spacer 的共享伸展职责。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage461-browser` 与 `git diff --check` 通过；构建 CSS 含 12px gap、28px padding-top、9px 字号和 560px 以下 `display:none` 规则；未新增或运行测试。构建有既有 web-tree-sitter eval、chunk size 与外部 outDir 提示，不影响成功结果。
+- 手工验证：核对 JSX 类名对应原 `welcomeFooter` 的 flex、垂直居中、12px 间距、自动上边距、28px 顶部内边距、主题次级文字色和 9px 字号；三个信息文本与分隔线在 560px 以下隐藏，弹性占位和“Explore the workspace”操作保留；divider 原有 1px 线样式继续由全局 CSS 提供。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 6 节。
+- 限制/后续：仅迁移底部信息栏常规排版和窄屏隐藏规则；Welcome 页面外壳、section eyebrow 及业务内容样式仍待逐项迁移，S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段样式迁移与台账同一 commit。

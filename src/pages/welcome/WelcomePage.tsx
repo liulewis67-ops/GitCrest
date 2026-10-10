@@ -94,7 +94,14 @@ export function WelcomePage({
               <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Initialize creates Git metadata only in the folder you select and keeps its files.</div>
             </aside>
           </div>
-          <footer className="welcomeFooter"><span>Private by default</span><span className="footerDivider" /><span>Your repositories stay on this device</span><span className="footerSpacer" /><span>{version || "Local engine"}</span><button type="button" className="textButton" onClick={() => onNavigateWorkspace()}>Explore the workspace <span aria-hidden="true">→</span></button></footer>
+          <footer className="mt-auto flex items-center gap-[12px] pt-[28px] text-[9px] text-muted">
+            <span className="max-[560px]:hidden">Private by default</span>
+            <span className="footerDivider max-[560px]:hidden" />
+            <span className="max-[560px]:hidden">Your repositories stay on this device</span>
+            <span className="footerSpacer" />
+            <span className="max-[560px]:hidden">{version || "Local engine"}</span>
+            <button type="button" className="textButton" onClick={() => onNavigateWorkspace()}>Explore the workspace <span aria-hidden="true">→</span></button>
+          </footer>
         </section>
   );
 }
