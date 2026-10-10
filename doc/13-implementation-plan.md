@@ -4984,3 +4984,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/credentials/mod.rs`、`crates/gitcrest-core/src/credentials/askpass.rs`、`crates/gitcrest-core/src/refresh/watcher.rs`。
 - 限制/后续：本阶段修复测试编译/生命周期，不替代完整后端测试套件与平台验收；S7.2、S7.4、S7.5 仍未全部完成。
 - 实施 commit：本阶段测试辅助修复与台账同一 commit。
+
+### 冷 message search 先返回索引 pending — 小阶段 459
+- 状态：已完成（首次 API 响应低于 200ms；冷搜索结果就绪耗时仍待优化）
+- 日期：2026-10-10
+- 交付：对长度至少 3 的 message-only 首页面搜索，在索引未命中且可得 refs fingerprint 时先启动或等待受监督的索引构建，并返回空 `searchPending: true` 页面；不再同步执行全量 `git log --grep`。索引 ready 后下一次轮询返回 FTS 命中；索引无法启动、fingerprint 不可用、存储查询/对象水合异常及短查询仍走原 Git 搜索回退。前端已有 500ms 轮询和“Preparing message search…”加载状态，行为与协议契约一致。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、定向 `cargo test ... indexed_message_search_matches_git_order_and_invalidates_after_ref_changes`（1 passed）、`cargo build --release --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`node --check scripts/performance/benchmark.mjs` 通过。Windows release sidecar、20 次 100k commit synthetic fixture：冷请求 pending 首响 P95 17.179ms；索引 ready 且目标提交可返回的全流程 P95 1,778.623ms；warm-index message search P95 20.457ms。未新增测试。
+- 手工验证：20 个冷样本均先返回空 pending 页面，等待索引就绪后均返回目标提交；warm 样本也均命中目标提交。索引预热约 1,500ms。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`src/features/history/model/use-repository-history.ts`、`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-pending-stage459.json`、`doc/evidence/S7.2/api-win32-indexed-search-stage459.json`。
+- 限制/后续：pending 初次响应已低于 200ms，但用户可见完整结果仍需约 1.78s P95；Git 遍历与 SQLite/FTS 索引构建仍是冷路径主要成本，不能据此宣称 S7.2 搜索结果门槛通过。S7.2、S7.4、S7.5 仍未全部完成。
+- 实施 commit：本阶段 pending 契约、基准更新、两份测量报告与台账同一 commit。

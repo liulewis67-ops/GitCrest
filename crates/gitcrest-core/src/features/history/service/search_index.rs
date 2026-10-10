@@ -127,6 +127,38 @@ pub async fn read_page_indexed(
         }
     }
 
+    if message_only_search && offset == 0 {
+        if store.is_index_building(&repo_id) {
+            return Ok(CommitPage {
+                repo_id,
+                offset,
+                limit,
+                commits: Vec::new(),
+                next_offset: None,
+                search_pending: true,
+            });
+        }
+        if let Some(fingerprint) = fingerprint.as_deref() {
+            let started = schedule_history_index_build(
+                repo_id.clone(),
+                repository_path.to_owned(),
+                head.map(str::to_owned),
+                Some(fingerprint.to_owned()),
+                store.clone(),
+            );
+            if started || store.is_index_building(&repo_id) {
+                return Ok(CommitPage {
+                    repo_id,
+                    offset,
+                    limit,
+                    commits: Vec::new(),
+                    next_offset: None,
+                    search_pending: true,
+                });
+            }
+        }
+    }
+
     let page = read_page(
         repo_id.clone(),
         repository_path,

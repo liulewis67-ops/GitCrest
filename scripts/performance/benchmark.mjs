@@ -273,12 +273,12 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
       const initialPage = await requestJson(searchUrl, instance.token);
       initialResponseSamplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
       const deadline = startedAt + 30_000;
-      if (!initialPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
-        throw new Error("Cold history search did not return its matching commit.");
+      if (initialPage.searchPending !== true || initialPage.commits.length !== 0) {
+        throw new Error("Cold history search should return an empty pending page while its index builds.");
       }
       await waitForHistoryIndex(instance, deadline);
       const indexedPage = await requestJson(searchUrl, instance.token);
-      if (!indexedPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+      if (indexedPage.searchPending === true || !indexedPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
         throw new Error("Indexed history search did not return its matching commit.");
       }
       samplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
@@ -367,14 +367,14 @@ async function runIndexedHistorySearchBenchmark(fixturePath, reportPath) {
     const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
     const indexStartedAt = performance.now();
     const initialPage = await requestJson(searchUrl, started.token);
-    if (!initialPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
-      throw new Error("Initial history search did not return its matching commit.");
+    if (initialPage.searchPending !== true || initialPage.commits.length !== 0) {
+      throw new Error("Initial history search should return an empty pending page while its index builds.");
     }
     await waitForHistoryIndex(started, indexStartedAt + 30_000);
     const attempts = 1;
     const indexReadyMs = Number((performance.now() - indexStartedAt).toFixed(3));
     const page = await requestJson(searchUrl, started.token);
-    if (!page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+    if (page.searchPending === true || !page.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
       throw new Error("Indexed history search did not return its matching commit.");
     }
     const indexedSearch = await measure("historySearch100kIndexed", async () => {
