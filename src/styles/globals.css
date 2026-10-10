@@ -141,10 +141,6 @@ button:disabled { cursor: not-allowed; }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 .repositoryMissing .repoStatusGlyph, .repositoryMissing .repositoryRowText small { color: var(--warning); }
 .repoStatusGlyph { color: var(--green); font-size: 8px; }
-.repositoryRowText { min-width: 0; }
-.repositoryRowText strong, .repositoryRowText small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.repositoryRowText strong { color: var(--text-secondary); font-size: 10px; font-weight: 620; }
-.repositoryRowText small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
 .repositoryBranch { max-width: 112px; overflow: hidden; color: var(--text-muted); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
 .inlineAction { padding: 3px; background: transparent; color: var(--accent-strong); font-size: 10px; }
 .inlineAction:disabled { color: var(--text-muted); }

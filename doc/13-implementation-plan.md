@@ -5174,3 +5174,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：仓库行操作按钮视觉状态样式仍由全局 CSS 管理；仓库状态标记、文本和分支标签继续待迁移。S7.2、S7.4、S7.5 验收仍未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 仓库名称与路径文字迁移到 Tailwind — 小阶段 479
+- 状态：已完成（仓库名称/路径排版使用静态 utility）
+- 日期：2026-10-10
+- 交付：将仓库名称与路径的单行截断、颜色 Token、字号和路径 3px 顶间距迁入 JSX；移除 `.repositoryRowText` wrapper 及其全部全局规则，外层改用 `min-w-0` 保持 flex/grid 收缩边界。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage479-browser`、`git diff --check` 通过；源码检索确认无残余 `.repositoryRowText` 引用。生产构建成功，保留既有 web-tree-sitter eval、chunk size、外部 outDir 提示；未新增或运行测试。
+- 手工验证：名称保留 10px/620、路径保留 9px 和 3px 顶边距；两者继续单行溢出省略，颜色分别映射到 `--text-secondary`、`--text-muted`。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：分支标签、状态 glyph 和剩余 Welcome 业务视觉仍在全局 CSS；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
