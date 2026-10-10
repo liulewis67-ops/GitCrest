@@ -5066,3 +5066,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-concurrent-index-stage467.json`、`doc/evidence/S7.2/api-win32-cold-git-fallback-stage466.json`。
 - 限制/后续：顺序策略下搜索结果 P95 仍约 600ms，冷搜索 <200ms 目标未达成；继续优化 Git message scan 本身及实际打开历史页后的并发路径。S7.2、S7.4、S7.5 整体验收仍未完成。
 - 实施 commit：本阶段对照报告与台账同一 commit；未保留并发实现。
+
+### 测量首屏历史加载后立即搜索 — 小阶段 468
+- 状态：已完成（增加贴近首次进入历史页的冷搜索流程基准；时延仍待优化）
+- 日期：2026-10-10
+- 交付：性能脚本增加 `cold-after-history` 场景：每轮启动新 sidecar/空数据库、注册 100k fixture、加载 50 条初始历史（触发真实页面会启动的后台索引），随后立即执行消息搜索；分别报告首屏、搜索结果和索引就绪时延。
+- 验证：`node --check scripts/performance/benchmark.mjs`、`git diff --check` 与 Windows Release sidecar 20 轮流程通过。首屏历史 P50/P95 80.608/100.026ms；紧随其后的完整搜索 P50/P95/max 717.230/811.288/811.311ms；后台索引就绪从搜索起点计 P50/P95 1,487.526/1,743.292ms；20 轮均先返回目标 Git 结果，索引就绪后再次查询也返回目标提交。
+- 手工验证：确认每轮先检查首屏恰好返回 50 个提交，再计时消息查询；首屏请求会启动索引构建，查询路径返回完整结果而非 pending；输出同时采集 Git、FTS、持久化阶段时间。
+- 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-after-history-stage468.json`。
+- 限制/后续：贴近真实首次历史页交互的完整结果 P95 为 811ms，仍超过 <200ms；后端全历史 Git 查询和并行索引争用仍待优化。S7.2、S7.4、S7.5 整体验收未完成。
+- 实施 commit：本阶段基准场景、20 轮报告与台账同一 commit。

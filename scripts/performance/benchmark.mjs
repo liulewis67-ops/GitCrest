@@ -16,7 +16,7 @@ const iterations = Number(process.env.GITCREST_BENCH_ITERATIONS || 20);
 const args = process.argv.slice(2);
 
 function usage() {
-  process.stdout.write("Usage:\n  node scripts/performance/benchmark.mjs prepare [fixture-path]\n  node scripts/performance/benchmark.mjs cold [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs diagnose-search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs run [fixture-path] [report-path]\n");
+  process.stdout.write("Usage:\n  node scripts/performance/benchmark.mjs prepare [fixture-path]\n  node scripts/performance/benchmark.mjs cold [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs cold-after-history [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs diagnose-search [fixture-path] [report-path]\n  node scripts/performance/benchmark.mjs run [fixture-path] [report-path]\n");
 }
 
 async function git(cwd, args, options = {}) {
@@ -246,10 +246,11 @@ async function waitForHistoryIndex(instance, deadline, intervalMs = 50) {
   }
 }
 
-async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
+async function measureColdHistorySearch(executable, fixturePath, tempDataPath, { prefetchHistoryPage = false } = {}) {
   const samplesMs = [];
   const initialResponseSamplesMs = [];
   const indexReadySamplesMs = [];
+  const historyPageSamplesMs = [];
   const phaseSamples = {
     git: [],
     parse: [],
@@ -269,6 +270,13 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
       instance = await startSidecar(executable, databasePath);
       const baseUrl = `http://${instance.address.host}:${instance.address.port}`;
       const repository = await requestJson(`${baseUrl}/api/v1/repositories`, instance.token, "POST", { path: fixturePath });
+      const historyUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50`;
+      if (prefetchHistoryPage) {
+        const historyPageStartedAt = performance.now();
+        const historyPage = await requestJson(historyUrl, instance.token);
+        historyPageSamplesMs.push(Number((performance.now() - historyPageStartedAt).toFixed(3)));
+        if (historyPage.commits.length !== 50) throw new Error(`Expected 50 initial history entries, got ${historyPage.commits.length}`);
+      }
       const startedAt = performance.now();
       const searchUrl = `${baseUrl}/api/v1/repositories/${repository.repoId}/commits?offset=0&limit=50&message=benchmark%20commit%20099999`;
       const initialPage = await requestJson(searchUrl, instance.token);
@@ -296,7 +304,7 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
     }
   }
   return {
-    name: "historySearch100kColdGitFallback",
+    name: prefetchHistoryPage ? "historySearch100kAfterInitialHistoryPage" : "historySearch100kColdGitFallback",
     samples: samplesMs.length,
     p50Ms: percentile(samplesMs, 0.5),
     p95Ms: percentile(samplesMs),
@@ -305,6 +313,12 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath) {
     initialResponseP95Ms: percentile(initialResponseSamplesMs),
     initialResponseMaxMs: Math.max(...initialResponseSamplesMs),
     initialResponseSamplesMs,
+    ...(prefetchHistoryPage ? {
+      historyPageP50Ms: percentile(historyPageSamplesMs, 0.5),
+      historyPageP95Ms: percentile(historyPageSamplesMs),
+      historyPageMaxMs: Math.max(...historyPageSamplesMs),
+      historyPageSamplesMs,
+    } : {}),
     indexReadyP50Ms: percentile(indexReadySamplesMs, 0.5),
     indexReadyP95Ms: percentile(indexReadySamplesMs),
     indexReadyMaxMs: Math.max(...indexReadySamplesMs),
@@ -410,11 +424,11 @@ async function runIndexedHistorySearchBenchmark(fixturePath, reportPath) {
   }
 }
 
-async function runColdBenchmark(fixturePath, reportPath) {
+async function runColdBenchmark(fixturePath, reportPath, options = {}) {
   const executable = join(root, "crates", "gitcrest-core", "target", "release", process.platform === "win32" ? "gitcrest-core.exe" : "gitcrest-core");
   const tempData = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-cold-data-"));
   try {
-    const coldHistorySearch = await measureColdHistorySearch(executable, fixturePath, tempData);
+    const coldHistorySearch = await measureColdHistorySearch(executable, fixturePath, tempData, options);
     const report = {
       generatedAt: new Date().toISOString(),
       host: { os: `${os.type()} ${os.release()}`, platform: process.platform, arch: process.arch, cpu: await cpuModel(), logicalCpus: os.cpus().length, totalMemoryBytes: os.totalmem(), storage: await storageInfo() },
@@ -562,6 +576,10 @@ if (command === "prepare") {
   if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
   const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}-cold.json`));
   await runColdBenchmark(fixturePath, reportPath);
+} else if (command === "cold-after-history") {
+  if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
+  const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}-cold-after-history.json`));
+  await runColdBenchmark(fixturePath, reportPath, { prefetchHistoryPage: true });
 } else if (command === "search") {
   if (iterations < 20) throw new Error("The plan requires at least 20 measured runs; use GITCREST_BENCH_ITERATIONS >= 20.");
   const reportPath = resolve(args[2] || join(root, "doc", "evidence", "S7.2", `api-${process.platform}-indexed-search.json`));
