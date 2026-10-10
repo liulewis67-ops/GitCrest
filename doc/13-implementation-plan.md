@@ -4864,3 +4864,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/main.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 3、6 节。
 - 限制/后续：Electron 双 renderer 构建及打包页面仍需随 Tailwind v4 接入统一核验；Tailwind v4 及业务组件工具类迁移尚未完成。S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段 renderer 样式入口调整与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 接入 Tailwind v4 双 renderer 构建和现有主题映射 — 小阶段 448
+- 状态：已完成（浏览器与 Electron renderer 均接入 Tailwind v4；新组件可使用现有主题变量映射）
+- 日期：2026-10-10
+- 交付：安装 `tailwindcss` 与 `@tailwindcss/vite` v4，分别加入浏览器 Vite 与 Electron renderer 插件；全局 CSS 按 v4 方式导入 Tailwind、显式限制扫描到 `src/`、声明现有深色主题变体，并用 `@theme inline` 将颜色、阴影和字体映射成语义 utility。未迁移现有业务组件样式。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出到 `E:/gitcrest-stage448-browser`）、`electron-vite build`（输出到 `E:/gitcrest-stage448-electron`）及 `git diff --check` 通过；未新增或运行测试。构建保留既有 web-tree-sitter `eval` 与大 chunk 警告。
+- 手工验证：在隔离浏览器预览中打开 Tailwind 构建后的 Welcome 页面，视觉确认标题、按钮、间距与主题样式正常；两套主题的变量名和值均保留，纯浏览器环境提示 desktop bridge 不可用符合预期。该截图未覆盖需要 renderer 接口的数据表单；临时预览服务与页面已关闭。
+- 证据：`package.json`、`pnpm-lock.yaml`、`vite.config.ts`、`electron.vite.config.ts`、`src/styles/globals.css`、`src/styles/tokens.css`、官方 [Vite 安装说明](https://tailwindcss.com/docs/installation/using-vite) 与 [source detection](https://tailwindcss.com/docs/detecting-classes-in-source-files)。
+- 限制/后续：需验证 Preflight 与现有 CSS 的实际交互，业务组件仍未迁移到 Tailwind utility；生产打包后的页面验收另行完成。S7.2、S7.4、S7.5 仍未全部验收。
+- 实施 commit：本阶段依赖、双构建插件、主题映射和台账同一 commit。
