@@ -4974,3 +4974,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-full-stage458.json`。
 - 限制/后续：当前 API 指标中的冷搜索仍失败，且完整桌面 Working Set、30 秒 compositor presented-frame P5、安装包大小和跨平台性能尚未通过发行版复测；S7.2、S7.4、S7.5 仍进行中。
 - 实施 commit：本阶段 benchmark watcher 同步修复、20 次 API 报告与台账同一 commit。
+
+### 修复后端测试辅助代码可见性与 watcher 停止 — 小阶段 460
+- 状态：已完成（后端定向测试可编译并通过）
+- 日期：2026-10-10
+- 交付：Askpass 测试辅助函数仅在 credentials 父模块内部导入，避免把 child-only `pub(super)` 函数重新导出到更宽的 crate 根可见范围；watcher 生命周期测试为 `run` 创建 shutdown channel，在断言结束后发停止信号并等待任务退出，匹配生产 graceful shutdown 接口。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check` 与 `cargo test --manifest-path crates/gitcrest-core/Cargo.toml indexed_message_search_matches_git_order_and_invalidates_after_ref_changes` 通过（1 passed，142 filtered out）。
+- 手工验证：确认 watcher 测试不会通过 abort 丢弃资源清理路径；token/Askpass 行为未改变。
+- 证据：`crates/gitcrest-core/src/credentials/mod.rs`、`crates/gitcrest-core/src/credentials/askpass.rs`、`crates/gitcrest-core/src/refresh/watcher.rs`。
+- 限制/后续：本阶段修复测试编译/生命周期，不替代完整后端测试套件与平台验收；S7.2、S7.4、S7.5 仍未全部完成。
+- 实施 commit：本阶段测试辅助修复与台账同一 commit。

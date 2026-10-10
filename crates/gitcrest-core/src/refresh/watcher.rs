@@ -600,7 +600,13 @@ mod tests {
         let status = StatusService::new(repositories.clone());
         let events = EventBus::default();
         let mut receiver = events.subscribe();
-        let watcher = tokio::spawn(run(repositories.clone(), status.clone(), events));
+        let (shutdown_sender, shutdown_receiver) = watch::channel(false);
+        let watcher = tokio::spawn(run(
+            repositories.clone(),
+            status.clone(),
+            events,
+            shutdown_receiver,
+        ));
 
         tokio::time::timeout(Duration::from_secs(8), async {
             loop {
@@ -712,6 +718,7 @@ mod tests {
         })
         .await
         .expect("external ref updates should refresh branch and history views");
-        watcher.abort();
+        let _ = shutdown_sender.send(true);
+        watcher.await.unwrap();
     }
 }

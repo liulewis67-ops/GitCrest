@@ -15,7 +15,7 @@ pub use askpass::answer_askpass_prompt;
 pub use askpass::{parse_askpass_prompt, AskpassPromptKind};
 
 #[cfg(test)]
-pub(super) use askpass::answer_askpass_prompt_with_manager;
+use askpass::answer_askpass_prompt_with_manager;
 
 const MAX_CREDENTIAL_BYTES: usize = 64 * 1024;
 
