@@ -88,13 +88,13 @@ export function WelcomePage({
                 <div><p className="m-0 mb-[5px] text-muted text-[9px] font-[750] tracking-[.14em]">GET STARTED</p><h2 id="quick-heading" className="m-0 text-[13px] font-[620] tracking-[-.02em]">Quick actions</h2></div>
               </div>
                 <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={`Open local repository (${displayShortcut(shortcuts.openRepository, isMacPlatform)})`}>
-                <span className="actionIcon" aria-hidden="true">↗</span><span><strong>Open local repository</strong><small>Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
+                <span className="actionIcon" aria-hidden="true">↗</span><span><strong className="block text-foreground-secondary text-[10px] font-[620]">Open local repository</strong><small className="mt-[3px] block text-muted text-[9px]">Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
               <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={!connected} onClick={() => { onCloneRepository() }}>
-                <span className="actionIcon" aria-hidden="true">⇣</span><span><strong>Clone a repository</strong><small>Bring a remote project here</small></span><span className="actionArrow" aria-hidden="true">→</span>
+                <span className="actionIcon" aria-hidden="true">⇣</span><span><strong className="block text-foreground-secondary text-[10px] font-[620]">Clone a repository</strong><small className="mt-[3px] block text-muted text-[9px]">Bring a remote project here</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
               <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={() => void onInitializeRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.initializeRepository, isMacPlatform)} title={`Initialize a repository (${displayShortcut(shortcuts.initializeRepository, isMacPlatform)})`}>
-                <span className="actionIcon" aria-hidden="true">＋</span><span><strong>Initialize a repository</strong><small>Start tracking a new project</small></span><span className="actionArrow" aria-hidden="true">→</span>
+                <span className="actionIcon" aria-hidden="true">＋</span><span><strong className="block text-foreground-secondary text-[10px] font-[620]">Initialize a repository</strong><small className="mt-[3px] block text-muted text-[9px]">Start tracking a new project</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>
               <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Initialize creates Git metadata only in the folder you select and keeps its files.</div>
             </aside>

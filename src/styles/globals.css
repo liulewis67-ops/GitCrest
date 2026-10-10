@@ -144,9 +144,6 @@ button:disabled { cursor: not-allowed; }
 .actionRow:not(:disabled) { cursor: pointer; }
 .actionRow:not(:disabled):hover { background: var(--surface-soft); }
 .actionIcon { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 6px; color: var(--accent-strong); font-size: 14px; }
-.actionRow strong, .actionRow small { display: block; }
-.actionRow strong { color: var(--text-secondary); font-size: 10px; font-weight: 620; }
-.actionRow small { margin-top: 3px; color: var(--text-muted); font-size: 9px; }
 .actionArrow { color: var(--text-muted); font-size: 13px; }
 .actionFootnote { display: flex; align-items: flex-start; gap: 7px; margin-top: 13px; color: var(--text-muted); font-size: 9px; line-height: 1.5; }
 .infoIcon { display: inline-grid; flex: 0 0 14px; place-items: center; width: 14px; height: 14px; border: 1px solid var(--line-strong); border-radius: 50%; font-size: 8px; }

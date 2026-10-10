@@ -5209,8 +5209,18 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 状态：已完成（3 个快捷操作行共享静态布局类）
 - 日期：2026-10-10
 - 交付：将 Quick actions 的三个按钮统一迁入 `QUICK_ACTION_CLASS_NAME`，包含 31px/minmax/auto 三列 grid、居中对齐、100% 宽度、58px 最小高度、line token 底边、透明背景、内边距和左对齐；删除 `.actionRow` 基础布局规则，保留可用态 cursor/hover 与内部文案规则。
-- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage482-browser`、`git diff --check` 通过；生产构建成功，源码无 `.actionRow` 基础样式规则；未新增或运行测试。保留已知构建提示。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage482-browser`、`git diff --check` 通过；生产构建成功，`.actionRow` 布局规则已移除；它仍使用共享 button reset 的 `border: 0`。未新增或运行测试。保留已知构建提示。
 - 手工验证：三个按钮共用静态 utility 常量；disabled 属性控制行为，`:not(:disabled)` cursor/hover 样式继续有效，图标和文案 DOM 顺序未变。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：快捷操作行的图标、文案排版和 footnote 样式仍在全局 CSS；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome Quick actions 标题与说明迁移到 Tailwind — 小阶段 483
+- 状态：已完成（快捷操作行文案排版使用静态 utility）
+- 日期：2026-10-10
+- 交付：将三个 Quick actions 行标题的块布局、次级文字色、10px 字号和 620 字重，以及说明文字的块布局、3px 顶间距、muted 色和 9px 字号迁至 JSX；删除 `.actionRow strong/small` 全局排版规则，并更正阶段482中关于共享 border reset 的记录。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage483-browser`、`git diff --check` 通过；源码检索确认 `.actionRow` 不再有内部文案样式选择器。未新增或运行测试；保留已知构建提示。
+- 手工验证：三个操作标题和说明继续沿用相同字体大小、颜色 Token、3px 行间距及 DOM 内容顺序。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Quick actions 图标、箭头和 footnote 样式仍在全局 CSS；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段文案迁移与台账同一 commit。
