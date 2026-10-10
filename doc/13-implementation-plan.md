@@ -4854,3 +4854,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/styles/tokens.css`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 3 节。
 - 限制/后续：本阶段只拆分既有主题 token；Tailwind CSS 与组件级设计系统仍按需渐进接入。S7.2 性能门槛和 S7.4/S7.5 验收仍未完成。
 - 实施 commit：本阶段主题 token 拆分与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 将全局样式加载归入 renderer 入口 — 小阶段 447
+- 状态：已完成（renderer 入口统一加载全局样式，业务组件不再负责全局副作用）
+- 日期：2026-10-10
+- 交付：将 `globals.css` 导入从 `App`、Diff 与冲突窗口组件移至 `src/main.tsx`，按前端规范由 renderer 挂载入口统一加载；全局主题与 CSS 类不变。
+- 验证：`pnpm frontend:boundaries`、`pnpm frontend:build`、`pnpm build`（含 Electron renderer）与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：全仓源码检索确认只有 `src/main.tsx` 导入 `globals.css`；浏览器 Vite 与 Electron renderer 构建均成功。
+- 证据：`src/main.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 3、6 节。
+- 限制/后续：Electron 双 renderer 构建及打包页面仍需随 Tailwind v4 接入统一核验；Tailwind v4 及业务组件工具类迁移尚未完成。S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段 renderer 样式入口调整与台账同一 commit（SHA 可在后续台账更新中补记）。
