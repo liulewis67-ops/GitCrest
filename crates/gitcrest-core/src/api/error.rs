@@ -512,6 +512,11 @@ impl ApiError {
                 ApiErrorCode::BranchNameInvalid,
                 "The branch name is not valid according to Git ref rules.",
             ),
+            branches::BranchError::AlreadyExists => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::BranchAlreadyExists,
+                "A local branch with this name already exists.",
+            ),
             branches::BranchError::NotFound => Self::new(
                 StatusCode::NOT_FOUND,
                 ApiErrorCode::BranchNotFound,

@@ -47,6 +47,7 @@ pub enum BranchKind {
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchError {
     InvalidName,
+    AlreadyExists,
     LocalNotFound,
     NotFound,
     GitUnavailable,
@@ -91,6 +92,25 @@ pub async fn require_local_branch_with_git(
         Ok(())
     } else {
         Err(BranchError::LocalNotFound)
+    }
+}
+
+pub async fn ensure_local_branch_name_available_with_git(
+    repository_path: &Path,
+    name: &str,
+    git: &dyn BranchGitPort,
+) -> Result<(), BranchError> {
+    let references = git
+        .list_references(repository_path)
+        .await
+        .map_err(map_git_error)?;
+    if references
+        .iter()
+        .any(|branch| branch.full_name == format!("refs/heads/{name}"))
+    {
+        Err(BranchError::AlreadyExists)
+    } else {
+        Ok(())
     }
 }
 
@@ -444,6 +464,13 @@ mod tests {
         require_local_branch_with_git(&path, "feature/one", &GitBranchAdapter)
             .await
             .unwrap();
+        ensure_local_branch_name_available_with_git(&path, "new-branch", &GitBranchAdapter)
+            .await
+            .unwrap();
+        assert!(matches!(
+            ensure_local_branch_name_available_with_git(&path, &default, &GitBranchAdapter).await,
+            Err(BranchError::AlreadyExists)
+        ));
         assert!(matches!(
             require_local_branch_with_git(&path, "missing", &GitBranchAdapter).await,
             Err(BranchError::LocalNotFound)

@@ -5314,3 +5314,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 rename/delete 与其他大型 handler 的用例编排仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向验证与台账同一 commit。
+
+### 创建/重命名分支同名冲突检查下沉到 feature service — 小阶段 493
+- 状态：已完成（创建与重命名共用本地分支名称冲突校验）
+- 日期：2026-10-10
+- 交付：新增 `ensure_local_branch_name_available_with_git`，将 create/rename handler 对 `BranchSnapshot` 的遍历和本地 ref 同名判断迁入 branch service；冲突以 `BranchError::AlreadyExists` 返回，并映射到既有 `BranchAlreadyExists`/409 和原有消息。创建时仍先验证名称及初始 commit，重命名仍先校验新名称和拒绝同名改名，再检查冲突，维持原错误顺序。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：临时 Git fixture 中 `new-branch` 可用；已有本地默认分支返回 `BranchError::AlreadyExists`。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 create/rename 的其他规则及后台执行协调仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向验证与台账同一 commit。

@@ -119,24 +119,13 @@ pub(super) async fn create_repository_branch(
             "Create an initial commit before creating a branch.",
         ));
     }
-    let existing = branches::read_branches_with_git(
-        repo_id.clone(),
+    branches::ensure_local_branch_name_available_with_git(
         &target.repository_path,
-        metadata.branch.as_deref(),
-        metadata.detached,
+        &request.name,
         state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?;
-    if existing.branches.iter().any(|branch| {
-        matches!(branch.kind, branches::BranchKind::Local) && branch.name == request.name
-    }) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::BranchAlreadyExists,
-            "A local branch with this name already exists.",
-        ));
-    }
     let path = target.repository_path;
     let command = state.git_commands.clone();
     let branch_name = request.name;
@@ -211,24 +200,13 @@ pub(super) async fn rename_repository_branch(
             "Choose a different branch name.",
         ));
     }
-    let snapshot = branches::read_branches_with_git(
-        repo_id.clone(),
+    branches::ensure_local_branch_name_available_with_git(
         &target.repository_path,
-        None,
-        false,
+        &request.new_name,
         state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?;
-    if snapshot.branches.iter().any(|branch| {
-        matches!(branch.kind, branches::BranchKind::Local) && branch.name == request.new_name
-    }) {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::BranchAlreadyExists,
-            "A local branch with this name already exists.",
-        ));
-    }
     let path = target.repository_path;
     let command = state.git_commands.clone();
     let favorites_store = state.branch_favorites.clone();
