@@ -141,7 +141,6 @@ button:disabled { cursor: not-allowed; }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 .inlineAction { padding: 3px; background: transparent; color: var(--accent-strong); font-size: 10px; }
 .inlineAction:disabled { color: var(--text-muted); }
-.actionRow { display: grid; grid-template-columns: 31px minmax(0, 1fr) auto; align-items: center; width: 100%; min-height: 58px; padding: 8px 4px; border-bottom: 1px solid var(--line); background: transparent; text-align: left; }
 .actionRow:not(:disabled) { cursor: pointer; }
 .actionRow:not(:disabled):hover { background: var(--surface-soft); }
 .actionIcon { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid var(--line); border-radius: 6px; color: var(--accent-strong); font-size: 14px; }

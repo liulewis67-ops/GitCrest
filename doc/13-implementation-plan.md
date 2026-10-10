@@ -5204,3 +5204,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：仓库行 hover/按钮状态和 Welcome 快捷操作区仍有 CSS 规则待迁移；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome Quick actions 行布局迁移到 Tailwind — 小阶段 482
+- 状态：已完成（3 个快捷操作行共享静态布局类）
+- 日期：2026-10-10
+- 交付：将 Quick actions 的三个按钮统一迁入 `QUICK_ACTION_CLASS_NAME`，包含 31px/minmax/auto 三列 grid、居中对齐、100% 宽度、58px 最小高度、line token 底边、透明背景、内边距和左对齐；删除 `.actionRow` 基础布局规则，保留可用态 cursor/hover 与内部文案规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage482-browser`、`git diff --check` 通过；生产构建成功，源码无 `.actionRow` 基础样式规则；未新增或运行测试。保留已知构建提示。
+- 手工验证：三个按钮共用静态 utility 常量；disabled 属性控制行为，`:not(:disabled)` cursor/hover 样式继续有效，图标和文案 DOM 顺序未变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：快捷操作行的图标、文案排版和 footnote 样式仍在全局 CSS；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
