@@ -112,16 +112,10 @@ pub(super) async fn create_repository_branch(
         .refresh_metadata(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    if metadata.head.is_none() {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::BranchRequiresCommit,
-            "Create an initial commit before creating a branch.",
-        ));
-    }
-    branches::ensure_local_branch_name_available_with_git(
+    branches::ensure_branch_creation_allowed_with_git(
         &target.repository_path,
         &request.name,
+        metadata.head.is_some(),
         state.branch_git.as_ref(),
     )
     .await

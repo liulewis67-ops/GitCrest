@@ -63,6 +63,7 @@ pub enum BranchError {
     TooLarge,
     GitFailed,
     StorageUnavailable,
+    RequiresCommit,
 }
 
 pub async fn validate_branch_name_with_git(
@@ -133,6 +134,18 @@ pub async fn validate_branch_rename_with_git(
         return Err(BranchError::NameUnchanged);
     }
     ensure_local_branch_name_available_with_git(repository_path, new_name, git).await
+}
+
+pub async fn ensure_branch_creation_allowed_with_git(
+    repository_path: &Path,
+    name: &str,
+    initial_commit_exists: bool,
+    git: &dyn BranchGitPort,
+) -> Result<(), BranchError> {
+    if !initial_commit_exists {
+        return Err(BranchError::RequiresCommit);
+    }
+    ensure_local_branch_name_available_with_git(repository_path, name, git).await
 }
 
 pub async fn unmerged_commit_count_with_git(
@@ -534,6 +547,18 @@ mod tests {
         validate_branch_rename_with_git(&path, "feature/one", "new-branch", &GitBranchAdapter)
             .await
             .unwrap();
+        ensure_branch_creation_allowed_with_git(&path, "created-branch", true, &GitBranchAdapter)
+            .await
+            .unwrap();
+        assert!(matches!(
+            ensure_branch_creation_allowed_with_git(&path, &default, false, &GitBranchAdapter)
+                .await,
+            Err(BranchError::RequiresCommit)
+        ));
+        assert!(matches!(
+            ensure_branch_creation_allowed_with_git(&path, &default, true, &GitBranchAdapter).await,
+            Err(BranchError::AlreadyExists)
+        ));
         assert!(matches!(
             validate_branch_rename_with_git(&path, "feature/one", "feature/one", &GitBranchAdapter)
                 .await,

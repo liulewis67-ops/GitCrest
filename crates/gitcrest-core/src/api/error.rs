@@ -532,6 +532,11 @@ impl ApiError {
                 ApiErrorCode::BranchNotFound,
                 "The local branch does not exist.",
             ),
+            branches::BranchError::RequiresCommit => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::BranchRequiresCommit,
+                "Create an initial commit before creating a branch.",
+            ),
             branches::BranchError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,

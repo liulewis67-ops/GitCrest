@@ -5364,3 +5364,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
+
+### 分支创建前置条件下沉到 feature service — 小阶段 498
+- 状态：已完成（service 统一执行初始提交与本地名称可用性判断）
+- 日期：2026-10-10
+- 交付：新增 `ensure_branch_creation_allowed_with_git`，将“仓库必须已有初始提交”和“本地目标名称必须空闲”合并为 branch service 用例，handler 只提供仓库 HEAD 状态并映射错误。名称语法检查仍先于 repository metadata 查询，service 用例仍先判初始提交条件再读 refs，维持既有错误优先级。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：已有 HEAD 且名称空闲时允许创建；HEAD 缺失时返回 `RequiresCommit`，即使目标名已存在也优先返回该错误；HEAD 存在但名称冲突时返回 `AlreadyExists`。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
