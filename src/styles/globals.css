@@ -130,7 +130,6 @@ button:disabled { cursor: not-allowed; }
 .textButton:hover { text-decoration: underline; text-underline-offset: 3px; }
 .recentSection, .quickActions { min-width: 0; }
 .sectionHeading { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding-bottom: 11px; border-bottom: 1px solid var(--line); }
-.sectionHeading .sectionEyebrow { margin-bottom: 5px; }
 .sectionHeading h2 { margin: 0; font-size: 13px; font-weight: 620; letter-spacing: -.02em; }
 .compact { min-height: 26px; padding-inline: 7px; font-size: 10px; }
 .emptyRepositories { display: grid; justify-items: center; padding: 42px 22px 34px; text-align: center; }

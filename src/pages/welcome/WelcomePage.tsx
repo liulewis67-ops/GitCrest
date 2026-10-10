@@ -38,7 +38,7 @@ export function WelcomePage({
   return (
 <section className="welcomePage flex min-h-0 flex-col overflow-y-auto px-[clamp(30px,8vw,112px)] pt-[clamp(30px,6vh,64px)] pb-[20px] max-[1120px]:px-[clamp(26px,6vw,72px)] max-[900px]:px-[24px] max-[900px]:pt-[30px] max-[900px]:pb-[16px]" aria-labelledby="welcome-title">
           <div className="welcomeIntro max-w-[710px]">
-            <p className="sectionEyebrow">LOCAL GIT WORKSPACE</p>
+            <p className="m-0 mb-[10px] text-muted text-[9px] font-[750] tracking-[.14em]">LOCAL GIT WORKSPACE</p>
             <h1 id="welcome-title" className="m-0 text-[clamp(32px,4.2vw,49px)] font-[610] tracking-[-0.055em] leading-[1.07]">Your repositories,<br /><span className="text-foreground-secondary font-[480]">in good order.</span></h1>
             <p className="mt-[15px] max-w-[450px] text-[13px] leading-[1.7] text-foreground-secondary">Review changes, follow branches, and make deliberate commits from one quiet place.</p>
             <div className="mt-[22px] flex flex-wrap items-center gap-[9px]">
@@ -53,7 +53,7 @@ export function WelcomePage({
           <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
             <section className="recentSection" aria-labelledby="recent-heading">
               <div className="sectionHeading">
-                <div><p className="sectionEyebrow">YOUR LIBRARY</p><h2 id="recent-heading">Recent repositories</h2></div>
+                <div><p className="m-0 mb-[5px] text-muted text-[9px] font-[750] tracking-[.14em]">YOUR LIBRARY</p><h2 id="recent-heading">Recent repositories</h2></div>
                 <span className="quietButton compact" aria-label="Favorites first, then most recently opened">Favorites first</span>
               </div>
               {repositories.length === 0 ? (
@@ -81,7 +81,7 @@ export function WelcomePage({
               )}
             </section>
             <aside className="quickActions" aria-labelledby="quick-heading">
-              <div className="sectionHeading"><div><p className="sectionEyebrow">GET STARTED</p><h2 id="quick-heading">Quick actions</h2></div></div>
+              <div className="sectionHeading"><div><p className="m-0 mb-[5px] text-muted text-[9px] font-[750] tracking-[.14em]">GET STARTED</p><h2 id="quick-heading">Quick actions</h2></div></div>
                 <button className="actionRow" type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={`Open local repository (${displayShortcut(shortcuts.openRepository, isMacPlatform)})`}>
                 <span className="actionIcon" aria-hidden="true">↗</span><span><strong>Open local repository</strong><small>Choose an existing folder</small></span><span className="actionArrow" aria-hidden="true">→</span>
               </button>

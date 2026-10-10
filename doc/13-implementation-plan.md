@@ -5094,3 +5094,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-first-match-cases-stage470.json`。
 - 限制/后续：仅近端查询稳定低于 200ms；无匹配的预探测会在完整 Git 回退前增加一次全历史遍历，带来重复成本，故暂不接入。搜索 <200ms 仍未达标，继续寻找能改善全体查询且不牺牲完整结果的索引构建/查询方案。S7.2、S7.4、S7.5 仍未完成。
 - 实施 commit：本阶段查询分布报告与台账同一 commit。
+
+### Welcome eyebrow 排版迁移到 Tailwind — 小阶段 471
+- 状态：已完成（Welcome 页三个 eyebrow 不再依赖共享全局排版规则）
+- 日期：2026-10-10
+- 交付：将 Welcome 主介绍和两个 section 标题的 eyebrow 间距、次级文字色、字号、字重及字距改为静态 Tailwind utility；section heading 的 5px 底间距与主介绍的 10px 间距分别保留。删除只服务旧 Welcome 结构的 `.sectionHeading .sectionEyebrow` 规则；其它 feature 继续使用共享 `.sectionEyebrow`。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage471-browser`、`git diff --check` 通过；检查生成 CSS 确认含 5px/10px 底间距、9px 字号、750 字重、`.14em` 字距与 `text-muted` 颜色映射。未新增或运行测试。构建存在已知 web-tree-sitter eval、chunk size 与外部 outDir 提示。
+- 手工验证：对照 Welcome 原 `.sectionEyebrow` 与 `.sectionHeading` 规则，确认 utility 对应值不变；workspace、历史空态及 feature dialog 的共享 eyebrow 标记和 CSS 保持不变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：仅迁移 Welcome 三处 eyebrow；其它页面共用的 `.sectionEyebrow` 样式仍待按组件逐步迁移。S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
