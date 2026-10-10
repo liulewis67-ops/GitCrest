@@ -4884,3 +4884,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`、Tailwind v4 小阶段 448。
 - 限制/后续：仅完成一处低风险样式迁移；其它页面/组件仍需按功能逐步消费 Token，且需在发行包中回归双主题与表单状态。S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段 Welcome 组件样式迁移与台账同一 commit。
+
+### Welcome 空仓库说明使用 muted Token utility — 小阶段 450
+- 状态：已完成（空仓库引导文字由 `text-muted` 直接消费运行时主题 Token）
+- 日期：2026-10-10
+- 交付：将空仓库说明段落的颜色从 `.emptyRepositories p` 全局规则移至 `text-muted` Tailwind utility；保留同一 `--text-muted` 颜色来源及段落宽度、间距、字号和行高。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出至 `E:/gitcrest-stage450-browser`）与 `git diff --check` 通过；构建 CSS 中生成 `.text-muted{color:var(--text-muted)}`；未新增或运行测试。
+- 手工验证：核对 utility 读取与原始规则一致的 `--text-muted` Token，段落其它布局声明保留。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`。
+- 限制/后续：仅迁移空仓库说明文字颜色，Welcome 和其它 feature 的结构/排版类仍逐步迁移；发行包及完整双主题验收继续待做。S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段 Welcome 空态文字迁移与台账同一 commit。

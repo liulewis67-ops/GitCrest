@@ -60,7 +60,7 @@ export function WelcomePage({
                 <div className="emptyRepositories">
                   <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
                   <h3>No repositories yet</h3>
-                  <p>Open a local Git repository to see its changes, branches, and history here.</p>
+                  <p className="text-muted">Open a local Git repository to see its changes, branches, and history here.</p>
                   <button className="inlineAction" type="button" onClick={() => void onOpenLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
                 </div>
               ) : (
