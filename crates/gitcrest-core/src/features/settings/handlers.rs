@@ -233,10 +233,7 @@ pub(super) async fn request_ai(
             }
             DiffScope::Commit => false,
         };
-        if !allowed
-            || file.categories.contains(&ChangeCategory::Ignored)
-            || file.categories.contains(&ChangeCategory::Conflicted)
-        {
+        if !allowed || file.is_ignored() || file.is_conflicted() {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 ApiErrorCode::ResourceVersionStale,

@@ -43,8 +43,7 @@ pub fn validate_patch_request(
     if request.selections.is_empty() || request.revision.is_empty() {
         return Err(StagingError::InvalidRequest);
     }
-    if file.categories.contains(&ChangeCategory::Conflicted) || file.kind == ChangeKind::Conflicted
-    {
+    if file.is_conflicted() {
         return Err(StagingError::ConflictMustBeResolvedFirst);
     }
     match (request.action, request.scope.into()) {
@@ -82,10 +81,7 @@ pub fn command(
     if matches!(
         request.action,
         StagingAction::StageAll | StagingAction::UnstageAll
-    ) && snapshot
-        .files
-        .iter()
-        .any(|file| file.categories.contains(&ChangeCategory::Conflicted))
+    ) && snapshot.files.iter().any(|file| file.is_conflicted())
     {
         return Err(StagingError::ConflictMustBeResolvedFirst);
     }
@@ -103,14 +99,12 @@ pub fn command(
                 .iter()
                 .find(|file| file.path == path)
                 .ok_or(StagingError::FileNotChanged)?;
-            if file.categories.contains(&ChangeCategory::Conflicted)
-                || file.kind == ChangeKind::Conflicted
-            {
+            if file.is_conflicted() {
                 return Err(StagingError::ConflictMustBeResolvedFirst);
             }
             match request.action {
                 StagingAction::StageFile => {
-                    if file.categories.contains(&ChangeCategory::Ignored) {
+                    if file.is_ignored() {
                         return Err(StagingError::FileNotChanged);
                     }
                     Ok(StagingOperation::StagePath(path.to_owned()))

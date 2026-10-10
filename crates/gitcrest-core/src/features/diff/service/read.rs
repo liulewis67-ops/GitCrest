@@ -74,14 +74,14 @@ pub async fn read_with_patch<G: DiffGitPort + ?Sized>(
         hunks: Vec::new(),
     };
 
-    if file.categories.contains(&ChangeCategory::Conflicted) {
+    if file.is_conflicted() {
         document.status = DiffContentStatus::Conflicted;
         return Ok(DiffRead {
             document,
             patch: Vec::new(),
         });
     }
-    if file.categories.contains(&ChangeCategory::Ignored) {
+    if file.is_ignored() {
         document.status = DiffContentStatus::Ignored;
         return Ok(DiffRead {
             document,

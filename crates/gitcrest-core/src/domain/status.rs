@@ -45,6 +45,20 @@ impl StatusFile {
             .iter()
             .all(|category| matches!(category, ChangeCategory::Ignored))
     }
+
+    pub(crate) fn is_ignored(&self) -> bool {
+        self.categories
+            .iter()
+            .any(|category| matches!(category, ChangeCategory::Ignored))
+    }
+
+    pub(crate) fn is_conflicted(&self) -> bool {
+        self.kind == ChangeKind::Conflicted
+            || self
+                .categories
+                .iter()
+                .any(|category| matches!(category, ChangeCategory::Conflicted))
+    }
 }
 
 #[cfg(test)]
@@ -71,5 +85,24 @@ mod tests {
                 .has_unignored_changes()
         );
         assert!(!file_with_categories(Vec::new()).has_unignored_changes());
+    }
+
+    #[test]
+    fn conflict_semantics_include_kind_or_category() {
+        let mut file = file_with_categories(Vec::new());
+        assert!(!file.is_conflicted());
+
+        file.kind = ChangeKind::Conflicted;
+        assert!(file.is_conflicted());
+
+        file.kind = ChangeKind::Modified;
+        file.categories = vec![ChangeCategory::Conflicted];
+        assert!(file.is_conflicted());
+    }
+
+    #[test]
+    fn ignored_semantics_read_status_categories() {
+        assert!(file_with_categories(vec![ChangeCategory::Ignored]).is_ignored());
+        assert!(!file_with_categories(vec![ChangeCategory::Unstaged]).is_ignored());
     }
 }

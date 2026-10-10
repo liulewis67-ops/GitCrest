@@ -29,11 +29,7 @@ pub fn validate_message(message: &str) -> Result<(), CommitError> {
 }
 
 pub fn validate_snapshot(snapshot: &StatusSnapshot) -> Result<(), CommitError> {
-    if snapshot
-        .files
-        .iter()
-        .any(|file| file.categories.contains(&ChangeCategory::Conflicted))
-    {
+    if snapshot.files.iter().any(|file| file.is_conflicted()) {
         return Err(CommitError::ConflictsMustBeResolved);
     }
     if !snapshot
