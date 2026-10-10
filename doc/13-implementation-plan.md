@@ -4944,3 +4944,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`src/styles/tokens.css`、前端规范第 2.1、6.1 节。
 - 限制/后续：Welcome 页面仍有多项自定义视觉规则待按组件语义逐步迁移；需在发行包中回归深浅主题与窄屏布局。S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段标题排版迁移与台账同一 commit。
+
+### Welcome 双栏布局迁移到 Tailwind — 小阶段 456
+- 状态：已完成（双栏网格和响应式间距使用静态 utility）
+- 日期：2026-10-10
+- 交付：将 Welcome 仓库列表/快捷操作双栏的 grid、1.5fr/0.86fr 列宽、clamp 间距和顶边距迁至静态 Tailwind utility；保留 1120px 下的 32px 间距，以及 900px 下单列、26px 间距和 36px 顶边距；移除对应全局 CSS 规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、浏览器 `vite build`（输出至 `E:/gitcrest-stage456-browser`）与 `git diff --check` 通过；生成 CSS 含原有 grid、clamp、32px、26px 和 36px 值，响应式断点为 1120px/900px；未新增或运行测试。构建有既有的外部 outDir、web-tree-sitter eval 和 chunk size 提示。
+- 手工验证：源码检索确认 `.welcomeColumns` 的基础及媒体查询规则已移除，recent/quick actions 的既有最小宽度规则未改动。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 2.1、6.1 节。
+- 限制/后续：Welcome 页面仍有自定义外观和响应式规则待迁移；发行包深浅主题与窄屏验收仍需完成。S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段双栏布局迁移与台账同一 commit。

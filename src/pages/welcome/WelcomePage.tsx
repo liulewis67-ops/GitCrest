@@ -50,7 +50,7 @@ export function WelcomePage({
             </div>
           </div>
           {openError && <div className="openRepositoryError" role="alert">{openError}</div>}
-          <div className="welcomeColumns">
+          <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
             <section className="recentSection" aria-labelledby="recent-heading">
               <div className="sectionHeading">
                 <div><p className="sectionEyebrow">YOUR LIBRARY</p><h2 id="recent-heading">Recent repositories</h2></div>
