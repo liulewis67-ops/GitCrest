@@ -98,7 +98,7 @@ export function WelcomePage({
               <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={() => void onInitializeRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.initializeRepository, isMacPlatform)} title={`Initialize a repository (${displayShortcut(shortcuts.initializeRepository, isMacPlatform)})`}>
                 <span className={QUICK_ACTION_ICON_CLASS_NAME} aria-hidden="true">＋</span><span><strong className="block text-foreground-secondary text-[10px] font-[620]">Initialize a repository</strong><small className="mt-[3px] block text-muted text-[9px]">Start tracking a new project</small></span><span className={QUICK_ACTION_ARROW_CLASS_NAME} aria-hidden="true">→</span>
               </button>
-              <div className="actionFootnote"><span className="infoIcon" aria-hidden="true">i</span> Initialize creates Git metadata only in the folder you select and keeps its files.</div>
+              <div className="flex items-start gap-[7px] mt-[13px] text-muted text-[9px] leading-[1.5]"><span className="inline-grid flex-none place-items-center w-[14px] h-[14px] border border-line-strong rounded-full text-[8px]" aria-hidden="true">i</span> Initialize creates Git metadata only in the folder you select and keeps its files.</div>
             </aside>
           </div>
           <footer className="mt-auto flex items-center gap-[12px] pt-[28px] text-[9px] text-muted">

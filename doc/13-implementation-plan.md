@@ -5254,3 +5254,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：Quick actions footnote 和空态插图仍需要保留/迁移各自样式；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段箭头迁移与台账同一 commit。
+
+### Welcome Quick actions footnote 迁移到 Tailwind — 小阶段 487
+- 状态：已完成（说明行和信息图标使用静态 utility）
+- 日期：2026-10-10
+- 交付：将 Quick actions footnote 的 flex 起始对齐、7px gap、13px 顶边距、muted 颜色、9px 字号和 1.5 行高迁入 JSX；信息圆标的 inline-grid、14px 尺寸、line-strong 边线、圆形和 8px 字号一并迁入；删除 `.actionFootnote` 与 `.infoIcon` CSS 规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage487-browser`、`git diff --check` 通过；生产构建成功，源码无旧 footnote/icon 样式类；未新增或运行测试，保留已知构建提示。
+- 手工验证：说明文案及信息 glyph 的顺序和 `aria-hidden` 状态保持不变，窄屏下容器继续自然换行。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 主操作按钮样式、仓库 hover/focus 与空态插图仍依赖 CSS；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段 footnote/icon 迁移与台账同一 commit。
