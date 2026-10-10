@@ -137,7 +137,6 @@ button:disabled { cursor: not-allowed; }
 .emptyGlyph span:nth-child(3)::after { position: absolute; top: 6px; left: 6px; width: 8px; height: 5px; border-left: 1px solid var(--accent); border-bottom: 1px solid var(--accent); transform: skew(-20deg); content: ""; }
 .repositoryRow:hover { background: var(--surface-soft); }
 .repositoryRowOpen:disabled { cursor: default; }
-.repositoryRowAction { min-height: 28px; padding: 0 5px; border: 1px solid transparent; border-radius: 4px; background: transparent; color: var(--text-muted); font-size: 9px; cursor: pointer; }
 .repositoryRowAction:hover { border-color: var(--line-strong); color: var(--text); }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 .repositoryMissing .repoStatusGlyph, .repositoryMissing .repositoryRowText small { color: var(--warning); }

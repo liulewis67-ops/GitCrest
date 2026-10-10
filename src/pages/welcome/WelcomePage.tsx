@@ -2,6 +2,8 @@ import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 
+const REPOSITORY_ROW_ACTION_CLASS_NAME = "repositoryRowAction min-h-[28px] rounded-[4px] border border-transparent bg-transparent px-[5px] text-muted text-[9px] cursor-pointer";
+
 interface WelcomePageProps {
   repositories: RepositoryResponse[];
   openingRepository: boolean;
@@ -72,9 +74,9 @@ export function WelcomePage({
                         <span className="repositoryRowText"><strong>{getRepositoryDisplayName(repository.path)}{repository.isFavorite ? " · Favorite" : ""}</strong><small>{repository.availability === "missing" ? `Unavailable · ${repository.path}` : repository.path}</small></span>
                         <span className="repositoryBranch">{repository.availability === "missing" ? "Missing" : repository.detached ? "Detached" : repository.branch || "Unborn"}</span>
                       </button>
-                      <button className="repositoryRowAction" type="button" aria-label={repository.isFavorite ? `Remove ${getRepositoryDisplayName(repository.path)} from favorites` : `Favorite ${getRepositoryDisplayName(repository.path)}`} onClick={() => void onToggleFavorite(repository)}>{repository.isFavorite ? "★" : "☆"}</button>
-                      {repository.availability === "missing" && <button className="repositoryRowAction" type="button" onClick={() => void onOpenLocalRepository()}>Locate</button>}
-                      <button className="repositoryRowAction" type="button" aria-label={`Remove ${getRepositoryDisplayName(repository.path)} from recent repositories`} onClick={() => void onForgetRepository(repository)}>Remove</button>
+                      <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" aria-label={repository.isFavorite ? `Remove ${getRepositoryDisplayName(repository.path)} from favorites` : `Favorite ${getRepositoryDisplayName(repository.path)}`} onClick={() => void onToggleFavorite(repository)}>{repository.isFavorite ? "★" : "☆"}</button>
+                      {repository.availability === "missing" && <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" onClick={() => void onOpenLocalRepository()}>Locate</button>}
+                      <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" aria-label={`Remove ${getRepositoryDisplayName(repository.path)} from recent repositories`} onClick={() => void onForgetRepository(repository)}>Remove</button>
                     </div>
                   ))}
                 </div>

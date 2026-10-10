@@ -5164,3 +5164,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：仓库行内文本、branch label 和操作按钮视觉规则尚未迁移；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 仓库行操作按钮样式迁移到 Tailwind — 小阶段 478
+- 状态：已完成（重复操作按钮使用一组静态 utility，hover/focus 留在状态 CSS）
+- 日期：2026-10-10
+- 交付：将收藏、Locate、Remove 三个仓库行操作按钮的 28px 最小高度、透明边框、4px 圆角、透明背景、5px 水平 padding、muted 颜色、9px 字号和 pointer cursor 提升为共享静态类名常量；删除 `.repositoryRowAction` 基础全局规则，保留 hover 和 focus-visible 反馈规则。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage478-browser`、`git diff --check` 通过；生产构建成功并生成相应 utility。未新增或运行测试；已知 web-tree-sitter eval、chunk size 与外部 outDir 提示仍存在。
+- 手工验证：三个操作按钮共同使用同一静态类名常量；现有 hover 边框/文字色和 2px focus-visible 外框规则保留。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：仓库行操作按钮视觉状态样式仍由全局 CSS 管理；仓库状态标记、文本和分支标签继续待迁移。S7.2、S7.4、S7.5 验收仍未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
