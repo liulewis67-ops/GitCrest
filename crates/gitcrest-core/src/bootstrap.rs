@@ -107,7 +107,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         repositories: repositories.clone(),
         repository_targets,
         status: status.clone(),
-        tasks,
+        tasks: tasks.clone(),
         git_commands,
         tag_git,
         branch_git,
@@ -134,22 +134,31 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     readiness::announce(&config.listen_address.ip().to_string(), address);
 
     let server_shutdown = shutdown_sender.clone();
+    let task_shutdown = tasks.clone();
     let server_result = axum::serve(listener, app)
         .with_graceful_shutdown(async move {
             shutdown::wait_for_shutdown().await;
+            task_shutdown.begin_shutdown().await;
             let _ = server_shutdown.send(true);
         })
         .await;
     let _ = shutdown_sender.send(true);
-    match timeout(Duration::from_secs(5), &mut refresh_task).await {
-        Ok(Ok(())) => {}
-        Ok(Err(error)) => eprintln!("[gitcrest-core] Refresh watcher exited unexpectedly: {error}"),
-        Err(_) => {
-            refresh_task.abort();
-            let _ = refresh_task.await;
-            eprintln!("[gitcrest-core] Refresh watcher did not stop within 5 seconds");
+    tasks.begin_shutdown().await;
+    let refresh_drain = async {
+        match timeout(Duration::from_secs(5), &mut refresh_task).await {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                eprintln!("[gitcrest-core] Refresh watcher exited unexpectedly: {error}")
+            }
+            Err(_) => {
+                refresh_task.abort();
+                let _ = refresh_task.await;
+                eprintln!("[gitcrest-core] Refresh watcher did not stop within 5 seconds");
+            }
         }
-    }
+    };
+    let task_drain = tasks.drain_workers(Duration::from_secs(5));
+    let _ = tokio::join!(refresh_drain, task_drain);
     server_result?;
     Ok(())
 }

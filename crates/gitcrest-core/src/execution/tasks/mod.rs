@@ -8,7 +8,11 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use tokio::sync::{watch, Mutex, Semaphore};
+use tokio::{
+    sync::{watch, Mutex, Semaphore},
+    task::JoinSet,
+    time::{timeout, Duration},
+};
 
 use crate::{
     domain::task::{TaskErrorCategory, TaskSnapshot, TaskStatus},
@@ -32,6 +36,7 @@ pub(super) struct TaskServiceInner {
     pub(super) data: Mutex<TaskData>,
     pub(super) repo_locks: super::locks::ResourceLocks,
     pub(super) workers: Arc<Semaphore>,
+    pub(super) worker_tasks: Mutex<JoinSet<()>>,
     pub(super) store: Option<Arc<dyn TaskStorePort>>,
     pub(super) status_invalidator: Option<Arc<StatusInvalidator>>,
 }
@@ -42,22 +47,34 @@ impl Default for TaskServiceInner {
             data: Mutex::default(),
             repo_locks: super::locks::ResourceLocks::default(),
             workers: Arc::new(Semaphore::new(4)),
+            worker_tasks: Mutex::new(JoinSet::new()),
             store: None,
             status_invalidator: None,
         }
     }
 }
 
-#[derive(Default)]
 pub(super) struct TaskData {
     pub(super) tasks: BTreeMap<String, TaskSnapshot>,
     pub(super) cancellations: HashMap<String, watch::Sender<bool>>,
+    accepting: bool,
+}
+
+impl Default for TaskData {
+    fn default() -> Self {
+        Self {
+            tasks: BTreeMap::new(),
+            cancellations: HashMap::new(),
+            accepting: true,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum TaskSubmitError {
     QueueFull,
     StorageUnavailable,
+    ShuttingDown,
 }
 
 #[derive(Clone)]
@@ -68,6 +85,43 @@ pub struct TaskContext {
 }
 
 impl TaskService {
+    pub(crate) async fn begin_shutdown(&self) {
+        let cancellations = {
+            let mut data = self.inner.data.lock().await;
+            data.accepting = false;
+            data.cancellations.values().cloned().collect::<Vec<_>>()
+        };
+        for cancellation in cancellations {
+            let _ = cancellation.send(true);
+        }
+    }
+
+    pub(crate) async fn drain_workers(&self, grace_period: Duration) {
+        let mut workers = self.inner.worker_tasks.lock().await;
+        let drained = timeout(grace_period, async {
+            while let Some(result) = workers.join_next().await {
+                if let Err(error) = result {
+                    let outcome = if error.is_panic() {
+                        "panicked"
+                    } else {
+                        "was cancelled"
+                    };
+                    eprintln!("[gitcrest-core] Task worker {outcome} unexpectedly");
+                }
+            }
+        })
+        .await;
+        if drained.is_err() {
+            let mut abandoned = std::mem::replace(&mut *workers, JoinSet::new());
+            let remaining = abandoned.len();
+            abandoned.abort_all();
+            drop(abandoned);
+            eprintln!(
+                "[gitcrest-core] Aborted {remaining} task workers after the shutdown deadline"
+            );
+        }
+    }
+
     #[cfg(test)]
     pub fn with_status_invalidator(invalidator: impl Fn(&str) + Send + Sync + 'static) -> Self {
         Self {
@@ -118,9 +172,11 @@ impl TaskService {
                 data: Mutex::new(TaskData {
                     tasks,
                     cancellations: HashMap::new(),
+                    accepting: true,
                 }),
                 repo_locks: super::locks::ResourceLocks::default(),
                 workers: Arc::new(Semaphore::new(4)),
+                worker_tasks: Mutex::new(JoinSet::new()),
                 store: Some(store),
                 status_invalidator,
             }),
@@ -222,10 +278,33 @@ impl TaskService {
     {
         let resource_key = resource_key.into();
         let operation = operation.into();
+        if !self.inner.data.lock().await.accepting {
+            return Err(TaskSubmitError::ShuttingDown);
+        }
+        let worker_capacity_full = {
+            let mut workers = self.inner.worker_tasks.lock().await;
+            while let Some(result) = workers.try_join_next() {
+                if let Err(error) = result {
+                    let outcome = if error.is_panic() {
+                        "panicked"
+                    } else {
+                        "was cancelled"
+                    };
+                    eprintln!("[gitcrest-core] Task worker {outcome} unexpectedly");
+                }
+            }
+            workers.len() >= MAX_ACTIVE_TASKS
+        };
+        if worker_capacity_full {
+            return Err(TaskSubmitError::QueueFull);
+        }
         let task_id = next_task_id();
         let (cancel_sender, cancellation) = watch::channel(false);
         {
             let mut data = self.inner.data.lock().await;
+            if !data.accepting {
+                return Err(TaskSubmitError::ShuttingDown);
+            }
             let active_count = data
                 .tasks
                 .values()
@@ -272,7 +351,7 @@ impl TaskService {
             return Err(TaskSubmitError::StorageUnavailable);
         }
         let worker_inner = self.inner.clone();
-        tokio::spawn(async move {
+        self.inner.worker_tasks.lock().await.spawn(async move {
             super::scheduler::run_task(worker_inner, task_id, resource_key, cancellation, work)
                 .await;
         });

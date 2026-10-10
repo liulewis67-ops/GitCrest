@@ -37,6 +37,7 @@ pub(crate) enum ApiErrorCode {
     RepositoryStatusFailed,
     TaskNotFound,
     TaskQueueFull,
+    TaskServiceStopping,
     RepositoryStateConflict,
     ResourceVersionStale,
     RequestInvalid,
@@ -229,6 +230,11 @@ impl ApiError {
                 "The background task queue is full. Wait for current work to finish.",
             ),
             TaskSubmitError::StorageUnavailable => Self::task_storage_unavailable(),
+            TaskSubmitError::ShuttingDown => Self::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::TaskServiceStopping,
+                "The application is shutting down. Retry after it restarts.",
+            ),
         }
     }
 

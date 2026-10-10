@@ -4824,3 +4824,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/lifecycle/shutdown.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/refresh/watcher.rs`、`electron/main/sidecar.ts`、`electron/main/index.ts`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.2 节。
 - 限制/后续：TaskService 中正在运行的操作仍由独立 Tokio task 执行，尚未接入停止准入、取消信号和排空等待；本阶段只监督 refresh watcher 和 HTTP server，不宣称所有后台任务均已可恢复停止。需后续按任务副作用语义补全 supervisor/drain，再完成 S7.4/S7.5 跨平台与故障验收。S7.2 仍有冷搜索、Working Set 和滚动帧率未达标项。
 - 实施 commit：本阶段进程生命周期与台账同一 commit（SHA 可在后续台账更新中补记）。
+
+### 监督 TaskService worker 停止准入与排空 — 小阶段 444
+- 状态：已完成（sidecar shutdown 会拒绝新后台任务、请求协作取消并监督 worker 排空）
+- 日期：2026-10-10
+- 交付：`TaskService` 在关机时原子关闭任务准入并向现存 worker 发出取消信号；运行中 worker 由 `JoinSet` 跟踪，HTTP 请求排空后与 refresh watcher 并行等待最多 5 秒，超时则中止剩余 worker。正常提交期间回收已完成 handle，并将监督集合限制在 64 个 worker。关机期间的新任务返回 503 `TASK_SERVICE_STOPPING`；OpenAPI 和生成类型同步更新；Electron 等待 sidecar 的强制终止期限从 5 秒延长至 15 秒，为后端排空留出时间。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`pnpm api:types`、`pnpm exec tsc --noEmit` 与 `git diff --check` 通过；未新增或运行测试。
+- 手工验证：确认 shutdown 信号先关闭准入并通知当前 cancellation watch；Axum 完成在途请求后再并行 drain worker 和 watcher。强制中止时不把未确认工作标记为成功；已有启动恢复逻辑会将持久化的 queued/running 任务转为 `OutcomeUnknown`，要求检查仓库状态后再重试。日志只记录固定类别与残留 worker 数，不输出 task panic 内容。
+- 证据：`crates/gitcrest-core/src/execution/tasks/mod.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/api/v1.yaml`、`src/api/schema.ts`、`electron/main/sidecar.ts`、`doc/14-backend-development-guidelines.md` 第 3、4.1、12.2 节。
+- 限制/后续：5 秒后强制取消仍不能回滚已经完成的 Git 副作用；对应 queued/running 持久化状态由下次启动恢复为结果未知。当前变化未运行真实 Electron 退出故障注入或平台 runner 验收；S7.2、S7.4、S7.5 整体验收仍未完成。
+- 实施 commit：本阶段 worker 生命周期、API 契约、Electron 超时与台账同一 commit（SHA 可在后续台账更新中补记）。

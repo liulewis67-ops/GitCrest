@@ -152,7 +152,7 @@ export function stopSidecar(): Promise<void> {
     const forceKill = setTimeout(() => {
       stoppingChild.kill();
       finish();
-    }, 5_000);
+    }, 15_000);
     stoppingChild.once("exit", finish);
     stoppingChild.once("error", finish);
     stoppingChild.stdin.end();
