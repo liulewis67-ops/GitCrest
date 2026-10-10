@@ -5374,3 +5374,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向测试与台账同一 commit。
+
+### 分支删除约束下沉到 feature service — 小阶段 499
+- 状态：已完成（删除入口由 service 统一拒绝当前分支和未确认的未合并分支）
+- 日期：2026-10-10
+- 交付：新增 `validate_branch_delete_with_git`，复用删除预检结果并执行当前分支保护和未合并确认约束；删除 handler 不再直接判断 `is_current` 或确认数量。新增 `BranchError::Current` / `Unmerged(count)`，通过既有 `BranchCurrent` / `BranchUnmerged` 409 错误码和消息返回。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：含 1 个未合并提交且未确认时返回 `Unmerged(1)`；显式允许时通过；目标是当前分支时即使允许未合并也返回 `Current`，保持当前分支保护优先。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向测试与台账同一 commit。

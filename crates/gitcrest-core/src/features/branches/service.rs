@@ -64,6 +64,8 @@ pub enum BranchError {
     GitFailed,
     StorageUnavailable,
     RequiresCommit,
+    Current,
+    Unmerged(u32),
 }
 
 pub async fn validate_branch_name_with_git(
@@ -178,6 +180,25 @@ pub async fn preview_branch_delete_with_git(
         unmerged_commit_count,
         requires_confirmation: unmerged_commit_count > 0,
     })
+}
+
+pub async fn validate_branch_delete_with_git(
+    repository_path: &Path,
+    current: Option<&str>,
+    detached: bool,
+    target: &str,
+    allow_unmerged: bool,
+    git: &dyn BranchGitPort,
+) -> Result<BranchDeletePreviewData, BranchError> {
+    let preview =
+        preview_branch_delete_with_git(repository_path, current, detached, target, git).await?;
+    if preview.is_current {
+        return Err(BranchError::Current);
+    }
+    if preview.unmerged_commit_count > 0 && !allow_unmerged {
+        return Err(BranchError::Unmerged(preview.unmerged_commit_count));
+    }
+    Ok(preview)
 }
 
 pub async fn paths_changed_between_with_git(
@@ -520,6 +541,40 @@ mod tests {
         .unwrap();
         assert!(current_delete_preview.is_current);
         assert_eq!(current_delete_preview.unmerged_commit_count, 0);
+        assert!(matches!(
+            validate_branch_delete_with_git(
+                &path,
+                Some(&default),
+                false,
+                "feature/one",
+                false,
+                &GitBranchAdapter
+            )
+            .await,
+            Err(BranchError::Unmerged(1))
+        ));
+        assert!(matches!(
+            validate_branch_delete_with_git(
+                &path,
+                Some(&default),
+                false,
+                &default,
+                true,
+                &GitBranchAdapter
+            )
+            .await,
+            Err(BranchError::Current)
+        ));
+        assert!(validate_branch_delete_with_git(
+            &path,
+            Some(&default),
+            false,
+            "feature/one",
+            true,
+            &GitBranchAdapter,
+        )
+        .await
+        .is_ok());
         assert!(overlapping_dirty_paths_with_git(
             &path,
             None,

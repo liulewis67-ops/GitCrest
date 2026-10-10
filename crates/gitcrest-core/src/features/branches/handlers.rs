@@ -275,29 +275,16 @@ pub(super) async fn delete_repository_branch(
         )
     })?;
     let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
-    let preview = branches::preview_branch_delete_with_git(
+    branches::validate_branch_delete_with_git(
         &target.repository_path,
         metadata.branch.as_deref(),
         metadata.detached,
         &request.name,
+        request.allow_unmerged,
         state.branch_git.as_ref(),
     )
     .await
     .map_err(ApiError::from_branch_error)?;
-    if preview.is_current {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::BranchCurrent,
-            "Switch to another branch before deleting the current branch.",
-        ));
-    }
-    if preview.unmerged_commit_count > 0 && !request.allow_unmerged {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::BranchUnmerged,
-            format!("The branch has {} commit(s) not reachable from the current branch; confirm deletion to continue.", preview.unmerged_commit_count),
-        ));
-    }
     let path = target.repository_path;
     let command = state.git_commands.clone();
     let favorites_store = state.branch_favorites.clone();

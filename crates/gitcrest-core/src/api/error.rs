@@ -537,6 +537,16 @@ impl ApiError {
                 ApiErrorCode::BranchRequiresCommit,
                 "Create an initial commit before creating a branch.",
             ),
+            branches::BranchError::Current => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::BranchCurrent,
+                "Switch to another branch before deleting the current branch.",
+            ),
+            branches::BranchError::Unmerged(unmerged) => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::BranchUnmerged,
+                format!("The branch has {unmerged} commit(s) not reachable from the current branch; confirm deletion to continue."),
+            ),
             branches::BranchError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,
                 ApiErrorCode::GitUnavailable,
