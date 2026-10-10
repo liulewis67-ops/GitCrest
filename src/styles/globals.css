@@ -112,11 +112,6 @@ button:disabled { cursor: not-allowed; }
 .connectionBadge.connected .connectionDot { background: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
 
 .welcomePage {
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  padding: clamp(30px, 6vh, 64px) clamp(30px, 8vw, 112px) 20px;
-  overflow-y: auto;
   background:
     radial-gradient(ellipse at 18% 20%, rgb(83 127 151 / 8%), transparent 34%),
     var(--canvas);
@@ -716,7 +711,6 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 1120px) {
   .workArea { grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr); }
   .detailsPanel, .resizeSeparator[aria-label="Resize commit details"] { display: none; }
-  .welcomePage { padding-inline: clamp(26px, 6vw, 72px); }
 }
 
 @media (max-width: 900px) {
@@ -726,7 +720,6 @@ button:disabled { cursor: not-allowed; }
   .connectionBadge { min-width: 10px; }
   .workArea { grid-template-columns: minmax(0, 1fr); }
   .navigationPanel, .resizeSeparator[aria-label="Resize repository navigation"] { display: none; }
-  .welcomePage { padding: 30px 24px 16px; }
   .welcomeIntro h1 { font-size: 35px; }
   .emptyRepositories { padding: 25px 12px; }
   .workbench { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }

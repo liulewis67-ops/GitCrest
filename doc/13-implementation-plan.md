@@ -5004,3 +5004,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 6 节。
 - 限制/后续：仅迁移底部信息栏常规排版和窄屏隐藏规则；Welcome 页面外壳、section eyebrow 及业务内容样式仍待逐项迁移，S7.2、S7.4、S7.5 验收仍未全部通过。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### Welcome 页面外壳布局迁移到 Tailwind — 小阶段 462
+- 状态：已完成（页面外壳布局、滚动与响应式内边距使用静态 utility）
+- 日期：2026-10-10
+- 交付：将 Welcome 外壳的 flex 列布局、最小高度、垂直滚动及基础/1120px/900px 响应式内边距从全局 CSS 迁至静态 Tailwind utility；主题径向背景继续保留在 `.welcomePage` CSS 规则中。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage462-browser` 与 `git diff --check` 通过；构建 CSS 含基础 `clamp(30px,8vw,112px)`、`clamp(30px,6vh,64px)`、20px 底部内边距及 1120px/900px 响应式 utility；未新增或运行测试。构建有既有 web-tree-sitter eval、chunk size 与外部 outDir 提示，不影响成功结果。
+- 手工验证：检查原 `.welcomePage` 规则现在只保留径向背景；JSX utility 覆盖 flex 列、min-height、滚动、基础内边距和既有两个断点的 padding 值，900px h1 字号及其它媒体查询规则未变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、前端规范第 6 节。
+- 限制/后续：Welcome 外壳的背景效果及其它组件样式仍在全局 CSS；发行版主题/窄屏验收与 S7.2、S7.4、S7.5 验收仍未全部通过。
+- 实施 commit：本阶段样式迁移与台账同一 commit。
