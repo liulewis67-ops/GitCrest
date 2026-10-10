@@ -5178,9 +5178,19 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 ### Welcome 仓库名称与路径文字迁移到 Tailwind — 小阶段 479
 - 状态：已完成（仓库名称/路径排版使用静态 utility）
 - 日期：2026-10-10
-- 交付：将仓库名称与路径的单行截断、颜色 Token、字号和路径 3px 顶间距迁入 JSX；移除 `.repositoryRowText` wrapper 及其全部全局规则，外层改用 `min-w-0` 保持 flex/grid 收缩边界。
-- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage479-browser`、`git diff --check` 通过；源码检索确认无残余 `.repositoryRowText` 引用。生产构建成功，保留既有 web-tree-sitter eval、chunk size、外部 outDir 提示；未新增或运行测试。
-- 手工验证：名称保留 10px/620、路径保留 9px 和 3px 顶边距；两者继续单行溢出省略，颜色分别映射到 `--text-secondary`、`--text-muted`。
+- 交付：将仓库名称与路径的单行截断、颜色 Token、字号和路径 3px 顶间距迁入 JSX；移除 `.repositoryRowText` wrapper 及其基础全局规则，外层改用 `min-w-0` 保持 flex/grid 收缩边界。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage479-browser`、`git diff --check` 通过；源码检索确认 wrapper 已移除，但随后发现有一个缺失仓库颜色选择器仍引用旧 wrapper，并在小阶段 480 清理。生产构建成功，保留既有 web-tree-sitter eval、chunk size、外部 outDir 提示；未新增或运行测试。
+- 手工验证：名称保留 10px/620、路径保留 9px 和 3px 顶边距；两者继续单行溢出省略。阶段479 暂时让缺失路径退回 muted 色，阶段480 恢复为 amber 警告色。
 - 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
 - 限制/后续：分支标签、状态 glyph 和剩余 Welcome 业务视觉仍在全局 CSS；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段样式迁移与台账同一 commit。
+
+### 修复 Welcome 缺失仓库警告色并清理旧选择器 — 小阶段 480
+- 状态：已完成（缺失仓库标记与路径警告色明确映射到 amber Token）
+- 日期：2026-10-10
+- 交付：仓库状态 glyph 和缺失路径使用静态 Tailwind 色彩 utility，正常仓库映射 `text-green`、缺失仓库映射 `text-amber`；移除失效的 `.repositoryMissing`/`.repoStatusGlyph` 规则。阶段479迁移后检查发现旧 `.repositoryRowText small` 选择器仍残留，本阶段一并删除，并在阶段479台账中更正相关记录。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage480-browser`、`git diff --check` 通过；源码确认旧 wrapper/status selector 无残余，构建成功并生成 green/amber 主题 utility。未新增或运行测试；保留已知构建提示。
+- 手工验证：缺失路径文案根据 availability 直接选择 amber Token，状态 glyph 也由正常绿点切换为 amber 感叹号；仓库行其它布局及交互不变。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/13-implementation-plan.md` 小阶段479修订记录、`doc/15-frontend-development-guidelines.md` 第6.2、6.3节。
+- 限制/后续：分支标签和剩余 Welcome 业务视觉仍待迁移；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段状态色修复与台账同一 commit。
