@@ -1,0 +1,79 @@
+{
+  "generatedAt": "2026-10-10T11:16:07.187Z",
+  "fixture": {
+    "path": "E:/gitcrest-stage465-commitgraph-fixture",
+    "commits": 100000,
+    "outputBytes": 6500000
+  },
+  "runsPerMode": 20,
+  "commitGraphFileBytes": 6001112,
+  "measurements": {
+    "false": {
+      "samples": [
+        886.666,
+        866.351,
+        817.365,
+        827.071,
+        868.786,
+        748.598,
+        784.547,
+        875.841,
+        816.973,
+        901.687,
+        754.909,
+        827.411,
+        909.439,
+        751.018,
+        837.684,
+        811.851,
+        822.976,
+        1004.418,
+        751.699,
+        811.012
+      ],
+      "p50Ms": 827.071,
+      "p95Ms": 909.439,
+      "maxMs": 1004.418
+    },
+    "true": {
+      "samples": [
+        772.496,
+        845.636,
+        845.158,
+        799.634,
+        876.118,
+        833.085,
+        786.032,
+        902.976,
+        797.68,
+        860.405,
+        809.635,
+        762.046,
+        777.796,
+        822.751,
+        807.11,
+        936.567,
+        774.756,
+        818.907,
+        815.552,
+        791.588
+      ],
+      "p50Ms": 815.552,
+      "p95Ms": 902.976,
+      "maxMs": 936.567
+    }
+  },
+  "sameOutput": true,
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376
+  },
+  "software": {
+    "git": "git version 2.37.3.windows.1",
+    "measurement": "Node.js 22.19 synchronous child_process spawn with full 100k-commit log output"
+  },
+  "gitCommand": "git -c core.commitGraph={false|true} -C <fixture> log -z --format=tformat:%H%x00%B HEAD --branches --remotes",
+  "interpretation": "Commit-graph reduced median and p95 marginally (about 1.4% and 0.7%), with identical output; the improvement is too small to justify writing and maintaining a 6 MB graph as a cold-search optimization."
+}

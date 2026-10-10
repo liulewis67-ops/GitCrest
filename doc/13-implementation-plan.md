@@ -5036,3 +5036,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/migrations/0015_history_search_detail_none.sql`、`crates/gitcrest-core/src/storage/history_index.rs`、`crates/gitcrest-core/src/storage/migrations.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-cold-detail-none-stage464.json`、`doc/evidence/S7.2/api-win32-indexed-search-detail-none-stage464.json`。
 - 限制/后续：冷搜索完整结果 P95 仍为 1.64s，未满足 <200ms；Git 全量历史扫描 P95 924ms 是剩余最大阶段，需继续处理真实遍历成本。S7.2 其它桌面/发布指标及 S7.4/S7.5 跨平台验收仍未完成。
 - 实施 commit：本阶段实现、测量证据与台账同一 commit。
+
+### 评估 Git commit-graph 对冷历史扫描的收益 — 小阶段 465
+- 状态：已完成（完成对照测量；收益不足，不改变索引构建策略）
+- 日期：2026-10-10
+- 交付：在同一 100k commit pack fixture 上创建 6,001,112-byte commit-graph，并以交错顺序分别运行 20 轮 `git log -z --format=tformat:%H%x00%B HEAD --branches --remotes`；比较强制 `core.commitGraph=false` 与 `true`。
+- 验证：20 轮结果输出 SHA-256 完全一致；关闭/开启 commit-graph 的 P50/P95 分别为 827.071/909.439ms 与 815.552/902.976ms，P95 仅改善约 0.7%，不值得为冷搜索额外生成/维护 6MB 图文件。该项未进入生产仓库，也未修改原 benchmark fixture。
+- 手工验证：探测在独立 `git clone --shared` fixture 完成；100k 输出为 6,500,000 bytes，Git 2.37.3、Windows 10.0.26300、Ryzen 7 5800H；每种配置 20 轮交错运行。
+- 证据：`doc/evidence/S7.2/api-win32-commit-graph-probe-stage465.json`。
+- 限制/后续：commit-graph 不是当前 0.9s Git 扫描瓶颈的有效解法；继续评估不改变提交消息完整性、refs 覆盖和 Git 顺序的替代扫描方式。S7.2、S7.4、S7.5 仍未全部验收。
+- 实施 commit：本阶段对照测量、结果报告与台账同一 commit。
