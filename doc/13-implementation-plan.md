@@ -5334,3 +5334,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/features/branches/dto.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向验证与台账同一 commit。
+
+### Welcome 空仓库操作按钮迁移到 Tailwind — 小阶段 495
+- 状态：已完成（空仓库态选择目录操作使用静态 utility）
+- 日期：2026-10-10
+- 交付：将唯一的 `.inlineAction` 使用点迁为 `border-0`、透明背景、3px padding、accent-strong 文本和 10px 字号等静态 Tailwind 类；从全局 reset 与局部规则中删除 `.inlineAction`，保留复杂空态插图 CSS。
+- 验证：`pnpm frontend:boundaries`、`pnpm exec tsc --noEmit`、`pnpm exec vite build --outDir E:/gitcrest-stage495-browser` 及 `git diff --check` 通过；生产 CSS 已生成对应 utility，源码不再引用 `.inlineAction`。构建保留既有 eval/chunk size 提示。
+- 手工验证：按钮仍是原生 button，文案与装饰箭头顺序、点击行为和 `aria-hidden` 不变；视觉参数与原 CSS 规则一致。
+- 证据：`src/pages/welcome/WelcomePage.tsx`、`src/styles/globals.css`、`doc/15-frontend-development-guidelines.md` 第 6.3 节。
+- 限制/后续：Welcome 主操作按钮仍复用跨页面 `.primaryButton` 基础组件样式，空态插图继续依赖伪元素 CSS；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段样式迁移与台账同一 commit。

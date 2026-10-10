@@ -89,7 +89,7 @@ button:disabled { cursor: not-allowed; }
 .repositoryTab.active > button:first-child { color: var(--text); }
 .repositoryTab .closeRepositoryTab { width: 21px; height: 22px; margin-right: 2px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .repositoryTab .closeRepositoryTab:hover { background: var(--line); color: var(--text); }
-.brandButton, .pageTab, .quietButton, .textButton, .panelMenu, .modeButton, .inlineAction, .actionRow { border: 0; }
+.brandButton, .pageTab, .quietButton, .textButton, .panelMenu, .modeButton, .actionRow { border: 0; }
 .brandButton { display: inline-flex; align-items: center; gap: 8px; padding: 0; background: transparent; font-weight: 650; letter-spacing: -.025em; cursor: pointer; }
 .brandMark, .crumbMark { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--accent-strong); font-size: 12px; font-weight: 800; }
 .brandName { font-size: 13px; }
@@ -137,8 +137,6 @@ button:disabled { cursor: not-allowed; }
 .emptyGlyph span:nth-child(3) { top: 11px; left: 10px; border-color: #557487; background: var(--surface-raised); }
 .emptyGlyph span:nth-child(3)::after { position: absolute; top: 6px; left: 6px; width: 8px; height: 5px; border-left: 1px solid var(--accent); border-bottom: 1px solid var(--accent); transform: skew(-20deg); content: ""; }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
-.inlineAction { padding: 3px; background: transparent; color: var(--accent-strong); font-size: 10px; }
-.inlineAction:disabled { color: var(--text-muted); }
 .actionRow:not(:disabled) { cursor: pointer; }
 .footerDivider { width: 1px; height: 11px; background: var(--line-strong); }
 

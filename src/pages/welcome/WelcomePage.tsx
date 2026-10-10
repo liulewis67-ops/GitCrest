@@ -66,7 +66,7 @@ export function WelcomePage({
                   <div className="emptyGlyph" aria-hidden="true"><span /><span /><span /></div>
                   <h3 className="m-0 text-[12px] font-[620]">No repositories yet</h3>
                   <p className="m-[7px_0_9px] max-w-[310px] text-[11px] leading-[1.6] text-muted">Open a local Git repository to see its changes, branches, and history here.</p>
-                  <button className="inlineAction" type="button" onClick={() => void onOpenLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
+                  <button className="border-0 bg-transparent p-[3px] text-accent-strong text-[10px]" type="button" onClick={() => void onOpenLocalRepository()}>Choose a folder <span aria-hidden="true">→</span></button>
                 </div>
               ) : (
                 <div className="repositoryList grid pt-[5px]">
