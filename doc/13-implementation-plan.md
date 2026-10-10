@@ -5076,3 +5076,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`scripts/performance/benchmark.mjs`、`doc/evidence/S7.2/api-win32-cold-after-history-stage468.json`。
 - 限制/后续：贴近真实首次历史页交互的完整结果 P95 为 811ms，仍超过 <200ms；后端全历史 Git 查询和并行索引争用仍待优化。S7.2、S7.4、S7.5 整体验收未完成。
 - 实施 commit：本阶段基准场景、20 轮报告与台账同一 commit。
+
+### 限量 Git 首匹配探针 — 小阶段 469
+- 状态：已完成（确认近 HEAD 候选可快速返回；尚未改变产品行为）
+- 日期：2026-10-10
+- 交付：对 100k commit fixture 运行 20 次 `git log` 限量首匹配探针，查询固定字符串 `benchmark commit 099999`，输出完整提交摘要并核实每次命中目标。
+- 验证：Windows 10.0.26300、Ryzen 7 5800H、Git 2.37.3；P50/P95/max 为 74.935/92.211/107.135ms，20/20 次返回目标提交。该数值只适用于 fixture 中靠近 HEAD 的已知匹配，不代表任意查询都能在 200ms 内找到候选。
+- 证据：`doc/evidence/S7.2/api-win32-first-match-probe-stage469.json`。
+- 限制/后续：探针表明可研究带 `searchPending` 标记的暂定候选 UI；候选不得伪装完整结果，索引完成后必须以完整匹配页替换。后续对冷查询与首屏后查询实际端到端验证；S7.2、S7.4、S7.5 仍未验收完成。
+- 实施 commit：本阶段探针报告与台账同一 commit。

@@ -1,0 +1,67 @@
+{
+  "generatedAt": "2026-10-10T11:30:24.128Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics",
+    "logicalCpus": 16
+  },
+  "software": {
+    "node": "v22.19.0",
+    "git": "git version 2.37.3.windows.1"
+  },
+  "fixture": {
+    "path": "E:/gitcrest-stage457-fixture",
+    "commits": 100000,
+    "query": "benchmark commit 099999"
+  },
+  "command": "git log --fixed-strings --regexp-ignore-case --grep=<query> --max-count=1 --format=tformat:%H%x00%P%x00%an%x00%ae%x00%at%x00%s HEAD --branches --remotes",
+  "iterations": 20,
+  "p50Ms": 74.935,
+  "p95Ms": 92.211,
+  "maxMs": 107.135,
+  "samplesMs": [
+    78.743,
+    84.501,
+    72.423,
+    74.935,
+    92.211,
+    107.135,
+    82.554,
+    86.406,
+    89.659,
+    74.541,
+    77.603,
+    85.779,
+    71.593,
+    70.592,
+    78.416,
+    71.257,
+    72.027,
+    71.587,
+    70.149,
+    70.823
+  ],
+  "allMatchedTarget": true,
+  "subjects": [
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999",
+    "benchmark commit 099999"
+  ]
+}
