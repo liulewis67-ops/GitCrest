@@ -22,6 +22,13 @@ pub struct BranchSnapshot {
     pub branches: Vec<BranchRef>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct BranchDeletePreviewData {
+    pub is_current: bool,
+    pub unmerged_commit_count: u32,
+    pub requires_confirmation: bool,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchRef {
@@ -123,6 +130,27 @@ pub async fn unmerged_commit_count_with_git(
     git.unmerged_commit_count(repository_path, current, branch)
         .await
         .map_err(map_git_error)
+}
+
+pub async fn preview_branch_delete_with_git(
+    repository_path: &Path,
+    current: Option<&str>,
+    detached: bool,
+    target: &str,
+    git: &dyn BranchGitPort,
+) -> Result<BranchDeletePreviewData, BranchError> {
+    let is_current = current == Some(target);
+    let unmerged_commit_count = match current {
+        Some(current) if !detached && !is_current => {
+            unmerged_commit_count_with_git(repository_path, current, target, git).await?
+        }
+        _ => 0,
+    };
+    Ok(BranchDeletePreviewData {
+        is_current,
+        unmerged_commit_count,
+        requires_confirmation: unmerged_commit_count > 0,
+    })
 }
 
 pub async fn paths_changed_between_with_git(
@@ -443,6 +471,28 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(overlaps, vec!["file.txt"]);
+        let delete_preview = preview_branch_delete_with_git(
+            &path,
+            Some(&default),
+            false,
+            "feature/one",
+            &GitBranchAdapter,
+        )
+        .await
+        .unwrap();
+        assert_eq!(delete_preview.unmerged_commit_count, 1);
+        assert!(delete_preview.requires_confirmation);
+        let current_delete_preview = preview_branch_delete_with_git(
+            &path,
+            Some(&default),
+            false,
+            &default,
+            &GitBranchAdapter,
+        )
+        .await
+        .unwrap();
+        assert!(current_delete_preview.is_current);
+        assert_eq!(current_delete_preview.unmerged_commit_count, 0);
         assert!(overlapping_dirty_paths_with_git(
             &path,
             None,

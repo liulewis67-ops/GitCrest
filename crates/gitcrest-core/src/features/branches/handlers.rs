@@ -264,23 +264,20 @@ pub(super) async fn preview_repository_branch_delete(
         )
     })?;
     let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
-    let is_current = metadata.branch.as_deref() == Some(request.name.as_str());
-    let unmerged_commit_count = match metadata.branch.as_deref() {
-        Some(current) if !metadata.detached => branches::unmerged_commit_count_with_git(
-            &target.repository_path,
-            current,
-            &request.name,
-            state.branch_git.as_ref(),
-        )
-        .await
-        .map_err(ApiError::from_branch_error)?,
-        _ => 0,
-    };
+    let preview = branches::preview_branch_delete_with_git(
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+        &request.name,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
     Ok(Json(BranchDeletePreview {
         name: request.name,
-        is_current,
-        unmerged_commit_count,
-        requires_confirmation: unmerged_commit_count > 0,
+        is_current: preview.is_current,
+        unmerged_commit_count: preview.unmerged_commit_count,
+        requires_confirmation: preview.requires_confirmation,
     }))
 }
 
@@ -297,29 +294,27 @@ pub(super) async fn delete_repository_branch(
         )
     })?;
     let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
-    if metadata.branch.as_deref() == Some(request.name.as_str()) {
+    let preview = branches::preview_branch_delete_with_git(
+        &target.repository_path,
+        metadata.branch.as_deref(),
+        metadata.detached,
+        &request.name,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
+    if preview.is_current {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::BranchCurrent,
             "Switch to another branch before deleting the current branch.",
         ));
     }
-    let unmerged = match metadata.branch.as_deref() {
-        Some(current) if !metadata.detached => branches::unmerged_commit_count_with_git(
-            &target.repository_path,
-            current,
-            &request.name,
-            state.branch_git.as_ref(),
-        )
-        .await
-        .map_err(ApiError::from_branch_error)?,
-        _ => 0,
-    };
-    if unmerged > 0 && !request.allow_unmerged {
+    if preview.unmerged_commit_count > 0 && !request.allow_unmerged {
         return Err(ApiError::new(
             StatusCode::CONFLICT,
             ApiErrorCode::BranchUnmerged,
-            format!("The branch has {unmerged} commit(s) not reachable from the current branch; confirm deletion to continue."),
+            format!("The branch has {} commit(s) not reachable from the current branch; confirm deletion to continue.", preview.unmerged_commit_count),
         ));
     }
     let path = target.repository_path;

@@ -5324,3 +5324,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/api/error.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
 - 限制/后续：分支 create/rename 的其他规则及后台执行协调仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：本阶段服务边界、定向验证与台账同一 commit。
+
+### 分支删除预检规则下沉到 feature service — 小阶段 494
+- 状态：已完成（预览与删除执行共用当前分支/未合并提交判定）
+- 日期：2026-10-10
+- 交付：新增 `preview_branch_delete_with_git` 和中立结果 `BranchDeletePreviewData`，在 service 统一判断目标是否为当前分支、未合并提交数及是否需要确认。预检 handler 只做 DTO 映射；删除 handler 使用同一结果执行当前分支保护与未合并确认，不再各自编排 Git 查询和确认阈值。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、分支 service 定向测试（5 passed）及 `git diff --check` 通过。测试链接使用 D: 临时目录。
+- 手工验证：默认分支到含一个独有提交的 `feature/one` 预检报告 1 个未合并提交并要求确认；目标为当前分支时报告 `is_current=true`、数量为 0。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`crates/gitcrest-core/src/features/branches/dto.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、5.2 节。
+- 限制/后续：分支 create/rename/delete 后台执行编排及其他大型 handler 仍待按 feature service 边界渐进整理；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：本阶段服务边界、定向验证与台账同一 commit。
