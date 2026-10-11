@@ -1,19 +1,17 @@
 use std::{
-    ffi::OsString,
     io,
     path::{Component, Path, PathBuf},
-    process::Stdio,
-    time::Duration,
 };
 
 use sha2::{Digest, Sha256};
-use tokio::{fs, io::AsyncWriteExt, process::Command};
+use tokio::{fs, io::AsyncWriteExt};
 
-use crate::domain::{error::ConflictError, workflow::WorkflowOperation};
+use crate::{
+    domain::{error::ConflictError, workflow::WorkflowOperation},
+    ports::conflicts::ConflictGitPort,
+};
 
 const MAX_CONFLICT_FILE_BYTES: usize = 1024 * 1024;
-const MAX_STDERR_BYTES: usize = 16 * 1024;
-const GIT_DEADLINE: Duration = Duration::from_secs(10);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ConflictFile {
@@ -31,6 +29,7 @@ pub struct ConflictFile {
 }
 
 pub async fn read_file(
+    git: &impl ConflictGitPort,
     repo_id: String,
     task_id: String,
     operation: WorkflowOperation,
@@ -39,13 +38,15 @@ pub async fn read_file(
     relative_path: &str,
 ) -> Result<ConflictFile, ConflictError> {
     validate_relative_path(relative_path)?;
-    let index_stages = read_index_stages(repository_path, relative_path).await?;
+    let index_stages = git
+        .read_conflict_stages(repository_path, relative_path)
+        .await?;
     if index_stages.is_empty() {
         return Err(ConflictError::NotConflicted);
     }
-    let base = read_stage(repository_path, index_stages.get(&1)).await?;
-    let ours = read_stage(repository_path, index_stages.get(&2)).await?;
-    let theirs = read_stage(repository_path, index_stages.get(&3)).await?;
+    let base = read_stage(git, repository_path, index_stages.get(&1)).await?;
+    let ours = read_stage(git, repository_path, index_stages.get(&2)).await?;
+    let theirs = read_stage(git, repository_path, index_stages.get(&3)).await?;
     let result = read_worktree_file(repository_path, relative_path).await?;
     let is_text = [&base, &ours, &theirs, &result]
         .into_iter()
@@ -69,6 +70,7 @@ pub async fn read_file(
 }
 
 pub async fn save_result(
+    git: &impl ConflictGitPort,
     repository_path: &Path,
     relative_path: &str,
     expected_revision: &str,
@@ -76,7 +78,8 @@ pub async fn save_result(
 ) -> Result<String, ConflictError> {
     validate_relative_path(relative_path)?;
     validate_content(content)?;
-    if read_index_stages(repository_path, relative_path)
+    if git
+        .read_conflict_stages(repository_path, relative_path)
         .await?
         .is_empty()
     {
@@ -102,12 +105,14 @@ pub async fn save_result(
 }
 
 pub async fn mark_resolved(
+    git: &impl ConflictGitPort,
     repository_path: &Path,
     relative_path: &str,
     expected_revision: &str,
 ) -> Result<(), ConflictError> {
     validate_relative_path(relative_path)?;
-    if read_index_stages(repository_path, relative_path)
+    if git
+        .read_conflict_stages(repository_path, relative_path)
         .await?
         .is_empty()
     {
@@ -125,13 +130,10 @@ pub async fn mark_resolved(
         return Err(ConflictError::UnresolvedMarkers);
     }
     safe_worktree_target(repository_path, relative_path).await?;
-    git_output(
-        repository_path,
-        ["--literal-pathspecs", "add", "--"],
-        Some(OsString::from(relative_path)),
-    )
-    .await?;
-    if !read_index_stages(repository_path, relative_path)
+    git.stage_conflict_file(repository_path, relative_path)
+        .await?;
+    if !git
+        .read_conflict_stages(repository_path, relative_path)
         .await?
         .is_empty()
     {
@@ -189,56 +191,13 @@ fn revision(value: &Option<Vec<u8>>) -> String {
         .collect()
 }
 
-async fn read_index_stages(
-    repository_path: &Path,
-    relative_path: &str,
-) -> Result<std::collections::BTreeMap<u8, String>, ConflictError> {
-    let output = git_output(
-        repository_path,
-        ["--literal-pathspecs", "ls-files", "-u", "-z", "--"],
-        Some(OsString::from(relative_path)),
-    )
-    .await?;
-    let mut stages = std::collections::BTreeMap::new();
-    for record in output
-        .split(|byte| *byte == 0)
-        .filter(|record| !record.is_empty())
-    {
-        let Some(tab) = record.iter().position(|byte| *byte == b'\t') else {
-            return Err(ConflictError::GitFailed);
-        };
-        let header = std::str::from_utf8(&record[..tab]).map_err(|_| ConflictError::GitFailed)?;
-        let mut parts = header.split_ascii_whitespace();
-        let _mode = parts.next().ok_or(ConflictError::GitFailed)?;
-        let oid = parts.next().ok_or(ConflictError::GitFailed)?;
-        let stage = parts
-            .next()
-            .and_then(|value| value.parse::<u8>().ok())
-            .ok_or(ConflictError::GitFailed)?;
-        let path =
-            std::str::from_utf8(&record[tab + 1..]).map_err(|_| ConflictError::InvalidPath)?;
-        if path == relative_path && (1..=3).contains(&stage) {
-            stages.insert(stage, oid.to_owned());
-        }
-    }
-    Ok(stages)
-}
-
 async fn read_stage(
+    git: &impl ConflictGitPort,
     repository_path: &Path,
     oid: Option<&String>,
 ) -> Result<Option<Vec<u8>>, ConflictError> {
     let Some(oid) = oid else { return Ok(None) };
-    let size = git_output(repository_path, ["cat-file", "-s", oid.as_str()], None).await?;
-    let size = std::str::from_utf8(&size)
-        .map_err(|_| ConflictError::GitFailed)?
-        .trim()
-        .parse::<usize>()
-        .map_err(|_| ConflictError::GitFailed)?;
-    if size > MAX_CONFLICT_FILE_BYTES {
-        return Err(ConflictError::TooLarge);
-    }
-    let bytes = git_output(repository_path, ["cat-file", "blob", oid.as_str()], None).await?;
+    let bytes = git.read_conflict_blob(repository_path, oid).await?;
     if bytes.len() > MAX_CONFLICT_FILE_BYTES {
         return Err(ConflictError::TooLarge);
     }
@@ -299,40 +258,13 @@ async fn safe_worktree_target(
     Ok(path)
 }
 
-async fn git_output<const N: usize>(
-    repository_path: &Path,
-    args: [&str; N],
-    trailing_arg: Option<OsString>,
-) -> Result<Vec<u8>, ConflictError> {
-    let mut command = Command::new("git");
-    command.arg("-C").arg(repository_path).args(args);
-    if let Some(argument) = trailing_arg {
-        command.arg(argument);
-    }
-    command
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .env("GIT_PAGER", "cat")
-        .kill_on_drop(true);
-    let output = tokio::time::timeout(GIT_DEADLINE, command.output())
-        .await
-        .map_err(|_| ConflictError::TimedOut)?
-        .map_err(|_| ConflictError::GitUnavailable)?;
-    if !output.status.success() {
-        return Err(ConflictError::GitFailed);
-    }
-    if output.stdout.len() > MAX_CONFLICT_FILE_BYTES + MAX_STDERR_BYTES {
-        return Err(ConflictError::TooLarge);
-    }
-    Ok(output.stdout)
-}
-
 #[cfg(test)]
 mod tests {
     use std::{fs, process::Command};
 
     use tempfile::TempDir;
+
+    use crate::git::command::GitCommandService;
 
     use super::*;
 
@@ -385,7 +317,9 @@ mod tests {
     #[tokio::test]
     async fn reads_three_stages_and_the_persisted_working_result() {
         let repository = conflicting_repo();
+        let git_service = GitCommandService::default();
         let result = read_file(
+            &git_service,
             "repo_fixture".into(),
             "task_fixture".into(),
             WorkflowOperation::Merge,
@@ -410,7 +344,9 @@ mod tests {
     #[tokio::test]
     async fn saves_only_the_current_conflict_and_refuses_stale_or_unresolved_results() {
         let repository = conflicting_repo();
+        let git_service = GitCommandService::default();
         let snapshot = read_file(
+            &git_service,
             "repo_fixture".into(),
             "task_fixture".into(),
             WorkflowOperation::Merge,
@@ -421,11 +357,19 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            save_result(repository.path(), "file.txt", "stale", "resolved\n").await,
+            save_result(
+                &git_service,
+                repository.path(),
+                "file.txt",
+                "stale",
+                "resolved\n"
+            )
+            .await,
             Err(ConflictError::StaleRevision)
         );
         let content = "resolved safely\n";
         let revision = save_result(
+            &git_service,
             repository.path(),
             "file.txt",
             &snapshot.result_revision,
@@ -438,10 +382,11 @@ mod tests {
             content
         );
         assert_eq!(
-            mark_resolved(repository.path(), "file.txt", "stale").await,
+            mark_resolved(&git_service, repository.path(), "file.txt", "stale").await,
             Err(ConflictError::StaleRevision)
         );
         let marked = save_result(
+            &git_service,
             repository.path(),
             "file.txt",
             &revision,
@@ -450,16 +395,23 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            mark_resolved(repository.path(), "file.txt", &marked).await,
+            mark_resolved(&git_service, repository.path(), "file.txt", &marked).await,
             Err(ConflictError::UnresolvedMarkers)
         );
-        let current = save_result(repository.path(), "file.txt", &marked, content)
+        let current = save_result(
+            &git_service,
+            repository.path(),
+            "file.txt",
+            &marked,
+            content,
+        )
+        .await
+        .unwrap();
+        mark_resolved(&git_service, repository.path(), "file.txt", &current)
             .await
             .unwrap();
-        mark_resolved(repository.path(), "file.txt", &current)
-            .await
-            .unwrap();
-        assert!(read_index_stages(repository.path(), "file.txt")
+        assert!(git_service
+            .read_conflict_stages(repository.path(), "file.txt")
             .await
             .unwrap()
             .is_empty());

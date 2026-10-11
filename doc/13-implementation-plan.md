@@ -5514,3 +5514,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
 - 限制/后续：S7.2 的冷搜索/桌面内存与帧率未达阈值，S7.4/S7.5 跨平台和发布验收继续未完成。
 - 实施 commit：command 输入、调用点、lint 修复与台账同一 commit。
+
+### Workflow conflict Git 操作迁入 adapter port — 小阶段 513
+- 状态：已完成（feature workflow 不再直接启动 Git 子进程）
+- 日期：2026-10-11
+- 交付：新增 `ConflictGitPort` 和 `git/conflicts.rs`，将 unmerged index stage 解析、冲突 blob 读取与冲突文件 stage 操作移入 `GitCommandService` adapter；workflow conflict helper 通过 port 协调原有冲突流程，handler 注入现有 Git command service。保留 literal pathspec、1 MiB blob 上限、10 秒 Git deadline 和原错误语义。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`git diff --check` 通过；Clippy 编译了 lib 与 test targets。源码检索确认生产 workflow conflict helper 不再有 Git 子进程调用；未运行测试。
+- 手工验证：检查 read/save/mark-resolved handler 均将同一 `GitCommandService` 传入 conflict helper；stage 操作后仍检查该路径的 unmerged stages 已清空。
+- 证据：`crates/gitcrest-core/src/ports/conflicts.rs`、`crates/gitcrest-core/src/git/conflicts.rs`、`crates/gitcrest-core/src/features/workflows/{conflicts.rs,handlers/conflicts.rs}`、`doc/14-backend-development-guidelines.md` 第 4.1 节。
+- 限制/后续：conflict helper 仍直接执行受限工作树文件读写；后续可评估 storage port 边界。S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：port、adapter、注入、验证与台账同一 commit。

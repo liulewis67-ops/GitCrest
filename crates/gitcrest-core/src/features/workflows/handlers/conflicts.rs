@@ -87,6 +87,7 @@ pub(in crate::features::workflows) async fn read_workflow_conflict_file(
         ));
     }
     conflicts::read_file(
+        &state.git_commands,
         repo_id,
         query.task_id,
         preview.operation,
@@ -196,6 +197,7 @@ async fn read_reviewed_conflict_for_suggestion(
         ));
     }
     let file = conflicts::read_file(
+        &state.git_commands,
         repo_id.to_owned(),
         request.task_id.clone(),
         request.expected_operation,
@@ -306,6 +308,7 @@ pub(in crate::features::workflows) async fn save_workflow_conflict_file(
     .await?;
     ensure_conflict_revision(&preview, &request.mutation)?;
     let snapshot = conflicts::read_file(
+        &state.git_commands,
         repo_id.clone(),
         request.mutation.task_id.clone(),
         preview.operation,
@@ -359,6 +362,7 @@ pub(in crate::features::workflows) async fn save_workflow_conflict_file(
                     ));
                 }
                 let current = conflicts::read_file(
+                    &git_commands,
                     repo_id.clone(),
                     task_id.clone(),
                     operation,
@@ -375,11 +379,17 @@ pub(in crate::features::workflows) async fn save_workflow_conflict_file(
                         "The working result changed after review. Refresh before saving.".into(),
                     ));
                 }
-                conflicts::save_result(&repo_path, &path, &expected_revision, &content)
-                    .await
-                    .map_err(|_| {
-                        TaskFailure::Failed("Could not safely save this conflict result.".into())
-                    })?;
+                conflicts::save_result(
+                    &git_commands,
+                    &repo_path,
+                    &path,
+                    &expected_revision,
+                    &content,
+                )
+                .await
+                .map_err(|_| {
+                    TaskFailure::Failed("Could not safely save this conflict result.".into())
+                })?;
                 Ok(Some("Conflict result saved to the working tree.".into()))
             },
         )
@@ -412,6 +422,7 @@ pub(in crate::features::workflows) async fn mark_workflow_conflict_resolved(
     .await?;
     ensure_conflict_revision(&preview, &request)?;
     let snapshot = conflicts::read_file(
+        &state.git_commands,
         repo_id.clone(),
         request.task_id.clone(),
         preview.operation,
@@ -475,7 +486,7 @@ pub(in crate::features::workflows) async fn mark_workflow_conflict_resolved(
                             .into(),
                     ));
                 }
-                conflicts::mark_resolved(&repo_path, &path, &expected_revision)
+                conflicts::mark_resolved(&git_commands, &repo_path, &path, &expected_revision)
                     .await
                     .map_err(|error| {
                         TaskFailure::Failed(match error {
