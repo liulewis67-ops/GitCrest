@@ -5562,3 +5562,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-pending-search-stage517-20261011.json`、`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`src/features/history/model/use-repository-history.ts`。
 - 限制/后续：首响符合 <200ms，但完整搜索结果 P95 仍约 5.97 秒，且索引 ready P95 约 5.95 秒；不得把 pending 首响称为完整搜索达标。需继续降低索引构建 Git/SQLite 持久化耗时，并完成其它 S7.2 与 S7.4/S7.5 门槛。
 - 实施 commit：后台 pending/失败回退、基准双时延、测试断言调整、证据与台账同一 commit。
+
+### 批量写入 history search SQLite 索引 — 小阶段 518
+- 状态：已完成（索引文档改为每批最多 256 行插入）
+- 日期：2026-10-11
+- 交付：将 history 搜索索引持久化从逐行执行 prepared statement 改为每批最多 256 行的参数化多行 INSERT；每批最多 768 个绑定参数，低于 SQLite 常见 999 参数上限。事务、FTS 批量回填和提交语义保持不变。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、Release build、20 轮冷搜索基准及 `git diff --check` 通过；Clippy 编译 lib/test targets，未运行测试。当前 100k fixture 首响 P95 19.935ms、完整结果 P95 1,584.919ms、index ready P95 1,576.021ms；rows 写入阶段 P95 234ms，前一轮 stage517 报告为 672ms。不同基准轮次的 Git 导出耗时波动较大，整体完整结果变化不全归因于本次批处理。
+- 手工验证：20/20 轮索引就绪后均返回目标提交；批次 256 条时使用 768 个绑定参数，末批按剩余行数构造占位符，空索引不生成空 INSERT。
+- 证据：`doc/evidence/S7.2/api-win32-cold-batched-index-stage518-20261011.json`、`crates/gitcrest-core/src/storage/history_index.rs`、`scripts/performance/benchmark.mjs`。
+- 限制/后续：完整结果 P95 约 1.58 秒，仍高于 200ms；索引构建 Git 遍历与 FTS/事务提交仍需继续优化，S7.2 其它目标及 S7.4/S7.5 仍未完成。
+- 实施 commit：批量写入、20 轮证据与台账同一 commit。

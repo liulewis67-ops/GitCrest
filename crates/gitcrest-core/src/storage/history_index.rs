@@ -3,7 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, params_from_iter, Connection, OptionalExtension, ToSql};
 
 use crate::{domain::commit::CommitSearchEntry, ports::history::HistorySearchIndexPort};
 
@@ -101,17 +101,27 @@ impl RepositoryStore {
             .map_err(|error| error.to_string())?;
         let maintenance_elapsed_ms = maintenance_started.elapsed().as_millis();
         let rows_started = std::time::Instant::now();
-        {
+        for chunk in entries.chunks(256) {
+            let placeholders = vec!["(?, ?, ?)"; chunk.len()].join(",");
+            let sql = format!(
+                "INSERT INTO history_search_documents (repo_id, oid, message) VALUES {placeholders}"
+            );
             let mut statement = transaction
-                .prepare_cached(
-                    "INSERT INTO history_search_documents (repo_id, oid, message) VALUES (?1, ?2, ?3)",
-                )
+                .prepare_cached(&sql)
                 .map_err(|error| error.to_string())?;
-            for entry in entries {
-                statement
-                    .execute(params![repo_id, entry.oid, entry.message,])
-                    .map_err(|error| error.to_string())?;
-            }
+            let values: Vec<&dyn ToSql> = chunk
+                .iter()
+                .flat_map(|entry| {
+                    [
+                        &repo_id as &dyn ToSql,
+                        &entry.oid as &dyn ToSql,
+                        &entry.message as &dyn ToSql,
+                    ]
+                })
+                .collect();
+            statement
+                .execute(params_from_iter(values))
+                .map_err(|error| error.to_string())?;
         }
         let rows_elapsed_ms = rows_started.elapsed().as_millis();
         let fts_started = std::time::Instant::now();
