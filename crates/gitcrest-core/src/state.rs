@@ -18,9 +18,12 @@ use crate::{
         RemoteCommandPort, RemoteGitPort, RemotePreflightReadPort, RemotePullRecoveryPort,
     },
     ports::settings::AiProviderSettingsPort,
-    ports::shelves::{ShelfPatchCheckPort, ShelfStorePort},
     ports::tags::TagGitPort,
     ports::undo::UndoStorePort,
+    ports::{
+        conflicts::ConflictWorktreePort,
+        shelves::{ShelfPatchCheckPort, ShelfStorePort},
+    },
 };
 
 #[derive(Clone)]
@@ -39,6 +42,7 @@ pub(crate) struct AppState {
     pub(crate) history_search_index: Arc<dyn HistorySearchIndexPort>,
     pub(crate) shelf_store: Arc<dyn ShelfStorePort>,
     pub(crate) shelf_patch_checker: Arc<dyn ShelfPatchCheckPort>,
+    pub(crate) conflict_worktree: Arc<dyn ConflictWorktreePort>,
     pub(crate) undo_store: Arc<dyn UndoStorePort>,
     pub(crate) repository_targets: RepositoryTargetReader,
     pub(crate) status: StatusService<RepositoryTargetReader, GitCommandService>,

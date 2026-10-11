@@ -24,3 +24,18 @@ pub(crate) trait ConflictGitPort: Send + Sync {
 
 pub(crate) type ConflictGitFuture<'a, T> =
     Pin<Box<dyn Future<Output = Result<T, ConflictError>> + Send + 'a>>;
+
+pub(crate) trait ConflictWorktreePort: Send + Sync {
+    fn read_conflict_worktree_file<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        relative_path: &'a str,
+    ) -> ConflictGitFuture<'a, Option<Vec<u8>>>;
+
+    fn write_conflict_worktree_file<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        relative_path: &'a str,
+        content: &'a [u8],
+    ) -> ConflictGitFuture<'a, ()>;
+}

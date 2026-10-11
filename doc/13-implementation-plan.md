@@ -5524,3 +5524,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/conflicts.rs`、`crates/gitcrest-core/src/git/conflicts.rs`、`crates/gitcrest-core/src/features/workflows/{conflicts.rs,handlers/conflicts.rs}`、`doc/14-backend-development-guidelines.md` 第 4.1 节。
 - 限制/后续：conflict helper 仍直接执行受限工作树文件读写；后续可评估 storage port 边界。S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：port、adapter、注入、验证与台账同一 commit。
+
+### Workflow conflict 工作树文件操作迁入 storage port — 小阶段 514
+- 状态：已完成（conflict feature helper 不再直接操作文件系统）
+- 日期：2026-10-11
+- 交付：扩展 conflict 能力接口中的 `ConflictWorktreePort`，新增 `storage/conflicts.rs` adapter，集中执行仓库内安全路径解析、符号链接/文件类型检查、1 MiB 限制以及工作树文件读写；feature helper 继续负责冲突 revision、文本和 marker 规则。通过 AppState 注入 adapter，并以 `ReadConflictCommand` 收拢读取场景输入。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 和 `git diff --check` 通过；Clippy 编译 lib 与 test targets。源码检索确认生产 conflict helper 不再直接调用 Git 子进程或 filesystem；未运行测试。
+- 手工验证：handler 的冲突读取、保存前复读、保存和标记 resolved 均使用注入的 storage adapter；写入前仍校验当前 revision，mark-resolved 仍先检查 markers 并在 stage 后确认 unmerged entries 清空。
+- 证据：`crates/gitcrest-core/src/ports/conflicts.rs`、`crates/gitcrest-core/src/storage/conflicts.rs`、`crates/gitcrest-core/src/features/workflows/{conflicts.rs,handlers/conflicts.rs}`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4.1 节。
+- 限制/后续：当前安全路径仍通过 canonical parent 与 symlink metadata 检查；S7.2、S7.4、S7.5 验收继续未完成。
+- 实施 commit：storage port、adapter、注入、command 输入整理与台账同一 commit。
