@@ -68,12 +68,14 @@ pub(super) async fn set_branch_favorite(
         .await
         .map_err(ApiError::from_repository_error)?;
     let snapshot = branches::set_branch_favorite_with_git(
-        repo_id,
-        &target.repository_path,
-        metadata.branch.as_deref(),
-        metadata.detached,
-        &request.full_name,
-        request.favorite,
+        branches::SetFavoriteCommand {
+            repo_id,
+            repository_path: target.repository_path,
+            current_branch: metadata.branch,
+            detached: metadata.detached,
+            full_name: request.full_name,
+            favorite: request.favorite,
+        },
         state.branch_git.as_ref(),
         state.branch_favorites.clone(),
     )

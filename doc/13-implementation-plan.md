@@ -5504,3 +5504,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/shelves.rs`、`crates/gitcrest-core/src/git/shelves.rs`、`crates/gitcrest-core/src/features/shelves/{service,handlers}.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4.1、7.1 节。
 - 限制/后续：Clippy 发现的 branch favorite service 参数聚合与一个测试 lint 在小阶段 512 处理；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：port、adapter、注入、错误映射与台账同一 commit。
+
+### 收拢 branch favorite 用例输入并清理 Clippy 告警 — 小阶段 512
+- 状态：已完成（favorite 更新以类型化 command 传入 service，全 target Clippy 通过）
+- 日期：2026-10-11
+- 交付：将 branch favorite 用例的仓库、路径、当前分支、目标 ref 和 favorite 状态收拢到 `SetFavoriteCommand`，减少服务入口参数并明确输入语义；测试改用 `slice::from_ref` 避免不必要的 clone。
+- 验证：branch favorite 定向测试（5 passed）、`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml --check`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；Clippy 覆盖 lib 与 test target，无 warning。
+- 手工验证：favorite 设置成功后响应快照和持久化记录均为 true；未知分支仍返回 NotFound；rename/delete 任务成功后才更新 favorites 的现有规则不变。
+- 证据：`crates/gitcrest-core/src/features/branches/{service,handlers}.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
+- 限制/后续：S7.2 的冷搜索/桌面内存与帧率未达阈值，S7.4/S7.5 跨平台和发布验收继续未完成。
+- 实施 commit：command 输入、调用点、lint 修复与台账同一 commit。

@@ -1,4 +1,8 @@
-use std::{future::Future, path::Path, sync::Arc};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde::Serialize;
 
@@ -68,6 +72,15 @@ pub enum BranchError {
     Unmerged(u32),
     AlreadyCurrent,
     WorktreeDirty,
+}
+
+pub struct SetFavoriteCommand {
+    pub repo_id: String,
+    pub repository_path: PathBuf,
+    pub current_branch: Option<String>,
+    pub detached: bool,
+    pub full_name: String,
+    pub favorite: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -355,20 +368,15 @@ pub async fn read_branches_with_favorites(
 }
 
 pub async fn set_branch_favorite_with_git(
-    repo_id: String,
-    repository_path: &Path,
-    current: Option<&str>,
-    detached: bool,
-    full_name: &str,
-    favorite: bool,
+    command: SetFavoriteCommand,
     git: &dyn BranchGitPort,
     favorites_store: Arc<dyn BranchFavoriteStorePort>,
 ) -> Result<BranchSnapshot, BranchError> {
     let mut snapshot = read_branches_with_favorites(
-        repo_id.clone(),
-        repository_path,
-        current,
-        detached,
+        command.repo_id.clone(),
+        &command.repository_path,
+        command.current_branch.as_deref(),
+        command.detached,
         git,
         favorites_store.clone(),
     )
@@ -376,11 +384,13 @@ pub async fn set_branch_favorite_with_git(
     let Some(branch) = snapshot
         .branches
         .iter_mut()
-        .find(|branch| branch.full_name == full_name)
+        .find(|branch| branch.full_name == command.full_name)
     else {
         return Err(BranchError::NotFound);
     };
-    let storage_full_name = full_name.to_owned();
+    let storage_full_name = command.full_name;
+    let repo_id = command.repo_id;
+    let favorite = command.favorite;
     tokio::task::spawn_blocking(move || {
         favorites_store.set_branch_favorite(&repo_id, &storage_full_name, favorite)
     })
@@ -787,12 +797,14 @@ mod tests {
         let store = Arc::new(RecordingBranchFavorites::default());
 
         let snapshot = set_branch_favorite_with_git(
-            "repo_fixture".into(),
-            path,
-            Some(&current),
-            false,
-            &full_name,
-            true,
+            SetFavoriteCommand {
+                repo_id: "repo_fixture".into(),
+                repository_path: path.to_owned(),
+                current_branch: Some(current.clone()),
+                detached: false,
+                full_name: full_name.clone(),
+                favorite: true,
+            },
             &GitBranchAdapter,
             store.clone(),
         )
@@ -814,12 +826,14 @@ mod tests {
         git(path, &["init", "--quiet"]);
 
         let result = set_branch_favorite_with_git(
-            "repo_fixture".into(),
-            path,
-            None,
-            true,
-            "refs/heads/missing",
-            true,
+            SetFavoriteCommand {
+                repo_id: "repo_fixture".into(),
+                repository_path: path.to_owned(),
+                current_branch: None,
+                detached: true,
+                full_name: "refs/heads/missing".into(),
+                favorite: true,
+            },
             &GitBranchAdapter,
             Arc::new(RecordingBranchFavorites::default()),
         )
@@ -861,7 +875,10 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(store.0.lock().unwrap().as_slice(), &[new_full_name.clone()]);
+        assert_eq!(
+            store.0.lock().unwrap().as_slice(),
+            std::slice::from_ref(&new_full_name)
+        );
 
         execute_branch_and_update_favorites(
             "repo_fixture".into(),
