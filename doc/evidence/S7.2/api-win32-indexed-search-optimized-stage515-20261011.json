@@ -1,0 +1,82 @@
+{
+  "generatedAt": "2026-10-11T04:47:26.103Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "node": "v22.19.0",
+    "git": "git version 2.37.3.windows.1",
+    "rustProfile": "release",
+    "executable": "E:\\personal_projects\\GitCrest\\crates\\gitcrest-core\\target\\release\\gitcrest-core.exe",
+    "executableBytes": 18173440
+  },
+  "fixture": {
+    "commits": 100000,
+    "path": "E:\\gitcrest-stage407-temp\\gitcrest-stage407-100k-fixture",
+    "searchQuery": "message contains benchmark commit 099999"
+  },
+  "iterations": 20,
+  "searchIndexWarmup": {
+    "ready": true,
+    "attempts": 1,
+    "elapsedMs": 2333.492
+  },
+  "results": [
+    {
+      "name": "historySearch100kColdGitFallbackFirstResponse",
+      "samples": 1,
+      "p50Ms": 603.406,
+      "p95Ms": 603.406,
+      "maxMs": 603.406,
+      "samplesMs": [
+        603.406
+      ]
+    },
+    {
+      "name": "historySearch100kIndexed",
+      "samples": 20,
+      "p50Ms": 8.851,
+      "p95Ms": 11.934,
+      "maxMs": 12.555,
+      "samplesMs": [
+        9.668,
+        11.934,
+        8.851,
+        11.826,
+        9.376,
+        12.555,
+        10.703,
+        9.64,
+        9.384,
+        9.087,
+        7.465,
+        7.743,
+        7.283,
+        9.294,
+        8.022,
+        7.765,
+        7.679,
+        6.807,
+        7.763,
+        6.926
+      ]
+    }
+  ],
+  "limitations": [
+    "Cold Git fallback is a single diagnostic sample; use the cold command for the required 20-run cold-search measurement. This command measures indexed search and does not claim other S7.2 targets."
+  ],
+  "stderr": "[gitcrest-core] History index store phases maintenance=0ms rows=266ms fts=297ms commit=257ms\n[gitcrest-core] History index build phases git=816ms parse=19ms verify=4ms persist=830ms\n[gitcrest-core] History message index ready in 1674ms"
+}

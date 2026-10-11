@@ -5534,3 +5534,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/conflicts.rs`、`crates/gitcrest-core/src/storage/conflicts.rs`、`crates/gitcrest-core/src/features/workflows/{conflicts.rs,handlers/conflicts.rs}`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 4.1 节。
 - 限制/后续：当前安全路径仍通过 canonical parent 与 symlink metadata 检查；S7.2、S7.4、S7.5 验收继续未完成。
 - 实施 commit：storage port、adapter、注入、command 输入整理与台账同一 commit。
+
+### 合并 indexed history search 仓库读取 — 小阶段 515
+- 状态：已完成（warm indexed query 通过单个阻塞工作单元复用 libgit2 仓库）
+- 日期：2026-10-11
+- 交付：将 message index 指纹计算、SQLite FTS 查询、命中提交 hydration 与末尾指纹复核合并到一个 `spawn_blocking` 工作单元，并复用单个 libgit2 `Repository`。保留索引缺失/查询失败时回退完整 Git 搜索，以及搜索期间 refs 变化时拒绝返回缓存结果。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、`cargo build --release --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`node --check scripts/performance/benchmark.mjs`、`git diff --check` 通过。Windows 10.0.26300 / Ryzen 7 5800H / Git 2.37.3 / Node 22.19 / 100k commit fixture 上执行 `search`：warm indexed API 20 轮 P50/P95/max = 8.851/11.934/12.555ms；冷 Git fallback 仅一轮 603.406ms，不能替代冷搜索 20 轮验收。
+- 手工验证：基准逐轮核对目标提交 `benchmark commit 099999`，索引 ready 后 20/20 查询均通过；本次运行的 index warmup 为 2,333.492ms。
+- 证据：`doc/evidence/S7.2/api-win32-indexed-search-optimized-stage515-20261011.json`、`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`。
+- 限制/后续：S7.2 冷 Git fallback 单样本 686.656ms，尚未达到 <200ms，也未执行 20 轮冷搜索；桌面内存/帧率与 S7.4/S7.5 发布验收仍未完成。
+- 实施 commit：warm query 复用优化、基准证据与台账同一 commit。

@@ -41,88 +41,23 @@ pub async fn read_page_indexed(
         && filters.path.is_none()
         && filters.since.is_none()
         && filters.until.is_none();
-    let fingerprint = if indexable_message_search {
-        match refs_fingerprint(repository_path, head).await {
-            Ok(fingerprint) => Some(fingerprint),
-            Err(_) => {
-                eprintln!(
-                    "[gitcrest-core] History message index refs fingerprint failed; falling back to Git search"
-                );
-                None
-            }
-        }
-    } else {
-        None
-    };
-
-    let mut stale_cached_index = false;
-    if let (Some(fingerprint), Some(message)) = (&fingerprint, &filters.message) {
-        let store_for_search = store.clone();
-        let repo_id_for_search = repo_id.clone();
-        let fingerprint_for_search = fingerprint.clone();
-        let message_for_search = message.clone();
-        let cached = match tokio::task::spawn_blocking(move || {
-            store_for_search.search_messages(
-                &repo_id_for_search,
-                &fingerprint_for_search,
-                &message_for_search,
-                offset,
-                limit + 1,
-            )
-        })
+    let (fingerprint, cached_page, stale_cached_index) = if indexable_message_search {
+        let message = filters.message.as_deref().unwrap_or_default();
+        cached_message_page(
+            repo_id.clone(),
+            repository_path,
+            head,
+            message.to_owned(),
+            offset,
+            limit,
+            store.clone(),
+        )
         .await
-        {
-            Ok(Ok(entries)) => entries,
-            Ok(Err(_)) => {
-                eprintln!(
-                    "[gitcrest-core] History message index storage query failed; falling back to Git search"
-                );
-                None
-            }
-            Err(_) => {
-                eprintln!(
-                    "[gitcrest-core] History message index query task failed; falling back to Git search"
-                );
-                None
-            }
-        };
-        if let Some(mut entries) = cached {
-            let has_more = entries.len() > limit;
-            if has_more {
-                entries.pop();
-            }
-            let commits = summaries_for_search_entries(repository_path, &entries).await;
-            let current_fingerprint = refs_fingerprint(repository_path, head).await;
-            let refs_are_current =
-                matches!(&current_fingerprint, Ok(current) if current == fingerprint);
-            match commits {
-                Ok(commits) if refs_are_current => {
-                    return Ok(CommitPage {
-                        repo_id,
-                        offset,
-                        limit,
-                        commits,
-                        next_offset: has_more.then_some(offset + limit),
-                        search_pending: false,
-                    });
-                }
-                Err(_) => eprintln!(
-                    "[gitcrest-core] History message index commit hydration failed; falling back to Git search"
-                ),
-                _ => {}
-            }
-            if !refs_are_current {
-                match current_fingerprint {
-                    Ok(_) => eprintln!(
-                        "[gitcrest-core] History message index refs changed during query; falling back to Git search"
-                    ),
-                    Err(_) => eprintln!(
-                        "[gitcrest-core] History message index refs recheck failed; falling back to Git search"
-                    ),
-                }
-                stale_cached_index = true;
-            }
-        }
+    } else {
+        (None, None, false)
+    };
+    if let Some(page) = cached_page {
+        return Ok(page);
     }
 
     let page = read_page(
@@ -154,8 +89,106 @@ pub async fn read_page_indexed(
     Ok(page)
 }
 
-async fn summaries_for_search_entries(
+async fn cached_message_page(
+    repo_id: String,
     repository_path: &Path,
+    head: Option<&str>,
+    message: String,
+    offset: usize,
+    limit: usize,
+    store: Arc<dyn HistorySearchIndexPort>,
+) -> (Option<String>, Option<CommitPage>, bool) {
+    let repository_path = repository_path.to_owned();
+    let head = head.map(str::to_owned);
+    match tokio::task::spawn_blocking(move || {
+        let repository = match Repository::open(repository_path) {
+            Ok(repository) => repository,
+            Err(_) => {
+                eprintln!(
+                    "[gitcrest-core] History message index refs fingerprint failed; falling back to Git search"
+                );
+                return (None, None, false);
+            }
+        };
+        let fingerprint = match refs_fingerprint_for_repository(&repository, head.as_deref()) {
+            Ok(fingerprint) => fingerprint,
+            Err(_) => {
+                eprintln!(
+                    "[gitcrest-core] History message index refs fingerprint failed; falling back to Git search"
+                );
+                return (None, None, false);
+            }
+        };
+        let entries = match store.search_messages(
+            &repo_id,
+            &fingerprint,
+            &message,
+            offset,
+            limit + 1,
+        ) {
+            Ok(entries) => entries,
+            Err(_) => {
+                eprintln!(
+                    "[gitcrest-core] History message index storage query failed; falling back to Git search"
+                );
+                return (Some(fingerprint), None, false);
+            }
+        };
+        let Some(mut entries) = entries else {
+            return (Some(fingerprint), None, false);
+        };
+        let has_more = entries.len() > limit;
+        if has_more {
+            entries.pop();
+        }
+        let commits = summaries_for_search_entries(&repository, &entries);
+        let current_fingerprint = refs_fingerprint_for_repository(&repository, head.as_deref());
+        let refs_are_current =
+            matches!(&current_fingerprint, Ok(current) if current == &fingerprint);
+        if !refs_are_current {
+            match current_fingerprint {
+                Ok(_) => eprintln!(
+                    "[gitcrest-core] History message index refs changed during query; falling back to Git search"
+                ),
+                Err(_) => eprintln!(
+                    "[gitcrest-core] History message index refs recheck failed; falling back to Git search"
+                ),
+            }
+            return (Some(fingerprint), None, true);
+        }
+        let Ok(commits) = commits else {
+            eprintln!(
+                "[gitcrest-core] History message index commit hydration failed; falling back to Git search"
+            );
+            return (Some(fingerprint), None, false);
+        };
+        (
+            Some(fingerprint),
+            Some(CommitPage {
+                repo_id,
+                offset,
+                limit,
+                commits,
+                next_offset: has_more.then_some(offset + limit),
+                search_pending: false,
+            }),
+            false,
+        )
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(_) => {
+            eprintln!(
+                "[gitcrest-core] History message index query task failed; falling back to Git search"
+            );
+            (None, None, false)
+        }
+    }
+}
+
+fn summaries_for_search_entries(
+    repository: &Repository,
     entries: &[CommitSearchEntry],
 ) -> Result<Vec<CommitSummary>, HistoryError> {
     if entries.is_empty() {
@@ -167,41 +200,34 @@ async fn summaries_for_search_entries(
     }) {
         return Err(HistoryError::GitFailed);
     }
-    let repository_path = repository_path.to_owned();
-    let entries = entries.to_vec();
-    tokio::task::spawn_blocking(move || {
-        let repository = Repository::open(repository_path).map_err(|_| HistoryError::GitFailed)?;
-        entries
-            .iter()
-            .map(|entry| {
-                let oid = git2::Oid::from_str(&entry.oid).map_err(|_| HistoryError::GitFailed)?;
-                let commit = repository
-                    .find_commit(oid)
-                    .map_err(|_| HistoryError::GitFailed)?;
-                let author = commit.author();
-                let committed_at_ms = author
-                    .when()
-                    .seconds()
-                    .checked_mul(1_000)
-                    .ok_or(HistoryError::GitFailed)?;
-                let author_name = text(author.name_bytes());
-                let author_email = text(author.email_bytes());
-                Ok(CommitSummary {
-                    oid: entry.oid.clone(),
-                    parents: commit
-                        .parent_ids()
-                        .map(|parent| parent.to_string())
-                        .collect(),
-                    author_name,
-                    author_email,
-                    committed_at_ms,
-                    subject: text(commit.summary_bytes().unwrap_or_default()),
-                })
+    entries
+        .iter()
+        .map(|entry| {
+            let oid = git2::Oid::from_str(&entry.oid).map_err(|_| HistoryError::GitFailed)?;
+            let commit = repository
+                .find_commit(oid)
+                .map_err(|_| HistoryError::GitFailed)?;
+            let author = commit.author();
+            let committed_at_ms = author
+                .when()
+                .seconds()
+                .checked_mul(1_000)
+                .ok_or(HistoryError::GitFailed)?;
+            let author_name = text(author.name_bytes());
+            let author_email = text(author.email_bytes());
+            Ok(CommitSummary {
+                oid: entry.oid.clone(),
+                parents: commit
+                    .parent_ids()
+                    .map(|parent| parent.to_string())
+                    .collect(),
+                author_name,
+                author_email,
+                committed_at_ms,
+                subject: text(commit.summary_bytes().unwrap_or_default()),
             })
-            .collect()
-    })
-    .await
-    .map_err(|_| HistoryError::GitFailed)?
+        })
+        .collect()
 }
 
 fn schedule_history_index_build(
@@ -353,6 +379,13 @@ fn refs_fingerprint_sync(
     head: Option<&str>,
 ) -> Result<String, HistoryError> {
     let repository = Repository::open(repository_path).map_err(|_| HistoryError::GitFailed)?;
+    refs_fingerprint_for_repository(&repository, head)
+}
+
+fn refs_fingerprint_for_repository(
+    repository: &Repository,
+    head: Option<&str>,
+) -> Result<String, HistoryError> {
     let head_reference = repository.find_reference("HEAD").ok();
     let attached_head = head_reference
         .as_ref()
