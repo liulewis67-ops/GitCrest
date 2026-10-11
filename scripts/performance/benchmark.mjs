@@ -250,6 +250,7 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath, {
   const samplesMs = [];
   const initialResponseSamplesMs = [];
   const indexReadySamplesMs = [];
+  const fullResultSamplesMs = [];
   const historyPageSamplesMs = [];
   const phaseSamples = {
     git: [],
@@ -284,8 +285,8 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath, {
       initialResponseSamplesMs.push(initialResponseMs);
       samplesMs.push(initialResponseMs);
       const deadline = startedAt + 30_000;
-      if (initialPage.searchPending === true || !initialPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
-        throw new Error("Cold Git history search did not return its matching commit before index construction.");
+      if (initialPage.searchPending !== true && !initialPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
+        throw new Error("Cold history search returned neither a pending state nor its matching commit.");
       }
       await waitForHistoryIndex(instance, deadline);
       indexReadySamplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
@@ -293,6 +294,7 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath, {
       if (indexedPage.searchPending === true || !indexedPage.commits.some((commit) => commit.subject === "benchmark commit 099999")) {
         throw new Error("Indexed history search did not return its matching commit.");
       }
+      fullResultSamplesMs.push(Number((performance.now() - startedAt).toFixed(3)));
       const buildPhases = instance.getStderr().match(/History index build phases git=([0-9]+)ms parse=([0-9]+)ms verify=([0-9]+)ms persist=([0-9]+)ms/);
       const storePhases = instance.getStderr().match(/History index store phases maintenance=([0-9]+)ms rows=([0-9]+)ms fts=([0-9]+)ms commit=([0-9]+)ms/);
       if (!buildPhases || !storePhases) throw new Error("Cold history search completed without index phase timings.");
@@ -304,7 +306,7 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath, {
     }
   }
   return {
-    name: prefetchHistoryPage ? "historySearch100kAfterInitialHistoryPage" : "historySearch100kColdGitFallback",
+    name: prefetchHistoryPage ? "historySearch100kAfterInitialHistoryPageFirstResponse" : "historySearch100kColdFirstResponse",
     samples: samplesMs.length,
     p50Ms: percentile(samplesMs, 0.5),
     p95Ms: percentile(samplesMs),
@@ -313,6 +315,10 @@ async function measureColdHistorySearch(executable, fixturePath, tempDataPath, {
     initialResponseP95Ms: percentile(initialResponseSamplesMs),
     initialResponseMaxMs: Math.max(...initialResponseSamplesMs),
     initialResponseSamplesMs,
+    fullResultP50Ms: percentile(fullResultSamplesMs, 0.5),
+    fullResultP95Ms: percentile(fullResultSamplesMs),
+    fullResultMaxMs: Math.max(...fullResultSamplesMs),
+    fullResultSamplesMs,
     ...(prefetchHistoryPage ? {
       historyPageP50Ms: percentile(historyPageSamplesMs, 0.5),
       historyPageP95Ms: percentile(historyPageSamplesMs),

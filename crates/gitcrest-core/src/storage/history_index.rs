@@ -21,6 +21,11 @@ impl RepositoryStore {
         if builds.contains(repo_id) {
             return false;
         }
+        if self.history_index_failures.lock().is_ok_and(|failures| {
+            failures.contains(&(repo_id.to_owned(), refs_fingerprint.to_owned()))
+        }) {
+            return false;
+        }
         let history_index_connection = self.history_index_connection();
         let Ok(connection) = history_index_connection.lock() else {
             return false;
@@ -51,6 +56,18 @@ impl RepositoryStore {
         self.history_index_builds
             .lock()
             .is_ok_and(|builds| builds.contains(repo_id))
+    }
+
+    pub fn history_index_build_failed(&self, repo_id: &str, refs_fingerprint: &str) -> bool {
+        self.history_index_failures.lock().is_ok_and(|failures| {
+            failures.contains(&(repo_id.to_owned(), refs_fingerprint.to_owned()))
+        })
+    }
+
+    pub fn fail_history_index_build(&self, repo_id: &str, refs_fingerprint: &str) {
+        if let Ok(mut failures) = self.history_index_failures.lock() {
+            failures.insert((repo_id.to_owned(), refs_fingerprint.to_owned()));
+        }
     }
 
     pub fn replace_history_search_index(
@@ -230,6 +247,14 @@ impl HistorySearchIndexPort for RepositoryStore {
 
     fn is_index_building(&self, repo_id: &str) -> bool {
         RepositoryStore::is_history_index_building(self, repo_id)
+    }
+
+    fn index_build_failed(&self, repo_id: &str, refs_fingerprint: &str) -> bool {
+        RepositoryStore::history_index_build_failed(self, repo_id, refs_fingerprint)
+    }
+
+    fn fail_index_build(&self, repo_id: &str, refs_fingerprint: &str) {
+        RepositoryStore::fail_history_index_build(self, repo_id, refs_fingerprint)
     }
 
     fn finish_index_build(&self, repo_id: &str) {

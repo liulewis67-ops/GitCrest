@@ -13,6 +13,7 @@ pub struct RepositoryStore {
     pub(super) connection: Arc<Mutex<Connection>>,
     pub(super) history_index_connection: Arc<Mutex<Connection>>,
     pub(super) history_index_builds: Arc<Mutex<HashSet<String>>>,
+    pub(super) history_index_failures: Arc<Mutex<HashSet<(String, String)>>>,
 }
 
 impl Default for RepositoryStore {
@@ -27,6 +28,7 @@ impl Default for RepositoryStore {
             connection: Arc::clone(&connection),
             history_index_connection: connection,
             history_index_builds: Arc::new(Mutex::new(HashSet::new())),
+            history_index_failures: Arc::new(Mutex::new(HashSet::new())),
         }
     }
 }
@@ -66,6 +68,7 @@ impl RepositoryStore {
             connection: Arc::new(Mutex::new(connection)),
             history_index_connection: Arc::new(Mutex::new(history_index_connection)),
             history_index_builds: Arc::new(Mutex::new(HashSet::new())),
+            history_index_failures: Arc::new(Mutex::new(HashSet::new())),
         })
     }
 }

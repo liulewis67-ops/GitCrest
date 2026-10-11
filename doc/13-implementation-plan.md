@@ -5553,3 +5553,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-search-current-stage516-20261011.json`、`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`。
 - 限制/后续：完整冷搜索 P95 1,018.209ms，未达到 <200ms，且比 stage507 的 702.117ms 高；本阶段只更新当前基线，不能据此宣称 cold search 性能达标。S7.2 桌面内存/帧率及 S7.4/S7.5 验收仍未完成。
 - 实施 commit：20 轮基准证据与台账同一 commit。
+
+### 冷 message search 返回可轮询的 pending 状态 — 小阶段 517
+- 状态：已完成（索引未就绪时首响不再同步等待全 Git 遍历；完整结果仍待优化）
+- 日期：2026-10-11
+- 交付：indexable message query 在无当前 refs 索引时启动后台索引并返回 `searchPending`，前端沿用既有轮询与“Preparing message search…”提示；索引就绪后返回 FTS 完整结果。refs 指纹维度记录索引构建失败，失败后回退 Git 搜索且不对同一指纹反复重建。更新冷搜索基准以分别计量首次响应和完整结果就绪时间，并调整服务测试对 pending 的断言。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings`、Release build、`node --check scripts/performance/benchmark.mjs`、`git diff --check` 通过；Clippy 编译 lib/test targets，未运行测试。Release 100k fixture cold 20 轮：首次响应 P50/P95/max = 20.442/35.662/40.165ms；完整结果就绪 P50/P95/max = 1,916.976/5,972.905/6,016.494ms；20/20 轮均验证索引就绪后包含目标提交 `benchmark commit 099999`。
+- 证据：`doc/evidence/S7.2/api-win32-cold-pending-search-stage517-20261011.json`、`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`src/features/history/model/use-repository-history.ts`。
+- 限制/后续：首响符合 <200ms，但完整搜索结果 P95 仍约 5.97 秒，且索引 ready P95 约 5.95 秒；不得把 pending 首响称为完整搜索达标。需继续降低索引构建 Git/SQLite 持久化耗时，并完成其它 S7.2 与 S7.4/S7.5 门槛。
+- 实施 commit：后台 pending/失败回退、基准双时延、测试断言调整、证据与台账同一 commit。

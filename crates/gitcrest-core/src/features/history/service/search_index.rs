@@ -41,7 +41,7 @@ pub async fn read_page_indexed(
         && filters.path.is_none()
         && filters.since.is_none()
         && filters.until.is_none();
-    let (fingerprint, cached_page, stale_cached_index) = if indexable_message_search {
+    let (fingerprint, cached_page, stale_cached_index, index_miss) = if indexable_message_search {
         let message = filters.message.as_deref().unwrap_or_default();
         cached_message_page(
             repo_id.clone(),
@@ -54,10 +54,40 @@ pub async fn read_page_indexed(
         )
         .await
     } else {
-        (None, None, false)
+        (None, None, false, false)
     };
     if let Some(page) = cached_page {
         return Ok(page);
+    }
+
+    if offset == 0 && indexable_message_search && index_miss {
+        let build_already_failed = fingerprint
+            .as_deref()
+            .is_some_and(|fingerprint| store.index_build_failed(&repo_id, fingerprint));
+        let build_is_running = store.is_index_building(&repo_id);
+        let build_was_started = !build_already_failed
+            && !build_is_running
+            && schedule_history_index_build(
+                repo_id.clone(),
+                repository_path.to_owned(),
+                head.map(str::to_owned),
+                if stale_cached_index {
+                    None
+                } else {
+                    fingerprint.clone()
+                },
+                store.clone(),
+            );
+        if build_is_running || build_was_started {
+            return Ok(CommitPage {
+                repo_id,
+                offset,
+                limit,
+                commits: Vec::new(),
+                next_offset: None,
+                search_pending: true,
+            });
+        }
     }
 
     let page = read_page(
@@ -73,6 +103,9 @@ pub async fn read_page_indexed(
     if offset == 0
         && (indexable_message_search || unfiltered_first_page)
         && !store.is_index_building(&repo_id)
+        && !fingerprint
+            .as_deref()
+            .is_some_and(|fingerprint| store.index_build_failed(&repo_id, fingerprint))
     {
         schedule_history_index_build(
             repo_id,
@@ -97,7 +130,7 @@ async fn cached_message_page(
     offset: usize,
     limit: usize,
     store: Arc<dyn HistorySearchIndexPort>,
-) -> (Option<String>, Option<CommitPage>, bool) {
+) -> (Option<String>, Option<CommitPage>, bool, bool) {
     let repository_path = repository_path.to_owned();
     let head = head.map(str::to_owned);
     match tokio::task::spawn_blocking(move || {
@@ -107,7 +140,7 @@ async fn cached_message_page(
                 eprintln!(
                     "[gitcrest-core] History message index refs fingerprint failed; falling back to Git search"
                 );
-                return (None, None, false);
+                return (None, None, false, false);
             }
         };
         let fingerprint = match refs_fingerprint_for_repository(&repository, head.as_deref()) {
@@ -116,7 +149,7 @@ async fn cached_message_page(
                 eprintln!(
                     "[gitcrest-core] History message index refs fingerprint failed; falling back to Git search"
                 );
-                return (None, None, false);
+                return (None, None, false, false);
             }
         };
         let entries = match store.search_messages(
@@ -131,11 +164,11 @@ async fn cached_message_page(
                 eprintln!(
                     "[gitcrest-core] History message index storage query failed; falling back to Git search"
                 );
-                return (Some(fingerprint), None, false);
+                return (Some(fingerprint), None, false, false);
             }
         };
         let Some(mut entries) = entries else {
-            return (Some(fingerprint), None, false);
+            return (Some(fingerprint), None, false, true);
         };
         let has_more = entries.len() > limit;
         if has_more {
@@ -154,13 +187,13 @@ async fn cached_message_page(
                     "[gitcrest-core] History message index refs recheck failed; falling back to Git search"
                 ),
             }
-            return (Some(fingerprint), None, true);
+            return (Some(fingerprint), None, true, true);
         }
         let Ok(commits) = commits else {
             eprintln!(
                 "[gitcrest-core] History message index commit hydration failed; falling back to Git search"
             );
-            return (Some(fingerprint), None, false);
+            return (Some(fingerprint), None, false, false);
         };
         (
             Some(fingerprint),
@@ -173,6 +206,7 @@ async fn cached_message_page(
                 search_pending: false,
             }),
             false,
+            false,
         )
     })
     .await
@@ -182,7 +216,7 @@ async fn cached_message_page(
             eprintln!(
                 "[gitcrest-core] History message index query task failed; falling back to Git search"
             );
-            (None, None, false)
+            (None, None, false, false)
         }
     }
 }
@@ -243,6 +277,7 @@ fn schedule_history_index_build(
     if expected_fingerprint.is_some() && !claimed {
         return false;
     }
+    let was_scheduled = claimed || expected_fingerprint.is_none();
     let mut _build_lease = claimed.then(|| HistoryIndexBuildLease {
         repo_id: repo_id.clone(),
         store: store.clone(),
@@ -276,6 +311,9 @@ fn schedule_history_index_build(
             store.clone(),
         )
         .await;
+        if result.is_err() {
+            store.fail_index_build(&repo_id, &index_fingerprint);
+        }
         let outcome = match &result {
             Ok(()) => "ready",
             Err(HistoryError::TooLarge) => "skipped-too-large",
@@ -287,7 +325,7 @@ fn schedule_history_index_build(
             started.elapsed().as_millis()
         );
     });
-    claimed
+    was_scheduled
 }
 
 struct HistoryIndexBuildLease {

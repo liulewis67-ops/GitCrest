@@ -5,6 +5,10 @@ pub(crate) trait HistorySearchIndexPort: Send + Sync {
 
     fn is_index_building(&self, repo_id: &str) -> bool;
 
+    fn index_build_failed(&self, repo_id: &str, refs_fingerprint: &str) -> bool;
+
+    fn fail_index_build(&self, repo_id: &str, refs_fingerprint: &str);
+
     fn finish_index_build(&self, repo_id: &str);
 
     fn search_messages(
