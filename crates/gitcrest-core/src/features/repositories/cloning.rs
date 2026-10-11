@@ -1,5 +1,6 @@
 use std::path::{Component, Path, PathBuf};
 
+#[cfg(test)]
 use tokio::fs;
 
 use crate::{
@@ -8,6 +9,7 @@ use crate::{
         tasks::{TaskFailure, TaskService, TaskSnapshot, TaskSubmitError},
     },
     git::command::GitCommandService,
+    ports::cloning::CloneFilesystemPort,
 };
 
 #[derive(Debug, PartialEq, Eq)]
@@ -25,6 +27,7 @@ pub struct CloneService {
     tasks: TaskService,
     git: GitCommandService,
     repositories: RepositoryManager,
+    filesystem: std::sync::Arc<dyn CloneFilesystemPort>,
 }
 
 impl CloneService {
@@ -32,11 +35,13 @@ impl CloneService {
         tasks: TaskService,
         git: GitCommandService,
         repositories: RepositoryManager,
+        filesystem: std::sync::Arc<dyn CloneFilesystemPort>,
     ) -> Self {
         Self {
             tasks,
             git,
             repositories,
+            filesystem,
         }
     }
 
@@ -48,23 +53,22 @@ impl CloneService {
     ) -> Result<TaskSnapshot, CloneError> {
         validate_remote_url(&remote_url)?;
         validate_directory_name(&directory_name)?;
-        let parent = fs::canonicalize(parent_path)
+        let parent = self
+            .filesystem
+            .canonicalize_directory(Path::new(&parent_path))
             .await
-            .map_err(|error| match error.kind() {
-                std::io::ErrorKind::NotFound => CloneError::ParentNotFound,
-                std::io::ErrorKind::PermissionDenied => CloneError::ParentAccessDenied,
-                _ => CloneError::InvalidTarget,
-            })?;
-        if !fs::metadata(&parent)
+            .map_err(map_parent_path_error)?;
+        if !self
+            .filesystem
+            .is_directory(&parent)
             .await
             .map_err(|_| CloneError::InvalidTarget)?
-            .is_dir()
         {
             return Err(CloneError::InvalidTarget);
         }
 
         let destination = parent.join(&directory_name);
-        if path_exists(&destination).await? {
+        if path_exists(self.filesystem.as_ref(), &destination).await? {
             return Err(CloneError::DestinationExists);
         }
         let resource_key = destination.to_string_lossy().into_owned();
@@ -73,6 +77,7 @@ impl CloneService {
         let remote_for_task = remote_url;
         let git = self.git.clone();
         let repositories = self.repositories.clone();
+        let filesystem = self.filesystem.clone();
         let target_path = destination.to_string_lossy().into_owned();
         self.tasks
             .submit(
@@ -81,7 +86,10 @@ impl CloneService {
                 resource_key,
                 "clone",
                 move |context| async move {
-                    if path_exists(&destination_for_task).await.unwrap_or(true) {
+                    if path_exists(filesystem.as_ref(), &destination_for_task)
+                        .await
+                        .unwrap_or(true)
+                    {
                         return Err(TaskFailure::Failed(
                             "The selected destination appeared before cloning began; it was preserved.".into(),
                         ));
@@ -90,7 +98,7 @@ impl CloneService {
                         ".gitcrest-clone-{}.partial",
                         context.task_id()
                     ));
-                    if path_exists(&stage).await.unwrap_or(true) {
+                    if path_exists(filesystem.as_ref(), &stage).await.unwrap_or(true) {
                         return Err(TaskFailure::Failed(
                             "A temporary clone destination already exists.".into(),
                         ));
@@ -101,21 +109,28 @@ impl CloneService {
                         .execute_clone(&remote_for_task, &git_stage, &git_parent, context.clone())
                         .await
                     {
-                        cleanup_stage(&stage).await;
+                        let _ = filesystem.cleanup_stage(&stage).await;
                         return Err(error);
                     }
                     if context.cancellation_requested() {
-                        cleanup_stage(&stage).await;
+                        let _ = filesystem.cleanup_stage(&stage).await;
                         return Err(TaskFailure::Cancelled);
                     }
-                    if path_exists(&destination_for_task).await.unwrap_or(true) {
-                        cleanup_stage(&stage).await;
+                    if path_exists(filesystem.as_ref(), &destination_for_task)
+                        .await
+                        .unwrap_or(true)
+                    {
+                        let _ = filesystem.cleanup_stage(&stage).await;
                         return Err(TaskFailure::Failed(
                             "The destination was created while cloning. The existing folder was preserved.".into(),
                         ));
                     }
-                    if fs::rename(&stage, &destination_for_task).await.is_err() {
-                        cleanup_stage(&stage).await;
+                    if filesystem
+                        .rename_path(&stage, &destination_for_task)
+                        .await
+                        .is_err()
+                    {
+                        let _ = filesystem.cleanup_stage(&stage).await;
                         return Err(TaskFailure::Failed(
                             "Git cloned the repository, but it could not be moved into the selected destination.".into(),
                         ));
@@ -153,22 +168,21 @@ fn git_compatible_path(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-async fn path_exists(path: &Path) -> Result<bool, CloneError> {
-    match fs::symlink_metadata(path).await {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
-        Err(_) => Err(CloneError::InvalidTarget),
-    }
+async fn path_exists(
+    filesystem: &dyn CloneFilesystemPort,
+    path: &Path,
+) -> Result<bool, CloneError> {
+    filesystem
+        .path_exists(path)
+        .await
+        .map_err(|_| CloneError::InvalidTarget)
 }
 
-async fn cleanup_stage(path: &Path) {
-    let Ok(metadata) = fs::symlink_metadata(path).await else {
-        return;
-    };
-    if metadata.file_type().is_symlink() || metadata.is_file() {
-        let _ = fs::remove_file(path).await;
-    } else if metadata.is_dir() {
-        let _ = fs::remove_dir_all(path).await;
+fn map_parent_path_error(error: std::io::Error) -> CloneError {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => CloneError::ParentNotFound,
+        std::io::ErrorKind::PermissionDenied => CloneError::ParentAccessDenied,
+        _ => CloneError::InvalidTarget,
     }
 }
 
@@ -308,6 +322,7 @@ mod tests {
             tasks.clone(),
             GitCommandService::default(),
             repositories.clone(),
+            std::sync::Arc::new(crate::storage::cloning::CloneFilesystemAdapter),
         );
         let invalid_remote = format!("file://{}", root.path().join("missing.git").display());
         let failed = clones

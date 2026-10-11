@@ -5582,3 +5582,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/repository.rs`、`crates/gitcrest-core/src/storage/repository_paths.rs`、`crates/gitcrest-core/src/features/repositories/{repository.rs,repository_target.rs}`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
 - 限制/后续：其他 feature 的工作树文件访问和 S7.2 性能门槛仍需按各自语义评估；S7.4/S7.5 跨平台及发布验收仍未完成。
 - 实施 commit：port、adapter、依赖注入、验证与台账同一 commit。
+
+### Clone 文件系统副作用迁入专用 port 与 adapter — 小阶段 520
+- 状态：已完成（clone feature 只编排目标检查、Git clone、取消清理与注册）
+- 日期：2026-10-11
+- 交付：新增专用 `CloneFilesystemPort` 与 `storage/cloning.rs`，由 bootstrap 注入 `CloneService`，执行父目录 canonicalize/类型检查、destination/stage 存在性检查、staging directory 原子 rename 与失败后的类型安全清理。避免将 clone 专属副作用扩入通用 `RepositoryFilesystemPort`；feature 保留目标名称/remote 校验、任务编排、Git 路径兼容处理及用户可读错误映射。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；Clippy 编译 lib/test targets，未运行测试。源码检索确认 production clone 流程不再调用 `tokio::fs`。
+- 手工验证：逐项核对 clone parent 错误到 `CloneError` 的映射、任务开始前与 rename 前 destination 重检、stage 冲突时不覆盖、Git 失败/取消/rename 失败时清理 stage，以及 symlink/file unlink、directory recursive cleanup 的既有策略。
+- 证据：`crates/gitcrest-core/src/ports/cloning.rs`、`crates/gitcrest-core/src/storage/cloning.rs`、`crates/gitcrest-core/src/features/repositories/cloning.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/tests.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
+- 限制/后续：此阶段不改变 clone Git 命令和目标注册行为；其他 feature 的文件系统访问、S7.2 性能门槛及 S7.4/S7.5 跨平台/发布验收仍待推进。
+- 实施 commit：port 扩展、clone 注入、构造点更新、验证与台账同一 commit。

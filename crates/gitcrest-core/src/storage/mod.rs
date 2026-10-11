@@ -9,6 +9,7 @@ use crate::domain::shelf::{ShelfRecord, ShelfSnapshot};
 use crate::domain::{commit::CommitSearchEntry, diff::DiffScope};
 
 mod branch_favorites;
+pub(crate) mod cloning;
 pub(crate) mod conflicts;
 mod database;
 mod history_index;

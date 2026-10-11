@@ -1,5 +1,6 @@
 pub(crate) mod branch_favorites;
 pub(crate) mod branches;
+pub(crate) mod cloning;
 pub(crate) mod conflicts;
 pub(crate) mod diff;
 pub(crate) mod git;

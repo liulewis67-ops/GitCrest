@@ -75,6 +75,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let repository_git: Arc<dyn RepositoryGitPort> = Arc::new(GitRepositoryAdapter);
     let repository_filesystem: Arc<dyn crate::ports::repository::RepositoryFilesystemPort> =
         Arc::new(crate::storage::repository_paths::RepositoryFilesystemAdapter);
+    let clone_filesystem: Arc<dyn crate::ports::cloning::CloneFilesystemPort> =
+        Arc::new(crate::storage::cloning::CloneFilesystemAdapter);
     let repositories = RepositoryManager::with_adapters(
         repository_catalog.clone(),
         repository_git.clone(),
@@ -83,7 +85,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let repository_targets = crate::features::repositories::RepositoryTargetReader::new(
         repository_catalog,
         repository_git,
-        repository_filesystem,
+        repository_filesystem.clone(),
     );
     let git_commands = GitCommandService::default();
     let remote_preflight_read: Arc<dyn RemotePreflightReadPort> = Arc::new(git_commands.clone());
@@ -99,7 +101,12 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
             task_status.invalidate(repo_id)
         })
         .map_err(|_| "Could not recover background task history")?;
-    let clones = CloneService::new(tasks.clone(), git_commands.clone(), repositories.clone());
+    let clones = CloneService::new(
+        tasks.clone(),
+        git_commands.clone(),
+        repositories.clone(),
+        clone_filesystem,
+    );
     let events = EventBus::default();
     let state = AppState {
         read_write_token: Arc::new(config.write_token),
