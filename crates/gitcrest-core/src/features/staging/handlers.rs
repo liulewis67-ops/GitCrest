@@ -132,6 +132,7 @@ pub(crate) async fn stage_repository_patch(
         .ok_or_else(|| ApiError::from_staging_error(staging::StagingError::StaleSelection))?;
     let current_diff = diff::read_with_patch(
         &state.git_commands,
+        state.diff_worktree.as_ref(),
         repo_id.clone(),
         &target.repository_path,
         file,
@@ -167,6 +168,7 @@ pub(crate) async fn stage_repository_patch(
     let status_service = state.status.clone();
     let undo_store = state.undo_store.clone();
     let commands = state.git_commands.clone();
+    let diff_worktree = state.diff_worktree.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
     let task = state
@@ -198,6 +200,7 @@ pub(crate) async fn stage_repository_patch(
                 })?;
                 let current_diff = diff::read_with_patch(
                     &commands,
+                    diff_worktree.as_ref(),
                     task_repo_id.clone(),
                     &repository_path,
                     file,
@@ -459,6 +462,7 @@ pub(crate) async fn discard_repository_patch(
     staging::validate_patch_request(&selection, file).map_err(ApiError::from_staging_error)?;
     let current_diff = diff::read_with_patch(
         &state.git_commands,
+        state.diff_worktree.as_ref(),
         repo_id.clone(),
         &target.repository_path,
         file,
@@ -487,6 +491,7 @@ pub(crate) async fn discard_repository_patch(
     let undo_store = state.undo_store.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
+    let diff_worktree = state.diff_worktree.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
     let path = request.path;
@@ -536,6 +541,7 @@ pub(crate) async fn discard_repository_patch(
                 })?;
                 let current_diff = diff::read_with_patch(
                     &commands,
+                    diff_worktree.as_ref(),
                     task_repo_id.clone(),
                     &repository_path,
                     file,

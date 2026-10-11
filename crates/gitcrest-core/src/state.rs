@@ -22,6 +22,7 @@ use crate::{
     ports::undo::UndoStorePort,
     ports::{
         conflicts::ConflictWorktreePort,
+        diff::DiffWorktreePort,
         shelves::{ShelfPatchCheckPort, ShelfStorePort},
     },
 };
@@ -43,6 +44,7 @@ pub(crate) struct AppState {
     pub(crate) shelf_store: Arc<dyn ShelfStorePort>,
     pub(crate) shelf_patch_checker: Arc<dyn ShelfPatchCheckPort>,
     pub(crate) conflict_worktree: Arc<dyn ConflictWorktreePort>,
+    pub(crate) diff_worktree: Arc<dyn DiffWorktreePort>,
     pub(crate) undo_store: Arc<dyn UndoStorePort>,
     pub(crate) repository_targets: RepositoryTargetReader,
     pub(crate) status: StatusService<RepositoryTargetReader, GitCommandService>,

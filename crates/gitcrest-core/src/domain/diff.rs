@@ -25,6 +25,14 @@ pub(crate) enum DiffContentStatus {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DiffWorktreeEntryKind {
+    Regular,
+    Missing,
+    Symlink,
+    Directory,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DiffRowKind {
     Context,
     Change,

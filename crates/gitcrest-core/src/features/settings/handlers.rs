@@ -234,6 +234,7 @@ pub(super) async fn request_ai(
         }
         let read = diff::read_with_patch(
             &state.git_commands,
+            state.diff_worktree.as_ref(),
             repo_id.clone(),
             &target.repository_path,
             file,

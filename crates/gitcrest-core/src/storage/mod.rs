@@ -12,6 +12,7 @@ mod branch_favorites;
 pub(crate) mod cloning;
 pub(crate) mod conflicts;
 mod database;
+pub(crate) mod diff;
 mod history_index;
 mod migrations;
 mod repositories;

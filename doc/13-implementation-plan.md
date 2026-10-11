@@ -5592,3 +5592,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/cloning.rs`、`crates/gitcrest-core/src/storage/cloning.rs`、`crates/gitcrest-core/src/features/repositories/cloning.rs`、`crates/gitcrest-core/src/bootstrap.rs`、`crates/gitcrest-core/src/tests.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
 - 限制/后续：此阶段不改变 clone Git 命令和目标注册行为；其他 feature 的文件系统访问、S7.2 性能门槛及 S7.4/S7.5 跨平台/发布验收仍待推进。
 - 实施 commit：port 扩展、clone 注入、构造点更新、验证与台账同一 commit。
+
+### Diff 工作树路径检查迁入 storage adapter — 小阶段 521
+- 状态：已完成（diff feature 不再直接检查工作树文件系统）
+- 日期：2026-10-11
+- 交付：新增 `DiffWorktreePort` 与 `storage/diff.rs` adapter，集中验证仓库相对路径并逐组件检查符号链接、缺失路径、非目录中间组件与最终目录；通过 `AppState` 注入，并传入 diff、commit、settings、staging 和 shelf 的读取链路。保留原有 `DiffError` 映射以及最终目录作为 submodule、符号链接不读取 patch 的行为。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；Clippy 编译 lib/test targets，未运行测试。源码检索确认 `features/diff/service/read.rs` 不再直接调用 filesystem API。
+- 手工验证：对照原逐组件检查逻辑核对 missing、permission denied、symlink、intermediate non-directory 和 final directory 分支；adapter 拒绝绝对路径、`.`/`..`、控制字符、反斜线和 Windows drive prefix。
+- 证据：`crates/gitcrest-core/src/ports/diff.rs`、`crates/gitcrest-core/src/storage/diff.rs`、`crates/gitcrest-core/src/features/diff/service/read.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
+- 限制/后续：本阶段只收拢工作树路径检查，不改变 diff 内容读取和 Git patch 获取方式；S7.2 性能门槛及 S7.4/S7.5 跨平台/发布验收仍待推进。
+- 实施 commit：port、adapter、依赖注入、调用链更新与台账同一 commit。

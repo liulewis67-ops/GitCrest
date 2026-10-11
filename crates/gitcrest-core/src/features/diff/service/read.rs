@@ -3,16 +3,20 @@ use std::path::{Component, Path};
 use sha2::{Digest, Sha256};
 
 use super::*;
-use crate::ports::diff::DiffGitPort;
+use crate::{
+    domain::diff::DiffWorktreeEntryKind,
+    ports::diff::{DiffGitPort, DiffWorktreePort},
+};
 
-pub async fn read<G: DiffGitPort + ?Sized>(
+pub async fn read<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
     git: &G,
+    worktree: &W,
     repo_id: String,
     repository_path: &Path,
     file: &StatusFile,
     scope: DiffScope,
 ) -> Result<DiffDocument, DiffError> {
-    read_with_patch(git, repo_id, repository_path, file, scope)
+    read_with_patch(git, worktree, repo_id, repository_path, file, scope)
         .await
         .map(|result| result.document)
 }
@@ -55,8 +59,9 @@ pub async fn read_commit_file<G: DiffGitPort + ?Sized>(
     Ok(document)
 }
 
-pub async fn read_with_patch<G: DiffGitPort + ?Sized>(
+pub async fn read_with_patch<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
     git: &G,
+    worktree: &W,
     repo_id: String,
     repository_path: &Path,
     file: &StatusFile,
@@ -95,23 +100,23 @@ pub async fn read_with_patch<G: DiffGitPort + ?Sized>(
         });
     }
 
-    let file_path = inspect_path(repository_path, &file.path).await?;
+    let file_path = worktree.inspect_entry(repository_path, &file.path).await?;
     match file_path {
-        FilePathState::Symlink => {
+        DiffWorktreeEntryKind::Symlink => {
             document.status = DiffContentStatus::Symlink;
             return Ok(DiffRead {
                 document,
                 patch: Vec::new(),
             });
         }
-        FilePathState::Submodule => {
+        DiffWorktreeEntryKind::Directory => {
             document.status = DiffContentStatus::Submodule;
             return Ok(DiffRead {
                 document,
                 patch: Vec::new(),
             });
         }
-        FilePathState::Regular | FilePathState::Missing => {}
+        DiffWorktreeEntryKind::Regular | DiffWorktreeEntryKind::Missing => {}
     }
 
     let untracked =
@@ -143,48 +148,6 @@ fn revision_for(scope: DiffScope, path: &str, patch: &[u8]) -> String {
     hash.update([0]);
     hash.update(patch);
     format!("sha256:{:x}", hash.finalize())
-}
-
-enum FilePathState {
-    Regular,
-    Missing,
-    Symlink,
-    Submodule,
-}
-
-async fn inspect_path(repository_path: &Path, relative: &str) -> Result<FilePathState, DiffError> {
-    let path = Path::new(relative);
-    let mut current = repository_path.to_path_buf();
-    let components = path.components().collect::<Vec<_>>();
-    for (index, component) in components.iter().enumerate() {
-        let Component::Normal(component) = component else {
-            return Err(DiffError::InvalidPath);
-        };
-        current.push(component);
-        let metadata = match tokio::fs::symlink_metadata(&current).await {
-            Ok(metadata) => metadata,
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-                if index + 1 == components.len() {
-                    return Ok(FilePathState::Missing);
-                }
-                return Err(DiffError::PathNotFound);
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => {
-                return Err(DiffError::PermissionDenied);
-            }
-            Err(_) => return Err(DiffError::PathNotFound),
-        };
-        if metadata.file_type().is_symlink() {
-            return Ok(FilePathState::Symlink);
-        }
-        if index + 1 < components.len() && !metadata.is_dir() {
-            return Err(DiffError::PathNotFound);
-        }
-        if index + 1 == components.len() && metadata.is_dir() {
-            return Ok(FilePathState::Submodule);
-        }
-    }
-    Ok(FilePathState::Regular)
 }
 
 pub(super) fn validate_repo_relative_path(value: &str) -> Result<(), DiffError> {

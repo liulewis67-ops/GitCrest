@@ -54,6 +54,7 @@ pub(super) async fn repository_diff(
             .snapshot_paths(&repo_id, std::slice::from_ref(&query.path),),
         service::read(
             &state.git_commands,
+            state.diff_worktree.as_ref(),
             repo_id.clone(),
             &repository_path,
             &candidate,
@@ -81,11 +82,18 @@ pub(super) async fn repository_diff(
             )
         })
     {
-        return service::read(&state.git_commands, repo_id, &repository_path, file, scope)
-            .await
-            .map(DiffDocumentDto::from)
-            .map(Json)
-            .map_err(ApiError::from_diff_error);
+        return service::read(
+            &state.git_commands,
+            state.diff_worktree.as_ref(),
+            repo_id,
+            &repository_path,
+            file,
+            scope,
+        )
+        .await
+        .map(DiffDocumentDto::from)
+        .map(Json)
+        .map_err(ApiError::from_diff_error);
     }
     let mut document = candidate_diff.map_err(ApiError::from_diff_error)?;
     document.change_kind = file.kind.clone();

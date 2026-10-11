@@ -283,6 +283,7 @@ mod tests {
         let staged = staged.expect("staged path is reported");
         let index = read(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo-test".into(),
             &root,
             staged,
@@ -297,6 +298,7 @@ mod tests {
             .any(|row| row.new_text.as_deref() == Some("staged line")));
         let working = read(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo-test".into(),
             &root,
             staged,
@@ -317,6 +319,7 @@ mod tests {
             .unwrap();
         let deleted_diff = read(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo-test".into(),
             &root,
             deleted,
@@ -337,6 +340,7 @@ mod tests {
             .unwrap();
         let untracked = read(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo-test".into(),
             &root,
             new_file,
@@ -358,6 +362,7 @@ mod tests {
             .unwrap();
         let binary = read(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo-test".into(),
             &root,
             binary_file,
@@ -374,6 +379,7 @@ mod tests {
             .unwrap();
         let renamed_diff = read(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo-test".into(),
             &root,
             renamed,
@@ -402,6 +408,7 @@ mod tests {
             .unwrap();
         let result = read_with_patch(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo-test".into(),
             &root,
             file,
@@ -440,6 +447,7 @@ mod tests {
         assert_eq!(
             read(
                 &crate::git::command::GitCommandService::default(),
+                &crate::storage::diff::DiffWorktreeAdapter,
                 "repo-test".into(),
                 &root,
                 file,

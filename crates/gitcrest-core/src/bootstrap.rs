@@ -77,6 +77,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         Arc::new(crate::storage::repository_paths::RepositoryFilesystemAdapter);
     let clone_filesystem: Arc<dyn crate::ports::cloning::CloneFilesystemPort> =
         Arc::new(crate::storage::cloning::CloneFilesystemAdapter);
+    let diff_worktree: Arc<dyn crate::ports::diff::DiffWorktreePort> =
+        Arc::new(crate::storage::diff::DiffWorktreeAdapter);
     let repositories = RepositoryManager::with_adapters(
         repository_catalog.clone(),
         repository_git.clone(),
@@ -115,6 +117,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         shelf_store: Arc::new(store.clone()),
         shelf_patch_checker: Arc::new(git_commands.clone()),
         conflict_worktree: Arc::new(crate::storage::conflicts::ConflictWorktreeAdapter),
+        diff_worktree,
         undo_store: Arc::new(store.clone()),
         branch_favorites: Arc::new(store.clone()),
         ai_provider_settings: Arc::new(store.clone()),

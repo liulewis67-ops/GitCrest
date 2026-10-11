@@ -13,7 +13,7 @@ use crate::{
         diff::{self, DiffError},
         tasks::{TaskFailure, TaskSnapshot},
     },
-    ports::diff::DiffGitPort,
+    ports::diff::{DiffGitPort, DiffWorktreePort},
     state::AppState,
 };
 enum CommitPatchError {
@@ -24,6 +24,7 @@ enum CommitPatchError {
 
 async fn selected_commit_patch(
     git: &impl DiffGitPort,
+    worktree: &dyn DiffWorktreePort,
     repo_id: &str,
     repository_path: &std::path::Path,
     snapshot: &StatusSnapshot,
@@ -43,6 +44,7 @@ async fn selected_commit_patch(
             .ok_or(CommitPatchError::Invalid)?;
         let current = diff::read_with_patch(
             git,
+            worktree,
             repo_id.to_owned(),
             repository_path,
             file,
@@ -119,6 +121,7 @@ pub(super) async fn commit_repository(
     commits::validate_selection_shape(&request.selections).map_err(ApiError::from_commit_error)?;
     let _selected_patch = selected_commit_patch(
         &state.git_commands,
+        state.diff_worktree.as_ref(),
         &repo_id,
         &target.repository_path,
         &snapshot,
@@ -130,6 +133,7 @@ pub(super) async fn commit_repository(
     let repositories = state.repositories.clone();
     let status_service = state.status.clone();
     let commands = state.git_commands.clone();
+    let worktree = state.diff_worktree.clone();
     let task_repo_id = repo_id.clone();
     let repository_path = target.repository_path;
     let message = request.message;
@@ -163,6 +167,7 @@ pub(super) async fn commit_repository(
                 })?;
                 let selected_patch = selected_commit_patch(
                     &commands,
+                    worktree.as_ref(),
                     &task_repo_id,
                     &repository_path,
                     &current,

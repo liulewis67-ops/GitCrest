@@ -478,6 +478,7 @@ mod tests {
             .unwrap();
         let working = crate::features::diff::read_with_patch(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo".into(),
             &root,
             file,
@@ -507,6 +508,7 @@ mod tests {
             .unwrap();
         let remaining_diff = crate::features::diff::read_with_patch(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo".into(),
             &root,
             file,
@@ -527,6 +529,7 @@ mod tests {
             .unwrap();
         let staged_diff = crate::features::diff::read_with_patch(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo".into(),
             &root,
             file,
@@ -558,6 +561,7 @@ mod tests {
             .unwrap();
         let new_diff = crate::features::diff::read_with_patch(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo".into(),
             &root,
             file,
@@ -599,6 +603,7 @@ mod tests {
             .unwrap();
         let diff = crate::features::diff::read_with_patch(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo".into(),
             &root,
             file,
@@ -648,6 +653,7 @@ mod tests {
             .unwrap();
         let diff = crate::features::diff::read_with_patch(
             &crate::git::command::GitCommandService::default(),
+            &crate::storage::diff::DiffWorktreeAdapter,
             "repo".into(),
             &root,
             file,

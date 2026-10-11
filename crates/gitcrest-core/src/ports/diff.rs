@@ -1,6 +1,20 @@
-use std::path::Path;
+use std::{future::Future, path::Path, pin::Pin};
 
-use crate::domain::{diff::DiffScope, error::DiffError};
+use crate::domain::{
+    diff::{DiffScope, DiffWorktreeEntryKind},
+    error::DiffError,
+};
+
+pub(crate) trait DiffWorktreePort: Send + Sync {
+    fn inspect_entry<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        relative_path: &'a str,
+    ) -> DiffWorktreeFuture<'a, DiffWorktreeEntryKind>;
+}
+
+pub(crate) type DiffWorktreeFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, DiffError>> + Send + 'a>>;
 
 pub(crate) trait DiffGitPort: Send + Sync {
     async fn read_file_patch(
