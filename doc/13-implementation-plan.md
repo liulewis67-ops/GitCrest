@@ -5602,3 +5602,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/ports/diff.rs`、`crates/gitcrest-core/src/storage/diff.rs`、`crates/gitcrest-core/src/features/diff/service/read.rs`、`crates/gitcrest-core/src/state.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
 - 限制/后续：本阶段只收拢工作树路径检查，不改变 diff 内容读取和 Git patch 获取方式；S7.2 性能门槛及 S7.4/S7.5 跨平台/发布验收仍待推进。
 - 实施 commit：port、adapter、依赖注入、调用链更新与台账同一 commit。
+
+### 命令面板交互迁入 app layout — 小阶段 522
+- 状态：已完成（App 不再内联命令面板焦点与键盘导航实现）
+- 日期：2026-10-11
+- 交付：新增 `src/app/layouts/CommandPalette.tsx`，由 app layout 组件承接命令搜索过滤、Escape/遮罩关闭、焦点圈定、方向键/回车导航及无匹配状态；`App` 只组合命令、当前上下文与开关回调。保留命令可用条件、快捷键显示、键盘触发时清空查询，以及关闭再打开时现有查询保留行为。
+- 验证：`pnpm build` 通过，包含 Electron main/preload/renderer 构建及应用、测试 TypeScript 类型检查；构建仍显示既有 web-tree-sitter `eval` 警告。`git diff --check` 通过；未运行测试。
+- 手工验证：对照迁移前 JSX 核对 Escape、Tab 焦点圈定、上下方向键、Enter 选择、遮罩点击关闭、查询过滤、空结果、命令调用与关闭顺序；CSS class、对话框标注和输入初始焦点属性保持。
+- 证据：`src/app/layouts/CommandPalette.tsx`、`src/app/App.tsx`、`src/shared/hooks/use-dialog-focus.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3、4.1 节。
+- 限制/后续：App 仍负责跨 feature 命令定义和 workspace 组合状态，后续按实际职责继续拆分；S7.2 完整冷索引/桌面资源门槛与 S7.4 原生 runner/真实签名升级验收仍未完成。
+- 实施 commit：命令面板布局拆分、行为核对与台账同一 commit。

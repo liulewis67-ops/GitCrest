@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from 
 import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { AppTitlebar, type AppPage } from "./layouts/AppTitlebar";
+import { CommandPalette, type CommandPaletteCommand } from "./layouts/CommandPalette";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
@@ -9,7 +10,6 @@ import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
 import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
 import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShortcutPreferences, useThemePreference } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
-import { useDialogFocus } from "../shared/hooks/use-dialog-focus";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
@@ -232,7 +232,6 @@ function App() {
   const { theme, nextTheme } = useThemePreference();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const { dialogRef: paletteRef, onKeyDown: onPaletteFocusKeyDown } = useDialogFocus<HTMLElement>(() => setPaletteOpen(false), false, undefined, paletteOpen);
   const { sidebarWidth, setSidebarWidth, detailsWidth, setDetailsWidth, workbenchHeight, setWorkbenchHeight } = useWorkspaceLayout(selectedRepository?.repoId);
   useEffect(() => {
     const bridge = getGitCrestBridge();
@@ -648,7 +647,7 @@ function App() {
     </Suspense>
   );
 
-  const commands = [
+  const commands: CommandPaletteCommand[] = [
     { id: "welcome", label: "Go to Welcome", detail: "Return to recent repositories and quick actions", available: true, run: () => setPage("welcome") },
     { id: "workspace", label: "Go to Workspace", detail: "Open the Changes, Graph, and Commit workspace", available: true, run: () => setPage("workspace") },
     { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`, available: true, run: nextTheme },
@@ -662,7 +661,11 @@ function App() {
     { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => cloneSubmission.openDialog() },
     { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
-  const filteredCommands = commands.filter((command) => `${command.label} ${command.detail}`.toLowerCase().includes(paletteQuery.toLowerCase()));
+  const paletteContext = page === "welcome"
+    ? "WELCOME"
+    : selectedRepository
+      ? `WORKSPACE · ${getRepositoryDisplayName(selectedRepository.path).toUpperCase()}`
+      : "WORKSPACE · NO REPOSITORY";
 
   return (
     <main className="appShell" style={layoutStyle}>
@@ -883,49 +886,15 @@ function App() {
           />
         </Suspense>}
 
-      {paletteOpen && (
-        <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPaletteOpen(false); }}>
-          <section
-            ref={paletteRef}
-            className="commandPalette"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="palette-title"
-            onKeyDown={(event) => {
-              onPaletteFocusKeyDown(event);
-              if (event.defaultPrevented) return;
-              if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter") return;
-              const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(".commandItem:not(:disabled)"));
-              if (items.length === 0) return;
-              const current = items.indexOf(document.activeElement as HTMLButtonElement);
-              if (event.key === "Enter") {
-                event.preventDefault();
-                (current >= 0 ? items[current] : items[0]).click();
-                return;
-              }
-              event.preventDefault();
-              const next = event.key === "ArrowDown"
-                ? (current + 1) % items.length
-                : (current <= 0 ? items.length - 1 : current - 1);
-              items[next].focus();
-            }}
-          >
-            <h2 id="palette-title" className="srOnly">Command palette</h2>
-            <div className="paletteSearch"><span aria-hidden="true">⌕</span><input autoFocus data-dialog-initial-focus aria-label="Search commands" placeholder="Search commands…" value={paletteQuery} onChange={(event) => setPaletteQuery(event.target.value)} /><kbd>ESC</kbd></div>
-          <div className="paletteContext">{page === "welcome" ? "WELCOME" : selectedRepository ? `WORKSPACE · ${getRepositoryDisplayName(selectedRepository.path).toUpperCase()}` : "WORKSPACE · NO REPOSITORY"}</div>
-            <div className="commandList">
-              {filteredCommands.map((command) => (
-                <button key={command.id} className="commandItem" type="button" disabled={!command.available} onClick={() => { command.run(); setPaletteOpen(false); }}>
-                  <span className="commandItemMain"><strong>{command.label}</strong><small>{command.detail}</small></span>
-                  {command.available ? <kbd>{command.id === "workspace" ? `${commandKey} 2` : command.id === "welcome" ? `${commandKey} 1` : "↵"}</kbd> : <span className="unavailableTag">Unavailable</span>}
-                </button>
-              ))}
-              {filteredCommands.length === 0 && <p className="noCommands">No commands match “{paletteQuery}”.</p>}
-            </div>
-            <div className="paletteFooter"><span>↑ ↓ Navigate</span><span>Enter Run command</span><span>Esc Close</span></div>
-          </section>
-        </div>
-      )}
+      <CommandPalette
+        open={paletteOpen}
+        context={paletteContext}
+        commands={commands}
+        navigationShortcut={commandKey}
+        query={paletteQuery}
+        onQueryChange={setPaletteQuery}
+        onClose={() => setPaletteOpen(false)}
+      />
 
       <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading dialog…</div>}>
       {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} forceWithLeaseOnly={pushForceOnly} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
