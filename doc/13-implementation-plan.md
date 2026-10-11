@@ -5544,3 +5544,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-indexed-search-optimized-stage515-20261011.json`、`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`。
 - 限制/后续：S7.2 冷 Git fallback 单样本 686.656ms，尚未达到 <200ms，也未执行 20 轮冷搜索；桌面内存/帧率与 S7.4/S7.5 发布验收仍未完成。
 - 实施 commit：warm query 复用优化、基准证据与台账同一 commit。
+
+### 复测 100k history 冷搜索完整路径 — 小阶段 516
+- 状态：已完成（20 轮冷搜索基线已更新；搜索目标仍未达标）
+- 日期：2026-10-11
+- 交付：使用当前 Release sidecar 与既有 100k commit fixture 独立重启 20 轮，重新测量空索引首次 message search、后台索引构建 Git/parse/verify/persist 阶段和 SQLite rows/FTS/commit 阶段。
+- 验证：`node scripts/performance/benchmark.mjs cold E:/gitcrest-stage407-temp/gitcrest-stage407-100k-fixture .codex-stage516-cold.json` 20 轮成功；Windows 10.0.26300 / Ryzen 7 5800H / Git 2.37.3 / Node 22.19。完整 cold search P50/P95/max = 650.123/1,018.209/1,087.541ms；索引 build Git P95 1,320ms、persist P95 1,539ms，内部分项 rows/FTS/commit P95 为 484/535/613ms。基准逐轮要求完整 Git fallback 和索引就绪后的 FTS 查询均包含目标 commit。
+- 证据：`doc/evidence/S7.2/api-win32-cold-search-current-stage516-20261011.json`、`scripts/performance/benchmark.mjs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`。
+- 限制/后续：完整冷搜索 P95 1,018.209ms，未达到 <200ms，且比 stage507 的 702.117ms 高；本阶段只更新当前基线，不能据此宣称 cold search 性能达标。S7.2 桌面内存/帧率及 S7.4/S7.5 验收仍未完成。
+- 实施 commit：20 轮基准证据与台账同一 commit。
