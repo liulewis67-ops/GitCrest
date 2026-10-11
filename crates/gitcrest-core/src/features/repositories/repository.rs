@@ -5,15 +5,21 @@ use std::{
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use tokio::{fs, task};
+use tokio::task;
 
 use crate::{
     domain::{error::RepositoryError, repository::RepositoryRecord},
-    ports::{git::RepositoryGitPort, repository::RepositoryCatalogPort},
+    ports::{
+        git::RepositoryGitPort,
+        repository::{RepositoryCatalogPort, RepositoryFilesystemPort},
+    },
 };
 
 #[cfg(test)]
-use crate::{git::repository::GitRepositoryAdapter, storage::RepositoryStore};
+use crate::{
+    git::repository::GitRepositoryAdapter,
+    storage::{repository_paths::RepositoryFilesystemAdapter, RepositoryStore},
+};
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -33,6 +39,7 @@ pub struct Repository {
 pub struct RepositoryManager {
     catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
     git: std::sync::Arc<dyn RepositoryGitPort>,
+    filesystem: std::sync::Arc<dyn RepositoryFilesystemPort>,
     #[cfg(test)]
     test_store: Option<RepositoryStore>,
 }
@@ -41,10 +48,12 @@ impl RepositoryManager {
     pub(crate) fn with_adapters(
         catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
         git: std::sync::Arc<dyn RepositoryGitPort>,
+        filesystem: std::sync::Arc<dyn RepositoryFilesystemPort>,
     ) -> Self {
         Self {
             catalog,
             git,
+            filesystem,
             #[cfg(test)]
             test_store: None,
         }
@@ -62,6 +71,7 @@ impl RepositoryManager {
         super::repository_target::RepositoryTargetReader::new(
             self.catalog.clone(),
             self.git.clone(),
+            self.filesystem.clone(),
         )
     }
 
@@ -81,18 +91,13 @@ impl RepositoryManager {
         }
 
         let requested_path = PathBuf::from(path);
-        let metadata = fs::metadata(&requested_path)
-            .await
-            .map_err(map_path_error)?;
-        if !metadata.is_dir() {
+        if !self.filesystem.is_directory(&requested_path).await? {
             return Err(RepositoryError::NotRepository);
         }
-        let requested_path = fs::canonicalize(&requested_path)
-            .await
-            .map_err(map_path_error)?;
+        let requested_path = self.filesystem.canonicalize(&requested_path).await?;
 
         let root = self.git.worktree_root(&requested_path).await?;
-        let root = normalize_canonical_path(fs::canonicalize(root).await.map_err(map_path_error)?);
+        let root = self.filesystem.canonicalize(&root).await?;
 
         let head = self.git.head_oid(&root).await.unwrap_or_default();
         let branch = self.git.current_branch(&root).await.unwrap_or_default();
@@ -122,14 +127,13 @@ impl RepositoryManager {
             return Err(RepositoryError::InvalidPath);
         }
         let path = PathBuf::from(path);
-        let metadata = fs::metadata(&path).await.map_err(map_path_error)?;
-        if !metadata.is_dir() {
+        if !self.filesystem.is_directory(&path).await? {
             return Err(RepositoryError::NotRepository);
         }
-        if fs::symlink_metadata(path.join(".git")).await.is_ok() {
+        if self.filesystem.entry_exists(&path.join(".git")).await {
             return Err(RepositoryError::AlreadyRepository);
         }
-        let path = fs::canonicalize(path).await.map_err(map_path_error)?;
+        let path = self.filesystem.canonicalize(&path).await?;
         if self.git.worktree_root(&path).await.is_ok() {
             return Err(RepositoryError::AlreadyRepository);
         }
@@ -149,7 +153,11 @@ impl RepositoryManager {
             return Ok(None);
         };
         let mut repository = Repository::from(repository);
-        repository.availability = if fs::metadata(&repository.path).await.is_ok() {
+        repository.availability = if self
+            .filesystem
+            .is_available(Path::new(&repository.path))
+            .await
+        {
             "available"
         } else {
             "missing"
@@ -180,7 +188,11 @@ impl RepositoryManager {
             .map(Repository::from)
             .collect::<Vec<_>>();
         for repository in &mut repositories {
-            repository.availability = if fs::metadata(&repository.path).await.is_ok() {
+            repository.availability = if self
+                .filesystem
+                .is_available(Path::new(&repository.path))
+                .await
+            {
                 "available"
             } else {
                 "missing"
@@ -221,6 +233,7 @@ impl RepositoryManager {
         Self {
             catalog: std::sync::Arc::new(store.clone()),
             git: std::sync::Arc::new(GitRepositoryAdapter),
+            filesystem: std::sync::Arc::new(RepositoryFilesystemAdapter),
             test_store: Some(store),
         }
     }
@@ -285,31 +298,6 @@ fn stable_repo_id(root: &Path) -> String {
         let _ = write!(repo_id, "{byte:02x}");
     }
     repo_id
-}
-
-#[cfg(windows)]
-fn normalize_canonical_path(path: PathBuf) -> PathBuf {
-    let path = path.to_string_lossy();
-    if let Some(unc_path) = path.strip_prefix(r"\\?\UNC\") {
-        PathBuf::from(format!(r"\\{unc_path}"))
-    } else if let Some(drive_path) = path.strip_prefix(r"\\?\") {
-        PathBuf::from(drive_path)
-    } else {
-        PathBuf::from(path.as_ref())
-    }
-}
-
-#[cfg(not(windows))]
-fn normalize_canonical_path(path: PathBuf) -> PathBuf {
-    path
-}
-
-pub(super) fn map_path_error(error: std::io::Error) -> RepositoryError {
-    match error.kind() {
-        std::io::ErrorKind::NotFound => RepositoryError::PathNotFound,
-        std::io::ErrorKind::PermissionDenied => RepositoryError::PathPermissionDenied,
-        _ => RepositoryError::PathNotFound,
-    }
 }
 
 #[cfg(test)]
@@ -398,13 +386,6 @@ mod tests {
         String::from_utf8_lossy(&output.stdout).trim().to_owned()
     }
 
-    #[test]
-    fn maps_permission_denied_io_errors_to_repository_access_errors() {
-        let error = std::io::Error::from(std::io::ErrorKind::PermissionDenied);
-
-        assert_eq!(map_path_error(error), RepositoryError::PathPermissionDenied);
-    }
-
     #[tokio::test]
     async fn opens_normal_and_empty_repositories_with_stable_ids() {
         let fixture = GitFixture::new();
@@ -483,9 +464,7 @@ mod tests {
         assert_eq!(repository.branch.as_deref(), Some("feature"));
         assert_ne!(
             repository.repo_id,
-            stable_repo_id(&normalize_canonical_path(
-                fixture.root.canonicalize().unwrap()
-            ))
+            stable_repo_id(Path::new(&common_repository.path))
         );
         let common_target = manager
             .target_reader()
@@ -567,6 +546,7 @@ mod tests {
         let manager = RepositoryManager::with_adapters(
             std::sync::Arc::new(store),
             std::sync::Arc::new(FailingInitializeGit),
+            std::sync::Arc::new(RepositoryFilesystemAdapter),
         );
 
         assert_eq!(

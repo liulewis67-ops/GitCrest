@@ -73,11 +73,17 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let repository_catalog: Arc<dyn crate::ports::repository::RepositoryCatalogPort> =
         Arc::new(store.clone());
     let repository_git: Arc<dyn RepositoryGitPort> = Arc::new(GitRepositoryAdapter);
-    let repositories =
-        RepositoryManager::with_adapters(repository_catalog.clone(), repository_git.clone());
+    let repository_filesystem: Arc<dyn crate::ports::repository::RepositoryFilesystemPort> =
+        Arc::new(crate::storage::repository_paths::RepositoryFilesystemAdapter);
+    let repositories = RepositoryManager::with_adapters(
+        repository_catalog.clone(),
+        repository_git.clone(),
+        repository_filesystem.clone(),
+    );
     let repository_targets = crate::features::repositories::RepositoryTargetReader::new(
         repository_catalog,
         repository_git,
+        repository_filesystem,
     );
     let git_commands = GitCommandService::default();
     let remote_preflight_read: Arc<dyn RemotePreflightReadPort> = Arc::new(git_commands.clone());

@@ -14,6 +14,7 @@ mod database;
 mod history_index;
 mod migrations;
 mod repositories;
+pub(crate) mod repository_paths;
 mod settings;
 mod shelves;
 mod tasks;

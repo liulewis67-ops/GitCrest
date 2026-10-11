@@ -1,12 +1,12 @@
 use std::path::PathBuf;
 
-use tokio::{fs, task};
+use tokio::task;
 
 use crate::{
     domain::{error::RepositoryError, repository::RepositoryRecord},
     ports::{
         git::RepositoryGitPort,
-        repository::{RepositoryCatalogPort, RepositoryPathPort},
+        repository::{RepositoryCatalogPort, RepositoryFilesystemPort, RepositoryPathPort},
     },
 };
 
@@ -26,14 +26,20 @@ pub struct HistoryTarget {
 pub(crate) struct RepositoryTargetReader {
     catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
     git: std::sync::Arc<dyn RepositoryGitPort>,
+    filesystem: std::sync::Arc<dyn RepositoryFilesystemPort>,
 }
 
 impl RepositoryTargetReader {
     pub(crate) fn new(
         catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
         git: std::sync::Arc<dyn RepositoryGitPort>,
+        filesystem: std::sync::Arc<dyn RepositoryFilesystemPort>,
     ) -> Self {
-        Self { catalog, git }
+        Self {
+            catalog,
+            git,
+            filesystem,
+        }
     }
 
     pub(crate) async fn task_target(&self, repo_id: &str) -> Result<TaskTarget, RepositoryError> {
@@ -45,7 +51,9 @@ impl RepositoryTargetReader {
         } else {
             repository_path.join(common_dir)
         };
-        let canonical = fs::canonicalize(&common_dir)
+        let canonical = self
+            .filesystem
+            .canonicalize(&common_dir)
             .await
             .map_err(|_| RepositoryError::StatusFailed)?;
         Ok(TaskTarget {
@@ -94,9 +102,7 @@ impl RepositoryTargetReader {
         repository: &RepositoryRecord,
     ) -> Result<PathBuf, RepositoryError> {
         let path = PathBuf::from(&repository.path);
-        fs::metadata(&path)
-            .await
-            .map_err(super::repository::map_path_error)?;
+        self.filesystem.verify_path(&path).await?;
         Ok(path)
     }
 }

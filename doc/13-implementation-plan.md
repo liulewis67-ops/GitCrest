@@ -5572,3 +5572,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-batched-index-stage518-20261011.json`、`crates/gitcrest-core/src/storage/history_index.rs`、`scripts/performance/benchmark.mjs`。
 - 限制/后续：完整结果 P95 约 1.58 秒，仍高于 200ms；索引构建 Git 遍历与 FTS/事务提交仍需继续优化，S7.2 其它目标及 S7.4/S7.5 仍未完成。
 - 实施 commit：批量写入、20 轮证据与台账同一 commit。
+
+### Repository 路径文件系统操作迁入 storage adapter — 小阶段 519
+- 状态：已完成（repository feature 与目标读取器不再直接调用文件系统 API）
+- 日期：2026-10-11
+- 交付：新增 `RepositoryFilesystemPort` 与 `storage/repository_paths.rs`，由 bootstrap 注入给 repository manager 和 repository target reader。目录识别、`.git` 入口探测、路径规范化、仓库路径存在性/可用性检查统一由 adapter 执行；Windows canonical path 前缀规整和原有 RepositoryError 映射保留。仓库目标读取仍将 common directory canonicalize 失败映射为 `StatusFailed`。
+- 验证：`cargo fmt --manifest-path crates/gitcrest-core/Cargo.toml`、`cargo check --manifest-path crates/gitcrest-core/Cargo.toml --bin gitcrest-core`、`cargo clippy --manifest-path crates/gitcrest-core/Cargo.toml --all-targets -- -D warnings` 与 `git diff --check` 通过；Clippy 编译 lib/test targets，未运行测试。源码检索确认 production repository manager/target reader 不再直接导入 Tokio filesystem API。
+- 手工验证：逐项对照 open、initialize、get/list、repository target 的原文件系统调用与新 adapter 调用；目录错误映射、`.git` 检查的错误吞并语义、missing availability 字段语义及 task resource key 计算规则均保持。
+- 证据：`crates/gitcrest-core/src/ports/repository.rs`、`crates/gitcrest-core/src/storage/repository_paths.rs`、`crates/gitcrest-core/src/features/repositories/{repository.rs,repository_target.rs}`、`crates/gitcrest-core/src/bootstrap.rs`、`doc/14-backend-development-guidelines.md` 第 2、4.1 节。
+- 限制/后续：其他 feature 的工作树文件访问和 S7.2 性能门槛仍需按各自语义评估；S7.4/S7.5 跨平台及发布验收仍未完成。
+- 实施 commit：port、adapter、依赖注入、验证与台账同一 commit。

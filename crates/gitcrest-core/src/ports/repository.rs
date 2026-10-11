@@ -1,4 +1,8 @@
-use std::path::PathBuf;
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+    pin::Pin,
+};
 
 use crate::domain::{error::RepositoryError, repository::RepositoryRecord};
 
@@ -30,3 +34,21 @@ pub(crate) trait RepositoryCatalogPort: Send + Sync {
 pub(crate) trait RepositoryPathPort: Send + Sync {
     async fn read_repository_path(&self, repo_id: &str) -> Result<PathBuf, RepositoryError>;
 }
+
+pub(crate) trait RepositoryFilesystemPort: Send + Sync {
+    fn canonicalize<'a>(&'a self, path: &'a Path) -> RepositoryFilesystemFuture<'a, PathBuf>;
+
+    fn is_directory<'a>(&'a self, path: &'a Path) -> RepositoryFilesystemFuture<'a, bool>;
+
+    fn entry_exists<'a>(&'a self, path: &'a Path) -> RepositoryFilesystemCheckFuture<'a>;
+
+    fn verify_path<'a>(&'a self, path: &'a Path) -> RepositoryFilesystemFuture<'a, ()>;
+
+    fn is_available<'a>(&'a self, path: &'a Path) -> RepositoryFilesystemCheckFuture<'a>;
+}
+
+pub(crate) type RepositoryFilesystemFuture<'a, T> =
+    Pin<Box<dyn Future<Output = Result<T, RepositoryError>> + Send + 'a>>;
+
+pub(crate) type RepositoryFilesystemCheckFuture<'a> =
+    Pin<Box<dyn Future<Output = bool> + Send + 'a>>;
