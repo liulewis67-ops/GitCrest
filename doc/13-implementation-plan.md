@@ -5650,3 +5650,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-sqlite-cache-stage526-20261013.json`、`crates/gitcrest-core/src/storage/database.rs`。
 - 限制/后续：索引就绪约 Git 695ms + persist 538ms ≈ 1.25s，仍高于 200ms；commit 阶段 275ms（WAL 写入）与 Git 导出下界为剩余成本。桌面内存/帧率复测及 S7.4/S7.5 外部环境验收未完成。
 - 实施 commit：连接配置、20 轮证据与台账同一 commit。
+
+### S7.2 Windows 发行包 20 轮内存复测 — 小阶段 527
+- 状态：已完成（复测与记录；内存空闲目标未达标，S7.2 保持待验收）
+- 日期：2026-10-13
+- 交付：`electron-builder --win --x64 --dir` 生成未打包发行目录后，用 `desktop-benchmark.mjs` 的 memory 模式对 100k commit / 1k 行 fixture 完成 20 轮独立 profile 采样（首次尝试在第 19 轮 renderer 崩溃并未写报告，随后整轮重跑）。
+- 结果（进程树合计，20 轮 P50/P95/max，MiB）：idle Working Set 380.0/382.9/383.8、Private Working Set 105.9/108.5/109.5、private bytes 279.1/282.0/282.1；加载 100k 仓库后 Working Set 448.0/451.7/452.9、Private Working Set 163.8/167.0/168.4、private bytes 345.6/356.2/359.6。
+- 判定：按计划当前判定口径（process-tree Working Set）空闲 P95 382.9MiB 高于 <250MB 目标，未达标；工作中 451.7MiB 低于 <500MB。Private Working Set 较低但不替代判定口径。
+- 验证：未运行单元测试；构建与打包成功；安装包大小因本次仅 `--dir` 打包未测。
+- 证据：`doc/evidence/S7.2/desktop-win32-release-memory-stage527-20261013.json`。
+- 限制/后续：第 19 轮崩溃的 renderer 原因未调查，仅在重跑中未复现；空闲内存需继续削减或经设计确认计数口径；帧率、安装包大小及 S7.4/S7.5 外部环境验收未完成。
+- 实施 commit：证据与台账同一 commit。
