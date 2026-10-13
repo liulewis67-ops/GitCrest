@@ -7,7 +7,7 @@ use crate::{domain::commit::CommitSearchEntry, ports::history::HistorySearchInde
 
 use super::commit_history::{read_page, valid_filters};
 use super::{
-    run_git_with_deadline, text, CommitPage, CommitSummary, HistoryError, HistoryFilters,
+    run_git_bulk_with_deadline, text, CommitPage, CommitSummary, HistoryError, HistoryFilters,
     HISTORY_INDEX_DEADLINE, MAX_HISTORY_INDEX_OUTPUT,
 };
 
@@ -358,7 +358,7 @@ pub async fn build_history_search_index(
     arguments.push("--branches".into());
     arguments.push("--remotes".into());
     let git_started = std::time::Instant::now();
-    let output = run_git_with_deadline(
+    let output = run_git_bulk_with_deadline(
         repository_path,
         &arguments,
         MAX_HISTORY_INDEX_OUTPUT,

@@ -126,6 +126,82 @@ async fn run_git_with_deadline(
     Ok(stdout)
 }
 
+/// Runs git on a blocking thread and drains stdout with large reads. Tokio's pipe
+/// reader uses small chunks, which dominates multi-megabyte exports such as the
+/// history message index.
+async fn run_git_bulk_with_deadline(
+    repository_path: &Path,
+    arguments: &[std::ffi::OsString],
+    maximum_output: usize,
+    deadline: Duration,
+) -> Result<Vec<u8>, HistoryError> {
+    let repository_path = repository_path.to_owned();
+    let arguments = arguments.to_vec();
+    tokio::task::spawn_blocking(move || {
+        use std::io::Read;
+        let mut child = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&repository_path)
+            .args(&arguments)
+            .env("GIT_TERMINAL_PROMPT", "0")
+            .env("GCM_INTERACTIVE", "never")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .map_err(|_| HistoryError::GitUnavailable)?;
+        let mut stdout = child.stdout.take().ok_or(HistoryError::GitFailed)?;
+        let reader = std::thread::spawn(move || {
+            let mut output = Vec::with_capacity(maximum_output.min(8 * 1024 * 1024));
+            let mut buffer = vec![0_u8; 1024 * 1024];
+            loop {
+                let read = stdout.read(&mut buffer)?;
+                if read == 0 {
+                    return Ok::<_, std::io::Error>(output);
+                }
+                if output.len() + read > maximum_output {
+                    output.extend_from_slice(&buffer[..maximum_output.saturating_sub(output.len())]);
+                    output.push(0);
+                    return Ok(output);
+                }
+                output.extend_from_slice(&buffer[..read]);
+            }
+        });
+        let started = std::time::Instant::now();
+        let status = loop {
+            match child.try_wait() {
+                Ok(Some(status)) => break status,
+                Ok(None) if started.elapsed() >= deadline => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = reader.join();
+                    return Err(HistoryError::TimedOut);
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(2)),
+                Err(_) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    let _ = reader.join();
+                    return Err(HistoryError::GitFailed);
+                }
+            }
+        };
+        let output = reader
+            .join()
+            .map_err(|_| HistoryError::GitFailed)?
+            .map_err(|_| HistoryError::GitFailed)?;
+        if output.len() > maximum_output {
+            return Err(HistoryError::TooLarge);
+        }
+        if !status.success() {
+            return Err(HistoryError::GitFailed);
+        }
+        Ok(output)
+    })
+    .await
+    .map_err(|_| HistoryError::GitFailed)?
+}
+
 async fn read_limited<R>(stream: R, maximum: usize) -> std::io::Result<Vec<u8>>
 where
     R: AsyncRead + Unpin,

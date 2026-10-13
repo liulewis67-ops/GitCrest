@@ -5632,3 +5632,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/features/settings/model/use-update-status.ts`、`src/features/settings/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md`。
 - 限制/后续：App 仍有其他可拆分职责；S7.2 完整冷搜索/桌面资源门槛与 S7.4/S7.5 外部环境验收仍未完成。
 - 实施 commit：hook 抽取与台账同一 commit。
+
+### 历史索引 Git 导出改用大块阻塞读取 — 小阶段 525
+- 状态：已完成（Git 导出阶段耗时下降；完整冷搜索仍未达 <200ms，S7.2 保持待验收）
+- 日期：2026-10-13
+- 交付：新增 `run_git_bulk_with_deadline`，在 `spawn_blocking` 中以 std 子进程和 1 MiB 缓冲读取 stdout（保留输出上限、截止时间超时终止子进程、非零退出码映射），仅用于历史搜索索引构建；其余 Git 读取仍使用原 tokio 路径。原因：tokio 管道小块读取使数 MB 导出耗时远高于 `git` 自身（约 0.65s）。
+- 验证：`cargo check`、`cargo clippy --all-targets -- -D warnings`、Release build 通过；未运行测试。同一 100k fixture、Windows 10.0.26300 / Ryzen 7 5800H 的 20 轮冷搜索：索引 Git 阶段 P50/P95/max = 611/764/839ms（stage516 为 P95 1,320ms）；parse P95 20ms、persist P95 760ms（rows/FTS/commit P95 242/263/283ms）；首响 P95 15.792ms。
+- 证据：`doc/evidence/S7.2/api-win32-cold-bulk-read-stage525-20261013.json`、`crates/gitcrest-core/src/features/history/service.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`。
+- 限制/后续：索引就绪总耗时约 Git 764ms + persist 760ms，仍远高于 200ms；SQLite 持久化（FTS + 提交）是下一瓶颈，桌面内存/帧率复测及 S7.4/S7.5 外部环境验收仍未完成。
+- 实施 commit：读取路径、20 轮证据与台账同一 commit。
