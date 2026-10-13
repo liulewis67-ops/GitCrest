@@ -5641,3 +5641,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-cold-bulk-read-stage525-20261013.json`、`crates/gitcrest-core/src/features/history/service.rs`、`crates/gitcrest-core/src/features/history/service/search_index.rs`。
 - 限制/后续：索引就绪总耗时约 Git 764ms + persist 760ms，仍远高于 200ms；SQLite 持久化（FTS + 提交）是下一瓶颈，桌面内存/帧率复测及 S7.4/S7.5 外部环境验收仍未完成。
 - 实施 commit：读取路径、20 轮证据与台账同一 commit。
+
+### 历史索引连接增大页缓存并使用内存临时存储 — 小阶段 526
+- 状态：已完成（SQLite 持久化阶段耗时下降；完整冷搜索仍未达 <200ms，S7.2 保持待验收）
+- 日期：2026-10-13
+- 交付：仅对可重建的 history index 专用连接设置 `cache_size=-65536`（64 MiB）与 `temp_store=MEMORY`；主连接的 `synchronous=FULL` 与 WAL 配置、迁移和索引语义不变。
+- 验证：Release build 通过；同一 100k fixture / Windows 10.0.26300 / Ryzen 7 5800H 的 20 轮冷搜索：persist P50/P95/max = 505/538/618ms（stage525 为 P95 760ms），rows/FTS/commit P95 = 145/183/275ms；Git 阶段 P95 695ms。未运行单元测试。
+- 证据：`doc/evidence/S7.2/api-win32-cold-sqlite-cache-stage526-20261013.json`、`crates/gitcrest-core/src/storage/database.rs`。
+- 限制/后续：索引就绪约 Git 695ms + persist 538ms ≈ 1.25s，仍高于 200ms；commit 阶段 275ms（WAL 写入）与 Git 导出下界为剩余成本。桌面内存/帧率复测及 S7.4/S7.5 外部环境验收未完成。
+- 实施 commit：连接配置、20 轮证据与台账同一 commit。
