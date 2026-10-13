@@ -5682,3 +5682,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：本条目；产物位于未入库的 `dist/`。
 - 限制/后续：S7.2 仍有冷搜索（约 1.25s vs 200ms）、空闲内存口径、帧率及第 19 轮 renderer 崩溃未调查；S7.4/S7.5 外部环境验收未完成。
 - 实施 commit：台账更新单独 commit。
+
+### S7.2 历史搜索索引持久性与实际触发频率核对 — 小阶段 530
+- 状态：已完成（核对与记录；未改代码，S7.2 保持待验收）
+- 日期：2026-10-14
+- 交付：核对 `search_index.rs`/`storage/history_index.rs`：索引存于 SQLite（`history_search_documents`/FTS 与 `history_search_index_state`），以 refs 指纹匹配，重启应用后指纹一致即直接走 FTS 查询；仅在“仓库首次搜索”或“refs 变化（新提交/fetch/切分支）”时重建，重建期间返回 `searchPending` 并轮询，不阻塞也不返回过期结果。
+- 结论：基准的“冷搜索”对应首次建索引的最坏情形（Git 约 0.7s + 持久化约 0.5s ≈ 1.25s 就绪，首响 P95 约 16ms）；稳定使用下的搜索为 warm 路径（P95 约 12ms）。但 refs 每次变化都会触发全量重建，100k 仓库在提交/fetch 后约 1.3s 内搜索处于 pending——这是尚未解决的真实体验缺口。
+- 验证：代码核对，未新增构建或测试运行。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/history_index.rs`。
+- 限制/后续：下一步可行方案是 refs 变化时基于旧指纹做增量索引（需处理 rebase/强推导致旧提交消失，必要时回退全量重建），属于较大设计改动；在此之前不宣称冷搜索达标。S7.2 其余项及 S7.4/S7.5 外部环境验收未完成。
+- 实施 commit：台账更新单独 commit。
