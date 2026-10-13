@@ -5692,3 +5692,13 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/history_index.rs`。
 - 限制/后续：下一步可行方案是 refs 变化时基于旧指纹做增量索引（需处理 rebase/强推导致旧提交消失，必要时回退全量重建），属于较大设计改动；在此之前不宣称冷搜索达标。S7.2 其余项及 S7.4/S7.5 外部环境验收未完成。
 - 实施 commit：台账更新单独 commit。
+
+### S7.2 增量历史索引方案评估 — 小阶段 531
+- 状态：已完成（设计评估；未实现，S7.2 保持待验收）
+- 日期：2026-10-14
+- 交付：评估“refs 变化后基于旧 tips 增量更新索引”。可行的正确性判据：先存旧 tips；若 `git rev-list -n1 <旧tips> --not <新tips>` 无输出（旧提交全部仍可达），则新可达集合 = 旧集合 ∪ `git log <新refs> --not <旧tips>`；否则（rebase/强推/删分支）回退全量重建。
+- 阻碍：搜索结果必须与 Git 日志顺序一致，当前依赖 `history_search_documents.id` 的插入顺序（迁移 0014）。增量提交与旧提交在多分支/合并场景下会按日期交错，仅靠负 id 前置或追加无法保证与全量 `git log` 顺序一致，需新增显式排序键（如全量重建时的序号 + 增量重排）并改迁移、查询与 Git 顺序测试。
+- 结论：不实现近似顺序的增量方案，避免违反“搜索结果与 Git 一致”的正确性要求。后续需先决定排序键设计（或接受 refs 变化后 ~0.7s 的 Git 回退而非 pending）。
+- 验证：设计与代码核对，无构建/测试运行。
+- 证据：`crates/gitcrest-core/migrations/0014_history_search_rowid_order.sql`、`crates/gitcrest-core/src/storage/history_index.rs`。
+- 实施 commit：台账更新单独 commit。
