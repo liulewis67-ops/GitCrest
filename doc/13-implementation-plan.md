@@ -5711,3 +5711,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/history_index.rs`、`crates/gitcrest-core/src/ports/history.rs`。
 - 限制/后续：refs 变化后的搜索完整结果约 0.7s（Git 直查，100k 仓库，stage 525 前后测得），仍高于 <200ms；未预热首次建索引仍 pending。该与小阶段 531 的备选方案之一对应，增量索引（排序键）未实现。
 - 实施 commit：实现与台账同一 commit。
+
+### S7.2 第 19 轮 renderer 崩溃取证 — 小阶段 533
+- 状态：已完成（取证记录；崩溃根因未确定，S7.2 保持待验收）
+- 日期：2026-10-14
+- 交付：stage527 首次 20 轮内存基准在第 19 轮 `page.evaluate` 报 `Target crashed`（renderer），整轮重跑 20/20 成功。核查 Windows Application 事件日志近 2 天无 GitCrest 相关条目，临时目录中无 GitCrest 的 `.dmp`（仅发现无关程序的转储）。基准使用的临时 `--user-data-dir` 在每轮后删除，故 Crashpad 转储不保留。
+- 结论：39 次轮次中出现 1 次，不可复现、无转储，无法归因；不能据此判定为应用缺陷或排除之。
+- 后续：如需取证，应在基准中保留 crashpad 目录（`--crash-dumps-dir`）并重复长跑；属测量基础设施改动，未在本阶段进行。
+- 验证：事件日志与文件系统检索，无构建/测试运行。
+- 实施 commit：台账更新单独 commit。
