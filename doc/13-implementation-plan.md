@@ -5661,3 +5661,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/desktop-win32-release-memory-stage527-20261013.json`。
 - 限制/后续：第 19 轮崩溃的 renderer 原因未调查，仅在重跑中未复现；空闲内存需继续削减或经设计确认计数口径；帧率、安装包大小及 S7.4/S7.5 外部环境验收未完成。
 - 实施 commit：证据与台账同一 commit。
+
+### S7.2 Electron 空白窗口内存下界对照 — 小阶段 528
+- 状态：已完成（确定性对照；空闲内存目标在当前判定口径下受 Electron 基线限制，S7.2 保持待验收）
+- 日期：2026-10-13
+- 交付：用仓库内 Electron 37 运行仅含一个 `data:` 空白页窗口的最小应用（无 GitCrest 代码、无 sidecar），8 秒稳定后读取进程树 Working Set 之和。
+- 结果：4 个进程，进程树 Working Set 合计 291.8MiB（单次手工采样）。同口径下 GitCrest 发行包 idle P95 为 382.9MiB（stage527），应用自身增量约 90MiB。
+- 判定：process-tree Working Set 把各 Chromium 进程共享的 DLL/运行时页面重复计入；空白 Electron 窗口即已高于 <250MB 目标，故该目标在 Electron 方案下无法仅靠应用侧优化达成，而 `10-electron-rust-architecture.md` 的 <250MB 基线需要产品/架构决策（改用 Private Working Set 口径或调整阈值）。本阶段不据此改判通过，也未修改任何阈值。
+- 验证：未运行测试；单次基线采样，不是 20 轮分布。
+- 证据：本条目（临时最小应用位于系统临时目录，未入库）。
+- 限制/后续：待产品确认内存验收口径；第 19 轮 renderer 崩溃未复现且未调查；帧率、安装包大小及 S7.4/S7.5 外部环境验收未完成。
+- 实施 commit：台账更新单独 commit。
