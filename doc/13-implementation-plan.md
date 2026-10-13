@@ -5612,3 +5612,23 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`src/app/layouts/CommandPalette.tsx`、`src/app/App.tsx`、`src/shared/hooks/use-dialog-focus.ts`、`doc/15-frontend-development-guidelines.md` 第 3.2、3.3、4.1 节。
 - 限制/后续：App 仍负责跨 feature 命令定义和 workspace 组合状态，后续按实际职责继续拆分；S7.2 完整冷索引/桌面资源门槛与 S7.4 原生 runner/真实签名升级验收仍未完成。
 - 实施 commit：命令面板布局拆分、行为核对与台账同一 commit。
+
+### S7.2 冷搜索路径复核与剩余瓶颈归因 — 小阶段 523
+- 状态：已完成（仅复核与归因，未改代码；S7.2 整体仍为待验收）
+- 日期：2026-10-13
+- 交付：核对 `read_page_indexed`：无过滤的首页读取（`unfiltered_first_page`）已在返回后台启动 `schedule_history_index_build`，因此历史视图打开后索引通常先于用户搜索就绪；未就绪时 message 搜索返回 `searchPending` 并轮询，首响不等待全量 Git 遍历。索引就绪后查询为 FTS 路径。
+- 验证：基于既有证据（stage515/517/518）：warm indexed 搜索 P95 11.934ms、冷搜索首响 P95 19.935ms，均 <200ms；仅“从未预热即搜索”的完整结果就绪 P95 约 1.58s（git 导出约 1.3s + SQLite 持久化）。未新增构建或测试运行。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`doc/evidence/S7.2/api-win32-cold-batched-index-stage518-20261011.json`。
+- 限制/后续：一次性 100k 提交索引构建的 Git 导出仍是下界（libgit2 方案已在小阶段 413 评估未采用）；未预热的完整结果不满足 <200ms，S7.2 保持待验收。桌面内存/帧率 20 轮发行版复测及 S7.4/S7.5 的多平台 runner、真实签名与发布验收仍需外部环境，未完成。
+- 补充实测（2026-10-13，同一 100k fixture，单次手工计时）：`git log -z --format=tformat:%H%x00%B HEAD --branches --remotes` 约 654–735ms；加 `--no-color/--no-decorate/--no-mailmap`、`rev-list --format=%B`、显式 commit-graph 配置均无改善（654–779ms）。即便消除 sidecar 管道读取与持久化开销，Git 导出下界约 0.65s，远高于 200ms；未预热的完整结果无法靠调整 git 参数达标。
+- 实施 commit：仅台账更新，与小阶段 524 同一 commit。
+
+### 更新状态订阅与操作迁入 settings feature hook — 小阶段 524
+- 状态：已完成（App 不再内联更新状态订阅与检查/安装回调）
+- 日期：2026-10-13
+- 交付：新增 `src/features/settings/model/use-update-status.ts`，承接 bridge 更新状态初始读取与订阅（含卸载取消）、检查更新与安装更新回调及其错误文案；`App` 仅调用 `useUpdateStatus()` 并把结果传给 `SettingsDialog`。行为与文案保持不变，App.tsx 由 924 行降至 895 行。
+- 验证：`pnpm build` 通过（含应用与测试 TypeScript 类型检查及 Electron 构建）；未运行测试。
+- 手工验证：对照迁移前代码核对订阅/取消订阅、`active` 防护、三处错误文案及 bridge 缺失时的静默返回。
+- 证据：`src/features/settings/model/use-update-status.ts`、`src/features/settings/index.ts`、`src/app/App.tsx`、`doc/15-frontend-development-guidelines.md`。
+- 限制/后续：App 仍有其他可拆分职责；S7.2 完整冷搜索/桌面资源门槛与 S7.4/S7.5 外部环境验收仍未完成。
+- 实施 commit：hook 抽取与台账同一 commit。

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
-import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
+import { requireGitCrestBridge } from "../api/bridge";
 import { AppTitlebar, type AppPage } from "./layouts/AppTitlebar";
 import { CommandPalette, type CommandPaletteCommand } from "./layouts/CommandPalette";
 import { useCoreConnection } from "./use-core-connection";
@@ -8,7 +8,7 @@ import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
 import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
 import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
-import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShortcutPreferences, useThemePreference } from "../features/settings";
+import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
@@ -23,7 +23,6 @@ import { loadBranchSwitcherDialog, loadRemoteBranchDeleteDialog, useBranchSwitch
 import { loadTaskCenter, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
 import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
-import type { UpdateStatus } from "../api/update-status";
 
 const TaskCenter = lazy(() => loadTaskCenter().then(({ TaskCenter }) => ({ default: TaskCenter })));
 const WorkflowDialog = lazy(() => loadWorkflowDialog().then(({ WorkflowDialog }) => ({ default: WorkflowDialog })));
@@ -52,7 +51,7 @@ function App() {
   const [shelfComposerRequest, setShelfComposerRequest] = useState<{ id: number; repoId?: string }>({ id: 0 });
   const [tasksOpen, setTasksOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>();
+  const { updateStatus, checkForUpdates, installUpdate } = useUpdateStatus();
   const { shortcuts, setShortcuts } = useShortcutPreferences();
   const {
     message: commitMessage,
@@ -233,26 +232,6 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const { sidebarWidth, setSidebarWidth, detailsWidth, setDetailsWidth, workbenchHeight, setWorkbenchHeight } = useWorkspaceLayout(selectedRepository?.repoId);
-  useEffect(() => {
-    const bridge = getGitCrestBridge();
-    const getStatus = bridge?.getUpdateStatus;
-    const subscribe = bridge?.subscribeToUpdateStatus;
-    if (!getStatus || !subscribe) return;
-
-    let active = true;
-    const unsubscribe = subscribe((next) => {
-      if (active) setUpdateStatus(next);
-    });
-    void getStatus().then((next) => {
-      if (active) setUpdateStatus(next);
-    }).catch(() => {
-      if (active) setUpdateStatus({ state: "error", message: "Update status could not be loaded." });
-    });
-    return () => {
-      active = false;
-      unsubscribe();
-    };
-  }, []);
   const connected = status === "Connected to local Rust core";
   const connecting = status.startsWith("Starting");
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
@@ -901,15 +880,7 @@ function App() {
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={(task) => cloneSubmission.retryFromTask(task)} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, _preview, action) => void recoverWorkflow(task, action)} onOpenConflictWindow={(task) => void openConflictWindow(task)} />}
-      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={async () => {
-        const check = getGitCrestBridge()?.checkForUpdates;
-        if (!check) return;
-        try { setUpdateStatus(await check()); }
-        catch { setUpdateStatus({ state: "error", message: "The update check failed. Try again later." }); }
-      }} onInstallUpdate={() => {
-        const install = getGitCrestBridge()?.installUpdate;
-        if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
-      }} />}
+      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={checkForUpdates} onInstallUpdate={installUpdate} />}
       {discardSelection && <DiscardChangesDialog repositoryPath={discardSelection.repositoryPath} path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveDiscardRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
       {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} onClose={workflowDialog.close} onStarted={workflowDialog.startTask} />}
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}

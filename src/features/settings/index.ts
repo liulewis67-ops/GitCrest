@@ -1,5 +1,6 @@
 export { THEME_CYCLE, useThemePreference } from "./model/use-theme-preference";
 export type { Theme } from "./model/use-theme-preference";
+export { useUpdateStatus } from "./model/use-update-status";
 export { useShortcutPreferences } from "./model/use-shortcut-preferences";
 export {
   ariaShortcut,
