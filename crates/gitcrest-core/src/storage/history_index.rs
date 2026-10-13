@@ -70,6 +70,23 @@ impl RepositoryStore {
         }
     }
 
+    pub fn has_history_search_index(&self, repo_id: &str) -> bool {
+        let history_index_connection = self.history_index_connection();
+        let Ok(connection) = history_index_connection.lock() else {
+            return false;
+        };
+        connection
+            .query_row(
+                "SELECT 1 FROM history_search_index_state WHERE repo_id=?1",
+                [repo_id],
+                |_| Ok(()),
+            )
+            .optional()
+            .ok()
+            .flatten()
+            .is_some()
+    }
+
     pub fn replace_history_search_index(
         &self,
         repo_id: &str,
@@ -257,6 +274,10 @@ impl HistorySearchIndexPort for RepositoryStore {
 
     fn is_index_building(&self, repo_id: &str) -> bool {
         RepositoryStore::is_history_index_building(self, repo_id)
+    }
+
+    fn has_index(&self, repo_id: &str) -> bool {
+        RepositoryStore::has_history_search_index(self, repo_id)
     }
 
     fn index_build_failed(&self, repo_id: &str, refs_fingerprint: &str) -> bool {

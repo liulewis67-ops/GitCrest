@@ -78,7 +78,10 @@ pub async fn read_page_indexed(
                 },
                 store.clone(),
             );
-        if build_is_running || build_was_started {
+        // A stale (previously built) index rebuilds in the background while the
+        // direct Git search answers immediately; only a first-ever build reports
+        // pending, because no complete answer is cheap then.
+        if (build_is_running || build_was_started) && !store.has_index(&repo_id) {
             return Ok(CommitPage {
                 repo_id,
                 offset,

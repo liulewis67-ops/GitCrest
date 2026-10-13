@@ -5,6 +5,9 @@ pub(crate) trait HistorySearchIndexPort: Send + Sync {
 
     fn is_index_building(&self, repo_id: &str) -> bool;
 
+    /// True when a previously built index exists, even if its refs fingerprint is stale.
+    fn has_index(&self, repo_id: &str) -> bool;
+
     fn index_build_failed(&self, repo_id: &str, refs_fingerprint: &str) -> bool;
 
     fn fail_index_build(&self, repo_id: &str, refs_fingerprint: &str);

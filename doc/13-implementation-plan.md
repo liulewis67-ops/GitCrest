@@ -5702,3 +5702,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 验证：设计与代码核对，无构建/测试运行。
 - 证据：`crates/gitcrest-core/migrations/0014_history_search_rowid_order.sql`、`crates/gitcrest-core/src/storage/history_index.rs`。
 - 实施 commit：台账更新单独 commit。
+
+### S7.2 refs 变化后用 Git 直查替代 pending — 小阶段 532
+- 状态：已完成（实现；未做性能复测，S7.2 保持待验收）
+- 日期：2026-10-14
+- 交付：新增 `HistorySearchIndexPort::has_index`（`history_search_index_state` 存在即真，指纹过期也算）。refs 变化导致索引过期时，后台重建照常启动，但搜索不再返回 `searchPending`，而是立即走完整 Git 搜索并返回结果；仅“仓库首次建索引”（无任何旧索引）仍返回 pending。结果顺序与 Git 一致，无需新增排序键。
+- 验证：`cargo clippy --all-targets -- -D warnings` 通过；`cargo test --lib indexed_message_search`（含 refs 变化后与 Git 顺序一致断言）1 passed。未跑完整测试集与性能基准。
+- 证据：`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/history_index.rs`、`crates/gitcrest-core/src/ports/history.rs`。
+- 限制/后续：refs 变化后的搜索完整结果约 0.7s（Git 直查，100k 仓库，stage 525 前后测得），仍高于 <200ms；未预热首次建索引仍 pending。该与小阶段 531 的备选方案之一对应，增量索引（排序键）未实现。
+- 实施 commit：实现与台账同一 commit。
