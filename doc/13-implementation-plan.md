@@ -5720,3 +5720,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 后续：如需取证，应在基准中保留 crashpad 目录（`--crash-dumps-dir`）并重复长跑；属测量基础设施改动，未在本阶段进行。
 - 验证：事件日志与文件系统检索，无构建/测试运行。
 - 实施 commit：台账更新单独 commit。
+
+### S7.2 桌面基准保留 Crashpad 转储 — 小阶段 534
+- 状态：已完成（测量基础设施；未复现崩溃，S7.2 保持待验收）
+- 日期：2026-10-14
+- 交付：`desktop-benchmark.mjs` 支持环境变量 `GITCREST_BENCH_CRASH_DUMPS_DIR`，设置后给每轮 Electron 追加 `--crash-dumps-dir=<目录>`，使崩溃转储不随每轮删除的临时 profile 丢失；未设置时行为不变。对应小阶段 533 的后续建议。
+- 验证：`node --check scripts/performance/desktop-benchmark.mjs` 通过；未运行基准。
+- 证据：`scripts/performance/desktop-benchmark.mjs`。
+- 限制/后续：需用该变量重复长跑才能捕获 renderer 崩溃；S7.2 其余项与 S7.4/S7.5 状态不变。
+- 实施 commit：脚本与台账同一 commit。

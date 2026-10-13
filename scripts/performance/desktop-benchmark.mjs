@@ -45,7 +45,11 @@ function benchmarkGpuFlags() {
 }
 
 function benchmarkElectronArgs(dataDir) {
-  return [...benchmarkGpuFlags(), `--user-data-dir=${join(dataDir, "user-data")}`];
+  const args = [...benchmarkGpuFlags(), `--user-data-dir=${join(dataDir, "user-data")}`];
+  // Keep Crashpad dumps outside the per-round profile (which is deleted) so a
+  // renderer crash during a long run can be investigated afterwards.
+  if (process.env.GITCREST_BENCH_CRASH_DUMPS_DIR) args.push(`--crash-dumps-dir=${resolve(process.env.GITCREST_BENCH_CRASH_DUMPS_DIR)}`);
+  return args;
 }
 
 function packagedAppExecutablePath() {
