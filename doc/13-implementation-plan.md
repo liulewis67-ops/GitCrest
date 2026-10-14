@@ -5777,3 +5777,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`crates/gitcrest-core/migrations/0016_history_search_incremental_basis.sql`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/history_index.rs`。
 - 限制/后续：增量只改善 refs 变化后的索引追平耗时；首次建索引（约 1.25s）、冷搜索 <200ms、帧率与内存口径仍未解决，S7.2 保持待验收。同提交时间戳的新提交会保守回退全量重建。
 - 实施 commit：实现与台账同一 commit。
+
+### Alpha 发布说明同步 S7.2 最新实测 — 小阶段 540
+- 状态：已完成（文档同步；S7.2/S7.4/S7.5 状态不变）
+- 日期：2026-10-14
+- 交付：`doc/release-notes-alpha-draft.md` 的 S7.2 限制条目由 2026-10-10 的旧数据更新为小阶段 536/537 的 20 轮实测（冷启动、滚动帧率、三种内存口径、安装包大小、搜索），并保留“口径待确认、不替代既定门槛”的声明；“尚未纳入产品范围”的 P1/P2 清单经核对与 PRD 一致，无需改动。
+- 验证：文档核对，无构建/测试运行。
+- 证据：`doc/release-notes-alpha-draft.md`、`doc/evidence/S7.2/desktop-win32-crashdump-stage536-20261014.json`、`doc/evidence/S7.2/desktop-win32-memory-notrace-stage537-20261014.json`。
+- 限制/后续：S7.5 仍依赖 S7.4 外部环境验收与 S7.2 达标后的最终口径同步。
+- 实施 commit：台账与发布说明同一 commit。

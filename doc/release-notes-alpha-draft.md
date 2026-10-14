@@ -32,7 +32,7 @@ GitCrest 是一款面向专业开发者的本地优先 Git 桌面客户端。当
 - Windows 更新器只有在配置可信 `publisherName` 后才会启用。锁定的 Linux AppImage 更新器只校验更新元数据中的 SHA-512，尚无清单来源签名验证链，因此不能作为已验证的 Linux 更新能力发布。
 - HTTPS 认证失败后保存凭据并重试 Fetch/Clone，以及运行中取消 Clone 后清理临时目录，已在 Windows Electron E2E 验证；macOS/Linux 的系统凭据库和 Git 进程取消行为仍需对应 runner 验收。
 - macOS/Linux 原生 runner 尚未提供本机验收结果；需由对应 CI runner 完成构建与 packaged smoke 后再确认平台就绪。
-- Windows S7.2 目标仍未达标：Windows 11 / Ryzen 7 5800H / Electron 37 / 100k 提交 fixture 的 20 轮独立 Release profile 测量中，进程树 Working Set 的 idle P50/P95 为 497.45/500.98 MiB，加载仓库后为 539.52/542.05 MiB，超过 idle <250MB 和 work <500MB 门槛。30 秒滚动的 compositor presented-frame P5 跨轮 P50 为 55.325 fps（P5–P95：55.276–55.356 fps），低于 ≥60 fps 门槛。数据来自当前开发主机；Private Working Set 和 private bytes 是补充计数口径，不替代既定 Working Set 门槛。
+- Windows S7.2 目标仍未全部达标（Windows 11 / Ryzen 7 5800H / Electron 37 / 100k 提交 fixture，20 轮独立 Release profile，2026-10-14 复测）：冷启动 P50/P95 为 1.11/1.77 s（目标 <1.5 s，P95 受相邻两个离群样本影响）；30 秒滚动 compositor presented-frame P5 约 55.3 fps（目标 ≥60 fps）；进程树 Working Set P95 idle 384 MiB、加载仓库后 453 MiB，高于 idle <250MB 门槛（空白 Electron 窗口自身约 292 MiB），Private Working Set P95 分别为 109/166 MiB。验收计数口径尚待产品确认，数据不替代既定门槛；100k 提交历史搜索完整结果约 0.7 s（目标 <200 ms）；安装包 103.8 MiB 达标。数据来自当前开发主机。
 - 发布前仍需在真实屏幕阅读器和高对比度环境进行人工体验检查。
 
 ## 兼容性与迁移
