@@ -1,0 +1,215 @@
+{
+  "mode": "memory-only",
+  "generatedAt": "2026-10-09T15:52:56.995Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         ",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "rendererBuild": "production electron-vite build",
+    "rustProfile": "release",
+    "launchMode": "packaged application",
+    "applicationExecutable": "E:\\personal_projects\\GitCrest\\dist\\win-unpacked\\GitCrest.exe",
+    "launchFlags": [],
+    "electronUserDataProfileIsolatedPerRun": true,
+    "memoryMeasurementRoot": "Electron main process and descendants; Playwright launcher excluded"
+  },
+  "fixture": {
+    "commits": 100000,
+    "diffFileLines": 1000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture-20261009-continuation"
+  },
+  "iterations": 20,
+  "startedAt": "2026-10-09T15:52:09.842Z",
+  "startup": {
+    "samples": 0,
+    "p50Ms": null,
+    "p95Ms": null,
+    "maxMs": null,
+    "samplesMs": []
+  },
+  "firstHistoryFrame": {
+    "samples": 0,
+    "p50Ms": null,
+    "p95Ms": null,
+    "maxMs": null,
+    "samplesMs": []
+  },
+  "idleProcessTreeMemory": {
+    "sampleCount": 0,
+    "peakBytes": null,
+    "samplesBytes": []
+  },
+  "loadedRepositoryIdleProcessTreeMemory": {
+    "sampleCount": 0,
+    "peakBytes": null,
+    "samplesBytes": []
+  },
+  "processMemoryBreakdown": {
+    "idle": [
+      {
+        "pid": 33564,
+        "role": "harness-wrapper",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 111419392,
+        "privateWorkingSetBytes": 34824192,
+        "privateBytes": 80437248
+      },
+      {
+        "pid": 34956,
+        "role": "renderer",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 110497792,
+        "privateWorkingSetBytes": 37261312,
+        "privateBytes": 82485248
+      },
+      {
+        "pid": 17264,
+        "role": "gpu",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 106008576,
+        "privateWorkingSetBytes": 29605888,
+        "privateBytes": 109539328
+      },
+      {
+        "pid": 35708,
+        "role": "utility",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 56168448,
+        "privateWorkingSetBytes": 7544832,
+        "privateBytes": 14258176
+      },
+      {
+        "pid": 38316,
+        "role": "rust-sidecar",
+        "image": "gitcrest-core.exe",
+        "workingSetBytes": 11476992,
+        "privateWorkingSetBytes": 2719744,
+        "privateBytes": 3723264
+      },
+      {
+        "pid": 5940,
+        "role": "electron-child",
+        "image": "conhost.exe",
+        "workingSetBytes": 7921664,
+        "privateWorkingSetBytes": 892928,
+        "privateBytes": 1302528
+      }
+    ],
+    "loaded": [
+      {
+        "pid": 34956,
+        "role": "renderer",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 126775296,
+        "privateWorkingSetBytes": 50446336,
+        "privateBytes": 99373056
+      },
+      {
+        "pid": 33564,
+        "role": "harness-wrapper",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 113061888,
+        "privateWorkingSetBytes": 35573760,
+        "privateBytes": 82067456
+      },
+      {
+        "pid": 17264,
+        "role": "gpu",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 108609536,
+        "privateWorkingSetBytes": 31891456,
+        "privateBytes": 93548544
+      },
+      {
+        "pid": 35708,
+        "role": "utility",
+        "image": "GitCrest.exe",
+        "workingSetBytes": 56528896,
+        "privateWorkingSetBytes": 7770112,
+        "privateBytes": 14508032
+      },
+      {
+        "pid": 38316,
+        "role": "rust-sidecar",
+        "image": "gitcrest-core.exe",
+        "workingSetBytes": 18931712,
+        "privateWorkingSetBytes": 6885376,
+        "privateBytes": 8081408
+      },
+      {
+        "pid": 5940,
+        "role": "electron-child",
+        "image": "conhost.exe",
+        "workingSetBytes": 7901184,
+        "privateWorkingSetBytes": 872448,
+        "privateBytes": 1265664
+      }
+    ],
+    "idleTotals": {
+      "workingSetBytes": 403492864,
+      "privateWorkingSetBytes": 112848896,
+      "privateBytes": 291745792
+    },
+    "loadedTotals": {
+      "workingSetBytes": 431808512,
+      "privateWorkingSetBytes": 133439488,
+      "privateBytes": 298844160
+    },
+    "privateWorkingSetWindow": {
+      "requestedSleepBetweenSamplesMs": 300,
+      "idleSamples": [
+        {
+          "sampledAtUtc": "2026-10-09T15:52:31.0154447Z",
+          "privateWorkingSetBytes": 112857088
+        },
+        {
+          "sampledAtUtc": "2026-10-09T15:52:31.9123497Z",
+          "privateWorkingSetBytes": 112861184
+        },
+        {
+          "sampledAtUtc": "2026-10-09T15:52:32.7961410Z",
+          "privateWorkingSetBytes": 112861184
+        }
+      ],
+      "idlePeakBytes": 112861184,
+      "loadedSamples": [
+        {
+          "sampledAtUtc": "2026-10-09T15:52:54.8682884Z",
+          "privateWorkingSetBytes": 128835584
+        },
+        {
+          "sampledAtUtc": "2026-10-09T15:52:55.6815750Z",
+          "privateWorkingSetBytes": 128835584
+        },
+        {
+          "sampledAtUtc": "2026-10-09T15:52:56.5056667Z",
+          "privateWorkingSetBytes": 128835584
+        }
+      ],
+      "loadedPeakBytes": 128835584
+    }
+  },
+  "repositoryCacheLifecycle": null,
+  "work": null,
+  "installer": {
+    "path": "E:\\personal_projects\\GitCrest\\dist\\GitCrest Setup 0.1.0.exe",
+    "bytes": 108778287,
+    "mebibytes": 103.74
+  },
+  "limitations": []
+}
