@@ -1,6 +1,6 @@
 # Conflict Resolver Enhancement Plan
 
-Status: Phases 0 to 4 completed (2026-10-14: 21/21 targeted Vitest and `tsc --noEmit` pass); Phase 5 is optional and not started · Scope: `ConflictWindow` (three-way conflict resolution)
+Status: Phases 0 to 4 completed (2026-10-14: 21/21 targeted Vitest and `tsc --noEmit` pass); Phase 5 is deferred: its trigger (parity drift in the `git merge-file` differential test in `tests/unit/conflict-merge-model.test.ts`) has not occurred · Scope: `ConflictWindow` (three-way conflict resolution)
 
 This builds on the JetBrains-style layout already shipped (Ours | Result | Theirs rows, gutter accept arrows, "Accept both", prev/next navigation, resolved counter). Three JetBrains features remain:
 
