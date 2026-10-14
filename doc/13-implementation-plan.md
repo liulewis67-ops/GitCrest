@@ -5747,3 +5747,14 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/desktop-win32-crashdump-stage536-20261014.json`（及 `.batches/`）。
 - 限制/后续：冷启动 P95、帧率、三项内存、搜索仍未达标，S7.2 保持待验收；帧率可能受显示器 55–60Hz 与 Electron 帧率限制影响，内存需产品确认口径。
 - 实施 commit：台账与证据同一 commit。
+
+### S7.2 Windows 发行版无追踪内存 20 轮（含 Private Working Set）— 小阶段 537
+- 状态：已完成（复测记录；S7.2 保持待验收）
+- 日期：2026-10-14
+- 交付：以 `GITCREST_BENCH_MODE=memory`（无 CDP 追踪）对发行包做 20 轮新 profile 内存采样，同时记录三种 Windows 计数口径。
+- 结果（P95）：空闲 Working Set 384MiB / Private Working Set 108.8MiB / Private Bytes 281MiB；加载 100k 仓库后 Working Set 452.8MiB / Private Working Set 166MiB / Private Bytes 354MiB。
+- 判定：按 Working Set 口径空闲 >250MB（受 Electron 基线限制，见小阶段 528）；按 Private Working Set 口径空闲与工作中均远低于 250/500MB。计划未规定验收计数器，故不据此改判通过，需产品确认口径。
+- 验证：基准脚本运行 20/20 成功，未改代码。
+- 证据：`doc/evidence/S7.2/desktop-win32-memory-notrace-stage537-20261014.json`。
+- 限制/后续：口径确认后内存项可判定；冷启动 P95（1.77s）、帧率（≈55fps）、搜索仍未达标。
+- 实施 commit：台账与证据同一 commit。
