@@ -302,6 +302,16 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     minHeight: secondaryWindow ? 520 : 640,
     title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? "Resolve conflicts · GitCrest" : "GitCrest",
     show: false,
+    // Main window drops the native title bar; the in-app titlebar acts as the drag region
+    // and Windows/Linux keep native window controls through a transparent overlay.
+    ...(secondaryWindow
+      ? {}
+      : {
+          titleBarStyle: "hidden" as const,
+          ...(process.platform === "darwin"
+            ? { trafficLightPosition: { x: 14, y: 15 } }
+            : { titleBarOverlay: { color: "#00000000", symbolColor: "#8a96a5", height: 46 } }),
+        }),
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
       contextIsolation: true,
