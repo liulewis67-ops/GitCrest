@@ -26,6 +26,8 @@ pub(crate) use self::refs::read_refs;
 pub(crate) use self::search_index::read_page_indexed;
 #[cfg(test)]
 use self::search_index::refs_fingerprint;
+#[cfg(test)]
+use self::search_index::build_history_search_index;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HistoryError {
@@ -403,6 +405,105 @@ mod tests {
             .await,
             Err(HistoryError::InvalidQuery)
         ));
+    }
+
+    fn commit_at(path: &Path, message: &str, timestamp: i64) {
+        git(path, &["add", "."]);
+        let date = format!("{timestamp} +0000");
+        let output = StdCommand::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(["commit", "--quiet", "-m", message])
+            .env("GIT_AUTHOR_DATE", &date)
+            .env("GIT_COMMITTER_DATE", &date)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+    }
+
+    async fn build_and_expect_git_order(
+        manager: &RepositoryManager,
+        path: &Path,
+        store: &Arc<dyn HistorySearchIndexPort>,
+    ) -> Vec<String> {
+        let repository = manager.open_path(path.to_str().unwrap()).await.unwrap();
+        build_history_search_index(
+            &repository.repo_id,
+            path,
+            repository.head.as_deref(),
+            None,
+            store.clone(),
+        )
+        .await
+        .unwrap();
+        let fingerprint = refs_fingerprint(path, repository.head.as_deref())
+            .await
+            .unwrap();
+        let indexed: Vec<String> = store
+            .search_messages(&repository.repo_id, &fingerprint, "needle", 0, 100)
+            .unwrap()
+            .expect("index should match the current refs")
+            .into_iter()
+            .map(|entry| entry.oid)
+            .collect();
+        let expected: Vec<String> = git(path, &["log", "--format=%H", "HEAD", "--branches", "--remotes"])
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(indexed, expected);
+        indexed
+    }
+
+    #[tokio::test]
+    async fn incremental_index_prepends_newer_commits_and_falls_back_otherwise() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        git(path, &["init", "--quiet", "-b", "main"]);
+        git(path, &["config", "user.name", "GitCrest History"]);
+        git(path, &["config", "user.email", "history@example.invalid"]);
+        let base = 1_700_000_000_i64;
+        std::fs::write(path.join("history.txt"), "one\n").unwrap();
+        commit_at(path, "needle one", base);
+        std::fs::write(path.join("history.txt"), "two\n").unwrap();
+        commit_at(path, "needle two", base + 100);
+
+        let manager = RepositoryManager::default();
+        let store: Arc<dyn HistorySearchIndexPort> = Arc::new(manager.store());
+        let initial = build_and_expect_git_order(&manager, path, &store).await;
+        assert_eq!(initial.len(), 2);
+        let repo_id = manager
+            .open_path(path.to_str().unwrap())
+            .await
+            .unwrap()
+            .repo_id;
+        let first_basis = store.index_basis(&repo_id).expect("full build records a basis");
+        assert_eq!(first_basis.max_commit_time, base + 100);
+
+        // Newer commits on main and on a side branch: incremental path.
+        std::fs::write(path.join("history.txt"), "three\n").unwrap();
+        commit_at(path, "needle three", base + 200);
+        git(path, &["checkout", "--quiet", "-b", "side"]);
+        std::fs::write(path.join("history.txt"), "four\n").unwrap();
+        commit_at(path, "needle four", base + 300);
+        git(path, &["checkout", "--quiet", "main"]);
+        let after_newer = build_and_expect_git_order(&manager, path, &store).await;
+        assert_eq!(after_newer.len(), 4);
+        let second_basis = store.index_basis(&repo_id).unwrap();
+        assert_eq!(second_basis.max_commit_time, base + 300);
+        assert_ne!(second_basis.tips, first_basis.tips);
+
+        // A commit older than the newest indexed one cannot be prepended safely.
+        git(path, &["checkout", "--quiet", "-b", "backdated", "main"]);
+        std::fs::write(path.join("history.txt"), "five\n").unwrap();
+        commit_at(path, "needle five", base + 50);
+        let after_backdated = build_and_expect_git_order(&manager, path, &store).await;
+        assert_eq!(after_backdated.len(), 5);
+
+        // Deleting a branch drops indexed commits: full rebuild.
+        git(path, &["checkout", "--quiet", "main"]);
+        git(path, &["branch", "-D", "side"]);
+        let after_reset = build_and_expect_git_order(&manager, path, &store).await;
+        assert!(after_reset.len() < 5);
     }
 
     #[tokio::test]

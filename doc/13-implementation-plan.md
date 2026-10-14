@@ -5768,3 +5768,12 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/desktop-win32-crashdump-stage536-20261014.json`。
 - 限制/后续：如需判定，需在排除杀毒/后台负载的环境重复采样，或在更多样本上看分布；S7.2 帧率（≈55fps）、搜索及内存口径仍待处理。
 - 实施 commit：台账更新单独 commit。
+
+### S7.2 历史搜索索引增量更新（仅前置更新）— 小阶段 539
+- 状态：已完成（实现；未做性能复测，S7.2 保持待验收）
+- 日期：2026-10-14
+- 交付：落实小阶段 531 评估的方案。迁移 0016 为 `history_search_index_state` 增加 `tips`（构建时的起点提交，排序去重）与 `max_commit_time`。refs 变化后的后台重建先尝试增量：①`git rev-list -n1 <旧tips> --not <新tips>` 为空（旧提交全部仍可达）；②`git log <新tips> --not <旧tips>` 取出新提交，且其最旧提交时间严格大于索引内最新提交时间（保证 Git 默认日志顺序中新提交全部排在旧提交之前）；满足时以负 rowid 前置写入（保持 `ORDER BY id` 即 Git 顺序，无需新排序键），并在同一事务内校验存量 tips 未变。任一条件不满足（分支删除/强推/回溯时间/旧索引无 tips）则回退全量重建。
+- 验证：`cargo clippy --all-targets -- -D warnings` 通过；`cargo test` 153 passed、0 failed。新增测试覆盖：全量构建后新增主干与旁支更新提交走增量且与 `git log` 顺序一致；回溯时间提交与删除分支均回退全量并保持顺序一致。已同步 schema 版本断言与“较新 schema 拒绝打开”测试。未跑性能基准。
+- 证据：`crates/gitcrest-core/migrations/0016_history_search_incremental_basis.sql`、`crates/gitcrest-core/src/features/history/service/search_index.rs`、`crates/gitcrest-core/src/storage/history_index.rs`。
+- 限制/后续：增量只改善 refs 变化后的索引追平耗时；首次建索引（约 1.25s）、冷搜索 <200ms、帧率与内存口径仍未解决，S7.2 保持待验收。同提交时间戳的新提交会保守回退全量重建。
+- 实施 commit：实现与台账同一 commit。

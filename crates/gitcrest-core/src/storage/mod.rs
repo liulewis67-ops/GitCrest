@@ -43,6 +43,13 @@ mod tests {
     use super::*;
     use crate::domain::undo::{UndoOperation, UndoRecord};
 
+    fn test_index_basis() -> crate::ports::history::HistoryIndexBasis {
+        crate::ports::history::HistoryIndexBasis {
+            tips: vec!["a".repeat(40)],
+            max_commit_time: 0,
+        }
+    }
+
     fn repository(id: &str, path: &str, timestamp: i64) -> StoredRepository {
         StoredRepository {
             repo_id: id.into(),
@@ -106,7 +113,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 16).unwrap();
+        connection.pragma_update(None, "user_version", 17).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -149,7 +156,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 15);
+        assert_eq!(version, 16);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }
@@ -228,7 +235,7 @@ mod tests {
             .unwrap();
         assert_eq!(sort_order_columns, 0);
         store
-            .replace_history_search_index("repo-1", "new-fingerprint", std::slice::from_ref(&entry))
+            .replace_history_search_index("repo-1", "new-fingerprint", &test_index_basis(), std::slice::from_ref(&entry))
             .unwrap();
         assert_eq!(
             store
@@ -396,7 +403,7 @@ mod tests {
         };
         let entries = [entry.clone(), next_entry.clone()];
         store
-            .replace_history_search_index("repo-1", "refs-v1", &entries)
+            .replace_history_search_index("repo-1", "refs-v1", &test_index_basis(), &entries)
             .unwrap();
 
         let matches = store
@@ -413,7 +420,7 @@ mod tests {
             .is_none());
 
         store
-            .replace_history_search_index("repo-1", "refs-v2", &[])
+            .replace_history_search_index("repo-1", "refs-v2", &test_index_basis(), &[])
             .unwrap();
         assert!(store
             .search_history_messages("repo-1", "refs-v2", "needle", 0, 10)
@@ -467,7 +474,7 @@ mod tests {
             message: "Persistent file-backed search entry".into(),
         };
         store
-            .replace_history_search_index("repo-1", "refs-v1", std::slice::from_ref(&entry))
+            .replace_history_search_index("repo-1", "refs-v1", &test_index_basis(), std::slice::from_ref(&entry))
             .unwrap();
         let other_entry = CommitSearchEntry {
             oid: "d".repeat(40),
@@ -477,6 +484,7 @@ mod tests {
             .replace_history_search_index(
                 "repo-2",
                 "other-refs",
+                &test_index_basis(),
                 std::slice::from_ref(&other_entry),
             )
             .unwrap();
@@ -494,7 +502,7 @@ mod tests {
         assert_eq!(store.get("repo-1").unwrap().unwrap().path, "/repo/1");
 
         store
-            .replace_history_search_index("repo-1", "refs-v2", &[])
+            .replace_history_search_index("repo-1", "refs-v2", &test_index_basis(), &[])
             .unwrap();
         assert!(store
             .search_history_messages("repo-2", "other-refs", "retained", 0, 10)
@@ -532,7 +540,7 @@ mod tests {
         assert!(!store.begin_history_index_build("repo", "refs-a"));
         store.finish_history_index_build("repo");
         store
-            .replace_history_search_index("repo", "refs-a", &[])
+            .replace_history_search_index("repo", "refs-a", &test_index_basis(), &[])
             .unwrap();
         assert!(!store.begin_history_index_build("repo", "refs-a"));
 

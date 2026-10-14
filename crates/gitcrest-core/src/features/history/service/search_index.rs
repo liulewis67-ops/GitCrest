@@ -3,7 +3,10 @@ use std::{fmt::Write as _, path::Path, sync::Arc};
 use git2::Repository;
 use sha2::{Digest, Sha256};
 
-use crate::{domain::commit::CommitSearchEntry, ports::history::HistorySearchIndexPort};
+use crate::{
+    domain::commit::CommitSearchEntry,
+    ports::history::{HistoryIndexBasis, HistorySearchIndexPort},
+};
 
 use super::commit_history::{read_page, valid_filters};
 use super::{
@@ -353,24 +356,37 @@ pub async fn build_history_search_index(
     if expected_fingerprint.is_some_and(|expected| expected != fingerprint) {
         return Ok(());
     }
-    let mut arguments = vec!["log".into(), "-z".into()];
-    arguments.push("--format=tformat:%H%x00%B".into());
-    if head.is_some() {
-        arguments.push("HEAD".into());
+    let tips = history_index_tips(repository_path).await?;
+    if let Some(old_basis) = store.index_basis(repo_id) {
+        match try_prepend_new_commits(
+            repo_id,
+            repository_path,
+            head,
+            &fingerprint,
+            &tips,
+            &old_basis,
+            store.clone(),
+        )
+        .await
+        {
+            Ok(true) => return Ok(()),
+            Ok(false) => {}
+            Err(_) => eprintln!(
+                "[gitcrest-core] Incremental history index failed; falling back to full rebuild"
+            ),
+        }
     }
-    arguments.push("--branches".into());
-    arguments.push("--remotes".into());
     let git_started = std::time::Instant::now();
     let output = run_git_bulk_with_deadline(
         repository_path,
-        &arguments,
+        &index_log_arguments(head.is_some(), &[], &[]),
         MAX_HISTORY_INDEX_OUTPUT,
         HISTORY_INDEX_DEADLINE,
     )
     .await?;
     let git_elapsed_ms = git_started.elapsed().as_millis();
     let parse_started = std::time::Instant::now();
-    let entries = tokio::task::spawn_blocking(move || parse_history_search_index(&output))
+    let parsed = tokio::task::spawn_blocking(move || parse_history_search_index(&output))
         .await
         .map_err(|_| HistoryError::GitFailed)??;
     let parse_elapsed_ms = parse_started.elapsed().as_millis();
@@ -381,9 +397,14 @@ pub async fn build_history_search_index(
     }
     let verify_elapsed_ms = verify_started.elapsed().as_millis();
     let repo_id = repo_id.to_owned();
+    let basis = HistoryIndexBasis {
+        tips,
+        max_commit_time: parsed.max_commit_time.unwrap_or(0),
+    };
+    let entries = parsed.entries;
     let persist_started = std::time::Instant::now();
     let persist_result = match tokio::task::spawn_blocking(move || {
-        store.replace_index(&repo_id, &fingerprint, entries)
+        store.replace_index(&repo_id, &fingerprint, basis, entries)
     })
     .await
     {
@@ -402,6 +423,135 @@ pub async fn build_history_search_index(
         "[gitcrest-core] History index build phases git={git_elapsed_ms}ms parse={parse_elapsed_ms}ms verify={verify_elapsed_ms}ms persist={persist_elapsed_ms}ms"
     );
     persist_result
+}
+
+fn index_log_arguments(
+    include_head: bool,
+    new_tips: &[String],
+    old_tips: &[String],
+) -> Vec<std::ffi::OsString> {
+    let mut arguments: Vec<std::ffi::OsString> = vec!["log".into(), "-z".into()];
+    arguments.push("--format=tformat:%H%x00%ct%x00%B".into());
+    if new_tips.is_empty() {
+        if include_head {
+            arguments.push("HEAD".into());
+        }
+        arguments.push("--branches".into());
+        arguments.push("--remotes".into());
+    } else {
+        arguments.extend(new_tips.iter().map(std::ffi::OsString::from));
+        arguments.push("--not".into());
+        arguments.extend(old_tips.iter().map(std::ffi::OsString::from));
+        arguments.push("--".into());
+    }
+    arguments
+}
+
+/// Commits reachable from HEAD and all local/remote branches, as the object ids
+/// `git log HEAD --branches --remotes` starts its walk from.
+async fn history_index_tips(repository_path: &Path) -> Result<Vec<String>, HistoryError> {
+    let repository_path = repository_path.to_owned();
+    tokio::task::spawn_blocking(move || {
+        let repository = Repository::open(repository_path).map_err(|_| HistoryError::GitFailed)?;
+        let mut tips = std::collections::BTreeSet::new();
+        if let Ok(head) = repository.head() {
+            if let Ok(commit) = head.peel_to_commit() {
+                tips.insert(commit.id().to_string());
+            }
+        }
+        for pattern in ["refs/heads/*", "refs/remotes/*"] {
+            let iterator = repository
+                .references_glob(pattern)
+                .map_err(|_| HistoryError::GitFailed)?;
+            for reference in iterator {
+                let reference = reference.map_err(|_| HistoryError::GitFailed)?;
+                let commit = reference
+                    .peel_to_commit()
+                    .map_err(|_| HistoryError::GitFailed)?;
+                tips.insert(commit.id().to_string());
+            }
+        }
+        Ok(tips.into_iter().collect())
+    })
+    .await
+    .map_err(|_| HistoryError::GitFailed)?
+}
+
+/// Adds only the commits that appeared since the last build. Correct only when
+/// every previously indexed commit is still reachable and every new commit is
+/// strictly newer than the newest indexed one, so that `git log` would list the
+/// new commits first, in the order produced here. Returns Ok(false) when those
+/// conditions do not hold and a full rebuild is required.
+async fn try_prepend_new_commits(
+    repo_id: &str,
+    repository_path: &Path,
+    head: Option<&str>,
+    fingerprint: &str,
+    tips: &[String],
+    old_basis: &HistoryIndexBasis,
+    store: Arc<dyn HistorySearchIndexPort>,
+) -> Result<bool, HistoryError> {
+    if tips.is_empty() {
+        return Ok(false);
+    }
+    let mut lost_arguments: Vec<std::ffi::OsString> =
+        vec!["rev-list".into(), "-n".into(), "1".into()];
+    lost_arguments.extend(old_basis.tips.iter().map(std::ffi::OsString::from));
+    lost_arguments.push("--not".into());
+    lost_arguments.extend(tips.iter().map(std::ffi::OsString::from));
+    lost_arguments.push("--".into());
+    let lost =
+        run_git_bulk_with_deadline(repository_path, &lost_arguments, 1024, HISTORY_INDEX_DEADLINE)
+            .await?;
+    if !lost.is_empty() {
+        return Ok(false);
+    }
+    let output = run_git_bulk_with_deadline(
+        repository_path,
+        &index_log_arguments(false, tips, &old_basis.tips),
+        MAX_HISTORY_INDEX_OUTPUT,
+        HISTORY_INDEX_DEADLINE,
+    )
+    .await?;
+    let parsed = tokio::task::spawn_blocking(move || parse_history_search_index(&output))
+        .await
+        .map_err(|_| HistoryError::GitFailed)??;
+    if parsed
+        .min_commit_time
+        .is_some_and(|oldest_new| oldest_new <= old_basis.max_commit_time)
+    {
+        return Ok(false);
+    }
+    if refs_fingerprint(repository_path, head).await? != fingerprint {
+        // Refs moved while walking; the next lookup schedules another build.
+        return Ok(true);
+    }
+    let basis = HistoryIndexBasis {
+        tips: tips.to_vec(),
+        max_commit_time: parsed
+            .max_commit_time
+            .unwrap_or(old_basis.max_commit_time)
+            .max(old_basis.max_commit_time),
+    };
+    let expected_tips = old_basis.tips.clone();
+    let entries = parsed.entries;
+    let repo_id = repo_id.to_owned();
+    let fingerprint = fingerprint.to_owned();
+    let added = entries.len();
+    let started = std::time::Instant::now();
+    let applied = tokio::task::spawn_blocking(move || {
+        store.prepend_index(&repo_id, &fingerprint, &expected_tips, basis, entries)
+    })
+    .await
+    .map_err(|_| HistoryError::GitFailed)?
+    .map_err(|_| HistoryError::GitFailed)?;
+    if applied {
+        eprintln!(
+            "[gitcrest-core] History index incrementally added {added} commits in {}ms",
+            started.elapsed().as_millis()
+        );
+    }
+    Ok(applied)
 }
 
 pub(super) async fn refs_fingerprint(
@@ -478,23 +628,48 @@ fn refs_fingerprint_for_repository(
     Ok(fingerprint)
 }
 
-fn parse_history_search_index(output: &[u8]) -> Result<Vec<CommitSearchEntry>, HistoryError> {
+struct ParsedHistoryIndex {
+    entries: Vec<CommitSearchEntry>,
+    min_commit_time: Option<i64>,
+    max_commit_time: Option<i64>,
+}
+
+fn parse_history_search_index(output: &[u8]) -> Result<ParsedHistoryIndex, HistoryError> {
     let mut fields = output.split(|byte| *byte == 0).peekable();
-    let mut entries = Vec::new();
+    let mut parsed = ParsedHistoryIndex {
+        entries: Vec::new(),
+        min_commit_time: None,
+        max_commit_time: None,
+    };
     while let Some(oid) = fields.next() {
         if oid.is_empty() && fields.peek().is_none() {
             break;
         }
-        if entries.len() >= 200_000 {
+        if parsed.entries.len() >= 200_000 {
             return Err(HistoryError::TooLarge);
         }
+        let commit_time = fields
+            .next()
+            .and_then(|field| std::str::from_utf8(field).ok())
+            .and_then(|field| field.trim().parse::<i64>().ok())
+            .ok_or(HistoryError::TooLarge)?;
         let message = fields.next().ok_or(HistoryError::TooLarge)?;
-        entries.push(CommitSearchEntry {
+        parsed.min_commit_time = Some(
+            parsed
+                .min_commit_time
+                .map_or(commit_time, |time| time.min(commit_time)),
+        );
+        parsed.max_commit_time = Some(
+            parsed
+                .max_commit_time
+                .map_or(commit_time, |time| time.max(commit_time)),
+        );
+        parsed.entries.push(CommitSearchEntry {
             oid: text(oid),
             message: text(message),
         });
     }
-    Ok(entries)
+    Ok(parsed)
 }
 
 #[cfg(test)]
@@ -503,8 +678,11 @@ mod tests {
 
     #[test]
     fn parses_search_index_records_without_collecting_all_fields() {
-        let output = b"oid-1\0first body\0oid-2\0second body\0";
-        let entries = parse_history_search_index(output).unwrap();
+        let output = b"oid-1\x00100\0first body\0oid-2\x00200\0second body\0";
+        let parsed = parse_history_search_index(output).unwrap();
+        assert_eq!(parsed.min_commit_time, Some(100));
+        assert_eq!(parsed.max_commit_time, Some(200));
+        let entries = parsed.entries;
 
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].oid, "oid-1");
@@ -515,7 +693,7 @@ mod tests {
     #[test]
     fn rejects_incomplete_search_index_records() {
         assert_eq!(
-            parse_history_search_index(b"oid-1\0parents\0author"),
+            parse_history_search_index(b"oid-1\x00100").map(|parsed| parsed.entries.len()),
             Err(HistoryError::TooLarge)
         );
     }

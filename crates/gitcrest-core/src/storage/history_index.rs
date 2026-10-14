@@ -5,7 +5,10 @@ use std::{
 
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, ToSql};
 
-use crate::{domain::commit::CommitSearchEntry, ports::history::HistorySearchIndexPort};
+use crate::{
+    domain::commit::CommitSearchEntry,
+    ports::history::{HistoryIndexBasis, HistorySearchIndexPort},
+};
 
 use super::{now_ms, RepositoryStore};
 
@@ -91,6 +94,7 @@ impl RepositoryStore {
         &self,
         repo_id: &str,
         refs_fingerprint: &str,
+        basis: &HistoryIndexBasis,
         entries: &[CommitSearchEntry],
     ) -> Result<(), String> {
         let history_index_connection = self.history_index_connection();
@@ -156,8 +160,14 @@ impl RepositoryStore {
             .map_err(|error| error.to_string())?;
         transaction
             .execute(
-                "INSERT INTO history_search_index_state (repo_id, refs_fingerprint, indexed_at_ms) VALUES (?1, ?2, ?3) ON CONFLICT(repo_id) DO UPDATE SET refs_fingerprint=excluded.refs_fingerprint, indexed_at_ms=excluded.indexed_at_ms",
-                params![repo_id, refs_fingerprint, now_ms()],
+                "INSERT INTO history_search_index_state (repo_id, refs_fingerprint, indexed_at_ms, tips, max_commit_time) VALUES (?1, ?2, ?3, ?4, ?5) ON CONFLICT(repo_id) DO UPDATE SET refs_fingerprint=excluded.refs_fingerprint, indexed_at_ms=excluded.indexed_at_ms, tips=excluded.tips, max_commit_time=excluded.max_commit_time",
+                params![
+                    repo_id,
+                    refs_fingerprint,
+                    now_ms(),
+                    basis.tips.join(" "),
+                    basis.max_commit_time
+                ],
             )
             .map_err(|error| error.to_string())?;
         let commit_started = std::time::Instant::now();
@@ -167,6 +177,71 @@ impl RepositoryStore {
             "[gitcrest-core] History index store phases maintenance={maintenance_elapsed_ms}ms rows={rows_elapsed_ms}ms fts={fts_elapsed_ms}ms commit={commit_elapsed_ms}ms"
         );
         Ok(())
+    }
+
+    pub fn history_index_basis(&self, repo_id: &str) -> Option<HistoryIndexBasis> {
+        let history_index_connection = self.history_index_connection();
+        let connection = history_index_connection.lock().ok()?;
+        read_index_basis(&connection, repo_id)
+    }
+
+    pub fn prepend_history_search_index(
+        &self,
+        repo_id: &str,
+        refs_fingerprint: &str,
+        expected_tips: &[String],
+        basis: &HistoryIndexBasis,
+        entries: &[CommitSearchEntry],
+    ) -> Result<bool, String> {
+        let history_index_connection = self.history_index_connection();
+        let mut connection = history_index_connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let transaction = connection
+            .transaction()
+            .map_err(|error| error.to_string())?;
+        match read_index_basis(&transaction, repo_id) {
+            Some(stored) if stored.tips == expected_tips => {}
+            _ => return Ok(false),
+        }
+        let minimum_id: Option<i64> = transaction
+            .query_row(
+                "SELECT MIN(id) FROM history_search_documents WHERE repo_id=?1",
+                [repo_id],
+                |row| row.get(0),
+            )
+            .map_err(|error| error.to_string())?;
+        let mut next_id = minimum_id
+            .unwrap_or(1)
+            .checked_sub(i64::try_from(entries.len()).map_err(|error| error.to_string())?)
+            .ok_or_else(|| "history index id space exhausted".to_string())?;
+        {
+            let mut insert = transaction
+                .prepare_cached(
+                    "INSERT INTO history_search_documents (id, repo_id, oid, message) VALUES (?1, ?2, ?3, ?4)",
+                )
+                .map_err(|error| error.to_string())?;
+            for entry in entries {
+                insert
+                    .execute(params![next_id, repo_id, entry.oid, entry.message])
+                    .map_err(|error| error.to_string())?;
+                next_id += 1;
+            }
+        }
+        transaction
+            .execute(
+                "UPDATE history_search_index_state SET refs_fingerprint=?2, indexed_at_ms=?3, tips=?4, max_commit_time=?5 WHERE repo_id=?1",
+                params![
+                    repo_id,
+                    refs_fingerprint,
+                    now_ms(),
+                    basis.tips.join(" "),
+                    basis.max_commit_time
+                ],
+            )
+            .map_err(|error| error.to_string())?;
+        transaction.commit().map_err(|error| error.to_string())?;
+        Ok(true)
     }
 
     pub fn search_history_messages(
@@ -240,6 +315,35 @@ impl RepositoryStore {
     }
 }
 
+fn read_index_basis(connection: &Connection, repo_id: &str) -> Option<HistoryIndexBasis> {
+    let (tips, max_commit_time) = connection
+        .query_row(
+            "SELECT tips, max_commit_time FROM history_search_index_state WHERE repo_id=?1",
+            [repo_id],
+            |row| {
+                Ok((
+                    row.get::<_, Option<String>>(0)?,
+                    row.get::<_, Option<i64>>(1)?,
+                ))
+            },
+        )
+        .optional()
+        .ok()
+        .flatten()?;
+    let tips: Vec<String> = tips?
+        .split(' ')
+        .filter(|tip| !tip.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if tips.is_empty() {
+        return None;
+    }
+    Some(HistoryIndexBasis {
+        tips,
+        max_commit_time: max_commit_time?,
+    })
+}
+
 fn trigram_match_query(query: &str) -> Option<String> {
     if !query.is_ascii() || query.len() < 3 {
         return None;
@@ -311,13 +415,46 @@ impl HistorySearchIndexPort for RepositoryStore {
         .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
     }
 
+    fn index_basis(&self, repo_id: &str) -> Option<HistoryIndexBasis> {
+        RepositoryStore::history_index_basis(self, repo_id)
+    }
+
+    fn prepend_index(
+        &self,
+        repo_id: &str,
+        refs_fingerprint: &str,
+        expected_tips: &[String],
+        basis: HistoryIndexBasis,
+        entries: Vec<CommitSearchEntry>,
+    ) -> Result<bool, crate::domain::error::RepositoryError> {
+        RepositoryStore::prepend_history_search_index(
+            self,
+            repo_id,
+            refs_fingerprint,
+            expected_tips,
+            &basis,
+            &entries,
+        )
+        .map_err(|error| {
+            eprintln!("[gitcrest-core] History search index storage error: {error}");
+            crate::domain::error::RepositoryError::StorageUnavailable
+        })
+    }
+
     fn replace_index(
         &self,
         repo_id: &str,
         refs_fingerprint: &str,
+        basis: HistoryIndexBasis,
         entries: Vec<CommitSearchEntry>,
     ) -> Result<(), crate::domain::error::RepositoryError> {
-        RepositoryStore::replace_history_search_index(self, repo_id, refs_fingerprint, &entries)
+        RepositoryStore::replace_history_search_index(
+            self,
+            repo_id,
+            refs_fingerprint,
+            &basis,
+            &entries,
+        )
             .map_err(|error| {
                 eprintln!("[gitcrest-core] History search index storage error: {error}");
                 crate::domain::error::RepositoryError::StorageUnavailable
