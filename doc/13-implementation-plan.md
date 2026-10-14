@@ -5786,3 +5786,10 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/release-notes-alpha-draft.md`、`doc/evidence/S7.2/desktop-win32-crashdump-stage536-20261014.json`、`doc/evidence/S7.2/desktop-win32-memory-notrace-stage537-20261014.json`。
 - 限制/后续：S7.5 仍依赖 S7.4 外部环境验收与 S7.2 达标后的最终口径同步。
 - 实施 commit：台账与发布说明同一 commit。
+
+### 冲突解决窗口增强 Phase 0–4 — 小阶段 541
+- 状态：已完成。日期 2026-10-14。依据 `doc/conflict-resolver-enhancement-plan.md`：抽出 `conflict-blocks`、`line-diff`、`merge3`、`use-draft-history` 纯模块；冲突行显示相对 base 的行级/词级高亮与真实 base；支持按侧忽略（×）、撤销/重做、Apply non-conflicting（All/Ours/Theirs，脏草稿需确认）；无 HTTP API 变更。
+- 验证：`vitest` 冲突相关 2 个文件 21/21、`tsc --noEmit` 通过；按要求未做额外测试。
+- 证据：`tests/unit/conflict-merge-model.test.ts`、`tests/unit/conflict-window.test.tsx`。
+- 限制/后续：Electron E2E 与可视检查未重跑；Phase 5（后端 merge 权威接口）为可选，未开始。S7.2/S7.4/S7.5 状态不变，S7.4/S7.5 仍阻塞于外部签名与原生 runner。
+- 实施 commit：本条目同一 commit。

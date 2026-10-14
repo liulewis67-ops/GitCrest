@@ -74,7 +74,9 @@ button:disabled { cursor: not-allowed; }
   align-items: center;
   gap: 16px;
   min-width: 0;
-  padding: 0 14px 0 18px;
+  /* Right inset keeps content clear of the native window-controls overlay. */
+  padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + 14px) 0 18px;
+  border-top: 1px solid var(--line-strong);
   border-bottom: 1px solid var(--line);
   background: var(--surface);
   -webkit-app-region: drag;
@@ -288,22 +290,37 @@ button:disabled { cursor: not-allowed; }
 .conflictStage { display: flex; flex-direction: column; min-width: 0; min-height: 0; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
 .conflictStage > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border-bottom: 1px solid var(--line); }
 .conflictStage h2 { margin: 0; color: var(--text-muted); font-size: 10px; letter-spacing: .04em; }
-.conflictStage > div button { min-height: 24px; padding: 3px 7px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 10px; cursor: pointer; }
-.conflictStage > div button:hover { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
 .conflictStage pre, .conflictResultPreview pre { flex: 1; min-height: 100px; margin: 0; padding: 9px; overflow: auto; color: var(--text); font: 12px/1.5 var(--font-mono); white-space: pre; tab-size: 4; }
 .conflictResultPreview { display: flex; flex-direction: column; min-height: 190px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
 .conflictResultPreview summary { padding: 8px 9px; color: var(--text); font-size: 10px; font-weight: 650; cursor: pointer; }
-.conflictBlockList { display: flex; flex-direction: column; gap: 8px; }
-.conflictBlockList > h2 { margin: 0; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
-.conflictBlockList article { border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
-.conflictBlockList article > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
-.conflictBlockList article > header span { color: var(--text-muted); }
-.conflictBlockChoices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 8px; }
-.conflictBlockChoices > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-.conflictBlockChoices h3 { margin: 0; color: var(--text-muted); font-size: 10px; }
-.conflictBlockChoices pre { min-height: 48px; max-height: 140px; margin: 0; padding: 7px; overflow: auto; border: 1px solid var(--line); border-radius: 3px; color: var(--text); font: 11px/1.45 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
-.conflictBlockChoices button { align-self: flex-start; min-height: 26px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface-raised); color: var(--text); font-size: 10px; cursor: pointer; }
-.conflictBlockChoices button:disabled { opacity: .55; cursor: not-allowed; }
+.conflictToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); position: sticky; top: -12px; z-index: 2; }
+.conflictToolbarGroup { display: flex; gap: 4px; }
+.conflictToolbar button { min-height: 26px; min-width: 28px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.conflictToolbar button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
+.conflictToolbar button:disabled { opacity: .5; cursor: not-allowed; }
+.conflictCounter { color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+.conflictMerge { display: flex; flex-direction: column; gap: 8px; }
+.conflictMergeColumns, .conflictMergeRow { display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr) 34px minmax(0, 1fr); }
+.conflictMergeColumns span { padding: 0 6px; color: var(--text-muted); font-size: 10px; font-weight: 650; letter-spacing: .04em; }
+.conflictMerge article { border: 1px solid var(--line); border-radius: 4px; background: var(--surface); overflow: hidden; }
+.conflictMerge article.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent-soft); }
+.conflictMerge article > header { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 5px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
+.conflictMerge article > header span { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.conflictSide { min-width: 0; min-height: 56px; max-height: 220px; margin: 0; padding: 8px; overflow: auto; color: var(--text); font: 11px/1.5 var(--font-mono); white-space: pre; tab-size: 4; }
+.conflictSide.ours { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.conflictSide.theirs { background: var(--green-soft); box-shadow: inset -3px 0 0 var(--green); }
+.conflictSide.base { flex: 1; background: var(--surface-soft); color: var(--text-muted); }
+.conflictResultCell { display: flex; flex-direction: column; min-width: 0; border-inline: 1px solid var(--line); }
+.conflictResultCell button { margin: 6px auto; min-height: 24px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--text-secondary); font-size: 10px; cursor: pointer; }
+.conflictResultCell button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
+.conflictGutter { display: flex; align-items: center; justify-content: center; background: var(--surface); }
+.conflictGutter button { width: 26px; height: 26px; padding: 0; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface-raised); color: var(--text); font-size: 14px; line-height: 1; cursor: pointer; }
+.conflictGutter button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent-strong); }
+.conflictGutter button:disabled, .conflictResultCell button:disabled { opacity: .5; cursor: not-allowed; }
+.conflictStageDetails { border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+.conflictStageDetails > summary { padding: 8px 9px; color: var(--text-secondary); font-size: 10px; font-weight: 650; cursor: pointer; }
+.conflictStageDetails .conflictStages { padding: 0 8px 8px; }
+.conflictStage pre { max-height: 320px; }
 .conflictResultPreview > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px 9px; border-bottom: 1px solid var(--line); font-size: 10px; }
 .conflictResultPreview small { color: var(--text-muted); font-family: var(--font-mono); }
 .conflictResultEditor { display: flex; flex-direction: column; min-height: 280px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
@@ -329,7 +346,7 @@ button:disabled { cursor: not-allowed; }
 .conflictResultActions button:last-child:not(:disabled) { border-color: var(--accent); background: var(--accent); color: var(--canvas); font-weight: 650; }
 .conflictResultActions button:disabled { opacity: .55; cursor: not-allowed; }
 .conflictActionStatus { margin: 0; color: var(--green); font-size: 11px; }
-@media (max-width: 860px) { .conflictStages { grid-template-columns: 1fr; } .conflictWindowLayout { grid-template-columns: minmax(150px, 34%) minmax(0, 1fr); } }
+@media (max-width: 860px) { .conflictStages { grid-template-columns: 1fr; } .conflictMergeColumns { display: none; } .conflictMergeRow { grid-template-columns: 1fr; } .conflictGutter { padding: 4px; } .conflictWindowLayout { grid-template-columns: minmax(150px, 34%) minmax(0, 1fr); } }
 .commitDetails .repositoryFact { padding: 0; }
 .commitDetails .repositoryFact strong { max-width: 68%; overflow-wrap: anywhere; }
 .commitDetailMessage { padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: 10px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
@@ -795,3 +812,28 @@ button:disabled { cursor: not-allowed; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+.conflictToolbar { flex-wrap: wrap; }
+.conflictToolbarLabel { align-self: center; padding-right: 4px; color: var(--text-muted); font-size: 10px; letter-spacing: .03em; }
+.conflictConfirm { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--amber); border-radius: 4px; background: var(--surface); color: var(--text-secondary); font-size: 11px; }
+.conflictConfirm button { min-height: 26px; padding: 3px 9px; border: 1px solid var(--line-strong); border-radius: 4px; background: transparent; color: var(--text); font-size: 11px; cursor: pointer; }
+.conflictConfirm button:first-child { border-color: var(--amber); }
+.conflictSide { position: relative; padding: 0; white-space: normal; }
+.conflictLines { display: flex; flex-direction: column; min-width: min-content; padding: 4px 0; }
+.conflictLine { display: grid; grid-template-columns: 34px 14px minmax(0, 1fr); align-items: baseline; min-height: 18px; font: 11px/1.5 var(--font-mono); }
+.conflictLineNo { padding-right: 6px; color: var(--text-muted); text-align: right; font-variant-numeric: tabular-nums; user-select: none; }
+.conflictLineMark { color: var(--text-muted); text-align: center; font-weight: 700; user-select: none; }
+.conflictLineText { margin: 0; padding-right: 8px; color: var(--text); font: inherit; white-space: pre; tab-size: 4; }
+.conflictLine.added, .conflictLine.changed { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.conflictSide.theirs .conflictLine.added, .conflictSide.theirs .conflictLine.changed { background: color-mix(in srgb, var(--green) 18%, transparent); }
+.conflictLine.added .conflictLineMark, .conflictLine.changed .conflictLineMark { color: var(--text); }
+.conflictWord { border-radius: 2px; background: color-mix(in srgb, var(--accent) 38%, transparent); color: inherit; }
+.conflictSide.theirs .conflictWord { background: color-mix(in srgb, var(--green) 40%, transparent); }
+.conflictLine.removed { min-height: 16px; border-block: 1px dashed var(--line-strong); color: var(--text-muted); font-style: italic; }
+.conflictLine.removed .conflictLineText { color: var(--text-muted); }
+.conflictLineEmpty { padding: 10px 12px; color: var(--text-muted); font: italic 11px/1.5 var(--font-mono); }
+.conflictSide.ignored { opacity: .55; }
+.conflictSide.ignored .conflictLine.added, .conflictSide.ignored .conflictLine.changed { background: transparent; }
+.conflictIgnoredTag { position: absolute; top: 4px; right: 6px; z-index: 1; padding: 1px 6px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); color: var(--text-secondary); font-size: 9px; letter-spacing: .04em; }
+.conflictGutter { flex-direction: column; gap: 6px; }
+.conflictGutter .conflictIgnore { color: var(--text-secondary); }
+.conflictGutter .conflictIgnore[aria-pressed="true"] { border-color: var(--amber); background: var(--surface); color: var(--amber); }

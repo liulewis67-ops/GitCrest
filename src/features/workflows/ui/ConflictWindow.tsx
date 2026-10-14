@@ -1,11 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
+import { baseForBlock, choiceText, findConflictBlocks, replaceConflictBlock, type ConflictBlock } from "../model/conflict-blocks";
+import { splitLines } from "../model/line-diff";
+import { countConflicts, merge3, renderMerge3, type NonConflictingMode } from "../model/merge3";
+import { useDraftHistory } from "../model/use-draft-history";
+import { ConflictBlockRow, type IgnoredSides } from "./ConflictBlockRow";
 import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
 
 type RequestState<T> = { key: string; loading: boolean; data?: T; error?: string };
 type ActionState = { busy?: "save" | "resolve"; message?: string; error?: string };
-type ConflictBlock = { index: number; start: number; end: number; ours: string; theirs: string };
 
 const TASK_POLL_INTERVAL_MS = 250;
 const TASK_POLL_ATTEMPTS = 60;
@@ -22,6 +26,14 @@ export function ConflictWindow() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [action, setAction] = useState<ActionState>({});
   const [suggestionOpen, setSuggestionOpen] = useState(false);
+  const [totalBlocks, setTotalBlocks] = useState(0);
+  const [activeBlock, setActiveBlock] = useState(0);
+  const [ignored, setIgnored] = useState<Record<string, IgnoredSides>>({});
+  const [pendingApply, setPendingApply] = useState<NonConflictingMode | null>(null);
+  const blockRefs = useRef<(HTMLElement | null)[]>([]);
+  const typingRecorded = useRef(false);
+  const history = useDraftHistory();
+  const { reset: resetHistory } = history;
   const selectedPathRef = useRef(selectedPath);
   const actionControllerRef = useRef<AbortController | null>(null);
   selectedPathRef.current = selectedPath;
@@ -72,16 +84,22 @@ export function ConflictWindow() {
     setAction({});
     setSuggestionOpen(false);
     setHasUnsavedChanges(false);
+    setIgnored({});
+    setPendingApply(null);
+    resetHistory();
+    typingRecorded.current = false;
     void api.withSignal(controller.signal).getRepositoryWorkflowConflictFile(repoId, taskId, selectedPath).then((response) => {
       if (!controller.signal.aborted && selectedPathRef.current === selectedPath) {
         setFile({ key: fileKey, loading: false, data: response });
         setDraft(response.resultContent ?? "");
+        setTotalBlocks(response.isText ? findConflictBlocks(response.resultContent ?? "").length : 0);
+        setActiveBlock(0);
       }
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted && selectedPathRef.current === selectedPath) setFile({ key: fileKey, loading: false, error: reason instanceof Error ? reason.message : "Could not load the conflict stages." });
     });
     return () => controller.abort();
-  }, [api, repoId, taskId, selectedPath, fileKey]);
+  }, [api, repoId, taskId, selectedPath, fileKey, resetHistory]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -180,7 +198,93 @@ export function ConflictWindow() {
   const currentSession = session.key === sessionKey ? session : { key: sessionKey, loading: true };
   const currentFile = file.key === fileKey ? file : { key: fileKey, loading: Boolean(selectedPath) };
   const conflictBlocks = currentFile.data?.isText ? findConflictBlocks(draft) : [];
-  return <main className="conflictWindow" aria-label="Conflict resolution window">
+  const stages = currentFile.data?.isText ? currentFile.data : undefined;
+  const regions = useMemo(
+    () => stages ? merge3(splitLines(stages.baseContent), splitLines(stages.oursContent), splitLines(stages.theirsContent)) : null,
+    [stages],
+  );
+  const canRebuild = Boolean(regions && stages && stages.oursContent !== null && stages.theirsContent !== null);
+  const availableModes: Record<NonConflictingMode, boolean> = {
+    all: Boolean(regions?.some((region) => region.kind === "ours" || region.kind === "theirs")),
+    ours: Boolean(regions?.some((region) => region.kind === "ours")),
+    theirs: Boolean(regions?.some((region) => region.kind === "theirs")),
+  };
+  const totalConflicts = Math.max(totalBlocks, conflictBlocks.length);
+  const resolvedBlocks = totalConflicts - conflictBlocks.length;
+  const savedResult = currentFile.data?.resultContent ?? "";
+  const busy = Boolean(action.busy);
+
+  const focusBlock = (position: number) => {
+    if (conflictBlocks.length === 0) return;
+    const next = (position + conflictBlocks.length) % conflictBlocks.length;
+    setActiveBlock(next);
+    blockRefs.current[next]?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+  };
+  /** Programmatic draft change: recorded for undo and ends the current typing session. */
+  const changeDraft = (content: string) => {
+    if (content === draft) return;
+    history.record(draft);
+    typingRecorded.current = false;
+    updateDraft(content, savedResult, setDraft, setHasUnsavedChanges);
+  };
+  const resolveBlock = (block: ConflictBlock, replacement: string) => {
+    changeDraft(replaceConflictBlock(draft, block, replacement));
+    setIgnored(({ [block.id]: _resolved, ...rest }) => rest);
+  };
+  const ignoreSide = (block: ConflictBlock, side: "ours" | "theirs") => {
+    const state = ignored[block.id] ?? {};
+    const other = side === "ours" ? "theirs" : "ours";
+    if (!state[side] && state[other]) {
+      resolveBlock(block, baseForBlock(block, regions) ?? "");
+      return;
+    }
+    setIgnored((current) => ({ ...current, [block.id]: { ...state, [side]: !state[side] } }));
+  };
+  const useEntire = (content: string | null) => {
+    changeDraft(content ?? "");
+    setIgnored({});
+  };
+  const applyNonConflicting = (mode: NonConflictingMode) => {
+    setPendingApply(null);
+    if (!regions) return;
+    const lineEnding = stages?.oursContent?.includes("\r\n") ? "\r\n" : "\n";
+    const next = renderMerge3(regions, mode, lineEnding);
+    const remaining = countConflicts(regions);
+    changeDraft(next);
+    setIgnored({});
+    setTotalBlocks(remaining);
+    setActiveBlock(0);
+    setAction({ message: `Applied non-conflicting changes (${mode === "all" ? "both sides" : mode}). ${remaining === 0 ? "No conflicts remain." : `${remaining} ${remaining === 1 ? "conflict" : "conflicts"} left to resolve.`} Undo is available.` });
+  };
+  const requestApply = (mode: NonConflictingMode) => {
+    if (hasUnsavedChanges) setPendingApply(mode);
+    else applyNonConflicting(mode);
+  };
+  const undo = () => {
+    const previous = history.undo(draft);
+    if (previous === undefined) return;
+    typingRecorded.current = false;
+    updateDraft(previous, savedResult, setDraft, setHasUnsavedChanges);
+  };
+  const redo = () => {
+    const next = history.redo(draft);
+    if (next === undefined) return;
+    typingRecorded.current = false;
+    updateDraft(next, savedResult, setDraft, setHasUnsavedChanges);
+  };
+  return <main className="conflictWindow" aria-label="Conflict resolution window" onKeyDown={(event) => {
+    if (event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault();
+      focusBlock(activeBlock + (event.key === "ArrowDown" ? 1 : -1));
+      return;
+    }
+    // The textarea keeps its native undo for typing; everywhere else Ctrl+Z walks the gutter-action history.
+    if ((event.ctrlKey || event.metaKey) && !(event.target instanceof HTMLTextAreaElement) && stages && !busy) {
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) { event.preventDefault(); undo(); }
+      else if ((key === "z" && event.shiftKey) || key === "y") { event.preventDefault(); redo(); }
+    }
+  }}>
     <header className="conflictWindowHeader">
       <div><p className="sectionEyebrow">CONFLICT REVIEW · {currentSession.data?.operation || "WORKFLOW"}</p><h1>Resolve conflicts</h1></div>
       <div className="conflictWindowProgress" role="status">{currentSession.data ? `${currentSession.data.conflictedPaths.length} unresolved` : "Waiting for task state"}</div>
@@ -200,28 +304,67 @@ export function ConflictWindow() {
         {currentFile.data && <>
           <div className="conflictFileHeading"><strong title={currentFile.data.path}>{currentFile.data.path}</strong><span className="monoText" title={currentFile.data.headOid || "Unborn HEAD"}>HEAD {currentFile.data.headOid?.slice(0, 12) || "—"}</span></div>
           {!currentFile.data.isText ? <p className="diffSpecialState" role="status">This conflict contains binary or non-text content and cannot be edited as text.</p> : <>
-            <div className="conflictStages">
-              <ConflictStage label="BASE" content={currentFile.data.baseContent} />
-              <ConflictStage label="OURS" content={currentFile.data.oursContent} onSelect={() => updateDraft(currentFile.data?.oursContent ?? "", currentFile.data?.resultContent ?? "", setDraft, setHasUnsavedChanges)} />
-              <ConflictStage label="THEIRS" content={currentFile.data.theirsContent} onSelect={() => updateDraft(currentFile.data?.theirsContent ?? "", currentFile.data?.resultContent ?? "", setDraft, setHasUnsavedChanges)} />
+            <div className="conflictToolbar" role="toolbar" aria-label="Conflict navigation">
+              <div className="conflictToolbarGroup">
+                <button type="button" aria-label="Previous conflict" title="Previous conflict (Alt+Up)" disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock - 1)}>↑</button>
+                <button type="button" aria-label="Next conflict" title="Next conflict (Alt+Down)" disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock + 1)}>↓</button>
+              </div>
+              <div className="conflictToolbarGroup">
+                <button type="button" aria-label="Undo" title="Undo (Ctrl+Z)" disabled={busy || !history.canUndo} onClick={undo}>Undo</button>
+                <button type="button" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled={busy || !history.canRedo} onClick={redo}>Redo</button>
+              </div>
+              <span className="conflictCounter" role="status">{conflictBlocks.length === 0 ? (totalConflicts > 0 ? `All ${totalConflicts} conflicts resolved` : "No conflict markers") : `${resolvedBlocks} of ${totalConflicts} resolved · ${conflictBlocks.length} remaining`}</span>
+              <div className="conflictToolbarGroup" role="group" aria-label="Apply non-conflicting changes">
+                <span className="conflictToolbarLabel">Apply non-conflicting</span>
+                <button type="button" aria-label="Apply all non-conflicting changes" title={canRebuild ? "Rebuild the result with every non-conflicting change from both sides" : "Not available for added, deleted or very different files"} disabled={busy || !canRebuild || !availableModes.all} onClick={() => requestApply("all")}>All</button>
+                <button type="button" aria-label="Apply non-conflicting changes from ours" disabled={busy || !canRebuild || !availableModes.ours} onClick={() => requestApply("ours")}>Ours</button>
+                <button type="button" aria-label="Apply non-conflicting changes from theirs" disabled={busy || !canRebuild || !availableModes.theirs} onClick={() => requestApply("theirs")}>Theirs</button>
+              </div>
+              <div className="conflictToolbarGroup">
+                <button type="button" disabled={busy} onClick={() => useEntire(currentFile.data?.oursContent ?? null)}>Use entire ours</button>
+                <button type="button" disabled={busy} onClick={() => useEntire(currentFile.data?.theirsContent ?? null)}>Use entire theirs</button>
+              </div>
             </div>
-            {conflictBlocks.length > 0 && <section className="conflictBlockList" aria-label="Conflict blocks">
-              <h2>Resolve each conflict block</h2>
-              {conflictBlocks.map((block) => <article key={`${block.start}:${block.end}`}>
-                <header><strong>Conflict {block.index}</strong><span>Choose a side or edit the working result below.</span></header>
-                <div className="conflictBlockChoices">
-                  <div><h3>OURS</h3><pre>{block.ours || "(empty side)"}</pre><button type="button" disabled={Boolean(action.busy)} onClick={() => updateDraft(replaceConflictBlock(draft, block, "ours"), currentFile.data?.resultContent ?? "", setDraft, setHasUnsavedChanges)}>Use ours for conflict {block.index}</button></div>
-                  <div><h3>THEIRS</h3><pre>{block.theirs || "(empty side)"}</pre><button type="button" disabled={Boolean(action.busy)} onClick={() => updateDraft(replaceConflictBlock(draft, block, "theirs"), currentFile.data?.resultContent ?? "", setDraft, setHasUnsavedChanges)}>Use theirs for conflict {block.index}</button></div>
-                </div>
-              </article>)}
+            {pendingApply && <div className="conflictConfirm" role="group" aria-label="Confirm apply non-conflicting changes">
+              <span>This rebuilds the working result from the three versions and replaces your unsaved edits. You can undo it.</span>
+              <div className="conflictToolbarGroup">
+                <button type="button" onClick={() => applyNonConflicting(pendingApply)}>Replace working result</button>
+                <button type="button" onClick={() => setPendingApply(null)}>Keep my edits</button>
+              </div>
+            </div>}
+            {conflictBlocks.length > 0 && <section className="conflictMerge" aria-label="Conflict blocks">
+              <div className="conflictMergeColumns" aria-hidden="true"><span>OURS · current branch</span><span /><span>RESULT · base</span><span /><span>THEIRS · incoming</span></div>
+              {conflictBlocks.map((block, position) => <ConflictBlockRow
+                key={block.id}
+                block={block}
+                base={baseForBlock(block, regions)}
+                ignored={ignored[block.id] ?? {}}
+                busy={busy}
+                active={position === activeBlock}
+                rowRef={(node) => { blockRefs.current[position] = node; }}
+                onActivate={() => setActiveBlock(position)}
+                onApply={(choice) => resolveBlock(block, choiceText(block, choice))}
+                onIgnore={(side) => ignoreSide(block, side)}
+              />)}
             </section>}
+            <details className="conflictStageDetails">
+              <summary>FULL FILE VERSIONS · OURS / BASE / THEIRS</summary>
+              <div className="conflictStages">
+                <ConflictStage label="OURS" content={currentFile.data.oursContent} />
+                <ConflictStage label="BASE" content={currentFile.data.baseContent} />
+                <ConflictStage label="THEIRS" content={currentFile.data.theirsContent} />
+              </div>
+            </details>
             <details className="conflictResultPreview">
               <summary>RESULT PREVIEW</summary>
               <pre>{draft || "(empty working result)"}</pre>
             </details>
             <section className="conflictResultEditor" aria-label="Working result editor">
               <div><label htmlFor="conflict-result">EDIT WORKING RESULT</label><small>Edits remain local until saved · {currentFile.data.resultRevision.slice(0, 12)}</small></div>
-              <textarea id="conflict-result" aria-label="Working result" spellCheck={false} value={draft} disabled={Boolean(action.busy)} onChange={(event) => updateDraft(event.currentTarget.value, currentFile.data?.resultContent ?? "", setDraft, setHasUnsavedChanges)} />
+              <textarea id="conflict-result" aria-label="Working result" spellCheck={false} value={draft} disabled={Boolean(action.busy)} onBlur={() => { typingRecorded.current = false; }} onChange={(event) => {
+                if (!typingRecorded.current) { history.record(draft); typingRecorded.current = true; }
+                updateDraft(event.currentTarget.value, savedResult, setDraft, setHasUnsavedChanges);
+              }} />
               <footer>
                 <div className="conflictResultActions" role="group" aria-label="Conflict result actions">
                   <button type="button" onClick={() => void saveDraft()} disabled={Boolean(action.busy) || !hasUnsavedChanges}>{action.busy === "save" ? "Saving…" : "Save result"}</button>
@@ -264,67 +407,15 @@ function delay(milliseconds: number, signal: AbortSignal) {
   });
 }
 
-function ConflictStage({ label, content, onSelect }: { label: string; content: string | null; onSelect?: () => void }) {
-  return <section className="conflictStage"><div><h2>{label}</h2>{onSelect && <button type="button" onClick={onSelect}>Use entire {label.toLowerCase()}</button>}</div><pre>{content ?? "(file absent in this stage)"}</pre></section>;
+function ConflictStage({ label, content }: { label: string; content: string | null }) {
+  return <section className="conflictStage"><div><h2>{label}</h2></div><pre onScroll={syncStageScroll}>{content ?? "(file absent in this stage)"}</pre></section>;
 }
 
-function findConflictBlocks(content: string): ConflictBlock[] {
-  const lines: { text: string; start: number; end: number }[] = [];
-  let offset = 0;
-  for (const match of content.matchAll(/\r?\n/g)) {
-    const end = (match.index ?? 0) + match[0].length;
-    lines.push({ text: content.slice(offset, end), start: offset, end });
-    offset = end;
+function syncStageScroll(event: UIEvent<HTMLPreElement>) {
+  const source = event.currentTarget;
+  for (const pane of source.closest(".conflictStages")?.querySelectorAll("pre") ?? []) {
+    if (pane === source) continue;
+    pane.scrollTop = source.scrollTop;
+    pane.scrollLeft = source.scrollLeft;
   }
-  if (offset < content.length) lines.push({ text: content.slice(offset), start: offset, end: content.length });
-
-  const blocks: ConflictBlock[] = [];
-  for (let startIndex = 0; startIndex < lines.length; startIndex += 1) {
-    if (!isConflictStart(lines[startIndex].text)) continue;
-    let separatorIndex = -1;
-    for (let index = startIndex + 1; index < lines.length; index += 1) {
-      if (isConflictStart(lines[index].text)) break;
-      if (lines[index].text.replace(/\r?\n$/, "") === "=======") {
-        separatorIndex = index;
-        break;
-      }
-    }
-    if (separatorIndex < 0) continue;
-    let endIndex = -1;
-    for (let index = separatorIndex + 1; index < lines.length; index += 1) {
-      if (isConflictStart(lines[index].text)) break;
-      if (isConflictEnd(lines[index].text)) {
-        endIndex = index;
-        break;
-      }
-    }
-    if (endIndex < 0) continue;
-    const baseIndex = lines.findIndex((line, index) => index > startIndex && index < separatorIndex && isConflictBase(line.text));
-    const oursEnd = baseIndex >= 0 ? baseIndex : separatorIndex;
-    blocks.push({
-      index: blocks.length + 1,
-      start: lines[startIndex].start,
-      end: lines[endIndex].end,
-      ours: content.slice(lines[startIndex].end, lines[oursEnd].start),
-      theirs: content.slice(lines[separatorIndex].end, lines[endIndex].start),
-    });
-    startIndex = endIndex;
-  }
-  return blocks;
-}
-
-function isConflictStart(line: string) {
-  return /^<{7}(?: .*)?$/.test(line.replace(/\r?\n$/, ""));
-}
-
-function isConflictEnd(line: string) {
-  return /^>{7}(?: .*)?$/.test(line.replace(/\r?\n$/, ""));
-}
-
-function isConflictBase(line: string) {
-  return /^\|{7}(?: .*)?$/.test(line.replace(/\r?\n$/, ""));
-}
-
-function replaceConflictBlock(content: string, block: ConflictBlock, side: "ours" | "theirs") {
-  return content.slice(0, block.start) + block[side] + content.slice(block.end);
 }
