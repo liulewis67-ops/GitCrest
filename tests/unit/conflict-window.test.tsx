@@ -393,3 +393,45 @@ it("rebuilds remaining conflicts with diff3 markers and disables apply when a si
   await mountConflict("<<<<<<< ours\nx\n=======\ny\n>>>>>>> theirs\n", { base: "z\n", ours: null, theirs: "y\n" }, "6");
   expect((screen.getByRole("button", { name: "Apply all non-conflicting changes" }) as HTMLButtonElement).disabled).toBe(true);
 });
+
+it("saves and marks a fully resolved file in one step", async () => {
+  const repoId = `repo_${"d".repeat(64)}`;
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-one-step-1`);
+  Object.defineProperty(window, "gitcrest", {
+    configurable: true,
+    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
+  });
+  let preview = {
+    repoId, taskId: "task-one-step-1", operation: "merge", headOid: "a".repeat(40), dirtyPaths: ["one.ts"],
+    omittedDirtyPathCount: 0, conflictedPaths: ["one.ts"], omittedConflictedPathCount: 0, canContinue: false, canSkip: false, canAbort: true,
+  };
+  let conflict = {
+    repoId, taskId: "task-one-step-1", path: "one.ts", operation: "merge", headOid: "a".repeat(40),
+    baseContent: "base", oursContent: "ours", theirsContent: "theirs",
+    resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n", resultRevision: "b".repeat(64), isText: true,
+  };
+  const calls: string[] = [];
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+    const url = String(input);
+    if (url.includes("conflicts/resolved")) {
+      calls.push("resolve");
+      preview = { ...preview, conflictedPaths: [], canContinue: true };
+      return new Response(JSON.stringify({ taskId: "resolve-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
+    }
+    if (url.includes("conflicts/file") && init?.method === "PUT") {
+      calls.push("save");
+      const request = JSON.parse(String(init.body)) as { content: string };
+      conflict = { ...conflict, resultContent: request.content, resultRevision: "c".repeat(64) };
+      return new Response(JSON.stringify({ taskId: "save-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
+    }
+    if (url.includes("conflicts/file")) return new Response(JSON.stringify(conflict), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    return new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+  }));
+  render(<ConflictWindow />);
+  const editor = await screen.findByRole("textbox", { name: "Working result" }) as HTMLTextAreaElement;
+  expect(screen.queryByRole("button", { name: "Save & mark resolved" })).toBeNull();
+  fireEvent.change(editor, { target: { value: "merged\n" } });
+  fireEvent.click(await screen.findByRole("button", { name: "Save & mark resolved" }));
+  await waitFor(() => expect(screen.getByText("0 unresolved")).toBeTruthy());
+  expect(calls).toEqual(["save", "resolve"]);
+});

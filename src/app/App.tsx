@@ -862,6 +862,7 @@ function App() {
               requestAnimationFrame(() => document.getElementById("commit-message")?.focus());
             }}
             onShelveAndSwitch={() => void branchSwitchShelfFlow.openShelfComposerForBranchSwitch()}
+            onChooseWorktreeParent={() => requireGitCrestBridge().chooseCloneParent()}
           />
         </Suspense>}
 

@@ -5636,6 +5636,43 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
     let completed = wait_for_task(&app, worktree_creation["taskId"].as_str().unwrap()).await;
     assert_eq!(completed["status"], "succeeded");
     assert!(worktree_dir.join(".git").exists());
+    for (uri, body, expected) in [
+        ("", r#"{ "name": "feature/co", "checkout": true }"#, "feature/co"),
+        ("/switch", r#"{ "name": "__ORIG__" }"#, "__ORIG__"),
+    ] {
+        let body = body.replace("__ORIG__", &current_branch);
+        let expected = expected.replace("__ORIG__", &current_branch);
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches{uri}"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(body))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+        assert_eq!(completed["status"], "succeeded");
+        let current = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        let body = to_bytes(current.into_body(), usize::MAX).await.unwrap();
+        let current: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(current["current"], expected);
+    }
     let favorite = app
         .clone()
         .oneshot(

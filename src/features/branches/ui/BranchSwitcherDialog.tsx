@@ -18,6 +18,7 @@ interface BranchSwitcherDialogProps {
   shelveAriaShortcut: string;
   onCommitChanges: () => void;
   onShelveAndSwitch: () => void;
+  onChooseWorktreeParent?: () => Promise<string | undefined>;
 }
 
 export function BranchSwitcherDialog({
@@ -34,6 +35,7 @@ export function BranchSwitcherDialog({
   shelveAriaShortcut,
   onCommitChanges,
   onShelveAndSwitch,
+  onChooseWorktreeParent,
 }: BranchSwitcherDialogProps) {
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(
     branchSwitcher.close,
@@ -165,7 +167,15 @@ export function BranchSwitcherDialog({
                   <span>Create “{filter.trim()}” without switching</span>
                 </button>
                 <label className="branchWorktreeField">New worktree folder
-                  <input value={effectiveWorktreePath} aria-label="Worktree folder" spellCheck={false} disabled={branchSwitcher.busy} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
+                  <span className="branchWorktreeInput">
+                    <input value={effectiveWorktreePath} aria-label="Worktree folder" spellCheck={false} disabled={branchSwitcher.busy} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
+                    {onChooseWorktreeParent && <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => void onChooseWorktreeParent().then((parent) => {
+                      if (!parent) return;
+                      const leaf = suggestedWorktree.split(/[\\/]/).pop() || "worktree";
+                      setWorktreePath(`${parent.replace(/[\\/]+$/, "")}${parent.includes("\\") ? "\\" : "/"}${leaf}`);
+                      setWorktreeEdited(true);
+                    }).catch(() => undefined)}>Browse…</button>}
+                  </span>
                 </label>
                 <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim()} onClick={() => void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() })}>
                   <span className="branchItemGlyph" aria-hidden="true">⧉</span>
