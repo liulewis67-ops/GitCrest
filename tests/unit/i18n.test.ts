@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { en } from "../../src/shared/i18n/en";
 import { zh } from "../../src/shared/i18n/zh";
-import { LOCALE_STORAGE_KEY, getLocale, setLocale, translate } from "../../src/shared/i18n";
+import { LOCALE_STORAGE_KEY, getLocale, localeFromSystem, setLocale, translate } from "../../src/shared/i18n";
 
 describe("i18n", () => {
   afterEach(() => setLocale("en"));
@@ -22,5 +22,14 @@ describe("i18n", () => {
     expect(getLocale()).toBe("zh");
     expect(window.localStorage.getItem(LOCALE_STORAGE_KEY)).toBe("zh");
     expect(document.documentElement.lang).toBe("zh-CN");
+  });
+
+  it("picks the first supported system language and defaults to English", () => {
+    expect(localeFromSystem(["zh-CN", "en-US"])).toBe("zh");
+    expect(localeFromSystem(["en-GB", "zh-CN"])).toBe("en");
+    expect(localeFromSystem(["fr-FR", "zh-TW"])).toBe("zh");
+    expect(localeFromSystem(["fr-FR", "de"])).toBe("en");
+    expect(localeFromSystem([])).toBe("en");
+    expect(localeFromSystem([undefined, ""])).toBe("en");
   });
 });

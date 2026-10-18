@@ -11,6 +11,16 @@ export const LOCALE_STORAGE_KEY = "gitcrest-locale";
 const catalogs: Record<Locale, Record<MessageKey, string>> = { en, zh };
 const listeners = new Set<() => void>();
 
+/** Picks the first system language we support (Chinese or English); anything else, or nothing, means English. */
+export function localeFromSystem(languages: ReadonlyArray<string | undefined>): Locale {
+  for (const language of languages) {
+    const tag = (language ?? "").toLowerCase();
+    if (tag.startsWith("zh")) return "zh";
+    if (tag.startsWith("en")) return "en";
+  }
+  return "en";
+}
+
 function detectLocale(): Locale {
   // Outside a renderer window (tests, Node tooling) stay on English instead of following the host locale.
   if (typeof window === "undefined") return "en";
@@ -20,8 +30,7 @@ function detectLocale(): Locale {
   } catch {
     // Fall through to the browser language when storage is unavailable.
   }
-  const language = typeof navigator === "undefined" ? "" : navigator.language ?? "";
-  return language.toLowerCase().startsWith("zh") ? "zh" : "en";
+  return localeFromSystem(typeof navigator === "undefined" ? [] : [...(navigator.languages ?? []), navigator.language]);
 }
 
 let currentLocale: Locale = detectLocale();
