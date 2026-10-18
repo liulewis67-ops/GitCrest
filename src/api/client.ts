@@ -171,11 +171,11 @@ export class GitCrestApiClient {
     return this.request<BranchSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`);
   }
 
-  createRepositoryBranch(repoId: RepoId, name: string): Promise<TaskSnapshotResponse> {
+  createRepositoryBranch(repoId: RepoId, name: string, options: { checkout?: boolean; worktreePath?: string } = {}): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name } satisfies components["schemas"]["CreateBranchRequest"]),
+      body: JSON.stringify({ name, ...options } satisfies components["schemas"]["CreateBranchRequest"]),
     });
   }
 

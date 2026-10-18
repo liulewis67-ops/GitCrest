@@ -121,19 +121,39 @@ pub(super) async fn create_repository_branch(
     )
     .await
     .map_err(ApiError::from_branch_error)?;
+    if let Some(worktree_path) = request.worktree_path.as_deref() {
+        let candidate = std::path::Path::new(worktree_path);
+        let occupied = candidate
+            .read_dir()
+            .map(|mut entries| entries.next().is_some())
+            .unwrap_or_else(|_| candidate.exists());
+        if !candidate.is_absolute() || occupied {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "The worktree path must be an absolute path to a new or empty folder.",
+            ));
+        }
+    }
     let path = target.repository_path;
     let command = state.git_commands.clone();
     let branch_name = request.name;
+    let checkout = request.checkout;
+    let worktree_path = request.worktree_path;
     let task = state
         .tasks
         .submit(
             Some(repo_id),
             None,
             target.resource_key,
-            "branchCreate",
+            if worktree_path.is_some() { "worktreeCreate" } else { "branchCreate" },
             move |context| async move {
                 command
-                    .execute_branch(&path, BranchCommand::Create { name: branch_name }, context)
+                    .execute_branch(&path, BranchCommand::Create {
+                            name: branch_name,
+                            checkout,
+                            worktree_path,
+                        }, context)
                     .await
                     .map(|()| None)
             },

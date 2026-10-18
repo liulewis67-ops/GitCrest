@@ -34,6 +34,10 @@ pub(super) struct SwitchBranchRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct CreateBranchRequest {
     pub(super) name: String,
+    #[serde(default)]
+    pub(super) checkout: bool,
+    #[serde(default)]
+    pub(super) worktree_path: Option<String>,
 }
 
 #[derive(Deserialize)]

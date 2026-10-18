@@ -84,7 +84,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     }
   }
 
-  async function createBranch(name: string) {
+  async function createBranch(name: string, options: { checkout?: boolean; worktreePath?: string } = {}) {
     const api = getApi();
     const repository = getRepository();
     const trimmed = name.trim();
@@ -92,7 +92,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     setBusy(true);
     setError("");
     try {
-      onTaskAccepted(await api.createRepositoryBranch(repository.repoId, trimmed));
+      onTaskAccepted(await api.createRepositoryBranch(repository.repoId, trimmed, options));
       close();
       openTaskCenter();
     } catch (reason) {

@@ -729,10 +729,31 @@ impl GitCommandService {
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match operation {
-            BranchCommand::Create { name } => (
-                vec!["branch".into(), "--".into(), name.into()],
-                "Create branch",
-            ),
+            BranchCommand::Create {
+                name,
+                checkout,
+                worktree_path,
+            } => match worktree_path {
+                Some(path) => (
+                    vec![
+                        "worktree".into(),
+                        "add".into(),
+                        "-b".into(),
+                        name.into(),
+                        "--".into(),
+                        path.into(),
+                    ],
+                    "Create worktree",
+                ),
+                None if checkout => (
+                    vec!["switch".into(), "--create".into(), name.into()],
+                    "Create and switch branch",
+                ),
+                None => (
+                    vec!["branch".into(), "--".into(), name.into()],
+                    "Create branch",
+                ),
+            },
             BranchCommand::Switch { name } => (
                 vec![
                     "switch".into(),

@@ -1604,6 +1604,9 @@ export interface components {
         };
         CreateBranchRequest: {
             name: string;
+            /** @default false */
+            checkout?: boolean;
+            worktreePath?: string;
         };
         RenameBranchRequest: {
             name: string;

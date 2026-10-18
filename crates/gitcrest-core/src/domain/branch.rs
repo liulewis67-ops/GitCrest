@@ -1,6 +1,10 @@
 #[derive(Clone, Debug)]
 pub(crate) enum BranchCommand {
-    Create { name: String },
+    Create {
+        name: String,
+        checkout: bool,
+        worktree_path: Option<String>,
+    },
     Switch { name: String },
     Rename { old_name: String, new_name: String },
     Delete { name: String, allow_unmerged: bool },

@@ -43,10 +43,14 @@ export function BranchSwitcherDialog({
   );
 
   const [filter, setFilter] = useState("");
+  const [worktreePath, setWorktreePath] = useState("");
+  const [worktreeEdited, setWorktreeEdited] = useState(false);
   useEffect(() => {
-    if (branchSwitcher.open) setFilter("");
+    if (branchSwitcher.open) { setFilter(""); setWorktreeEdited(false); }
   }, [branchSwitcher.open]);
 
+  const suggestedWorktree = suggestWorktreePath(repository?.path, filter.trim());
+  const effectiveWorktreePath = worktreeEdited ? worktreePath : suggestedWorktree;
   if (!branchSwitcher.open || !repository) return null;
 
   const query = filter.trim().toLowerCase();
@@ -139,10 +143,10 @@ export function BranchSwitcherDialog({
                 disabled={branchSwitcher.busy}
                 onChange={(event) => setFilter(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === "Enter" && localBranches[0] && !branchSwitcher.busy) {
-                    event.preventDefault();
-                    void branchSwitcher.inspect(localBranches[0].name);
-                  }
+                  if (event.key !== "Enter" || branchSwitcher.busy) return;
+                  event.preventDefault();
+                  if (localBranches[0]) void branchSwitcher.inspect(localBranches[0].name);
+                  else if (query && connected) void branchSwitcher.createBranch(filter, { checkout: true });
                 }}
               />
             )}
@@ -150,10 +154,24 @@ export function BranchSwitcherDialog({
             {branchError && <p className="dialogError" role="alert">{branchError}</p>}
             {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
             {query && !branches.some((branch) => branch.kind === "local" && branch.name === filter.trim()) && (
-              <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected} onClick={() => void branchSwitcher.createBranch(filter)}>
-                <span className="branchItemGlyph" aria-hidden="true">+</span>
-                <span>Create branch “{filter.trim()}” from current HEAD</span>
-              </button>
+              <div className="branchCreateOptions">
+                <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected} onClick={() => void branchSwitcher.createBranch(filter, { checkout: true })}>
+                  <span className="branchItemGlyph" aria-hidden="true">+</span>
+                  <span>Create and switch to “{filter.trim()}”</span>
+                  <kbd>Enter</kbd>
+                </button>
+                <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected} onClick={() => void branchSwitcher.createBranch(filter)}>
+                  <span className="branchItemGlyph" aria-hidden="true">+</span>
+                  <span>Create “{filter.trim()}” without switching</span>
+                </button>
+                <label className="branchWorktreeField">New worktree folder
+                  <input value={effectiveWorktreePath} aria-label="Worktree folder" spellCheck={false} disabled={branchSwitcher.busy} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
+                </label>
+                <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim()} onClick={() => void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() })}>
+                  <span className="branchItemGlyph" aria-hidden="true">⧉</span>
+                  <span>Create “{filter.trim()}” in a new worktree</span>
+                </button>
+              </div>
             )}
             {hasBranchSnapshot && allLocalBranches.length === 0 && <p className="navEmpty">There are no other local branches.</p>}
             {allLocalBranches.length > 0 && localBranches.length === 0 && <p className="navEmpty">No branch matches “{filter.trim()}”.</p>}
@@ -180,4 +198,13 @@ export function BranchSwitcherDialog({
       </section>
     </div>
   );
+}
+
+function suggestWorktreePath(repositoryPath: string | undefined, branch: string) {
+  if (!repositoryPath || !branch) return "";
+  const separator = repositoryPath.includes("\\") ? "\\" : "/";
+  const trimmed = repositoryPath.replace(/[\\/]+$/, "");
+  const cut = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
+  if (cut < 0) return "";
+  return `${trimmed.slice(0, cut)}${separator}${trimmed.slice(cut + 1)}-${branch.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
 }

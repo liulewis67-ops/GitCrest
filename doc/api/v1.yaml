@@ -3719,6 +3719,8 @@ components:
       required: [name]
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
+        checkout: { type: boolean, default: false }
+        worktreePath: { type: string, minLength: 1, maxLength: 4096 }
     RenameBranchRequest:
       type: object
       additionalProperties: false
