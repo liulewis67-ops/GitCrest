@@ -5,9 +5,17 @@ pub(crate) enum BranchCommand {
         checkout: bool,
         worktree_path: Option<String>,
     },
-    Switch { name: String },
-    Rename { old_name: String, new_name: String },
-    Delete { name: String, allow_unmerged: bool },
+    Switch {
+        name: String,
+    },
+    Rename {
+        old_name: String,
+        new_name: String,
+    },
+    Delete {
+        name: String,
+        allow_unmerged: bool,
+    },
 }
 
 pub(crate) fn is_branch_name_syntactically_valid(name: &str) -> bool {

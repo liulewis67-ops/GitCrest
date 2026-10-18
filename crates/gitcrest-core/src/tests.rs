@@ -5637,7 +5637,11 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
     assert_eq!(completed["status"], "succeeded");
     assert!(worktree_dir.join(".git").exists());
     for (uri, body, expected) in [
-        ("", r#"{ "name": "feature/co", "checkout": true }"#, "feature/co"),
+        (
+            "",
+            r#"{ "name": "feature/co", "checkout": true }"#,
+            "feature/co",
+        ),
         ("/switch", r#"{ "name": "__ORIG__" }"#, "__ORIG__"),
     ] {
         let body = body.replace("__ORIG__", &current_branch);

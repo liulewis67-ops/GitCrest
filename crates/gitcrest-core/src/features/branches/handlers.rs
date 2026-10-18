@@ -146,14 +146,22 @@ pub(super) async fn create_repository_branch(
             Some(repo_id),
             None,
             target.resource_key,
-            if worktree_path.is_some() { "worktreeCreate" } else { "branchCreate" },
+            if worktree_path.is_some() {
+                "worktreeCreate"
+            } else {
+                "branchCreate"
+            },
             move |context| async move {
                 command
-                    .execute_branch(&path, BranchCommand::Create {
+                    .execute_branch(
+                        &path,
+                        BranchCommand::Create {
                             name: branch_name,
                             checkout,
                             worktree_path,
-                        }, context)
+                        },
+                        context,
+                    )
                     .await
                     .map(|()| None)
             },
