@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, UIEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
@@ -44,15 +45,17 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
   onSelect: (oid: string) => void;
   onMoveFocus: (event: KeyboardEvent<HTMLButtonElement>, index: number) => void;
 }) {
+  const { t } = useI18n();
   return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${refNames.length ? `, ${refNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
     <span className={`commitGraphNode${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
-    <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || "(no subject)"}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
+    <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
     <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
     {refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}
   </button>;
 });
 
 export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, onScrollPosition, onSelect }: CommitGraphProps) {
+  const { t } = useI18n();
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
   const { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, resetFilters } = useHistoryFilters();
@@ -182,20 +185,20 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   }
 
   return <div className="historyWorkspace">
-    <form className="historyFilters" aria-label="Commit history filters" onSubmit={submitFilters}>
-      <label>SHA<input aria-label="Filter by SHA" value={draftFilters.sha || ""} onChange={(event) => setDraftFilter("sha", event.target.value)} placeholder="Prefix or full object ID" /></label>
-      <label>Author<input aria-label="Filter by author" value={draftFilters.author || ""} onChange={(event) => setDraftFilter("author", event.target.value)} placeholder="Name or email" /></label>
-      <label>Message<input ref={messageSearchRef} aria-label="Filter by message" aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setDraftFilter("message", event.target.value)} placeholder="Contains text" /></label>
-      <label>Branch<select aria-label="Filter by branch" value={draftFilters.branch || ""} onChange={(event) => setDraftFilter("branch", event.target.value)}><option value="">All branches</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
-      <label>Path<input aria-label="Filter by path" value={draftFilters.path || ""} onChange={(event) => setDraftFilter("path", event.target.value)} placeholder="Exact repository path" /></label>
-      <label>Since<input aria-label="Filter since date" type="date" value={draftFilters.since || ""} onChange={(event) => setDraftFilter("since", event.target.value)} /></label>
-      <label>Until<input aria-label="Filter until date" type="date" value={draftFilters.until || ""} onChange={(event) => setDraftFilter("until", event.target.value)} /></label>
-      <div className="historyFilterActions"><button className="secondaryButton" type="submit">Search</button>{hasFilters && <button className="textButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
+    <form className="historyFilters" aria-label={t("hist.filtersAria")} onSubmit={submitFilters}>
+      <label>{t("hist.sha")}<input aria-label={t("hist.shaAria")} value={draftFilters.sha || ""} onChange={(event) => setDraftFilter("sha", event.target.value)} placeholder={t("hist.shaPlaceholder")} /></label>
+      <label>{t("hist.author")}<input aria-label={t("hist.authorAria")} value={draftFilters.author || ""} onChange={(event) => setDraftFilter("author", event.target.value)} placeholder={t("hist.authorPlaceholder")} /></label>
+      <label>{t("hist.message")}<input ref={messageSearchRef} aria-label={t("hist.messageAria")} aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setDraftFilter("message", event.target.value)} placeholder={t("hist.messagePlaceholder")} /></label>
+      <label>{t("hist.branch")}<select aria-label={t("hist.branchAria")} value={draftFilters.branch || ""} onChange={(event) => setDraftFilter("branch", event.target.value)}><option value="">{t("hist.allBranches")}</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
+      <label>{t("hist.path")}<input aria-label={t("hist.pathAria")} value={draftFilters.path || ""} onChange={(event) => setDraftFilter("path", event.target.value)} placeholder={t("hist.pathPlaceholder")} /></label>
+      <label>{t("hist.since")}<input aria-label={t("hist.sinceAria")} type="date" value={draftFilters.since || ""} onChange={(event) => setDraftFilter("since", event.target.value)} /></label>
+      <label>{t("hist.until")}<input aria-label={t("hist.untilAria")} type="date" value={draftFilters.until || ""} onChange={(event) => setDraftFilter("until", event.target.value)} /></label>
+      <div className="historyFilterActions"><button className="secondaryButton" type="submit">{t("hist.search")}</button>{hasFilters && <button className="textButton" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}</div>
     </form>
-    <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label="Commit graph view">
-    {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? "Preparing message search…" : "Loading commit history…"}</div>
-      : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={retry}>Retry history</button></div>
-        : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p><h2>{hasFilters ? "No matching commits" : "No commits yet"}</h2><p>{hasFilters ? "Adjust or clear the current filters to see more history." : "This repository has no commit history on HEAD or its branches."}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>Clear filters</button>}</div>
+    <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label={t("main.graphView")}>
+    {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? t("hist.preparing") : t("hist.loading")}</div>
+      : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={retry}>{t("hist.retry")}</button></div>
+        : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">{t("hist.clearView")}</p><h2>{hasFilters ? t("hist.noMatching") : t("hist.noCommits")}</h2><p>{hasFilters ? t("hist.adjust") : t("hist.emptyRepo")}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}</div>
           : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>
             <svg className="commitGraphEdges" aria-hidden="true" width={graphWidth} height={visibleEnd - visibleStart} viewBox={`0 ${visibleStart} ${graphWidth} ${visibleEnd - visibleStart}`} style={{ top: visibleStart }}>
               {visibleEdges.map((edge) => {
@@ -207,7 +210,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
                 return <path key={`${edge.from}-${edge.to}-${edge.fromLane}-${edge.toLane}`} d={`M ${x1} ${y1} C ${x1} ${y1 + direction * ROW_HEIGHT / 2}, ${x2} ${y2 - direction * ROW_HEIGHT / 2}, ${x2} ${y2}`} />;
               })}
             </svg>
-            <div className="commitGraphList" role="list" aria-label="Commit history">
+            <div className="commitGraphList" role="list" aria-label={t("hist.listAria")}>
               <div className="commitGraphSpacer" aria-hidden="true" style={{ height: visibleStart }} />
               {visibleCommits.map((commit, visibleIndex) => {
                 const index = firstVisible + visibleIndex;
@@ -230,8 +233,8 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
               <div className="commitGraphSpacer" aria-hidden="true" style={{ height: Math.max(0, graphHeight - visibleEnd) }} />
             </div>
       </div>}
-    {loadingMore && <div className="historyLoadingMore" role="status">Loading older commits…</div>}
-    {refsError && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status">Branch labels unavailable: {refsError}</div>}
+    {loadingMore && <div className="historyLoadingMore" role="status">{t("hist.loadingOlder")}</div>}
+    {refsError && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status">{t("hist.labelsUnavailable", { error: refsError })}</div>}
     </div>
   </div>;
 }

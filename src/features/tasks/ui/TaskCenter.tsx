@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
@@ -20,6 +21,7 @@ interface TaskCenterProps {
 }
 
 export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow }: TaskCenterProps) {
+  const { t } = useI18n();
   const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: string }>>({});
   const [confirmAbortId, setConfirmAbortId] = useState("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
@@ -43,7 +45,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
       }
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted && waitingTaskIds.current.has(task.taskId)) {
-        setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : "Could not inspect workflow recovery." } }));
+        setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : t("tk.recoveryFailed") } }));
       }
     }).finally(() => {
       if (recoveryControllers.current.get(task.taskId) === controller) recoveryControllers.current.delete(task.taskId);
@@ -70,39 +72,39 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
     <div className="paletteBackdrop taskBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <section ref={dialogRef} className="taskCenter" role="dialog" aria-modal="true" aria-labelledby="task-center-title" onKeyDown={onKeyDown}>
         <div className="taskCenterHeader">
-          <div><p className="sectionEyebrow">BACKGROUND WORK</p><h2 id="task-center-title">Tasks</h2></div>
+          <div><p className="sectionEyebrow">{t("tk.eyebrow")}</p><h2 id="task-center-title">{t("tk.title")}</h2></div>
           <div className="taskCenterActions">
-            <button className="quietButton compact" type="button" onClick={onRefresh}>Refresh</button>
-            <button className="quietButton compact" type="button" onClick={onClose} aria-label="Close tasks">Close</button>
+            <button className="quietButton compact" type="button" onClick={onRefresh}>{t("tk.refresh")}</button>
+            <button className="quietButton compact" type="button" onClick={onClose} aria-label={t("tk.closeAria")}>{t("tk.close")}</button>
           </div>
         </div>
         {error && <p role="alert" className="taskCenterError">{error}</p>}
-        {tasks.length === 0 ? <p className="taskCenterEmpty">No background tasks in this session.</p> : (
+        {tasks.length === 0 ? <p className="taskCenterEmpty">{t("tk.empty")}</p> : (
           <div className="taskList">
             {[...tasks].reverse().map((task) => (
               <article className="taskCard" key={task.taskId}>
                 <div className="taskCardHeading"><strong>{task.operation}</strong><span className={`taskStatus task-${task.status}`} role="status">{task.status}</span></div>
-                <div className="taskCardMeta"><span>{task.phase}</span>{task.progress !== null && <span>{task.progress}%</span>}<span>{task.repoId || task.targetPath || "Repository"}</span></div>
-                {task.progress !== null && <progress max={100} value={task.progress} aria-label={`${task.operation} progress`} />}
+                <div className="taskCardMeta"><span>{task.phase}</span>{task.progress !== null && <span>{task.progress}%</span>}<span>{task.repoId || task.targetPath || t("tk.repository")}</span></div>
+                {task.progress !== null && <progress max={100} value={task.progress} aria-label={t("tk.progressAria", { op: task.operation })} />}
                 {task.message && <p className="taskMessage">{task.errorCategory && <strong>{task.errorCategory}: </strong>}{task.message}</p>}
-                {task.operation === "clone" && (task.status === "failed" || task.status === "cancelled") && <><p className="cloneHelp">For HTTPS authentication failures, save a credential for the host in the clone dialog before retrying.</p><button className="textButton taskCancelButton" type="button" onClick={() => onRetryClone(task)}>Retry clone</button></>}
-                {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">Update the saved HTTPS credential for one of this repository’s remotes, then retry the fetch.</p><button className="secondaryButton" type="button" onClick={() => onConfigureCredentials(task)}>Configure credentials</button></div>}
-                {isFailedPush(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{task.errorCategory === "pushRejected" ? "The push was rejected. Fetch and review remote changes before retrying." : "The commit is still saved locally. Review the target and retry only the push when ready."} A force-with-lease action requires a fresh preview and explicit confirmation.</p><button className="secondaryButton" type="button" onClick={() => onReviewPush(task)}>Review and retry push</button></div>}
-                {task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && <div className="taskCredentialRecovery workflowRecovery"><p className="cloneHelp">Resolve the listed conflicts in the working tree, then refresh the recovery preview.</p>
-                  {recovery[task.taskId]?.loading && <p role="status">Inspecting conflicts…</p>}
+                {task.operation === "clone" && (task.status === "failed" || task.status === "cancelled") && <><p className="cloneHelp">{t("tk.cloneHelp")}</p><button className="textButton taskCancelButton" type="button" onClick={() => onRetryClone(task)}>{t("tk.retryClone")}</button></>}
+                {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.updateCred")}</p><button className="secondaryButton" type="button" onClick={() => onConfigureCredentials(task)}>{t("tk.configCred")}</button></div>}
+                {isFailedPush(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{task.errorCategory === "pushRejected" ? t("tk.pushRejected") : t("tk.commitSaved")} {t("tk.forceNote")}</p><button className="secondaryButton" type="button" onClick={() => onReviewPush(task)}>{t("tk.reviewPush")}</button></div>}
+                {task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && <div className="taskCredentialRecovery workflowRecovery"><p className="cloneHelp">{t("tk.resolveListed")}</p>
+                  {recovery[task.taskId]?.loading && <p role="status">{t("tk.inspecting")}</p>}
                   {recovery[task.taskId]?.error && <p className="taskCenterError" role="alert">{recovery[task.taskId]?.error}</p>}
                   {recovery[task.taskId]?.snapshot && <>
-                    {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 && <button className="secondaryButton" type="button" onClick={() => onOpenConflictWindow(task)}>Open conflict resolver</button>}
-                    {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 ? <ul className="workflowPathList" aria-label="Conflicted files">{recovery[task.taskId]!.snapshot!.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul> : <p className="cloneHelp">No unresolved conflicts remain.</p>}
-                    {recovery[task.taskId]!.snapshot!.omittedConflictedPathCount > 0 && <p className="cloneHelp">And {recovery[task.taskId]!.snapshot!.omittedConflictedPathCount} more conflicted file(s).</p>}
-                    <div className="taskCenterActions"><button className="quietButton compact" type="button" onClick={() => refreshRecoveryPreview(task)}>Refresh preview</button>
-                      <button className="secondaryButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canContinue || actionId === task.taskId} onClick={() => onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "continue")}>Continue</button>
-                      {(task.operation === "cherryPick" || task.operation === "revert" || task.operation === "rebase") && <button className="secondaryButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canSkip || actionId === task.taskId} onClick={() => onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "skip")}>Skip</button>}
-                      {confirmAbortId === task.taskId ? <><span className="cloneHelp">Abort this operation?</span><button className="textButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canAbort || actionId === task.taskId} onClick={() => { onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "abort"); setConfirmAbortId(""); }}>Confirm abort</button><button className="textButton" type="button" onClick={() => setConfirmAbortId("")}>Keep resolving</button></> : <button className="textButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canAbort || actionId === task.taskId} onClick={() => setConfirmAbortId(task.taskId)}>Abort…</button>}</div>
+                    {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 && <button className="secondaryButton" type="button" onClick={() => onOpenConflictWindow(task)}>{t("tk.openResolver")}</button>}
+                    {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 ? <ul className="workflowPathList" aria-label={t("tk.conflictedFiles")}>{recovery[task.taskId]!.snapshot!.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul> : <p className="cloneHelp">{t("tk.noneLeft")}</p>}
+                    {recovery[task.taskId]!.snapshot!.omittedConflictedPathCount > 0 && <p className="cloneHelp">{t("tk.andMore", { count: recovery[task.taskId]!.snapshot!.omittedConflictedPathCount })}</p>}
+                    <div className="taskCenterActions"><button className="quietButton compact" type="button" onClick={() => refreshRecoveryPreview(task)}>{t("tk.refreshPreview")}</button>
+                      <button className="secondaryButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canContinue || actionId === task.taskId} onClick={() => onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "continue")}>{t("tk.continue")}</button>
+                      {(task.operation === "cherryPick" || task.operation === "revert" || task.operation === "rebase") && <button className="secondaryButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canSkip || actionId === task.taskId} onClick={() => onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "skip")}>{t("tk.skip")}</button>}
+                      {confirmAbortId === task.taskId ? <><span className="cloneHelp">{t("tk.abortQ")}</span><button className="textButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canAbort || actionId === task.taskId} onClick={() => { onRecoverWorkflow(task, recovery[task.taskId]!.snapshot!, "abort"); setConfirmAbortId(""); }}>{t("tk.confirmAbort")}</button><button className="textButton" type="button" onClick={() => setConfirmAbortId("")}>{t("tk.keepResolving")}</button></> : <button className="textButton" type="button" disabled={!recovery[task.taskId]!.snapshot!.canAbort || actionId === task.taskId} onClick={() => setConfirmAbortId(task.taskId)}>{t("tk.abort")}</button>}</div>
                   </>}
                 </div>}
-                <details className="taskLogs"><summary>Sanitized log · {task.logs.length} lines</summary><pre>{task.logs.join("\n") || "No log output."}</pre><button className="textButton" type="button" disabled={task.logs.length === 0} onClick={() => onCopy(task)}>Copy log</button></details>
-                {(task.status === "queued" || task.status === "running") && <button className="textButton taskCancelButton" type="button" disabled={task.cancelRequested || actionId === task.taskId} onClick={() => onCancel(task.taskId)}>{task.cancelRequested ? "Stopping safely…" : actionId === task.taskId ? "Requesting cancellation…" : "Cancel task"}</button>}
+                <details className="taskLogs"><summary>{t("tk.logSummary", { count: task.logs.length })}</summary><pre>{task.logs.join("\n") || t("tk.noLog")}</pre><button className="textButton" type="button" disabled={task.logs.length === 0} onClick={() => onCopy(task)}>{t("tk.copyLog")}</button></details>
+                {(task.status === "queued" || task.status === "running") && <button className="textButton taskCancelButton" type="button" disabled={task.cancelRequested || actionId === task.taskId} onClick={() => onCancel(task.taskId)}>{task.cancelRequested ? t("tk.stopping") : actionId === task.taskId ? t("tk.requesting") : t("tk.cancel")}</button>}
               </article>
             ))}
           </div>

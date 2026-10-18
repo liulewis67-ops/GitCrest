@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type RemoteBranchDeletePreviewResponse, type RemoteSnapshotResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { useI18n } from "../../../shared/i18n";
 
 function resolveTarget(branchRef: string, remotes?: RemoteSnapshotResponse) {
   const referencePrefix = "refs/remotes/";
@@ -23,6 +24,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
   onClose: () => void;
   onStarted: (task: TaskSnapshotResponse) => void;
 }) {
+  const { t } = useI18n();
   const target = resolveTarget(branchRef, remotes);
   const [preview, setPreview] = useState<RemoteBranchDeletePreviewResponse>();
   const [confirmed, setConfirmed] = useState(false);
@@ -39,7 +41,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
     try {
       setPreview(await api.previewRepositoryRemoteBranchDelete(repoId, target.remoteName, target.remoteBranch));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not inspect this remote branch.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rbd.inspectFailed"));
     } finally {
       setLoading(false);
     }
@@ -58,7 +60,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
         confirmDelete: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not delete this remote branch.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rbd.deleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -67,36 +69,36 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter remoteBranchDeleteDialog" role="dialog" aria-modal="true" aria-labelledby="remote-branch-delete-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">DELETE REMOTE REF</p><h2 id="remote-branch-delete-title">Delete remote branch</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>
+        <div><p className="sectionEyebrow">{t("rbd.eyebrow")}</p><h2 id="remote-branch-delete-title">{t("rbd.title")}</h2></div>
+        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rbd.close")}</button>
       </div>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>TARGET REF</span><strong className="monoText">{branchRef}</strong></div>
-        {!target && <p className="taskCenterError" role="alert">This remote-tracking ref cannot be mapped to a configured remote.</p>}
+        <div className="repositoryFact"><span>{t("rbd.targetRef")}</span><strong className="monoText">{branchRef}</strong></div>
+        {!target && <p className="taskCenterError" role="alert">{t("rbd.cannotMap")}</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
-        {loading && <p role="status">Reviewing the remote ref and affected files…</p>}
+        {loading && <p role="status">{t("rbd.reviewing")}</p>}
         {preview && <>
           <div className="rebasePreviewFacts">
-            <div className="repositoryFact"><span>REMOTE BRANCH</span><strong>{preview.remoteName}/{preview.remoteBranch}</strong></div>
-            <div className="repositoryFact"><span>TRACKING OID</span><strong className="monoText">{preview.expectedRemoteOid.slice(0, 12)}</strong></div>
-            <div className="repositoryFact"><span>COMMITS ONLY THERE</span><strong>{preview.commitsOnlyOnRemote}</strong></div>
-            <div className="repositoryFact"><span>FILES DIFFER FROM HEAD</span><strong>{preview.affectedPaths.length}{preview.omittedPathCount ? ` + ${preview.omittedPathCount} omitted` : ""}</strong></div>
+            <div className="repositoryFact"><span>{t("rbd.remoteBranch")}</span><strong>{preview.remoteName}/{preview.remoteBranch}</strong></div>
+            <div className="repositoryFact"><span>{t("rbd.trackingOid")}</span><strong className="monoText">{preview.expectedRemoteOid.slice(0, 12)}</strong></div>
+            <div className="repositoryFact"><span>{t("rbd.commitsOnlyThere")}</span><strong>{preview.commitsOnlyOnRemote}</strong></div>
+            <div className="repositoryFact"><span>{t("rbd.filesDiffer")}</span><strong>{preview.affectedPaths.length}{preview.omittedPathCount ? t("rbd.omittedSuffix", { count: preview.omittedPathCount }) : ""}</strong></div>
           </div>
-          <section className="operationImpactNotice" aria-label="Remote branch deletion impact explanation">
-            <h3>What this deletion will change</h3>
-            <p>GitCrest will delete <strong>{preview.remoteName}/{preview.remoteBranch}</strong> from the remote, using the reviewed OID <code>{preview.expectedRemoteOid.slice(0, 12)}</code> as a lease.</p>
-            <p>The preview finds {preview.commitsOnlyOnRemote} commit(s) reachable only from that remote branch and {preview.affectedPaths.length} path(s) that differ from the current HEAD{preview.omittedPathCount ? `; ${preview.omittedPathCount} additional path(s) are omitted from this list` : ""}. Deleting the ref can make those commits harder to reach; it does not rewrite the current local branch.</p>
-            {preview.operationInProgress && <p>A {preview.operationInProgress} operation is active, so deletion is blocked until it finishes.</p>}
-            <p className="cloneHelp">This safety summary is based on the reviewed remote preview and remains available without an AI provider.</p>
+          <section className="operationImpactNotice" aria-label={t("rbd.impactAria")}>
+            <h3>{t("rbd.impactHeading")}</h3>
+            <p>{t("rbd.impactLease", { ref: `${preview.remoteName}/${preview.remoteBranch}`, oid: preview.expectedRemoteOid.slice(0, 12) })}</p>
+            <p>{t("rbd.impactDetail", { commits: preview.commitsOnlyOnRemote, paths: preview.affectedPaths.length, omitted: preview.omittedPathCount ? t("rbd.impactOmitted", { count: preview.omittedPathCount }) : "" })}</p>
+            {preview.operationInProgress && <p>{t("rbd.opInProgress", { op: preview.operationInProgress })}</p>}
+            <p className="cloneHelp">{t("rbd.safetyNote")}</p>
           </section>
           {preview.affectedPaths.length > 0 && <ul className="resetAffectedPaths">{preview.affectedPaths.map((path) => <li key={path} className="monoText">{path}</li>)}</ul>}
-          {!preview.canDelete && <p className="taskCenterError" role="alert">Finish the active Git operation before deleting a remote branch.</p>}
-          <p className="cloneHelp">Deletion uses a force-with-lease check against this reviewed OID. If the remote branch moved since your last fetch, Git will refuse and the branch will remain.</p>
-          <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand this deletes {preview.remoteName}/{preview.remoteBranch} from the remote. This cannot be undone through GitCrest.</label>
+          {!preview.canDelete && <p className="taskCenterError" role="alert">{t("rbd.finishOp")}</p>}
+          <p className="cloneHelp">{t("rbd.leaseNote")}</p>
+          <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("rbd.confirm", { ref: `${preview.remoteName}/${preview.remoteBranch}` })}</label>
         </>}
         <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={!target || disabled || loading || busy} onClick={() => void inspect()}>{loading ? "Reviewing…" : "Review impact"}</button>
-          <button className="dangerTextButton" type="button" disabled={!preview?.canDelete || !confirmed || disabled || busy} onClick={() => void remove()}>{busy ? "Starting…" : "Delete remote branch"}</button>
+          <button className="quietButton compact" type="button" disabled={!target || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rbd.reviewingBtn") : t("rbd.review")}</button>
+          <button className="dangerTextButton" type="button" disabled={!preview?.canDelete || !confirmed || disabled || busy} onClick={() => void remove()}>{busy ? t("rbd.starting") : t("rbd.delete")}</button>
         </div>
       </div>
     </section>

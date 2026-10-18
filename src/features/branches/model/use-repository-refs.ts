@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type RemoteSnapshotResponse } from "../../../api/client";
 
@@ -67,7 +68,7 @@ export function useRepositoryRefs({
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
-        setBranchErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository branches.") }));
+        setBranchErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : t("bm.readBranches")) }));
       }
     } finally {
       releaseController(repoId, controller);
@@ -94,7 +95,7 @@ export function useRepositoryRefs({
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
-        setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not read repository remotes.") }));
+        setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : t("bm.readRemotes")) }));
       }
     } finally {
       releaseController(repoId, controller);
@@ -119,7 +120,7 @@ export function useRepositoryRefs({
       if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
         setBranchErrors((current) => ({
           ...current,
-          [repoId]: message || (error instanceof Error ? error.message : "Could not update branch favorite."),
+          [repoId]: message || (error instanceof Error ? error.message : t("bm.favoriteFailed")),
         }));
       }
     } finally {

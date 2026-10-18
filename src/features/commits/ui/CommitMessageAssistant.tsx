@@ -1,3 +1,5 @@
+import { t } from "../../../shared/i18n";
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import type { AiFileSelection, AiReplyResponse, AiSettingsResponse, CommitRequest, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../../api/client";
 
@@ -15,13 +17,13 @@ function selectedRows(document: DiffDocumentResponse, selections: NonNullable<Co
   const picked = new Map<number, Set<number>>();
   for (const selection of selections) {
     const hunk = document.hunks[selection.hunkIndex];
-    if (!hunk) throw new Error("A staged selection is no longer available. Refresh the diff and select the changes again.");
+    if (!hunk) throw new Error(t("ai.selectionGone"));
     const rows = selection.rowIndex === undefined
       ? hunk.rows.map((row, index) => row.kind === "change" ? index : -1).filter((index) => index >= 0)
       : [selection.rowIndex];
     for (const rowIndex of rows) {
       const row = hunk.rows[rowIndex];
-      if (!row || row.kind !== "change") throw new Error("A staged selection is no longer available. Refresh the diff and select the changes again.");
+      if (!row || row.kind !== "change") throw new Error(t("ai.selectionGone"));
       const indices = picked.get(selection.hunkIndex) || new Set<number>();
       indices.add(rowIndex);
       picked.set(selection.hunkIndex, indices);
@@ -76,6 +78,7 @@ export function CommitMessageAssistant({
   onUseSuggestion: (message: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   const [settings, setSettings] = useState<AiSettingsResponse>();
   const [reviewed, setReviewed] = useState<ReviewedFile[]>([]);
   const [reviewFingerprint, setReviewFingerprint] = useState("");
@@ -115,7 +118,7 @@ export function CommitMessageAssistant({
   useEffect(() => {
     let current = true;
     void api.getAiSettings().then((value) => { if (current) setSettings(value); }).catch((reason: unknown) => {
-      if (current) setError(reason instanceof Error ? reason.message : "AI provider settings could not be loaded.");
+      if (current) setError(reason instanceof Error ? reason.message : t("ai.settingsLoadFailed"));
     });
     void reviewCurrentChanges();
     return () => { current = false; };
@@ -131,27 +134,27 @@ export function CommitMessageAssistant({
       const paths = commitSelections.length > 0
         ? commitSelectionRepoId === repoId ? [...new Set(commitSelections.map(({ path }) => path))].sort() : []
         : stagedPaths(snapshot);
-      if (paths.length === 0) throw new Error("Stage changes before generating a commit suggestion.");
-      if (paths.length > 20) throw new Error("A commit suggestion can include at most 20 staged file scopes. Select fewer staged changes.");
+      if (paths.length === 0) throw new Error(t("ai.stageFirst"));
+      if (paths.length > 20) throw new Error(t("ai.tooMany"));
       const currentStaged = new Set(stagedPaths(snapshot));
       const documents: ReviewedFile[] = [];
       let bytes = 0;
       for (const path of paths) {
-        if (!currentStaged.has(path)) throw new Error(`${path} is no longer staged. Refresh status and review the commit scope again.`);
+        if (!currentStaged.has(path)) throw new Error(t("ai.noLongerStaged", { path }));
         const document = await api.getFileDiff(repoId, path, "index");
-        if (document.status !== "text") throw new Error(`${path} is ${document.status} and cannot be sent as text.`);
+        if (document.status !== "text") throw new Error(t("ai.cannotSend", { path, status: document.status }));
         const selected = commitSelections.length > 0 ? commitSelections.find((item) => item.path === path) : undefined;
-        if (commitSelections.length > 0 && !selected) throw new Error("The selected commit scope changed. Select the staged changes again.");
-        if (selected && selected.revision !== document.revision) throw new Error(`${path} changed after its staged commit selection was reviewed. Refresh the diff and select the changes again.`);
+        if (commitSelections.length > 0 && !selected) throw new Error(t("ai.scopeChanged"));
+        if (selected && selected.revision !== document.revision) throw new Error(t("ai.selChanged", { path }));
         const file: ReviewedFile = { path, document, ...(selected ? { selections: selected.selections } : {}) };
         bytes += new TextEncoder().encode(diffText(document, file.selections)).length;
-        if (bytes > 1024 * 1024) throw new Error("The selected staged diffs exceed the 1 MiB request limit. Select fewer changes.");
+        if (bytes > 1024 * 1024) throw new Error(t("ai.tooBig"));
         documents.push(file);
       }
-      if (commitSelections.length > 0 && paths.length !== commitSelections.length) throw new Error("The staged commit selection contains duplicate paths. Clear it and select the changes again.");
+      if (commitSelections.length > 0 && paths.length !== commitSelections.length) throw new Error(t("ai.duplicate"));
       setReviewed(documents); setReviewFingerprint(statusFingerprint(snapshot)); setReviewDiffBytes(bytes);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The staged changes could not be reviewed.");
+      setError(reason instanceof Error ? reason.message : t("ai.reviewFailed"));
     } finally { setBusy(false); }
   }
 
@@ -175,7 +178,7 @@ export function CommitMessageAssistant({
     try {
       if (!(await checkFresh(reviewed, reviewFingerprint))) {
         setWorkspaceStale(true);
-        throw new Error("Staged changes changed after review. Review them again before sending.");
+        throw new Error(t("ai.stagedChanged"));
       }
       const files: AiFileSelection[] = reviewed.map((file) => ({
         path: file.path,
@@ -193,7 +196,7 @@ export function CommitMessageAssistant({
       setWorkspaceStale(!freshWorkspace);
       setDraftChanged(!draftStillMatches);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "The AI provider request failed. You can retry or keep writing the commit manually.");
+      setError(reason instanceof Error ? reason.message : t("ai.requestFailed"));
       setConfirmed(false);
     } finally { setBusy(false); }
   }
@@ -202,37 +205,37 @@ export function CommitMessageAssistant({
 
   return (
     <section className="commitAiAssistant" aria-labelledby="commit-ai-title">
-      <div className="commitAiHeader"><h4 id="commit-ai-title">AI commit message suggestion</h4><button className="textButton" type="button" onClick={onClose}>Close</button></div>
-      <p className="settingsNotice">The provider receives only the reviewed staged diff. Responses stay separate from the commit message unless you explicitly use a commit suggestion. Manual commit remains available.</p>
-      <label className="commitAiOutputMode">AI output<select aria-label="AI output" value={outputMode} disabled={busy} onChange={(event) => { setOutputMode(event.target.value as typeof outputMode); setSuggestion(undefined); setSummaryResult(undefined); setSuggestionText(""); setConfirmed(false); setDraftChanged(false); }}><option value="commitMessage">Conventional commit message</option><option value="changeSummary">Change summary</option></select></label>
-      {busy && reviewed.length === 0 && <p role="status">Loading staged changes for review…</p>}
-      {settings?.provider === "none" && <p className="settingsNotice">Choose an AI provider in Settings before sending a request.</p>}
-      {settings?.provider === "openAiCompatible" && !settings.hasCloudCredential && <p className="settingsNotice">Save a cloud API key in Settings before sending a request.</p>}
+      <div className="commitAiHeader"><h4 id="commit-ai-title">{t("ai.title")}</h4><button className="textButton" type="button" onClick={onClose}>{t("ai.close")}</button></div>
+      <p className="settingsNotice">{t("ai.notice")}</p>
+      <label className="commitAiOutputMode">{t("ai.output")}<select aria-label={t("ai.output")} value={outputMode} disabled={busy} onChange={(event) => { setOutputMode(event.target.value as typeof outputMode); setSuggestion(undefined); setSummaryResult(undefined); setSuggestionText(""); setConfirmed(false); setDraftChanged(false); }}><option value="commitMessage">{t("ai.modeCommit")}</option><option value="changeSummary">{t("ai.modeSummary")}</option></select></label>
+      {busy && reviewed.length === 0 && <p role="status">{t("ai.loadingStaged")}</p>}
+      {settings?.provider === "none" && <p className="settingsNotice">{t("ai.chooseProvider")}</p>}
+      {settings?.provider === "openAiCompatible" && !settings.hasCloudCredential && <p className="settingsNotice">{t("ai.saveKey")}</p>}
       {reviewed.length > 0 && <>
         <div className="commitAiRequestDetails">
-          <p><strong>Provider endpoint:</strong> {settings?.baseUrl || (settings?.provider === "ollama" ? "Loopback Ollama endpoint" : "Loading provider settings…")}</p>
-          <p><strong>Prompt:</strong> {outputMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT}</p>
-          <p><strong>Scope:</strong> {reviewed.length} staged file scope{reviewed.length === 1 ? "" : "s"} · {(reviewDiffBytes / 1024).toFixed(1)} KiB</p>
+          <p><strong>{t("ai.endpoint")}</strong> {settings?.baseUrl || (settings?.provider === "ollama" ? t("ai.loopback") : t("ai.loadingProvider"))}</p>
+          <p><strong>{t("ai.prompt")}</strong> {outputMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT}</p>
+          <p><strong>{t("ai.scope")}</strong> {t(reviewed.length === 1 ? "ai.scopeOne" : "ai.scopeMany", { count: reviewed.length, kib: (reviewDiffBytes / 1024).toFixed(1) })}</p>
         </div>
         {reviewed.map((file) => <details className="privacyDiffPreview" key={file.path} open>
-          <summary>{file.path} · staged/index · {file.selections ? `${file.selections.length} selected hunk/row range${file.selections.length === 1 ? "" : "s"}` : "all staged changes"}</summary>
-          <pre>{diffText(file.document, file.selections) || "The reviewed staged diff is empty."}</pre>
+          <summary>{file.path} · staged/index · {file.selections ? t(file.selections.length === 1 ? "ai.rangesOne" : "ai.rangesMany", { count: file.selections.length }) : t("ai.allStaged")}</summary>
+          <pre>{diffText(file.document, file.selections) || t("ai.diffEmpty")}</pre>
         </details>)}
-        {workspaceStale && <p role="alert" className="taskCenterError">Staged changes changed. Review the current staged changes again.</p>}
-        {suggestion && workspaceStale && <p role="status">This suggestion is stale and cannot be applied.</p>}
-        {suggestion && draftChanged && <p role="status">The commit draft changed while the provider was responding. Your text was kept; start a new request to use a suggestion.</p>}
-        {!suggestion && !summaryResult && <label className="aiRequestConsent"><input type="checkbox" checked={confirmed} disabled={busy || workspaceStale} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the staged diff, prompt, and provider endpoint and want to send them.</label>}
+        {workspaceStale && <p role="alert" className="taskCenterError">{t("ai.stale")}</p>}
+        {suggestion && workspaceStale && <p role="status">{t("ai.staleSuggestion")}</p>}
+        {suggestion && draftChanged && <p role="status">{t("ai.draftChanged")}</p>}
+        {!suggestion && !summaryResult && <label className="aiRequestConsent"><input type="checkbox" checked={confirmed} disabled={busy || workspaceStale} onChange={(event) => setConfirmed(event.target.checked)} />{t("ai.consent")}</label>}
         {suggestion && <>
-          <label className="commitAiSuggestion">Suggestion from {suggestion.provider} · {suggestion.model}<textarea aria-label="Commit message suggestion" value={suggestionText} disabled={busy} onChange={(event) => setSuggestionText(event.target.value)} /></label>
+          <label className="commitAiSuggestion">{t("ai.suggestionFrom", { provider: suggestion.provider, model: suggestion.model })}<textarea aria-label={t("ai.suggestionAria")} value={suggestionText} disabled={busy} onChange={(event) => setSuggestionText(event.target.value)} /></label>
           <div className="commitAiActions">
-            <button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>Review current staged changes again</button>
-            <button type="button" className="primaryButton" disabled={!canUseSuggestion} onClick={() => { if (canUseSuggestion) onUseSuggestion(suggestionText); }}>Use suggestion</button>
+            <button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewAgain")}</button>
+            <button type="button" className="primaryButton" disabled={!canUseSuggestion} onClick={() => { if (canUseSuggestion) onUseSuggestion(suggestionText); }}>{t("ai.use")}</button>
           </div>
         </>}
-        {summaryResult && <section className="commitAiSummary" aria-label="AI change summary"><h5>Change summary · {summaryResult.model}</h5><pre>{summaryResult.response}</pre><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>Review current staged changes again</button></section>}
-        {!suggestion && !summaryResult && <button type="button" className="primaryButton" disabled={!confirmed || busy || settings?.provider === "none" || !settings || (settings.provider === "openAiCompatible" && !settings.hasCloudCredential)} onClick={() => void sendReviewed()}>{busy ? "Waiting for provider…" : outputMode === "changeSummary" ? "Summarize reviewed staged diff" : "Send reviewed staged diff"}</button>}
+        {summaryResult && <section className="commitAiSummary" aria-label={t("ai.summaryAria")}><h5>{t("ai.summaryHeading", { model: summaryResult.model })}</h5><pre>{summaryResult.response}</pre><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewAgain")}</button></section>}
+        {!suggestion && !summaryResult && <button type="button" className="primaryButton" disabled={!confirmed || busy || settings?.provider === "none" || !settings || (settings.provider === "openAiCompatible" && !settings.hasCloudCredential)} onClick={() => void sendReviewed()}>{busy ? t("ai.waiting") : outputMode === "changeSummary" ? t("ai.summarize") : t("ai.send")}</button>}
       </>}
-      {error && <div className="commitAiError" role="alert"><span>{error}</span><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>Review and retry</button></div>}
+      {error && <div className="commitAiError" role="alert"><span>{error}</span><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewRetry")}</button></div>}
     </section>
   );
 }

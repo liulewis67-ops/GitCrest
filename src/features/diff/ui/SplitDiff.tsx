@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import type { DiffDocumentResponse } from "../../../api/client";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { splitInlineDiff } from "../model/inline-diff";
@@ -17,6 +18,7 @@ interface SplitDiffProps {
 }
 
 export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow }: SplitDiffProps) {
+  const { t } = useI18n();
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
   const [activeHunk, setActiveHunk] = useState<number | null>(null);
@@ -64,13 +66,13 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
   }, [document.revision, navigateHunk, navigableHunks.length]);
   if (document.status !== "text") {
     const descriptions: Record<DiffDocumentResponse["status"], string> = {
-      text: "Text diff",
-      binary: "This file is binary; Git does not provide a line based diff.",
-      empty: "No textual changes remain for this comparison. Refresh the working tree to check for external edits.",
-      conflicted: "This file is conflicted. Three way conflict review is available in a later workflow stage.",
-      ignored: "This path is ignored by Git and has no tracked diff.",
-      symlink: "This path is a symbolic link. GitCrest shows its status without following its target.",
-      submodule: "This path is a submodule. Its nested repository diff is not available yet.",
+      text: t("sd.text"),
+      binary: t("sd.binary"),
+      empty: t("sd.empty"),
+      conflicted: t("sd.conflicted"),
+      ignored: t("sd.ignored"),
+      symlink: t("sd.symlink"),
+      submodule: t("sd.submodule"),
     };
     return <div className="diffSpecialState" role="status"><span className={`diffStateBadge diffState-${document.status}`}>{document.status}</span><p>{descriptions[document.status]}</p></div>;
   }
@@ -78,21 +80,21 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
   return (
     <div
       className="splitDiff"
-      aria-label={`${document.scope} diff for ${document.path}`}
+      aria-label={t("sd.diffAria", { scope: document.scope, path: document.path })}
       tabIndex={0}
     >
-      <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? "COMMIT ↔ FIRST PARENT" : document.scope === "index" ? "INDEX ↔ HEAD" : "WORKING TREE ↔ INDEX"}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
-      <div className="splitDiffNavigation" aria-label="Diff navigation">
-        <span>{navigableHunks.length ? `${activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1} / ${navigableHunks.length} changes` : "No changes"}</span>
-        <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>Split view</button>
-        <button type="button" aria-pressed={view === "monaco"} disabled={monacoDegraded} title={monacoDegraded ? "This diff is too large for Monaco view; use Split view." : undefined} onClick={() => setView("monaco")}>Monaco view</button>
-        {onOpenWindow && <button type="button" onClick={onOpenWindow}>Open in Diff window</button>}
-        <button type="button" onClick={() => navigateHunk(-1)} disabled={navigableHunks.length === 0} title="Previous change (Shift+F7)">Previous change</button>
-        <button type="button" onClick={() => navigateHunk(1)} disabled={navigableHunks.length === 0} title="Next change (F7)">Next change</button>
+      <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
+      <div className="splitDiffNavigation" aria-label={t("sd.navAria")}>
+        <span>{navigableHunks.length ? t("sd.changes", { current: activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1, total: navigableHunks.length }) : t("sd.noChanges")}</span>
+        <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>{t("sd.splitView")}</button>
+        <button type="button" aria-pressed={view === "monaco"} disabled={monacoDegraded} title={monacoDegraded ? t("sd.monacoTooLargeTitle") : undefined} onClick={() => setView("monaco")}>{t("sd.monacoView")}</button>
+        {onOpenWindow && <button type="button" onClick={onOpenWindow}>{t("sd.openWindow")}</button>}
+        <button type="button" onClick={() => navigateHunk(-1)} disabled={navigableHunks.length === 0} title={t("sd.prevTitle")}>{t("sd.prev")}</button>
+        <button type="button" onClick={() => navigateHunk(1)} disabled={navigableHunks.length === 0} title={t("sd.nextTitle")}>{t("sd.next")}</button>
       </div>
-      {monacoDegraded && <div className="diffSyntaxFallback" role="status">This diff is too large for Monaco view. Split view remains available.</div>}
-      <div className="splitDiffColumns" aria-hidden="true"><div /><div>OLD</div><div>NEW</div></div>
-      {view === "monaco" && !language.supported && <div className="diffSyntaxFallback" role="status">No Tree-sitter grammar is bundled for this file type. Monaco is showing plain text.</div>}
+      {monacoDegraded && <div className="diffSyntaxFallback" role="status">{t("sd.monacoTooLarge")}</div>}
+      <div className="splitDiffColumns" aria-hidden="true"><div /><div>{t("sd.old")}</div><div>{t("sd.new")}</div></div>
+      {view === "monaco" && !language.supported && <div className="diffSyntaxFallback" role="status">{t("sd.noGrammar")}</div>}
       {document.hunks.map((hunk, hunkIndex) => {
         const changeRowIndexes = hunk.rows.flatMap((row, rowIndex) => row.kind === "change" ? [rowIndex] : []);
         const hunkSelected = selection.some((item) => item.hunkIndex === hunkIndex && item.rowIndex === undefined);
@@ -101,37 +103,37 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
         <section
           className={`splitDiffHunk${activeHunk === hunkIndex ? " splitDiffHunk-active" : ""}`}
           key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`}
-          aria-label={`Change hunk ${hunkIndex + 1}`}
+          aria-label={t("sd.hunkAria", { n: hunkIndex + 1 })}
           ref={(element) => { hunkRefs.current[hunkIndex] = element; }}
         >
           <div className="splitDiffHunkHeader">
             {!readOnly ? <label className="hunkSelection"><input
               type="checkbox"
-              aria-label={`Select hunk ${hunkIndex + 1}`}
+              aria-label={t("sd.selectHunkAria", { n: hunkIndex + 1 })}
               checked={hunkSelected || allRowsSelected}
               disabled={disabled || changeRowIndexes.length === 0}
               onChange={(event) => setSelection((current) => {
                 const rest = current.filter((item) => item.hunkIndex !== hunkIndex);
                 return event.target.checked ? [...rest, { hunkIndex }] : rest;
               })}
-            />Select hunk</label> : <span className="hunkSelection">Hunk {hunkIndex + 1}</span>}
+            />{t("sd.selectHunk")}</label> : <span className="hunkSelection">{t("sd.hunkLabel", { n: hunkIndex + 1 })}</span>}
             <code>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</code>
             <button
               type="button"
               className="diffHunkToggle"
               aria-expanded={!collapsedHunks.has(hunkIndex)}
-              aria-label={`${collapsedHunks.has(hunkIndex) ? "Expand" : "Collapse"} hunk ${hunkIndex + 1}`}
+              aria-label={collapsedHunks.has(hunkIndex) ? t("sd.expandAria", { n: hunkIndex + 1 }) : t("sd.collapseAria", { n: hunkIndex + 1 })}
               onClick={() => setCollapsedHunks((current) => {
                 const next = new Set(current);
                 if (next.has(hunkIndex)) next.delete(hunkIndex);
                 else next.add(hunkIndex);
                 return next;
               })}
-            >{collapsedHunks.has(hunkIndex) ? "Expand" : "Collapse"}</button>
+            >{collapsedHunks.has(hunkIndex) ? t("sd.expand") : t("sd.collapse")}</button>
           </div>
-          {!collapsedHunks.has(hunkIndex) && view === "monaco" && <Suspense fallback={<div className="monacoDiffLoading" role="status">Loading Monaco editor…</div>}>
+          {!collapsedHunks.has(hunkIndex) && view === "monaco" && <Suspense fallback={<div className="monacoDiffLoading" role="status">{t("sd.loadingMonaco")}</div>}>
             <MonacoDiffHunk
-              label={`Monaco diff hunk ${hunkIndex + 1}`}
+              label={t("sd.monacoHunk", { n: hunkIndex + 1 })}
               original={hunk.rows.flatMap((row) => row.oldText === null || row.oldText === undefined ? [] : [row.oldText]).join("\n")}
               modified={hunk.rows.flatMap((row) => row.newText === null || row.newText === undefined ? [] : [row.newText]).join("\n")}
               language={language.id}
@@ -140,10 +142,10 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
             />
           </Suspense>}
           {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => (
-            <div className={`splitDiffRow splitDiffRow-${row.kind}`} role="group" aria-label={row.kind === "change" ? "Changed diff lines" : "Unchanged context lines"} key={`${hunkIndex}:${rowIndex}`}>
+            <div className={`splitDiffRow splitDiffRow-${row.kind}`} role="group" aria-label={row.kind === "change" ? t("sd.changedLines") : t("sd.contextLines")} key={`${hunkIndex}:${rowIndex}`}>
               {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"
-                aria-label={`Select hunk ${hunkIndex + 1} change row ${rowIndex + 1}`}
+                aria-label={t("sd.selectRowAria", { hunk: hunkIndex + 1, row: rowIndex + 1 })}
                 checked={selection.some((item) => item.hunkIndex === hunkIndex && (item.rowIndex === undefined || item.rowIndex === rowIndex))}
                 disabled={disabled}
                 onChange={(event) => setSelection((current) => {
@@ -162,10 +164,10 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                 className="splitDiffCell"
                 role="group"
                 aria-label={row.oldText === null
-                  ? "No previous line"
+                  ? t("sd.noPrevious")
                   : row.kind === "change"
-                    ? `Deleted line ${row.oldLine ?? "unknown"}: ${row.oldText}`
-                    : `Context line ${row.oldLine ?? "unknown"}: ${row.oldText}`}
+                    ? t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })
+                    : t("sd.contextLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })}
               >
                 <span className="splitDiffLineNumber">{row.oldLine ?? ""}</span>
                 <code>{row.oldText !== null && row.oldText !== undefined && row.kind === "change" ? <InlineDiffText text={row.oldText} counterpart={row.newText ?? null} /> : row.oldText ?? ""}</code>
@@ -174,10 +176,10 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                 className="splitDiffCell"
                 role="group"
                 aria-label={row.newText === null
-                  ? "No added line"
+                  ? t("sd.noAdded")
                   : row.kind === "change"
-                    ? `Added line ${row.newLine ?? "unknown"}: ${row.newText}`
-                    : `Context line ${row.newLine ?? "unknown"}: ${row.newText}`}
+                    ? t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })
+                    : t("sd.contextLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}
               >
                 <span className="splitDiffLineNumber">{row.newLine ?? ""}</span>
                 <code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code>
@@ -188,12 +190,12 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
         );
       })}
       {!readOnly && <div className="diffSelectionActions">
-        <span>{selection.length} selection{selection.length === 1 ? "" : "s"}</span>
+        <span>{t(selection.length === 1 ? "sd.selectionOne" : "sd.selectionMany", { count: selection.length })}</span>
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
-          {document.scope === "index" ? "Unstage selected changes" : "Stage selected changes"}
+          {document.scope === "index" ? t("sd.unstageSel") : t("sd.stageSel")}
         </button>
-        {document.scope === "workingTree" && onDiscardSelection && <button className="dangerTextButton" type="button" disabled={disabled || selection.length === 0} onClick={() => onDiscardSelection(selection)}>Discard selected changes…</button>}
-        {document.scope === "index" && onCommitSelection && <button type="button" disabled={disabled || selection.length === 0} onClick={() => onCommitSelection(selection)}>Add to commit selection</button>}
+        {document.scope === "workingTree" && onDiscardSelection && <button className="dangerTextButton" type="button" disabled={disabled || selection.length === 0} onClick={() => onDiscardSelection(selection)}>{t("sd.discardSel")}</button>}
+        {document.scope === "index" && onCommitSelection && <button type="button" disabled={disabled || selection.length === 0} onClick={() => onCommitSelection(selection)}>{t("sd.addToCommit")}</button>}
       </div>}
     </div>
   );

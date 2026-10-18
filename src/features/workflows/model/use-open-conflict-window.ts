@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useCallback } from "react";
 import type { TaskSnapshotResponse } from "../../../api/client";
 import { requireGitCrestBridge } from "../../../api/bridge";
@@ -14,7 +15,7 @@ export function useOpenConflictWindow({ clearTaskError, setTaskError }: OpenConf
       await requireGitCrestBridge().openConflictWindow({ repoId: task.repoId, taskId: task.taskId });
       clearTaskError();
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : "Could not open the conflict window.");
+      setTaskError(error instanceof Error ? error.message : t("err.openConflict"));
     }
   }, [clearTaskError, setTaskError]);
 }

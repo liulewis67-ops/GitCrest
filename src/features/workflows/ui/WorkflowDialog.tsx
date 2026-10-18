@@ -1,9 +1,8 @@
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type WorkflowPreflightResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import type { WorkflowAction } from "../model/workflow-action";
-
-const labels: Record<WorkflowAction, string> = { merge: "Merge", cherryPick: "Cherry-pick", revert: "Revert" };
 
 export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, onClose, onStarted }: {
   api: GitCrestApiClient;
@@ -15,6 +14,9 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
   onClose: () => void;
   onStarted: (task: Awaited<ReturnType<GitCrestApiClient["startRepositoryWorkflow"]>>) => void;
 }) {
+  const { t } = useI18n();
+  const labels: Record<WorkflowAction, string> = { merge: t("wf.merge"), cherryPick: t("wf.cherryPick"), revert: t("wf.revert") };
+  const startLabels: Record<WorkflowAction, string> = { merge: t("wf.startMerge"), cherryPick: t("wf.startCherryPick"), revert: t("wf.startRevert") };
   const [state, setState] = useState<{ key: string; loading: boolean; snapshot?: WorkflowPreflightResponse; error?: string }>({ key: "", loading: false });
   const [busy, setBusy] = useState(false);
   const [noFastForward, setNoFastForward] = useState(false);
@@ -29,7 +31,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
     void api.withSignal(controller.signal).preflightRepositoryWorkflow(repoId, action, targetOid).then((snapshot) => {
       if (!controller.signal.aborted) setState({ key, loading: false, snapshot });
     }).catch((reason: unknown) => {
-      const message = reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not inspect this Git operation.";
+      const message = reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("wf.inspectFailed");
       if (!controller.signal.aborted) setState({ key, loading: false, error: message });
     });
     return () => controller.abort();
@@ -43,7 +45,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
     try {
       onStarted(await api.startRepositoryWorkflow(repoId, { action, targetOid, expectedHeadOid: snapshot.headOid, ...(action === "merge" && noFastForward ? { noFastForward: true } : {}) }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start this Git operation.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("wf.startFailed"));
     } finally {
       setBusy(false);
     }
@@ -52,25 +54,25 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
   const snapshot = state.key === key ? state.snapshot : undefined;
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader"><div><p className="sectionEyebrow">REVIEW GIT OPERATION</p><h2 id="workflow-dialog-title">{labels[action]} {targetLabel ?? "commit"}</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button></div>
+      <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("wf.eyebrow")}</p><h2 id="workflow-dialog-title">{t("wf.title", { action: labels[action], target: targetLabel ?? t("wf.commitWord") })}</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("wf.close")}</button></div>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>{targetLabel ? "TARGET BRANCH" : "TARGET COMMIT"}</span><strong className="monoText" title={targetOid}>{targetLabel ? `${targetLabel} · ${targetOid.slice(0, 12)}` : targetOid.slice(0, 12)}</strong></div>
-        {state.key !== key || state.loading ? <p role="status">Checking repository state…</p> : state.error && <p className="taskCenterError" role="alert">{state.error}</p>}
+        <div className="repositoryFact"><span>{targetLabel ? t("wf.targetBranch") : t("wf.targetCommit")}</span><strong className="monoText" title={targetOid}>{targetLabel ? `${targetLabel} · ${targetOid.slice(0, 12)}` : targetOid.slice(0, 12)}</strong></div>
+        {state.key !== key || state.loading ? <p role="status">{t("wf.checking")}</p> : state.error && <p className="taskCenterError" role="alert">{state.error}</p>}
         {snapshot && <>
-          <div className="repositoryFact"><span>SUBJECT</span><strong>{snapshot.targetSubject || "(no subject)"}</strong></div>
-          <div className="repositoryFact"><span>HEAD</span><strong className="monoText">{snapshot.headOid?.slice(0, 12) || "Unborn"}</strong></div>
-          {snapshot.mergeKind === "upToDate" && <p className="cloneHelp" role="status">Already up to date: this commit is already part of the current branch, so there is nothing to merge.</p>}
-          {snapshot.mergeKind === "fastForward" && <><p className="cloneHelp" role="status">{noFastForward ? `A merge commit will record this merge of ${snapshot.incomingCommitCount} commit(s), keeping the branch history visible.` : `Fast-forward: the current branch moves ahead by ${snapshot.incomingCommitCount} commit(s) and no merge commit is created.`}</p>
-            <label className="rebaseConfirm"><input type="checkbox" checked={noFastForward} disabled={busy} onChange={(event) => setNoFastForward(event.target.checked)} />Always create a merge commit</label></>}
-          {snapshot.mergeKind === "mergeCommit" && <p className="cloneHelp" role="status">A merge commit will combine {snapshot.incomingCommitCount} incoming commit(s) with the current branch. Conflicts, if any, open in the resolver.</p>}
-          {snapshot.operationInProgress && <p className="taskCenterError" role="alert">A {snapshot.operationInProgress} operation is already in progress.</p>}
-          {!snapshot.isClean && <p className="cloneHelp">Working tree has {snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount} change(s). Commit or shelve them before starting.</p>}
-          {!snapshot.isClean && snapshot.dirtyPaths.length > 0 && <ul className="workflowPathList" aria-label="Uncommitted files">{snapshot.dirtyPaths.slice(0, 8).map((path) => <li key={path} title={path}>{path}</li>)}{snapshot.dirtyPaths.length > 8 && <li>…and {snapshot.dirtyPaths.length - 8 + snapshot.omittedDirtyPathCount} more</li>}</ul>}
+          <div className="repositoryFact"><span>{t("wf.subject")}</span><strong>{snapshot.targetSubject || t("push.noSubject")}</strong></div>
+          <div className="repositoryFact"><span>{t("wf.head")}</span><strong className="monoText">{snapshot.headOid?.slice(0, 12) || t("wf.unborn")}</strong></div>
+          {snapshot.mergeKind === "upToDate" && <p className="cloneHelp" role="status">{t("wf.upToDate")}</p>}
+          {snapshot.mergeKind === "fastForward" && <><p className="cloneHelp" role="status">{noFastForward ? t("wf.mergeCommitWill", { count: snapshot.incomingCommitCount }) : t("wf.fastForward", { count: snapshot.incomingCommitCount })}</p>
+            <label className="rebaseConfirm"><input type="checkbox" checked={noFastForward} disabled={busy} onChange={(event) => setNoFastForward(event.target.checked)} />{t("wf.alwaysMergeCommit")}</label></>}
+          {snapshot.mergeKind === "mergeCommit" && <p className="cloneHelp" role="status">{t("wf.mergeCombine", { count: snapshot.incomingCommitCount })}</p>}
+          {snapshot.operationInProgress && <p className="taskCenterError" role="alert">{t("wf.opInProgress", { op: snapshot.operationInProgress })}</p>}
+          {!snapshot.isClean && <p className="cloneHelp">{t("wf.dirty", { count: snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount })}</p>}
+          {!snapshot.isClean && snapshot.dirtyPaths.length > 0 && <ul className="workflowPathList" aria-label={t("wf.uncommitted")}>{snapshot.dirtyPaths.slice(0, 8).map((path) => <li key={path} title={path}>{path}</li>)}{snapshot.dirtyPaths.length > 8 && <li>{t("wf.andMore", { count: snapshot.dirtyPaths.length - 8 + snapshot.omittedDirtyPathCount })}</li>}</ul>}
           {snapshot.conflictedPaths.length > 0 && <ul className="workflowPathList">{snapshot.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul>}
-          {!snapshot.canStart && !snapshot.operationInProgress && snapshot.isClean && snapshot.mergeKind !== "upToDate" && <p className="cloneHelp">This operation is not available for the current repository state.</p>}
+          {!snapshot.canStart && !snapshot.operationInProgress && snapshot.isClean && snapshot.mergeKind !== "upToDate" && <p className="cloneHelp">{t("wf.notAvailable")}</p>}
         </>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
-        <div className="taskCenterActions"><button className="quietButton compact" type="button" disabled={busy || state.loading} onClick={() => { setError(""); setRefreshKey((current) => current + 1); }}>Refresh preview</button><button className="primaryButton" type="button" disabled={!snapshot?.canStart || !snapshot.headOid || busy} onClick={() => void confirm()}>{busy ? "Starting…" : `Start ${labels[action].toLowerCase()}`}</button></div>
+        <div className="taskCenterActions"><button className="quietButton compact" type="button" disabled={busy || state.loading} onClick={() => { setError(""); setRefreshKey((current) => current + 1); }}>{t("wf.refresh")}</button><button className="primaryButton" type="button" disabled={!snapshot?.canStart || !snapshot.headOid || busy} onClick={() => void confirm()}>{busy ? t("wf.starting") : startLabels[action]}</button></div>
       </div>
     </section>
   </div>;

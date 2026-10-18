@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   GitCrestApiError,
@@ -62,7 +63,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
       setPreflight(undefined);
-      setError(message || (requestError instanceof Error ? requestError.message : "Could not preview the push."));
+      setError(message || (requestError instanceof Error ? requestError.message : t("err.pushPreview")));
     } finally {
       setLoading(false);
     }
@@ -95,7 +96,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
       setOpen(false);
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : "Could not start the push task."));
+      setError(message || (requestError instanceof Error ? requestError.message : t("err.pushStart")));
       if (requestError instanceof GitCrestApiError && requestError.body.error.code === "PUSH_PREFLIGHT_STALE") {
         void refreshPreflight(repoId, target || null);
       }
@@ -132,7 +133,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
       setOpen(false);
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : "The commit succeeded, but its push could not start."));
+      setError(message || (requestError instanceof Error ? requestError.message : t("err.pushAfterCommit")));
     } finally {
       setLoading(false);
       setBusy(false);

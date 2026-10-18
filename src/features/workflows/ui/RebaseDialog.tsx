@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useState } from "react";
 import {
   GitCrestApiError,
@@ -22,6 +23,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
   onClose: () => void;
   onStarted: (task: TaskSnapshotResponse) => void;
 }) {
+  const { t } = useI18n();
   const targets = useMemo(
     () => (branches?.branches || []).filter((branch) => !branch.isCurrent),
     [branches],
@@ -48,7 +50,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
       setBackupSnapshot(snapshot);
       setSelectedBackup(snapshot.backups[0]?.reference || "");
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? reason.body.error.message : "Could not load rebase backups.");
+      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? reason.body.error.message : t("rb.loadBackups"));
     });
     return () => controller.abort();
   }, [api, repoId]);
@@ -81,7 +83,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
       setPreview(next);
       setTodo(next.commits.map((commit) => ({ oid: commit.oid, action: "pick", message: null })));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not inspect this rebase.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rb.inspectFailed"));
     } finally {
       setLoading(false);
     }
@@ -115,7 +117,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
         confirmPublishedRewrite,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start this rebase.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rb.startFailed"));
     } finally {
       setBusy(false);
     }
@@ -134,7 +136,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
         confirmRollback: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start rollback.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rb.rollbackFailed"));
     } finally {
       setBusy(false);
     }
@@ -143,73 +145,73 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter rebaseDialog" role="dialog" aria-modal="true" aria-labelledby="rebase-dialog-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">REVIEW HISTORY REWRITE</p><h2 id="rebase-dialog-title">Interactive rebase</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>
+        <div><p className="sectionEyebrow">{t("rb.eyebrow")}</p><h2 id="rebase-dialog-title">{t("rb.title")}</h2></div>
+        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rb.close")}</button>
       </div>
       <div className="workflowDialogBody">
-        <label className="rebaseTargetField" htmlFor="rebase-onto">Rebase current branch onto
+        <label className="rebaseTargetField" htmlFor="rebase-onto">{t("rb.onto")}
           <select id="rebase-onto" value={ontoOid} disabled={disabled || loading || busy || targets.length === 0} onChange={(event) => { setOntoOid(event.target.value); setPreview(undefined); setTodo([]); }}>
             {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} · {branch.oid.slice(0, 9)}</option>)}
           </select>
         </label>
-        {targets.length === 0 && <p className="cloneHelp">There is no other local or remote-tracking branch to use as a target.</p>}
-        {disabled && <p className="cloneHelp">Wait for the current repository task to finish before starting a rebase.</p>}
+        {targets.length === 0 && <p className="cloneHelp">{t("rb.noTargets")}</p>}
+        {disabled && <p className="cloneHelp">{t("rb.waitTask")}</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <section className="rebaseRollbackPanel" aria-labelledby="rebase-rollback-heading">
-          <h3 id="rebase-rollback-heading">Restore a rebase backup</h3>
+          <h3 id="rebase-rollback-heading">{t("rb.restoreHeading")}</h3>
           {backupSnapshot?.backups.length ? <>
-            <label className="rebaseTargetField" htmlFor="rebase-backup">Saved branch state
+            <label className="rebaseTargetField" htmlFor="rebase-backup">{t("rb.savedState")}
               <select id="rebase-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRollback(false); }}>
-                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || "(no subject)"} · {backup.oid.slice(0, 9)}</option>)}
+                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} · {backup.oid.slice(0, 9)}</option>)}
               </select>
             </label>
-            {!backupSnapshot.canRollback && <p className="cloneHelp">Rollback is available only on a clean attached branch with no Git operation in progress.</p>}
-            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRollback} onChange={(event) => setConfirmRollback(event.target.checked)} />I understand restoring this backup moves the current branch and replaces its checked-out files.</label>
-            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRollback || !confirmRollback || disabled || busy} onClick={() => void rollback()}>{busy ? "Starting…" : "Restore selected backup"}</button>
-          </> : <p className="cloneHelp">No GitCrest rebase backups are available in this repository.</p>}
+            {!backupSnapshot.canRollback && <p className="cloneHelp">{t("rb.rollbackOnly")}</p>}
+            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRollback} onChange={(event) => setConfirmRollback(event.target.checked)} />{t("rb.rollbackConfirm")}</label>
+            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRollback || !confirmRollback || disabled || busy} onClick={() => void rollback()}>{busy ? t("rb.starting") : t("rb.restoreBtn")}</button>
+          </> : <p className="cloneHelp">{t("rb.noBackups")}</p>}
         </section>
-        {loading && <p role="status">Reviewing the commit range…</p>}
+        {loading && <p role="status">{t("rb.reviewing")}</p>}
         {preview && <>
           <div className="rebasePreviewFacts">
-            <div className="repositoryFact"><span>BRANCH</span><strong>{preview.currentBranch || "Detached HEAD"}</strong></div>
-            <div className="repositoryFact"><span>HEAD</span><strong className="monoText">{preview.headOid?.slice(0, 12) || "Unborn"}</strong></div>
-            <div className="repositoryFact"><span>ONTO</span><strong className="monoText">{preview.ontoOid.slice(0, 12)}</strong></div>
-            <div className="repositoryFact"><span>COMMITS</span><strong>{preview.commits.length}{preview.omittedCommitCount ? ` + ${preview.omittedCommitCount} omitted` : ""}</strong></div>
+            <div className="repositoryFact"><span>{t("rb.branch")}</span><strong>{preview.currentBranch || t("rb.detached")}</strong></div>
+            <div className="repositoryFact"><span>{t("rb.head")}</span><strong className="monoText">{preview.headOid?.slice(0, 12) || t("rb.unborn")}</strong></div>
+            <div className="repositoryFact"><span>{t("rb.onto2")}</span><strong className="monoText">{preview.ontoOid.slice(0, 12)}</strong></div>
+            <div className="repositoryFact"><span>{t("rb.commits")}</span><strong>{preview.commits.length}{preview.omittedCommitCount ? t("rb.omittedSuffix", { count: preview.omittedCommitCount }) : ""}</strong></div>
           </div>
-          <section className="operationImpactNotice" aria-label="Rebase impact explanation">
-            <h3>What this rebase will change</h3>
-            <p><strong>{preview.currentBranch || "Detached HEAD"}</strong> will replay the reviewed todo onto <code>{preview.ontoOid.slice(0, 12)}</code>. Review the action and order shown below; the todo currently contains {todo.length} commit(s){preview.omittedCommitCount ? ` and ${preview.omittedCommitCount} additional commit(s) were omitted from this bounded preview` : ""}.</p>
-            {dropCount > 0 && <p>{dropCount} commit(s) marked drop will not be replayed.</p>}
-            {preview.publishedCommitOids.length > 0 && <p>{preview.publishedCommitOids.length} previewed commit(s) are already reachable from remote-tracking refs and may receive new OIDs when rewritten.</p>}
-            {preview.dirtyPaths.length > 0 && <p>{preview.dirtyPaths.length} local changed path(s) are present; the rebase is not available until the worktree is clean.</p>}
-            <p>A rollback ref is created before execution. This deterministic summary uses the current preview and edited todo, even when an AI provider is unavailable.</p>
+          <section className="operationImpactNotice" aria-label={t("rb.impactAria")}>
+            <h3>{t("rb.impactHeading")}</h3>
+            <p>{t("rb.impactBody", { branch: preview.currentBranch || t("rb.detached"), onto: preview.ontoOid.slice(0, 12), count: todo.length, omitted: preview.omittedCommitCount ? t("rb.impactOmitted", { count: preview.omittedCommitCount }) : "" })}</p>
+            {dropCount > 0 && <p>{t("rb.dropNote", { count: dropCount })}</p>}
+            {preview.publishedCommitOids.length > 0 && <p>{t("rb.publishedNote", { count: preview.publishedCommitOids.length })}</p>}
+            {preview.dirtyPaths.length > 0 && <p>{t("rb.dirtyNote", { count: preview.dirtyPaths.length })}</p>}
+            <p>{t("rb.rollbackNote")}</p>
           </section>
-          {!preview.canStart && <p className="taskCenterError" role="alert">This branch cannot be rebased in its current state. Check for a dirty worktree, active operation, detached HEAD, or an oversized commit range.</p>}
-          {preview.publishedCommitOids.length > 0 && <label className="rebaseConfirm"><input type="checkbox" checked={confirmPublishedRewrite} onChange={(event) => setConfirmPublishedRewrite(event.target.checked)} />I understand this rewrites {preview.publishedCommitOids.length} commit(s) already reachable from a remote-tracking branch.</label>}
-          <ol className="rebaseTodoList" aria-label="Rebase todo">
+          {!preview.canStart && <p className="taskCenterError" role="alert">{t("rb.cannotRebase")}</p>}
+          {preview.publishedCommitOids.length > 0 && <label className="rebaseConfirm"><input type="checkbox" checked={confirmPublishedRewrite} onChange={(event) => setConfirmPublishedRewrite(event.target.checked)} />{t("rb.publishedConfirm", { count: preview.publishedCommitOids.length })}</label>}
+          <ol className="rebaseTodoList" aria-label={t("rb.todoAria")}>
             {todo.map((item, index) => {
               const commit = preview.commits.find((entry) => entry.oid === item.oid);
               return <li key={item.oid}>
                 <div className="rebaseTodoRow">
                   <span className="monoText rebaseTodoOid">{item.oid.slice(0, 9)}</span>
-                  <select aria-label={`Action for ${item.oid.slice(0, 9)}`} value={item.action} disabled={busy} onChange={(event) => updateTodo(index, { action: event.target.value as RebaseTodoItem["action"], message: event.target.value === "reword" ? item.message || commit?.subject || "" : null })}>
+                  <select aria-label={t("rb.actionFor", { oid: item.oid.slice(0, 9) })} value={item.action} disabled={busy} onChange={(event) => updateTodo(index, { action: event.target.value as RebaseTodoItem["action"], message: event.target.value === "reword" ? item.message || commit?.subject || "" : null })}>
                     {ACTIONS.map((action) => <option key={action} value={action}>{action}</option>)}
                   </select>
-                  <span className="rebaseTodoSubject" title={commit?.subject}>{commit?.subject || "(no subject)"}</span>
-                  <button className="quietButton compact" type="button" aria-label={`Move ${item.oid.slice(0, 9)} up`} disabled={busy || index === 0} onClick={() => moveTodo(index, -1)}>↑</button>
-                  <button className="quietButton compact" type="button" aria-label={`Move ${item.oid.slice(0, 9)} down`} disabled={busy || index === todo.length - 1} onClick={() => moveTodo(index, 1)}>↓</button>
+                  <span className="rebaseTodoSubject" title={commit?.subject}>{commit?.subject || t("rb.noSubject")}</span>
+                  <button className="quietButton compact" type="button" aria-label={t("rb.moveUp", { oid: item.oid.slice(0, 9) })} disabled={busy || index === 0} onClick={() => moveTodo(index, -1)}>↑</button>
+                  <button className="quietButton compact" type="button" aria-label={t("rb.moveDown", { oid: item.oid.slice(0, 9) })} disabled={busy || index === todo.length - 1} onClick={() => moveTodo(index, 1)}>↓</button>
                 </div>
-                {item.action === "reword" && <textarea className="rebaseMessage" aria-label={`Replacement message for ${item.oid.slice(0, 9)}`} value={item.message || ""} disabled={busy} onChange={(event) => updateTodo(index, { message: event.target.value })} rows={3} />}
+                {item.action === "reword" && <textarea className="rebaseMessage" aria-label={t("rb.replacement", { oid: item.oid.slice(0, 9) })} value={item.message || ""} disabled={busy} onChange={(event) => updateTodo(index, { message: event.target.value })} rows={3} />}
               </li>;
             })}
           </ol>
-          {dropCount > 0 && <label className="rebaseConfirm"><input type="checkbox" checked={confirmDrop} onChange={(event) => setConfirmDrop(event.target.checked)} />I understand {dropCount} dropped commit(s) will not be replayed.</label>}
+          {dropCount > 0 && <label className="rebaseConfirm"><input type="checkbox" checked={confirmDrop} onChange={(event) => setConfirmDrop(event.target.checked)} />{t("rb.dropConfirm", { count: dropCount })}</label>}
         </>}
         <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={!ontoOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? "Reviewing…" : "Refresh preview"}</button>
-          <button className="primaryButton" type="button" disabled={!canStart} onClick={() => void start()}>{busy ? "Starting…" : "Start rebase"}</button>
+          <button className="quietButton compact" type="button" disabled={!ontoOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rb.reviewingBtn") : t("rb.refresh")}</button>
+          <button className="primaryButton" type="button" disabled={!canStart} onClick={() => void start()}>{busy ? t("rb.starting") : t("rb.start")}</button>
         </div>
-        {preview && <p className="cloneHelp">A rollback ref is created before execution. The task log shows its name.</p>}
+        {preview && <p className="cloneHelp">{t("rb.footer")}</p>}
       </div>
     </section>
   </div>;

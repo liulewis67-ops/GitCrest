@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
   GitCrestApiError,
@@ -41,7 +42,7 @@ export function useRemoteMutations({
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (isRepositoryOpen(targetRepoId) && getCacheGeneration(targetRepoId) === requestGeneration) {
-        setRemoteError(targetRepoId, message || (error instanceof Error ? error.message : "Could not update repository remotes."));
+        setRemoteError(targetRepoId, message || (error instanceof Error ? error.message : t("err.updateRemotes")));
       }
     } finally {
       setBusy(false);

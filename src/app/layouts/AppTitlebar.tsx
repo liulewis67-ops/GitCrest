@@ -1,6 +1,7 @@
 import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences, type Theme } from "../../features/settings";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
+import { useI18n } from "../../shared/i18n";
 
 export type AppPage = "welcome" | "workspace";
 
@@ -43,20 +44,22 @@ export function AppTitlebar({
   onOpenTasks,
   onOpenSettings,
 }: AppTitlebarProps) {
+  const { t } = useI18n();
   const connecting = status.startsWith("Starting");
-  const connectionLabel = connected ? "Core connected" : connecting ? "Starting core" : "Core unavailable";
+  const connectionLabel = connected ? t("titlebar.coreConnected") : connecting ? t("titlebar.coreStarting") : t("titlebar.coreUnavailable");
+  const themeName = theme === "system" ? t("theme.system") : theme === "dark" ? t("theme.dark") : t("theme.light");
 
   return (
     <header className="titlebar">
-      <button className="brandButton" type="button" onClick={() => onPageChange("welcome")} aria-label="Go to Welcome">
+      <button className="brandButton" type="button" onClick={() => onPageChange("welcome")} aria-label={t("titlebar.goWelcome")}>
         <span className="brandMark" aria-hidden="true">G</span>
         <span className="brandName">GitCrest</span>
       </button>
-      <nav className="pageTabs" aria-label="Primary navigation">
-        <button type="button" className={page === "welcome" ? "pageTab active" : "pageTab"} onClick={() => onPageChange("welcome")}>Welcome</button>
-        <button type="button" className={page === "workspace" ? "pageTab active" : "pageTab"} onClick={() => onPageChange("workspace")}>Workspace</button>
+      <nav className="pageTabs" aria-label={t("titlebar.primaryNav")}>
+        <button type="button" className={page === "welcome" ? "pageTab active" : "pageTab"} onClick={() => onPageChange("welcome")}>{t("titlebar.welcome")}</button>
+        <button type="button" className={page === "workspace" ? "pageTab active" : "pageTab"} onClick={() => onPageChange("workspace")}>{t("titlebar.workspace")}</button>
       </nav>
-      <div className="repositoryTabs" role="tablist" aria-label="Open repositories">
+      <div className="repositoryTabs" role="tablist" aria-label={t("titlebar.openRepositories")}>
         {openRepoIds.map((repoId) => {
           const repository = repositories.find((item) => item.repoId === repoId);
           if (!repository) return null;
@@ -67,22 +70,22 @@ export function AppTitlebar({
               <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (!active) onSelectRepository(repository); }}>
                 {displayName}
               </button>
-              <button type="button" className="closeRepositoryTab" aria-label={`Close ${displayName} tab`} title="Close tab" onClick={() => onCloseRepository(repoId)}>×</button>
+              <button type="button" className="closeRepositoryTab" aria-label={t("titlebar.closeTabLabel", { name: displayName })} title={t("titlebar.closeTab")} onClick={() => onCloseRepository(repoId)}>×</button>
             </div>
           );
         })}
       </div>
       <div className="titlebarSpacer" />
       <button className="quietButton searchShortcut" type="button" onClick={onOpenCommandPalette} aria-keyshortcuts={ariaShortcut(shortcuts.commandPalette, isMacPlatform)}>
-        <span aria-hidden="true">⌕</span><span>Search commands</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>
+        <span aria-hidden="true">⌕</span><span>{t("titlebar.searchCommands")}</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>
       </button>
-      <button className="quietButton themeButton" type="button" onClick={onCycleTheme} aria-label={`Color theme: ${theme}. Activate to cycle theme`} title={`Theme: ${theme}`}>
-        <span aria-hidden="true">◐</span><span>{theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light"}</span>
+      <button className="quietButton themeButton" type="button" onClick={onCycleTheme} aria-label={t("titlebar.themeLabel", { theme: themeName })} title={t("titlebar.themeTitle", { theme: themeName })}>
+        <span aria-hidden="true">◐</span><span>{themeName}</span>
       </button>
-      <button className="quietButton taskCenterButton" type="button" onClick={onOpenTasks} aria-label={`Background tasks, ${activeTaskCount} active`}>
-        Tasks <span className="countBadge">{activeTaskCount}</span>
+      <button className="quietButton taskCenterButton" type="button" onClick={onOpenTasks} aria-label={t("titlebar.tasksLabel", { count: activeTaskCount })}>
+        {t("titlebar.tasks")} <span className="countBadge">{activeTaskCount}</span>
       </button>
-      <button className="quietButton" type="button" onClick={onOpenSettings} aria-keyshortcuts={ariaShortcut(shortcuts.settings, isMacPlatform)} title={`Settings (${displayShortcut(shortcuts.settings, isMacPlatform)})`}>Settings</button>
+      <button className="quietButton" type="button" onClick={onOpenSettings} aria-keyshortcuts={ariaShortcut(shortcuts.settings, isMacPlatform)} title={t("titlebar.settingsTitle", { shortcut: displayShortcut(shortcuts.settings, isMacPlatform) })}>{t("titlebar.settings")}</button>
       <div className={`connectionBadge ${connected ? "connected" : ""}`} role="status" aria-live="polite" aria-label={status} title={status}>
         <span className="connectionDot" aria-hidden="true" />
         <span>{connectionLabel}</span>

@@ -1,3 +1,4 @@
+import { useI18n } from "../shared/i18n";
 import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
 import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { requireGitCrestBridge } from "../api/bridge";
@@ -44,6 +45,7 @@ const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench
 const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
 
 function App() {
+  const { t } = useI18n();
   const isMacPlatform = navigator.platform.toLowerCase().includes("mac");
   const commandKey = isMacPlatform ? "⌘" : "Ctrl";
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
@@ -107,7 +109,7 @@ function App() {
       if (plan.refreshRepositories) {
         void refreshRepositories(api).catch((syncError: unknown) => {
           if (plan.reportRepositoryRefreshError && isActive()) {
-            setStatus(syncError instanceof Error ? syncError.message : "Failed to refresh repository state");
+            setStatus(syncError instanceof Error ? syncError.message : t("app.refreshFailed"));
           }
         });
       }
@@ -294,8 +296,8 @@ function App() {
     hasActiveRepositoryTask,
   });
   const commitActionLabel = amendCommit
-    ? activeCommitAction === "commit" ? "Amend" : activeCommitAction === "commitAndPushTo" ? "Amend and Push to…" : "Amend and Push"
-    : activeCommitAction === "commit" ? "Commit" : activeCommitAction === "commitAndPushTo" ? "Commit and Push to…" : activeCommitAction === "commitAndPushForce" ? "Commit and Push (force-with-lease)" : "Commit and Push";
+    ? activeCommitAction === "commit" ? t("app.amend") : activeCommitAction === "commitAndPushTo" ? t("app.amendAndPushTo") : t("app.amendAndPush")
+    : activeCommitAction === "commit" ? t("app.commit") : activeCommitAction === "commitAndPushTo" ? t("app.commitAndPushTo") : activeCommitAction === "commitAndPushForce" ? t("app.commitAndPushForce") : t("app.commitAndPush");
   const commitActionIsDanger = activeCommitAction === "commitAndPushForce" || (amendCommit && activeCommitAction !== "commit");
   const hasActiveStagingTask = tasks.some((task) => (task.operation.startsWith("stage") || task.operation.startsWith("unstage")) && (task.status === "queued" || task.status === "running"));
   const commitSubmission = useCommitSubmission({
@@ -630,32 +632,32 @@ function App() {
     "--workbench-height": `${workbenchHeight}px`,
   } as CSSProperties;
   const renderCredentialEditor: CredentialEditorRenderer = (host, disabled) => (
-    <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading credential controls…</div>}>
+    <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.credentials")}</div>}>
       <CredentialEditor key={host} api={apiRef.current} host={host} disabled={disabled} />
     </Suspense>
   );
 
   const commands: CommandPaletteCommand[] = [
-    { id: "welcome", label: "Go to Welcome", detail: "Return to recent repositories and quick actions", available: true, run: () => setPage("welcome") },
-    { id: "workspace", label: "Go to Workspace", detail: "Open the Changes, Graph, and Commit workspace", available: true, run: () => setPage("workspace") },
-    { id: "theme", label: "Cycle color theme", detail: `Current: ${theme}; next: ${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`, available: true, run: nextTheme },
-    { id: "open", label: "Open local repository", detail: "Choose a local Git repository folder", available: true, run: () => { void repositoryOpening.chooseAndOpenLocal(); } },
-    { id: "branch-switcher", label: "Switch, create or open branch in a worktree", detail: `Filter branches, type a new name to create one, or open it in a new worktree (${displayShortcut(shortcuts.branchSwitcher, isMacPlatform)})`, available: Boolean(selectedRepository && connected && selectedRepository.availability === "available"), run: branchSwitcher.openSwitcher },
-    { id: "branch-here", label: "Create branch at selected commit", detail: "Start a new branch, optionally in a new worktree, from the commit selected in the graph", available: Boolean(selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask && isFullGitObjectId(selectedCommit)), run: () => { if (isFullGitObjectId(selectedCommit)) setCreateBranchAt(selectedCommit); } },
-    { id: "fetch", label: "Fetch from remotes", detail: "Start a cancellable fetch task", available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
-    { id: "pull", label: "Pull current branch", detail: "Review worktree state and choose merge or rebase", available: Boolean(selectedRepository), run: () => openPullDialog() },
-    { id: "rebase", label: "Interactive rebase", detail: `Review, reorder, and edit the current branch commit sequence (${displayShortcut(shortcuts.rebase, isMacPlatform)})`, available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openRebase },
-    { id: "reset", label: "Reset current branch", detail: "Review commit and file impact before moving HEAD", available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openReset },
-    { id: "push", label: "Push current branch", detail: "Review commits, target, and overwrite scope before pushing", available: Boolean(selectedRepository), run: () => openPushDialog() },
-    { id: "ai-commit-message", label: "Generate commit message suggestion", detail: `Review staged diffs and ask the configured AI provider (${displayShortcut(shortcuts.aiCommitMessage, isMacPlatform)})`, available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
-    { id: "clone", label: "Clone repository", detail: "Clone a remote using Git credentials", available: connected, run: () => cloneSubmission.openDialog() },
-    { id: "diff", label: "Open Diff view", detail: "Review the selected changed file", available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
+    { id: "welcome", label: t("cmd.welcome"), detail: t("cmd.welcomeDetail"), available: true, run: () => setPage("welcome") },
+    { id: "workspace", label: t("cmd.workspace"), detail: t("cmd.workspaceDetail"), available: true, run: () => setPage("workspace") },
+    { id: "theme", label: t("cmd.theme"), detail: t("cmd.themeDetail", { current: t(`theme.${theme}`), next: t(`theme.${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`) }), available: true, run: nextTheme },
+    { id: "open", label: t("cmd.open"), detail: t("cmd.openDetail"), available: true, run: () => { void repositoryOpening.chooseAndOpenLocal(); } },
+    { id: "branch-switcher", label: t("cmd.branchSwitcher"), detail: t("cmd.branchSwitcherDetail", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) }), available: Boolean(selectedRepository && connected && selectedRepository.availability === "available"), run: branchSwitcher.openSwitcher },
+    { id: "branch-here", label: t("cmd.branchHere"), detail: t("cmd.branchHereDetail"), available: Boolean(selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask && isFullGitObjectId(selectedCommit)), run: () => { if (isFullGitObjectId(selectedCommit)) setCreateBranchAt(selectedCommit); } },
+    { id: "fetch", label: t("cmd.fetch"), detail: t("cmd.fetchDetail"), available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
+    { id: "pull", label: t("cmd.pull"), detail: t("cmd.pullDetail"), available: Boolean(selectedRepository), run: () => openPullDialog() },
+    { id: "rebase", label: t("cmd.rebase"), detail: t("cmd.rebaseDetail", { shortcut: displayShortcut(shortcuts.rebase, isMacPlatform) }), available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openRebase },
+    { id: "reset", label: t("cmd.reset"), detail: t("cmd.resetDetail"), available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openReset },
+    { id: "push", label: t("cmd.push"), detail: t("cmd.pushDetail"), available: Boolean(selectedRepository), run: () => openPushDialog() },
+    { id: "ai-commit-message", label: t("cmd.ai"), detail: t("cmd.aiDetail", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) }), available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
+    { id: "clone", label: t("cmd.clone"), detail: t("cmd.cloneDetail"), available: connected, run: () => cloneSubmission.openDialog() },
+    { id: "diff", label: t("cmd.diff"), detail: t("cmd.diffDetail"), available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
   ];
   const paletteContext = page === "welcome"
-    ? "WELCOME"
+    ? t("app.ctxWelcome")
     : selectedRepository
-      ? `WORKSPACE · ${getRepositoryDisplayName(selectedRepository.path).toUpperCase()}`
-      : "WORKSPACE · NO REPOSITORY";
+      ? t("app.ctxWorkspace", { name: getRepositoryDisplayName(selectedRepository.path).toUpperCase() })
+      : t("app.ctxNoRepo");
 
   return (
     <main className="appShell" style={layoutStyle}>
@@ -778,9 +780,9 @@ function App() {
               }}
               onShelfComposerClosed={branchSwitchShelfFlow.onShelfComposerClosed}
             />
-            <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label="Resize repository navigation" onResize={setSidebarWidth} />
+            <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label={t("app.resizeNav")} onResize={setSidebarWidth} />
 
-            <Suspense fallback={<section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}><div className="graphViewport" role="status" aria-live="polite">Loading workspace view…</div></section>}>
+            <Suspense fallback={<section className="mainPanel" aria-label={mode === "graph" ? t("main.commitGraph") : t("main.fileDiff")}><div className="graphViewport" role="status" aria-live="polite">{t("app.loadingView")}</div></section>}>
               <WorkspaceMainPanel
                 mode={mode}
                 repository={selectedRepository}
@@ -816,7 +818,7 @@ function App() {
                 onOpenDiffWindow={(path, scope, oid) => void openDiffWindow(path, scope, oid)}
               />
             </Suspense>
-            {mode === "graph" && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label="Resize commit details" onResize={setDetailsWidth} />}
+            {mode === "graph" && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label={t("app.resizeDetails")} onResize={setDetailsWidth} />}
 
             {mode === "graph" && <WorkspaceDetailsPanel
               repository={selectedRepository}
@@ -835,8 +837,8 @@ function App() {
             />}
           </div>
 
-          <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label="Resize changes and commit area" onResize={setWorkbenchHeight} />
-          <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading commit controls…</div>}>
+          <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label={t("app.resizeWorkbench")} onResize={setWorkbenchHeight} />
+          <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.commit")}</div>}>
             <CommitWorkbench
               repository={selectedRepository}
               status={{ snapshot: activeStatus, error: activeStatusError, loading: activeStatusLoading, workingCount, stagedCount, hasConflicts, sensitiveStagedPaths }}
@@ -862,7 +864,7 @@ function App() {
         </WorkspacePage>
       )}
 
-      {branchSwitcher.open && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading branch switcher…</div>}>
+      {branchSwitcher.open && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.branchSwitcher")}</div>}>
           <BranchSwitcherDialog
             repository={selectedRepository}
             branchSwitcher={branchSwitcher}
@@ -896,9 +898,9 @@ function App() {
         onClose={() => setPaletteOpen(false)}
       />
 
-      <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">Loading dialog…</div>}>
+      <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.dialog")}</div>}>
       {pushOpen && <PushDialog snapshot={pushPreflight} loading={pushLoading} busy={pushBusy} error={pushError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pushDisabledReason} forceWithLeaseOnly={pushForceOnly} onRefresh={() => void refreshPushPreflight()} onFetch={fetchFromPushDialog} onPush={(forceWithLease) => void submitPush(forceWithLease)} onClose={() => setPushOpen(false)} />}
-      {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? "Wait for the current repository task." : !canCommit ? "Stage changes and enter a commit message first." : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
+      {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? t("app.waitTask") : !canCommit ? t("app.stageFirst") : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={(task) => cloneSubmission.retryFromTask(task)} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, _preview, action) => void recoverWorkflow(task, action)} onOpenConflictWindow={(task) => void openConflictWindow(task)} />}
       {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={checkForUpdates} onInstallUpdate={installUpdate} />}

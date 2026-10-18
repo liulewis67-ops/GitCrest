@@ -1,3 +1,4 @@
+import { useI18n } from "../../shared/i18n";
 import { lazy, Suspense, useEffect, type RefObject } from "react";
 import type { DiffDocumentResponse, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../api/client";
 import type { WorkspaceSession } from "../../features/repositories";
@@ -77,6 +78,7 @@ export function WorkspaceMainPanel({
   onCommitSelection,
   onOpenDiffWindow,
 }: WorkspaceMainPanelProps) {
+  const { t } = useI18n();
   useEffect(() => {
     const viewport = graphViewportRef.current;
     if (viewport && mode === "graph" && repository) {
@@ -85,9 +87,9 @@ export function WorkspaceMainPanel({
   }, [graphViewportRef, mode, repository?.repoId, workspaceSession.tabs]);
 
   return (
-    <section className="mainPanel" aria-label={mode === "graph" ? "Commit graph" : "File diff"}>
-      <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? "Commit graph" : "Diff viewer"}</span><span className="subtleTag">LOCAL</span></div><button className="quietButton compact" type="button" disabled={!repository || statusLoading} onClick={() => { if (repository) onRefreshStatus(repository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? "Refreshing working tree status" : "Refresh working tree status"} title={statusLoading ? "Refreshing working tree status" : `Refresh working tree status (${displayShortcut(shortcuts.refreshStatus, isMacPlatform)})`}>{statusLoading ? "Refreshing…" : "Refresh ↻"}</button></div>
-      {mode === "graph" ? repository && api && isFullGitObjectId(repository.head) ? <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">Loading commit history…</div>}><CommitGraph
+    <section className="mainPanel" aria-label={mode === "graph" ? t("main.commitGraph") : t("main.fileDiff")}>
+      <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? t("main.commitGraph") : t("main.diffViewer")}</span><span className="subtleTag">{t("main.local")}</span></div><button className="quietButton compact" type="button" disabled={!repository || statusLoading} onClick={() => { if (repository) onRefreshStatus(repository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? t("main.refreshingLabel") : t("main.refreshLabel")} title={statusLoading ? t("main.refreshingLabel") : t("main.refreshTitle", { shortcut: displayShortcut(shortcuts.refreshStatus, isMacPlatform) })}>{statusLoading ? t("main.refreshing") : t("main.refresh")}</button></div>
+      {mode === "graph" ? repository && api && isFullGitObjectId(repository.head) ? <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">{t("main.loadingHistory")}</div>}><CommitGraph
         key={repository.repoId}
         api={api}
         repoId={repository.repoId}
@@ -99,19 +101,19 @@ export function WorkspaceMainPanel({
         onFocusSearchHandled={onFocusSearchHandled}
         onScrollPosition={onGraphScrollPosition}
         onSelect={onSelectCommit}
-      /></Suspense> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => onGraphScrollPosition(event.currentTarget.scrollTop)} role="region" aria-label="Commit graph view"><div className="graphEmpty">
+      /></Suspense> : <div className="graphViewport" ref={graphViewportRef} onScroll={(event) => onGraphScrollPosition(event.currentTarget.scrollTop)} role="region" aria-label={t("main.graphView")}><div className="graphEmpty">
         <div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div>
-        <p className="sectionEyebrow">A CLEAR VIEW OF YOUR HISTORY</p>
-        <h2>{repository ? repository.head ? "Connecting to history…" : "No commits yet" : "Your commit graph starts here"}</h2>
-        <p>{repository ? `${repository.path}${repository.branch ? ` · ${repository.branch}` : repository.detached ? " · detached HEAD" : " · unborn branch"}` : "Open a repository to explore commits, branches, and the changes that connect them."}</p>
-        {!repository && <button className="secondaryButton" type="button" onClick={onOpenRepository} disabled={openingRepository}>Open repository <span aria-hidden="true">→</span></button>}
+        <p className="sectionEyebrow">{t("main.clearView")}</p>
+        <h2>{repository ? repository.head ? t("main.connectingHistory") : t("main.noCommitsYet") : t("main.graphStartsHere")}</h2>
+        <p>{repository ? `${repository.path}${repository.branch ? ` · ${repository.branch}` : repository.detached ? t("main.detachedSuffix") : t("main.unbornSuffix")}` : t("main.openToExplore")}</p>
+        {!repository && <button className="secondaryButton" type="button" onClick={onOpenRepository} disabled={openingRepository}>{t("main.openRepository")} <span aria-hidden="true">→</span></button>}
       </div></div>
-        : !repository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>Choose a changed file</h2><p>Select a file from Changes to review its working tree or staged diff.</p></div></div>
-          : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />Reading file diff…</div>
-            : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={onRetryDiff}>Retry diff</button></div>
-              : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">Loading diff viewer…</div>}><SplitDiff document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={() => onOpenDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></Suspense></div>
-                : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? "Preparing file diff…" : "This file is no longer in the latest change snapshot."}</p></div></div>}
-      <div className="panelFooter mainPanelFooter"><span>History is read from your local repository</span><span className="footerSpacer" />{version || "Local engine"}</div>
+        : !repository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>{t("main.chooseFile")}</h2><p>{t("main.chooseFileHint")}</p></div></div>
+          : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
+            : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button></div>
+              : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={() => onOpenDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></Suspense></div>
+                : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? t("main.preparingDiff") : t("main.fileGone")}</p></div></div>}
+      <div className="panelFooter mainPanelFooter"><span>{t("main.historyLocal")}</span><span className="footerSpacer" />{version || t("welcome.localEngine")}</div>
     </section>
   );
 }

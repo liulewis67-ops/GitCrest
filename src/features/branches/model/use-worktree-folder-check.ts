@@ -1,13 +1,14 @@
 import { useEffect, useState } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 import { isAbsoluteFolder } from "./worktree-path";
+import { t } from "../../../shared/i18n";
 
 export type WorktreeFolderProblem = "notEmpty" | "isFile";
 
 export function worktreeFolderProblemMessage(problem: WorktreeFolderProblem) {
   return problem === "isFile"
-    ? "A file with that name already exists. Choose a different folder."
-    : "That folder already contains files. Choose a new or empty folder.";
+    ? t("wt.folderIsFile")
+    : t("wt.folderNotEmpty");
 }
 
 /**

@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useRef } from "react";
 import type { GitCrestApiClient, RepositoryResponse, TaskSnapshotResponse } from "../../../api/client";
 import { TaskRefreshPlanner, type TaskRepositoryRefreshPlan } from "./task-refresh-planner";
@@ -50,7 +51,7 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
             }
           }).catch((error: unknown) => {
             if (!controller.signal.aborted && plan.reportRepositoryRefreshError) {
-              optionsRef.current.reportError(error instanceof Error ? error.message : "Could not refresh repository metadata after commit.");
+              optionsRef.current.reportError(error instanceof Error ? error.message : t("err.refreshMeta"));
             }
           }).finally(() => {
             if (repositoryRefreshControllersRef.current.get(repoId) === controller) {

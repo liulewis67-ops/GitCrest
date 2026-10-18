@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useState } from "react";
 import type {
   DiffDocumentResponse,
@@ -39,6 +40,7 @@ export function ShelfCenter({
   onTaskSubmitted: (task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) => void;
   onComposerClosed?: () => void;
 }) {
+  const { t } = useI18n();
   const [shelves, setShelves] = useState<ShelfResponse[]>([]);
   const [selectedShelfId, setSelectedShelfId] = useState<string>();
   const [detail, setDetail] = useState<ShelfDetailResponse>();
@@ -72,7 +74,7 @@ export function ShelfCenter({
   async function refreshShelves() {
     try {
       const next = await api.listRepositoryShelves(repoId);
-      if (!Array.isArray(next)) throw new Error("The shelf list response was invalid.");
+      if (!Array.isArray(next)) throw new Error(t("sh.invalid"));
       setShelves(next);
       setLoadError("");
       if (selectedShelfId && !next.some((shelf) => shelf.shelfId === selectedShelfId)) {
@@ -81,7 +83,7 @@ export function ShelfCenter({
         setApplyPreview(undefined);
       }
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not load saved shelves.");
+      setLoadError(error instanceof Error ? error.message : t("sh.loadFailed"));
     }
   }
 
@@ -132,7 +134,7 @@ export function ShelfCenter({
       setDiffs((current) => ({ ...current, [path]: response }));
       return response;
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : `Could not read ${path}.`);
+      setLoadError(error instanceof Error ? error.message : t("sh.readFailed", { path }));
       return undefined;
     }
   }
@@ -176,7 +178,7 @@ export function ShelfCenter({
         selections: change.hunks?.map((hunkIndex) => ({ hunkIndex })) || [],
       }));
     if (!name.trim() || items.length === 0) {
-      setLoadError("Enter a name and select at least one file or hunk.");
+      setLoadError(t("sh.needNameFile"));
       return;
     }
     setBusy(true);
@@ -197,7 +199,7 @@ export function ShelfCenter({
       onTaskSubmitted(task, afterCreateAction);
       await refreshShelves();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not create the shelf.");
+      setLoadError(error instanceof Error ? error.message : t("sh.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -211,7 +213,7 @@ export function ShelfCenter({
     try {
       setDetail(await api.getRepositoryShelf(repoId, shelf.shelfId));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not read the shelf patch.");
+      setLoadError(error instanceof Error ? error.message : t("sh.patchFailed"));
     }
   }
 
@@ -222,7 +224,7 @@ export function ShelfCenter({
     try {
       setApplyPreview(await api.preflightRepositoryShelfApply(repoId, selectedShelfId));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not preview this shelf.");
+      setLoadError(error instanceof Error ? error.message : t("sh.previewFailed"));
     } finally {
       setBusy(false);
     }
@@ -241,7 +243,7 @@ export function ShelfCenter({
       setPendingTaskId(task.taskId);
       onTaskSubmitted();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not apply this shelf.");
+      setLoadError(error instanceof Error ? error.message : t("sh.applyFailed"));
     } finally {
       setBusy(false);
     }
@@ -261,7 +263,7 @@ export function ShelfCenter({
       setDeleteConfirm(undefined);
       await refreshShelves();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : "Could not delete this shelf.");
+      setLoadError(error instanceof Error ? error.message : t("sh.deleteFailed"));
     } finally {
       setBusy(false);
     }
@@ -269,45 +271,45 @@ export function ShelfCenter({
 
   return (
     <div className="shelfCenter">
-      <div className="navGroupTitle"><span>Shelves</span><span className="countBadge">{shelves.length}</span></div>
+      <div className="navGroupTitle"><span>{t("sh.title")}</span><span className="countBadge">{shelves.length}</span></div>
       <button className="shelfCreateButton" type="button" disabled={disabled} onClick={() => { setComposerOpen(true); setLoadError(""); }}>
-        <span aria-hidden="true">＋</span> Shelve selected changes
+        <span aria-hidden="true">＋</span> {t("sh.shelveSelected")}
       </button>
       {loadError && <div className="shelfInlineError" role="alert">{loadError}</div>}
-      {shelves.length === 0 && !loadError && <div className="navEmpty">No saved shelves</div>}
+      {shelves.length === 0 && !loadError && <div className="navEmpty">{t("sh.none")}</div>}
       {shelves.map((shelf) => (
         <div className={`shelfListItem${selectedShelfId === shelf.shelfId ? " active" : ""}`} key={shelf.shelfId}>
           <button className="shelfSelectButton" type="button" onClick={() => void selectShelf(shelf)}>
             <span className="shelfItemName" title={shelf.name}>{shelf.name}</span>
-            <span className="shelfItemMeta">{shelf.paths.length} files · {shelf.scope || "scope unknown"}</span>
+            <span className="shelfItemMeta">{t("sh.files", { count: shelf.paths.length, scope: shelf.scope || t("sh.scopeUnknown") })}</span>
           </button>
-          <button className="shelfDeleteButton" type="button" aria-label={`Review deletion of ${shelf.name}`} disabled={disabled || busy} onClick={() => setDeleteConfirm(shelf)}>×</button>
+          <button className="shelfDeleteButton" type="button" aria-label={t("sh.reviewDeletion", { name: shelf.name })} disabled={disabled || busy} onClick={() => setDeleteConfirm(shelf)}>×</button>
         </div>
       ))}
 
-      {detail && selectedShelfId && <section className="shelfDetail" aria-label={`Shelf preview: ${detail.shelf.name}`}>
-        <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><button type="button" className="textButton" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>Close</button></div>
-        <p>{detail.shelf.description || "No description"}</p>
+      {detail && selectedShelfId && <section className="shelfDetail" aria-label={t("sh.previewAria", { name: detail.shelf.name })}>
+        <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><button type="button" className="textButton" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>{t("sh.close")}</button></div>
+        <p>{detail.shelf.description || t("sh.noDescription")}</p>
         <div className="shelfPathList">{detail.shelf.paths.map((path) => <code key={path}>{path}</code>)}</div>
         <pre className="shelfPatchPreview">{detail.patch}</pre>
         {applyPreview && <div className={`shelfApplyStatus${applyPreview.canApplyCleanly ? " ready" : " blocked"}`} role="status">
-          {applyPreview.canApplyCleanly ? "Patch applies cleanly to the current working tree." : applyPreview.canApplyWithConflicts ? "This patch needs conflict review. Applying it will open the conflict resolver." : "Patch cannot be applied safely here. The shelf will be preserved."}
-          <span>HEAD {applyPreview.expectedHeadOid?.slice(0, 10) || "(unborn)"}</span>
+          {applyPreview.canApplyCleanly ? t("sh.cleanly") : applyPreview.canApplyWithConflicts ? t("sh.needsConflict") : t("sh.cannotApply")}
+          <span>{t("sh.head", { oid: applyPreview.expectedHeadOid?.slice(0, 10) || t("sh.unborn") })}</span>
         </div>}
         <div className="shelfActions">
-          <button className="secondaryButton" type="button" disabled={busy || disabled} onClick={() => void previewApply()}>{busy ? "Checking…" : "Preview apply"}</button>
-          {applyPreview && <button className="primaryButton" type="button" disabled={busy || disabled || (!applyPreview.canApplyCleanly && !applyPreview.canApplyWithConflicts)} onClick={() => void applyShelf()}>{busy ? "Applying…" : "Apply reviewed shelf"}</button>}
+          <button className="secondaryButton" type="button" disabled={busy || disabled} onClick={() => void previewApply()}>{busy ? t("sh.checking") : t("sh.previewApply")}</button>
+          {applyPreview && <button className="primaryButton" type="button" disabled={busy || disabled || (!applyPreview.canApplyCleanly && !applyPreview.canApplyWithConflicts)} onClick={() => void applyShelf()}>{busy ? t("sh.applying") : t("sh.applyReviewed")}</button>}
         </div>
       </section>}
 
       {composerOpen && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) closeComposer(); }}>
         <section ref={composerRef} className="dialogCard shelfComposer" role="dialog" aria-modal="true" aria-labelledby="shelf-composer-title" onKeyDown={onComposerKeyDown}>
-          <div className="dialogHeading"><div><span className="sectionEyebrow">WORKTREE · {repoId}</span><h2 id="shelf-composer-title">Shelve selected changes</h2>{afterCreateAction && <p role="status">After the selected changes are shelved, GitCrest will switch to {afterCreateAction.switchTarget} and restore this shelf if the remaining changes are safe.</p>}</div><button className="dialogClose" type="button" aria-label="Close shelf composer" disabled={busy} onClick={closeComposer}>×</button></div>
-          <label className="shelfField">Name<input autoFocus data-dialog-initial-focus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder="e.g. API retry draft" /></label>
-          <label className="shelfField">Description<textarea maxLength={500} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder="Optional note" /></label>
-          <label className="shelfField">Change scope<select value={scope} onChange={(event) => { setScope(event.target.value as "workingTree" | "index"); setSelected({}); setDiffs({}); }}><option value="workingTree">Working tree</option><option value="index">Staged index</option></select></label>
-          <div className="shelfFilePicker" aria-label="Select files or hunks to shelve">
-            {availableFiles.length === 0 && <div className="navEmpty">No changed files in this scope</div>}
+          <div className="dialogHeading"><div><span className="sectionEyebrow">{t("sh.composerEyebrow", { repo: repoId })}</span><h2 id="shelf-composer-title">{t("sh.composerTitle")}</h2>{afterCreateAction && <p role="status">{t("sh.afterCreate", { target: afterCreateAction.switchTarget })}</p>}</div><button className="dialogClose" type="button" aria-label={t("sh.closeComposer")} disabled={busy} onClick={closeComposer}>×</button></div>
+          <label className="shelfField">{t("sh.name")}<input autoFocus data-dialog-initial-focus maxLength={120} value={name} onChange={(event) => setName(event.target.value)} placeholder={t("sh.namePlaceholder")} /></label>
+          <label className="shelfField">{t("sh.description")}<textarea maxLength={500} rows={2} value={description} onChange={(event) => setDescription(event.target.value)} placeholder={t("sh.descPlaceholder")} /></label>
+          <label className="shelfField">{t("sh.scope")}<select value={scope} onChange={(event) => { setScope(event.target.value as "workingTree" | "index"); setSelected({}); setDiffs({}); }}><option value="workingTree">{t("sh.scopeWorking")}</option><option value="index">{t("sh.scopeIndex")}</option></select></label>
+          <div className="shelfFilePicker" aria-label={t("sh.pickerAria")}>
+            {availableFiles.length === 0 && <div className="navEmpty">{t("sh.noFiles")}</div>}
             {availableFiles.map((file) => {
               const chosen = selected[file.path];
               const diff = diffs[file.path];
@@ -315,24 +317,24 @@ export function ShelfCenter({
               return <div className="shelfFileChoice" key={file.path}>
                 <label><input type="checkbox" checked={Boolean(chosen)} onChange={(event) => void toggleFile(file.path, event.target.checked)} /><span className="shelfFilePath">{file.path}</span><span className="shelfFileState">{file.kind}</span></label>
                 {chosen && diff && <details className="shelfHunkPicker">
-                  <summary>Whole file selected · {diff.hunks.length} hunks</summary>
-                  <div className="shelfHunkActions"><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: diff.hunks.map((_, index) => index) } }))}>Select all</button><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: [] } }))}>Clear</button><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { revision: diff.revision } }))}>Whole file</button></div>
-                  {diff.hunks.map((hunk, index) => <label className="shelfHunkChoice" key={`${file.path}-${index}`}><input type="checkbox" checked={selectedHunks === undefined || selectedHunks.includes(index)} onChange={(event) => setHunk(file.path, index, event.target.checked, diff)} /><span>Hunk {index + 1}</span><code>-{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines}</code></label>)}
+                  <summary>{t("sh.wholeFile", { count: diff.hunks.length })}</summary>
+                  <div className="shelfHunkActions"><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: diff.hunks.map((_, index) => index) } }))}>{t("sh.selectAll")}</button><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { ...current[file.path], hunks: [] } }))}>{t("sh.clear")}</button><button type="button" className="textButton" onClick={() => setSelected((current) => ({ ...current, [file.path]: { revision: diff.revision } }))}>{t("sh.wholeFileBtn")}</button></div>
+                  {diff.hunks.map((hunk, index) => <label className="shelfHunkChoice" key={`${file.path}-${index}`}><input type="checkbox" checked={selectedHunks === undefined || selectedHunks.includes(index)} onChange={(event) => setHunk(file.path, index, event.target.checked, diff)} /><span>{t("sh.hunk", { n: index + 1 })}</span><code>-{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines}</code></label>)}
                 </details>}
               </div>;
             })}
           </div>
           {loadError && <div className="shelfInlineError" role="alert">{loadError}</div>}
-          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} onClick={closeComposer}>Cancel</button><button className="primaryButton" type="button" disabled={busy || disabled || Object.keys(selected).length === 0 || !name.trim()} onClick={() => void createShelf()}>{busy ? "Saving…" : "Create shelf"}</button></div>
+          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} onClick={closeComposer}>{t("sh.cancel")}</button><button className="primaryButton" type="button" disabled={busy || disabled || Object.keys(selected).length === 0 || !name.trim()} onClick={() => void createShelf()}>{busy ? t("sh.saving") : t("sh.create")}</button></div>
         </section>
       </div>}
 
       {deleteConfirm && <div className="paletteBackdrop shelfBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDeleteConfirm(undefined); }}>
         <section ref={deleteRef} className="dialogCard shelfDeleteDialog" role="alertdialog" aria-modal="true" aria-labelledby="shelf-delete-title" aria-describedby="shelf-delete-description" onKeyDown={onDeleteKeyDown}>
-          <div className="dialogHeading"><div><span className="sectionEyebrow">PERMANENTLY REMOVE SAVED PATCH</span><h2 id="shelf-delete-title">Delete “{deleteConfirm.name}”?</h2></div></div>
-          <p id="shelf-delete-description">This removes the saved shelf without changing repository files. It contains {deleteConfirm.paths.length} paths:</p>
+          <div className="dialogHeading"><div><span className="sectionEyebrow">{t("sh.deleteEyebrow")}</span><h2 id="shelf-delete-title">{t("sh.deleteTitle", { name: deleteConfirm.name })}</h2></div></div>
+          <p id="shelf-delete-description">{t("sh.deleteBody", { count: deleteConfirm.paths.length })}</p>
           <div className="shelfPathList">{deleteConfirm.paths.map((path) => <code key={path}>{path}</code>)}</div>
-          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} data-dialog-initial-focus onClick={() => setDeleteConfirm(undefined)}>Keep shelf</button><button className="dangerButton" type="button" disabled={busy} onClick={() => void deleteShelf()}>{busy ? "Deleting…" : "Delete shelf"}</button></div>
+          <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} data-dialog-initial-focus onClick={() => setDeleteConfirm(undefined)}>{t("sh.keep")}</button><button className="dangerButton" type="button" disabled={busy} onClick={() => void deleteShelf()}>{busy ? t("sh.deleting") : t("sh.delete")}</button></div>
         </section>
       </div>}
     </div>

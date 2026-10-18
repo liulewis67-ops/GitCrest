@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 export const SHORTCUT_PREFERENCES_KEY = "gitcrest-shortcuts-v1";
 
 export const shortcutActions = [
@@ -76,10 +77,10 @@ export function shortcutConflict(
   binding: string,
   preferences: ShortcutPreferences,
 ): string | undefined {
-  if (!isValidBinding(binding)) return "Use a Ctrl/Cmd shortcut with a key.";
-  if (reservedBindings.has(binding)) return "This shortcut is reserved by the operating system or window.";
+  if (!isValidBinding(binding)) return t("sc.invalid");
+  if (reservedBindings.has(binding)) return t("sc.reserved");
   const otherAction = shortcutActions.find(({ id }) => id !== action && preferences[id] === binding);
-  return otherAction ? `Already assigned to ${otherAction.label}.` : undefined;
+  return otherAction ? t("sc.assigned", { label: t(`sc.${otherAction.id}`) }) : undefined;
 }
 
 export function matchesShortcut(event: KeyboardEvent, binding: string, isMac: boolean): boolean {

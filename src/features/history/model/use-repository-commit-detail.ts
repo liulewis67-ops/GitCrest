@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import type { CommitDetailResponse, GitCrestApiClient } from "../../../api/client";
 
@@ -25,10 +26,10 @@ export function useRepositoryCommitDetail(api: GitCrestApiClient, repoId: string
     }
     setState({ oid, loading: true });
     void api.withSignal(controller.signal).getRepositoryCommit(repoId, oid).then((response) => {
-      if (!isCommitDetail(response)) throw new Error("Commit detail response was invalid.");
+      if (!isCommitDetail(response)) throw new Error(t("err.commitDetailInvalid"));
       if (!controller.signal.aborted) setState({ oid, detail: response, loading: false });
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setState({ oid, error: reason instanceof Error ? reason.message : "Could not read commit details.", loading: false });
+      if (!controller.signal.aborted) setState({ oid, error: reason instanceof Error ? reason.message : t("err.commitDetail"), loading: false });
     });
     return () => controller.abort();
   }, [api, oid, repoId]);

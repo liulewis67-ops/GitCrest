@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse } from "../../../api/client";
 
@@ -29,7 +30,7 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
       }
     } catch (reason) {
       if (!controller.signal.aborted && refreshGenerationRef.current === generation) {
-        setError(reason instanceof Error ? reason.message : "Could not read task history.");
+        setError(reason instanceof Error ? reason.message : t("err.taskHistory"));
       }
     } finally {
       if (refreshControllerRef.current === controller) refreshControllerRef.current = undefined;
@@ -44,7 +45,7 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
       await api.cancelTask(taskId);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Could not request task cancellation.");
+      setError(reason instanceof Error ? reason.message : t("err.cancelTask"));
     } finally {
       setActionId("");
     }
@@ -52,11 +53,11 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
 
   async function copyLogs(task: TaskSnapshotResponse) {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
+      if (!navigator.clipboard?.writeText) throw new Error(t("cd.clipboardUnavailable"));
       await navigator.clipboard.writeText(task.logs.join("\n"));
       setError("");
     } catch {
-      setError("Clipboard access is unavailable. Select and copy the task log text.");
+      setError(t("err.clipboardCopy"));
     }
   }
 

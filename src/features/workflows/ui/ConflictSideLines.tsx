@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { useMemo } from "react";
 import { splitInlineDiff } from "../../diff";
 import { diffLines, splitLines } from "../model/line-diff";
@@ -9,26 +10,26 @@ type Change = { kind: "added" | "changed"; pair: string | null };
 type Row = { type: "line"; number: number; text: string; change: Change | null } | { type: "removed"; count: number };
 
 const MARKS = { added: "+", changed: "~" } as const;
-const MARK_LABELS = { added: "added line", changed: "changed line" } as const;
 
 /**
  * Renders one side of a conflict as numbered lines. When `reference` is given, lines that differ from it are tinted,
  * marked with a text symbol (never color alone), and changed words inside modified lines are highlighted.
  */
-export function ConflictSideLines({ text, reference, startLine, emptyLabel = "(empty side)" }: {
+export function ConflictSideLines({ text, reference, startLine, emptyLabel }: {
   text: string;
   reference: string | null;
   startLine: number;
   emptyLabel?: string;
 }) {
+  const { t } = useI18n();
   const { rows, highlighted } = useMemo(() => buildRows(text, reference, startLine), [text, reference, startLine]);
-  if (rows.length === 0) return <div className="conflictLineEmpty">{emptyLabel}</div>;
+  if (rows.length === 0) return <div className="conflictLineEmpty">{emptyLabel ?? t("sl.emptySide")}</div>;
   return <div className="conflictLines" data-highlighted={highlighted || undefined}>
     {rows.map((row, index) => row.type === "removed"
-      ? <div className="conflictLine removed" key={`removed-${index}`}><span className="conflictLineNo" /><span className="conflictLineMark" role="img" aria-label="removed lines">−</span><span className="conflictLineText">{row.count} {row.count === 1 ? "line" : "lines"} removed</span></div>
+      ? <div className="conflictLine removed" key={`removed-${index}`}><span className="conflictLineNo" /><span className="conflictLineMark" role="img" aria-label={t("sl.removedLines")}>−</span><span className="conflictLineText">{t("sl.removedCount", { count: row.count, unit: row.count === 1 ? t("sl.lineOne") : t("sl.lineMany") })}</span></div>
       : <div className={`conflictLine${row.change ? ` ${row.change.kind}` : ""}`} key={row.number}>
         <span className="conflictLineNo">{row.number}</span>
-        <span className="conflictLineMark" role={row.change ? "img" : undefined} aria-label={row.change ? MARK_LABELS[row.change.kind] : undefined}>{row.change ? MARKS[row.change.kind] : ""}</span>
+        <span className="conflictLineMark" role={row.change ? "img" : undefined} aria-label={row.change ? (row.change.kind === "added" ? t("sl.addedLine") : t("sl.changedLine")) : undefined}>{row.change ? MARKS[row.change.kind] : ""}</span>
         <code className="conflictLineText">{renderText(row.text, row.change)}</code>
       </div>)}
   </div>;

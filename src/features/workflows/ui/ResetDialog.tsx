@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type ResetBackupSnapshotResponse, type ResetPreviewResponse, type TaskSnapshotResponse } from "../../../api/client";
 import type { components } from "../../../api/schema";
@@ -14,6 +15,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
   onClose: () => void;
   onStarted: (task: TaskSnapshotResponse) => void;
 }) {
+  const { t } = useI18n();
   const current = branches?.branches.find((branch) => branch.isCurrent);
   const targets = (branches?.branches || []).filter((branch) => !branch.isCurrent && branch.oid !== current?.oid);
   const [targetOid, setTargetOid] = useState("");
@@ -35,7 +37,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
       setBackupSnapshot(snapshot);
       setSelectedBackup(snapshot.backups[0]?.reference || "");
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? reason.body.error.message : "Could not load reset recovery references.");
+      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? reason.body.error.message : t("rs.loadBackups"));
     });
     return () => controller.abort();
   }, [api, repoId]);
@@ -49,7 +51,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
     try {
       setPreview(await api.preflightRepositoryReset(repoId, targetOid, mode));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not inspect this reset.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rs.inspectFailed"));
     } finally {
       setLoading(false);
     }
@@ -68,7 +70,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
         confirmReset: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start this reset.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rs.startFailed"));
     } finally {
       setBusy(false);
     }
@@ -87,7 +89,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
         confirmRestore: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start restore.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rs.restoreFailed"));
     } finally {
       setBusy(false);
     }
@@ -96,63 +98,63 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter resetDialog" role="dialog" aria-modal="true" aria-labelledby="reset-dialog-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">REVIEW BRANCH MOVEMENT</p><h2 id="reset-dialog-title">Reset current branch</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>
+        <div><p className="sectionEyebrow">{t("rs.eyebrow")}</p><h2 id="reset-dialog-title">{t("rs.title")}</h2></div>
+        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rs.close")}</button>
       </div>
       <div className="workflowDialogBody">
-        <label className="rebaseTargetField" htmlFor="reset-target">Move {current?.fullName || "current branch"} to
+        <label className="rebaseTargetField" htmlFor="reset-target">{t("rs.moveTo", { name: current?.fullName || t("rs.currentBranch") })}
           <select id="reset-target" value={targetOid} disabled={disabled || loading || busy} onChange={(event) => { setTargetOid(event.target.value); setPreview(undefined); setConfirmed(false); }}>
-            <option value="">Choose a branch commit…</option>
+            <option value="">{t("rs.chooseCommit")}</option>
             {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} · {branch.oid.slice(0, 9)}</option>)}
           </select>
         </label>
-        <label className="rebaseTargetField" htmlFor="reset-mode">Reset mode
+        <label className="rebaseTargetField" htmlFor="reset-mode">{t("rs.mode")}
           <select id="reset-mode" value={mode} disabled={disabled || loading || busy} onChange={(event) => { setMode(event.target.value as ResetMode); setPreview(undefined); setConfirmed(false); }}>
             {MODES.map((option) => <option key={option} value={option}>{option}</option>)}
           </select>
         </label>
-        <p className="cloneHelp">Soft moves HEAD and keeps the index and files. Mixed moves HEAD and resets the index while keeping files. Hard also replaces tracked files and is available only when the working tree is clean.</p>
+        <p className="cloneHelp">{t("rs.modeHelp")}</p>
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <section className="rebaseRollbackPanel" aria-labelledby="reset-restore-heading">
-          <h3 id="reset-restore-heading">Restore a reset backup</h3>
+          <h3 id="reset-restore-heading">{t("rs.restoreHeading")}</h3>
           {backupSnapshot?.backups.length ? <>
-            <label className="rebaseTargetField" htmlFor="reset-backup">Saved branch state
+            <label className="rebaseTargetField" htmlFor="reset-backup">{t("rs.savedState")}
               <select id="reset-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRestore(false); }}>
-                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || "(no subject)"} · {backup.oid.slice(0, 9)}</option>)}
+                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} · {backup.oid.slice(0, 9)}</option>)}
               </select>
             </label>
-            {!backupSnapshot.canRestore && <p className="cloneHelp">Restore is available only on a clean attached branch with no Git operation in progress.</p>}
-            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRestore} onChange={(event) => setConfirmRestore(event.target.checked)} />I understand restoring the saved state replaces the current branch and checked-out files. A safety backup will be created first.</label>
-            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRestore || !confirmRestore || disabled || busy} onClick={() => void restore()}>{busy ? "Starting…" : "Restore selected reset backup"}</button>
-          </> : <p className="cloneHelp">No reset recovery references are available in this repository.</p>}
+            {!backupSnapshot.canRestore && <p className="cloneHelp">{t("rs.restoreOnly")}</p>}
+            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRestore} onChange={(event) => setConfirmRestore(event.target.checked)} />{t("rs.restoreConfirm")}</label>
+            <button className="quietButton compact" type="button" disabled={!backupSnapshot.canRestore || !confirmRestore || disabled || busy} onClick={() => void restore()}>{busy ? t("rs.starting") : t("rs.restoreBtn")}</button>
+          </> : <p className="cloneHelp">{t("rs.noBackups")}</p>}
         </section>
-        {loading && <p role="status">Reviewing reset impact…</p>}
+        {loading && <p role="status">{t("rs.reviewing")}</p>}
         {preview && <>
           <div className="rebasePreviewFacts">
-            <div className="repositoryFact"><span>BRANCH</span><strong>{preview.currentBranch}</strong></div>
-            <div className="repositoryFact"><span>MODE</span><strong>{preview.mode}</strong></div>
-            <div className="repositoryFact"><span>COMMITS</span><strong>{preview.commitsRemoved} removed · {preview.commitsAdded} added</strong></div>
-            <div className="repositoryFact"><span>TARGET</span><strong className="monoText">{preview.targetOid.slice(0, 12)}</strong></div>
+            <div className="repositoryFact"><span>{t("rs.branch")}</span><strong>{preview.currentBranch}</strong></div>
+            <div className="repositoryFact"><span>{t("rs.modeLabel")}</span><strong>{preview.mode}</strong></div>
+            <div className="repositoryFact"><span>{t("rs.commits")}</span><strong>{t("rs.removedAdded", { removed: preview.commitsRemoved, added: preview.commitsAdded })}</strong></div>
+            <div className="repositoryFact"><span>{t("rs.target")}</span><strong className="monoText">{preview.targetOid.slice(0, 12)}</strong></div>
           </div>
-          <section className="operationImpactNotice" aria-label="Reset impact explanation">
-            <h3>What this reset will change</h3>
-            <p><strong>{preview.currentBranch}</strong> moves from <code>{preview.expectedHeadOid.slice(0, 12)}</code> to <code>{preview.targetOid.slice(0, 12)}</code>, removing {preview.commitsRemoved} commit(s) from the current branch history and adding {preview.commitsAdded} target commit(s).</p>
-            {preview.mode === "soft" && <p>Soft reset keeps the index and checked-out files as they are.</p>}
-            {preview.mode === "mixed" && <p>Mixed reset replaces the index with the target tree and keeps checked-out files as they are.</p>}
-            {preview.mode === "hard" && <p>Hard reset replaces tracked checked-out files with the target tree. The preview reports {preview.affectedPaths.length} changed path(s){preview.omittedPathCount ? ` and omits ${preview.omittedPathCount} more` : ""}.</p>}
-            {preview.dirtyPaths.length > 0 && <p>{preview.dirtyPaths.length} local changed path(s) are present; this preview does not permit hard reset over them.</p>}
-            <p className="cloneHelp">This explanation is generated from the current reset preview and remains available without an AI provider.</p>
+          <section className="operationImpactNotice" aria-label={t("rs.impactAria")}>
+            <h3>{t("rs.impactHeading")}</h3>
+            <p>{t("rs.impactMove", { branch: preview.currentBranch, from: preview.expectedHeadOid.slice(0, 12), to: preview.targetOid.slice(0, 12), removed: preview.commitsRemoved, added: preview.commitsAdded })}</p>
+            {preview.mode === "soft" && <p>{t("rs.soft")}</p>}
+            {preview.mode === "mixed" && <p>{t("rs.mixed")}</p>}
+            {preview.mode === "hard" && <p>{t("rs.hard", { count: preview.affectedPaths.length, omitted: preview.omittedPathCount ? t("rs.hardOmits", { count: preview.omittedPathCount }) : "" })}</p>}
+            {preview.dirtyPaths.length > 0 && <p>{t("rs.dirtyBlocks", { count: preview.dirtyPaths.length })}</p>}
+            <p className="cloneHelp">{t("rs.noAi")}</p>
           </section>
-          {!preview.canStart && <p className="taskCenterError" role="alert">This reset cannot start. The target may already be HEAD, a Git operation may be active, or hard reset may overwrite local changes.</p>}
-          <div className="resetAffectedPaths"><strong>Affected paths ({preview.affectedPaths.length}{preview.omittedPathCount ? ` + ${preview.omittedPathCount} omitted` : ""})</strong>
-            {preview.affectedPaths.length ? <ul>{preview.affectedPaths.map((path) => <li key={path} className="monoText">{path}</li>)}</ul> : <p className="cloneHelp">No tracked paths differ between HEAD and the target.</p>}
+          {!preview.canStart && <p className="taskCenterError" role="alert">{t("rs.cannotStart")}</p>}
+          <div className="resetAffectedPaths"><strong>{t("rs.affected", { count: preview.affectedPaths.length, omitted: preview.omittedPathCount ? t("rs.omittedSuffix", { count: preview.omittedPathCount }) : "" })}</strong>
+            {preview.affectedPaths.length ? <ul>{preview.affectedPaths.map((path) => <li key={path} className="monoText">{path}</li>)}</ul> : <p className="cloneHelp">{t("rs.noDiff")}</p>}
           </div>
-          {preview.dirtyPaths.length > 0 && <p className="cloneHelp">Local changes present: {preview.dirtyPaths.length} path(s). Soft and mixed preserve working files; hard reset is disabled.</p>}
-          <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I reviewed the commit and path impact. A recovery ref will be created before moving this branch.</label>
+          {preview.dirtyPaths.length > 0 && <p className="cloneHelp">{t("rs.localPresent", { count: preview.dirtyPaths.length })}</p>}
+          <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("rs.reviewedConfirm")}</label>
         </>}
         <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={!targetOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? "Reviewing…" : "Review impact"}</button>
-          <button className="dangerTextButton" type="button" disabled={!preview?.canStart || !confirmed || disabled || busy} onClick={() => void start()}>{busy ? "Starting…" : `Reset ${mode}`}</button>
+          <button className="quietButton compact" type="button" disabled={!targetOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rs.reviewingBtn") : t("rs.review")}</button>
+          <button className="dangerTextButton" type="button" disabled={!preview?.canStart || !confirmed || disabled || busy} onClick={() => void start()}>{busy ? t("rs.starting") : t("rs.start", { mode })}</button>
         </div>
       </div>
     </section>

@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse } from "../../../api/client";
 import type { WorkspaceMode } from "../../repositories";
@@ -39,12 +40,12 @@ export function useRepositoryDiffQuery({ api, mode, repository, path, scope, com
       ? api.getRepositoryCommitDiff(repository.repoId, commitOid, path)
       : scope === "workingTree" || scope === "index"
         ? api.getFileDiff(repository.repoId, path, scope)
-        : Promise.reject(new Error("The selected commit diff is unavailable."));
+        : Promise.reject(new Error(t("err.commitDiffUnavailable")));
     request
       .then((document) => { if (active) setState({ key: requestKey, loading: false, document }); })
       .catch((error: unknown) => {
         const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-        if (active) setState({ key: requestKey, loading: false, error: message || (error instanceof Error ? error.message : "Could not read this file diff.") });
+        if (active) setState({ key: requestKey, loading: false, error: message || (error instanceof Error ? error.message : t("err.readDiff")) });
       });
     return () => { active = false; };
   }, [mode, repository?.repoId, path, scope, commitOid, retryVersion, api]);
@@ -57,7 +58,7 @@ export function useRepositoryDiffQuery({ api, mode, repository, path, scope, com
     setState((current) => ({
       ...current,
       loading: false,
-      error: error instanceof Error ? error.message : "Could not open the Diff window.",
+      error: error instanceof Error ? error.message : t("err.openDiffWindow"),
     }));
   }
 

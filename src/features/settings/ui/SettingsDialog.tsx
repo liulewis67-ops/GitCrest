@@ -12,6 +12,7 @@ import {
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 import type { UpdateStatus } from "../../../api/update-status";
+import { LOCALES, useI18n } from "../../../shared/i18n";
 
 export function SettingsDialog({
   api,
@@ -32,6 +33,7 @@ export function SettingsDialog({
   onCheckForUpdates?: () => void | Promise<void>;
   onInstallUpdate?: () => void;
 }) {
+  const { t, locale, setLocale } = useI18n();
   const [settings, setSettings] = useState<AiSettingsResponse>();
   const [provider, setProvider] = useState<AiSettingsResponse["provider"]>("none");
   const [baseUrl, setBaseUrl] = useState("");
@@ -56,7 +58,7 @@ export function SettingsDialog({
     }
     const binding = shortcutFromEvent(event.nativeEvent);
     if (!binding) {
-      setShortcutError("Press a Ctrl/Cmd shortcut. Escape cancels recording.");
+      setShortcutError(t("settings.pressCtrlCmd"));
       return;
     }
     const conflict = shortcutConflict(action, binding, shortcuts);
@@ -78,7 +80,7 @@ export function SettingsDialog({
       setBaseUrl(value.baseUrl);
       setModel(value.model);
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Settings could not be loaded.");
+      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("settings.loadFailed"));
     });
     return () => controller.abort();
   }, [api]);
@@ -97,8 +99,8 @@ export function SettingsDialog({
     setBusy(true); setError(""); setNotice("");
     try {
       const saved = await api.setAiSettings(provider, provider === "none" ? "" : baseUrl, provider === "none" ? "" : model);
-      setSettings(saved); setBaseUrl(saved.baseUrl); setModel(saved.model); setNotice("Provider settings saved. No model request was made.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "Settings could not be saved."); }
+      setSettings(saved); setBaseUrl(saved.baseUrl); setModel(saved.model); setNotice(t("settings.providerSaved"));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("settings.saveFailed")); }
     finally { setBusy(false); }
   }
 
@@ -107,8 +109,8 @@ export function SettingsDialog({
     setBusy(true); setError(""); setNotice("");
     try {
       const saved = await api.setAiCredential(apiKey);
-      setSettings(saved); setApiKey(""); setNotice("API key saved to the system credential store.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "API key could not be saved."); }
+      setSettings(saved); setApiKey(""); setNotice(t("settings.keySavedNotice"));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("settings.keySaveFailed")); }
     finally { setBusy(false); }
   }
 
@@ -117,69 +119,74 @@ export function SettingsDialog({
     try {
       await api.deleteAiCredential();
       setSettings((current) => current ? { ...current, hasCloudCredential: false } : current);
-      setNotice("Saved API key removed.");
-    } catch (reason) { setError(reason instanceof Error ? reason.message : "API key could not be removed."); }
+      setNotice(t("settings.keyRemoved"));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : t("settings.keyRemoveFailed")); }
     finally { setBusy(false); }
   }
 
   return (
     <div className="paletteBackdrop cloneBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
       <section ref={dialogRef} className="taskCenter workflowDialog settingsDialog" role="dialog" aria-modal="true" aria-labelledby="settings-title" onKeyDown={onKeyDown}>
-        <header className="taskCenterHeader"><div><p className="sectionEyebrow">PREFERENCES</p><h2 id="settings-title">Settings</h2></div><button className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label="Close settings">×</button></header>
+        <header className="taskCenterHeader"><div><p className="sectionEyebrow">{t("settings.eyebrow")}</p><h2 id="settings-title">{t("settings.title")}</h2></div><button className="quietButton" type="button" onClick={onClose} disabled={busy} aria-label={t("settings.close")}>×</button></header>
         <div className="workflowDialogBody">
+          <section className="shortcutPreferences" aria-labelledby="language-preferences-title">
+            <div className="settingsSectionHeading"><h3 id="language-preferences-title">{t("language.label")}</h3></div>
+            <p>{t("language.description")}</p>
+            <div className="settingsForm"><select aria-label={t("language.label")} value={locale} onChange={(event) => setLocale(event.target.value as typeof LOCALES[number])}>{LOCALES.map((code) => <option key={code} value={code}>{t(`language.${code}`)}</option>)}</select></div>
+          </section>
           <section className="shortcutPreferences" aria-labelledby="shortcut-preferences-title">
-            <div className="settingsSectionHeading"><h3 id="shortcut-preferences-title">Keyboard shortcuts</h3><button type="button" className="quietButton" onClick={() => { onShortcutsChange({ ...defaultShortcutPreferences }); setRecordingShortcut(undefined); setShortcutError(""); }}>Restore defaults</button></div>
-            <p>Choose a shortcut, then press the replacement. Shortcuts are saved on this device.</p>
+            <div className="settingsSectionHeading"><h3 id="shortcut-preferences-title">{t("settings.shortcuts")}</h3><button type="button" className="quietButton" onClick={() => { onShortcutsChange({ ...defaultShortcutPreferences }); setRecordingShortcut(undefined); setShortcutError(""); }}>{t("settings.restoreDefaults")}</button></div>
+            <p>{t("settings.shortcutsHelp")}</p>
             <div className="shortcutPreferenceList">
-              {shortcutActions.map(({ id, label }) => <div className="shortcutPreferenceRow" key={id}>
-                <span>{label}</span>
+              {shortcutActions.map(({ id }) => <div className="shortcutPreferenceRow" key={id}>
+                <span>{t(`sc.${id}`)}</span>
                 <button
                   type="button"
                   className="shortcutCaptureButton"
-                  aria-label={`Record shortcut for ${label}`}
+                  aria-label={t("settings.recordShortcut", { label: t(`sc.${id}`) })}
                   onClick={() => { setRecordingShortcut(id); setShortcutError(""); }}
                   onKeyDown={(event) => captureShortcut(event, id)}
                 >
-                  <kbd>{recordingShortcut === id ? "Press shortcut…" : displayShortcut(shortcuts[id], isMac)}</kbd>
+                  <kbd>{recordingShortcut === id ? t("settings.pressShortcut") : displayShortcut(shortcuts[id], isMac)}</kbd>
                 </button>
               </div>)}
             </div>
             {shortcutError && <p className="formError" role="alert">{shortcutError}</p>}
           </section>
           {updateStatus && <section className="shortcutPreferences" aria-labelledby="application-updates-title">
-            <div className="settingsSectionHeading"><h3 id="application-updates-title">Application updates</h3></div>
+            <div className="settingsSectionHeading"><h3 id="application-updates-title">{t("settings.updates")}</h3></div>
             <p role="status" aria-live="polite">
-              {updateStatus.state === "notConfigured" && "Updates are not configured for this build."}
-              {updateStatus.state === "idle" && "You can check for a newer version."}
-              {updateStatus.state === "checking" && "Checking for updates…"}
-              {updateStatus.state === "notAvailable" && "GitCrest is up to date."}
-              {updateStatus.state === "available" && `Version ${updateStatus.version} is available. Downloading…`}
-              {updateStatus.state === "downloading" && `Downloading update${updateStatus.version ? ` ${updateStatus.version}` : ""}… ${Math.round(updateStatus.percent)}%`}
-              {updateStatus.state === "downloaded" && `Version ${updateStatus.version} is ready to install.`}
+              {updateStatus.state === "notConfigured" && t("settings.updNotConfigured")}
+              {updateStatus.state === "idle" && t("settings.updIdle")}
+              {updateStatus.state === "checking" && t("settings.updChecking")}
+              {updateStatus.state === "notAvailable" && t("settings.updUpToDate")}
+              {updateStatus.state === "available" && t("settings.updAvailable", { version: updateStatus.version })}
+              {updateStatus.state === "downloading" && t("settings.updDownloading", { version: updateStatus.version ? ` ${updateStatus.version}` : "", percent: Math.round(updateStatus.percent) })}
+              {updateStatus.state === "downloaded" && t("settings.updDownloaded", { version: updateStatus.version })}
               {updateStatus.state === "error" && updateStatus.message}
             </p>
             <div className="settingsActions">
               <button className="secondaryButton" type="button" disabled={!onCheckForUpdates || ["notConfigured", "checking", "available", "downloading", "downloaded"].includes(updateStatus.state)} onClick={() => void onCheckForUpdates?.()}>
-                {updateStatus.state === "checking" ? "Checking…" : "Check for updates"}
+                {updateStatus.state === "checking" ? t("settings.checkingBtn") : t("settings.checkUpdates")}
               </button>
-              {updateStatus.state === "downloaded" && <button className="primaryButton" type="button" disabled={!onInstallUpdate} onClick={onInstallUpdate}>Restart to install</button>}
+              {updateStatus.state === "downloaded" && <button className="primaryButton" type="button" disabled={!onInstallUpdate} onClick={onInstallUpdate}>{t("settings.restartInstall")}</button>}
             </div>
           </section>}
-          <p className="settingsNotice">Provider settings are stored locally. Saving them does not send a request to an AI provider.</p>
+          <p className="settingsNotice">{t("settings.providerNotice")}</p>
           <form className="settingsForm" onSubmit={saveSettings}>
-            <label>Provider<select aria-label="AI provider" value={provider} onChange={(event) => changeProvider(event.target.value as AiSettingsResponse["provider"])}><option value="none">Disabled</option><option value="openAiCompatible">OpenAI-compatible cloud</option><option value="ollama">Ollama on this machine</option></select></label>
+            <label>{t("settings.provider")}<select aria-label={t("settings.providerAria")} value={provider} onChange={(event) => changeProvider(event.target.value as AiSettingsResponse["provider"])}><option value="none">{t("settings.providerDisabled")}</option><option value="openAiCompatible">{t("settings.providerOpenAi")}</option><option value="ollama">{t("settings.providerOllama")}</option></select></label>
             {provider !== "none" && <>
-              <label>Endpoint<input aria-label="AI endpoint" value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={provider === "ollama" ? "http://127.0.0.1:11434" : "https://api.openai.com/v1"} autoComplete="url" /></label>
-              <label>Model<input aria-label="AI model" value={model} onChange={(event) => setModel(event.target.value)} /></label>
+              <label>{t("settings.endpoint")}<input aria-label={t("settings.endpointAria")} value={baseUrl} onChange={(event) => setBaseUrl(event.target.value)} placeholder={provider === "ollama" ? "http://127.0.0.1:11434" : "https://api.openai.com/v1"} autoComplete="url" /></label>
+              <label>{t("settings.model")}<input aria-label={t("settings.modelAria")} value={model} onChange={(event) => setModel(event.target.value)} /></label>
             </>}
-            <button className="primaryButton" type="submit" disabled={busy || !settings}>{busy ? "Saving…" : "Save provider settings"}</button>
+            <button className="primaryButton" type="submit" disabled={busy || !settings}>{busy ? t("settings.saving") : t("settings.saveProvider")}</button>
           </form>
           {provider === "openAiCompatible" && <form className="settingsForm settingsKeyForm" onSubmit={saveKey}>
-            <h3>Cloud API key</h3>
-            {settings?.provider !== "openAiCompatible" && <p>Save the OpenAI-compatible provider settings before adding its key.</p>}
-            <p>{settings?.hasCloudCredential ? "An API key is saved in the system credential store." : "No API key is saved."} The key is never returned to this window.</p>
-            <label>API key<input aria-label="Cloud API key" type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" /></label>
-            <div className="settingsActions"><button className="secondaryButton" type="submit" disabled={busy || settings?.provider !== "openAiCompatible" || !apiKey}>{busy ? "Saving…" : "Save API key"}</button>{settings?.hasCloudCredential && <button className="dangerTextButton" type="button" disabled={busy} onClick={() => void removeKey()}>Remove key</button>}</div>
+            <h3>{t("settings.cloudKey")}</h3>
+            {settings?.provider !== "openAiCompatible" && <p>{t("settings.saveProviderFirst")}</p>}
+            <p>{settings?.hasCloudCredential ? t("settings.keySaved") : t("settings.keyNotSaved")} {t("settings.keyNeverReturned")}</p>
+            <label>{t("settings.apiKey")}<input aria-label={t("settings.cloudKey")} type="password" value={apiKey} onChange={(event) => setApiKey(event.target.value)} autoComplete="new-password" /></label>
+            <div className="settingsActions"><button className="secondaryButton" type="submit" disabled={busy || settings?.provider !== "openAiCompatible" || !apiKey}>{busy ? t("settings.saving") : t("settings.saveKey")}</button>{settings?.hasCloudCredential && <button className="dangerTextButton" type="button" disabled={busy} onClick={() => void removeKey()}>{t("settings.removeKey")}</button>}</div>
           </form>}
           <PrivacyScopePreview api={api} repoId={repoId} settings={settings} />
           {error && <p className="formError" role="alert">{error}</p>}{notice && <p className="settingsNotice" role="status">{notice}</p>}

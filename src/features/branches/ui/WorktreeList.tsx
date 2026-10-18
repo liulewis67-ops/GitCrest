@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse, type WorktreeSnapshotResponse } from "../../../api/client";
+import { useI18n } from "../../../shared/i18n";
 
 function leafName(path: string) {
   return path.split(/[\\/]/).filter(Boolean).pop() || path;
@@ -14,6 +15,7 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
   onOpen: (path: string) => void;
   onRemoveStarted: (task: TaskSnapshotResponse) => void;
 }) {
+  const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<WorktreeSnapshotResponse>();
   const [confirming, setConfirming] = useState<string>();
   const [error, setError] = useState("");
@@ -24,7 +26,7 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
     try {
       onRemoveStarted(await api.pruneRepositoryWorktrees(repoId));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not clean up the worktree list.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("wt.cleanupFailed"));
     }
   }
 
@@ -35,7 +37,7 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
       setConfirming(undefined);
       setForce(false);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not remove this worktree.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("wt.removeFailed"));
     }
   }
 
@@ -53,24 +55,24 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
   return <>
     <div className="navDivider" />
     <div className="navGroup worktreesNavigation">
-      <div className="navGroupTitle"><span>Worktrees</span><span className="countBadge">{snapshot.worktrees.length}</span>{snapshot.worktrees.some((worktree) => worktree.prunable) && <button className="textButton" type="button" disabled={disabled} title="Forget worktrees whose folders were deleted outside GitCrest" onClick={() => void prune()}>Clean up missing</button>}</div>
+      <div className="navGroupTitle"><span>{t("wt.title")}</span><span className="countBadge">{snapshot.worktrees.length}</span>{snapshot.worktrees.some((worktree) => worktree.prunable) && <button className="textButton" type="button" disabled={disabled} title={t("wt.forgetTitle")} onClick={() => void prune()}>{t("wt.cleanUp")}</button>}</div>
       {error && <p className="dialogError" role="alert">{error}</p>}
-      <ul className="branchList" aria-label="Repository worktrees">
+      <ul className="branchList" aria-label={t("wt.listAria")}>
         {snapshot.worktrees.map((worktree) => (
           <li className={`branchItem${worktree.isCurrent ? " current" : ""}`} key={worktree.path}>
             <span className="branchItemGlyph" aria-hidden="true">⧉</span>
-            <span className="branchItemName" title={worktree.path}>{worktree.branch ?? (worktree.detached ? `Detached ${worktree.head?.slice(0, 7) ?? ""}` : leafName(worktree.path))}</span>
-            {worktree.isDirty && !worktree.isCurrent && <span className="worktreeDirty" title="This worktree has uncommitted changes" aria-label="Has uncommitted changes">●</span>}
+            <span className="branchItemName" title={worktree.path}>{worktree.branch ?? (worktree.detached ? t("wt.detached", { oid: worktree.head?.slice(0, 7) ?? "" }) : leafName(worktree.path))}</span>
+            {worktree.isDirty && !worktree.isCurrent && <span className="worktreeDirty" title={t("wt.dirtyTitle")} aria-label={t("wt.dirtyAria")}>●</span>}
             {worktree.isCurrent
-              ? <span className="branchCurrentLabel">OPEN</span>
-              : <button className="branchAction worktreeOpen" type="button" aria-label={`Open worktree ${leafName(worktree.path)}`} title={worktree.path} disabled={disabled || worktree.prunable} onClick={() => onOpen(worktree.path)}>{worktree.prunable ? "Missing" : "Open"}</button>}
+              ? <span className="branchCurrentLabel">{t("wt.openLabel")}</span>
+              : <button className="branchAction worktreeOpen" type="button" aria-label={t("wt.openAria", { name: leafName(worktree.path) })} title={worktree.path} disabled={disabled || worktree.prunable} onClick={() => onOpen(worktree.path)}>{worktree.prunable ? t("wt.missing") : t("wt.open")}</button>}
             {!worktree.isCurrent && !worktree.isMain && !worktree.prunable && (confirming === worktree.path
               ? <span className="worktreeConfirm">
-                <label className="worktreeForce" title="Also discard uncommitted changes in that folder"><input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />Discard changes</label>
-                <button className="branchAction" type="button" aria-label={`Confirm remove worktree ${leafName(worktree.path)}`} disabled={disabled || (worktree.isDirty && !force)} title={worktree.isDirty && !force ? "This worktree has uncommitted changes. Tick Discard changes to remove it." : undefined} onClick={() => void remove(worktree.path, force)}>Confirm</button>
-                <button className="branchAction" type="button" aria-label="Cancel remove" onClick={() => setConfirming(undefined)}>Cancel</button>
+                <label className="worktreeForce" title={t("wt.discardTitle")}><input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />{t("wt.discard")}</label>
+                <button className="branchAction" type="button" aria-label={t("wt.confirmAria", { name: leafName(worktree.path) })} disabled={disabled || (worktree.isDirty && !force)} title={worktree.isDirty && !force ? t("wt.tickDiscard") : undefined} onClick={() => void remove(worktree.path, force)}>{t("wt.confirm")}</button>
+                <button className="branchAction" type="button" aria-label={t("wt.cancelAria")} onClick={() => setConfirming(undefined)}>{t("wt.cancel")}</button>
               </span>
-              : <button className="branchAction worktreeRemove" type="button" aria-label={`Remove worktree ${leafName(worktree.path)}`} title={`Remove ${worktree.path} (the branch is kept)`} disabled={disabled || worktree.locked} onClick={() => { setForce(false); setConfirming(worktree.path); }}>Remove</button>)}
+              : <button className="branchAction worktreeRemove" type="button" aria-label={t("wt.removeAria", { name: leafName(worktree.path) })} title={t("wt.removeTitle", { path: worktree.path })} disabled={disabled || worktree.locked} onClick={() => { setForce(false); setConfirming(worktree.path); }}>{t("wt.remove")}</button>)}
           </li>
         ))}
       </ul>

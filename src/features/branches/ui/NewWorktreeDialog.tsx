@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { useI18n } from "../../../shared/i18n";
 import { LocalFilesPicker } from "./LocalFilesPicker";
 import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
 import { isAbsoluteFolder, rememberCopyFiles, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
@@ -18,6 +19,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
   onClose: () => void;
   onStarted: (task: TaskSnapshotResponse) => void;
 }) {
+  const { t } = useI18n();
   const localName = fromRemote ? branch.slice(branch.indexOf("/") + 1) : branch;
   const suggested = suggestWorktreePath(repositoryPath, localName);
   const [folder, setFolder] = useState(suggested);
@@ -39,7 +41,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
       rememberCopyFiles(repoId, copyFiles);
       onStarted(task);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not create this worktree.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("nw.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -57,26 +59,26 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="new-worktree-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">NEW WORKTREE</p><h2 id="new-worktree-title">Open branch in a new worktree</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>
+        <div><p className="sectionEyebrow">{t("nw.eyebrow")}</p><h2 id="new-worktree-title">{t("nw.title")}</h2></div>
+        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("nw.close")}</button>
       </div>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>{fromRemote ? "REMOTE BRANCH" : "BRANCH"}</span><strong>{branch}</strong></div>
-        {fromRemote && <p className="cloneHelp">A local branch named <strong>{localName}</strong> will be created in the worktree and set to track {branch}.</p>}
-        <label className="branchWorktreeField">Worktree folder
+        <div className="repositoryFact"><span>{fromRemote ? t("nw.remoteBranch") : t("nw.branch")}</span><strong>{branch}</strong></div>
+        {fromRemote && <p className="cloneHelp">{t("nw.localWillBeCreated", { name: localName, branch })}</p>}
+        <label className="branchWorktreeField">{t("nw.folder")}
           <span className="branchWorktreeInput">
-            <input autoFocus data-dialog-initial-focus value={folder} aria-label="Worktree folder" spellCheck={false} onChange={(event) => setFolder(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && ready) { event.preventDefault(); void submit(); } }} />
-            {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void browse()}>Browse…</button>}
+            <input autoFocus data-dialog-initial-focus value={folder} aria-label={t("nw.folder")} spellCheck={false} onChange={(event) => setFolder(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && ready) { event.preventDefault(); void submit(); } }} />
+            {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void browse()}>{t("nw.browse")}</button>}
           </span>
         </label>
         <LocalFilesPicker api={api} repoId={repoId} selected={copyFiles} onChange={setCopyFiles} disabled={busy} />
-        <p className="cloneHelp">The folder must be new or empty. Your current working tree is not touched. Open the new worktree afterwards from the Worktrees list.</p>
-        {relative && <p className="taskCenterError" role="alert">Use a full path, such as C:\work\app-feature or /home/me/app-feature.</p>}
+        <p className="cloneHelp">{t("nw.help")}</p>
+        {relative && <p className="taskCenterError" role="alert">{t("nw.fullPath")}</p>}
         {folderProblem && <p className="taskCenterError" role="alert">{worktreeFolderProblemMessage(folderProblem)}</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Cancel</button>
-          <button className="primaryButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? "Creating…" : "Create worktree"}</button>
+          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("nw.cancel")}</button>
+          <button className="primaryButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("nw.creating") : t("nw.create")}</button>
         </div>
       </div>
     </section>

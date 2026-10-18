@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 import { rememberedCopyFiles } from "../model/worktree-path";
+import { useI18n } from "../../../shared/i18n";
 
 type Listing = { files: Array<{ path: string; sizeBytes: number }>; omittedCount: number };
 
@@ -19,6 +20,7 @@ export function LocalFilesPicker({ api, repoId, selected, onChange, disabled }: 
   onChange: (files: string[]) => void;
   disabled?: boolean;
 }) {
+  const { t } = useI18n();
   const [listing, setListing] = useState<Listing>();
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
@@ -46,11 +48,11 @@ export function LocalFilesPicker({ api, repoId, selected, onChange, disabled }: 
   if (!listing || listing.files.length === 0) return null;
   const toggle = (path: string, checked: boolean) => onChange(checked ? [...selected, path] : selected.filter((item) => item !== path));
   return <fieldset className="localFilesPicker" disabled={disabled}>
-    <legend>Copy local files (ignored by Git)</legend>
+    <legend>{t("br.copyLocalFiles")}</legend>
     {listing.files.map((file) => <label key={file.path}>
       <input type="checkbox" checked={selected.includes(file.path)} onChange={(event) => toggle(file.path, event.target.checked)} />
       <span className="monoText">{file.path}</span><small>{formatSize(file.sizeBytes)}</small>
     </label>)}
-    <p className="cloneHelp">Only the files you tick are copied (files copied last time are ticked again), and existing files are never overwritten. These files can contain secrets.{listing.omittedCount > 0 ? ` ${listing.omittedCount} larger or folder item(s) are not offered.` : ""}</p>
+    <p className="cloneHelp">{t("br.copyHelp")}{listing.omittedCount > 0 ? t("br.omitted", { count: listing.omittedCount }) : ""}</p>
   </fieldset>;
 }

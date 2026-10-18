@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
@@ -32,6 +33,7 @@ export function CommitDetails({
   cherryPickShortcut?: string;
   onTagRequestHandled?: (sequence: number) => void;
 }) {
+  const { t } = useI18n();
   const state = useRepositoryCommitDetail(api, repoId, oid);
   const [copyMessage, setCopyMessage] = useState("");
   const tagCreation = useCommitTagCreation(api, repoId, oid);
@@ -45,19 +47,19 @@ export function CommitDetails({
     onTagRequestHandled?.(openTagRequest.sequence);
   }, [oid, onTagRequestHandled, openTagRequest, repoId, tagCreation.openEditor]);
 
-  if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>No commit selected</h2><p>Select a commit in the graph to inspect its message, author, and changed files.</p></div>;
-  if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">Loading commit details…</div>;
+  if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>{t("cd.none")}</h2><p>{t("cd.noneHint")}</p></div>;
+  if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">{t("cd.loading")}</div>;
   if (state.error) return <div className="commitDetailsState" role="alert"><p>{state.error}</p></div>;
   const detail = state.detail;
   if (!detail) return null;
   const commitOid = detail.oid;
   async function copyCommitId() {
     try {
-      if (!navigator.clipboard?.writeText) throw new Error("Clipboard access is unavailable.");
+      if (!navigator.clipboard?.writeText) throw new Error(t("cd.clipboardUnavailable"));
       await navigator.clipboard.writeText(commitOid);
-      setCopyMessage("Full commit SHA copied.");
+      setCopyMessage(t("cd.copied"));
     } catch {
-      setCopyMessage("Clipboard access is unavailable. Select the commit ID to copy it.");
+      setCopyMessage(t("cd.copyFailed"));
     }
   }
   async function createAnnotatedTag(event: FormEvent<HTMLFormElement>) {
@@ -65,22 +67,22 @@ export function CommitDetails({
     await tagCreation.createTag();
   }
   return <div className="commitDetails">
-    <div className="repositoryFact"><span>COMMIT</span><strong className="monoText" title={detail.oid}>{detail.oid.slice(0, 12)}</strong></div>
-    <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>Copy SHA</button>
+    <div className="repositoryFact"><span>{t("cd.commit")}</span><strong className="monoText" title={detail.oid}>{detail.oid.slice(0, 12)}</strong></div>
+    <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>{t("cd.copySha")}</button>
     {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
-    <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={tagCreation.toggleEditor}>{tagCreation.editorOpen ? "Cancel tag" : "Create tag"}</button>
-    {onWorkflow && <div className="commitWorkflowActions" aria-label="Commit actions"><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>Merge</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} aria-keyshortcuts={cherryPickShortcut} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>Cherry-pick</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>Revert</button>{onCreateBranch && <button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason ?? "Create a branch that starts at this commit"} onClick={() => onCreateBranch(commitOid)}>Branch here</button>}</div>}
+    <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={tagCreation.toggleEditor}>{tagCreation.editorOpen ? t("cd.cancelTag") : t("cd.createTag")}</button>
+    {onWorkflow && <div className="commitWorkflowActions" aria-label={t("cd.actionsAria")}><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>{t("cd.merge")}</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} aria-keyshortcuts={cherryPickShortcut} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>{t("cd.cherryPick")}</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>{t("cd.revert")}</button>{onCreateBranch && <button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason ?? t("cd.createBranchTitle")} onClick={() => onCreateBranch(commitOid)}>{t("cd.branchHere")}</button>}</div>}
     {tagCreation.editorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
-      <label>Tag name<input aria-label="Tag name" value={tagCreation.name} maxLength={255} required onChange={(event) => tagCreation.setName(event.target.value)} placeholder="v1.0.0" /></label>
-      <label>Annotation message<textarea aria-label="Tag annotation" value={tagCreation.message} maxLength={8192} onChange={(event) => tagCreation.setMessage(event.target.value)} placeholder="Describe this release" /></label>
+      <label>{t("cd.tagName")}<input aria-label={t("cd.tagName")} value={tagCreation.name} maxLength={255} required onChange={(event) => tagCreation.setName(event.target.value)} placeholder="v1.0.0" /></label>
+      <label>{t("cd.annotation")}<textarea aria-label={t("cd.annotationAria")} value={tagCreation.message} maxLength={8192} onChange={(event) => tagCreation.setMessage(event.target.value)} placeholder={t("cd.annotationPlaceholder")} /></label>
       {tagCreation.error && <p className="commitTagError" role="alert">{tagCreation.error}</p>}
-      <button className="secondaryButton" type="submit" disabled={tagCreation.busy || !tagCreation.name.trim()}>{tagCreation.busy ? "Creating tag…" : "Create annotated tag"}</button>
+      <button className="secondaryButton" type="submit" disabled={tagCreation.busy || !tagCreation.name.trim()}>{tagCreation.busy ? t("cd.creatingTag") : t("cd.createAnnotated")}</button>
     </form>}
     {tagCreation.status && <p className="commitCopyStatus" role="status">{tagCreation.status}</p>}
-    <div className="repositoryFact"><span>AUTHOR</span><strong>{detail.authorName}</strong></div>
-    <div className="repositoryFact"><span>DATE</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
+    <div className="repositoryFact"><span>{t("cd.author")}</span><strong>{detail.authorName}</strong></div>
+    <div className="repositoryFact"><span>{t("cd.date")}</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
     <div className="commitDetailMessage">{detail.message}</div>
-    <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> files <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
-    <div className="commitDetailFiles" aria-label="Changed files">{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className="commitDetailFile" type="button" aria-label={`Open commit diff for ${file.path}`} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? "binary" : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={`Open commit diff window for ${file.path}`} title="Open in a read-only Diff window" onClick={() => onOpenDiffWindow(file.path, detail.oid)}>↗</button>}</div>)}</div>
+    <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> {t("cd.files")} <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
+    <div className="commitDetailFiles" aria-label={t("cd.changedFiles")}>{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className="commitDetailFile" type="button" aria-label={t("cd.openDiffFor", { path: file.path })} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, detail.oid)}>↗</button>}</div>)}</div>
   </div>;
 }

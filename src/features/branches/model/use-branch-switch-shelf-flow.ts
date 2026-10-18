@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   GitCrestApiError,
@@ -102,7 +103,7 @@ export function useBranchSwitchShelfFlow({
         branchSwitcher.close();
         requestShelfComposer(repoId);
       } catch (error) {
-        branchSwitcher.setError(errorMessage(error, "Could not prepare the shelf before switching branches."));
+        branchSwitcher.setError(errorMessage(error, t("bm.shelfPrepare")));
       }
     });
   }
@@ -129,9 +130,9 @@ export function useBranchSwitchShelfFlow({
       const preflight = await api.preflightRepositoryBranchSwitch(context.repoId, context.target);
       if (preflight.potentiallyOverwrittenPaths.length > 0) {
         if (getSelectedRepositoryId() === context.repoId) {
-          onBranchSwitchReview(context.target, preflight, "Some changes remain on paths the target branch updates. Shelve or commit them, then review the switch again.");
+          onBranchSwitchReview(context.target, preflight, t("bm.remainOverlap"));
         } else {
-          setTaskError(`The shelf was created, but ${preflight.potentiallyOverwrittenPaths.length} remaining path(s) still overlap ${context.target}. Reopen that repository to review the switch.`);
+          setTaskError(t("bm.remainPaths", { count: preflight.potentiallyOverwrittenPaths.length, target: context.target }));
         }
         return;
       }
@@ -140,7 +141,7 @@ export function useBranchSwitchShelfFlow({
       appendTask(task);
       openTaskCenter();
     } catch (error) {
-      setTaskError(errorMessage(error, "The shelf was created, but GitCrest could not continue the branch switch."));
+      setTaskError(errorMessage(error, t("bm.shelfContinue")));
     }
   }
 
@@ -153,7 +154,7 @@ export function useBranchSwitchShelfFlow({
         .filter((shelf) => !context.existingShelfIds.includes(shelf.shelfId))
         .sort((left, right) => left.createdAtMs - right.createdAtMs);
       if (newlyCreated.length === 0) {
-        setTaskError("The branch switched, but GitCrest could not identify the newly created shelf. Review the shelf list and restore it manually.");
+        setTaskError(t("bm.shelfIdentify"));
         openTaskCenter();
         return;
       }
@@ -162,7 +163,7 @@ export function useBranchSwitchShelfFlow({
       savedTargetsRef.current.delete(key);
       await applyNextShelf(context.repoId, newlyCreated.map((shelf) => shelf.shelfId));
     } catch (error) {
-      setTaskError(errorMessage(error, "The branch switched, but GitCrest could not restore the saved shelf."));
+      setTaskError(errorMessage(error, t("bm.shelfRestore")));
       openTaskCenter();
     }
   }
@@ -175,7 +176,7 @@ export function useBranchSwitchShelfFlow({
     try {
       const preview = await api.preflightRepositoryShelfApply(repoId, shelfId);
       if (!preview.canApplyCleanly && !preview.canApplyWithConflicts) {
-        setTaskError("The branch switched, but a saved shelf cannot be restored safely on this branch. Review and apply the remaining shelf manually.");
+        setTaskError(t("bm.shelfUnsafe"));
         openTaskCenter();
         return;
       }
@@ -192,7 +193,7 @@ export function useBranchSwitchShelfFlow({
       }
       openTaskCenter();
     } catch (error) {
-      setTaskError(errorMessage(error, "GitCrest could not restore the saved shelf."));
+      setTaskError(errorMessage(error, t("bm.shelfRestoreShort")));
       openTaskCenter();
     }
   }

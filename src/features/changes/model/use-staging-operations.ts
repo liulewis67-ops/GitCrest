@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
   GitCrestApiError,
@@ -69,7 +70,7 @@ export function useStagingOperations({
       openTaskCenter();
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : "Could not start the staging task."));
+      setTaskError(message || (error instanceof Error ? error.message : t("err.stagingStart")));
       openTaskCenter();
     } finally {
       setBusy(false);
@@ -85,7 +86,7 @@ export function useStagingOperations({
       openTaskCenter();
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : "Could not undo the recent staging operation."));
+      setTaskError(message || (error instanceof Error ? error.message : t("err.stagingUndo")));
       openTaskCenter();
     }
   }
@@ -107,7 +108,7 @@ export function useStagingOperations({
       openTaskCenter();
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : "Could not start the partial staging task."));
+      setTaskError(message || (error instanceof Error ? error.message : t("err.partialStaging")));
       openTaskCenter();
     } finally {
       setBusy(false);
@@ -127,7 +128,7 @@ export function useStagingOperations({
       clearDiscardSelection();
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : "Could not start the discard task."));
+      setTaskError(message || (error instanceof Error ? error.message : t("err.discardStart")));
     } finally {
       setBusy(false);
     }

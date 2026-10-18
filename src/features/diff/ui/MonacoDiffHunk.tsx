@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { DiffEditor } from "@monaco-editor/react";
 import { useEffect, useState } from "react";
 import { parseDiffHunkSyntax } from "../model/tree-sitter";
@@ -46,6 +47,7 @@ interface MonacoDiffHunkProps {
 }
 
 export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar, label, height }: MonacoDiffHunkProps) {
+  const { t } = useI18n();
   const [languageReady, setLanguageReady] = useState(language === "plaintext");
   const [languageFailed, setLanguageFailed] = useState(false);
   const [parseState, setParseState] = useState<"loading" | "parsed" | "recovered" | "language" | "tooLarge" | "parserUnavailable">(treeSitterGrammar ? "loading" : "language");
@@ -74,15 +76,15 @@ export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar
     return () => { cancelled = true; };
   }, [treeSitterGrammar, original, modified]);
 
-  if (!languageReady || parseState === "loading") return <div className="monacoDiffLoading" role="status">Loading syntax support…</div>;
+  if (!languageReady || parseState === "loading") return <div className="monacoDiffLoading" role="status">{t("mz.loading")}</div>;
   const themePreference = document.documentElement.dataset.theme;
   const prefersDark = themePreference === "dark" || (themePreference === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
   return (
     <div className="monacoDiffHunk" aria-label={label} data-tree-sitter-state={parseState}>
-      {languageFailed && <div className="diffSyntaxFallback" role="status">Syntax support failed to load. Monaco is showing plain text.</div>}
-      {treeSitterGrammar && parseState === "parserUnavailable" && <div className="diffSyntaxFallback" role="status">Tree-sitter could not load this grammar. Monaco is showing plain text.</div>}
-      {parseState === "tooLarge" && <div className="diffSyntaxFallback" role="status">This hunk is too large for syntax parsing. Monaco is showing plain text.</div>}
-      {parseState === "recovered" && <div className="diffSyntaxFallback" role="status">This hunk is a partial excerpt; tree-sitter recovered from incomplete context.</div>}
+      {languageFailed && <div className="diffSyntaxFallback" role="status">{t("mz.loadFailed")}</div>}
+      {treeSitterGrammar && parseState === "parserUnavailable" && <div className="diffSyntaxFallback" role="status">{t("mz.grammar")}</div>}
+      {parseState === "tooLarge" && <div className="diffSyntaxFallback" role="status">{t("mz.tooLarge")}</div>}
+      {parseState === "recovered" && <div className="diffSyntaxFallback" role="status">{t("mz.recovered")}</div>}
       <DiffEditor
         height={`${height}px`}
         language={languageFailed || parseState === "language" || parseState === "tooLarge" || parseState === "parserUnavailable" ? "plaintext" : language}

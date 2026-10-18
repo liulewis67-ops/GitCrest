@@ -1,4 +1,5 @@
 import { useDialogFocus } from "../../shared/hooks/use-dialog-focus";
+import { useI18n } from "../../shared/i18n";
 
 export interface CommandPaletteCommand {
   id: string;
@@ -27,6 +28,7 @@ export function CommandPalette({
   onQueryChange,
   onClose,
 }: CommandPaletteProps) {
+  const { t } = useI18n();
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false, undefined, open);
   if (!open) return null;
 
@@ -65,14 +67,14 @@ export function CommandPalette({
         aria-labelledby="palette-title"
         onKeyDown={handleKeyDown}
       >
-        <h2 id="palette-title" className="srOnly">Command palette</h2>
+        <h2 id="palette-title" className="srOnly">{t("palette.title")}</h2>
         <div className="paletteSearch">
           <span aria-hidden="true">⌕</span>
           <input
             autoFocus
             data-dialog-initial-focus
-            aria-label="Search commands"
-            placeholder="Search commands…"
+            aria-label={t("palette.searchLabel")}
+            placeholder={t("palette.placeholder")}
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
           />
@@ -94,12 +96,12 @@ export function CommandPalette({
               <span className="commandItemMain"><strong>{command.label}</strong><small>{command.detail}</small></span>
               {command.available
                 ? <kbd>{command.id === "workspace" ? `${navigationShortcut} 2` : command.id === "welcome" ? `${navigationShortcut} 1` : "↵"}</kbd>
-                : <span className="unavailableTag">Unavailable</span>}
+                : <span className="unavailableTag">{t("palette.unavailable")}</span>}
             </button>
           ))}
-          {filteredCommands.length === 0 && <p className="noCommands">No commands match “{query}”.</p>}
+          {filteredCommands.length === 0 && <p className="noCommands">{t("palette.noMatch", { query })}</p>}
         </div>
-        <div className="paletteFooter"><span>↑ ↓ Navigate</span><span>Enter Run command</span><span>Esc Close</span></div>
+        <div className="paletteFooter"><span>{t("palette.navigate")}</span><span>{t("palette.run")}</span><span>{t("palette.close")}</span></div>
       </section>
     </div>
   );

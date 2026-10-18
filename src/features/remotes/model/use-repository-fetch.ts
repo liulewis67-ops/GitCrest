@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import type { GitCrestApiClient, TaskSnapshotResponse } from "../../../api/client";
 
 interface RepositoryFetchOptions {
@@ -14,7 +15,7 @@ export function useRepositoryFetch({ getApi, repoId, onTaskAccepted, onError }: 
     try {
       onTaskAccepted(await api.fetchRepository(repoId));
     } catch (error) {
-      onError(error instanceof Error ? error.message : "Could not start a fetch task.");
+      onError(error instanceof Error ? error.message : t("err.fetchStart"));
     }
   }
 

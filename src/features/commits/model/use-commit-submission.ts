@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useRef, useState } from "react";
 import {
   GitCrestApiError,
@@ -87,7 +88,7 @@ export function useCommitSubmission({
         retryDiff();
         refreshRepositoryStatus(repoId);
       }
-      setTaskError(message || (error instanceof Error ? error.message : "Could not start the commit task."));
+      setTaskError(message || (error instanceof Error ? error.message : t("err.commitStart")));
       openTaskCenter();
     } finally {
       setBusy(false);

@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 
@@ -45,12 +46,12 @@ export function useCommitTagCreation(api: GitCrestApiClient, repoId: string, oid
     try {
       const tag = await api.createRepositoryCommitTag(repoId, oid, name.trim(), message);
       if (generation.current !== requestGeneration) return false;
-      setStatus(`Annotated tag ${tag.name} created at ${oid.slice(0, 12)}.`);
+      setStatus(t("tag.created", { name: tag.name, oid: oid.slice(0, 12) }));
       closeEditor();
       return true;
     } catch (reason) {
       if (generation.current === requestGeneration) {
-        setError(reason instanceof Error ? reason.message : "Could not create this tag.");
+        setError(reason instanceof Error ? reason.message : t("err.tagFailed"));
       }
       return false;
     } finally {

@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useCallback, useEffect, useState } from "react";
 import { getGitCrestBridge } from "../../../api/bridge";
 import type { UpdateStatus } from "../../../api/update-status";
@@ -18,7 +19,7 @@ export function useUpdateStatus() {
     void getStatus().then((next) => {
       if (active) setUpdateStatus(next);
     }).catch(() => {
-      if (active) setUpdateStatus({ state: "error", message: "Update status could not be loaded." });
+      if (active) setUpdateStatus({ state: "error", message: t("upd.loadFailed") });
     });
     return () => {
       active = false;
@@ -30,12 +31,12 @@ export function useUpdateStatus() {
     const check = getGitCrestBridge()?.checkForUpdates;
     if (!check) return;
     try { setUpdateStatus(await check()); }
-    catch { setUpdateStatus({ state: "error", message: "The update check failed. Try again later." }); }
+    catch { setUpdateStatus({ state: "error", message: t("upd.checkFailed") }); }
   }, []);
 
   const installUpdate = useCallback(() => {
     const install = getGitCrestBridge()?.installUpdate;
-    if (install) void install().catch(() => setUpdateStatus({ state: "error", message: "The update could not be installed." }));
+    if (install) void install().catch(() => setUpdateStatus({ state: "error", message: t("upd.installFailed") }));
   }, []);
 
   return { updateStatus, checkForUpdates, installUpdate };

@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
   GitCrestApiError,
@@ -58,7 +59,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     try {
       setPreflight(await api.preflightRepositoryBranchSwitch(repository.repoId, name));
     } catch (reason) {
-      setError(errorMessage(reason, "Could not check this branch switch."));
+      setError(errorMessage(reason, t("bm.checkSwitch")));
     } finally {
       setBusy(false);
     }
@@ -78,7 +79,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
       close();
       openTaskCenter();
     } catch (reason) {
-      setError(errorMessage(reason, "Could not switch branches."));
+      setError(errorMessage(reason, t("bm.switchFailed")));
     } finally {
       setBusy(false);
     }
@@ -96,7 +97,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
       close();
       openTaskCenter();
     } catch (reason) {
-      setError(errorMessage(reason, "Could not create this branch."));
+      setError(errorMessage(reason, t("bm.createFailed")));
     } finally {
       setBusy(false);
     }

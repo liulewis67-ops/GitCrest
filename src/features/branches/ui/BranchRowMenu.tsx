@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useI18n } from "../../../shared/i18n";
 
 /** The less common actions for a local branch row, behind one compact button so the branch name keeps its room. */
 export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, onRename, onDelete }: {
@@ -10,6 +11,7 @@ export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, o
   onRename: () => void;
   onDelete: () => void;
 }) {
+  const { t } = useI18n();
   const [position, setPosition] = useState<{ top: number; right: number }>();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -55,11 +57,11 @@ export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, o
   };
 
   return <>
-    <button ref={buttonRef} className="branchAction" type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`More actions for ${branch}`} title="More actions" disabled={disabled} onClick={toggle}>⋯</button>
-    {position && <div ref={menuRef} className="branchRowMenu" role="menu" aria-label={`Actions for ${branch}`} style={{ top: position.top, right: position.right }}>
-      <button type="button" role="menuitem" aria-label={`Open ${branch} in a new worktree`} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? `Already checked out in ${checkedOutAt}` : undefined} onClick={choose(onNewWorktree)}>Open in new worktree…</button>
-      <button type="button" role="menuitem" aria-label={`Rename ${branch}`} onClick={choose(onRename)}>Rename…</button>
-      <button type="button" role="menuitem" className="danger" aria-label={`Delete ${branch}`} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? "Remove the worktree that has this branch checked out first" : undefined} onClick={choose(onDelete)}>Delete…</button>
+    <button ref={buttonRef} className="branchAction" type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("br.moreActionsFor", { branch })} title={t("br.moreActions")} disabled={disabled} onClick={toggle}>⋯</button>
+    {position && <div ref={menuRef} className="branchRowMenu" role="menu" aria-label={t("br.actionsFor", { branch })} style={{ top: position.top, right: position.right }}>
+      <button type="button" role="menuitem" aria-label={t("br.openNewWorktreeAria", { branch })} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? t("br.alreadyCheckedOut", { path: checkedOutAt }) : undefined} onClick={choose(onNewWorktree)}>{t("br.openNewWorktree")}</button>
+      <button type="button" role="menuitem" aria-label={t("br.renameAria", { branch })} onClick={choose(onRename)}>{t("br.rename")}</button>
+      <button type="button" role="menuitem" className="danger" aria-label={t("br.deleteAria", { branch })} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? t("br.removeWorktreeFirst") : undefined} onClick={choose(onDelete)}>{t("br.delete")}</button>
     </div>}
   </>;
 }

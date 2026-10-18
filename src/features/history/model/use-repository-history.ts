@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CommitHistoryFilters, CommitPageResponse, GitCrestApiClient, RefSnapshotResponse } from "../../../api/client";
 import type { components } from "../../../api/schema";
@@ -67,22 +68,22 @@ export function useRepositoryHistory(
         }
         setSearchPending(true);
         if (Date.now() - waitStartedAt >= SEARCH_INDEX_WAIT_LIMIT_MS) {
-          throw new Error("History search is taking longer than expected. Try again shortly.");
+          throw new Error(t("err.historySlow"));
         }
         await waitForSearchIndex(signal);
         if (signal.aborted) return;
       }
       if (requestGeneration.current !== generation) return;
       if (!response || typeof response !== "object" || !Array.isArray((response as Partial<CommitPageResponse>).commits)) {
-        throw new Error("History response did not contain a commit list.");
+        throw new Error(t("err.historyNoList"));
       }
       const page = response as CommitPageResponse;
-      if (!page.commits.every(isCommitSummary)) throw new Error("History response contained an invalid commit.");
+      if (!page.commits.every(isCommitSummary)) throw new Error(t("err.historyInvalid"));
       setCommits((current) => offset === 0 ? page.commits : [...current, ...page.commits]);
       setNextOffset(typeof page.nextOffset === "number" && Number.isSafeInteger(page.nextOffset) ? page.nextOffset : null);
     } catch (reason) {
       if (requestGeneration.current !== generation) return;
-      setError(reason instanceof Error ? reason.message : "Could not read commit history.");
+      setError(reason instanceof Error ? reason.message : t("err.readHistory"));
     } finally {
       offsetsInFlight.current.delete(requestKey);
       if (requestGeneration.current === generation) {
@@ -120,7 +121,7 @@ export function useRepositoryHistory(
     void api.withSignal(controller.signal).getRepositoryRefs(repoId).then((snapshot) => {
       if (!controller.signal.aborted) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setRefsError(reason instanceof Error ? reason.message : "Could not read repository refs.");
+      if (!controller.signal.aborted) setRefsError(reason instanceof Error ? reason.message : t("err.readRefs"));
     });
     return () => controller.abort();
   }, [api, repoId, refreshKey]);

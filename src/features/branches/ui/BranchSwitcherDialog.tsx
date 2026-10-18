@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RepositoryResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
@@ -45,6 +46,7 @@ export function BranchSwitcherDialog({
   api,
   onChooseWorktreeParent,
 }: BranchSwitcherDialogProps) {
+  const { t } = useI18n();
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(
     branchSwitcher.close,
     branchSwitcher.busy,
@@ -74,8 +76,8 @@ export function BranchSwitcherDialog({
     : allLocalBranches;
   const hasRemoteBranches = branches.some((branch) => branch.kind === "remote");
   const currentBranch = repository.detached
-    ? `Detached · ${repository.head?.slice(0, 7)}`
-    : repository.branch || "Unborn branch";
+    ? t("bs.detached", { oid: repository.head?.slice(0, 7) ?? "" })
+    : repository.branch || t("bs.unborn");
 
   return (
     <div
@@ -95,62 +97,62 @@ export function BranchSwitcherDialog({
       >
         <div className="dialogHeading">
           <div>
-            <span className="sectionEyebrow">BRANCHES · {getRepositoryDisplayName(repository.path)}</span>
-            <h2 id="branch-switcher-title">Switch branch</h2>
+            <span className="sectionEyebrow">{t("bs.eyebrow", { name: getRepositoryDisplayName(repository.path) })}</span>
+            <h2 id="branch-switcher-title">{t("bs.title")}</h2>
           </div>
-          <button className="dialogClose" type="button" aria-label="Close branch switcher" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>×</button>
+          <button className="dialogClose" type="button" aria-label={t("bs.closeAria")} disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>×</button>
         </div>
-        <p className="branchSwitcherCurrent">Current branch: <strong>{currentBranch}</strong></p>
+        <p className="branchSwitcherCurrent">{t("bs.current")} <strong>{currentBranch}</strong></p>
         {branchSwitcher.targetName ? (
           <div className="branchSwitchDetails">
-            <button className="textButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.chooseAnother}>← Choose another branch</button>
+            <button className="textButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.chooseAnother}>{t("bs.chooseAnother")}</button>
             <h3>{branchSwitcher.targetName}</h3>
-            {branchSwitcher.busy && !branchSwitcher.preflight && <p role="status">Checking the working tree…</p>}
+            {branchSwitcher.busy && !branchSwitcher.preflight && <p role="status">{t("bs.checking")}</p>}
             {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
-            {branchSwitcher.preflight?.isClean && <p className="branchCleanNotice" role="status">The working tree is clean. GitCrest can switch to this branch.</p>}
+            {branchSwitcher.preflight?.isClean && <p className="branchCleanNotice" role="status">{t("bs.clean")}</p>}
             {branchSwitcher.preflight && !branchSwitcher.preflight.isClean && <>
-              <p className="branchDirtyNotice" role="alert">Commit or shelve these changes before switching.</p>
-              <div className="branchDirtyFiles" aria-label="Uncommitted files">
+              <p className="branchDirtyNotice" role="alert">{t("bs.dirty")}</p>
+              <div className="branchDirtyFiles" aria-label={t("bs.uncommittedFiles")}>
                 {branchSwitcher.preflight.dirtyFiles.map((path) => (
                   <div className="branchDirtyFile" key={path}>
                     <span aria-hidden="true">•</span>
                     <span>{path}</span>
-                    {branchSwitcher.preflight?.potentiallyOverwrittenPaths.includes(path) && <strong>May be overwritten</strong>}
+                    {branchSwitcher.preflight?.potentiallyOverwrittenPaths.includes(path) && <strong>{t("bs.mayOverwrite")}</strong>}
                   </div>
                 ))}
               </div>
               <div className="branchSwitchOptions">
-                <button className="secondaryButton" type="button" onClick={onCommitChanges}>Commit changes</button>
+                <button className="secondaryButton" type="button" onClick={onCommitChanges}>{t("bs.commitChanges")}</button>
                 <button
                   className="secondaryButton"
                   type="button"
                   disabled={branchSwitcher.busy || !connected || hasActiveRepositoryTask}
                   aria-keyshortcuts={shelveAriaShortcut}
-                  title={`Shelve selected changes, then switch to ${branchSwitcher.targetName} (${shelveShortcut})`}
+                  title={t("bs.shelveTitle", { name: branchSwitcher.targetName, shortcut: shelveShortcut })}
                   onClick={onShelveAndSwitch}
-                >Shelve &amp; switch</button>
+                >{t("bs.shelveSwitch")}</button>
                 <button
                   className="secondaryButton"
                   type="button"
                   disabled={branchSwitcher.busy || (branchSwitcher.preflight?.potentiallyOverwrittenPaths.length ?? 1) > 0}
                   title={(branchSwitcher.preflight?.potentiallyOverwrittenPaths.length ?? 1) > 0
-                    ? "The target branch changes one or more listed paths"
-                    : "Switch branches while keeping these non-overlapping changes"}
+                    ? t("bs.targetChangesPaths")
+                    : t("bs.keepNonOverlapping")}
                   onClick={() => void branchSwitcher.continueSwitch()}
-                >Continue</button>
+                >{t("bs.continue")}</button>
               </div>
             </>}
           </div>
         ) : (
           <div className="branchSwitchChoices">
-            <h3>Local branches</h3>
+            <h3>{t("bs.localBranches")}</h3>
             {(allLocalBranches.length > 0 || hasBranchSnapshot) && (
               <input
                 className="branchFilterInput"
                 type="search"
                 autoFocus
-                placeholder="Filter, or type a new branch name"
-                aria-label="Filter local branches"
+                placeholder={t("bs.filterPlaceholder")}
+                aria-label={t("bs.filterAria")}
                 value={filter}
                 disabled={branchSwitcher.busy}
                 onChange={(event) => { setFilter(event.target.value); setCursor(0); }}
@@ -179,69 +181,69 @@ export function BranchSwitcherDialog({
                 }}
               />
             )}
-            {!hasBranchSnapshot && branchesLoading && <p role="status">Loading branches…</p>}
+            {!hasBranchSnapshot && branchesLoading && <p role="status">{t("bs.loadingBranches")}</p>}
             {branchError && <p className="dialogError" role="alert">{branchError}</p>}
             {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
             {query && !branches.some((branch) => branch.kind === "local" && branch.name === filter.trim()) && (
               <div className="branchCreateOptions">
                 <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected} onClick={() => void branchSwitcher.createBranch(filter, { checkout: true })}>
                   <span className="branchItemGlyph" aria-hidden="true">+</span>
-                  <span>Create and switch to “{filter.trim()}”</span>
+                  <span>{t("bs.createSwitch", { name: filter.trim() })}</span>
                   <kbd>Enter</kbd>
                 </button>
                 <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected} onClick={() => void branchSwitcher.createBranch(filter)}>
                   <span className="branchItemGlyph" aria-hidden="true">+</span>
-                  <span>Create “{filter.trim()}” without switching</span>
+                  <span>{t("bs.createStay", { name: filter.trim() })}</span>
                 </button>
-                <label className="branchWorktreeField">New worktree folder
+                <label className="branchWorktreeField">{t("bs.newWorktreeFolder")}
                   <span className="branchWorktreeInput">
-                    <input value={effectiveWorktreePath} aria-label="Worktree folder" spellCheck={false} disabled={branchSwitcher.busy} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
+                    <input value={effectiveWorktreePath} aria-label={t("bs.folderAria")} spellCheck={false} disabled={branchSwitcher.busy} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
                     {onChooseWorktreeParent && <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => void onChooseWorktreeParent().then((parent) => {
                       if (!parent) return;
                       setWorktreePath(worktreePathInParent(parent, suggestedWorktree));
                       setWorktreeEdited(true);
-                    }).catch(() => undefined)}>Browse…</button>}
+                    }).catch(() => undefined)}>{t("bs.browse")}</button>}
                   </span>
                 </label>
                 <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim() || !isAbsoluteFolder(effectiveWorktreePath) || Boolean(folderProblem)} onClick={() => { rememberWorktreeParent(effectiveWorktreePath); void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() }); }}>
                   <span className="branchItemGlyph" aria-hidden="true">⧉</span>
-                  <span>Create “{filter.trim()}” in a new worktree</span>
+                  <span>{t("bs.createWorktree", { name: filter.trim() })}</span>
                   <kbd>Shift+Enter</kbd>
-                  {effectiveWorktreePath.trim() !== "" && !isAbsoluteFolder(effectiveWorktreePath) && <small>use a full folder path</small>}
+                  {effectiveWorktreePath.trim() !== "" && !isAbsoluteFolder(effectiveWorktreePath) && <small>{t("bs.fullPath")}</small>}
                   {folderProblem && <small role="alert">{worktreeFolderProblemMessage(folderProblem)}</small>}
                 </button>
               </div>
             )}
-            {hasBranchSnapshot && allLocalBranches.length === 0 && <p className="navEmpty">There are no other local branches.</p>}
-            {allLocalBranches.length > 0 && localBranches.length === 0 && <p className="navEmpty">No branch matches “{filter.trim()}”.</p>}
+            {hasBranchSnapshot && allLocalBranches.length === 0 && <p className="navEmpty">{t("bs.noOthers")}</p>}
+            {allLocalBranches.length > 0 && localBranches.length === 0 && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim() })}</p>}
             {localBranches.map((branch, position) => branch.worktreePath && onOpenWorktree ? (
               <div className="branchChoice inWorktree" key={branch.fullName}>
                 <span className="branchItemGlyph" aria-hidden="true">⧉</span>
                 <span title={branch.worktreePath}>{branch.name}</span>
-                <small>open in another worktree</small>
-                <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>Open worktree</button>
+                <small>{t("bs.openInOther")}</small>
+                <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>{t("bs.openWorktree")}</button>
               </div>
             ) : (
               <button className={`branchChoice${position === Math.min(cursor, localBranches.length - 1) ? " active" : ""}`} type="button" key={branch.fullName} ref={(node) => { if (node && position === Math.min(cursor, localBranches.length - 1)) node.scrollIntoView?.({ block: "nearest" }); }} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true">⑂</span>
                 <span>{branch.name}</span>
                 <BranchSyncBadge branch={branch} />
-                {branch.isFavorite && <span className="branchFavoriteMark" aria-label="Favorite">★</span>}
+                {branch.isFavorite && <span className="branchFavoriteMark" aria-label={t("bs.favorite")}>★</span>}
                 <span className="actionArrow" aria-hidden="true">→</span>
               </button>
             ))}
-            {hasRemoteBranches && <p className="branchRemoteNote">Remote branches are shown in navigation. Check out a local tracking branch before switching to a remote branch.</p>}
+            {hasRemoteBranches && <p className="branchRemoteNote">{t("bs.remoteNote")}</p>}
           </div>
         )}
         <div className="dialogActions">
-          <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>Cancel</button>
+          <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>{t("bs.cancel")}</button>
           {branchSwitcher.targetName && branchSwitcher.preflight?.isClean && (
             <button className="primaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.continueSwitch()}>
-              {branchSwitcher.busy ? "Switching…" : `Switch to ${branchSwitcher.targetName}`}
+              {branchSwitcher.busy ? t("bs.switching") : t("bs.switchTo", { name: branchSwitcher.targetName })}
             </button>
           )}
         </div>
-        <div className="branchSwitcherHint"><kbd>{branchSwitcherShortcut}</kbd> opens this switcher <span>Esc closes</span></div>
+        <div className="branchSwitcherHint"><kbd>{branchSwitcherShortcut}</kbd> {t("bs.hintOpens")} <span>{t("bs.hintEsc")}</span></div>
       </section>
     </div>
   );

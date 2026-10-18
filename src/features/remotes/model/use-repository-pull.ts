@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
   GitCrestApiError,
@@ -39,7 +40,7 @@ export function useRepositoryPull({
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
       setPreflight(undefined);
-      setError(message || (requestError instanceof Error ? requestError.message : "Could not preview the pull."));
+      setError(message || (requestError instanceof Error ? requestError.message : t("err.pullPreview")));
     } finally {
       setLoading(false);
     }
@@ -67,7 +68,7 @@ export function useRepositoryPull({
       setOpen(false);
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : "Could not start the pull task."));
+      setError(message || (requestError instanceof Error ? requestError.message : t("err.pullStart")));
       if (requestError instanceof GitCrestApiError && ["PULL_PREFLIGHT_STALE", "PULL_REQUIRES_CLEAN"].includes(requestError.body.error.code)) {
         void refreshPreflight(repoId);
         refreshRepositoryStatus(repoId);

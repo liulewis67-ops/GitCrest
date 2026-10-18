@@ -1,3 +1,4 @@
+import { useI18n } from "../../../shared/i18n";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
@@ -14,6 +15,7 @@ const MAX_DIFF_TABS = 100;
 const SplitDiff = lazy(() => import("./SplitDiff").then(({ SplitDiff }) => ({ default: SplitDiff })));
 
 export function DiffWindow() {
+  const { t } = useI18n();
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const repoId = params.get("repoId") || "";
   const initialPath = params.get("path") || "";
@@ -65,16 +67,16 @@ export function DiffWindow() {
     let active = true;
     const controller = new AbortController();
     if (!repoId || !initialPath || !["workingTree", "index", "commit"].includes(initialScope || "") || (initialScope === "commit" && !initialCommitOid)) {
-      setError("This Diff window request is invalid. Reopen the file from GitCrest.");
+      setError(t("dw.invalid"));
       return () => { active = false; };
     }
     const bridge = getGitCrestBridge();
     if (!bridge) {
-      setError("GitCrest desktop bridge is unavailable. Open this feature in the GitCrest desktop app.");
+      setError(t("dw.noBridge"));
       return () => { active = false; };
     }
     void bridge.getSidecarConnection().then(async (connection) => {
-      if (connection.windowAccess !== "readOnly") throw new Error("Diff windows must use read-only access.");
+      if (connection.windowAccess !== "readOnly") throw new Error(t("dw.readOnlyOnly"));
       const client = new GitCrestApiClient(connection.baseUrl, connection.token).withSignal(controller.signal);
       const initial: DiffTab = {
         key: tabKey(initialPath, initialScope as DiffTab["scope"], initialCommitOid),
@@ -95,7 +97,7 @@ export function DiffWindow() {
         setApi(client);
       }
     }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : "Could not load repository files.");
+      if (active) setError(reason instanceof Error ? reason.message : t("dw.loadFilesFailed"));
     });
     return () => {
       active = false;
@@ -117,11 +119,11 @@ export function DiffWindow() {
       ? requestClient.getRepositoryCommitDiff(repoId, activeTab.commitOid, activeTab.path)
       : activeTab.scope === "workingTree" || activeTab.scope === "index"
         ? requestClient.getFileDiff(repoId, activeTab.path, activeTab.scope)
-        : Promise.reject(new Error("This historical Diff has no commit ID."));
+        : Promise.reject(new Error(t("dw.noCommitId")));
     void request.then((result) => {
       if (active) setDocument(result);
     }).catch((reason: unknown) => {
-      if (active && !controller.signal.aborted) setError(reason instanceof Error ? reason.message : "Could not load this file diff.");
+      if (active && !controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("dw.loadDiffFailed"));
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -142,7 +144,7 @@ export function DiffWindow() {
       const result = await api.getRepositoryBlame(repoId, activeTab.path, activeTab.scope === "commit" ? activeTab.commitOid : undefined);
       if (activeTabKeyRef.current === requestedTabKey) setBlame(result);
     } catch (reason) {
-      if (activeTabKeyRef.current === requestedTabKey) setError(reason instanceof Error ? reason.message : "Could not load file blame.");
+      if (activeTabKeyRef.current === requestedTabKey) setError(reason instanceof Error ? reason.message : t("dw.loadBlameFailed"));
     } finally {
       if (activeTabKeyRef.current === requestedTabKey) setLoading(false);
     }
@@ -157,31 +159,31 @@ export function DiffWindow() {
   }
 
   return (
-    <main className="diffWindow" aria-label="Read-only Diff window">
+    <main className="diffWindow" aria-label={t("dw.aria")}>
       <header className="diffWindowHeader">
-        <div><span className="sectionEyebrow">READ ONLY DIFF</span><strong title={activeTab?.path || initialPath}>{activeTab?.path || initialPath || "File diff"}</strong></div>
-        <div className="diffWindowViewToggle" role="group" aria-label="Diff layout">
-          <button type="button" aria-pressed={view === "split"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={`Toggle Split/Unified (${displayShortcut(shortcuts.toggleDiffView, isMac)})`} onClick={() => setView("split")}>Split</button>
-          <button type="button" aria-pressed={view === "unified"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={`Toggle Split/Unified (${displayShortcut(shortcuts.toggleDiffView, isMac)})`} onClick={() => setView("unified")}>Unified</button>
-          <button type="button" aria-pressed={view === "blame"} disabled={blameDisabled} title={blameDisabled ? "Blame requires a text file with committed history." : "Show Git line blame"} onClick={() => void openBlame()}>Blame</button>
+        <div><span className="sectionEyebrow">{t("dw.eyebrow")}</span><strong title={activeTab?.path || initialPath}>{activeTab?.path || initialPath || t("dw.fileDiff")}</strong></div>
+        <div className="diffWindowViewToggle" role="group" aria-label={t("dw.layout")}>
+          <button type="button" aria-pressed={view === "split"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={t("dw.toggleTitle", { shortcut: displayShortcut(shortcuts.toggleDiffView, isMac) })} onClick={() => setView("split")}>{t("dw.split")}</button>
+          <button type="button" aria-pressed={view === "unified"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={t("dw.toggleTitle", { shortcut: displayShortcut(shortcuts.toggleDiffView, isMac) })} onClick={() => setView("unified")}>{t("dw.unified")}</button>
+          <button type="button" aria-pressed={view === "blame"} disabled={blameDisabled} title={blameDisabled ? t("dw.blameDisabled") : t("dw.blameShow")} onClick={() => void openBlame()}>{t("dw.blame")}</button>
         </div>
       </header>
-      <nav className="diffWindowTabs" aria-label="Open diff files">
+      <nav className="diffWindowTabs" aria-label={t("dw.tabsAria")}>
         {tabs.map((tab) => <div className={`diffWindowTab${tab.key === activeTabKey ? " active" : ""}`} key={tab.key}>
           <button type="button" className="diffWindowTabSelect" aria-current={tab.key === activeTabKey ? "page" : undefined} onClick={() => setActiveTabKey(tab.key)}>
-            <span>{tab.scope === "commit" ? "COMMIT" : tab.scope === "index" ? "STAGED" : "WORKTREE"}</span>{tab.path}
+            <span>{tab.scope === "commit" ? t("dw.tabCommit") : tab.scope === "index" ? t("dw.tabStaged") : t("dw.tabWorktree")}</span>{tab.path}
           </button>
-          {tabs.length > 1 && <button type="button" className="diffWindowTabClose" aria-label={`Close ${tab.path} tab`} onClick={() => closeTab(tab)}>×</button>}
+          {tabs.length > 1 && <button type="button" className="diffWindowTabClose" aria-label={t("dw.closeTab", { path: tab.path })} onClick={() => closeTab(tab)}>×</button>}
         </div>)}
-        {tabsTruncated && <span className="diffWindowTabLimit" role="status">Showing the first {MAX_DIFF_TABS} changed files.</span>}
+        {tabsTruncated && <span className="diffWindowTabLimit" role="status">{t("dw.tabLimit", { count: MAX_DIFF_TABS })}</span>}
       </nav>
-      <section className="diffWindowContent" aria-label="File diff content">
+      <section className="diffWindowContent" aria-label={t("dw.contentAria")}>
         {error ? <div className="diffSpecialState" role="alert"><p>{error}</p></div>
-          : loading && !document ? <div className="diffSpecialState" role="status">Loading file diff…</div>
-            : view === "blame" ? loading ? <div className="diffSpecialState" role="status">Loading line blame…</div> : blame ? <BlameView document={blame} /> : <div className="diffSpecialState" role="status">No blame data is available.</div>
-              : !document ? <div className="diffSpecialState" role="status">Loading file diff…</div>
+          : loading && !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
+            : view === "blame" ? loading ? <div className="diffSpecialState" role="status">{t("dw.loadingBlame")}</div> : blame ? <BlameView document={blame} /> : <div className="diffSpecialState" role="status">{t("dw.noBlame")}</div>
+              : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
                 : view === "split"
-                  ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">Loading diff viewer…</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly /></Suspense>
+                  ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly /></Suspense>
                   : <UnifiedDiff document={document} />}
       </section>
     </main>
@@ -203,8 +205,9 @@ function tabsFromStatus(snapshot: StatusSnapshotResponse): DiffTab[] {
 }
 
 function BlameView({ document }: { document: BlameDocumentResponse }) {
-  return <div className="blameView" aria-label={`Line blame for ${document.path}`}>
-    <div className="splitDiffFileMeta"><span className="diffScopeBadge">BLAME {document.revision ? document.revision.slice(0, 12) : "HEAD"}</span><strong>{document.path}</strong></div>
+  const { t } = useI18n();
+  return <div className="blameView" aria-label={t("dw.blameAria", { path: document.path })}>
+    <div className="splitDiffFileMeta"><span className="diffScopeBadge">{t("dw.blameBadge", { rev: document.revision ? document.revision.slice(0, 12) : "HEAD" })}</span><strong>{document.path}</strong></div>
     {document.lines.map((line) => <div className="blameLine" key={line.lineNumber}>
       <span className="blameLineNumber">{line.lineNumber}</span>
       <span className="blameCommit" title={line.commitOid}>{line.commitOid.slice(0, 8)}</span>
@@ -216,18 +219,19 @@ function BlameView({ document }: { document: BlameDocumentResponse }) {
 }
 
 function UnifiedDiff({ document }: { document: DiffDocumentResponse }) {
+  const { t } = useI18n();
   if (document.status !== "text") {
-    return <div className="diffSpecialState" role="status"><span className={`diffStateBadge diffState-${document.status}`}>{document.status}</span><p>{document.status === "binary" ? "This file is binary; Git does not provide a line based diff." : "No text diff is available for this file."}</p></div>;
+    return <div className="diffSpecialState" role="status"><span className={`diffStateBadge diffState-${document.status}`}>{document.status}</span><p>{document.status === "binary" ? t("dw.binaryNote") : t("dw.noTextDiff")}</p></div>;
   }
-  return <div className="unifiedDiff" aria-label={`Unified diff for ${document.path}`}>
-    <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? "COMMIT ↔ FIRST PARENT" : document.scope === "index" ? "INDEX ↔ HEAD" : "WORKING TREE ↔ INDEX"}</span><strong>{document.path}</strong></div>
-    {document.hunks.map((hunk, hunkIndex) => <section className="unifiedDiffHunk" aria-label={`Change hunk ${hunkIndex + 1}`} key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`}>
+  return <div className="unifiedDiff" aria-label={t("dw.unifiedAria", { path: document.path })}>
+    <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong></div>
+    {document.hunks.map((hunk, hunkIndex) => <section className="unifiedDiffHunk" aria-label={t("sd.hunkAria", { n: hunkIndex + 1 })} key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`}>
       <header>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</header>
       {hunk.rows.map((row, rowIndex) => row.kind === "context"
-        ? <div className="unifiedDiffRow" role="group" aria-label={`Context line ${row.oldLine ?? row.newLine ?? "unknown"}: ${row.oldText ?? row.newText ?? ""}`} key={rowIndex}><span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code> {row.oldText ?? row.newText ?? ""}</code></div>
+        ? <div className="unifiedDiffRow" role="group" aria-label={t("sd.contextLine", { line: row.oldLine ?? row.newLine ?? t("sd.unknown"), text: row.oldText ?? row.newText ?? "" })} key={rowIndex}><span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code> {row.oldText ?? row.newText ?? ""}</code></div>
         : <Fragment key={rowIndex}>
-          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion" role="group" aria-label={`Deleted line ${row.oldLine ?? "unknown"}: ${row.oldText}`}><span>{row.oldLine ?? ""}</span><span /> <code>-{row.oldText}</code></div>}
-          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition" role="group" aria-label={`Added line ${row.newLine ?? "unknown"}: ${row.newText}`}><span /> <span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
+          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion" role="group" aria-label={t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })}><span>{row.oldLine ?? ""}</span><span /> <code>-{row.oldText}</code></div>}
+          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition" role="group" aria-label={t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}><span /> <span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
         </Fragment>)}
     </section>)}
   </div>;

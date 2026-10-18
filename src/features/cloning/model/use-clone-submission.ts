@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
   GitCrestApiError,
@@ -54,7 +55,7 @@ export function useCloneSubmission({
       closeDialog();
     } catch (requestError) {
       const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : "Could not start the clone task."));
+      setError(message || (requestError instanceof Error ? requestError.message : t("err.cloneStart")));
     } finally {
       setBusy(false);
     }

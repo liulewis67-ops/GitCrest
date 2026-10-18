@@ -1,5 +1,14 @@
-const COMMIT_DATE_FORMAT = new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" });
+import { getLocale } from "../../../shared/i18n";
+
+const formatters = new Map<string, Intl.DateTimeFormat>();
 
 export function formatCommitDate(timestamp: number): string {
-  return COMMIT_DATE_FORMAT.format(new Date(timestamp));
+  const language = getLocale() === "zh" ? "zh-CN" : undefined;
+  const cacheKey = language ?? "default";
+  let formatter = formatters.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" });
+    formatters.set(cacheKey, formatter);
+  }
+  return formatter.format(new Date(timestamp));
 }

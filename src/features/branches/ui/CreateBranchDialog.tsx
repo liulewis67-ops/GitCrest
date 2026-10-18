@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { useI18n } from "../../../shared/i18n";
 import { LocalFilesPicker } from "./LocalFilesPicker";
 import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
 import { isAbsoluteFolder, rememberCopyFiles, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
@@ -18,6 +19,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
   onClose: () => void;
   onStarted: (task: TaskSnapshotResponse) => void;
 }) {
+  const { t } = useI18n();
   const [name, setName] = useState("");
   const [placement, setPlacement] = useState<Placement>("switch");
   const [worktreePath, setWorktreePath] = useState("");
@@ -48,7 +50,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
       }
       onStarted(task);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not create this branch.");
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("cb.createFailed"));
     } finally {
       setBusy(false);
     }
@@ -68,32 +70,32 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="create-branch-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">NEW BRANCH</p><h2 id="create-branch-title">Create branch here</h2></div>
-        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button>
+        <div><p className="sectionEyebrow">{t("cb.eyebrow")}</p><h2 id="create-branch-title">{t("cb.title")}</h2></div>
+        <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("cb.close")}</button>
       </div>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>STARTS AT</span><strong className="monoText" title={startOid}>{startOid.slice(0, 12)}</strong></div>
-        <label className="cloneField">Branch name<input autoFocus data-dialog-initial-focus value={name} spellCheck={false} placeholder="feature/my-change" onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && ready) { event.preventDefault(); void submit(); } }} /></label>
+        <div className="repositoryFact"><span>{t("cb.startsAt")}</span><strong className="monoText" title={startOid}>{startOid.slice(0, 12)}</strong></div>
+        <label className="cloneField">{t("cb.name")}<input autoFocus data-dialog-initial-focus value={name} spellCheck={false} placeholder="feature/my-change" onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && ready) { event.preventDefault(); void submit(); } }} /></label>
         <fieldset className="branchPlacement">
-          <legend>After creating</legend>
-          <label><input type="radio" name="branch-placement" checked={placement === "switch"} onChange={() => setPlacement("switch")} />Switch to the new branch</label>
-          <label><input type="radio" name="branch-placement" checked={placement === "stay"} onChange={() => setPlacement("stay")} />Stay on the current branch</label>
-          <label><input type="radio" name="branch-placement" checked={placement === "worktree"} onChange={() => setPlacement("worktree")} />Check it out in a new worktree</label>
+          <legend>{t("cb.after")}</legend>
+          <label><input type="radio" name="branch-placement" checked={placement === "switch"} onChange={() => setPlacement("switch")} />{t("cb.switch")}</label>
+          <label><input type="radio" name="branch-placement" checked={placement === "stay"} onChange={() => setPlacement("stay")} />{t("cb.stay")}</label>
+          <label><input type="radio" name="branch-placement" checked={placement === "worktree"} onChange={() => setPlacement("worktree")} />{t("cb.worktree")}</label>
         </fieldset>
-        {placement === "switch" && <p className="cloneHelp">Uncommitted changes that do not conflict with the new branch stay in your working tree.</p>}
-        {placement === "worktree" && <label className="branchWorktreeField">New worktree folder
+        {placement === "switch" && <p className="cloneHelp">{t("cb.switchHelp")}</p>}
+        {placement === "worktree" && <label className="branchWorktreeField">{t("cb.newWorktreeFolder")}
           <span className="branchWorktreeInput">
-            <input value={worktreeEdited ? worktreePath : suggested} aria-label="Worktree folder" spellCheck={false} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
-            {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void choose()}>Browse…</button>}
+            <input value={worktreeEdited ? worktreePath : suggested} aria-label={t("cb.folderAria")} spellCheck={false} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
+            {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void choose()}>{t("cb.browse")}</button>}
           </span>
         </label>}
         {placement === "worktree" && <LocalFilesPicker api={api} repoId={repoId} selected={copyFiles} onChange={setCopyFiles} disabled={busy} />}
-        {relativeFolder && <p className="taskCenterError" role="alert">Use a full path, such as C:\work\app-feature or /home/me/app-feature.</p>}
+        {relativeFolder && <p className="taskCenterError" role="alert">{t("nw.fullPath")}</p>}
         {placement === "worktree" && folderProblem && <p className="taskCenterError" role="alert">{worktreeFolderProblemMessage(folderProblem)}</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <div className="taskCenterActions">
-          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Cancel</button>
-          <button className="primaryButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? "Creating…" : placement === "switch" ? "Create and switch" : placement === "worktree" ? "Create worktree" : "Create branch"}</button>
+          <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("cb.cancel")}</button>
+          <button className="primaryButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("cb.creating") : placement === "switch" ? t("cb.createSwitch") : placement === "worktree" ? t("cb.createWorktree") : t("cb.create")}</button>
         </div>
       </div>
     </section>

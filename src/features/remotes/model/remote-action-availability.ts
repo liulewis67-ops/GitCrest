@@ -1,4 +1,5 @@
 import type { RepositoryResponse } from "../../../api/client";
+import { t } from "../../../shared/i18n";
 
 interface RemoteActionAvailabilityOptions {
   repository?: RepositoryResponse;
@@ -14,26 +15,26 @@ export function getRemoteActionDisabledReasons({
   const getReason = (messages: { missingRepository: string; disconnected: string; busy: string }) => {
     if (!repository) return messages.missingRepository;
     if (!connected) return messages.disconnected;
-    if (repository.availability !== "available") return "This repository is unavailable.";
+    if (repository.availability !== "available") return t("remote.unavailable");
     if (hasActiveRepositoryTask) return messages.busy;
     return "";
   };
 
   return {
     remoteDisabledReason: getReason({
-      missingRepository: "Open a repository to manage remotes.",
-      disconnected: "Connect to the local Git engine to manage remotes.",
-      busy: "Wait for the current repository task to finish before changing remotes.",
+      missingRepository: t("remote.manageNoRepo"),
+      disconnected: t("remote.manageDisconnected"),
+      busy: t("remote.manageBusy"),
     }),
     pushDisabledReason: getReason({
-      missingRepository: "Open a repository to push its current branch.",
-      disconnected: "Connect to the local Git engine to push.",
-      busy: "Wait for the current repository task to finish before pushing.",
+      missingRepository: t("remote.pushNoRepo"),
+      disconnected: t("remote.pushDisconnected"),
+      busy: t("remote.pushBusy"),
     }),
     pullDisabledReason: getReason({
-      missingRepository: "Open a repository to pull its current branch.",
-      disconnected: "Connect to the local Git engine to pull.",
-      busy: "Wait for the current repository task to finish before pulling.",
+      missingRepository: t("remote.pullNoRepo"),
+      disconnected: t("remote.pullDisconnected"),
+      busy: t("remote.pullBusy"),
     }),
   };
 }

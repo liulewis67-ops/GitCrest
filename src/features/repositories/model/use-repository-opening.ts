@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
   GitCrestApiError,
@@ -25,14 +26,14 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
     setError("");
     const api = getApi();
     if (!api) {
-      setError("The Git engine is still starting. Try again in a moment.");
+      setError(t("err.engineStarting"));
       return;
     }
     setOpening(true);
     try {
       onRepositoryOpened(await api.openRepository(path), false);
     } catch (error) {
-      setError(errorMessage(error, "Could not open this repository."));
+      setError(errorMessage(error, t("err.openRepo")));
     } finally {
       setOpening(false);
     }
@@ -42,14 +43,14 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
     setError("");
     const api = getApi();
     if (!api) {
-      setError("The Git engine is still starting. Try again in a moment.");
+      setError(t("err.engineStarting"));
       return;
     }
     setOpening(true);
     try {
       onRepositoryOpened(await api.initializeRepository(path), false);
     } catch (error) {
-      setError(errorMessage(error, "Could not initialize this folder."));
+      setError(errorMessage(error, t("err.initFolder")));
     } finally {
       setOpening(false);
     }
@@ -63,7 +64,7 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
     try {
       onRepositoryOpened(await api.getRepository(repository.repoId), true);
     } catch (error) {
-      setError(errorMessage(error, "Could not reopen this repository."));
+      setError(errorMessage(error, t("err.reopenRepo")));
       void refreshRepositories(api).catch(() => undefined);
     } finally {
       setOpening(false);
@@ -76,7 +77,7 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
       const path = await chooseRepository();
       if (path) await openAtPath(path);
     } catch (error) {
-      setError(errorMessage(error, "Could not open this repository."));
+      setError(errorMessage(error, t("err.openRepo")));
     }
   }
 
@@ -86,7 +87,7 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
       const path = await chooseRepository();
       if (path) await initializeAtPath(path);
     } catch (error) {
-      setError(errorMessage(error, "Could not initialize this folder."));
+      setError(errorMessage(error, t("err.initFolder")));
     }
   }
 

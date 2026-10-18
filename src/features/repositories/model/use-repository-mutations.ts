@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import {
   type GitCrestApiClient,
   type RepositoryResponse,
@@ -25,7 +26,7 @@ export function useRepositoryMutations({
       onRepositoriesChanged((current) => current.map((item) => item.repoId === updated.repoId ? updated : item)
         .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt));
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not update this favorite.");
+      setError(error instanceof Error ? error.message : t("err.favorite"));
     }
   }
 
@@ -38,7 +39,7 @@ export function useRepositoryMutations({
       onRepositoriesChanged((current) => current.filter((item) => item.repoId !== repository.repoId));
       onRepositoryForgotten(repository.repoId);
     } catch (error) {
-      setError(error instanceof Error ? error.message : "Could not remove this recent repository.");
+      setError(error instanceof Error ? error.message : t("err.removeRecent"));
     }
   }
 

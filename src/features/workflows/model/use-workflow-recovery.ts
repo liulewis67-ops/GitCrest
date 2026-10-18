@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useCallback } from "react";
 import {
   GitCrestApiError,
@@ -23,7 +24,7 @@ export function useWorkflowRecovery({ getApi, setActionId, setTaskError, refresh
     try {
       const current = await api.preflightRepositoryWorkflowRecovery(task.repoId, task.taskId);
       const allowed = action === "continue" ? current.canContinue : action === "skip" ? current.canSkip : current.canAbort;
-      if (!allowed || !current.headOid) throw new Error("Repository state changed. Review the refreshed recovery preview before continuing.");
+      if (!allowed || !current.headOid) throw new Error(t("err.recoveryStale"));
       await api.recoverRepositoryWorkflow(task.repoId, {
         taskId: task.taskId,
         action,
@@ -33,7 +34,7 @@ export function useWorkflowRecovery({ getApi, setActionId, setTaskError, refresh
       });
       await refreshTasks();
     } catch (reason) {
-      setTaskError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not queue workflow recovery.");
+      setTaskError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("err.queueRecovery"));
     } finally {
       setActionId("");
     }

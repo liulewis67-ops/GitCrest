@@ -1,3 +1,4 @@
+import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type StatusSnapshotResponse } from "../../../api/client";
 import { mergeStatusScope } from "../../../api/status-snapshot";
@@ -84,7 +85,7 @@ export function useRepositoryStatus({
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
-        setErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : "Could not refresh repository status.") }));
+        setErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : t("err.refreshStatus")) }));
       }
     } finally {
       activeRefreshesRef.current.delete(repoId);
