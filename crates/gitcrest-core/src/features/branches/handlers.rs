@@ -13,9 +13,10 @@ use crate::{
 };
 
 use super::dto::{
-    BranchDeletePreview, BranchFavoriteRequest, BranchNameQuery, BranchNameRequest,
-    BranchSwitchPreflight, CreateBranchRequest, DeleteBranchRequest, RemoveWorktreeRequest,
-    RenameBranchRequest, SwitchBranchRequest, WorktreeInfo, WorktreeSnapshot,
+    AddWorktreeRequest, BranchDeletePreview, BranchFavoriteRequest, BranchNameQuery,
+    BranchNameRequest, BranchSwitchPreflight, CreateBranchRequest, DeleteBranchRequest,
+    RemoveWorktreeRequest, RenameBranchRequest, SwitchBranchRequest, WorktreeInfo,
+    WorktreeSnapshot,
 };
 
 pub(super) async fn repository_branches(
@@ -108,6 +109,100 @@ pub(super) async fn repository_worktrees(
     ordered.sort_by_key(|(index, _)| *index);
     let worktrees = ordered.into_iter().map(|(_, info)| info).collect();
     Ok(Json(WorktreeSnapshot { repo_id, worktrees }))
+}
+
+/// A new worktree folder must be an absolute path that does not exist yet or is empty.
+fn validate_new_worktree_folder(worktree_path: &str) -> Result<(), ApiError> {
+    let candidate = std::path::Path::new(worktree_path);
+    let occupied = candidate
+        .read_dir()
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or_else(|_| candidate.exists());
+    if !candidate.is_absolute() || occupied {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "The worktree path must be an absolute path to a new or empty folder.",
+        ));
+    }
+    Ok(())
+}
+
+/// Checks an existing local branch out into a new linked worktree.
+pub(super) async fn add_repository_worktree(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<AddWorktreeRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A local branch and a worktree folder are required.",
+        )
+    })?;
+    validate_new_worktree_folder(&request.path)?;
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    branches::require_local_branch_with_git(
+        &target.repository_path,
+        &request.branch,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
+    let entries = state
+        .git_commands
+        .list_worktrees(&target.repository_path)
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::RequestInvalid,
+                "Could not list the worktrees of this repository.",
+            )
+        })?;
+    if entries
+        .iter()
+        .any(|entry| entry.branch.as_deref() == Some(request.branch.as_str()))
+    {
+        return Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::RequestInvalid,
+            "That branch is already checked out in another worktree.",
+        ));
+    }
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let branch = request.branch;
+    let folder = request.path;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "worktreeCreate",
+            move |context| async move {
+                command
+                    .execute_branch(
+                        &path,
+                        BranchCommand::WorktreeAdd {
+                            branch,
+                            path: folder,
+                        },
+                        context,
+                    )
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
 pub(super) async fn remove_repository_worktree(
@@ -268,18 +363,7 @@ pub(super) async fn create_repository_branch(
     .await
     .map_err(ApiError::from_branch_error)?;
     if let Some(worktree_path) = request.worktree_path.as_deref() {
-        let candidate = std::path::Path::new(worktree_path);
-        let occupied = candidate
-            .read_dir()
-            .map(|mut entries| entries.next().is_some())
-            .unwrap_or_else(|_| candidate.exists());
-        if !candidate.is_absolute() || occupied {
-            return Err(ApiError::new(
-                StatusCode::BAD_REQUEST,
-                ApiErrorCode::RequestInvalid,
-                "The worktree path must be an absolute path to a new or empty folder.",
-            ));
-        }
+        validate_new_worktree_folder(worktree_path)?;
     }
     let path = target.repository_path;
     let command = state.git_commands.clone();

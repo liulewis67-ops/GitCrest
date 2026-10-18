@@ -489,6 +489,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/worktrees/add": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Check an existing local branch out into a new linked worktree */
+        post: operations["addRepositoryWorktree"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/worktrees/remove": {
         parameters: {
             query?: never;
@@ -2065,6 +2086,11 @@ export interface components {
             name: string;
             /** @description Explicitly permit deletion when the preview reports commits not reachable from the current branch. */
             allowUnmerged: boolean;
+        };
+        AddWorktreeRequest: {
+            branch: string;
+            /** @description Absolute path to a new or empty folder. */
+            path: string;
         };
         RemoveWorktreeRequest: {
             path: string;
@@ -3777,6 +3803,57 @@ export interface operations {
                 };
             };
             406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    addRepositoryWorktree: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddWorktreeRequest"];
+            };
+        };
+        responses: {
+            /** @description Worktree creation task accepted. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository or local branch is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The branch is already checked out in another worktree. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     removeRepositoryWorktree: {

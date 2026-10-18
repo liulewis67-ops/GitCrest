@@ -9,3 +9,4 @@ export type { LocalBranchAction } from "./ui/LocalBranchDialog";
 export { WorktreeList } from "./ui/WorktreeList";
 export { BranchSyncBadge } from "./ui/BranchSyncBadge";
 export const loadCreateBranchDialog = () => import("./ui/CreateBranchDialog");
+export const loadNewWorktreeDialog = () => import("./ui/NewWorktreeDialog");

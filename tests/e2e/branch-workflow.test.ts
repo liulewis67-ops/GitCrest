@@ -92,6 +92,18 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     expect(await git(fixture.path, "branch", "--list", "feature/wt")).toContain("feature/wt");
     await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
 
+    // The surviving branch can be checked out into a new worktree straight from its sidebar row.
+    const wtRow = window.locator(".branchItem").filter({ has: window.getByText("feature/wt", { exact: true }) });
+    const newWorktree = wtRow.getByRole("button", { name: "Open feature/wt in a new worktree" });
+    await expect.poll(async () => { await wtRow.hover(); return newWorktree.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    await newWorktree.click();
+    const worktreeDialog = window.getByRole("dialog", { name: "Open branch in a new worktree" });
+    const secondFolder = resolve(worktreeParent, "wt-folder-again");
+    await worktreeDialog.getByRole("textbox", { name: "Worktree folder" }).fill(secondFolder);
+    await worktreeDialog.getByRole("button", { name: "Create worktree" }).click();
+    await expect.poll(() => git(secondFolder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/wt");
+    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+
     // Merge `side` into the current branch from the sidebar row.
     const sideRow = window.locator(".branchItem", { hasText: "side" });
     await sideRow.hover();

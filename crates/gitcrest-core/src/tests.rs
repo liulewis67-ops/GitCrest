@@ -5723,6 +5723,58 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
         }
     }
     assert!(!worktree_dir.exists());
+    // The branch survived the removal, so it can be checked out again into a fresh worktree.
+    let reused_dir = worktree_parent.path().join("reused");
+    for (branch, folder, expected) in [
+        (
+            "feature/wt",
+            reused_dir.display().to_string(),
+            StatusCode::ACCEPTED,
+        ),
+        (
+            "feature/wt",
+            worktree_parent.path().join("again").display().to_string(),
+            StatusCode::CONFLICT,
+        ),
+        (
+            current_branch.as_str(),
+            worktree_parent
+                .path()
+                .join("main-copy")
+                .display()
+                .to_string(),
+            StatusCode::CONFLICT,
+        ),
+        (
+            "no/such-branch",
+            worktree_parent.path().join("missing").display().to_string(),
+            StatusCode::NOT_FOUND,
+        ),
+        (
+            "feature/api-x",
+            "relative/dir".to_string(),
+            StatusCode::BAD_REQUEST,
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/worktrees/add"),
+                &serde_json::json!({ "branch": branch, "path": folder }).to_string(),
+                WRITE_TOKEN,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected, "branch {branch}");
+        if expected == StatusCode::ACCEPTED {
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+            assert_eq!(completed["status"], "succeeded");
+            assert!(reused_dir.join(".git").exists());
+        }
+    }
     for (uri, body, expected) in [
         (
             "",

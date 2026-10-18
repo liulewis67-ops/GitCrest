@@ -99,3 +99,10 @@ pub(super) struct RemoveWorktreeRequest {
     #[serde(default)]
     pub(super) force: bool,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct AddWorktreeRequest {
+    pub(super) branch: String,
+    pub(super) path: String,
+}

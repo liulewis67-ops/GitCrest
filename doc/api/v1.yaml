@@ -964,6 +964,43 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/worktrees/add:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: addRepositoryWorktree
+      summary: Check an existing local branch out into a new linked worktree
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddWorktreeRequest" }
+      responses:
+        "202":
+          description: Worktree creation task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSnapshot" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository or local branch is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409":
+          description: The branch is already checked out in another worktree.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
   /api/v1/repositories/{repoId}/worktrees/remove:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4338,6 +4375,13 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
         allowUnmerged: { type: boolean, description: Explicitly permit deletion when the preview reports commits not reachable from the current branch. }
+    AddWorktreeRequest:
+      type: object
+      additionalProperties: false
+      required: [branch, path]
+      properties:
+        branch: { type: string, minLength: 1, maxLength: 255 }
+        path: { type: string, minLength: 1, maxLength: 4096, description: Absolute path to a new or empty folder. }
     RemoveWorktreeRequest:
       type: object
       additionalProperties: false

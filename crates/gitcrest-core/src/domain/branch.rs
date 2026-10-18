@@ -9,6 +9,10 @@ pub(crate) enum BranchCommand {
     Switch {
         name: String,
     },
+    WorktreeAdd {
+        branch: String,
+        path: String,
+    },
     WorktreeRemove {
         path: String,
         force: bool,
