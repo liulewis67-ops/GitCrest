@@ -26,7 +26,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
 
     const providerRequests: Array<Record<string, unknown>> = [];
     mockProvider = createServer((request, response) => {

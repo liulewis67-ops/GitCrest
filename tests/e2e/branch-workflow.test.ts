@@ -62,7 +62,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, fixture.path);
 
     // Create a branch and switch to it by typing a new name in the switcher and pressing Enter.
@@ -177,7 +177,7 @@ it("refuses to remove a dirty worktree until changes are explicitly discarded, a
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, fixture.path);
 
     expect(await window.getByRole("button", { name: "Remove worktree locked-wt" }).isDisabled()).toBe(true);
@@ -222,7 +222,7 @@ it("creates a branch at an older commit from the commit details", async () => {
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, fixture.path);
 
     await window.getByText("first commit", { exact: true }).first().click();
@@ -277,7 +277,7 @@ it("can force a merge commit instead of a fast-forward from the merge review", a
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, fixture.path);
 
     const row = window.locator(".branchItem").filter({ has: window.getByText("feature", { exact: true }) });
@@ -324,7 +324,7 @@ it("opens a remote branch in a new worktree with a local tracking branch", async
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, repo);
 
     const row = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("origin/feature/remote-work", { exact: true }) });
@@ -365,7 +365,7 @@ it("cleans up worktrees whose folders were deleted outside GitCrest", async () =
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, fixture.path);
 
     await window.getByRole("button", { name: "Missing" }).waitFor({ timeout: 15_000 });

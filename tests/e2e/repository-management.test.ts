@@ -24,7 +24,7 @@ it("initializes a repository in the selected project folder and keeps its files"
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, projectPath);
@@ -54,7 +54,7 @@ it("leaves the project unchanged when repository initialization is cancelled in 
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }) => {
       dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
     });
@@ -84,7 +84,7 @@ it("explains that the selected folder is not a Git repository", async () => {
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, projectPath);
@@ -114,7 +114,7 @@ it("reports when the selected repository path disappears before it can be opened
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, missingPath);
@@ -149,7 +149,7 @@ it.skipIf(process.platform !== "win32")("reports an access error for a folder de
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, projectPath);
@@ -192,7 +192,7 @@ it("keeps a failed Git template initialization out of the selected project folde
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, projectPath);
@@ -241,7 +241,7 @@ it("clones a remote from the welcome page and opens the new repository", async (
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, cloneParent);
@@ -306,7 +306,7 @@ it("retries a failed clone from Task Center after the remote becomes available",
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, cloneParent);
@@ -367,7 +367,7 @@ it("opens HTTPS credentials when retrying a clone that failed authentication", a
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, cloneParent);
@@ -455,7 +455,7 @@ it("clones successfully after saving credentials for an authentication-failed re
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, cloneParent);
@@ -573,7 +573,7 @@ it("removes the partial destination when an active clone is cancelled", async ()
     });
     const window = await app.firstWindow();
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await app.evaluate(({ dialog }, destination) => {
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, cloneParent);

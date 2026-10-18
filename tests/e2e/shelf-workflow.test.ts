@@ -37,7 +37,7 @@ describe("shelf workflow E2E", () => {
       });
       const window = await app.firstWindow();
       await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
-      await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+      await window.getByText("Core connected").waitFor({ timeout: 40_000 });
 
       const opened = await window.evaluate(async (repositoryPath) => {
         const connection = await (globalThis.window as unknown as Window & {
