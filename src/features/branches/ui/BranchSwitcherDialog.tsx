@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { BranchSnapshotResponse, RepositoryResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { BranchSyncBadge } from "./BranchSyncBadge";
 import { useBranchSwitcher } from "../model/use-branch-switcher";
 import { getRepositoryDisplayName } from "../../../shared/lib/repository-display-name";
 
@@ -189,6 +190,7 @@ export function BranchSwitcherDialog({
               <button className="branchChoice" type="button" key={branch.fullName} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true">⑂</span>
                 <span>{branch.name}</span>
+                <BranchSyncBadge branch={branch} />
                 {branch.isFavorite && <span className="branchFavoriteMark" aria-label="Favorite">★</span>}
                 <span className="actionArrow" aria-hidden="true">→</span>
               </button>

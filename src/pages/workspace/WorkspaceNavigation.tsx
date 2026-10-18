@@ -3,7 +3,7 @@ import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse,
 import type { RepositoryStatusGroup } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadRemoteManager } from "../../features/remotes";
-import { WorktreeList } from "../../features/branches";
+import { BranchSyncBadge, WorktreeList } from "../../features/branches";
 import type { CredentialEditorRenderer } from "../../features/credentials";
 
 const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
@@ -136,6 +136,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
                       <span className="branchItemGlyph" aria-hidden="true">{branch.kind === "remote" ? "⇢" : "⑂"}</span>
                       <span className="branchItemName" title={branch.fullName} aria-current={branch.isCurrent ? "page" : undefined}>{branch.name}</span>
                       {branch.isCurrent && <span className="branchCurrentLabel">HEAD</span>}
+                      <BranchSyncBadge branch={branch} />
                       {!branch.isCurrent && !branch.fullName.endsWith("/HEAD") && <span className="branchActions">
                         {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Switch to ${branch.name}`} title={`Switch to ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onSwitchBranch(branch.name)}>Switch</button>}
                         <button className="branchAction" type="button" aria-label={`Merge ${branch.fullName} into the current branch`} title={`Merge ${branch.name} into the current branch`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onMergeBranch(branch.oid)}>Merge</button>
