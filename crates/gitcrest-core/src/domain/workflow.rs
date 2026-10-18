@@ -111,3 +111,20 @@ pub(crate) struct RebaseExecutionPlan {
     pub(crate) commits: Vec<RebaseCommitSubject>,
     pub(crate) todo: Vec<RebaseTodoItem>,
 }
+
+/// How a merge target relates to the current HEAD.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MergeKind {
+    /// The target is already contained in HEAD, so merging changes nothing.
+    UpToDate,
+    /// HEAD is contained in the target, so the branch pointer can simply move.
+    FastForward,
+    /// The histories diverged and a merge commit is needed.
+    MergeCommit,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MergeRelation {
+    pub kind: MergeKind,
+    pub incoming_commit_count: u32,
+}

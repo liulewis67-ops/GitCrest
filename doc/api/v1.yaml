@@ -3839,7 +3839,7 @@ components:
     WorkflowPreflight:
       type: object
       additionalProperties: false
-      required: [repoId, action, headOid, targetOid, targetSubject, operationInProgress, isClean, dirtyPaths, omittedDirtyPathCount, conflictedPaths, omittedConflictedPathCount, canStart]
+      required: [repoId, action, headOid, targetOid, targetSubject, operationInProgress, isClean, dirtyPaths, omittedDirtyPathCount, conflictedPaths, omittedConflictedPathCount, canStart, mergeKind, incomingCommitCount]
       properties:
         repoId: { $ref: "#/components/schemas/RepoId" }
         action: { type: string, enum: [merge, cherryPick, revert] }
@@ -3853,6 +3853,8 @@ components:
         conflictedPaths: { type: array, maxItems: 200, items: { type: string } }
         omittedConflictedPathCount: { type: integer, minimum: 0 }
         canStart: { type: boolean }
+        mergeKind: { type: [string, "null"], enum: [upToDate, fastForward, mergeCommit, null], description: How a merge target relates to HEAD; null for other actions. }
+        incomingCommitCount: { type: [integer, "null"], minimum: 0, description: Commits reachable from the merge target but not from HEAD. }
     RebaseCommit:
       type: object
       additionalProperties: false

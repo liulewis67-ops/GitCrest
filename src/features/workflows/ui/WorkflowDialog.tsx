@@ -56,11 +56,14 @@ export function WorkflowDialog({ api, repoId, targetOid, action, onClose, onStar
         {snapshot && <>
           <div className="repositoryFact"><span>SUBJECT</span><strong>{snapshot.targetSubject || "(no subject)"}</strong></div>
           <div className="repositoryFact"><span>HEAD</span><strong className="monoText">{snapshot.headOid?.slice(0, 12) || "Unborn"}</strong></div>
+          {snapshot.mergeKind === "upToDate" && <p className="cloneHelp" role="status">Already up to date: this commit is already part of the current branch, so there is nothing to merge.</p>}
+          {snapshot.mergeKind === "fastForward" && <p className="cloneHelp" role="status">Fast-forward: the current branch moves ahead by {snapshot.incomingCommitCount} commit(s) and no merge commit is created.</p>}
+          {snapshot.mergeKind === "mergeCommit" && <p className="cloneHelp" role="status">A merge commit will combine {snapshot.incomingCommitCount} incoming commit(s) with the current branch. Conflicts, if any, open in the resolver.</p>}
           {snapshot.operationInProgress && <p className="taskCenterError" role="alert">A {snapshot.operationInProgress} operation is already in progress.</p>}
           {!snapshot.isClean && <p className="cloneHelp">Working tree has {snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount} change(s). Commit or shelve them before starting.</p>}
           {!snapshot.isClean && snapshot.dirtyPaths.length > 0 && <ul className="workflowPathList" aria-label="Uncommitted files">{snapshot.dirtyPaths.slice(0, 8).map((path) => <li key={path} title={path}>{path}</li>)}{snapshot.dirtyPaths.length > 8 && <li>…and {snapshot.dirtyPaths.length - 8 + snapshot.omittedDirtyPathCount} more</li>}</ul>}
           {snapshot.conflictedPaths.length > 0 && <ul className="workflowPathList">{snapshot.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul>}
-          {!snapshot.canStart && !snapshot.operationInProgress && snapshot.isClean && <p className="cloneHelp">This operation is not available for the current repository state.</p>}
+          {!snapshot.canStart && !snapshot.operationInProgress && snapshot.isClean && snapshot.mergeKind !== "upToDate" && <p className="cloneHelp">This operation is not available for the current repository state.</p>}
         </>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <div className="taskCenterActions"><button className="quietButton compact" type="button" disabled={busy || state.loading} onClick={() => { setError(""); setRefreshKey((current) => current + 1); }}>Refresh preview</button><button className="primaryButton" type="button" disabled={!snapshot?.canStart || !snapshot.headOid || busy} onClick={() => void confirm()}>{busy ? "Starting…" : `Start ${labels[action].toLowerCase()}`}</button></div>

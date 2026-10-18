@@ -22,6 +22,7 @@ pub struct WorkflowPreflight {
     pub conflicted_paths: Vec<String>,
     pub omitted_conflicted_path_count: u32,
     pub can_start: bool,
+    pub merge_relation: Option<crate::domain::workflow::MergeRelation>,
 }
 
 #[derive(Clone, Debug)]
@@ -63,7 +64,16 @@ pub async fn read_preflight<G: GitReadPort>(
     let state = git.read_worktree_state(repository_path).await?;
     let operation_in_progress = state.operation;
     let is_clean = state.dirty_paths.is_empty() && operation_in_progress.is_none();
-    let can_start = head_oid.is_some() && is_clean;
+    let merge_relation = match (action, head_oid.as_deref()) {
+        (WorkflowAction::Merge, Some(head)) => Some(
+            git.read_merge_relation(repository_path, head, &target_oid)
+                .await?,
+        ),
+        _ => None,
+    };
+    let already_merged = merge_relation
+        .is_some_and(|relation| relation.kind == crate::domain::workflow::MergeKind::UpToDate);
+    let can_start = head_oid.is_some() && is_clean && !already_merged;
     Ok(WorkflowPreflight {
         repo_id,
         action,
@@ -77,6 +87,7 @@ pub async fn read_preflight<G: GitReadPort>(
         conflicted_paths: state.conflicted_paths,
         omitted_conflicted_path_count: state.omitted_conflicted_path_count,
         can_start,
+        merge_relation,
     })
 }
 
@@ -202,7 +213,12 @@ mod tests {
         )
         .await
         .unwrap();
-        assert!(clean.can_start);
+        // Merging the commit HEAD already points at changes nothing, so it cannot start.
+        assert!(!clean.can_start);
+        assert_eq!(
+            clean.merge_relation.map(|relation| relation.kind),
+            Some(crate::domain::workflow::MergeKind::UpToDate)
+        );
         assert_eq!(clean.head_oid.as_deref(), Some(oid.as_str()));
         assert_eq!(clean.target_oid, oid);
         assert_eq!(clean.target_subject, "base commit");
@@ -227,6 +243,35 @@ mod tests {
         git(&["checkout", "--quiet", "main"]);
         std::fs::write(root.join("base.txt"), "main\n").unwrap();
         git(&["commit", "--quiet", "-am", "main commit"]);
+        let diverged = read_preflight(
+            &git_service,
+            "repo_fixture".into(),
+            root,
+            WorkflowAction::Merge,
+            "side",
+        )
+        .await;
+        // Branch names are not accepted as targets; only object IDs are.
+        assert!(diverged.is_err());
+        let side_head = String::from_utf8(git(&["rev-parse", "side"]))
+            .unwrap()
+            .trim()
+            .to_owned();
+        let diverged = read_preflight(
+            &git_service,
+            "repo_fixture".into(),
+            root,
+            WorkflowAction::Merge,
+            &side_head,
+        )
+        .await
+        .unwrap();
+        let relation = diverged.merge_relation.unwrap();
+        assert_eq!(
+            relation.kind,
+            crate::domain::workflow::MergeKind::MergeCommit
+        );
+        assert_eq!(relation.incoming_commit_count, 1);
         let conflict = Command::new("git")
             .arg("-C")
             .arg(root)

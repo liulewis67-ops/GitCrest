@@ -155,6 +155,56 @@ impl GitReadPort for GitCommandService {
         status::read_worktree_state(&self.git_program, repository_path).await
     }
 
+    async fn read_merge_relation(
+        &self,
+        repository_path: &Path,
+        head_oid: &str,
+        target_oid: &str,
+    ) -> Result<crate::domain::workflow::MergeRelation, WorkflowError> {
+        use crate::domain::workflow::{MergeKind, MergeRelation};
+        let is_ancestor = |ancestor: &str, descendant: &str| {
+            let mut command = Command::new(&self.git_program);
+            command
+                .args(["merge-base", "--is-ancestor", ancestor, descendant])
+                .current_dir(repository_path)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .kill_on_drop(true);
+            async move {
+                match command.status().await {
+                    Ok(status) if status.success() => Ok(true),
+                    Ok(status) if status.code() == Some(1) => Ok(false),
+                    _ => Err(WorkflowError::GitFailed),
+                }
+            }
+        };
+        let kind = if is_ancestor(target_oid, head_oid).await? {
+            MergeKind::UpToDate
+        } else if is_ancestor(head_oid, target_oid).await? {
+            MergeKind::FastForward
+        } else {
+            MergeKind::MergeCommit
+        };
+        let range = format!("{head_oid}..{target_oid}");
+        let count = capture_git_output(
+            &self.git_program,
+            repository_path,
+            ["rev-list", "--count", range.as_str()],
+            64,
+        )
+        .await
+        .map_err(|_| WorkflowError::GitFailed)?;
+        let incoming_commit_count = String::from_utf8_lossy(&count)
+            .trim()
+            .parse()
+            .map_err(|_| WorkflowError::GitFailed)?;
+        Ok(MergeRelation {
+            kind,
+            incoming_commit_count,
+        })
+    }
+
     async fn read_operation(
         &self,
         repository_path: &Path,

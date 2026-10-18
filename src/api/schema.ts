@@ -1708,6 +1708,13 @@ export interface components {
             conflictedPaths: string[];
             omittedConflictedPathCount: number;
             canStart: boolean;
+            /**
+             * @description How a merge target relates to HEAD; null for other actions.
+             * @enum {string|null}
+             */
+            mergeKind: "upToDate" | "fastForward" | "mergeCommit" | null;
+            /** @description Commits reachable from the merge target but not from HEAD. */
+            incomingCommitCount: number | null;
         };
         RebaseCommit: {
             oid: string;

@@ -16,6 +16,8 @@ pub(in crate::features::workflows) struct WorkflowPreflightDto {
     pub(in crate::features::workflows) conflicted_paths: Vec<String>,
     pub(in crate::features::workflows) omitted_conflicted_path_count: u32,
     pub(in crate::features::workflows) can_start: bool,
+    pub(in crate::features::workflows) merge_kind: Option<&'static str>,
+    pub(in crate::features::workflows) incoming_commit_count: Option<u32>,
 }
 
 impl From<super::super::service::WorkflowPreflight> for WorkflowPreflightDto {
@@ -33,6 +35,16 @@ impl From<super::super::service::WorkflowPreflight> for WorkflowPreflightDto {
             conflicted_paths: preflight.conflicted_paths,
             omitted_conflicted_path_count: preflight.omitted_conflicted_path_count,
             can_start: preflight.can_start,
+            merge_kind: preflight
+                .merge_relation
+                .map(|relation| match relation.kind {
+                    crate::domain::workflow::MergeKind::UpToDate => "upToDate",
+                    crate::domain::workflow::MergeKind::FastForward => "fastForward",
+                    crate::domain::workflow::MergeKind::MergeCommit => "mergeCommit",
+                }),
+            incoming_commit_count: preflight
+                .merge_relation
+                .map(|relation| relation.incoming_commit_count),
         }
     }
 }

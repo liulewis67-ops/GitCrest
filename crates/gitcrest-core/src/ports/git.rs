@@ -7,7 +7,7 @@ use std::{
 use crate::domain::{
     error::{RepositoryError, WorkflowError},
     workflow::{
-        WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
+        MergeRelation, WorkflowBackupNamespace, WorkflowBackupReference, WorkflowRebaseCommitList,
         WorkflowRemoteBranchComparison, WorkflowResetComparison, WorkflowState,
     },
 };
@@ -55,6 +55,13 @@ pub(crate) trait GitReadPort: Send + Sync {
         &self,
         repository_path: &Path,
     ) -> Result<WorkflowState, WorkflowError>;
+
+    async fn read_merge_relation(
+        &self,
+        repository_path: &Path,
+        head_oid: &str,
+        target_oid: &str,
+    ) -> Result<MergeRelation, WorkflowError>;
 
     async fn read_operation(
         &self,

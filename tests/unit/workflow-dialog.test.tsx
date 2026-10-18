@@ -21,7 +21,7 @@ function deferred<T>() {
 it("requires a fresh allowed preflight before starting a commit workflow", async () => {
   const preflight = {
     repoId: "repo_fixture", action: "merge" as const, headOid: "b".repeat(40), targetOid: "a".repeat(40), targetSubject: "Merge this change",
-    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true,
+    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true, mergeKind: "mergeCommit" as const, incomingCommitCount: 2,
   };
   const task = { taskId: "task-merge", operation: "merge" } as Awaited<ReturnType<GitCrestApiClient["startRepositoryWorkflow"]>>;
   const api = cancellableApi({
@@ -57,7 +57,7 @@ it("moves focus into the workflow dialog and closes it with Escape", async () =>
   const api = cancellableApi({
     preflightRepositoryWorkflow: vi.fn().mockResolvedValue({
       repoId: "repo_fixture", action: "merge", headOid: "b".repeat(40), targetOid: "a".repeat(40), targetSubject: "Merge this change",
-      operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true,
+      operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true, mergeKind: "mergeCommit" as const, incomingCommitCount: 2,
     }),
   });
   const onClose = vi.fn();
@@ -74,7 +74,7 @@ it("aborts the previous preflight and ignores it after the target changes", asyn
   const first = deferred<Awaited<ReturnType<GitCrestApiClient["preflightRepositoryWorkflow"]>>>();
   const second = {
     repoId: "repo_fixture", action: "merge" as const, headOid: "c".repeat(40), targetOid: "d".repeat(40), targetSubject: "New target",
-    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true,
+    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true, mergeKind: "mergeCommit" as const, incomingCommitCount: 2,
   };
   const signals: AbortSignal[] = [];
   let api: Record<string, unknown>;
@@ -95,8 +95,27 @@ it("aborts the previous preflight and ignores it after the target changes", asyn
   expect(signals[0]?.aborted).toBe(true);
   await act(async () => first.resolve({
     repoId: "repo_fixture", action: "merge", headOid: "b".repeat(40), targetOid: "a".repeat(40), targetSubject: "Old target",
-    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true,
+    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0, canStart: true, mergeKind: "mergeCommit" as const, incomingCommitCount: 2,
   }));
   expect(screen.queryByText("Old target")).toBeNull();
   expect(screen.getByText("New target")).toBeTruthy();
+});
+
+it("explains whether a merge fast-forwards, needs a merge commit, or is already up to date", async () => {
+  const base = {
+    repoId: "repo_fixture", action: "merge" as const, headOid: "b".repeat(40), targetOid: "a".repeat(40), targetSubject: "Target",
+    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0,
+  };
+  const cases = [
+    { mergeKind: "fastForward" as const, incomingCommitCount: 3, canStart: true, text: /Fast-forward: the current branch moves ahead by 3 commit/, enabled: true },
+    { mergeKind: "mergeCommit" as const, incomingCommitCount: 2, canStart: true, text: /merge commit will combine 2 incoming commit/, enabled: true },
+    { mergeKind: "upToDate" as const, incomingCommitCount: 0, canStart: false, text: /Already up to date/, enabled: false },
+  ];
+  for (const item of cases) {
+    const api = cancellableApi({ preflightRepositoryWorkflow: vi.fn().mockResolvedValue({ ...base, ...item }) });
+    const view = render(<WorkflowDialog api={api} repoId="repo_fixture" targetOid={"a".repeat(40)} action="merge" onClose={vi.fn()} onStarted={vi.fn()} />);
+    expect(await screen.findByText(item.text)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Start merge" }) as HTMLButtonElement).disabled).toBe(!item.enabled);
+    view.unmount();
+  }
 });
