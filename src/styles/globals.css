@@ -177,13 +177,14 @@ button:disabled { cursor: not-allowed; }
 .branchItem.current { background: var(--accent-soft); color: var(--text); }
 .branchItemGlyph { flex: 0 0 12px; color: var(--text-muted); font-size: 11px; text-align: center; }
 .branchItemName { overflow: hidden; flex: 1; min-width: 0; text-overflow: ellipsis; white-space: nowrap; font-size: 9px; }
-.branchSync { display: inline-flex; gap: 4px; color: var(--text-muted); font-size: 8px; font-variant-numeric: tabular-nums; }
+.branchSync { display: inline-flex; flex: 0 0 auto; gap: 4px; color: var(--text-muted); font-size: 9px; font-variant-numeric: tabular-nums; }
 .branchSync.gone { color: var(--danger); }
 .branchCurrentLabel { color: var(--accent-strong); font-size: 7px; font-weight: 750; letter-spacing: .05em; }
 .branchFavorite { width: 22px; height: 22px; flex: 0 0 22px; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 12px; }
 .branchFavorite:hover, .branchFavorite.active { background: var(--surface-raised); color: var(--amber); }
 .branchFavorite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.branchActions { display: none; gap: 4px; margin-left: auto; }
+.branchActions { display: none; flex: 0 0 auto; gap: 2px; margin-left: auto; }
+.branchActions .branchAction { min-width: 20px; padding: 1px 4px; font-size: 11px; line-height: 1.2; }
 .branchItem:hover .branchActions, .branchItem:focus-within .branchActions { display: inline-flex; }
 .worktreeDirty { color: var(--warning, #d29922); font-size: 9px; }
 .worktreeForce { display: inline-flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 9px; }
