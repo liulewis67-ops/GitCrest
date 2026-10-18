@@ -163,6 +163,15 @@ export function BranchSwitcherDialog({
                   }
                   if (event.key !== "Enter") return;
                   event.preventDefault();
+                  if (event.shiftKey) {
+                    // Shift+Enter: create the typed name in a new worktree at the suggested (or edited) folder.
+                    const folderReady = effectiveWorktreePath.trim() !== "" && isAbsoluteFolder(effectiveWorktreePath) && !folderProblem;
+                    if (query && connected && folderReady && !branches.some((candidate) => candidate.kind === "local" && candidate.name === filter.trim())) {
+                      rememberWorktreeParent(effectiveWorktreePath);
+                      void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() });
+                    }
+                    return;
+                  }
                   const highlighted = localBranches[Math.min(cursor, localBranches.length - 1)];
                   if (highlighted?.worktreePath && onOpenWorktree) { branchSwitcher.close(); onOpenWorktree(highlighted.worktreePath); }
                   else if (highlighted) void branchSwitcher.inspect(highlighted.name);
@@ -197,6 +206,7 @@ export function BranchSwitcherDialog({
                 <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim() || !isAbsoluteFolder(effectiveWorktreePath) || Boolean(folderProblem)} onClick={() => { rememberWorktreeParent(effectiveWorktreePath); void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() }); }}>
                   <span className="branchItemGlyph" aria-hidden="true">⧉</span>
                   <span>Create “{filter.trim()}” in a new worktree</span>
+                  <kbd>Shift+Enter</kbd>
                   {effectiveWorktreePath.trim() !== "" && !isAbsoluteFolder(effectiveWorktreePath) && <small>use a full folder path</small>}
                   {folderProblem && <small role="alert">{worktreeFolderProblemMessage(folderProblem)}</small>}
                 </button>

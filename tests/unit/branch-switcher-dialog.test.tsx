@@ -84,3 +84,15 @@ it("flags a non-empty worktree folder for a new branch before anything is submit
   expect((screen.getByRole("button", { name: /in a new worktree/ }) as HTMLButtonElement).disabled).toBe(true);
   expect(checkWorktreeFolder).toHaveBeenCalledWith("repo_x", "C:/work/repo-brand-new");
 });
+
+it("creates the typed branch in a new worktree with Shift+Enter, but only when a new name is typed", () => {
+  const { createBranch, filter } = renderDialog();
+  fireEvent.keyDown(filter, { key: "Enter", shiftKey: true });
+  expect(createBranch).not.toHaveBeenCalled();
+  fireEvent.change(filter, { target: { value: "release" } });
+  fireEvent.keyDown(filter, { key: "Enter", shiftKey: true });
+  expect(createBranch).not.toHaveBeenCalled();
+  fireEvent.change(filter, { target: { value: "brand-new" } });
+  fireEvent.keyDown(filter, { key: "Enter", shiftKey: true });
+  expect(createBranch).toHaveBeenCalledWith("brand-new", { worktreePath: "C:/work/repo-brand-new" });
+});
