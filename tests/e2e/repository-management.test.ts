@@ -19,7 +19,7 @@ it("initializes a repository in the selected project folder and keeps its files"
   try {
     await writeFile(projectFile, "# Existing project\n");
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -49,7 +49,7 @@ it("leaves the project unchanged when repository initialization is cancelled in 
   try {
     await writeFile(projectFile, "# Keep this project unchanged\n");
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -79,7 +79,7 @@ it("explains that the selected folder is not a Git repository", async () => {
   try {
     await writeFile(resolve(projectPath, "notes.txt"), "This folder is not a repository.\n");
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -109,7 +109,7 @@ it("reports when the selected repository path disappears before it can be opened
 
   try {
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -144,7 +144,7 @@ it.skipIf(process.platform !== "win32")("reports an access error for a folder de
     await execFileAsync("icacls", [projectPath, "/deny", `*${userSid}:(RX)`]);
     denyApplied = true;
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -181,7 +181,7 @@ it("keeps a failed Git template initialization out of the selected project folde
     await writeFile(resolve(templatePath, "config"), "not a valid git config line\n");
     await writeFile(gitConfigPath, `[init]\n\ttemplateDir = ${templatePath.replace(/\\/g, "/")}\n`);
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: {
         ...process.env,
         GIT_CONFIG_GLOBAL: gitConfigPath,
@@ -236,7 +236,7 @@ it("clones a remote from the welcome page and opens the new repository", async (
     expect(rewrittenHead).toBe((await execFileAsync("git", ["-C", source.path, "rev-parse", "HEAD"])).stdout.trim());
 
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: { ...gitEnvironment, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -295,7 +295,7 @@ it("retries a failed clone from Task Center after the remote becomes available",
     await writeRewrite(missingRemotePath);
 
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: {
         ...process.env,
         GIT_CONFIG_GLOBAL: gitConfigPath,
@@ -355,7 +355,7 @@ it("opens HTTPS credentials when retrying a clone that failed authentication", a
     authenticationServer = await createAuthenticationFailureServer(appDataPath);
     await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: {
         ...process.env,
         GIT_CONFIG_GLOBAL: gitConfigPath,
@@ -443,7 +443,7 @@ it("clones successfully after saving credentials for an authentication-failed re
     await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
 
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: {
         ...process.env,
         GIT_CONFIG_GLOBAL: gitConfigPath,
@@ -561,7 +561,7 @@ it("removes the partial destination when an active clone is cancelled", async ()
     await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
 
     app = await electron.launch({
-      args: ["."],
+      args: [".", "--disable-gpu"],
       env: {
         ...process.env,
         GIT_CONFIG_GLOBAL: gitConfigPath,

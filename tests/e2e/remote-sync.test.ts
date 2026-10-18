@@ -39,7 +39,7 @@ describe("remote sync E2E", () => {
       const localHead = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -122,7 +122,7 @@ describe("remote sync E2E", () => {
       const remoteHead = (await execFileAsync("git", ["-C", peerPath, "rev-parse", "HEAD"])).stdout.trim();
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -212,7 +212,7 @@ describe("remote sync E2E", () => {
       await writeFile(filePath, localEdit);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -288,7 +288,7 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "remote", "set-url", "origin", bareRemotePath]);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -380,7 +380,7 @@ describe("remote sync E2E", () => {
       await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: {
           ...process.env,
           GIT_CONFIG_GLOBAL: gitConfigPath,
@@ -495,7 +495,7 @@ describe("remote sync E2E", () => {
       await writeFile(gitConfigPath, "[credential]\n\thelper =\n");
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: {
           ...process.env,
           GIT_CONFIG_GLOBAL: gitConfigPath,
@@ -609,7 +609,7 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "config", "core.hooksPath", hookDirectory]);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -724,7 +724,7 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "config", "core.hooksPath", hookDirectory]);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -825,7 +825,7 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "config", "core.hooksPath", hookDirectory]);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -914,7 +914,7 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "config", "core.hooksPath", hookDirectory]);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -1001,7 +1001,7 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "config", "core.hooksPath", hookDirectory]);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -1086,7 +1086,7 @@ describe("remote sync E2E", () => {
       const remoteCommit = (await execFileAsync("git", ["-C", peerPath, "rev-parse", "HEAD"])).stdout.trim();
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
@@ -1228,7 +1228,7 @@ describe("remote sync E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "remote", "set-url", "origin", unavailableRemotePath]);
 
       app = await electron.launch({
-        args: ["."],
+        args: [".", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
