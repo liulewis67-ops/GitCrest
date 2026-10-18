@@ -17,12 +17,14 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
   const [snapshot, setSnapshot] = useState<WorktreeSnapshotResponse>();
   const [confirming, setConfirming] = useState<string>();
   const [error, setError] = useState("");
+  const [force, setForce] = useState(false);
 
   async function remove(path: string, force: boolean) {
     setError("");
     try {
       onRemoveStarted(await api.removeRepositoryWorktree(repoId, path, force));
       setConfirming(undefined);
+      setForce(false);
     } catch (reason) {
       setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not remove this worktree.");
     }
@@ -54,10 +56,11 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
               : <button className="branchAction worktreeOpen" type="button" aria-label={`Open worktree ${leafName(worktree.path)}`} title={worktree.path} disabled={disabled || worktree.prunable} onClick={() => onOpen(worktree.path)}>{worktree.prunable ? "Missing" : "Open"}</button>}
             {!worktree.isCurrent && !worktree.isMain && !worktree.prunable && (confirming === worktree.path
               ? <>
-                <button className="branchAction" type="button" aria-label={`Confirm remove worktree ${leafName(worktree.path)}`} disabled={disabled} onClick={() => void remove(worktree.path, false)}>Confirm</button>
+                <label className="worktreeForce" title="Also discard uncommitted changes in that folder"><input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />Discard changes</label>
+                <button className="branchAction" type="button" aria-label={`Confirm remove worktree ${leafName(worktree.path)}`} disabled={disabled} onClick={() => void remove(worktree.path, force)}>Confirm</button>
                 <button className="branchAction" type="button" aria-label="Cancel remove" onClick={() => setConfirming(undefined)}>Cancel</button>
               </>
-              : <button className="branchAction worktreeRemove" type="button" aria-label={`Remove worktree ${leafName(worktree.path)}`} title={`Remove ${worktree.path} (the branch is kept)`} disabled={disabled || worktree.locked} onClick={() => setConfirming(worktree.path)}>Remove</button>)}
+              : <button className="branchAction worktreeRemove" type="button" aria-label={`Remove worktree ${leafName(worktree.path)}`} title={`Remove ${worktree.path} (the branch is kept)`} disabled={disabled || worktree.locked} onClick={() => { setForce(false); setConfirming(worktree.path); }}>Remove</button>)}
           </li>
         ))}
       </ul>

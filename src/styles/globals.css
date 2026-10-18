@@ -183,6 +183,7 @@ button:disabled { cursor: not-allowed; }
 .branchFavorite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .branchActions { display: none; gap: 4px; margin-left: auto; }
 .branchItem:hover .branchActions, .branchItem:focus-within .branchActions { display: inline-flex; }
+.worktreeForce { display: inline-flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 9px; }
 .branchAction { padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 9px; }
 .branchAction:hover:not(:disabled) { border-color: var(--line-strong); background: var(--accent-soft); }
 .branchRemoteDelete { width: 18px; height: 18px; flex: 0 0 18px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 14px; line-height: 1; opacity: .65; }

@@ -136,3 +136,48 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await rm(worktreeParent, { recursive: true, force: true });
   }
 }, 120_000);
+
+it("refuses to remove a dirty worktree until changes are explicitly discarded, and blocks locked ones", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-worktree-e2e-app-data-"));
+  const worktreeParent = await mkdtemp(resolve(tmpdir(), "gitcrest-worktree-e2e-wt-"));
+  try {
+    await writeFile(resolve(fixture.path, "base.txt"), "base\n");
+    await git(fixture.path, "add", "base.txt");
+    await git(fixture.path, "commit", "--quiet", "-m", "base");
+    const dirty = resolve(worktreeParent, "dirty-wt");
+    const locked = resolve(worktreeParent, "locked-wt");
+    await git(fixture.path, "worktree", "add", "-b", "wt-dirty", dirty);
+    await git(fixture.path, "worktree", "add", "-b", "wt-locked", locked);
+    await git(fixture.path, "worktree", "lock", locked);
+    await writeFile(resolve(dirty, "scratch.txt"), "uncommitted\n");
+
+    app = await electron.launch({
+      args: [".", "--disable-gpu"],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await openRepository(window, fixture.path);
+
+    expect(await window.getByRole("button", { name: "Remove worktree locked-wt" }).isDisabled()).toBe(true);
+    await window.getByRole("button", { name: "Remove worktree dirty-wt" }).click();
+    await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).click();
+    await window.getByRole("dialog", { name: "Tasks" }).getByText(/Failed/i).first().waitFor({ timeout: 15_000 });
+    expect(await access(resolve(dirty, "scratch.txt")).then(() => true, () => false)).toBe(true);
+    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+
+    await window.getByRole("button", { name: "Remove worktree dirty-wt" }).click();
+    await window.getByRole("checkbox", { name: "Discard changes" }).check();
+    await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).click();
+    await expect.poll(() => access(dirty).then(() => true, () => false), { timeout: 15_000 }).toBe(false);
+  } finally {
+    await app?.close();
+    app = undefined;
+    await git(fixture.path, "worktree", "unlock", resolve(worktreeParent, "locked-wt")).catch(() => undefined);
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true });
+    await rm(worktreeParent, { recursive: true, force: true });
+  }
+}, 120_000);
