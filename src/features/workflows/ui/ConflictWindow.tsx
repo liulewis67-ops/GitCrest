@@ -159,20 +159,22 @@ export function ConflictWindow() {
     }
   };
 
-  const markResolved = async (fileOverride?: WorkflowConflictFileResponse) => {
+  const markResolved = async (fileOverride?: WorkflowConflictFileResponse, side?: "ours" | "theirs") => {
     const currentFile = fileOverride ?? file.data;
-    if (!api || !currentFile || !currentFile.isText || (hasUnsavedChanges && !fileOverride) || action.busy) return;
+    if (!api || !currentFile || (!currentFile.isText && !side) || (hasUnsavedChanges && !fileOverride) || action.busy) return;
     const controller = new AbortController();
     actionControllerRef.current = controller;
-    setAction({ busy: "resolve", message: "Staging this file as resolved…" });
+    setAction({ busy: "resolve", message: side ? "Applying that version to the working tree…" : "Staging this file as resolved…" });
     try {
-      await api.markRepositoryWorkflowConflictResolved(repoId, {
+      const mutation = {
         taskId,
         path: currentFile.path,
         expectedOperation: currentFile.operation,
         expectedHeadOid: currentFile.headOid || "",
         expectedResultRevision: currentFile.resultRevision,
-      });
+      };
+      if (side) await api.chooseRepositoryWorkflowConflictSide(repoId, { ...mutation, side });
+      else await api.markRepositoryWorkflowConflictResolved(repoId, mutation);
       for (let attempt = 0; attempt < TASK_POLL_ATTEMPTS; attempt += 1) {
         await delay(TASK_POLL_INTERVAL_MS, controller.signal);
         if (controller.signal.aborted) return;
@@ -320,7 +322,14 @@ export function ConflictWindow() {
         {currentFile.loading && <p className="diffSpecialState" role="status">Loading conflict stages…</p>}
         {currentFile.data && <>
           <div className="conflictFileHeading"><strong title={currentFile.data.path}>{currentFile.data.path}</strong><span className="monoText" title={currentFile.data.headOid || "Unborn HEAD"}>HEAD {currentFile.data.headOid?.slice(0, 12) || "—"}</span></div>
-          {!currentFile.data.isText ? <p className="diffSpecialState" role="status">This conflict contains binary or non-text content and cannot be edited as text.</p> : <>
+          {(!currentFile.data.isText || !currentFile.data.oursPresent || !currentFile.data.theirsPresent) && <section className="conflictChooseSide" aria-label="Take a whole version">
+            <p role="status">{!currentFile.data.isText ? "This file is binary or non-text, so it cannot be merged line by line. Take one whole version." : !currentFile.data.oursPresent ? "The current branch deleted this file while the incoming branch changed it." : "The incoming branch deleted this file while the current branch changed it."}</p>
+            <div className="conflictToolbarGroup" role="group" aria-label="Take a whole version">
+              <button type="button" disabled={busy || hasUnsavedChanges} onClick={() => void markResolved(undefined, "ours")}>{currentFile.data.oursPresent ? "Use ours (current branch)" : "Accept deletion (ours)"}</button>
+              <button type="button" disabled={busy || hasUnsavedChanges} onClick={() => void markResolved(undefined, "theirs")}>{currentFile.data.theirsPresent ? "Use theirs (incoming)" : "Accept deletion (theirs)"}</button>
+            </div>
+          </section>}
+          {!currentFile.data.isText ? null : <>
             <div className="conflictToolbar" role="toolbar" aria-label="Conflict navigation">
               <div className="conflictToolbarGroup">
                 <button type="button" aria-label="Previous conflict" title="Previous conflict (Alt+Up)" disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock - 1)}>↑</button>

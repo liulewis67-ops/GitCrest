@@ -97,6 +97,8 @@ pub(in crate::features::workflows) struct ConflictFileDto {
     pub(in crate::features::workflows) result_content: Option<String>,
     pub(in crate::features::workflows) result_revision: String,
     pub(in crate::features::workflows) is_text: bool,
+    pub(in crate::features::workflows) ours_present: bool,
+    pub(in crate::features::workflows) theirs_present: bool,
 }
 
 impl From<super::super::conflicts::ConflictFile> for ConflictFileDto {
@@ -113,6 +115,8 @@ impl From<super::super::conflicts::ConflictFile> for ConflictFileDto {
             result_content: file.result_content,
             result_revision: file.result_revision,
             is_text: file.is_text,
+            ours_present: file.ours_present,
+            theirs_present: file.theirs_present,
         }
     }
 }

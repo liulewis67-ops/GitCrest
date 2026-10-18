@@ -67,6 +67,7 @@ pub(crate) fn conflict_capability_allows(method: &Method, path: &str) -> bool {
         "workflows/recovery-preflight"
             | "workflows/conflicts/file"
             | "workflows/conflicts/resolved"
+            | "workflows/conflicts/choose"
             | "workflows/conflicts/suggestion"
             | "workflows/conflicts/ai-settings"
     );
@@ -83,7 +84,9 @@ pub(crate) fn conflict_capability_allows(method: &Method, path: &str) -> bool {
         Method::PUT => suffix == "workflows/conflicts/file",
         Method::POST => matches!(
             suffix,
-            "workflows/conflicts/resolved" | "workflows/conflicts/suggestion"
+            "workflows/conflicts/resolved"
+                | "workflows/conflicts/choose"
+                | "workflows/conflicts/suggestion"
         ),
         Method::OPTIONS => true,
         _ => false,

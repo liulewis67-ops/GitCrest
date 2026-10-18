@@ -76,3 +76,62 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
     await rm(appDataPath, { recursive: true, force: true });
   }
 }, 120_000);
+
+it("resolves a binary conflict by taking one whole version", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-binary-conflict-e2e-app-data-"));
+  try {
+    const file = resolve(fixture.path, "logo.bin");
+    await writeFile(file, Buffer.from([0, 1, 2, 3]));
+    await git(fixture.path, "add", "logo.bin");
+    await git(fixture.path, "commit", "--quiet", "-m", "base");
+    const main = await git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD");
+    await git(fixture.path, "switch", "--quiet", "--create", "other");
+    await writeFile(file, Buffer.from([0, 9, 9, 9]));
+    await git(fixture.path, "commit", "--quiet", "-am", "other binary");
+    await git(fixture.path, "switch", "--quiet", main);
+    await writeFile(file, Buffer.from([0, 5, 5, 5]));
+    await git(fixture.path, "commit", "--quiet", "-am", "main binary");
+
+    app = await electron.launch({
+      args: [".", "--disable-gpu"],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.evaluate(async (repositoryPath) => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+        body: JSON.stringify({ path: repositoryPath }),
+      });
+    }, fixture.path);
+    await window.reload();
+    await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+    await window.locator(".repositoryRowOpen").click();
+    await window.locator(".workspaceCrumb").waitFor();
+
+    const otherRow = window.locator(".branchItem").filter({ has: window.getByText("other", { exact: true }) });
+    const merge = otherRow.getByRole("button", { name: /Merge refs\/heads\/other/ });
+    await expect.poll(async () => { await otherRow.hover(); return merge.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    const conflictWindowPromise = app.waitForEvent("window", { timeout: 30_000 });
+    await merge.click();
+    await window.getByRole("button", { name: "Start merge" }).click();
+
+    const conflictWindow: Page = await conflictWindowPromise;
+    await conflictWindow.getByText(/binary or non-text/).waitFor();
+    await conflictWindow.getByRole("button", { name: "Use theirs (incoming)" }).click();
+    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 20_000 });
+    await expect.poll(() => git(fixture.path, "ls-files", "--unmerged"), { timeout: 15_000 }).toBe("");
+    expect([...(await readFile(file))]).toEqual([0, 9, 9, 9]);
+  } finally {
+    await app?.close();
+    app = undefined;
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 120_000);

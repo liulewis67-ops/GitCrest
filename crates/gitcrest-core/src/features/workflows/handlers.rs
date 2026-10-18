@@ -5,8 +5,9 @@ mod recovery;
 mod reset;
 
 pub(super) use conflicts::{
-    get_workflow_conflict_ai_settings, mark_workflow_conflict_resolved,
-    read_workflow_conflict_file, request_workflow_conflict_suggestion, save_workflow_conflict_file,
+    choose_workflow_conflict_side, get_workflow_conflict_ai_settings,
+    mark_workflow_conflict_resolved, read_workflow_conflict_file,
+    request_workflow_conflict_suggestion, save_workflow_conflict_file,
 };
 pub(super) use merge::{preflight_repository_workflow, start_repository_workflow};
 pub(super) use rebase::{

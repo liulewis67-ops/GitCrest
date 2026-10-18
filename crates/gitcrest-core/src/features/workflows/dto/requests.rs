@@ -187,6 +187,21 @@ pub(in crate::features::workflows) struct WorkflowConflictSaveRequest {
     pub(in crate::features::workflows) content: String,
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(in crate::features::workflows) struct WorkflowConflictChooseRequest {
+    #[serde(flatten)]
+    pub(in crate::features::workflows) mutation: WorkflowConflictMutationRequest,
+    pub(in crate::features::workflows) side: WorkflowConflictSideDto,
+}
+
+#[derive(Deserialize, Clone, Copy)]
+#[serde(rename_all = "camelCase")]
+pub(in crate::features::workflows) enum WorkflowConflictSideDto {
+    Ours,
+    Theirs,
+}
+
 fn deserialize_workflow_operation<'de, D>(deserializer: D) -> Result<WorkflowOperation, D::Error>
 where
     D: serde::Deserializer<'de>,

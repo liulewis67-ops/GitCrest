@@ -3124,6 +3124,68 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/conflicts/choose:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema:
+          $ref: "#/components/schemas/RepoId"
+    post:
+      operationId: chooseWorkflowConflictSide
+      summary: Resolve one conflicted file by taking the whole ours or theirs version
+      description: Requires the conflict-scoped window capability. Works for binary and delete/modify conflicts; rechecks task, operation, HEAD, conflict set and result revision, then stages only this path (or removes it when the chosen side deleted the file).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkflowConflictChooseRequest"
+      responses:
+        "202":
+          description: Conflict resolution task accepted.
+          headers:
+            X-GitCrest-API-Version:
+              $ref: "#/components/headers/ApiVersion"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskSnapshot"
+        "400":
+          description: The request is malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: The waiting workflow task or repository is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: The file is no longer conflicted in the waiting workflow.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "412":
+          description: HEAD, operation or result changed after review.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "503":
+          description: The task queue is full or Git is unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
   /api/v1/repositories/{repoId}/workflows/conflicts/suggestion:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4023,7 +4085,7 @@ components:
     WorkflowConflictFile:
       type: object
       additionalProperties: false
-      required: [repoId, taskId, path, operation, headOid, baseContent, oursContent, theirsContent, resultContent, resultRevision, isText]
+      required: [repoId, taskId, path, operation, headOid, baseContent, oursContent, theirsContent, resultContent, resultRevision, isText, oursPresent, theirsPresent]
       properties:
         repoId: { $ref: "#/components/schemas/RepoId" }
         taskId: { type: string }
@@ -4036,6 +4098,19 @@ components:
         resultContent: { type: [string, "null"], maxLength: 1048576 }
         resultRevision: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-f]+$" }
         isText: { type: boolean }
+        oursPresent: { type: boolean }
+        theirsPresent: { type: boolean }
+    WorkflowConflictChooseRequest:
+      type: object
+      additionalProperties: false
+      required: [taskId, path, expectedOperation, expectedHeadOid, expectedResultRevision, side]
+      properties:
+        taskId: { type: string, minLength: 1, maxLength: 128 }
+        path: { type: string, minLength: 1, maxLength: 4096 }
+        expectedOperation: { type: string, enum: [merge, cherryPick, revert, rebase, shelfApply] }
+        expectedHeadOid: { type: string, minLength: 40, maxLength: 64 }
+        expectedResultRevision: { type: string, minLength: 64, maxLength: 64, pattern: "^[0-9a-f]+$" }
+        side: { type: string, enum: [ours, theirs] }
     WorkflowConflictMutationRequest:
       type: object
       additionalProperties: false

@@ -32,6 +32,7 @@ export type ResetBackupSnapshotResponse = components["schemas"]["ResetBackupSnap
 export type WorkflowRecoveryPreflightResponse = components["schemas"]["WorkflowRecoveryPreflight"];
 export type WorkflowConflictFileResponse = components["schemas"]["WorkflowConflictFile"];
 export type WorkflowConflictMutationRequest = components["schemas"]["WorkflowConflictMutationRequest"];
+export type WorkflowConflictChooseRequest = components["schemas"]["WorkflowConflictChooseRequest"];
 export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflictSaveRequest"];
 export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowConflictSuggestionRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
@@ -625,6 +626,17 @@ export class GitCrestApiClient {
   ): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(
       `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/resolved`,
+      true,
+      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) },
+    );
+  }
+
+  chooseRepositoryWorkflowConflictSide(
+    repoId: RepoId,
+    request: WorkflowConflictChooseRequest,
+  ): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/choose`,
       true,
       { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) },
     );

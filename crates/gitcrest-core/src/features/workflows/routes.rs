@@ -3,9 +3,9 @@ use axum::{routing::get, Router};
 use crate::state::AppState;
 
 use super::handlers::{
-    get_workflow_conflict_ai_settings, list_repository_rebase_backups,
-    list_repository_reset_backups, mark_workflow_conflict_resolved, preflight_repository_rebase,
-    preflight_repository_reset, preflight_repository_workflow,
+    choose_workflow_conflict_side, get_workflow_conflict_ai_settings,
+    list_repository_rebase_backups, list_repository_reset_backups, mark_workflow_conflict_resolved,
+    preflight_repository_rebase, preflight_repository_reset, preflight_repository_workflow,
     preflight_repository_workflow_recovery, read_workflow_conflict_file,
     recover_repository_workflow, request_workflow_conflict_suggestion, restore_repository_reset,
     rollback_repository_rebase, save_workflow_conflict_file, start_repository_rebase,
@@ -61,6 +61,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/repositories/:repo_id/workflows/conflicts/resolved",
             axum::routing::post(mark_workflow_conflict_resolved),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/conflicts/choose",
+            axum::routing::post(choose_workflow_conflict_side),
         )
         .route(
             "/v1/repositories/:repo_id/workflows/conflicts/suggestion",

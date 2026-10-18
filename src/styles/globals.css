@@ -306,6 +306,8 @@ button:disabled { cursor: not-allowed; }
 .conflictResultPreview { display: flex; flex-direction: column; min-height: 190px; border: 1px solid var(--line-strong); border-radius: 4px; background: var(--surface); }
 .conflictResultPreview summary { padding: 8px 9px; color: var(--text); font-size: 10px; font-weight: 650; cursor: pointer; }
 .conflictToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); position: sticky; top: -12px; z-index: 2; }
+.conflictChooseSide { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); font-size: 11px; }
+.conflictChooseSide p { margin: 0; color: var(--text-secondary); }
 .conflictToolbarGroup { display: flex; gap: 4px; }
 .conflictToolbar button { min-height: 26px; min-width: 28px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
 .conflictToolbar button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }

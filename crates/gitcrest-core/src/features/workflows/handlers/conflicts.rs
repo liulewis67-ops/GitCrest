@@ -7,8 +7,9 @@ use axum::{
 use super::super::conflicts;
 use super::super::{
     dto::{
-        ConflictFileDto, WorkflowConflictFileQuery, WorkflowConflictMutationRequest,
-        WorkflowConflictSaveRequest, WorkflowConflictSuggestionRequest,
+        ConflictFileDto, WorkflowConflictChooseRequest, WorkflowConflictFileQuery,
+        WorkflowConflictMutationRequest, WorkflowConflictSaveRequest, WorkflowConflictSideDto,
+        WorkflowConflictSuggestionRequest,
     },
     service as workflows,
 };
@@ -405,6 +406,117 @@ pub(in crate::features::workflows) async fn save_workflow_conflict_file(
                     TaskFailure::Failed("Could not safely save this conflict result.".into())
                 })?;
                 Ok(Some("Conflict result saved to the working tree.".into()))
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+pub(in crate::features::workflows) async fn choose_workflow_conflict_side(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<WorkflowConflictChooseRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Choosing a conflict side requires its task, file, HEAD, operation, result revision and side.",
+        )
+    })?;
+    validate_conflict_mutation(&request.mutation)?;
+    let side = match request.side {
+        WorkflowConflictSideDto::Ours => conflicts::ConflictSide::Ours,
+        WorkflowConflictSideDto::Theirs => conflicts::ConflictSide::Theirs,
+    };
+    let (target, preview) = inspect_waiting_conflict(
+        &state.git_commands,
+        &state.tasks,
+        &state.repository_targets,
+        &repo_id,
+        &request.mutation.task_id,
+        &request.mutation.path,
+    )
+    .await?;
+    ensure_conflict_revision(&preview, &request.mutation)?;
+    let snapshot = conflicts::read_file(
+        &state.git_commands,
+        state.conflict_worktree.as_ref(),
+        &target.repository_path,
+        conflicts::ReadConflictCommand {
+            repo_id: repo_id.clone(),
+            task_id: request.mutation.task_id.clone(),
+            operation: preview.operation,
+            head_oid: preview.head_oid.clone(),
+            relative_path: request.mutation.path.clone(),
+        },
+    )
+    .await
+    .map_err(ApiError::from_conflict_error)?;
+    if snapshot.result_revision != request.mutation.expected_result_revision {
+        return Err(ApiError::new(
+            StatusCode::PRECONDITION_FAILED,
+            ApiErrorCode::WorkflowRecoveryStale,
+            "The conflict result changed after review. Refresh it before choosing a side.",
+        ));
+    }
+
+    let repo_path = target.repository_path;
+    let resource_key = target.resource_key;
+    let tasks = state.tasks.clone();
+    let repositories = state.repository_targets.clone();
+    let git_commands = state.git_commands.clone();
+    let conflict_worktree = state.conflict_worktree.clone();
+    let task_id = request.mutation.task_id;
+    let path = request.mutation.path;
+    let operation = request.mutation.expected_operation;
+    let head_oid = request.mutation.expected_head_oid;
+    let expected_revision = request.mutation.expected_result_revision;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id.clone()),
+            None,
+            resource_key,
+            "workflowConflictResolved",
+            move |_context| async move {
+                let (_target, preview) = inspect_waiting_conflict(
+                    &git_commands,
+                    &tasks,
+                    &repositories,
+                    &repo_id,
+                    &task_id,
+                    &path,
+                )
+                .await
+                .map_err(|error| TaskFailure::Failed(error.message))?;
+                if preview.operation != operation || preview.head_oid.as_deref() != Some(&head_oid)
+                {
+                    return Err(TaskFailure::Failed(
+                        "Repository state changed. Refresh the conflict before resolving it."
+                            .into(),
+                    ));
+                }
+                conflicts::choose_side(
+                    &git_commands,
+                    conflict_worktree.as_ref(),
+                    &repo_path,
+                    &path,
+                    side,
+                    &expected_revision,
+                )
+                .await
+                .map_err(|error| {
+                    TaskFailure::Failed(match error {
+                        crate::domain::error::ConflictError::StaleRevision => {
+                            "The result changed after review. Refresh before choosing a side."
+                                .into()
+                        }
+                        _ => "Could not safely resolve this conflict with that side.".into(),
+                    })
+                })?;
+                Ok(Some("Conflict file resolved with the chosen side.".into()))
             },
         )
         .await

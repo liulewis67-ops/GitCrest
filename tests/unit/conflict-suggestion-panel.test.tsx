@@ -17,7 +17,7 @@ const conflict: WorkflowConflictFileResponse = {
   theirsContent: "theirs value\n",
   resultContent: "<<<<<<< ours\nours value\n=======\ntheirs value\n>>>>>>> theirs\n",
   resultRevision: "b".repeat(64),
-  isText: true,
+  isText: true, oursPresent: true, theirsPresent: true,
 };
 
 function makeApi(request = vi.fn().mockResolvedValue({ provider: "ollama", model: "qwen", response: "merged result\n", files: ["src/conflict.ts [base/ours/theirs/result]"] })) {

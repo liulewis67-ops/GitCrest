@@ -77,6 +77,41 @@ impl ConflictGitPort for GitCommandService {
         })
     }
 
+    fn resolve_conflict_side<'a>(
+        &'a self,
+        repository_path: &'a Path,
+        relative_path: &'a str,
+        stage: u8,
+        side_exists: bool,
+    ) -> ConflictGitFuture<'a, ()> {
+        Box::pin(async move {
+            if !matches!(stage, 2 | 3) {
+                return Err(ConflictError::GitFailed);
+            }
+            if side_exists {
+                let side = if stage == 2 { "--ours" } else { "--theirs" };
+                git_output(
+                    self,
+                    repository_path,
+                    ["--literal-pathspecs", "checkout", side, "--"],
+                    Some(OsString::from(relative_path)),
+                )
+                .await?;
+                self.stage_conflict_file(repository_path, relative_path)
+                    .await
+            } else {
+                git_output(
+                    self,
+                    repository_path,
+                    ["--literal-pathspecs", "rm", "--quiet", "--force", "--"],
+                    Some(OsString::from(relative_path)),
+                )
+                .await?;
+                Ok(())
+            }
+        })
+    }
+
     fn stage_conflict_file<'a>(
         &'a self,
         repository_path: &'a Path,

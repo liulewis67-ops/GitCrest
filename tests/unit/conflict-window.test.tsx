@@ -96,7 +96,7 @@ it("edits, saves, and marks a conflict resolved using conflict-scoped window acc
     repoId, taskId: "task-123-1", path: "conflict.ts", operation: "merge", headOid: "a".repeat(40),
     baseContent: "base value", oursContent: "ours value", theirsContent: "theirs value",
     resultContent: "prefix\n<<<<<<< ours\nours first\n=======\ntheirs first\n>>>>>>> theirs\nmiddle\n<<<<<<< ours\nours second\n=======\ntheirs second\n>>>>>>> theirs\nsuffix\n",
-    resultRevision: "b".repeat(64), isText: true,
+    resultRevision: "b".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
   };
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
     const url = String(input);
@@ -158,7 +158,7 @@ it("aborts save polling when the conflict window closes", async () => {
   const conflict = {
     repoId, taskId, path: "conflict.ts", operation: "merge", headOid: "a".repeat(40),
     baseContent: "base", oursContent: "ours", theirsContent: "theirs", resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n",
-    resultRevision: "b".repeat(64), isText: true,
+    resultRevision: "b".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
   };
   const pollResponse = deferred<Response>();
   let fileReads = 0;
@@ -205,7 +205,7 @@ it("aborts resolved-state polling when the conflict window closes", async () => 
     const url = String(input);
     if (url.includes("conflicts/file")) return Promise.resolve(new Response(JSON.stringify({
       repoId, taskId, path: "conflict.ts", operation: "merge", headOid: "a".repeat(40), baseContent: "base", oursContent: "ours", theirsContent: "theirs",
-      resultContent: "resolved\n", resultRevision: "b".repeat(64), isText: true,
+      resultContent: "resolved\n", resultRevision: "b".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
     }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
     if (url.includes("conflicts/resolved")) return Promise.resolve(new Response(JSON.stringify({ taskId: "resolve-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }));
     if (url.includes("recovery-preflight")) {
@@ -240,7 +240,7 @@ it("aborts error-recovery preflight when the conflict window closes", async () =
   };
   const conflict = {
     repoId, taskId, path: "conflict.ts", operation: "merge", headOid: "a".repeat(40), baseContent: "base", oursContent: "ours", theirsContent: "theirs",
-    resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n", resultRevision: "b".repeat(64), isText: true,
+    resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n", resultRevision: "b".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
   };
   const recoveryResponse = deferred<Response>();
   let fileReads = 0;
@@ -288,7 +288,7 @@ it("shows aligned ours/result/theirs blocks, a resolved counter, and accepts bot
     repoId, taskId: "task-blocks-1", path: "c.ts", operation: "merge", headOid: "a".repeat(40),
     baseContent: "b", oursContent: "o", theirsContent: "t",
     resultContent: "<<<<<<< ours\nA\n||||||| base\nB\n=======\nC\n>>>>>>> theirs\nmid\n<<<<<<< ours\nD\n=======\nE\n>>>>>>> theirs\n",
-    resultRevision: "e".repeat(64), isText: true,
+    resultRevision: "e".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
   };
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input) => {
     const body = String(input).includes("conflicts/file") ? conflict : preview;
@@ -316,7 +316,7 @@ function mountConflict(resultContent: string, stages: { base: string | null; our
   };
   const conflict = {
     repoId, taskId: preview.taskId, path: "c.ts", operation: "merge", headOid: "a".repeat(40),
-    baseContent: stages.base, oursContent: stages.ours, theirsContent: stages.theirs, resultContent, resultRevision: "f".repeat(64), isText: true,
+    baseContent: stages.base, oursContent: stages.ours, theirsContent: stages.theirs, resultContent, resultRevision: "f".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
   };
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input) => new Response(
     JSON.stringify(String(input).includes("conflicts/file") ? conflict : preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } },
@@ -408,7 +408,7 @@ it("saves and marks a fully resolved file in one step", async () => {
   let conflict = {
     repoId, taskId: "task-one-step-1", path: "one.ts", operation: "merge", headOid: "a".repeat(40),
     baseContent: "base", oursContent: "ours", theirsContent: "theirs",
-    resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n", resultRevision: "b".repeat(64), isText: true,
+    resultContent: "<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\n", resultRevision: "b".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
   };
   const calls: string[] = [];
   vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
@@ -448,4 +448,44 @@ it("resolves the active conflict from the keyboard with Alt+1, Alt+2 and Alt+3",
   fireEvent.keyDown(main, { key: "3", code: "Digit3", altKey: true });
   expect(screen.getByText("All 3 conflicts resolved")).toBeTruthy();
   expect(editor.value).toBe("A\nmid\nD\nmid2\nE\nF\n");
+});
+
+it("lets the user take a whole side for a binary file and for a delete/modify conflict", async () => {
+  const repoId = `repo_${"8".repeat(64)}`;
+  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-8-1`);
+  Object.defineProperty(window, "gitcrest", {
+    configurable: true,
+    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
+  });
+  let preview = {
+    repoId, taskId: "task-8-1", operation: "merge", headOid: "a".repeat(40), dirtyPaths: ["logo.png", "gone.txt"],
+    omittedDirtyPathCount: 0, conflictedPaths: ["logo.png", "gone.txt"], omittedConflictedPathCount: 0, canContinue: false, canSkip: false, canAbort: true,
+  };
+  const files: Record<string, unknown> = {
+    "logo.png": { repoId, taskId: "task-8-1", path: "logo.png", operation: "merge", headOid: "a".repeat(40), baseContent: null, oursContent: null, theirsContent: null, resultContent: null, resultRevision: "1".repeat(64), isText: false, oursPresent: true, theirsPresent: true },
+    "gone.txt": { repoId, taskId: "task-8-1", path: "gone.txt", operation: "merge", headOid: "a".repeat(40), baseContent: "x\n", oursContent: "edit\n", theirsContent: null, resultContent: "edit\n", resultRevision: "2".repeat(64), isText: true, oursPresent: true, theirsPresent: false },
+  };
+  const chosen: unknown[] = [];
+  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+    const url = new URL(String(input), "http://127.0.0.1:4100");
+    if (url.pathname.endsWith("conflicts/choose")) {
+      const body = JSON.parse(String(init?.body)) as { path: string };
+      chosen.push(body);
+      preview = { ...preview, conflictedPaths: preview.conflictedPaths.filter((path) => path !== body.path) };
+      return new Response(JSON.stringify({ taskId: "choose-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
+    }
+    if (url.pathname.endsWith("conflicts/file")) return new Response(JSON.stringify(files[url.searchParams.get("path") ?? ""]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    return new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+  }));
+  render(<ConflictWindow />);
+  expect(await screen.findByText(/binary or non-text/)).toBeTruthy();
+  expect(screen.queryByRole("textbox", { name: "Working result" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Use theirs (incoming)" }));
+  await waitFor(() => expect(chosen).toHaveLength(1));
+  expect(chosen[0]).toMatchObject({ path: "logo.png", side: "theirs", expectedResultRevision: "1".repeat(64) });
+  expect(await screen.findByText(/incoming branch deleted this file/)).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Accept deletion (theirs)" })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Accept deletion (theirs)" }));
+  await waitFor(() => expect(chosen).toHaveLength(2));
+  expect(chosen[1]).toMatchObject({ path: "gone.txt", side: "theirs" });
 });

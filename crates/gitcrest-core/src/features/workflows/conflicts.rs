@@ -21,6 +21,10 @@ pub struct ConflictFile {
     pub result_content: Option<String>,
     pub result_revision: String,
     pub is_text: bool,
+    /// Whether the current-branch (ours) side still has the file.
+    pub ours_present: bool,
+    /// Whether the incoming (theirs) side still has the file.
+    pub theirs_present: bool,
 }
 
 pub struct ReadConflictCommand {
@@ -76,7 +80,56 @@ pub async fn read_file(
         result_content: to_text(result),
         result_revision,
         is_text,
+        ours_present: index_stages.contains_key(&2),
+        theirs_present: index_stages.contains_key(&3),
     })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConflictSide {
+    Ours,
+    Theirs,
+}
+
+/// Resolves a conflicted file by taking one whole side (or its deletion). Works for binary
+/// files, where the text merge editor cannot be used.
+pub async fn choose_side(
+    git: &impl ConflictGitPort,
+    worktree: &(impl ConflictWorktreePort + ?Sized),
+    repository_path: &Path,
+    relative_path: &str,
+    side: ConflictSide,
+    expected_revision: &str,
+) -> Result<(), ConflictError> {
+    validate_relative_path(relative_path)?;
+    let stages = git
+        .read_conflict_stages(repository_path, relative_path)
+        .await?;
+    if stages.is_empty() {
+        return Err(ConflictError::NotConflicted);
+    }
+    let current = worktree
+        .read_conflict_worktree_file(repository_path, relative_path)
+        .await?;
+    if revision(&current) != expected_revision {
+        return Err(ConflictError::StaleRevision);
+    }
+    let stage = if side == ConflictSide::Ours { 2 } else { 3 };
+    git.resolve_conflict_side(
+        repository_path,
+        relative_path,
+        stage,
+        stages.contains_key(&stage),
+    )
+    .await?;
+    if !git
+        .read_conflict_stages(repository_path, relative_path)
+        .await?
+        .is_empty()
+    {
+        return Err(ConflictError::GitFailed);
+    }
+    Ok(())
 }
 
 pub async fn save_result(
@@ -404,6 +457,123 @@ mod tests {
             git(repository.path(), &["show", ":file.txt"]),
             "resolved safely"
         );
+    }
+
+    fn repo_with(setup: impl Fn(&Path)) -> TempDir {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path();
+        git(root, &["init", "--quiet", "--initial-branch=main"]);
+        git(root, &["config", "user.name", "Fixture"]);
+        git(root, &["config", "user.email", "fixture@example.test"]);
+        setup(root);
+        directory
+    }
+
+    async fn snapshot(repository: &Path, path: &str) -> ConflictFile {
+        read_file(
+            &GitCommandService::default(),
+            &ConflictWorktreeAdapter,
+            repository,
+            ReadConflictCommand {
+                repo_id: "repo_fixture".into(),
+                task_id: "task_fixture".into(),
+                operation: WorkflowOperation::Merge,
+                head_oid: Some(git(repository, &["rev-parse", "HEAD"])),
+                relative_path: path.into(),
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn chooses_a_whole_side_for_a_binary_conflict() {
+        let repository = repo_with(|root| {
+            fs::write(root.join("image.bin"), [0u8, 1, 2, 3]).unwrap();
+            git(root, &["add", "image.bin"]);
+            git(root, &["commit", "--quiet", "-m", "base"]);
+            git(root, &["checkout", "--quiet", "-b", "theirs"]);
+            fs::write(root.join("image.bin"), [0u8, 9, 9, 9]).unwrap();
+            git(root, &["commit", "--quiet", "-am", "theirs"]);
+            git(root, &["checkout", "--quiet", "main"]);
+            fs::write(root.join("image.bin"), [0u8, 5, 5, 5]).unwrap();
+            git(root, &["commit", "--quiet", "-am", "ours"]);
+            let merge = Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(["merge", "theirs"])
+                .output()
+                .unwrap();
+            assert!(!merge.status.success());
+        });
+        let file = snapshot(repository.path(), "image.bin").await;
+        assert!(!file.is_text);
+        assert!(file.ours_present && file.theirs_present);
+        let git_service = GitCommandService::default();
+        assert_eq!(
+            choose_side(
+                &git_service,
+                &ConflictWorktreeAdapter,
+                repository.path(),
+                "image.bin",
+                ConflictSide::Theirs,
+                "stale"
+            )
+            .await,
+            Err(ConflictError::StaleRevision)
+        );
+        choose_side(
+            &git_service,
+            &ConflictWorktreeAdapter,
+            repository.path(),
+            "image.bin",
+            ConflictSide::Theirs,
+            &file.result_revision,
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            fs::read(repository.path().join("image.bin")).unwrap(),
+            vec![0u8, 9, 9, 9]
+        );
+        assert_eq!(git(repository.path(), &["ls-files", "-u"]), "");
+    }
+
+    #[tokio::test]
+    async fn chooses_deletion_for_a_delete_modify_conflict() {
+        let repository = repo_with(|root| {
+            fs::write(root.join("gone.txt"), "base\n").unwrap();
+            git(root, &["add", "gone.txt"]);
+            git(root, &["commit", "--quiet", "-m", "base"]);
+            git(root, &["checkout", "--quiet", "-b", "theirs"]);
+            git(root, &["rm", "--quiet", "gone.txt"]);
+            git(root, &["commit", "--quiet", "-m", "theirs deletes"]);
+            git(root, &["checkout", "--quiet", "main"]);
+            fs::write(root.join("gone.txt"), "ours edit\n").unwrap();
+            git(root, &["commit", "--quiet", "-am", "ours edits"]);
+            let merge = Command::new("git")
+                .arg("-C")
+                .arg(root)
+                .args(["merge", "theirs"])
+                .output()
+                .unwrap();
+            assert!(!merge.status.success());
+        });
+        let file = snapshot(repository.path(), "gone.txt").await;
+        assert!(file.ours_present);
+        assert!(!file.theirs_present);
+        choose_side(
+            &GitCommandService::default(),
+            &ConflictWorktreeAdapter,
+            repository.path(),
+            "gone.txt",
+            ConflictSide::Theirs,
+            &file.result_revision,
+        )
+        .await
+        .unwrap();
+        assert!(!repository.path().join("gone.txt").exists());
+        assert_eq!(git(repository.path(), &["ls-files", "-u"]), "");
     }
 
     #[test]

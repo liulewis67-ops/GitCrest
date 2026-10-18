@@ -1318,6 +1318,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/workflows/conflicts/choose": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve one conflicted file by taking the whole ours or theirs version
+         * @description Requires the conflict-scoped window capability. Works for binary and delete/modify conflicts; rechecks task, operation, HEAD, conflict set and result revision, then stages only this path (or removes it when the chosen side deleted the file).
+         */
+        post: operations["chooseWorkflowConflictSide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/workflows/conflicts/suggestion": {
         parameters: {
             query?: never;
@@ -1864,6 +1888,18 @@ export interface components {
             resultContent: string | null;
             resultRevision: string;
             isText: boolean;
+            oursPresent: boolean;
+            theirsPresent: boolean;
+        };
+        WorkflowConflictChooseRequest: {
+            taskId: string;
+            path: string;
+            /** @enum {string} */
+            expectedOperation: "merge" | "cherryPick" | "revert" | "rebase" | "shelfApply";
+            expectedHeadOid: string;
+            expectedResultRevision: string;
+            /** @enum {string} */
+            side: "ours" | "theirs";
         };
         WorkflowConflictMutationRequest: {
             taskId: string;
@@ -6263,6 +6299,82 @@ export interface operations {
                 };
             };
             /** @description Conflict markers remain or the file cannot safely be resolved. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description HEAD, operation or result changed after review. */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The task queue is full or Git is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    chooseWorkflowConflictSide: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkflowConflictChooseRequest"];
+            };
+        };
+        responses: {
+            /** @description Conflict resolution task accepted. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            /** @description The request is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The waiting workflow task or repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The file is no longer conflicted in the waiting workflow. */
             409: {
                 headers: {
                     [name: string]: unknown;
