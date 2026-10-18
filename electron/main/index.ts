@@ -302,9 +302,9 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     minHeight: secondaryWindow ? 520 : 640,
     title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? "Resolve conflicts · GitCrest" : "GitCrest",
     show: false,
-    // Main window drops the native title bar; the in-app titlebar acts as the drag region
-    // and Windows/Linux keep native window controls through a transparent overlay.
-    ...(secondaryWindow
+    // The main and conflict-resolution windows drop the native title bar; their in-app header acts as the drag
+    // region and Windows/Linux keep native window controls through a transparent overlay.
+    ...(diffRequest
       ? {}
       : {
           titleBarStyle: "hidden" as const,

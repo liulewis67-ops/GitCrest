@@ -291,8 +291,11 @@ button:disabled { cursor: not-allowed; }
 .workflowRecovery { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .workflowRecovery .taskCenterActions { flex-wrap: wrap; align-items: center; }
 .conflictWindow { display: flex; flex-direction: column; min-width: 0; min-height: 100vh; background: var(--canvas); color: var(--text); }
-.conflictWindowHeader { display: flex; align-items: center; justify-content: space-between; min-height: 62px; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--surface); }
-.conflictWindowHeader h1 { margin: 2px 0 0; font-size: 16px; font-weight: 620; }
+/* Same drawn title bar as the main window: top rule, drag region, and room for the window-controls overlay. */
+.conflictWindowHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 46px; padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + 14px) 0 18px; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); background: var(--surface); -webkit-app-region: drag; }
+.conflictWindowHeader > div:first-child { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.conflictWindowHeader .sectionEyebrow { margin: 0; }
+.conflictWindowHeader h1 { margin: 0; font-size: 13px; font-weight: 650; letter-spacing: -.01em; }
 .conflictWindowProgress { color: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
 .conflictWindowLayout { display: grid; grid-template-columns: minmax(200px, 25%) minmax(0, 1fr); flex: 1; min-height: 0; }
 .conflictFileList { display: flex; flex-direction: column; gap: 3px; min-height: 0; padding: 9px; overflow: auto; border-right: 1px solid var(--line); background: var(--surface); }
