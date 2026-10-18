@@ -5591,6 +5591,36 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
         .unwrap()
         .iter()
         .any(|branch| branch["name"] == "feature/api" && branch["kind"] == "local"));
+    for (start_point, expected) in [
+        ("not-hex!", StatusCode::BAD_REQUEST),
+        ("deadbeefdeadbeef", StatusCode::NOT_FOUND),
+        (&*oid, StatusCode::ACCEPTED),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/branches"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(
+                        serde_json::json!({ "name": "feature/at-commit", "startPoint": start_point })
+                            .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
+        if expected == StatusCode::ACCEPTED {
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+            assert_eq!(completed["status"], "succeeded");
+        }
+    }
     let worktree_parent = tempfile::tempdir().unwrap();
     let worktree_dir = worktree_parent.path().join("feature-wt");
     let relative_worktree = app

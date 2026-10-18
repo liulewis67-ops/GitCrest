@@ -811,27 +811,30 @@ impl GitCommandService {
                 name,
                 checkout,
                 worktree_path,
-            } => match worktree_path {
-                Some(path) => (
-                    vec![
+                start_point,
+            } => {
+                let mut arguments: Vec<OsString> = match (&worktree_path, checkout) {
+                    (Some(path), _) => vec![
                         "worktree".into(),
                         "add".into(),
                         "-b".into(),
-                        name.into(),
+                        name.clone().into(),
                         "--".into(),
-                        path.into(),
+                        path.clone().into(),
                     ],
-                    "Create worktree",
-                ),
-                None if checkout => (
-                    vec!["switch".into(), "--create".into(), name.into()],
-                    "Create and switch branch",
-                ),
-                None => (
-                    vec!["branch".into(), "--".into(), name.into()],
-                    "Create branch",
-                ),
-            },
+                    (None, true) => vec!["switch".into(), "--create".into(), name.into()],
+                    (None, false) => vec!["branch".into(), "--".into(), name.into()],
+                };
+                if let Some(start_point) = start_point {
+                    arguments.push(start_point.into());
+                }
+                let label = match (&worktree_path, checkout) {
+                    (Some(_), _) => "Create worktree",
+                    (None, true) => "Create and switch branch",
+                    (None, false) => "Create branch",
+                };
+                (arguments, label)
+            }
             BranchCommand::Switch { name } => (
                 vec![
                     "switch".into(),

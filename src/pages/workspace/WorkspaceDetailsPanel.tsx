@@ -20,6 +20,7 @@ interface WorkspaceDetailsPanelProps {
   onOpenDiffWindow: (path: string, oid: string) => void;
   onTagRequestHandled: (sequence: number) => void;
   onWorkflow: (action: WorkflowAction, oid: string) => void;
+  onCreateBranch: (oid: string) => void;
 }
 
 export function WorkspaceDetailsPanel({
@@ -35,6 +36,7 @@ export function WorkspaceDetailsPanel({
   onOpenDiffWindow,
   onTagRequestHandled,
   onWorkflow,
+  onCreateBranch,
 }: WorkspaceDetailsPanelProps) {
   const workflowDisabledReason = !connected
     ? "Connect to the Git engine to start this operation."
@@ -47,7 +49,7 @@ export function WorkspaceDetailsPanel({
   return (
     <aside className="detailsPanel" aria-label="Commit details">
       <div className="panelHeading">{repository ? "REPOSITORY" : "COMMIT DETAILS"}</div>
-      {repository && isFullGitObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">Loading commit details…</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} /></Suspense> : repository ? (
+      {repository && isFullGitObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">Loading commit details…</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} onCreateBranch={onCreateBranch} /></Suspense> : repository ? (
         <div className="repositoryDetails">
           <span className="detailsGlyph" aria-hidden="true">G</span>
           <h2>{getRepositoryDisplayName(repository.path)}</h2>

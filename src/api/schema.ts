@@ -1649,6 +1649,8 @@ export interface components {
             /** @default false */
             checkout: boolean;
             worktreePath?: string;
+            /** @description Commit ID the new branch starts at; defaults to HEAD. */
+            startPoint?: string;
         };
         RenameBranchRequest: {
             name: string;

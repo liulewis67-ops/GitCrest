@@ -38,6 +38,8 @@ pub(super) struct CreateBranchRequest {
     pub(super) checkout: bool,
     #[serde(default)]
     pub(super) worktree_path: Option<String>,
+    #[serde(default)]
+    pub(super) start_point: Option<String>,
 }
 
 #[derive(Deserialize)]

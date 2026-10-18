@@ -177,3 +177,39 @@ it("refuses to remove a dirty worktree until changes are explicitly discarded, a
     await rm(worktreeParent, { recursive: true, force: true });
   }
 }, 120_000);
+
+it("creates a branch at an older commit from the commit details", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-branch-here-e2e-app-data-"));
+  try {
+    await writeFile(resolve(fixture.path, "one.txt"), "one\n");
+    await git(fixture.path, "add", "one.txt");
+    await git(fixture.path, "commit", "--quiet", "-m", "first commit");
+    const firstOid = await git(fixture.path, "rev-parse", "HEAD");
+    await writeFile(resolve(fixture.path, "two.txt"), "two\n");
+    await git(fixture.path, "add", "two.txt");
+    await git(fixture.path, "commit", "--quiet", "-m", "second commit");
+
+    app = await electron.launch({
+      args: [".", "--disable-gpu"],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await openRepository(window, fixture.path);
+
+    await window.getByText("first commit", { exact: true }).first().click();
+    await window.getByRole("button", { name: "Branch here" }).click();
+    const dialog = window.getByRole("dialog", { name: "Create branch here" });
+    await dialog.getByRole("textbox", { name: "Branch name" }).fill("from-first");
+    await dialog.getByRole("button", { name: "Create and switch" }).click();
+    await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe("from-first");
+    expect(await git(fixture.path, "rev-parse", "HEAD")).toBe(firstOid);
+  } finally {
+    await app?.close();
+    app = undefined;
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 120_000);

@@ -286,6 +286,35 @@ pub(super) async fn create_repository_branch(
     let branch_name = request.name;
     let checkout = request.checkout;
     let worktree_path = request.worktree_path;
+    let start_point = match request.start_point.as_deref() {
+        Some(start) => {
+            if !(4..=64).contains(&start.len())
+                || !start.bytes().all(|byte| byte.is_ascii_hexdigit())
+            {
+                return Err(ApiError::new(
+                    StatusCode::BAD_REQUEST,
+                    ApiErrorCode::RequestInvalid,
+                    "The start point must be a commit ID.",
+                ));
+            }
+            Some(
+                crate::ports::git::GitReadPort::resolve_commit_target(
+                    &state.git_commands,
+                    &path,
+                    start,
+                )
+                .await
+                .map_err(|_| {
+                    ApiError::new(
+                        StatusCode::NOT_FOUND,
+                        ApiErrorCode::HistoryCommitNotFound,
+                        "That commit could not be found in this repository.",
+                    )
+                })?,
+            )
+        }
+        None => None,
+    };
     let task = state
         .tasks
         .submit(
@@ -305,6 +334,7 @@ pub(super) async fn create_repository_branch(
                             name: branch_name,
                             checkout,
                             worktree_path,
+                            start_point,
                         },
                         context,
                     )

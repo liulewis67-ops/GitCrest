@@ -4,6 +4,7 @@ pub(crate) enum BranchCommand {
         name: String,
         checkout: bool,
         worktree_path: Option<String>,
+        start_point: Option<String>,
     },
     Switch {
         name: String,

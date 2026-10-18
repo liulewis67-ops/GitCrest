@@ -184,11 +184,11 @@ export class GitCrestApiClient {
     });
   }
 
-  createRepositoryBranch(repoId: RepoId, name: string, options: { checkout?: boolean; worktreePath?: string } = {}): Promise<TaskSnapshotResponse> {
+  createRepositoryBranch(repoId: RepoId, name: string, options: { checkout?: boolean; worktreePath?: string; startPoint?: string } = {}): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, ...(options.checkout ? { checkout: true } : {}), ...(options.worktreePath ? { worktreePath: options.worktreePath } : {}) } as components["schemas"]["CreateBranchRequest"]),
+      body: JSON.stringify({ name, ...(options.checkout ? { checkout: true } : {}), ...(options.worktreePath ? { worktreePath: options.worktreePath } : {}), ...(options.startPoint ? { startPoint: options.startPoint } : {}) } as components["schemas"]["CreateBranchRequest"]),
     });
   }
 

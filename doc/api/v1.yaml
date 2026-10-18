@@ -3779,6 +3779,7 @@ components:
         name: { type: string, minLength: 1, maxLength: 255 }
         checkout: { type: boolean, default: false }
         worktreePath: { type: string, minLength: 1, maxLength: 4096 }
+        startPoint: { type: string, minLength: 4, maxLength: 64, description: Commit ID the new branch starts at; defaults to HEAD. }
     RenameBranchRequest:
       type: object
       additionalProperties: false

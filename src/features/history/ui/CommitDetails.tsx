@@ -12,6 +12,7 @@ export function CommitDetails({
   onOpenFile,
   onOpenDiffWindow,
   onWorkflow,
+  onCreateBranch,
   workflowDisabledReason,
   openTagRequest,
   tagShortcut,
@@ -24,6 +25,7 @@ export function CommitDetails({
   onOpenFile?: (path: string, oid: string) => void;
   onOpenDiffWindow?: (path: string, oid: string) => void;
   onWorkflow?: (action: "merge" | "cherryPick" | "revert", oid: string) => void;
+  onCreateBranch?: (oid: string) => void;
   workflowDisabledReason?: string;
   openTagRequest?: { repoId: string; oid: string; sequence: number };
   tagShortcut?: string;
@@ -67,7 +69,7 @@ export function CommitDetails({
     <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>Copy SHA</button>
     {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
     <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={tagCreation.toggleEditor}>{tagCreation.editorOpen ? "Cancel tag" : "Create tag"}</button>
-    {onWorkflow && <div className="commitWorkflowActions" aria-label="Commit actions"><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>Merge</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} aria-keyshortcuts={cherryPickShortcut} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>Cherry-pick</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>Revert</button></div>}
+    {onWorkflow && <div className="commitWorkflowActions" aria-label="Commit actions"><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>Merge</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} aria-keyshortcuts={cherryPickShortcut} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>Cherry-pick</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>Revert</button>{onCreateBranch && <button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason ?? "Create a branch that starts at this commit"} onClick={() => onCreateBranch(commitOid)}>Branch here</button>}</div>}
     {tagCreation.editorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
       <label>Tag name<input aria-label="Tag name" value={tagCreation.name} maxLength={255} required onChange={(event) => tagCreation.setName(event.target.value)} placeholder="v1.0.0" /></label>
       <label>Annotation message<textarea aria-label="Tag annotation" value={tagCreation.message} maxLength={8192} onChange={(event) => tagCreation.setMessage(event.target.value)} placeholder="Describe this release" /></label>
