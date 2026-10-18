@@ -290,6 +290,32 @@ impl GitCommandService {
         .unwrap_or(true)
     }
 
+    /// Paths Git ignores and does not track; ignored folders are reported as one entry ending in a slash.
+    pub async fn list_ignored_paths(
+        &self,
+        repository_path: &Path,
+    ) -> Result<Vec<String>, TaskFailure> {
+        let output = capture_git_output(
+            &self.git_program,
+            repository_path,
+            [
+                "ls-files",
+                "--others",
+                "--ignored",
+                "--exclude-standard",
+                "--directory",
+                "-z",
+            ],
+            1024 * 1024,
+        )
+        .await?;
+        Ok(output
+            .split(|byte| *byte == 0)
+            .filter(|path| !path.is_empty())
+            .map(|path| String::from_utf8_lossy(path).into_owned())
+            .collect())
+    }
+
     pub async fn read_index_tree(&self, repository_path: &Path) -> Result<String, TaskFailure> {
         let output =
             capture_git_output(&self.git_program, repository_path, ["write-tree"], 128).await?;

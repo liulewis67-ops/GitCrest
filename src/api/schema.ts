@@ -510,6 +510,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/worktrees/local-files": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** List small Git-ignored files (such as .env) that can be copied into a new worktree */
+        get: operations["listWorktreeLocalFiles"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/worktrees/add": {
         parameters: {
             query?: never;
@@ -1764,6 +1785,8 @@ export interface components {
             worktreePath?: string;
             /** @description Commit ID the new branch starts at; defaults to HEAD. */
             startPoint?: string;
+            /** @description Small Git-ignored files to copy into the new worktree; only valid with worktreePath. */
+            copyFiles?: string[];
         };
         RenameBranchRequest: {
             name: string;
@@ -2131,6 +2154,14 @@ export interface components {
             /** @description Explicitly permit deletion when the preview reports commits not reachable from the current branch. */
             allowUnmerged: boolean;
         };
+        CopyableFiles: {
+            files: {
+                path: string;
+                sizeBytes: number;
+            }[];
+            /** @description Ignored folders */
+            omittedCount: number;
+        };
         WorktreeFolderCheck: {
             /** @enum {string} */
             status: "ok" | "notAbsolute" | "notEmpty" | "isFile";
@@ -2139,6 +2170,8 @@ export interface components {
             branch: string;
             /** @description Absolute path to a new or empty folder. */
             path: string;
+            /** @description Small Git-ignored files (from the local-files listing) to copy into the new worktree. */
+            copyFiles?: string[];
             /** @description branch is a remote-tracking branch such as origin/feature; a local tracking branch is created in the worktree. Defaults to false. */
             fromRemote?: boolean;
         };
@@ -3881,6 +3914,43 @@ export interface operations {
                 };
             };
             400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    listWorktreeLocalFiles: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Copyable files. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CopyableFiles"];
+                };
+            };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             /** @description Repository is unavailable. */

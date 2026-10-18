@@ -40,6 +40,9 @@ pub(super) struct CreateBranchRequest {
     pub(super) worktree_path: Option<String>,
     #[serde(default)]
     pub(super) start_point: Option<String>,
+    /// Ignored local files (such as .env) to copy into the new worktree; only used with worktreePath.
+    #[serde(default)]
+    pub(super) copy_files: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -108,6 +111,9 @@ pub(super) struct AddWorktreeRequest {
     /// `branch` names a remote-tracking branch such as `origin/feature`; a local tracking branch is created.
     #[serde(default)]
     pub(super) from_remote: bool,
+    /// Ignored local files (such as .env) to copy into the new worktree.
+    #[serde(default)]
+    pub(super) copy_files: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -121,4 +127,18 @@ pub(super) struct WorktreeFolderQuery {
 pub(super) struct WorktreeFolderCheck {
     /// `ok`, `notAbsolute`, `notEmpty` or `isFile`.
     pub(super) status: &'static str,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct CopyableFile {
+    pub(super) path: String,
+    pub(super) size_bytes: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct CopyableFiles {
+    pub(super) files: Vec<CopyableFile>,
+    pub(super) omitted_count: usize,
 }

@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
@@ -49,6 +49,9 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await writeFile(resolve(fixture.path, "base.txt"), "base\n");
     await git(fixture.path, "add", "base.txt");
     await git(fixture.path, "commit", "--quiet", "-m", "base");
+    // A Git-ignored local file that the new-worktree dialog can copy on request.
+    await writeFile(resolve(fixture.path, ".git", "info", "exclude"), "*.local\n");
+    await writeFile(resolve(fixture.path, "app.local"), "SECRET=1\n");
     const main = await git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD");
     await git(fixture.path, "switch", "--quiet", "--create", "side");
     await writeFile(resolve(fixture.path, "side.txt"), "side\n");
@@ -110,7 +113,11 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await worktreeDialog.getByText(/already contains files/).waitFor({ timeout: 10_000 });
     expect(await worktreeDialog.getByRole("button", { name: "Create worktree" }).isDisabled()).toBe(true);
     await worktreeDialog.getByRole("textbox", { name: "Worktree folder" }).fill(secondFolder);
+    // Nothing is copied unless ticked; tick the ignored file so it follows the new worktree.
+    expect(await worktreeDialog.getByRole("checkbox", { name: /app.local/ }).isChecked()).toBe(false);
+    await worktreeDialog.getByRole("checkbox", { name: /app.local/ }).check();
     await worktreeDialog.getByRole("button", { name: "Create worktree" }).click();
+    await expect.poll(() => readFile(resolve(secondFolder, "app.local"), "utf8").catch(() => ""), { timeout: 15_000 }).toBe("SECRET=1\n");
     await expect.poll(() => git(secondFolder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/wt");
     await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("wt-folder-again");
     await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();

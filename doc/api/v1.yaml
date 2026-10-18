@@ -996,6 +996,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/worktrees/local-files:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: listWorktreeLocalFiles
+      summary: List small Git-ignored files (such as .env) that can be copied into a new worktree
+      responses:
+        "200":
+          description: Copyable files.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CopyableFiles" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/worktrees/add:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3965,6 +3991,7 @@ components:
         checkout: { type: boolean, default: false }
         worktreePath: { type: string, minLength: 1, maxLength: 4096 }
         startPoint: { type: string, minLength: 4, maxLength: 64, description: Commit ID the new branch starts at; defaults to HEAD. }
+        copyFiles: { type: array, maxItems: 100, items: { type: string, maxLength: 4096 }, description: Small Git-ignored files to copy into the new worktree; only valid with worktreePath. }
     RenameBranchRequest:
       type: object
       additionalProperties: false
@@ -4434,6 +4461,21 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
         allowUnmerged: { type: boolean, description: Explicitly permit deletion when the preview reports commits not reachable from the current branch. }
+    CopyableFiles:
+      type: object
+      additionalProperties: false
+      required: [files, omittedCount]
+      properties:
+        files:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, sizeBytes]
+            properties:
+              path: { type: string }
+              sizeBytes: { type: integer, minimum: 0 }
+        omittedCount: { type: integer, minimum: 0, description: Ignored folders, large files and files beyond the listing limit that are not offered. }
     WorktreeFolderCheck:
       type: object
       additionalProperties: false
@@ -4447,6 +4489,7 @@ components:
       properties:
         branch: { type: string, minLength: 1, maxLength: 255 }
         path: { type: string, minLength: 1, maxLength: 4096, description: Absolute path to a new or empty folder. }
+        copyFiles: { type: array, maxItems: 100, items: { type: string, maxLength: 4096 }, description: Small Git-ignored files (from the local-files listing) to copy into the new worktree. }
         fromRemote: { type: boolean, description: "branch is a remote-tracking branch such as origin/feature; a local tracking branch is created in the worktree. Defaults to false." }
     RemoveWorktreeRequest:
       type: object

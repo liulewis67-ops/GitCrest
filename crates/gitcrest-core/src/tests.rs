@@ -5910,6 +5910,93 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
     let body = to_bytes(cleaned.into_body(), usize::MAX).await.unwrap();
     let cleaned: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(worktree_count(cleaned), 1);
+
+    // Ignored local files can be listed and copied into a new worktree, but only when named.
+    std::fs::write(root.join(".git").join("info").join("exclude"), "*.local\n").unwrap();
+    std::fs::write(root.join("app.local"), "SECRET=1\n").unwrap();
+    std::fs::create_dir(root.join("cache.local")).unwrap();
+    std::fs::write(root.join("cache.local").join("big.bin"), "x").unwrap();
+    let listing = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/worktrees/local-files"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(listing.status(), StatusCode::OK);
+    let body = to_bytes(listing.into_body(), usize::MAX).await.unwrap();
+    let listing: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let listed: Vec<&str> = listing["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|file| file["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(listed, ["app.local"]);
+    assert_eq!(
+        listing["omittedCount"], 1,
+        "the ignored folder is not offered"
+    );
+
+    let copy_dir = worktree_parent.path().join("with-copy");
+    let create_with = |copy_files: serde_json::Value, folder: Option<&std::path::Path>| {
+        let mut body = serde_json::json!({ "name": "feature/copy", "copyFiles": copy_files });
+        if let Some(folder) = folder {
+            body["worktreePath"] = serde_json::json!(folder);
+        }
+        json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/branches"),
+            &body.to_string(),
+            WRITE_TOKEN,
+        )
+    };
+    for (copy_files, folder, expected) in [
+        (
+            serde_json::json!(["history.txt"]),
+            Some(copy_dir.as_path()),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            serde_json::json!(["../outside.local"]),
+            Some(copy_dir.as_path()),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            serde_json::json!(["cache.local/big.bin"]),
+            Some(copy_dir.as_path()),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            serde_json::json!(["app.local"]),
+            None,
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            serde_json::json!(["app.local"]),
+            Some(copy_dir.as_path()),
+            StatusCode::ACCEPTED,
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(create_with(copy_files.clone(), folder))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected, "copyFiles {copy_files}");
+        if expected == StatusCode::ACCEPTED {
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+            assert_eq!(completed["status"], "succeeded");
+        }
+    }
+    assert_eq!(
+        std::fs::read_to_string(copy_dir.join("app.local")).unwrap(),
+        "SECRET=1\n"
+    );
+    assert!(!copy_dir.join("cache.local").exists());
     for (uri, body, expected) in [
         (
             "",

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { LocalFilesPicker } from "./LocalFilesPicker";
 import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
 import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 
@@ -21,6 +22,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
   const suggested = suggestWorktreePath(repositoryPath, localName);
   const [folder, setFolder] = useState(suggested);
   const [busy, setBusy] = useState(false);
+  const [copyFiles, setCopyFiles] = useState<string[]>([]);
   const [error, setError] = useState("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const relative = folder.trim() !== "" && !isAbsoluteFolder(folder);
@@ -32,7 +34,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
     setBusy(true);
     setError("");
     try {
-      const task = await api.addRepositoryWorktree(repoId, branch, folder.trim(), fromRemote);
+      const task = await api.addRepositoryWorktree(repoId, branch, folder.trim(), fromRemote, copyFiles);
       rememberWorktreeParent(folder);
       onStarted(task);
     } catch (reason) {
@@ -66,6 +68,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
             {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void browse()}>Browse…</button>}
           </span>
         </label>
+        <LocalFilesPicker api={api} repoId={repoId} selected={copyFiles} onChange={setCopyFiles} disabled={busy} />
         <p className="cloneHelp">The folder must be new or empty. Your current working tree is not touched. Open the new worktree afterwards from the Worktrees list.</p>
         {relative && <p className="taskCenterError" role="alert">Use a full path, such as C:\work\app-feature or /home/me/app-feature.</p>}
         {folderProblem && <p className="taskCenterError" role="alert">{worktreeFolderProblemMessage(folderProblem)}</p>}

@@ -4,6 +4,7 @@ use axum::{
     Json,
 };
 
+use super::local_files;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::branch::BranchCommand,
@@ -14,9 +15,9 @@ use crate::{
 
 use super::dto::{
     AddWorktreeRequest, BranchDeletePreview, BranchFavoriteRequest, BranchNameQuery,
-    BranchNameRequest, BranchSwitchPreflight, CreateBranchRequest, DeleteBranchRequest,
-    RemoveWorktreeRequest, RenameBranchRequest, SwitchBranchRequest, WorktreeFolderCheck,
-    WorktreeFolderQuery, WorktreeInfo, WorktreeSnapshot,
+    BranchNameRequest, BranchSwitchPreflight, CopyableFile, CopyableFiles, CreateBranchRequest,
+    DeleteBranchRequest, RemoveWorktreeRequest, RenameBranchRequest, SwitchBranchRequest,
+    WorktreeFolderCheck, WorktreeFolderQuery, WorktreeInfo, WorktreeSnapshot,
 };
 
 pub(super) async fn repository_branches(
@@ -109,6 +110,89 @@ pub(super) async fn repository_worktrees(
     ordered.sort_by_key(|(index, _)| *index);
     let worktrees = ordered.into_iter().map(|(_, info)| info).collect();
     Ok(Json(WorktreeSnapshot { repo_id, worktrees }))
+}
+
+/// Lists small Git-ignored files (such as .env) that can be copied into a new worktree.
+pub(super) async fn list_worktree_local_files(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<CopyableFiles>, ApiError> {
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let listing = local_files::list_copyable_files(&state.git_commands, &target.repository_path)
+        .await
+        .map_err(|()| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::RequestInvalid,
+                "Could not list the local files of this repository.",
+            )
+        })?;
+    Ok(Json(CopyableFiles {
+        files: listing
+            .files
+            .into_iter()
+            .map(|(path, size_bytes)| CopyableFile { path, size_bytes })
+            .collect(),
+        omitted_count: listing.omitted,
+    }))
+}
+
+/// Rejects copy requests for anything that is not on the copyable list.
+async fn validate_copy_files(
+    state: &AppState,
+    repository_path: &std::path::Path,
+    requested: &[String],
+) -> Result<(), ApiError> {
+    let rejected =
+        local_files::rejected_copy_requests(&state.git_commands, repository_path, requested)
+            .await
+            .map_err(|()| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ApiErrorCode::RequestInvalid,
+                    "Could not check the files to copy.",
+                )
+            })?;
+    if rejected.is_empty() {
+        Ok(())
+    } else {
+        Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Only small, Git-ignored files inside the repository can be copied.",
+        ))
+    }
+}
+
+/// Copies the chosen files into the new worktree and records the outcome in the task log.
+async fn copy_into_worktree(
+    context: &crate::execution::TaskContext,
+    repository_path: std::path::PathBuf,
+    folder: String,
+    files: Vec<String>,
+) {
+    if files.is_empty() {
+        return;
+    }
+    let outcome = tokio::task::spawn_blocking(move || {
+        local_files::copy_files(&repository_path, std::path::Path::new(&folder), &files)
+    })
+    .await;
+    match outcome {
+        Ok((copied, failures)) => {
+            context
+                .log(&format!("Copied {copied} local file(s) into the worktree."))
+                .await;
+            for failure in failures {
+                context.log(&format!("Not copied: {failure}")).await;
+            }
+        }
+        Err(_) => context.log("Copying local files did not finish.").await,
+    }
 }
 
 /// Tells whether a folder can receive a new worktree, so dialogs can warn before anything is submitted.
@@ -264,7 +348,10 @@ pub(super) async fn add_repository_worktree(
             path: request.path.clone(),
         }
     };
+    validate_copy_files(&state, &target.repository_path, &request.copy_files).await?;
+    let copy_list = request.copy_files;
     let path = target.repository_path;
+    let copy_source = path.clone();
     let git_commands = state.git_commands.clone();
     let folder = request.path;
     let repositories = state.repositories.clone();
@@ -276,7 +363,9 @@ pub(super) async fn add_repository_worktree(
             target.resource_key,
             "worktreeCreate",
             move |context| async move {
+                let task_context = context.clone();
                 git_commands.execute_branch(&path, command, context).await?;
+                copy_into_worktree(&task_context, copy_source, folder.clone(), copy_list).await;
                 // Register the new worktree so the app can open it right away.
                 Ok(repositories
                     .open_path(&folder)
@@ -515,6 +604,16 @@ pub(super) async fn create_repository_branch(
         }
         None => None,
     };
+    if !request.copy_files.is_empty() && worktree_path.is_none() {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "Local files can only be copied into a new worktree.",
+        ));
+    }
+    validate_copy_files(&state, &path, &request.copy_files).await?;
+    let copy_source = path.clone();
+    let copy_list = request.copy_files;
     let repositories = state.repositories.clone();
     let new_worktree_folder = worktree_path.clone();
     let task = state
@@ -529,6 +628,7 @@ pub(super) async fn create_repository_branch(
                 "branchCreate"
             },
             move |context| async move {
+                let task_context = context.clone();
                 command
                     .execute_branch(
                         &path,
@@ -541,6 +641,9 @@ pub(super) async fn create_repository_branch(
                         context,
                     )
                     .await?;
+                if let Some(folder) = new_worktree_folder.clone() {
+                    copy_into_worktree(&task_context, copy_source, folder, copy_list).await;
+                }
                 // Register the new worktree so the app can open it right away.
                 Ok(match new_worktree_folder {
                     Some(folder) => repositories

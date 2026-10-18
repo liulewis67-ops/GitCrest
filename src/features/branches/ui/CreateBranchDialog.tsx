@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { LocalFilesPicker } from "./LocalFilesPicker";
 import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
 import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 
@@ -22,6 +23,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
   const [worktreePath, setWorktreePath] = useState("");
   const [worktreeEdited, setWorktreeEdited] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [copyFiles, setCopyFiles] = useState<string[]>([]);
   const [error, setError] = useState("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const suggested = suggestWorktreePath(repositoryPath, name.trim());
@@ -38,7 +40,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
       const task = await api.createRepositoryBranch(repoId, name.trim(), {
         checkout: placement === "switch",
         startPoint: startOid,
-        ...(placement === "worktree" ? { worktreePath: folder } : {}),
+        ...(placement === "worktree" ? { worktreePath: folder, copyFiles } : {}),
       });
       if (placement === "worktree") rememberWorktreeParent(folder);
       onStarted(task);
@@ -82,6 +84,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
             {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void choose()}>Browse…</button>}
           </span>
         </label>}
+        {placement === "worktree" && <LocalFilesPicker api={api} repoId={repoId} selected={copyFiles} onChange={setCopyFiles} disabled={busy} />}
         {relativeFolder && <p className="taskCenterError" role="alert">Use a full path, such as C:\work\app-feature or /home/me/app-feature.</p>}
         {placement === "worktree" && folderProblem && <p className="taskCenterError" role="alert">{worktreeFolderProblemMessage(folderProblem)}</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}

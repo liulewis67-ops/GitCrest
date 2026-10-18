@@ -37,5 +37,5 @@ it("offers a worktree folder suggestion, lets the user browse, and sends the wor
   await waitFor(() => expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("D:/trees/app-feature-x"));
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
   await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "t2" }));
-  expect(createRepositoryBranch).toHaveBeenCalledWith("repo_x", "feature/x", { checkout: false, startPoint: "d".repeat(40), worktreePath: "D:/trees/app-feature-x" });
+  expect(createRepositoryBranch).toHaveBeenCalledWith("repo_x", "feature/x", { checkout: false, startPoint: "d".repeat(40), worktreePath: "D:/trees/app-feature-x", copyFiles: [] });
 });

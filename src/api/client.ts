@@ -177,12 +177,16 @@ export class GitCrestApiClient {
     return this.request<WorktreeSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees`);
   }
 
-  addRepositoryWorktree(repoId: RepoId, branch: string, path: string, fromRemote = false): Promise<TaskSnapshotResponse> {
+  addRepositoryWorktree(repoId: RepoId, branch: string, path: string, fromRemote = false, copyFiles: string[] = []): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/add`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch, path, ...(fromRemote ? { fromRemote: true } : {}) } as components["schemas"]["AddWorktreeRequest"]),
+      body: JSON.stringify({ branch, path, ...(fromRemote ? { fromRemote: true } : {}), ...(copyFiles.length > 0 ? { copyFiles } : {}) } as components["schemas"]["AddWorktreeRequest"]),
     });
+  }
+
+  listWorktreeLocalFiles(repoId: RepoId): Promise<components["schemas"]["CopyableFiles"]> {
+    return this.request<components["schemas"]["CopyableFiles"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/local-files`);
   }
 
   checkWorktreeFolder(repoId: RepoId, path: string): Promise<components["schemas"]["WorktreeFolderCheck"]> {
@@ -204,11 +208,11 @@ export class GitCrestApiClient {
     });
   }
 
-  createRepositoryBranch(repoId: RepoId, name: string, options: { checkout?: boolean; worktreePath?: string; startPoint?: string } = {}): Promise<TaskSnapshotResponse> {
+  createRepositoryBranch(repoId: RepoId, name: string, options: { checkout?: boolean; worktreePath?: string; startPoint?: string; copyFiles?: string[] } = {}): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, ...(options.checkout ? { checkout: true } : {}), ...(options.worktreePath ? { worktreePath: options.worktreePath } : {}), ...(options.startPoint ? { startPoint: options.startPoint } : {}) } as components["schemas"]["CreateBranchRequest"]),
+      body: JSON.stringify({ name, ...(options.checkout ? { checkout: true } : {}), ...(options.worktreePath ? { worktreePath: options.worktreePath } : {}), ...(options.startPoint ? { startPoint: options.startPoint } : {}), ...(options.copyFiles && options.copyFiles.length > 0 ? { copyFiles: options.copyFiles } : {}) } as components["schemas"]["CreateBranchRequest"]),
     });
   }
 

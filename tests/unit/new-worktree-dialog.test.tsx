@@ -18,7 +18,7 @@ it("suggests a sibling folder, lets the user browse, and creates the worktree fo
   await waitFor(() => expect(folder.value).toBe("D:/trees/app-feature-login"));
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
   await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "t1" }));
-  expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "feature/login", "D:/trees/app-feature-login", false);
+  expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "feature/login", "D:/trees/app-feature-login", false, []);
 });
 
 it("shows the engine's reason when the branch is already checked out elsewhere", async () => {
@@ -39,7 +39,7 @@ it("creates a local tracking branch in the worktree when opening a remote branch
   expect(screen.getByText(/A local branch named/).textContent).toContain("feature/login");
   expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("C:/work/app-feature-login");
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
-  await waitFor(() => expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "origin/feature/login", "C:/work/app-feature-login", true));
+  await waitFor(() => expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "origin/feature/login", "C:/work/app-feature-login", true, []));
 });
 
 it("remembers the folder it was created in and suggests it next time", async () => {
