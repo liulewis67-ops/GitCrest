@@ -4056,6 +4056,7 @@ components:
         action: { type: string, enum: [merge, cherryPick, revert] }
         targetOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        noFastForward: { type: boolean, description: Merge only. Always create a merge commit even when a fast-forward is possible; defaults to false. }
     WorkflowRecoveryPreflight:
       type: object
       additionalProperties: false

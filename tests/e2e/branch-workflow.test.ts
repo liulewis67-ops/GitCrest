@@ -229,3 +229,42 @@ it("creates a branch at an older commit from the commit details", async () => {
     await rm(worktreeParent, { recursive: true, force: true });
   }
 }, 120_000);
+
+it("can force a merge commit instead of a fast-forward from the merge review", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-noff-e2e-app-data-"));
+  try {
+    await writeFile(resolve(fixture.path, "base.txt"), "base\n");
+    await git(fixture.path, "add", "base.txt");
+    await git(fixture.path, "commit", "--quiet", "-m", "base");
+    const main = await git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD");
+    await git(fixture.path, "switch", "--quiet", "--create", "feature");
+    await writeFile(resolve(fixture.path, "feature.txt"), "feature\n");
+    await git(fixture.path, "add", "feature.txt");
+    await git(fixture.path, "commit", "--quiet", "-m", "feature work");
+    await git(fixture.path, "switch", "--quiet", main);
+
+    app = await electron.launch({
+      args: [".", "--disable-gpu"],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await openRepository(window, fixture.path);
+
+    const row = window.locator(".branchItem").filter({ has: window.getByText("feature", { exact: true }) });
+    const merge = row.getByRole("button", { name: /Merge refs\/heads\/feature/ });
+    await expect.poll(async () => { await row.hover(); return merge.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    await merge.click();
+    await window.getByText(/Fast-forward: the current branch moves ahead by 1/).waitFor();
+    await window.getByRole("checkbox", { name: "Always create a merge commit" }).check();
+    await window.getByRole("button", { name: "Start merge" }).click();
+    await expect.poll(() => git(fixture.path, "rev-list", "--parents", "-n", "1", "HEAD").then((line) => line.split(" ").length), { timeout: 15_000 }).toBe(3);
+  } finally {
+    await app?.close();
+    app = undefined;
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 120_000);

@@ -457,18 +457,18 @@ impl GitCommandService {
         repository_path: &Path,
         action: crate::domain::workflow::WorkflowAction,
         target_oid: &str,
+        no_fast_forward: bool,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match action {
-            crate::domain::workflow::WorkflowAction::Merge => (
-                vec![
-                    "merge".into(),
-                    "--no-edit".into(),
-                    "--".into(),
-                    target_oid.into(),
-                ],
-                "Merge commit",
-            ),
+            crate::domain::workflow::WorkflowAction::Merge => {
+                let mut arguments: Vec<OsString> = vec!["merge".into(), "--no-edit".into()];
+                if no_fast_forward {
+                    arguments.push("--no-ff".into());
+                }
+                arguments.extend(["--".into(), target_oid.into()]);
+                (arguments, "Merge commit")
+            }
             crate::domain::workflow::WorkflowAction::CherryPick => (
                 vec!["cherry-pick".into(), "--no-edit".into(), target_oid.into()],
                 "Cherry-pick commit",

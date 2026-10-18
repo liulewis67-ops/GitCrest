@@ -1851,6 +1851,8 @@ export interface components {
             action: "merge" | "cherryPick" | "revert";
             targetOid: string;
             expectedHeadOid: string;
+            /** @description Merge only. Always create a merge commit even when a fast-forward is possible; defaults to false. */
+            noFastForward?: boolean;
         };
         WorkflowRecoveryPreflight: {
             repoId: components["schemas"]["RepoId"];

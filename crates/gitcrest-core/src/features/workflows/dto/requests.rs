@@ -20,6 +20,9 @@ pub(in crate::features::workflows) struct WorkflowRequest {
     pub(in crate::features::workflows) action: WorkflowActionDto,
     pub(in crate::features::workflows) target_oid: String,
     pub(in crate::features::workflows) expected_head_oid: String,
+    /// Merge only: always create a merge commit, even when a fast-forward is possible.
+    #[serde(default)]
+    pub(in crate::features::workflows) no_fast_forward: bool,
 }
 
 #[derive(Deserialize)]

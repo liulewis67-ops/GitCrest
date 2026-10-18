@@ -17,6 +17,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
 }) {
   const [state, setState] = useState<{ key: string; loading: boolean; snapshot?: WorkflowPreflightResponse; error?: string }>({ key: "", loading: false });
   const [busy, setBusy] = useState(false);
+  const [noFastForward, setNoFastForward] = useState(false);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const [error, setError] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
@@ -40,7 +41,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
     setBusy(true);
     setError("");
     try {
-      onStarted(await api.startRepositoryWorkflow(repoId, { action, targetOid, expectedHeadOid: snapshot.headOid }));
+      onStarted(await api.startRepositoryWorkflow(repoId, { action, targetOid, expectedHeadOid: snapshot.headOid, ...(action === "merge" && noFastForward ? { noFastForward: true } : {}) }));
     } catch (reason) {
       setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not start this Git operation.");
     } finally {
@@ -59,7 +60,8 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
           <div className="repositoryFact"><span>SUBJECT</span><strong>{snapshot.targetSubject || "(no subject)"}</strong></div>
           <div className="repositoryFact"><span>HEAD</span><strong className="monoText">{snapshot.headOid?.slice(0, 12) || "Unborn"}</strong></div>
           {snapshot.mergeKind === "upToDate" && <p className="cloneHelp" role="status">Already up to date: this commit is already part of the current branch, so there is nothing to merge.</p>}
-          {snapshot.mergeKind === "fastForward" && <p className="cloneHelp" role="status">Fast-forward: the current branch moves ahead by {snapshot.incomingCommitCount} commit(s) and no merge commit is created.</p>}
+          {snapshot.mergeKind === "fastForward" && <><p className="cloneHelp" role="status">{noFastForward ? `A merge commit will record this merge of ${snapshot.incomingCommitCount} commit(s), keeping the branch history visible.` : `Fast-forward: the current branch moves ahead by ${snapshot.incomingCommitCount} commit(s) and no merge commit is created.`}</p>
+            <label className="rebaseConfirm"><input type="checkbox" checked={noFastForward} disabled={busy} onChange={(event) => setNoFastForward(event.target.checked)} />Always create a merge commit</label></>}
           {snapshot.mergeKind === "mergeCommit" && <p className="cloneHelp" role="status">A merge commit will combine {snapshot.incomingCommitCount} incoming commit(s) with the current branch. Conflicts, if any, open in the resolver.</p>}
           {snapshot.operationInProgress && <p className="taskCenterError" role="alert">A {snapshot.operationInProgress} operation is already in progress.</p>}
           {!snapshot.isClean && <p className="cloneHelp">Working tree has {snapshot.dirtyPaths.length + snapshot.omittedDirtyPathCount} change(s). Commit or shelve them before starting.</p>}

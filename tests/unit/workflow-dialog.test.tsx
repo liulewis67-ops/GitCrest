@@ -133,3 +133,25 @@ it("names the target branch in the title when merging from a branch row", async 
   expect(screen.getByText("TARGET BRANCH")).toBeTruthy();
   expect(await screen.findByText("Work on feature")).toBeTruthy();
 });
+
+it("lets the user force a merge commit when a fast-forward is possible", async () => {
+  const preflight = {
+    repoId: "repo_fixture", action: "merge" as const, headOid: "b".repeat(40), targetOid: "a".repeat(40), targetSubject: "Feature work",
+    operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0,
+    canStart: true, mergeKind: "fastForward" as const, incomingCommitCount: 2,
+  };
+  const startRepositoryWorkflow = vi.fn().mockResolvedValue({ taskId: "task-merge" });
+  const api = cancellableApi({ preflightRepositoryWorkflow: vi.fn().mockResolvedValue(preflight), startRepositoryWorkflow });
+  render(<WorkflowDialog api={api} repoId="repo_fixture" targetOid={"a".repeat(40)} action="merge" onClose={vi.fn()} onStarted={vi.fn()} />);
+
+  expect(await screen.findByText(/Fast-forward: the current branch moves ahead by 2/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Start merge" }));
+  await waitFor(() => expect(startRepositoryWorkflow).toHaveBeenCalledTimes(1));
+  expect(startRepositoryWorkflow.mock.calls[0]?.[1]).toEqual({ action: "merge", targetOid: "a".repeat(40), expectedHeadOid: "b".repeat(40) });
+
+  fireEvent.click(screen.getByRole("checkbox", { name: "Always create a merge commit" }));
+  expect(screen.getByText(/A merge commit will record this merge of 2 commit/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Start merge" }));
+  await waitFor(() => expect(startRepositoryWorkflow).toHaveBeenCalledTimes(2));
+  expect(startRepositoryWorkflow.mock.calls[1]?.[1]).toEqual({ action: "merge", targetOid: "a".repeat(40), expectedHeadOid: "b".repeat(40), noFastForward: true });
+});
