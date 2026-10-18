@@ -8,7 +8,7 @@ use crate::AppState;
 use super::handlers::{
     create_repository_branch, delete_repository_branch, preflight_branch_switch,
     preview_repository_branch_delete, rename_repository_branch, repository_branches,
-    set_branch_favorite, switch_repository_branch,
+    repository_worktrees, set_branch_favorite, switch_repository_branch,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -16,6 +16,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/repositories/:repo_id/branches",
             get(repository_branches).post(create_repository_branch),
+        )
+        .route(
+            "/v1/repositories/:repo_id/worktrees",
+            get(repository_worktrees),
         )
         .route(
             "/v1/repositories/:repo_id/branches/rename",

@@ -90,5 +90,5 @@ export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpe
     }
   }
 
-  return { opening, openRecent, chooseAndOpenLocal, chooseAndInitializeLocal };
+  return { opening, openAtPath, openRecent, chooseAndOpenLocal, chooseAndInitializeLocal };
 }

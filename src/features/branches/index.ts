@@ -6,3 +6,4 @@ export { useBranchSwitchShelfFlow } from "./model/use-branch-switch-shelf-flow";
 export { useRemoteBranchDeleteSession } from "./model/use-remote-branch-delete-session";
 export const loadLocalBranchDialog = () => import("./ui/LocalBranchDialog");
 export type { LocalBranchAction } from "./ui/LocalBranchDialog";
+export { WorktreeList } from "./ui/WorktreeList";

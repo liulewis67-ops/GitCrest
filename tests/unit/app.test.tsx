@@ -218,6 +218,7 @@ describe("App", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
       .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, worktrees: [{ path: "C:/fixture", head: null, branch: "main", detached: false, locked: false, prunable: false, isCurrent: true }] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, refreshedAtMs: 1, files: [
         { path: "README.md", indexStatus: "M", worktreeStatus: "M", kind: "modified", categories: ["staged", "unstaged"], modeChanged: false },
         { path: "src/new-name.ts", originalPath: "src/old-name.ts", indexStatus: "R", worktreeStatus: ".", kind: "renamed", categories: ["staged"], modeChanged: false },
@@ -241,9 +242,9 @@ describe("App", () => {
 
     expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(7));
+    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(8));
     expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/fixture" });
-    expect(String(fetcher.mock.calls[3][0])).toContain("/api/v1/repositories/repo_fixture/status");
+    expect(fetcher.mock.calls.some(([input]) => String(input).includes("/api/v1/repositories/repo_fixture/status"))).toBe(true);
     expect(screen.getByText("main", { selector: ".branchItemName" })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Add refs/heads/main to favorites" }));
     expect(await screen.findByRole("button", { name: "Remove refs/heads/main from favorites" })).toBeDefined();

@@ -468,6 +468,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/worktrees": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** List the working trees linked to this repository */
+        get: operations["listRepositoryWorktrees"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/branches/delete-preview": {
         parameters: {
             query?: never;
@@ -1605,7 +1626,7 @@ export interface components {
         CreateBranchRequest: {
             name: string;
             /** @default false */
-            checkout?: boolean;
+            checkout: boolean;
             worktreePath?: string;
         };
         RenameBranchRequest: {
@@ -1948,6 +1969,18 @@ export interface components {
             name: string;
             /** @description Explicitly permit deletion when the preview reports commits not reachable from the current branch. */
             allowUnmerged: boolean;
+        };
+        WorktreeSnapshot: {
+            repoId: components["schemas"]["RepoId"];
+            worktrees: {
+                path: string;
+                head: string | null;
+                branch: string | null;
+                detached: boolean;
+                locked: boolean;
+                prunable: boolean;
+                isCurrent: boolean;
+            }[];
         };
         BranchDeletePreview: {
             name: string;
@@ -3604,6 +3637,43 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    listRepositoryWorktrees: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Linked worktrees. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorktreeSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     previewRepositoryBranchDelete: {

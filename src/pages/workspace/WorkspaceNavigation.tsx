@@ -3,6 +3,7 @@ import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse,
 import type { RepositoryStatusGroup } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadRemoteManager } from "../../features/remotes";
+import { WorktreeList } from "../../features/branches";
 import type { CredentialEditorRenderer } from "../../features/credentials";
 
 const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
@@ -51,6 +52,7 @@ interface WorkspaceNavigationProps {
   onDeleteRemoteBranch: (branchRef: string) => void;
   onSwitchBranch: (name: string) => void;
   onMergeBranch: (oid: string) => void;
+  onOpenWorktree: (path: string) => void;
   onManageBranch: (name: string, mode: "rename" | "delete") => void;
   onToggleBranchFavorite: (fullName: string, favorite: boolean) => void;
   onFetchRepository: () => void;
@@ -78,7 +80,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
     connected, connecting, hasActiveRepositoryTask, shortcuts, isMacPlatform,
     onStageChanges: stageChanges, onRefreshRepositoryStatus: refreshRepositoryStatus,
     onRefreshRepositoryBranches: refreshRepositoryBranches, onOpenFileDiff: openFileDiff,
-    onDeleteRemoteBranch, onSwitchBranch, onMergeBranch, onManageBranch, onToggleBranchFavorite: toggleBranchFavorite, onFetchRepository: fetchRepository,
+    onDeleteRemoteBranch, onSwitchBranch, onMergeBranch, onOpenWorktree, onManageBranch, onToggleBranchFavorite: toggleBranchFavorite, onFetchRepository: fetchRepository,
     onRefreshRepositoryRemotes: refreshRepositoryRemotes, onAddRepositoryRemote: addRepositoryRemote,
     onSetRepositoryRemoteUrl: setRepositoryRemoteUrl, onDeleteRepositoryRemote: deleteRepositoryRemote,
     onSetRepositoryDefaultRemote: setRepositoryDefaultRemote, onSetRepositoryBranchUpstream: setRepositoryBranchUpstream,
@@ -145,6 +147,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
                   ))}
                 </ul>}
               </div>
+              {selectedRepository && api && <WorktreeList api={api} repoId={selectedRepository.repoId} refreshKey={historyRefreshKey} disabled={!connected || hasActiveRepositoryTask} onOpen={onOpenWorktree} />}
               <div className="navDivider" />
               <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">Loading remote controls…</div>}><RemoteManager
                 snapshot={activeRemotes}

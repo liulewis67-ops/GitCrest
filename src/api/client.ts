@@ -22,6 +22,7 @@ export type CommitDetailResponse = components["schemas"]["CommitDetail"];
 export type RefSnapshotResponse = components["schemas"]["RefSnapshot"];
 export type BranchSnapshotResponse = components["schemas"]["BranchSnapshot"];
 export type RemoteBranchDeletePreviewResponse = components["schemas"]["RemoteBranchDeletePreview"];
+export type WorktreeSnapshotResponse = components["schemas"]["WorktreeSnapshot"];
 export type BranchSwitchPreflightResponse = components["schemas"]["BranchSwitchPreflight"];
 export type WorkflowPreflightResponse = components["schemas"]["WorkflowPreflight"];
 export type RebasePreviewResponse = components["schemas"]["RebasePreview"];
@@ -171,11 +172,15 @@ export class GitCrestApiClient {
     return this.request<BranchSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`);
   }
 
+  getRepositoryWorktrees(repoId: RepoId): Promise<WorktreeSnapshotResponse> {
+    return this.request<WorktreeSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees`);
+  }
+
   createRepositoryBranch(repoId: RepoId, name: string, options: { checkout?: boolean; worktreePath?: string } = {}): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, ...options } satisfies components["schemas"]["CreateBranchRequest"]),
+      body: JSON.stringify({ name, ...(options.checkout ? { checkout: true } : {}), ...(options.worktreePath ? { worktreePath: options.worktreePath } : {}) } as components["schemas"]["CreateBranchRequest"]),
     });
   }
 

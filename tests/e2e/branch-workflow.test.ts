@@ -77,6 +77,14 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     expect(await git(worktreePath, "rev-parse", "--abbrev-ref", "HEAD")).toBe("feature/wt");
     await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
 
+    // The new worktree is listed in the sidebar and opens as its own repository tab.
+    const openWorktree = window.getByRole("button", { name: "Open worktree wt-folder" });
+    await openWorktree.waitFor({ timeout: 15_000 });
+    await openWorktree.click();
+    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("wt-folder");
+    await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();
+    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).not.toContain("wt-folder");
+
     // Merge `side` into the current branch from the sidebar row.
     const sideRow = window.locator(".branchItem", { hasText: "side" });
     await sideRow.hover();

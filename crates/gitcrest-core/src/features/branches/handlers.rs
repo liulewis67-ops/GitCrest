@@ -15,7 +15,7 @@ use crate::{
 use super::dto::{
     BranchDeletePreview, BranchFavoriteRequest, BranchNameQuery, BranchNameRequest,
     BranchSwitchPreflight, CreateBranchRequest, DeleteBranchRequest, RenameBranchRequest,
-    SwitchBranchRequest,
+    SwitchBranchRequest, WorktreeInfo, WorktreeSnapshot,
 };
 
 pub(super) async fn repository_branches(
@@ -43,6 +43,49 @@ pub(super) async fn repository_branches(
     .await
     .map_err(ApiError::from_branch_error)?;
     Ok(Json(snapshot))
+}
+
+pub(super) async fn repository_worktrees(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<WorktreeSnapshot>, ApiError> {
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let entries = state
+        .git_commands
+        .list_worktrees(&target.repository_path)
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::RequestInvalid,
+                "Could not list the worktrees of this repository.",
+            )
+        })?;
+    let current = std::fs::canonicalize(&target.repository_path).ok();
+    let worktrees = entries
+        .into_iter()
+        .filter(|entry| !entry.bare)
+        .map(|entry| {
+            let is_current = current
+                .as_ref()
+                .zip(std::fs::canonicalize(&entry.path).ok())
+                .is_some_and(|(left, right)| *left == right);
+            WorktreeInfo {
+                path: entry.path,
+                head: entry.head,
+                branch: entry.branch,
+                detached: entry.detached,
+                locked: entry.locked,
+                prunable: entry.prunable,
+                is_current,
+            }
+        })
+        .collect();
+    Ok(Json(WorktreeSnapshot { repo_id, worktrees }))
 }
 
 pub(super) async fn set_branch_favorite(

@@ -938,6 +938,32 @@ paths:
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "409": { description: Provider is disabled or a reviewed diff revision is stale., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "502": { description: Provider request failed; response content and secret values are not returned in the error., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/worktrees:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: listRepositoryWorktrees
+      summary: List the working trees linked to this repository
+      responses:
+        "200":
+          description: Linked worktrees.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorktreeSnapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/branches/delete-preview:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4164,6 +4190,26 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
         allowUnmerged: { type: boolean, description: Explicitly permit deletion when the preview reports commits not reachable from the current branch. }
+    WorktreeSnapshot:
+      type: object
+      additionalProperties: false
+      required: [repoId, worktrees]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        worktrees:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [path, head, branch, detached, locked, prunable, isCurrent]
+            properties:
+              path: { type: string }
+              head: { type: [string, "null"] }
+              branch: { type: [string, "null"] }
+              detached: { type: boolean }
+              locked: { type: boolean }
+              prunable: { type: boolean }
+              isCurrent: { type: boolean }
     BranchDeletePreview:
       type: object
       additionalProperties: false

@@ -212,6 +212,20 @@ impl GitCommandService {
         }
     }
 
+    pub async fn list_worktrees(
+        &self,
+        repository_path: &Path,
+    ) -> Result<Vec<WorktreeEntry>, TaskFailure> {
+        let output = capture_git_output(
+            &self.git_program,
+            repository_path,
+            ["worktree", "list", "--porcelain"],
+            256 * 1024,
+        )
+        .await?;
+        Ok(parse_worktree_list(&String::from_utf8_lossy(&output)))
+    }
+
     pub async fn read_index_tree(&self, repository_path: &Path) -> Result<String, TaskFailure> {
         let output =
             capture_git_output(&self.git_program, repository_path, ["write-tree"], 128).await?;
@@ -2453,5 +2467,76 @@ mod tests {
             .unwrap();
         terminate_process_tree(&mut child).await;
         assert!(child.try_wait().unwrap().is_some());
+    }
+}
+
+/// One entry of `git worktree list --porcelain`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WorktreeEntry {
+    pub path: String,
+    pub head: Option<String>,
+    pub branch: Option<String>,
+    pub detached: bool,
+    pub bare: bool,
+    pub locked: bool,
+    pub prunable: bool,
+}
+
+fn parse_worktree_list(text: &str) -> Vec<WorktreeEntry> {
+    let mut entries = Vec::new();
+    for block in text.split("\n\n") {
+        let mut entry: Option<WorktreeEntry> = None;
+        for line in block.lines() {
+            let line = line.trim_end_matches('\r');
+            if let Some(path) = line.strip_prefix("worktree ") {
+                entry = Some(WorktreeEntry {
+                    path: path.to_string(),
+                    head: None,
+                    branch: None,
+                    detached: false,
+                    bare: false,
+                    locked: false,
+                    prunable: false,
+                });
+            } else if let Some(entry) = entry.as_mut() {
+                if let Some(head) = line.strip_prefix("HEAD ") {
+                    entry.head = Some(head.to_string());
+                } else if let Some(branch) = line.strip_prefix("branch ") {
+                    entry.branch = Some(
+                        branch
+                            .strip_prefix("refs/heads/")
+                            .unwrap_or(branch)
+                            .to_string(),
+                    );
+                } else if line == "detached" {
+                    entry.detached = true;
+                } else if line == "bare" {
+                    entry.bare = true;
+                } else if line == "locked" || line.starts_with("locked ") {
+                    entry.locked = true;
+                } else if line == "prunable" || line.starts_with("prunable ") {
+                    entry.prunable = true;
+                }
+            }
+        }
+        if let Some(entry) = entry {
+            entries.push(entry);
+        }
+    }
+    entries
+}
+
+#[cfg(test)]
+mod worktree_list_tests {
+    use super::parse_worktree_list;
+
+    #[test]
+    fn parses_branch_detached_and_locked_worktrees() {
+        let text = "worktree /repo\nHEAD aaaa\nbranch refs/heads/main\n\nworktree /repo-wt\nHEAD bbbb\ndetached\nlocked reason\n\n";
+        let entries = parse_worktree_list(text);
+        assert_eq!(entries.len(), 2);
+        assert_eq!(entries[0].branch.as_deref(), Some("main"));
+        assert!(entries[1].detached && entries[1].locked);
+        assert_eq!(entries[1].path, "/repo-wt");
     }
 }

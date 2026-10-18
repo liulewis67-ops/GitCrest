@@ -68,3 +68,22 @@ pub(super) struct BranchDeletePreview {
     pub(super) unmerged_commit_count: u32,
     pub(super) requires_confirmation: bool,
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WorktreeInfo {
+    pub(super) path: String,
+    pub(super) head: Option<String>,
+    pub(super) branch: Option<String>,
+    pub(super) detached: bool,
+    pub(super) locked: bool,
+    pub(super) prunable: bool,
+    pub(super) is_current: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WorktreeSnapshot {
+    pub(super) repo_id: String,
+    pub(super) worktrees: Vec<WorktreeInfo>,
+}
