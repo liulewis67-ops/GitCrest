@@ -631,6 +631,14 @@ export class GitCrestApiClient {
     );
   }
 
+  adoptRepositoryWorkflow(repoId: RepoId): Promise<components["schemas"]["WorkflowAdoption"]> {
+    return this.request<components["schemas"]["WorkflowAdoption"]>(
+      `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/adopt`,
+      true,
+      { method: "POST" },
+    );
+  }
+
   chooseRepositoryWorkflowConflictSide(
     repoId: RepoId,
     request: WorkflowConflictChooseRequest,

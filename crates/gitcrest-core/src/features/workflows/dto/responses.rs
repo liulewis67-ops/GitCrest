@@ -242,3 +242,10 @@ impl From<super::super::reset::ResetBackupSnapshot> for ResetBackupSnapshotDto {
         }
     }
 }
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(in crate::features::workflows) struct WorkflowAdoptionDto {
+    pub(in crate::features::workflows) adopted: bool,
+    pub(in crate::features::workflows) task: Option<crate::features::tasks::TaskSnapshot>,
+}

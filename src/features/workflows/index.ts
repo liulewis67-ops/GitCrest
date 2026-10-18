@@ -7,3 +7,4 @@ export { useWorkflowRecovery } from "./model/use-workflow-recovery";
 export { useAutoOpenConflicts } from "./model/use-auto-open-conflicts";
 export { useOpenConflictWindow } from "./model/use-open-conflict-window";
 export { useWorkflowDialogSession } from "./model/use-workflow-dialog-session";
+export { useAdoptInProgressWorkflow } from "./model/use-adopt-in-progress-workflow";

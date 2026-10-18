@@ -22,7 +22,7 @@ import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/di
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
 import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
-import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
+import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAdoptInProgressWorkflow, useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
 
 const TaskCenter = lazy(() => loadTaskCenter().then(({ TaskCenter }) => ({ default: TaskCenter })));
 const WorkflowDialog = lazy(() => loadWorkflowDialog().then(({ WorkflowDialog }) => ({ default: WorkflowDialog })));
@@ -238,6 +238,7 @@ function App() {
   const [paletteQuery, setPaletteQuery] = useState("");
   const { sidebarWidth, setSidebarWidth, detailsWidth, setDetailsWidth, workbenchHeight, setWorkbenchHeight } = useWorkspaceLayout(selectedRepository?.repoId);
   const connected = status === "Connected to local Rust core";
+  useAdoptInProgressWorkflow({ getApi: () => apiRef.current, repoId: selectedRepository?.availability === "available" ? selectedRepository.repoId : undefined, connected, onAdopted: prependTask });
   const connecting = status.startsWith("Starting");
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
   const activeStatusError = selectedRepository ? statusErrors[selectedRepository.repoId] : undefined;

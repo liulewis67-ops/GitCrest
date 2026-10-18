@@ -5,7 +5,8 @@ use axum::{
 };
 
 use super::super::dto::{
-    WorkflowRecoveryPreflightDto, WorkflowRecoveryQuery, WorkflowRecoveryRequest,
+    WorkflowAdoptionDto, WorkflowRecoveryPreflightDto, WorkflowRecoveryQuery,
+    WorkflowRecoveryRequest,
 };
 use crate::{
     api::error::{ApiError, ApiErrorCode},
@@ -19,6 +20,69 @@ use crate::{
     ports::git::GitReadPort,
     state::AppState,
 };
+
+/// Tracks a merge, cherry-pick, revert or rebase that was started outside GitCrest (or before a
+/// restart) as a waiting task, so the normal conflict resolver, Continue and Abort controls apply.
+pub(in crate::features::workflows) async fn adopt_repository_workflow(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<WorkflowAdoptionDto>, ApiError> {
+    use crate::domain::workflow::WorkflowOperation;
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let operation = state
+        .git_commands
+        .read_operation(&target.repository_path)
+        .await
+        .map_err(ApiError::from_workflow_error)?;
+    let (operation, task_operation, label) = match operation {
+        Some(WorkflowOperation::Merge) => (WorkflowOperation::Merge, "merge", "A merge"),
+        Some(WorkflowOperation::CherryPick) => {
+            (WorkflowOperation::CherryPick, "cherryPick", "A cherry-pick")
+        }
+        Some(WorkflowOperation::Revert) => (WorkflowOperation::Revert, "revert", "A revert"),
+        Some(WorkflowOperation::Rebase) => (WorkflowOperation::Rebase, "rebase", "A rebase"),
+        _ => {
+            return Ok(Json(WorkflowAdoptionDto {
+                adopted: false,
+                task: None,
+            }))
+        }
+    };
+    let already_tracked = state.tasks.list().await.into_iter().any(|task| {
+        task.repo_id.as_deref() == Some(repo_id.as_str())
+            && !task.status.is_terminal()
+            && crate::features::workflows::recovery::workflow_operation_for_task(&task.operation)
+                == Some(operation)
+    });
+    if already_tracked {
+        return Ok(Json(WorkflowAdoptionDto {
+            adopted: false,
+            task: None,
+        }));
+    }
+    let message = format!(
+        "{label} is in progress in this repository. Resolve the listed files, then continue or abort it."
+    );
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            task_operation,
+            move |_context| async move { Err(TaskFailure::WaitingForInput(message)) },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok(Json(WorkflowAdoptionDto {
+        adopted: true,
+        task: Some(task),
+    }))
+}
 
 pub(in crate::features::workflows) async fn preflight_repository_workflow_recovery(
     State(state): State<AppState>,

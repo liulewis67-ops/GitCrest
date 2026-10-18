@@ -14,6 +14,7 @@ pub(super) use rebase::{
     list_repository_rebase_backups, preflight_repository_rebase, rollback_repository_rebase,
     start_repository_rebase,
 };
+pub(super) use recovery::adopt_repository_workflow;
 pub(super) use recovery::{preflight_repository_workflow_recovery, recover_repository_workflow};
 pub(super) use reset::{
     list_repository_reset_backups, preflight_repository_reset, restore_repository_reset,

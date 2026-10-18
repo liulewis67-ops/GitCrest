@@ -2817,6 +2817,33 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/workflows/adopt:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: adoptRepositoryWorkflow
+      summary: Track a merge, cherry-pick, revert or rebase that is already in progress as a waiting task
+      description: Used when the operation was started outside GitCrest or before a restart. Does nothing when no operation is in progress or one is already tracked by a task.
+      responses:
+        "200":
+          description: Whether an in-progress operation was adopted as a task.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkflowAdoption" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/workflows/recovery-preflight:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4057,6 +4084,16 @@ components:
         targetOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         expectedHeadOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
         noFastForward: { type: boolean, description: Merge only. Always create a merge commit even when a fast-forward is possible; defaults to false. }
+    WorkflowAdoption:
+      type: object
+      additionalProperties: false
+      required: [adopted, task]
+      properties:
+        adopted: { type: boolean }
+        task:
+          oneOf:
+            - $ref: "#/components/schemas/TaskSnapshot"
+            - type: "null"
     WorkflowRecoveryPreflight:
       type: object
       additionalProperties: false

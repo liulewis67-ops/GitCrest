@@ -135,3 +135,65 @@ it("resolves a binary conflict by taking one whole version", async () => {
     await rm(appDataPath, { recursive: true, force: true });
   }
 }, 120_000);
+
+it("adopts a merge started outside GitCrest so it can be resolved and continued", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-adopt-e2e-app-data-"));
+  try {
+    const file = resolve(fixture.path, "shared.txt");
+    await writeFile(file, "base\n");
+    await git(fixture.path, "add", "shared.txt");
+    await git(fixture.path, "commit", "--quiet", "-m", "base");
+    const main = await git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD");
+    await git(fixture.path, "switch", "--quiet", "--create", "other");
+    await writeFile(file, "from other\n");
+    await git(fixture.path, "commit", "--quiet", "-am", "other change");
+    await git(fixture.path, "switch", "--quiet", main);
+    await writeFile(file, "from main\n");
+    await git(fixture.path, "commit", "--quiet", "-am", "main change");
+    // Start the merge from the terminal; GitCrest has no task for it.
+    await execFileAsync("git", ["-C", fixture.path, "merge", "other"]).catch(() => undefined);
+    await git(fixture.path, "rev-parse", "-q", "--verify", "MERGE_HEAD");
+
+    app = await electron.launch({
+      args: [".", "--disable-gpu"],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await window.evaluate(async (repositoryPath) => {
+      const connection = await (globalThis.window as unknown as Window & {
+        gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> };
+      }).gitcrest.getSidecarConnection();
+      await fetch(new URL("/api/v1/repositories", connection.baseUrl), {
+        method: "POST",
+        headers: { Authorization: `Bearer ${connection.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" },
+        body: JSON.stringify({ path: repositoryPath }),
+      });
+    }, fixture.path);
+    await window.reload();
+    await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
+    const conflictWindowPromise = app.waitForEvent("window", { timeout: 30_000 });
+    await window.locator(".repositoryRowOpen").click();
+
+    const conflictWindow: Page = await conflictWindowPromise;
+    await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
+    await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
+    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 20_000 });
+
+    await window.getByRole("button", { name: /^Background tasks/ }).click();
+    const tasks = window.getByRole("dialog", { name: "Tasks" });
+    await tasks.getByRole("button", { name: "Refresh preview" }).click();
+    const proceed = tasks.getByRole("button", { name: "Continue" });
+    await expect.poll(async () => proceed.isEnabled(), { timeout: 15_000 }).toBe(true);
+    await proceed.click();
+    await expect.poll(() => git(fixture.path, "rev-parse", "-q", "--verify", "MERGE_HEAD").then(() => true, () => false), { timeout: 20_000 }).toBe(false);
+    expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("from other\n");
+  } finally {
+    await app?.close();
+    app = undefined;
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 150_000);

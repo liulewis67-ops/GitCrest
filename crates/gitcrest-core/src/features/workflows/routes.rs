@@ -3,7 +3,7 @@ use axum::{routing::get, Router};
 use crate::state::AppState;
 
 use super::handlers::{
-    choose_workflow_conflict_side, get_workflow_conflict_ai_settings,
+    adopt_repository_workflow, choose_workflow_conflict_side, get_workflow_conflict_ai_settings,
     list_repository_rebase_backups, list_repository_reset_backups, mark_workflow_conflict_resolved,
     preflight_repository_rebase, preflight_repository_reset, preflight_repository_workflow,
     preflight_repository_workflow_recovery, read_workflow_conflict_file,
@@ -49,6 +49,10 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/repositories/:repo_id/workflows/recovery-preflight",
             get(preflight_repository_workflow_recovery),
+        )
+        .route(
+            "/v1/repositories/:repo_id/workflows/adopt",
+            axum::routing::post(adopt_repository_workflow),
         )
         .route(
             "/v1/repositories/:repo_id/workflows/recovery",
