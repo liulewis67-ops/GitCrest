@@ -743,6 +743,8 @@ function App() {
               onRefreshRepositoryBranches={(repoId) => void refreshRepositoryBranches(repoId)}
               onOpenFileDiff={openFileDiff}
               onDeleteRemoteBranch={remoteBranchDelete.open}
+              onSwitchBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
+              onMergeBranch={(oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, "merge"); }}
               onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository?.repoId, fullName, favorite)}
               onFetchRepository={() => void fetchRepository()}
               onRefreshRepositoryRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}
