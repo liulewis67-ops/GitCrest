@@ -964,6 +964,38 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/worktrees/folder-check:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: checkWorktreeFolder
+      summary: Check whether a folder can receive a new worktree
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 4096 }
+      responses:
+        "200":
+          description: Folder status.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorktreeFolderCheck" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/worktrees/add:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4402,6 +4434,12 @@ components:
       properties:
         name: { type: string, minLength: 1, maxLength: 255 }
         allowUnmerged: { type: boolean, description: Explicitly permit deletion when the preview reports commits not reachable from the current branch. }
+    WorktreeFolderCheck:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status: { type: string, enum: [ok, notAbsolute, notEmpty, isFile] }
     AddWorktreeRequest:
       type: object
       additionalProperties: false

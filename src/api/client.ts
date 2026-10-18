@@ -185,6 +185,11 @@ export class GitCrestApiClient {
     });
   }
 
+  checkWorktreeFolder(repoId: RepoId, path: string): Promise<components["schemas"]["WorktreeFolderCheck"]> {
+    const query = new URLSearchParams({ path });
+    return this.request<components["schemas"]["WorktreeFolderCheck"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/folder-check?${query}`);
+  }
+
   pruneRepositoryWorktrees(repoId: RepoId): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/prune`, true, {
       method: "POST",

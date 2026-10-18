@@ -101,6 +101,10 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await chooseRowMenuItem(window, wtRow, "feature/wt", "Open feature/wt in a new worktree");
     const worktreeDialog = window.getByRole("dialog", { name: "Open branch in a new worktree" });
     const secondFolder = resolve(worktreeParent, "wt-folder-again");
+    // A folder that already has files is flagged before anything is submitted.
+    await worktreeDialog.getByRole("textbox", { name: "Worktree folder" }).fill(fixture.path);
+    await worktreeDialog.getByText(/already contains files/).waitFor({ timeout: 10_000 });
+    expect(await worktreeDialog.getByRole("button", { name: "Create worktree" }).isDisabled()).toBe(true);
     await worktreeDialog.getByRole("textbox", { name: "Worktree folder" }).fill(secondFolder);
     await worktreeDialog.getByRole("button", { name: "Create worktree" }).click();
     await expect.poll(() => git(secondFolder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/wt");

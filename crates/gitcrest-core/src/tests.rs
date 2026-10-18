@@ -5622,6 +5622,65 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
         }
     }
     let worktree_parent = tempfile::tempdir().unwrap();
+    std::fs::write(worktree_parent.path().join("a-file.txt"), "x").unwrap();
+    std::fs::create_dir(worktree_parent.path().join("busy")).unwrap();
+    std::fs::write(worktree_parent.path().join("busy").join("inside.txt"), "x").unwrap();
+    std::fs::create_dir(worktree_parent.path().join("empty")).unwrap();
+    let encode = |value: &str| {
+        value
+            .bytes()
+            .map(|byte| {
+                if byte.is_ascii_alphanumeric() {
+                    (byte as char).to_string()
+                } else {
+                    format!("%{byte:02X}")
+                }
+            })
+            .collect::<String>()
+    };
+    for (folder, expected) in [
+        ("relative/dir".to_string(), "notAbsolute"),
+        (
+            worktree_parent
+                .path()
+                .join("a-file.txt")
+                .display()
+                .to_string(),
+            "isFile",
+        ),
+        (
+            worktree_parent.path().join("busy").display().to_string(),
+            "notEmpty",
+        ),
+        (
+            worktree_parent.path().join("empty").display().to_string(),
+            "ok",
+        ),
+        (
+            worktree_parent
+                .path()
+                .join("does-not-exist-yet")
+                .display()
+                .to_string(),
+            "ok",
+        ),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/worktrees/folder-check?path={}",
+                    encode(&folder)
+                ),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "folder {folder}");
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let check: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(check["status"], expected, "folder {folder}");
+    }
     let worktree_dir = worktree_parent.path().join("feature-wt");
     let relative_worktree = app
         .clone()

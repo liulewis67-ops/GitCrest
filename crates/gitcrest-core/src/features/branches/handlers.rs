@@ -15,8 +15,8 @@ use crate::{
 use super::dto::{
     AddWorktreeRequest, BranchDeletePreview, BranchFavoriteRequest, BranchNameQuery,
     BranchNameRequest, BranchSwitchPreflight, CreateBranchRequest, DeleteBranchRequest,
-    RemoveWorktreeRequest, RenameBranchRequest, SwitchBranchRequest, WorktreeInfo,
-    WorktreeSnapshot,
+    RemoveWorktreeRequest, RenameBranchRequest, SwitchBranchRequest, WorktreeFolderCheck,
+    WorktreeFolderQuery, WorktreeInfo, WorktreeSnapshot,
 };
 
 pub(super) async fn repository_branches(
@@ -109,6 +109,41 @@ pub(super) async fn repository_worktrees(
     ordered.sort_by_key(|(index, _)| *index);
     let worktrees = ordered.into_iter().map(|(_, info)| info).collect();
     Ok(Json(WorktreeSnapshot { repo_id, worktrees }))
+}
+
+/// Tells whether a folder can receive a new worktree, so dialogs can warn before anything is submitted.
+pub(super) async fn check_worktree_folder(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<WorktreeFolderQuery>, QueryRejection>,
+) -> Result<Json<WorktreeFolderCheck>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A folder path is required.",
+        )
+    })?;
+    state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let candidate = std::path::Path::new(&query.path);
+    let status = if !candidate.is_absolute() {
+        "notAbsolute"
+    } else if candidate.is_file() {
+        "isFile"
+    } else if candidate
+        .read_dir()
+        .map(|mut entries| entries.next().is_some())
+        .unwrap_or(false)
+    {
+        "notEmpty"
+    } else {
+        "ok"
+    };
+    Ok(Json(WorktreeFolderCheck { status }))
 }
 
 /// A new worktree folder must be an absolute path that does not exist yet or is empty.

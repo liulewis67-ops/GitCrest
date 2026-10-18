@@ -109,3 +109,16 @@ pub(super) struct AddWorktreeRequest {
     #[serde(default)]
     pub(super) from_remote: bool,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct WorktreeFolderQuery {
+    pub(super) path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct WorktreeFolderCheck {
+    /// `ok`, `notAbsolute`, `notEmpty` or `isFile`.
+    pub(super) status: &'static str,
+}

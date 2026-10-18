@@ -62,3 +62,18 @@ it("blocks relative folders before anything is sent", () => {
   expect((screen.getByRole("button", { name: "Create worktree" }) as HTMLButtonElement).disabled).toBe(true);
   expect(addRepositoryWorktree).not.toHaveBeenCalled();
 });
+
+it("warns before submitting when the chosen folder already has files", async () => {
+  const checkWorktreeFolder = vi.fn().mockResolvedValue({ status: "notEmpty" });
+  const addRepositoryWorktree = vi.fn();
+  const api = { withSignal: () => api, checkWorktreeFolder, addRepositoryWorktree } as unknown as GitCrestApiClient;
+  render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="one" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  expect((await screen.findByRole("alert", {}, { timeout: 2000 })).textContent).toContain("already contains files");
+  expect(checkWorktreeFolder).toHaveBeenCalledWith("repo_x", "C:/work/app-one");
+  expect((screen.getByRole("button", { name: "Create worktree" }) as HTMLButtonElement).disabled).toBe(true);
+
+  checkWorktreeFolder.mockResolvedValue({ status: "ok" });
+  fireEvent.change(screen.getByRole("textbox", { name: "Worktree folder" }), { target: { value: "C:/work/fresh" } });
+  await waitFor(() => expect((screen.getByRole("button", { name: "Create worktree" }) as HTMLButtonElement).disabled).toBe(false), { timeout: 2000 });
+  expect(screen.queryByRole("alert")).toBeNull();
+});
