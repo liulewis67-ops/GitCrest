@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
+import { rememberedCopyFiles } from "../model/worktree-path";
 
 type Listing = { files: Array<{ path: string; sizeBytes: number }>; omittedCount: number };
 
@@ -19,6 +20,8 @@ export function LocalFilesPicker({ api, repoId, selected, onChange, disabled }: 
   disabled?: boolean;
 }) {
   const [listing, setListing] = useState<Listing>();
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -29,7 +32,11 @@ export function LocalFilesPicker({ api, repoId, selected, onChange, disabled }: 
       return;
     }
     void request.then((result) => {
-      if (!controller.signal.aborted) setListing(result);
+      if (controller.signal.aborted) return;
+      setListing(result);
+      // Tick again what was copied into this repository's previous worktree (still only files that exist now).
+      const again = rememberedCopyFiles(repoId).filter((path) => result.files.some((file) => file.path === path));
+      if (again.length > 0) onChangeRef.current(again);
     }).catch(() => {
       if (!controller.signal.aborted) setListing(undefined);
     });
@@ -44,6 +51,6 @@ export function LocalFilesPicker({ api, repoId, selected, onChange, disabled }: 
       <input type="checkbox" checked={selected.includes(file.path)} onChange={(event) => toggle(file.path, event.target.checked)} />
       <span className="monoText">{file.path}</span><small>{formatSize(file.sizeBytes)}</small>
     </label>)}
-    <p className="cloneHelp">Only the files you tick are copied, and existing files are never overwritten. These files can contain secrets.{listing.omittedCount > 0 ? ` ${listing.omittedCount} larger or folder item(s) are not offered.` : ""}</p>
+    <p className="cloneHelp">Only the files you tick are copied (files copied last time are ticked again), and existing files are never overwritten. These files can contain secrets.{listing.omittedCount > 0 ? ` ${listing.omittedCount} larger or folder item(s) are not offered.` : ""}</p>
   </fieldset>;
 }

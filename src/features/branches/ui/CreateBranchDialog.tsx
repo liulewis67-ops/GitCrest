@@ -3,7 +3,7 @@ import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } f
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { LocalFilesPicker } from "./LocalFilesPicker";
 import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
-import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
+import { isAbsoluteFolder, rememberCopyFiles, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 
 type Placement = "switch" | "stay" | "worktree";
 
@@ -42,7 +42,10 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
         startPoint: startOid,
         ...(placement === "worktree" ? { worktreePath: folder, copyFiles } : {}),
       });
-      if (placement === "worktree") rememberWorktreeParent(folder);
+      if (placement === "worktree") {
+        rememberWorktreeParent(folder);
+        rememberCopyFiles(repoId, copyFiles);
+      }
       onStarted(task);
     } catch (reason) {
       setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not create this branch.");

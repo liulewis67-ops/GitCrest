@@ -49,3 +49,24 @@ export function worktreePathInParent(parent: string, suggested: string) {
 export function isAbsoluteFolder(path: string) {
   return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(path.trim());
 }
+
+const COPY_KEY_PREFIX = "gitcrest.worktreeCopyFiles.";
+
+/** The local files copied into this repository's previous worktree, to tick again next time. */
+export function rememberedCopyFiles(repoId: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(window.localStorage.getItem(COPY_KEY_PREFIX + repoId) || "[]");
+    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function rememberCopyFiles(repoId: string, files: string[]) {
+  try {
+    if (files.length === 0) window.localStorage.removeItem(COPY_KEY_PREFIX + repoId);
+    else window.localStorage.setItem(COPY_KEY_PREFIX + repoId, JSON.stringify(files));
+  } catch {
+    /* Best effort; without storage the files are simply not pre-ticked. */
+  }
+}

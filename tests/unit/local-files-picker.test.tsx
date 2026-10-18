@@ -53,3 +53,27 @@ it("sends only the ticked files when creating the worktree", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
   await waitFor(() => expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "feature/x", "C:/work/app-feature-x", false, [".env"]));
 });
+
+it("ticks again the files that were copied into this repository's previous worktree, if they still exist", async () => {
+  window.localStorage.setItem("gitcrest.worktreeCopyFiles.repo_x", JSON.stringify([".env", "deleted.txt"]));
+  render(<Harness api={fakeApi({ listWorktreeLocalFiles: vi.fn().mockResolvedValue(listing) })} />);
+  await waitFor(() => expect((screen.getByRole("checkbox", { name: /\.env/ }) as HTMLInputElement).checked).toBe(true));
+  expect(screen.getByLabelText("selected").textContent).toBe(".env");
+  expect((screen.getByRole("checkbox", { name: /config\/local\.json/ }) as HTMLInputElement).checked).toBe(false);
+});
+
+it("remembers the copied files after a successful creation and forgets them when none were chosen", async () => {
+  const addRepositoryWorktree = vi.fn().mockResolvedValue({ taskId: "t10" });
+  const api = fakeApi({ listWorktreeLocalFiles: vi.fn().mockResolvedValue(listing), addRepositoryWorktree });
+  const first = render(<NewWorktreeDialog api={api} repoId="repo_y" repositoryPath="C:/work/app" branch="a" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  fireEvent.click(await screen.findByRole("checkbox", { name: /\.env/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
+  await waitFor(() => expect(window.localStorage.getItem("gitcrest.worktreeCopyFiles.repo_y")).toBe(JSON.stringify([".env"])));
+  first.unmount();
+  render(<NewWorktreeDialog api={api} repoId="repo_y" repositoryPath="C:/work/app" branch="b" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  const box = (await screen.findByRole("checkbox", { name: /\.env/ })) as HTMLInputElement;
+  await waitFor(() => expect(box.checked).toBe(true));
+  fireEvent.click(box);
+  fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
+  await waitFor(() => expect(window.localStorage.getItem("gitcrest.worktreeCopyFiles.repo_y")).toBeNull());
+});

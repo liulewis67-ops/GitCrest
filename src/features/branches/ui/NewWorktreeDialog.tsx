@@ -3,7 +3,7 @@ import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } f
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { LocalFilesPicker } from "./LocalFilesPicker";
 import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
-import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
+import { isAbsoluteFolder, rememberCopyFiles, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 
 /** Checks an existing local branch out into a new worktree folder. */
 export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRemote = false, disabled, onChooseFolder, onClose, onStarted }: {
@@ -36,6 +36,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
     try {
       const task = await api.addRepositoryWorktree(repoId, branch, folder.trim(), fromRemote, copyFiles);
       rememberWorktreeParent(folder);
+      rememberCopyFiles(repoId, copyFiles);
       onStarted(task);
     } catch (reason) {
       setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not create this worktree.");
