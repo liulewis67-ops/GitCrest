@@ -342,6 +342,49 @@ describe("App", () => {
     expect(fetcher.mock.calls.some(([input, init]) => new URL(String(input)).pathname.endsWith("/branches/switch") && init?.method === "POST")).toBe(true);
   });
 
+  it("switches or merges a branch straight from the sidebar branch row", async () => {
+    const repository = { repoId: "repo_rows", path: "C:/rows", head: "a".repeat(40), branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
+    const branch = (name: string, oid: string, isCurrent: boolean) => ({ name, fullName: `refs/heads/${name}`, oid, kind: "local", isCurrent, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null });
+    const branches = { repoId: repository.repoId, current: "main", detached: false, branches: [branch("main", "a".repeat(40), true), branch("feature/row", "b".repeat(40), false)] };
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:43210", token: "test-session-token", windowAccess: "readWrite" }),
+        subscribeToEvents: vi.fn(async () => vi.fn()),
+        chooseRepository: vi.fn().mockResolvedValue(repository.path),
+      },
+    });
+    const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "X-GitCrest-API-Version": "1" } });
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }));
+      if (url.pathname === "/api/v1/repositories" && init?.method === "POST") return response(repository);
+      if (url.pathname === "/api/v1/repositories") return response([]);
+      if (url.pathname === "/api/v1/tasks") return response([]);
+      if (url.pathname === `/api/v1/repositories/${repository.repoId}`) return response(repository);
+      if (url.pathname.endsWith("/status")) return response({ repoId: repository.repoId, refreshedAtMs: 1, files: [] });
+      if (url.pathname.endsWith("/branches")) return response(branches);
+      if (url.pathname.endsWith("/branches/switch-preflight")) return response({ repoId: repository.repoId, current: "main", target: "feature/row", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] });
+      if (url.pathname.endsWith("/workflows/preflight")) return response({ repoId: repository.repoId, action: "merge", targetOid: "b".repeat(40), targetSubject: "Row commit", headOid: "a".repeat(40), isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], operationInProgress: null, canStart: true });
+      throw new Error(`Unexpected API request: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    await screen.findByText("Core connected");
+    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+    await screen.findByText("C:/rows", { selector: ".workspaceCrumb .mutedText" });
+    expect(screen.queryByRole("button", { name: "Switch to main" })).toBeNull();
+    fireEvent.click(await screen.findByRole("button", { name: "Switch to feature/row" }));
+    const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
+    expect(await within(dialog).findByText("The working tree is clean. GitCrest can switch to this branch.")).toBeDefined();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Switch branch" })).toBeNull());
+    fireEvent.click(screen.getByRole("button", { name: "Merge refs/heads/feature/row into the current branch" }));
+    expect(await screen.findByText("Row commit")).toBeDefined();
+    expect(fetcher.mock.calls.some(([input]) => String(input).includes("action=merge") && String(input).includes("b".repeat(40)))).toBe(true);
+  });
+
   it("continues a reviewed branch switch after the selected changes are shelved", async () => {
     const repository = { repoId: "repo_auto_shelf", path: "C:/auto-shelf", head: "a".repeat(40), branch: "main", detached: false, state: "normal", isFavorite: false, lastAccessedAt: 1, availability: "available" };
     const branches = { repoId: repository.repoId, current: "main", detached: false, branches: [
