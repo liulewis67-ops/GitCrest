@@ -184,6 +184,10 @@ button:disabled { cursor: not-allowed; }
 .branchFavorite { width: 22px; height: 22px; flex: 0 0 22px; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 12px; }
 .branchFavorite:hover, .branchFavorite.active { background: var(--surface-raised); color: var(--amber); }
 .branchFavorite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.branchRowMenu { position: fixed; z-index: 50; display: grid; min-width: 168px; padding: 4px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-raised); box-shadow: var(--shadow); }
+.branchRowMenu button { padding: 6px 9px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; font-size: 11px; text-align: left; cursor: pointer; }
+.branchRowMenu button:hover:not(:disabled), .branchRowMenu button:focus-visible { background: var(--accent-soft); outline: none; }
+.branchRowMenu button.danger { color: var(--danger); }
 .branchActions { display: none; flex: 0 0 auto; gap: 2px; margin-left: auto; }
 .branchActions .branchAction { min-width: 20px; padding: 1px 4px; font-size: 11px; line-height: 1.2; }
 .branchItem:hover .branchActions, .branchItem:focus-within .branchActions { display: inline-flex; }

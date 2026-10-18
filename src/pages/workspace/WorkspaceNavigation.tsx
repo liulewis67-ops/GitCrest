@@ -3,7 +3,7 @@ import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse,
 import type { RepositoryStatusGroup } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadRemoteManager } from "../../features/remotes";
-import { BranchSyncBadge, WorktreeList } from "../../features/branches";
+import { BranchRowMenu, BranchSyncBadge, WorktreeList } from "../../features/branches";
 import type { CredentialEditorRenderer } from "../../features/credentials";
 
 const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
@@ -141,9 +141,8 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
                       {!branch.isCurrent && !branch.fullName.endsWith("/HEAD") && <span className="branchActions">
                         {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Switch to ${branch.name}`} title={`Switch to ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onSwitchBranch(branch.name)}>↪</button>}
                         <button className="branchAction" type="button" aria-label={`Merge ${branch.fullName} into the current branch`} title={`Merge ${branch.name} into the current branch`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onMergeBranch(branch.oid, branch.name)}>⤴</button>
-                        {<button className="branchAction" type="button" aria-label={`Open ${branch.name} in a new worktree`} title={`Open ${branch.name} in a new worktree`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onNewWorktreeForBranch(branch.name, branch.kind === "remote")}>⧉</button>}
-                        {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Rename ${branch.name}`} title={`Rename ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onManageBranch(branch.name, "rename")}>✎</button>}
-                        {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Delete ${branch.name}`} title={`Delete ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onManageBranch(branch.name, "delete")}>⌫</button>}
+                        {branch.kind === "remote" && <button className="branchAction" type="button" aria-label={`Open ${branch.name} in a new worktree`} title={`Open ${branch.name} in a new worktree`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onNewWorktreeForBranch(branch.name, true)}>⧉</button>}
+                        {branch.kind === "local" && <BranchRowMenu branch={branch.name} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onNewWorktree={() => onNewWorktreeForBranch(branch.name, false)} onRename={() => onManageBranch(branch.name, "rename")} onDelete={() => onManageBranch(branch.name, "delete")} />}
                       </span>}
                       {branch.kind === "remote" && !branch.fullName.endsWith("/HEAD") && <button className="branchRemoteDelete" type="button" aria-label={"Delete remote branch " + branch.fullName} title={"Delete remote branch " + branch.fullName} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onDeleteRemoteBranch(branch.fullName)}>×</button>}
                       <button className={`branchFavorite${branch.isFavorite ? " active" : ""}`} type="button" aria-label={`${branch.isFavorite ? "Remove" : "Add"} ${branch.fullName} ${branch.isFavorite ? "from" : "to"} favorites`} aria-pressed={branch.isFavorite} onClick={() => void toggleBranchFavorite(branch.fullName, branch.isFavorite)}>{branch.isFavorite ? "★" : "☆"}</button>

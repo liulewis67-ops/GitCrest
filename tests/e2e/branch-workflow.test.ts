@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { promisify } from "node:util";
-import { _electron as electron, type ElectronApplication, type Page } from "playwright";
+import { _electron as electron, type ElectronApplication, type Locator, type Page } from "playwright";
 import { afterEach, expect, it } from "vitest";
 import { createTempGitRepository } from "../fixtures/temp-repo";
 
@@ -15,6 +15,14 @@ afterEach(async () => {
   await app?.close();
   app = undefined;
 });
+
+/** Opens a local branch row's "More actions" menu and picks one item. */
+async function chooseRowMenuItem(window: Page, row: Locator, branch: string, item: string) {
+  const more = row.getByRole("button", { name: `More actions for ${branch}` });
+  await expect.poll(async () => { await row.hover(); return more.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+  await more.click();
+  await window.getByRole("menuitem", { name: item }).click();
+}
 
 async function openRepository(window: Page, path: string) {
   await window.evaluate(async (repositoryPath) => {
@@ -90,9 +98,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
 
     // The surviving branch can be checked out into a new worktree straight from its sidebar row.
     const wtRow = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("feature/wt", { exact: true }) });
-    const newWorktree = wtRow.getByRole("button", { name: "Open feature/wt in a new worktree" });
-    await expect.poll(async () => { await wtRow.hover(); return newWorktree.isEnabled(); }, { timeout: 20_000 }).toBe(true);
-    await newWorktree.click();
+    await chooseRowMenuItem(window, wtRow, "feature/wt", "Open feature/wt in a new worktree");
     const worktreeDialog = window.getByRole("dialog", { name: "Open branch in a new worktree" });
     const secondFolder = resolve(worktreeParent, "wt-folder-again");
     await worktreeDialog.getByRole("textbox", { name: "Worktree folder" }).fill(secondFolder);
@@ -120,9 +126,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
 
     // Rename a branch, then delete it; it is unmerged into main so deletion needs confirmation.
     const sideRow2 = window.locator(".branchItem").filter({ has: window.getByText("side", { exact: true }) });
-    const renameSide = sideRow2.getByRole("button", { name: "Rename side" });
-    await expect.poll(async () => { await sideRow2.hover(); return renameSide.isEnabled(); }, { timeout: 20_000 }).toBe(true);
-    await renameSide.click();
+    await chooseRowMenuItem(window, sideRow2, "side", "Rename side");
     const renameDialog = window.getByRole("dialog", { name: "Rename branch" });
     await renameDialog.getByRole("textbox", { name: "New name" }).fill("side-renamed");
     await renameDialog.getByRole("button", { name: "Rename branch" }).click();
@@ -130,9 +134,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
 
     const renamedRow = window.locator(".branchItem", { hasText: "side-renamed" });
-    const deleteRenamed = renamedRow.getByRole("button", { name: "Delete side-renamed" });
-    await expect.poll(async () => { await renamedRow.hover(); return deleteRenamed.isEnabled(); }, { timeout: 20_000 }).toBe(true);
-    await deleteRenamed.click();
+    await chooseRowMenuItem(window, renamedRow, "side-renamed", "Delete side-renamed");
     const deleteDialog = window.getByRole("dialog", { name: "Delete branch" });
     await deleteDialog.getByRole("checkbox").check();
     await deleteDialog.getByRole("button", { name: "Delete branch" }).click();
