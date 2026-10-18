@@ -46,4 +46,6 @@ pub(crate) struct BranchReference {
     pub(crate) upstream_gone: bool,
     pub(crate) ahead: Option<u32>,
     pub(crate) behind: Option<u32>,
+    /// Folder of the working tree that has this branch checked out, when there is one.
+    pub(crate) worktree_path: Option<String>,
 }

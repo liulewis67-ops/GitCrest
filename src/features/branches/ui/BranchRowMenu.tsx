@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
 /** The less common actions for a local branch row, behind one compact button so the branch name keeps its room. */
-export function BranchRowMenu({ branch, disabled, onNewWorktree, onRename, onDelete }: {
+export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, onRename, onDelete }: {
   branch: string;
   disabled: boolean;
+  /** Folder of another worktree that already has this branch checked out. */
+  checkedOutAt?: string;
   onNewWorktree: () => void;
   onRename: () => void;
   onDelete: () => void;
@@ -55,9 +57,9 @@ export function BranchRowMenu({ branch, disabled, onNewWorktree, onRename, onDel
   return <>
     <button ref={buttonRef} className="branchAction" type="button" aria-haspopup="menu" aria-expanded={open} aria-label={`More actions for ${branch}`} title="More actions" disabled={disabled} onClick={toggle}>⋯</button>
     {position && <div ref={menuRef} className="branchRowMenu" role="menu" aria-label={`Actions for ${branch}`} style={{ top: position.top, right: position.right }}>
-      <button type="button" role="menuitem" aria-label={`Open ${branch} in a new worktree`} onClick={choose(onNewWorktree)}>Open in new worktree…</button>
+      <button type="button" role="menuitem" aria-label={`Open ${branch} in a new worktree`} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? `Already checked out in ${checkedOutAt}` : undefined} onClick={choose(onNewWorktree)}>Open in new worktree…</button>
       <button type="button" role="menuitem" aria-label={`Rename ${branch}`} onClick={choose(onRename)}>Rename…</button>
-      <button type="button" role="menuitem" className="danger" aria-label={`Delete ${branch}`} onClick={choose(onDelete)}>Delete…</button>
+      <button type="button" role="menuitem" className="danger" aria-label={`Delete ${branch}`} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? "Remove the worktree that has this branch checked out first" : undefined} onClick={choose(onDelete)}>Delete…</button>
     </div>}
   </>;
 }

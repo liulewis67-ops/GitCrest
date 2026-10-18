@@ -173,6 +173,11 @@ it("refuses to remove a dirty worktree until changes are explicitly discarded, a
     await openRepository(window, fixture.path);
 
     expect(await window.getByRole("button", { name: "Remove worktree locked-wt" }).isDisabled()).toBe(true);
+    // Branches that a worktree has checked out cannot be switched to; the row offers to open that worktree.
+    const dirtyBranchRow = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("wt-dirty", { exact: true }) });
+    await dirtyBranchRow.hover();
+    expect(await dirtyBranchRow.getByRole("button", { name: "Switch to wt-dirty" }).count()).toBe(0);
+    await expect.poll(async () => { await dirtyBranchRow.hover(); return dirtyBranchRow.getByRole("button", { name: "Open the worktree of wt-dirty" }).isEnabled(); }, { timeout: 20_000 }).toBe(true);
     await window.getByRole("button", { name: "Remove worktree dirty-wt" }).click();
     expect(await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).isDisabled()).toBe(true);
     expect(await access(resolve(dirty, "scratch.txt")).then(() => true, () => false)).toBe(true);

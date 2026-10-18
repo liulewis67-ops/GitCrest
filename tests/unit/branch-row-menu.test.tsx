@@ -39,3 +39,14 @@ it("closes on Escape and on an outside click, and is unavailable while disabled"
   renderMenu(true);
   expect((screen.getByRole("button", { name: "More actions for feature/x" }) as HTMLButtonElement).disabled).toBe(true);
 });
+
+it("disables creating a second worktree and deleting a branch that another worktree has checked out", () => {
+  const handlers = { onNewWorktree: vi.fn(), onRename: vi.fn(), onDelete: vi.fn() };
+  render(<BranchRowMenu branch="feature/x" disabled={false} checkedOutAt="D:/trees/x" {...handlers} />);
+  fireEvent.click(screen.getByRole("button", { name: "More actions for feature/x" }));
+  const worktree = screen.getByRole("menuitem", { name: "Open feature/x in a new worktree" }) as HTMLButtonElement;
+  expect(worktree.disabled).toBe(true);
+  expect(worktree.title).toContain("D:/trees/x");
+  expect((screen.getByRole("menuitem", { name: "Delete feature/x" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("menuitem", { name: "Rename feature/x" }) as HTMLButtonElement).disabled).toBe(false);
+});

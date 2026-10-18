@@ -11,7 +11,7 @@ const branch = (name: string, isCurrent = false): BranchSnapshotResponse["branch
   name, fullName: `refs/heads/${name}`, oid: "b".repeat(40), kind: "local", isCurrent, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null,
 });
 
-function renderDialog() {
+function renderDialog(onOpenWorktree?: (path: string) => void, extra: BranchSnapshotResponse["branches"] = []) {
   const inspect = vi.fn();
   const createBranch = vi.fn();
   const branchSwitcher = {
@@ -21,7 +21,7 @@ function renderDialog() {
   render(<BranchSwitcherDialog
     repository={repository}
     branchSwitcher={branchSwitcher}
-    branches={[branch("main", true), branch("feature/alpha"), branch("feature/beta"), branch("release")]}
+    branches={[branch("main", true), branch("feature/alpha"), branch("feature/beta"), branch("release"), ...extra]}
     hasBranchSnapshot
     branchesLoading={false}
     connected
@@ -31,6 +31,7 @@ function renderDialog() {
     shelveAriaShortcut="Control+Shift+S"
     onCommitChanges={vi.fn()}
     onShelveAndSwitch={vi.fn()}
+    onOpenWorktree={onOpenWorktree}
   />);
   return { inspect, createBranch, filter: screen.getByRole("searchbox", { name: "Filter local branches" }) };
 }
@@ -59,4 +60,13 @@ it("resets the highlight when the filter changes and creates a branch when nothi
   fireEvent.keyDown(filter, { key: "Enter" });
   expect(createBranch).toHaveBeenCalledWith("brand-new", { checkout: true });
   expect(screen.getByRole("button", { name: /Create and switch to/ })).toBeTruthy();
+});
+
+it("offers to open the worktree instead of switching to a branch another worktree has checked out", () => {
+  const onOpenWorktree = vi.fn();
+  renderDialog(onOpenWorktree, [{ ...branch("hotfix"), worktreePath: "D:/trees/hotfix" }]);
+  expect(screen.getByText("open in another worktree")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Open worktree" }));
+  expect(onOpenWorktree).toHaveBeenCalledWith("D:/trees/hotfix");
+  expect(screen.queryByRole("button", { name: /hotfix/ })).toBeNull();
 });

@@ -5779,6 +5779,33 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
             assert!(reused_dir.join(".git").exists());
         }
     }
+    let with_worktree = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/branches"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(with_worktree.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let with_worktree: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let branches = with_worktree["branches"].as_array().unwrap();
+    let checked_out_elsewhere = branches
+        .iter()
+        .find(|branch| branch["name"] == "feature/wt")
+        .unwrap();
+    assert!(checked_out_elsewhere["worktreePath"]
+        .as_str()
+        .is_some_and(|path| path.ends_with("reused")));
+    assert!(
+        branches
+            .iter()
+            .filter(|branch| branch["isCurrent"] == true)
+            .all(|branch| branch.get("worktreePath").is_none()),
+        "the current branch never reports another worktree"
+    );
     for (uri, body, expected) in [
         (
             "",

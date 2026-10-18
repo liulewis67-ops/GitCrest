@@ -48,7 +48,7 @@ impl BranchGitPort for GitBranchAdapter {
                     repository_path,
                     &[
                         "for-each-ref",
-                        "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)%00%(upstream:track)",
+                        "--format=%(refname)%00%(refname:short)%00%(objectname)%00%(upstream:short)%00%(upstream:track)%00%(worktreepath)",
                         "refs/heads",
                         "refs/remotes",
                     ],
@@ -121,8 +121,8 @@ fn normalize_current_ref(current: &str) -> String {
 }
 
 fn parse_branch_reference(record: &[u8]) -> Result<BranchReference, GitAdapterError> {
-    let fields = record.splitn(5, |byte| *byte == 0).collect::<Vec<_>>();
-    if fields.len() != 5 {
+    let fields = record.splitn(6, |byte| *byte == 0).collect::<Vec<_>>();
+    if fields.len() != 6 {
         return Err(GitAdapterError::Failed);
     }
     let full_name = String::from_utf8_lossy(fields[0]).into_owned();
@@ -130,6 +130,8 @@ fn parse_branch_reference(record: &[u8]) -> Result<BranchReference, GitAdapterEr
         return Err(GitAdapterError::Failed);
     }
     let track = String::from_utf8_lossy(fields[4]);
+    let worktree_path =
+        (!fields[5].is_empty()).then(|| String::from_utf8_lossy(fields[5]).into_owned());
     let (mut ahead, mut behind, upstream_gone) = parse_branch_track(&track)?;
     let upstream = (!fields[3].is_empty()).then(|| String::from_utf8_lossy(fields[3]).into_owned());
     if upstream.is_some() && !upstream_gone && ahead.is_none() && behind.is_none() {
@@ -144,6 +146,7 @@ fn parse_branch_reference(record: &[u8]) -> Result<BranchReference, GitAdapterEr
         upstream_gone,
         ahead,
         behind,
+        worktree_path,
     })
 }
 

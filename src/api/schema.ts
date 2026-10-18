@@ -1712,6 +1712,8 @@ export interface components {
             upstreamGone: boolean;
             ahead: number | null;
             behind: number | null;
+            /** @description Folder of another working tree that has this branch checked out; omitted otherwise. */
+            worktreePath?: string;
         };
         CreateBranchRequest: {
             name: string;

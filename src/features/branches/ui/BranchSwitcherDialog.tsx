@@ -20,6 +20,7 @@ interface BranchSwitcherDialogProps {
   shelveAriaShortcut: string;
   onCommitChanges: () => void;
   onShelveAndSwitch: () => void;
+  onOpenWorktree?: (path: string) => void;
   onChooseWorktreeParent?: () => Promise<string | undefined>;
 }
 
@@ -37,6 +38,7 @@ export function BranchSwitcherDialog({
   shelveAriaShortcut,
   onCommitChanges,
   onShelveAndSwitch,
+  onOpenWorktree,
   onChooseWorktreeParent,
 }: BranchSwitcherDialogProps) {
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(
@@ -157,7 +159,8 @@ export function BranchSwitcherDialog({
                   if (event.key !== "Enter") return;
                   event.preventDefault();
                   const highlighted = localBranches[Math.min(cursor, localBranches.length - 1)];
-                  if (highlighted) void branchSwitcher.inspect(highlighted.name);
+                  if (highlighted?.worktreePath && onOpenWorktree) { branchSwitcher.close(); onOpenWorktree(highlighted.worktreePath); }
+                  else if (highlighted) void branchSwitcher.inspect(highlighted.name);
                   else if (query && connected) void branchSwitcher.createBranch(filter, { checkout: true });
                 }}
               />
@@ -194,7 +197,14 @@ export function BranchSwitcherDialog({
             )}
             {hasBranchSnapshot && allLocalBranches.length === 0 && <p className="navEmpty">There are no other local branches.</p>}
             {allLocalBranches.length > 0 && localBranches.length === 0 && <p className="navEmpty">No branch matches “{filter.trim()}”.</p>}
-            {localBranches.map((branch, position) => (
+            {localBranches.map((branch, position) => branch.worktreePath && onOpenWorktree ? (
+              <div className="branchChoice inWorktree" key={branch.fullName}>
+                <span className="branchItemGlyph" aria-hidden="true">⧉</span>
+                <span title={branch.worktreePath}>{branch.name}</span>
+                <small>open in another worktree</small>
+                <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>Open worktree</button>
+              </div>
+            ) : (
               <button className={`branchChoice${position === Math.min(cursor, localBranches.length - 1) ? " active" : ""}`} type="button" key={branch.fullName} ref={(node) => { if (node && position === Math.min(cursor, localBranches.length - 1)) node.scrollIntoView?.({ block: "nearest" }); }} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true">⑂</span>
                 <span>{branch.name}</span>

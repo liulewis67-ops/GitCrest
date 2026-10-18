@@ -46,6 +46,9 @@ pub struct BranchRef {
     pub ahead: Option<u32>,
     pub behind: Option<u32>,
     pub is_favorite: bool,
+    /// Folder of another working tree that has this branch checked out (never the current one).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub worktree_path: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -419,6 +422,11 @@ fn map_branch_reference(branch: BranchReference, current: Option<&str>) -> Branc
         ahead: branch.ahead,
         behind: branch.behind,
         is_favorite: false,
+        worktree_path: if is_current {
+            None
+        } else {
+            branch.worktree_path
+        },
     }
 }
 
