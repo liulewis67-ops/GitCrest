@@ -66,7 +66,8 @@ pub(super) async fn repository_worktrees(
             )
         })?;
     let current = std::fs::canonicalize(&target.repository_path).ok();
-    let mut worktrees = Vec::new();
+    // Dirty checks are independent `git status` runs, so they go out together.
+    let mut checks = tokio::task::JoinSet::new();
     for (index, entry) in entries
         .into_iter()
         .enumerate()
@@ -76,23 +77,36 @@ pub(super) async fn repository_worktrees(
             .as_ref()
             .zip(std::fs::canonicalize(&entry.path).ok())
             .is_some_and(|(left, right)| *left == right);
-        let is_dirty = !entry.prunable
-            && state
-                .git_commands
-                .worktree_is_dirty(std::path::Path::new(&entry.path))
-                .await;
-        worktrees.push(WorktreeInfo {
-            path: entry.path,
-            head: entry.head,
-            branch: entry.branch,
-            detached: entry.detached,
-            locked: entry.locked,
-            prunable: entry.prunable,
-            is_current,
-            is_main: index == 0,
-            is_dirty,
+        let git_commands = state.git_commands.clone();
+        checks.spawn(async move {
+            let is_dirty = !entry.prunable
+                && git_commands
+                    .worktree_is_dirty(std::path::Path::new(&entry.path))
+                    .await;
+            (
+                index,
+                WorktreeInfo {
+                    path: entry.path,
+                    head: entry.head,
+                    branch: entry.branch,
+                    detached: entry.detached,
+                    locked: entry.locked,
+                    prunable: entry.prunable,
+                    is_current,
+                    is_main: index == 0,
+                    is_dirty,
+                },
+            )
         });
     }
+    let mut ordered = Vec::new();
+    while let Some(result) = checks.join_next().await {
+        if let Ok(item) = result {
+            ordered.push(item);
+        }
+    }
+    ordered.sort_by_key(|(index, _)| *index);
+    let worktrees = ordered.into_iter().map(|(_, info)| info).collect();
     Ok(Json(WorktreeSnapshot { repo_id, worktrees }))
 }
 
