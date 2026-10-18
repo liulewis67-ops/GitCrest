@@ -20,9 +20,9 @@ import { summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } 
 import { isFullGitObjectId, useHistoryViewRequests } from "../features/history";
 import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
 import { loadBranchSwitcherDialog, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
-import { loadTaskCenter, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
+import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
 import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
-import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
+import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
 
 const TaskCenter = lazy(() => loadTaskCenter().then(({ TaskCenter }) => ({ default: TaskCenter })));
 const WorkflowDialog = lazy(() => loadWorkflowDialog().then(({ WorkflowDialog }) => ({ default: WorkflowDialog })));
@@ -142,6 +142,7 @@ function App() {
     refreshTasks,
   });
   const openConflictWindow = useOpenConflictWindow({ clearTaskError: () => setTasksError(""), setTaskError: setTasksError });
+  useAutoOpenConflicts({ tasks, isRecoverableOperation: supportsWorkflowRecovery, openConflictWindow: (task) => void openConflictWindow(task) });
   const [page, setPage] = useState<AppPage>("welcome");
   const { session: workspaceSession, setSession: setWorkspaceSession, sessionRef: workspaceSessionRef } = useWorkspaceSessionState();
   const repositoryCacheLifecycle = useRepositoryCacheLifecycle((repoId) =>
