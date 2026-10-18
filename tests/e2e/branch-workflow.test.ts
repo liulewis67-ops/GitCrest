@@ -218,7 +218,10 @@ it("creates a branch at an older commit from the commit details", async () => {
     await openRepository(window, fixture.path);
 
     await window.getByText("first commit", { exact: true }).first().click();
-    await window.getByRole("button", { name: "Branch here" }).click();
+    // The command palette reaches the same dialog from the keyboard.
+    await window.keyboard.press("Control+k");
+    await window.getByRole("textbox", { name: "Search commands" }).fill("branch at selected");
+    await window.getByRole("button", { name: /Create branch at selected commit/ }).click();
     const dialog = window.getByRole("dialog", { name: "Create branch here" });
     await dialog.getByRole("textbox", { name: "Branch name" }).fill("from-first");
     await dialog.getByRole("button", { name: "Create and switch" }).click();
