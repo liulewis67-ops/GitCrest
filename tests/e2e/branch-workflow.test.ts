@@ -92,6 +92,27 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await switchMain.click();
     await window.getByRole("dialog", { name: "Switch branch" }).getByRole("button", { name: `Switch to ${main}` }).click();
     await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe(main);
+    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+
+    // Rename a branch, then delete it; it is unmerged into main so deletion needs confirmation.
+    const sideRow2 = window.locator(".branchItem").filter({ has: window.getByText("side", { exact: true }) });
+    const renameSide = sideRow2.getByRole("button", { name: "Rename side" });
+    await expect.poll(async () => { await sideRow2.hover(); return renameSide.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    await renameSide.click();
+    const renameDialog = window.getByRole("dialog", { name: "Rename branch" });
+    await renameDialog.getByRole("textbox", { name: "New name" }).fill("side-renamed");
+    await renameDialog.getByRole("button", { name: "Rename branch" }).click();
+    await expect.poll(() => git(fixture.path, "branch", "--list", "side-renamed"), { timeout: 15_000 }).toContain("side-renamed");
+    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+
+    const renamedRow = window.locator(".branchItem", { hasText: "side-renamed" });
+    const deleteRenamed = renamedRow.getByRole("button", { name: "Delete side-renamed" });
+    await expect.poll(async () => { await renamedRow.hover(); return deleteRenamed.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    await deleteRenamed.click();
+    const deleteDialog = window.getByRole("dialog", { name: "Delete branch" });
+    await deleteDialog.getByRole("checkbox").check();
+    await deleteDialog.getByRole("button", { name: "Delete branch" }).click();
+    await expect.poll(() => git(fixture.path, "branch", "--list", "side-renamed"), { timeout: 15_000 }).toBe("");
   } finally {
     await app?.close();
     app = undefined;

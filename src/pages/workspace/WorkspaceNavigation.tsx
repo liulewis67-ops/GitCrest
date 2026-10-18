@@ -51,6 +51,7 @@ interface WorkspaceNavigationProps {
   onDeleteRemoteBranch: (branchRef: string) => void;
   onSwitchBranch: (name: string) => void;
   onMergeBranch: (oid: string) => void;
+  onManageBranch: (name: string, mode: "rename" | "delete") => void;
   onToggleBranchFavorite: (fullName: string, favorite: boolean) => void;
   onFetchRepository: () => void;
   onRefreshRepositoryRemotes: (repoId: string) => void;
@@ -77,7 +78,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
     connected, connecting, hasActiveRepositoryTask, shortcuts, isMacPlatform,
     onStageChanges: stageChanges, onRefreshRepositoryStatus: refreshRepositoryStatus,
     onRefreshRepositoryBranches: refreshRepositoryBranches, onOpenFileDiff: openFileDiff,
-    onDeleteRemoteBranch, onSwitchBranch, onMergeBranch, onToggleBranchFavorite: toggleBranchFavorite, onFetchRepository: fetchRepository,
+    onDeleteRemoteBranch, onSwitchBranch, onMergeBranch, onManageBranch, onToggleBranchFavorite: toggleBranchFavorite, onFetchRepository: fetchRepository,
     onRefreshRepositoryRemotes: refreshRepositoryRemotes, onAddRepositoryRemote: addRepositoryRemote,
     onSetRepositoryRemoteUrl: setRepositoryRemoteUrl, onDeleteRepositoryRemote: deleteRepositoryRemote,
     onSetRepositoryDefaultRemote: setRepositoryDefaultRemote, onSetRepositoryBranchUpstream: setRepositoryBranchUpstream,
@@ -135,6 +136,8 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
                       {!branch.isCurrent && !branch.fullName.endsWith("/HEAD") && <span className="branchActions">
                         {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Switch to ${branch.name}`} title={`Switch to ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onSwitchBranch(branch.name)}>Switch</button>}
                         <button className="branchAction" type="button" aria-label={`Merge ${branch.fullName} into the current branch`} title={`Merge ${branch.name} into the current branch`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onMergeBranch(branch.oid)}>Merge</button>
+                        {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Rename ${branch.name}`} title={`Rename ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onManageBranch(branch.name, "rename")}>Rename</button>}
+                        {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Delete ${branch.name}`} title={`Delete ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onManageBranch(branch.name, "delete")}>Delete</button>}
                       </span>}
                       {branch.kind === "remote" && !branch.fullName.endsWith("/HEAD") && <button className="branchRemoteDelete" type="button" aria-label={"Delete remote branch " + branch.fullName} title={"Delete remote branch " + branch.fullName} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onDeleteRemoteBranch(branch.fullName)}>×</button>}
                       <button className={`branchFavorite${branch.isFavorite ? " active" : ""}`} type="button" aria-label={`${branch.isFavorite ? "Remove" : "Add"} ${branch.fullName} ${branch.isFavorite ? "from" : "to"} favorites`} aria-pressed={branch.isFavorite} onClick={() => void toggleBranchFavorite(branch.fullName, branch.isFavorite)}>{branch.isFavorite ? "★" : "☆"}</button>
