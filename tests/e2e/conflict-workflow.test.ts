@@ -65,7 +65,14 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
     await conflictWindow.getByRole("main", { name: "Conflict resolution window" }).waitFor();
     await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
-    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
+    try {
+      await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
+    } catch (error) {
+      console.log("DIAG window text:", (await conflictWindow.locator("body").innerText().catch(() => "?")).slice(0, 1500));
+      console.log("DIAG git status:", await git(fixture.path, "status", "--short").catch(() => "?"), "| unmerged:", await git(fixture.path, "ls-files", "--unmerged").catch(() => "?"));
+      console.log("DIAG tasks:", await window.evaluate(async () => { const c = await (globalThis.window as unknown as { gitcrest: { getSidecarConnection: () => Promise<{ baseUrl: string; token: string }> } }).gitcrest.getSidecarConnection(); const r = await fetch(new URL("/api/v1/tasks", c.baseUrl), { headers: { Authorization: `Bearer ${c.token}`, "X-GitCrest-API-Version": "1" } }); return JSON.stringify((await r.json()).map((t: { operation: string; status: string; message: string | null }) => [t.operation, t.status, t.message])); }).catch(() => "?"));
+      throw error;
+    }
 
     await expect.poll(() => git(fixture.path, "ls-files", "--unmerged"), { timeout: 15_000 }).toBe("");
     expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("from other\n");
