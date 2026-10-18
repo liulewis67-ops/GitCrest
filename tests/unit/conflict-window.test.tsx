@@ -435,3 +435,17 @@ it("saves and marks a fully resolved file in one step", async () => {
   await waitFor(() => expect(screen.getByText("0 unresolved")).toBeTruthy());
   expect(calls).toEqual(["save", "resolve"]);
 });
+
+it("resolves the active conflict from the keyboard with Alt+1, Alt+2 and Alt+3", async () => {
+  const content = "<<<<<<< ours\nA\n=======\nB\n>>>>>>> theirs\nmid\n<<<<<<< ours\nC\n=======\nD\n>>>>>>> theirs\nmid2\n<<<<<<< ours\nE\n=======\nF\n>>>>>>> theirs\n";
+  const editor = await mountConflict(content, { base: "x\n", ours: "A\nmid\nC\nmid2\nE\n", theirs: "B\nmid\nD\nmid2\nF\n" }, "7");
+  const main = screen.getByRole("main", { name: "Conflict resolution window" });
+  expect(screen.getByText("0 of 3 resolved · 3 remaining")).toBeTruthy();
+  fireEvent.keyDown(main, { key: "1", code: "Digit1", altKey: true });
+  expect(screen.getByText("1 of 3 resolved · 2 remaining")).toBeTruthy();
+  fireEvent.keyDown(main, { key: "µ", code: "Digit2", altKey: true });
+  expect(screen.getByText("2 of 3 resolved · 1 remaining")).toBeTruthy();
+  fireEvent.keyDown(main, { key: "3", code: "Digit3", altKey: true });
+  expect(screen.getByText("All 3 conflicts resolved")).toBeTruthy();
+  expect(editor.value).toBe("A\nmid\nD\nmid2\nE\nF\n");
+});

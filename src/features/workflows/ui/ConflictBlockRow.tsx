@@ -27,7 +27,7 @@ export function ConflictBlockRow({ block, base, ignored, busy, active, rowRef, o
         <ConflictSideLines text={block.ours} reference={base ?? block.theirs} startLine={block.line} />
       </div>
       <div className="conflictGutter">
-        <button type="button" aria-label={`Use ours for conflict ${n}`} title="Accept ours" disabled={busy || ignored.ours} onClick={() => onApply("ours")}>»</button>
+        <button type="button" aria-label={`Use ours for conflict ${n}`} title="Accept ours (Alt+1)" disabled={busy || ignored.ours} onClick={() => onApply("ours")}>»</button>
         <button type="button" className="conflictIgnore" aria-label={`Ignore ours for conflict ${n}`} aria-pressed={Boolean(ignored.ours)} title={ignored.theirs ? "Ignore both sides: keep the base text" : "Ignore ours"} disabled={busy} onClick={() => onIgnore("ours")}>×</button>
       </div>
       <div className="conflictResultCell">
@@ -36,10 +36,10 @@ export function ConflictBlockRow({ block, base, ignored, busy, active, rowRef, o
             ? <ConflictSideLines text={base} reference={null} startLine={block.line} emptyLabel="(base is empty)" />
             : <div className="conflictLineEmpty">Unresolved — choose a side or edit the result below</div>}
         </div>
-        <button type="button" aria-label={`Use both for conflict ${n}`} title="Accept ours, then theirs" disabled={busy || ignored.ours || ignored.theirs} onClick={() => onApply("both")}>Accept both</button>
+        <button type="button" aria-label={`Use both for conflict ${n}`} title="Accept ours, then theirs (Alt+3)" disabled={busy || ignored.ours || ignored.theirs} onClick={() => onApply("both")}>Accept both</button>
       </div>
       <div className="conflictGutter">
-        <button type="button" aria-label={`Use theirs for conflict ${n}`} title="Accept theirs" disabled={busy || ignored.theirs} onClick={() => onApply("theirs")}>«</button>
+        <button type="button" aria-label={`Use theirs for conflict ${n}`} title="Accept theirs (Alt+2)" disabled={busy || ignored.theirs} onClick={() => onApply("theirs")}>«</button>
         <button type="button" className="conflictIgnore" aria-label={`Ignore theirs for conflict ${n}`} aria-pressed={Boolean(ignored.theirs)} title={ignored.ours ? "Ignore both sides: keep the base text" : "Ignore theirs"} disabled={busy} onClick={() => onIgnore("theirs")}>×</button>
       </div>
       <div className={`conflictSide theirs${ignored.theirs ? " ignored" : ""}`} role="group" aria-label={`Theirs for conflict ${n}`}>

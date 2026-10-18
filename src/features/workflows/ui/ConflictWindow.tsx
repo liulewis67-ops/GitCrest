@@ -273,6 +273,18 @@ export function ConflictWindow() {
     updateDraft(next, savedResult, setDraft, setHasUnsavedChanges);
   };
   return <main className="conflictWindow" aria-label="Conflict resolution window" onKeyDown={(event) => {
+    // event.code keeps Alt+digit working on layouts where Alt changes the produced character.
+    const digit = /^(?:Digit|Numpad)([123])$/.exec(event.code)?.[1] ?? event.key;
+    const quickChoice = ({ "1": "ours", "2": "theirs", "3": "both" } as Record<string, "ours" | "theirs" | "both">)[digit];
+    if (event.altKey && !event.ctrlKey && !event.metaKey && quickChoice && !busy) {
+      const block = conflictBlocks[Math.min(activeBlock, conflictBlocks.length - 1)];
+      const skipped = ignored[block?.id ?? ""] ?? {};
+      if (block && !(quickChoice !== "theirs" && skipped.ours) && !(quickChoice !== "ours" && skipped.theirs)) {
+        event.preventDefault();
+        resolveBlock(block, choiceText(block, quickChoice));
+      }
+      return;
+    }
     if (event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
       event.preventDefault();
       focusBlock(activeBlock + (event.key === "ArrowDown" ? 1 : -1));
