@@ -882,6 +882,7 @@ function App() {
             onShelveAndSwitch={() => void branchSwitchShelfFlow.openShelfComposerForBranchSwitch()}
             onChooseWorktreeParent={() => requireGitCrestBridge().chooseCloneParent()}
             onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
+            api={apiRef.current}
           />
         </Suspense>}
 

@@ -14,12 +14,12 @@ export function worktreeFolderProblemMessage(problem: WorktreeFolderProblem) {
  * Asks the engine, shortly after typing stops, whether the folder can receive a new worktree. The check is a
  * convenience: when it cannot be made, creation is still validated by the engine on submit.
  */
-export function useWorktreeFolderCheck(api: GitCrestApiClient, repoId: string, folder: string, enabled: boolean) {
+export function useWorktreeFolderCheck(api: GitCrestApiClient | undefined, repoId: string, folder: string, enabled: boolean) {
   const [problem, setProblem] = useState<{ folder: string; value: WorktreeFolderProblem }>();
 
   useEffect(() => {
     const candidate = folder.trim();
-    if (!enabled || !candidate || !isAbsoluteFolder(candidate)) {
+    if (!api || !enabled || !candidate || !isAbsoluteFolder(candidate)) {
       setProblem(undefined);
       return;
     }

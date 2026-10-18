@@ -79,6 +79,9 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await window.keyboard.press("Control+b");
     const second = window.getByRole("dialog", { name: "Switch branch" });
     await second.getByRole("searchbox", { name: "Filter local branches" }).fill("feature/wt");
+    await second.getByRole("textbox", { name: "Worktree folder" }).fill(fixture.path);
+    await second.getByText(/already contains files/).waitFor({ timeout: 10_000 });
+    expect(await second.getByRole("button", { name: /in a new worktree/ }).isDisabled()).toBe(true);
     await second.getByRole("textbox", { name: "Worktree folder" }).fill(worktreePath);
     await second.getByRole("button", { name: /in a new worktree/ }).click();
     await expect.poll(() => access(resolve(worktreePath, ".git")).then(() => true, () => false), { timeout: 15_000 }).toBe(true);

@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import type { BranchSnapshotResponse, RepositoryResponse } from "../../../api/client";
+import type { BranchSnapshotResponse, GitCrestApiClient, RepositoryResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { BranchSyncBadge } from "./BranchSyncBadge";
+import { useWorktreeFolderCheck, worktreeFolderProblemMessage } from "../model/use-worktree-folder-check";
 import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 import { useBranchSwitcher } from "../model/use-branch-switcher";
 import { getRepositoryDisplayName } from "../../../shared/lib/repository-display-name";
@@ -21,6 +22,8 @@ interface BranchSwitcherDialogProps {
   onCommitChanges: () => void;
   onShelveAndSwitch: () => void;
   onOpenWorktree?: (path: string) => void;
+  /** Lets the dialog check worktree folders while typing; creation is still validated by the engine. */
+  api?: GitCrestApiClient;
   onChooseWorktreeParent?: () => Promise<string | undefined>;
 }
 
@@ -39,6 +42,7 @@ export function BranchSwitcherDialog({
   onCommitChanges,
   onShelveAndSwitch,
   onOpenWorktree,
+  api,
   onChooseWorktreeParent,
 }: BranchSwitcherDialogProps) {
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(
@@ -58,6 +62,7 @@ export function BranchSwitcherDialog({
 
   const suggestedWorktree = suggestWorktreePath(repository?.path, filter.trim());
   const effectiveWorktreePath = worktreeEdited ? worktreePath : suggestedWorktree;
+  const folderProblem = useWorktreeFolderCheck(api, repository?.repoId ?? "", effectiveWorktreePath, Boolean(branchSwitcher.open && filter.trim()));
   if (!branchSwitcher.open || !repository) return null;
 
   const query = filter.trim().toLowerCase();
@@ -189,10 +194,11 @@ export function BranchSwitcherDialog({
                     }).catch(() => undefined)}>Browse…</button>}
                   </span>
                 </label>
-                <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim() || !isAbsoluteFolder(effectiveWorktreePath)} onClick={() => { rememberWorktreeParent(effectiveWorktreePath); void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() }); }}>
+                <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim() || !isAbsoluteFolder(effectiveWorktreePath) || Boolean(folderProblem)} onClick={() => { rememberWorktreeParent(effectiveWorktreePath); void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() }); }}>
                   <span className="branchItemGlyph" aria-hidden="true">⧉</span>
                   <span>Create “{filter.trim()}” in a new worktree</span>
                   {effectiveWorktreePath.trim() !== "" && !isAbsoluteFolder(effectiveWorktreePath) && <small>use a full folder path</small>}
+                  {folderProblem && <small role="alert">{worktreeFolderProblemMessage(folderProblem)}</small>}
                 </button>
               </div>
             )}

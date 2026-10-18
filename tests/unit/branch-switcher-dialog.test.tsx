@@ -70,3 +70,17 @@ it("offers to open the worktree instead of switching to a branch another worktre
   expect(onOpenWorktree).toHaveBeenCalledWith("D:/trees/hotfix");
   expect(screen.queryByRole("button", { name: /hotfix/ })).toBeNull();
 });
+
+it("flags a non-empty worktree folder for a new branch before anything is submitted", async () => {
+  const checkWorktreeFolder = vi.fn().mockResolvedValue({ status: "notEmpty" });
+  const api = { withSignal: () => api, checkWorktreeFolder } as unknown as import("../../src/api/client").GitCrestApiClient;
+  const branchSwitcher = {
+    open: true, setOpen: vi.fn(), targetName: "", preflight: undefined, error: "", setError: vi.fn(), busy: false,
+    openSwitcher: vi.fn(), close: vi.fn(), chooseAnother: vi.fn(), inspect: vi.fn(), continueSwitch: vi.fn(), createBranch: vi.fn(), reviewAfterShelf: vi.fn(), runWhileBusy: vi.fn(),
+  } as unknown as Parameters<typeof BranchSwitcherDialog>[0]["branchSwitcher"];
+  render(<BranchSwitcherDialog repository={repository} branchSwitcher={branchSwitcher} branches={[branch("main", true)]} hasBranchSnapshot branchesLoading={false} connected hasActiveRepositoryTask={false} branchSwitcherShortcut="Ctrl+B" shelveShortcut="Ctrl+Shift+S" shelveAriaShortcut="Control+Shift+S" onCommitChanges={vi.fn()} onShelveAndSwitch={vi.fn()} api={api} />);
+  fireEvent.change(screen.getByRole("searchbox", { name: "Filter local branches" }), { target: { value: "brand-new" } });
+  expect((await screen.findByRole("alert", {}, { timeout: 2000 })).textContent).toContain("already contains files");
+  expect((screen.getByRole("button", { name: /in a new worktree/ }) as HTMLButtonElement).disabled).toBe(true);
+  expect(checkWorktreeFolder).toHaveBeenCalledWith("repo_x", "C:/work/repo-brand-new");
+});
