@@ -75,7 +75,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
   }
 
   return (
-    <section className="remoteManager" aria-label="Repository remotes">
+    <section className="navGroup remoteManager" aria-label="Repository remotes">
       <div className="navGroupTitle remoteManagerHeading">
         <span>Remotes</span>
         {remoteList && <span className="countBadge">{remoteList.length}</span>}

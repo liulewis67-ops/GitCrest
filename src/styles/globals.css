@@ -27,6 +27,7 @@
 }
 
 :root {
+  --font-ui: Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   font-family: Inter, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -187,6 +188,8 @@ button:disabled { cursor: not-allowed; }
 .branchActions .branchAction { min-width: 20px; padding: 1px 4px; font-size: 11px; line-height: 1.2; }
 .branchItem:hover .branchActions, .branchItem:focus-within .branchActions { display: inline-flex; }
 .worktreeDirty { color: var(--warning, #d29922); font-size: 9px; }
+.worktreesNavigation .branchItem { flex-wrap: wrap; }
+.worktreeConfirm { display: flex; flex: 1 0 100%; align-items: center; justify-content: flex-end; gap: 4px; padding-bottom: 3px; }
 .worktreeForce { display: inline-flex; align-items: center; gap: 3px; color: var(--text-muted); font-size: 9px; }
 .branchAction { padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 9px; }
 .branchAction:hover:not(:disabled) { border-color: var(--line-strong); background: var(--accent-soft); }
