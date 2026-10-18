@@ -119,3 +119,17 @@ it("explains whether a merge fast-forwards, needs a merge commit, or is already 
     view.unmount();
   }
 });
+
+it("names the target branch in the title when merging from a branch row", async () => {
+  const api = cancellableApi({
+    preflightRepositoryWorkflow: vi.fn().mockResolvedValue({
+      repoId: "repo_fixture", action: "merge" as const, headOid: "b".repeat(40), targetOid: "a".repeat(40), targetSubject: "Work on feature",
+      operationInProgress: null, isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], omittedConflictedPathCount: 0,
+      canStart: true, mergeKind: "mergeCommit" as const, incomingCommitCount: 1,
+    }),
+  });
+  render(<WorkflowDialog api={api} repoId="repo_fixture" targetOid={"a".repeat(40)} action="merge" targetLabel="feature/login" onClose={vi.fn()} onStarted={vi.fn()} />);
+  expect(screen.getByRole("heading", { name: "Merge feature/login" })).toBeTruthy();
+  expect(screen.getByText("TARGET BRANCH")).toBeTruthy();
+  expect(await screen.findByText("Work on feature")).toBeTruthy();
+});

@@ -5,11 +5,13 @@ import type { WorkflowAction } from "../model/workflow-action";
 
 const labels: Record<WorkflowAction, string> = { merge: "Merge", cherryPick: "Cherry-pick", revert: "Revert" };
 
-export function WorkflowDialog({ api, repoId, targetOid, action, onClose, onStarted }: {
+export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, onClose, onStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   targetOid: string;
   action: WorkflowAction;
+  /** Human name of the target, such as a branch; shown instead of the generic "commit". */
+  targetLabel?: string;
   onClose: () => void;
   onStarted: (task: Awaited<ReturnType<GitCrestApiClient["startRepositoryWorkflow"]>>) => void;
 }) {
@@ -49,9 +51,9 @@ export function WorkflowDialog({ api, repoId, targetOid, action, onClose, onStar
   const snapshot = state.key === key ? state.snapshot : undefined;
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="workflow-dialog-title" onKeyDown={onKeyDown}>
-      <div className="taskCenterHeader"><div><p className="sectionEyebrow">REVIEW GIT OPERATION</p><h2 id="workflow-dialog-title">{labels[action]} commit</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button></div>
+      <div className="taskCenterHeader"><div><p className="sectionEyebrow">REVIEW GIT OPERATION</p><h2 id="workflow-dialog-title">{labels[action]} {targetLabel ?? "commit"}</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Close</button></div>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>TARGET COMMIT</span><strong className="monoText" title={targetOid}>{targetOid.slice(0, 12)}</strong></div>
+        <div className="repositoryFact"><span>{targetLabel ? "TARGET BRANCH" : "TARGET COMMIT"}</span><strong className="monoText" title={targetOid}>{targetLabel ? `${targetLabel} · ${targetOid.slice(0, 12)}` : targetOid.slice(0, 12)}</strong></div>
         {state.key !== key || state.loading ? <p role="status">Checking repository state…</p> : state.error && <p className="taskCenterError" role="alert">{state.error}</p>}
         {snapshot && <>
           <div className="repositoryFact"><span>SUBJECT</span><strong>{snapshot.targetSubject || "(no subject)"}</strong></div>

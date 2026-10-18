@@ -6,6 +6,7 @@ interface WorkflowDialogContext {
   repoId: string;
   targetOid: string;
   action: WorkflowAction;
+  targetLabel?: string;
 }
 
 interface WorkflowDialogSessionOptions {
@@ -19,8 +20,8 @@ export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCen
   const [rebaseOpen, setRebaseOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
 
-  function open(repoId: string, targetOid: string, action: WorkflowAction) {
-    setContext({ repoId, targetOid, action });
+  function open(repoId: string, targetOid: string, action: WorkflowAction, targetLabel?: string) {
+    setContext({ repoId, targetOid, action, targetLabel });
   }
 
   function close() {

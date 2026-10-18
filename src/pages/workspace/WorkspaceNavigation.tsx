@@ -51,7 +51,7 @@ interface WorkspaceNavigationProps {
   onOpenFileDiff: (path: string, scope: "workingTree" | "index") => void;
   onDeleteRemoteBranch: (branchRef: string) => void;
   onSwitchBranch: (name: string) => void;
-  onMergeBranch: (oid: string) => void;
+  onMergeBranch: (oid: string, name: string) => void;
   onOpenWorktree: (path: string) => void;
   onWorktreeRemoveStarted: (task: TaskSnapshotResponse) => void;
   onManageBranch: (name: string, mode: "rename" | "delete") => void;
@@ -139,7 +139,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
                       <BranchSyncBadge branch={branch} />
                       {!branch.isCurrent && !branch.fullName.endsWith("/HEAD") && <span className="branchActions">
                         {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Switch to ${branch.name}`} title={`Switch to ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onSwitchBranch(branch.name)}>↪</button>}
-                        <button className="branchAction" type="button" aria-label={`Merge ${branch.fullName} into the current branch`} title={`Merge ${branch.name} into the current branch`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onMergeBranch(branch.oid)}>⤴</button>
+                        <button className="branchAction" type="button" aria-label={`Merge ${branch.fullName} into the current branch`} title={`Merge ${branch.name} into the current branch`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onMergeBranch(branch.oid, branch.name)}>⤴</button>
                         {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Rename ${branch.name}`} title={`Rename ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onManageBranch(branch.name, "rename")}>✎</button>}
                         {branch.kind === "local" && <button className="branchAction" type="button" aria-label={`Delete ${branch.name}`} title={`Delete ${branch.name}`} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClick={() => onManageBranch(branch.name, "delete")}>⌫</button>}
                       </span>}
