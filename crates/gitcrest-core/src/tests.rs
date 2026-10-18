@@ -5666,6 +5666,10 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
     let completed = wait_for_task(&app, worktree_creation["taskId"].as_str().unwrap()).await;
     assert_eq!(completed["status"], "succeeded");
     assert!(worktree_dir.join(".git").exists());
+    assert!(
+        completed["resultRepoId"].as_str().is_some(),
+        "a created worktree is registered so the app can open it"
+    );
     let listing = app
         .clone()
         .oneshot(request(

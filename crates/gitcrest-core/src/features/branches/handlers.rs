@@ -179,6 +179,7 @@ pub(super) async fn add_repository_worktree(
     let command = state.git_commands.clone();
     let branch = request.branch;
     let folder = request.path;
+    let repositories = state.repositories.clone();
     let task = state
         .tasks
         .submit(
@@ -192,12 +193,17 @@ pub(super) async fn add_repository_worktree(
                         &path,
                         BranchCommand::WorktreeAdd {
                             branch,
-                            path: folder,
+                            path: folder.clone(),
                         },
                         context,
                     )
+                    .await?;
+                // Register the new worktree so the app can open it right away.
+                Ok(repositories
+                    .open_path(&folder)
                     .await
-                    .map(|()| None)
+                    .ok()
+                    .map(|repository| repository.repo_id))
             },
         )
         .await
@@ -399,6 +405,8 @@ pub(super) async fn create_repository_branch(
         }
         None => None,
     };
+    let repositories = state.repositories.clone();
+    let new_worktree_folder = worktree_path.clone();
     let task = state
         .tasks
         .submit(
@@ -422,8 +430,16 @@ pub(super) async fn create_repository_branch(
                         },
                         context,
                     )
-                    .await
-                    .map(|()| None)
+                    .await?;
+                // Register the new worktree so the app can open it right away.
+                Ok(match new_worktree_folder {
+                    Some(folder) => repositories
+                        .open_path(&folder)
+                        .await
+                        .ok()
+                        .map(|repository| repository.repo_id),
+                    None => None,
+                })
             },
         )
         .await
