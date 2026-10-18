@@ -563,6 +563,9 @@ button:disabled { cursor: not-allowed; }
 .branchSwitchChoices, .branchSwitchDetails { display: grid; gap: 7px; }
 .branchSwitchChoices h3, .branchSwitchDetails h3 { margin: 2px 0; font-size: 11px; font-weight: 650; }
 .branchFilterInput { min-height: 30px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface); color: var(--text); font: inherit; font-size: 10px; }
+.branchPlacement { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; font-size: 11px; }
+.branchPlacement legend { padding: 0 0 4px; color: var(--text-muted); font-size: 9px; letter-spacing: .05em; text-transform: uppercase; }
+.branchPlacement label { display: flex; align-items: center; gap: 6px; color: var(--text-secondary); }
 .branchCreateOptions { display: grid; gap: 7px; }
 .branchWorktreeField { display: grid; gap: 4px; color: var(--text-muted); font-size: 9px; }
 .branchWorktreeInput { display: flex; gap: 6px; }

@@ -181,6 +181,7 @@ it("refuses to remove a dirty worktree until changes are explicitly discarded, a
 it("creates a branch at an older commit from the commit details", async () => {
   const fixture = await createTempGitRepository();
   const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-branch-here-e2e-app-data-"));
+  const worktreeParent = await mkdtemp(resolve(tmpdir(), "gitcrest-branch-here-e2e-wt-"));
   try {
     await writeFile(resolve(fixture.path, "one.txt"), "one\n");
     await git(fixture.path, "add", "one.txt");
@@ -189,6 +190,7 @@ it("creates a branch at an older commit from the commit details", async () => {
     await writeFile(resolve(fixture.path, "two.txt"), "two\n");
     await git(fixture.path, "add", "two.txt");
     await git(fixture.path, "commit", "--quiet", "-m", "second commit");
+    const secondOid = await git(fixture.path, "rev-parse", "HEAD");
 
     app = await electron.launch({
       args: [".", "--disable-gpu"],
@@ -206,10 +208,24 @@ it("creates a branch at an older commit from the commit details", async () => {
     await dialog.getByRole("button", { name: "Create and switch" }).click();
     await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe("from-first");
     expect(await git(fixture.path, "rev-parse", "HEAD")).toBe(firstOid);
+    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+
+    // The same dialog can check the branch out in a new worktree instead.
+    const worktreePath = resolve(worktreeParent, "from-second");
+    await window.getByText("second commit", { exact: true }).first().click();
+    await window.getByRole("button", { name: "Branch here" }).click();
+    const second = window.getByRole("dialog", { name: "Create branch here" });
+    await second.getByRole("textbox", { name: "Branch name" }).fill("wt-from-second");
+    await second.getByRole("radio", { name: "Check it out in a new worktree" }).check();
+    await second.getByRole("textbox", { name: "Worktree folder" }).fill(worktreePath);
+    await second.getByRole("button", { name: "Create worktree" }).click();
+    await expect.poll(() => git(worktreePath, "rev-parse", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe(secondOid);
+    expect(await git(worktreePath, "rev-parse", "--abbrev-ref", "HEAD")).toBe("wt-from-second");
   } finally {
     await app?.close();
     app = undefined;
     await fixture.cleanup();
     await rm(appDataPath, { recursive: true, force: true });
+    await rm(worktreeParent, { recursive: true, force: true });
   }
 }, 120_000);

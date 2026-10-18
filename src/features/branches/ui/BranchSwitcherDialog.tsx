@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { BranchSnapshotResponse, RepositoryResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { BranchSyncBadge } from "./BranchSyncBadge";
+import { suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 import { useBranchSwitcher } from "../model/use-branch-switcher";
 import { getRepositoryDisplayName } from "../../../shared/lib/repository-display-name";
 
@@ -180,8 +181,7 @@ export function BranchSwitcherDialog({
                     <input value={effectiveWorktreePath} aria-label="Worktree folder" spellCheck={false} disabled={branchSwitcher.busy} onChange={(event) => { setWorktreePath(event.target.value); setWorktreeEdited(true); }} />
                     {onChooseWorktreeParent && <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => void onChooseWorktreeParent().then((parent) => {
                       if (!parent) return;
-                      const leaf = suggestedWorktree.split(/[\\/]/).pop() || "worktree";
-                      setWorktreePath(`${parent.replace(/[\\/]+$/, "")}${parent.includes("\\") ? "\\" : "/"}${leaf}`);
+                      setWorktreePath(worktreePathInParent(parent, suggestedWorktree));
                       setWorktreeEdited(true);
                     }).catch(() => undefined)}>Browse…</button>}
                   </span>
@@ -218,13 +218,4 @@ export function BranchSwitcherDialog({
       </section>
     </div>
   );
-}
-
-function suggestWorktreePath(repositoryPath: string | undefined, branch: string) {
-  if (!repositoryPath || !branch) return "";
-  const separator = repositoryPath.includes("\\") ? "\\" : "/";
-  const trimmed = repositoryPath.replace(/[\\/]+$/, "");
-  const cut = Math.max(trimmed.lastIndexOf("/"), trimmed.lastIndexOf("\\"));
-  if (cut < 0) return "";
-  return `${trimmed.slice(0, cut)}${separator}${trimmed.slice(cut + 1)}-${branch.replace(/[^A-Za-z0-9._-]+/g, "-")}`;
 }

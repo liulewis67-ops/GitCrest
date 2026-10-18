@@ -17,8 +17,25 @@ it("creates a branch at the chosen commit and switches to it by default", async 
   expect(create.disabled).toBe(true);
   fireEvent.change(screen.getByRole("textbox", { name: "Branch name" }), { target: { value: " hotfix/from-here " } });
   expect(create.disabled).toBe(false);
-  fireEvent.click(screen.getByRole("checkbox", { name: "Switch to the new branch" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Stay on the current branch" }));
   fireEvent.click(screen.getByRole("button", { name: "Create branch" }));
   await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "t1" }));
   expect(createRepositoryBranch).toHaveBeenCalledWith("repo_x", "hotfix/from-here", { checkout: false, startPoint: start });
+});
+
+it("offers a worktree folder suggestion, lets the user browse, and sends the worktree path", async () => {
+  const createRepositoryBranch = vi.fn().mockResolvedValue({ taskId: "t2" });
+  const onStarted = vi.fn();
+  const api = { createRepositoryBranch } as unknown as GitCrestApiClient;
+  const onChooseFolder = vi.fn().mockResolvedValue("D:/trees/");
+  render(<CreateBranchDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" startOid={"d".repeat(40)} disabled={false} onChooseFolder={onChooseFolder} onClose={vi.fn()} onStarted={onStarted} />);
+
+  fireEvent.change(screen.getByRole("textbox", { name: "Branch name" }), { target: { value: "feature/x" } });
+  fireEvent.click(screen.getByRole("radio", { name: "Check it out in a new worktree" }));
+  expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("C:/work/app-feature-x");
+  fireEvent.click(screen.getByRole("button", { name: "Browse…" }));
+  await waitFor(() => expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("D:/trees/app-feature-x"));
+  fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
+  await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "t2" }));
+  expect(createRepositoryBranch).toHaveBeenCalledWith("repo_x", "feature/x", { checkout: false, startPoint: "d".repeat(40), worktreePath: "D:/trees/app-feature-x" });
 });
