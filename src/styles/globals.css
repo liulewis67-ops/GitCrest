@@ -309,9 +309,9 @@ button:disabled { cursor: not-allowed; }
 .conflictChooseSide { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); font-size: 11px; }
 .conflictChooseSide p { margin: 0; color: var(--text-secondary); }
 .conflictToolbarGroup { display: flex; gap: 4px; }
-.conflictToolbar button { min-height: 26px; min-width: 28px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
-.conflictToolbar button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
-.conflictToolbar button:disabled { opacity: .5; cursor: not-allowed; }
+.conflictToolbar button, .conflictChooseSide button { min-height: 26px; min-width: 28px; padding: 3px 9px; border: 1px solid var(--line); border-radius: 4px; background: transparent; color: var(--text-secondary); font-size: 11px; cursor: pointer; }
+.conflictToolbar button:hover:not(:disabled), .conflictChooseSide button:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-raised); color: var(--text); }
+.conflictToolbar button:disabled, .conflictChooseSide button:disabled { opacity: .5; cursor: not-allowed; }
 .conflictCounter { color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 .conflictMerge { display: flex; flex-direction: column; gap: 8px; }
 .conflictMergeColumns, .conflictMergeRow { display: grid; grid-template-columns: minmax(0, 1fr) 34px minmax(0, 1fr) 34px minmax(0, 1fr); }

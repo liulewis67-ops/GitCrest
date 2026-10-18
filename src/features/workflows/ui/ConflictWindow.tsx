@@ -329,7 +329,7 @@ export function ConflictWindow() {
               <button type="button" disabled={busy || hasUnsavedChanges} onClick={() => void markResolved(undefined, "theirs")}>{currentFile.data.theirsPresent ? "Use theirs (incoming)" : "Accept deletion (theirs)"}</button>
             </div>
           </section>}
-          {!currentFile.data.isText ? null : <>
+          {!currentFile.data.isText || !currentFile.data.oursPresent || !currentFile.data.theirsPresent ? null : <>
             <div className="conflictToolbar" role="toolbar" aria-label="Conflict navigation">
               <div className="conflictToolbarGroup">
                 <button type="button" aria-label="Previous conflict" title="Previous conflict (Alt+Up)" disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock - 1)}>↑</button>
