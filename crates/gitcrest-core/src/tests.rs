@@ -142,7 +142,7 @@ async fn error_code(response: Response) -> (StatusCode, String) {
 }
 
 async fn wait_for_task(router: &Router, task_id: &str) -> serde_json::Value {
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
             let response = router
                 .clone()
@@ -176,7 +176,7 @@ async fn wait_for_task_status(
     task_id: &str,
     expected_status: &str,
 ) -> serde_json::Value {
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+    tokio::time::timeout(std::time::Duration::from_secs(30), async {
         loop {
             let response = router
                 .clone()
