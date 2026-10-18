@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { NewWorktreeDialog } from "../../src/features/branches/ui/NewWorktreeDialog";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); window.localStorage.clear(); });
 
 it("suggests a sibling folder, lets the user browse, and creates the worktree for the branch", async () => {
   const addRepositoryWorktree = vi.fn().mockResolvedValue({ taskId: "t1" });
@@ -40,4 +40,15 @@ it("creates a local tracking branch in the worktree when opening a remote branch
   expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("C:/work/app-feature-login");
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
   await waitFor(() => expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "origin/feature/login", "C:/work/app-feature-login", true));
+});
+
+it("remembers the folder it was created in and suggests it next time", async () => {
+  const api = { addRepositoryWorktree: vi.fn().mockResolvedValue({ taskId: "t4" }) } as unknown as GitCrestApiClient;
+  const first = render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="one" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "Worktree folder" }), { target: { value: "E:/scratch/trees/app-one" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
+  await waitFor(() => expect(window.localStorage.getItem("gitcrest.worktreeParent")).toBe("E:/scratch/trees"));
+  first.unmount();
+  render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="two" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("E:/scratch/trees/app-two");
 });

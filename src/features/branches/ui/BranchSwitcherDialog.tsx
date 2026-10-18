@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { BranchSnapshotResponse, RepositoryResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { BranchSyncBadge } from "./BranchSyncBadge";
-import { suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
+import { rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 import { useBranchSwitcher } from "../model/use-branch-switcher";
 import { getRepositoryDisplayName } from "../../../shared/lib/repository-display-name";
 
@@ -189,7 +189,7 @@ export function BranchSwitcherDialog({
                     }).catch(() => undefined)}>Browse…</button>}
                   </span>
                 </label>
-                <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim()} onClick={() => void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() })}>
+                <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim()} onClick={() => { rememberWorktreeParent(effectiveWorktreePath); void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() }); }}>
                   <span className="branchItemGlyph" aria-hidden="true">⧉</span>
                   <span>Create “{filter.trim()}” in a new worktree</span>
                 </button>

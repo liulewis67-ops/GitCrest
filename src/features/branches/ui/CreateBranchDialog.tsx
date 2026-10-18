@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
-import { suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
+import { rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 
 type Placement = "switch" | "stay" | "worktree";
 
@@ -32,11 +32,13 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
     setBusy(true);
     setError("");
     try {
-      onStarted(await api.createRepositoryBranch(repoId, name.trim(), {
+      const task = await api.createRepositoryBranch(repoId, name.trim(), {
         checkout: placement === "switch",
         startPoint: startOid,
         ...(placement === "worktree" ? { worktreePath: folder } : {}),
-      }));
+      });
+      if (placement === "worktree") rememberWorktreeParent(folder);
+      onStarted(task);
     } catch (reason) {
       setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not create this branch.");
     } finally {

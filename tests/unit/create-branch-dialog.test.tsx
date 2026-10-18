@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { CreateBranchDialog } from "../../src/features/branches/ui/CreateBranchDialog";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); window.localStorage.clear(); });
 
 it("creates a branch at the chosen commit and switches to it by default", async () => {
   const createRepositoryBranch = vi.fn().mockResolvedValue({ taskId: "t1" });
