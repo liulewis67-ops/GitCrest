@@ -44,3 +44,8 @@ export function worktreePathInParent(parent: string, suggested: string) {
   const leaf = suggested.split(/[\\/]/).pop() || "worktree";
   return `${parent.replace(/[\\/]+$/, "")}${parent.includes("\\") ? "\\" : "/"}${leaf}`;
 }
+
+/** True for Windows drive, UNC and POSIX absolute paths, the only folders a worktree can be created in. */
+export function isAbsoluteFolder(path: string) {
+  return /^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(path.trim());
+}

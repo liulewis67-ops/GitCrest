@@ -52,3 +52,13 @@ it("remembers the folder it was created in and suggests it next time", async () 
   render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="two" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
   expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("E:/scratch/trees/app-two");
 });
+
+it("blocks relative folders before anything is sent", () => {
+  const addRepositoryWorktree = vi.fn();
+  const api = { addRepositoryWorktree } as unknown as GitCrestApiClient;
+  render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="one" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  fireEvent.change(screen.getByRole("textbox", { name: "Worktree folder" }), { target: { value: "trees/app-one" } });
+  expect(screen.getByRole("alert").textContent).toContain("full path");
+  expect((screen.getByRole("button", { name: "Create worktree" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(addRepositoryWorktree).not.toHaveBeenCalled();
+});

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it } from "vitest";
-import { rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../../src/features/branches/model/worktree-path";
+import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../../src/features/branches/model/worktree-path";
 
 afterEach(() => window.localStorage.clear());
 
@@ -32,4 +32,9 @@ it("falls back to the repository's folder when storage is unavailable", () => {
 it("joins a picked folder with the suggested leaf", () => {
   expect(worktreePathInParent("D:\\trees\\", "C:\\work\\app-feature")).toBe("D:\\trees\\app-feature");
   expect(worktreePathInParent("/mnt/trees", "/home/me/app-feature")).toBe("/mnt/trees/app-feature");
+});
+
+it("recognises absolute Windows, UNC and POSIX folders and rejects relative ones", () => {
+  for (const path of ["C:\\trees\\app", "d:/trees/app", "\\\\server\\share\\app", "/home/me/app", "  /tmp/x "]) expect(isAbsoluteFolder(path)).toBe(true);
+  for (const path of ["", "trees/app", "..\\app", "./app", "C:app"]) expect(isAbsoluteFolder(path)).toBe(false);
 });

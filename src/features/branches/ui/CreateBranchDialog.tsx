@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
-import { rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
+import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 
 type Placement = "switch" | "stay" | "worktree";
 
@@ -25,7 +25,8 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const suggested = suggestWorktreePath(repositoryPath, name.trim());
   const folder = (worktreeEdited ? worktreePath : suggested).trim();
-  const ready = name.trim() !== "" && (placement !== "worktree" || folder !== "") && !disabled && !busy;
+  const relativeFolder = placement === "worktree" && folder !== "" && !isAbsoluteFolder(folder);
+  const ready = name.trim() !== "" && (placement !== "worktree" || (folder !== "" && !relativeFolder)) && !disabled && !busy;
 
   async function submit() {
     if (!ready) return;
@@ -79,6 +80,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
             {onChooseFolder && <button className="secondaryButton" type="button" onClick={() => void choose()}>Browse…</button>}
           </span>
         </label>}
+        {relativeFolder && <p className="taskCenterError" role="alert">Use a full path, such as C:\work\app-feature or /home/me/app-feature.</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Cancel</button>

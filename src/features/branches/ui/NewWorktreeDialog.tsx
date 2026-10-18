@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
-import { rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
+import { isAbsoluteFolder, rememberWorktreeParent, suggestWorktreePath, worktreePathInParent } from "../model/worktree-path";
 
 /** Checks an existing local branch out into a new worktree folder. */
 export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRemote = false, disabled, onChooseFolder, onClose, onStarted }: {
@@ -22,7 +22,8 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
-  const ready = folder.trim() !== "" && !disabled && !busy;
+  const relative = folder.trim() !== "" && !isAbsoluteFolder(folder);
+  const ready = folder.trim() !== "" && !relative && !disabled && !busy;
 
   async function submit() {
     if (!ready) return;
@@ -64,6 +65,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
           </span>
         </label>
         <p className="cloneHelp">The folder must be new or empty. Your current working tree is not touched. Open the new worktree afterwards from the Worktrees list.</p>
+        {relative && <p className="taskCenterError" role="alert">Use a full path, such as C:\work\app-feature or /home/me/app-feature.</p>}
         {error && <p className="taskCenterError" role="alert">{error}</p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>Cancel</button>
