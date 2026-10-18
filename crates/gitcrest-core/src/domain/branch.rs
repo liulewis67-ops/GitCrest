@@ -8,6 +8,10 @@ pub(crate) enum BranchCommand {
     Switch {
         name: String,
     },
+    WorktreeRemove {
+        path: String,
+        force: bool,
+    },
     Rename {
         old_name: String,
         new_name: String,

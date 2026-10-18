@@ -5636,6 +5636,63 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
     let completed = wait_for_task(&app, worktree_creation["taskId"].as_str().unwrap()).await;
     assert_eq!(completed["status"], "succeeded");
     assert!(worktree_dir.join(".git").exists());
+    let listing = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/worktrees"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(listing.status(), StatusCode::OK);
+    let body = to_bytes(listing.into_body(), usize::MAX).await.unwrap();
+    let listing: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let worktrees = listing["worktrees"].as_array().unwrap();
+    assert_eq!(worktrees.len(), 2);
+    assert_eq!(worktrees[0]["isMain"], true);
+    assert_eq!(worktrees[0]["isCurrent"], true);
+    assert_eq!(worktrees[1]["branch"], "feature/wt");
+    for (path, expected) in [
+        (
+            worktrees[0]["path"].as_str().unwrap().to_string(),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            worktree_parent
+                .path()
+                .join("not-a-worktree")
+                .display()
+                .to_string(),
+            StatusCode::BAD_REQUEST,
+        ),
+        (
+            worktrees[1]["path"].as_str().unwrap().to_string(),
+            StatusCode::ACCEPTED,
+        ),
+    ] {
+        let removal = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(Method::POST)
+                    .uri(format!("/api/v1/repositories/{repo_id}/worktrees/remove"))
+                    .header("X-GitCrest-API-Version", API_VERSION)
+                    .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                    .header(CONTENT_TYPE, "application/json")
+                    .body(Body::from(serde_json::json!({ "path": path }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(removal.status(), expected);
+        if expected == StatusCode::ACCEPTED {
+            let body = to_bytes(removal.into_body(), usize::MAX).await.unwrap();
+            let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            let completed = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+            assert_eq!(completed["status"], "succeeded");
+        }
+    }
+    assert!(!worktree_dir.exists());
     for (uri, body, expected) in [
         (
             "",

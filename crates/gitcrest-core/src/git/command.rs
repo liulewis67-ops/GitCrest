@@ -777,6 +777,14 @@ impl GitCommandService {
                 ],
                 "Switch branch",
             ),
+            BranchCommand::WorktreeRemove { path, force } => {
+                let mut arguments = vec!["worktree".into(), "remove".into()];
+                if force {
+                    arguments.push("--force".into());
+                }
+                arguments.extend(["--".into(), path.into()]);
+                (arguments, "Remove worktree")
+            }
             BranchCommand::Rename { old_name, new_name } => (
                 vec![
                     "branch".into(),

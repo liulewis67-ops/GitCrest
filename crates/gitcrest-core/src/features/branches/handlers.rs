@@ -14,8 +14,8 @@ use crate::{
 
 use super::dto::{
     BranchDeletePreview, BranchFavoriteRequest, BranchNameQuery, BranchNameRequest,
-    BranchSwitchPreflight, CreateBranchRequest, DeleteBranchRequest, RenameBranchRequest,
-    SwitchBranchRequest, WorktreeInfo, WorktreeSnapshot,
+    BranchSwitchPreflight, CreateBranchRequest, DeleteBranchRequest, RemoveWorktreeRequest,
+    RenameBranchRequest, SwitchBranchRequest, WorktreeInfo, WorktreeSnapshot,
 };
 
 pub(super) async fn repository_branches(
@@ -68,8 +68,9 @@ pub(super) async fn repository_worktrees(
     let current = std::fs::canonicalize(&target.repository_path).ok();
     let worktrees = entries
         .into_iter()
-        .filter(|entry| !entry.bare)
-        .map(|entry| {
+        .enumerate()
+        .filter(|(_, entry)| !entry.bare)
+        .map(|(index, entry)| {
             let is_current = current
                 .as_ref()
                 .zip(std::fs::canonicalize(&entry.path).ok())
@@ -82,10 +83,92 @@ pub(super) async fn repository_worktrees(
                 locked: entry.locked,
                 prunable: entry.prunable,
                 is_current,
+                is_main: index == 0,
             }
         })
         .collect();
     Ok(Json(WorktreeSnapshot { repo_id, worktrees }))
+}
+
+pub(super) async fn remove_repository_worktree(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<RemoveWorktreeRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A worktree path is required.",
+        )
+    })?;
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let invalid = |message: &'static str| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            message,
+        )
+    };
+    let entries = state
+        .git_commands
+        .list_worktrees(&target.repository_path)
+        .await
+        .map_err(|_| invalid("Could not list the worktrees of this repository."))?;
+    let requested = std::fs::canonicalize(&request.path).ok();
+    let current = std::fs::canonicalize(&target.repository_path).ok();
+    let matched = entries.iter().enumerate().find(|(_, entry)| {
+        entry.path == request.path
+            || requested
+                .as_ref()
+                .zip(std::fs::canonicalize(&entry.path).ok())
+                .is_some_and(|(left, right)| *left == right)
+    });
+    let Some((index, entry)) = matched else {
+        return Err(invalid("That folder is not a worktree of this repository."));
+    };
+    if index == 0 {
+        return Err(invalid("The main working tree cannot be removed."));
+    }
+    if current
+        .as_ref()
+        .zip(std::fs::canonicalize(&entry.path).ok())
+        .is_some_and(|(left, right)| *left == right)
+    {
+        return Err(invalid("The worktree you are viewing cannot be removed."));
+    }
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let worktree_path = entry.path.clone();
+    let force = request.force;
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "worktreeRemove",
+            move |context| async move {
+                command
+                    .execute_branch(
+                        &path,
+                        BranchCommand::WorktreeRemove {
+                            path: worktree_path,
+                            force,
+                        },
+                        context,
+                    )
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
 pub(super) async fn set_branch_favorite(

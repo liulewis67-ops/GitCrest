@@ -748,6 +748,7 @@ function App() {
               onDeleteRemoteBranch={remoteBranchDelete.open}
               onSwitchBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
               onManageBranch={(name, mode) => setLocalBranchAction({ name, mode })}
+              onWorktreeRemoveStarted={(task) => { prependTask(task); setTasksError(""); setTasksOpen(true); }}
               onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
               onMergeBranch={(oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, "merge"); }}
               onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository?.repoId, fullName, favorite)}

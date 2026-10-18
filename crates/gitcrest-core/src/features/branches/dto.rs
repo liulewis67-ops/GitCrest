@@ -79,6 +79,7 @@ pub(super) struct WorktreeInfo {
     pub(super) locked: bool,
     pub(super) prunable: bool,
     pub(super) is_current: bool,
+    pub(super) is_main: bool,
 }
 
 #[derive(Serialize)]
@@ -86,4 +87,12 @@ pub(super) struct WorktreeInfo {
 pub(super) struct WorktreeSnapshot {
     pub(super) repo_id: String,
     pub(super) worktrees: Vec<WorktreeInfo>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct RemoveWorktreeRequest {
+    pub(super) path: String,
+    #[serde(default)]
+    pub(super) force: bool,
 }

@@ -176,6 +176,14 @@ export class GitCrestApiClient {
     return this.request<WorktreeSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees`);
   }
 
+  removeRepositoryWorktree(repoId: RepoId, path: string, force = false): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/remove`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, force } satisfies components["schemas"]["RemoveWorktreeRequest"]),
+    });
+  }
+
   createRepositoryBranch(repoId: RepoId, name: string, options: { checkout?: boolean; worktreePath?: string } = {}): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches`, true, {
       method: "POST",
