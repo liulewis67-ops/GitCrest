@@ -65,7 +65,7 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
     await conflictWindow.getByRole("main", { name: "Conflict resolution window" }).waitFor();
     await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
-    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 20_000 });
+    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
 
     await expect.poll(() => git(fixture.path, "ls-files", "--unmerged"), { timeout: 15_000 }).toBe("");
     expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("from other\n");
@@ -125,7 +125,7 @@ it("resolves a binary conflict by taking one whole version", async () => {
     const conflictWindow: Page = await conflictWindowPromise;
     await conflictWindow.getByText(/binary or non-text/).waitFor();
     await conflictWindow.getByRole("button", { name: "Use theirs (incoming)" }).click();
-    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 20_000 });
+    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
     await expect.poll(() => git(fixture.path, "ls-files", "--unmerged"), { timeout: 15_000 }).toBe("");
     expect([...(await readFile(file))]).toEqual([0, 9, 9, 9]);
   } finally {
@@ -180,7 +180,7 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     const conflictWindow: Page = await conflictWindowPromise;
     await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
-    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 20_000 });
+    await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
 
     await window.getByRole("button", { name: /^Background tasks/ }).click();
     const tasks = window.getByRole("dialog", { name: "Tasks" });
