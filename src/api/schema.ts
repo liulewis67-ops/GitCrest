@@ -2007,6 +2007,7 @@ export interface components {
                 prunable: boolean;
                 isCurrent: boolean;
                 isMain: boolean;
+                isDirty: boolean;
             }[];
         };
         BranchDeletePreview: {

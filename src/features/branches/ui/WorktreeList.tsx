@@ -51,13 +51,14 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
           <li className={`branchItem${worktree.isCurrent ? " current" : ""}`} key={worktree.path}>
             <span className="branchItemGlyph" aria-hidden="true">⧉</span>
             <span className="branchItemName" title={worktree.path}>{worktree.branch ?? (worktree.detached ? `Detached ${worktree.head?.slice(0, 7) ?? ""}` : leafName(worktree.path))}</span>
+            {worktree.isDirty && !worktree.isCurrent && <span className="worktreeDirty" title="This worktree has uncommitted changes" aria-label="Has uncommitted changes">●</span>}
             {worktree.isCurrent
               ? <span className="branchCurrentLabel">OPEN</span>
               : <button className="branchAction worktreeOpen" type="button" aria-label={`Open worktree ${leafName(worktree.path)}`} title={worktree.path} disabled={disabled || worktree.prunable} onClick={() => onOpen(worktree.path)}>{worktree.prunable ? "Missing" : "Open"}</button>}
             {!worktree.isCurrent && !worktree.isMain && !worktree.prunable && (confirming === worktree.path
               ? <>
                 <label className="worktreeForce" title="Also discard uncommitted changes in that folder"><input type="checkbox" checked={force} onChange={(event) => setForce(event.target.checked)} />Discard changes</label>
-                <button className="branchAction" type="button" aria-label={`Confirm remove worktree ${leafName(worktree.path)}`} disabled={disabled} onClick={() => void remove(worktree.path, force)}>Confirm</button>
+                <button className="branchAction" type="button" aria-label={`Confirm remove worktree ${leafName(worktree.path)}`} disabled={disabled || (worktree.isDirty && !force)} title={worktree.isDirty && !force ? "This worktree has uncommitted changes. Tick Discard changes to remove it." : undefined} onClick={() => void remove(worktree.path, force)}>Confirm</button>
                 <button className="branchAction" type="button" aria-label="Cancel remove" onClick={() => setConfirming(undefined)}>Cancel</button>
               </>
               : <button className="branchAction worktreeRemove" type="button" aria-label={`Remove worktree ${leafName(worktree.path)}`} title={`Remove ${worktree.path} (the branch is kept)`} disabled={disabled || worktree.locked} onClick={() => { setForce(false); setConfirming(worktree.path); }}>Remove</button>)}

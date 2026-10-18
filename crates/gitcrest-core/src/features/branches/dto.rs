@@ -80,6 +80,7 @@ pub(super) struct WorktreeInfo {
     pub(super) prunable: bool,
     pub(super) is_current: bool,
     pub(super) is_main: bool,
+    pub(super) is_dirty: bool,
 }
 
 #[derive(Serialize)]

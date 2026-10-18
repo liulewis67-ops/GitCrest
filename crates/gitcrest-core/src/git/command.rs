@@ -226,6 +226,20 @@ impl GitCommandService {
         Ok(parse_worktree_list(&String::from_utf8_lossy(&output)))
     }
 
+    /// True when the working tree at `path` has tracked changes or untracked files.
+    /// Output too large to capture also counts as dirty.
+    pub async fn worktree_is_dirty(&self, path: &Path) -> bool {
+        capture_git_output(
+            &self.git_program,
+            path,
+            ["status", "--porcelain", "--untracked-files=normal"],
+            64 * 1024,
+        )
+        .await
+        .map(|output| !output.iter().all(u8::is_ascii_whitespace))
+        .unwrap_or(true)
+    }
+
     pub async fn read_index_tree(&self, repository_path: &Path) -> Result<String, TaskFailure> {
         let output =
             capture_git_output(&self.git_program, repository_path, ["write-tree"], 128).await?;

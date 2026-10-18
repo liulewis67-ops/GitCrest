@@ -66,27 +66,33 @@ pub(super) async fn repository_worktrees(
             )
         })?;
     let current = std::fs::canonicalize(&target.repository_path).ok();
-    let worktrees = entries
+    let mut worktrees = Vec::new();
+    for (index, entry) in entries
         .into_iter()
         .enumerate()
         .filter(|(_, entry)| !entry.bare)
-        .map(|(index, entry)| {
-            let is_current = current
-                .as_ref()
-                .zip(std::fs::canonicalize(&entry.path).ok())
-                .is_some_and(|(left, right)| *left == right);
-            WorktreeInfo {
-                path: entry.path,
-                head: entry.head,
-                branch: entry.branch,
-                detached: entry.detached,
-                locked: entry.locked,
-                prunable: entry.prunable,
-                is_current,
-                is_main: index == 0,
-            }
-        })
-        .collect();
+    {
+        let is_current = current
+            .as_ref()
+            .zip(std::fs::canonicalize(&entry.path).ok())
+            .is_some_and(|(left, right)| *left == right);
+        let is_dirty = !entry.prunable
+            && state
+                .git_commands
+                .worktree_is_dirty(std::path::Path::new(&entry.path))
+                .await;
+        worktrees.push(WorktreeInfo {
+            path: entry.path,
+            head: entry.head,
+            branch: entry.branch,
+            detached: entry.detached,
+            locked: entry.locked,
+            prunable: entry.prunable,
+            is_current,
+            is_main: index == 0,
+            is_dirty,
+        });
+    }
     Ok(Json(WorktreeSnapshot { repo_id, worktrees }))
 }
 

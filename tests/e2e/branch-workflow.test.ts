@@ -163,12 +163,8 @@ it("refuses to remove a dirty worktree until changes are explicitly discarded, a
 
     expect(await window.getByRole("button", { name: "Remove worktree locked-wt" }).isDisabled()).toBe(true);
     await window.getByRole("button", { name: "Remove worktree dirty-wt" }).click();
-    await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).click();
-    await window.getByRole("dialog", { name: "Tasks" }).getByText(/Failed/i).first().waitFor({ timeout: 15_000 });
+    expect(await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).isDisabled()).toBe(true);
     expect(await access(resolve(dirty, "scratch.txt")).then(() => true, () => false)).toBe(true);
-    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
-
-    await window.getByRole("button", { name: "Remove worktree dirty-wt" }).click();
     await window.getByRole("checkbox", { name: "Discard changes" }).check();
     await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).click();
     await expect.poll(() => access(dirty).then(() => true, () => false), { timeout: 15_000 }).toBe(false);

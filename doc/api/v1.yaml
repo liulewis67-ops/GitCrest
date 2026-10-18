@@ -4240,7 +4240,7 @@ components:
           items:
             type: object
             additionalProperties: false
-            required: [path, head, branch, detached, locked, prunable, isCurrent, isMain]
+            required: [path, head, branch, detached, locked, prunable, isCurrent, isMain, isDirty]
             properties:
               path: { type: string }
               head: { type: [string, "null"] }
@@ -4250,6 +4250,7 @@ components:
               prunable: { type: boolean }
               isCurrent: { type: boolean }
               isMain: { type: boolean }
+              isDirty: { type: boolean }
     BranchDeletePreview:
       type: object
       additionalProperties: false
