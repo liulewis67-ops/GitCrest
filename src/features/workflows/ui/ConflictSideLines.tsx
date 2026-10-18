@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { splitInlineDiff } from "../../diff/model/inline-diff";
+import { splitInlineDiff } from "../../diff";
 import { diffLines, splitLines } from "../model/line-diff";
 
 /** Beyond this many lines per side the diff is skipped and plain text is shown. */
