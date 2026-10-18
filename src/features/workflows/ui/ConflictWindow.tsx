@@ -278,6 +278,11 @@ export function ConflictWindow() {
       focusBlock(activeBlock + (event.key === "ArrowDown" ? 1 : -1));
       return;
     }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
+      event.preventDefault();
+      if (hasUnsavedChanges && !busy) void saveDraft();
+      return;
+    }
     // The textarea keeps its native undo for typing; everywhere else Ctrl+Z walks the gutter-action history.
     if ((event.ctrlKey || event.metaKey) && !(event.target instanceof HTMLTextAreaElement) && stages && !busy) {
       const key = event.key.toLowerCase();
@@ -370,7 +375,7 @@ export function ConflictWindow() {
                   <button type="button" onClick={() => void saveDraft()} disabled={Boolean(action.busy) || !hasUnsavedChanges}>{action.busy === "save" ? "Saving…" : "Save result"}</button>
                   <button type="button" onClick={() => void markResolved()} disabled={Boolean(action.busy) || hasUnsavedChanges}>{action.busy === "resolve" ? "Marking…" : "Mark resolved"}</button>
                 </div>
-                {hasUnsavedChanges && <span>Unsaved edits</span>}
+                {hasUnsavedChanges ? <span>Unsaved edits · Ctrl+S saves</span> : conflictBlocks.length > 0 && <span role="status">{conflictBlocks.length} conflict {conflictBlocks.length === 1 ? "marker" : "markers"} still in the result</span>}
               </footer>
             </section>
           </>}

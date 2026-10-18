@@ -84,6 +84,24 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     }
   }
 
+  async function createBranch(name: string) {
+    const api = getApi();
+    const repository = getRepository();
+    const trimmed = name.trim();
+    if (!api || !repository || !trimmed) return;
+    setBusy(true);
+    setError("");
+    try {
+      onTaskAccepted(await api.createRepositoryBranch(repository.repoId, trimmed));
+      close();
+      openTaskCenter();
+    } catch (reason) {
+      setError(errorMessage(reason, "Could not create this branch."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function reviewAfterShelf(target: string, nextPreflight: BranchSwitchPreflightResponse, message: string) {
     setTargetName(target);
     setPreflight(nextPreflight);
@@ -113,6 +131,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     chooseAnother,
     inspect,
     continueSwitch,
+    createBranch,
     reviewAfterShelf,
     runWhileBusy,
   };

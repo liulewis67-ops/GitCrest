@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { BranchSnapshotResponse, RepositoryResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useBranchSwitcher } from "../model/use-branch-switcher";
@@ -41,9 +42,20 @@ export function BranchSwitcherDialog({
     branchSwitcher.open,
   );
 
+  const [filter, setFilter] = useState("");
+  useEffect(() => {
+    if (branchSwitcher.open) setFilter("");
+  }, [branchSwitcher.open]);
+
   if (!branchSwitcher.open || !repository) return null;
 
-  const localBranches = branches.filter((branch) => branch.kind === "local" && !branch.isCurrent);
+  const query = filter.trim().toLowerCase();
+  const allLocalBranches = branches
+    .filter((branch) => branch.kind === "local" && !branch.isCurrent)
+    .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
+  const localBranches = query
+    ? allLocalBranches.filter((branch) => branch.name.toLowerCase().includes(query))
+    : allLocalBranches;
   const hasRemoteBranches = branches.some((branch) => branch.kind === "remote");
   const currentBranch = repository.detached
     ? `Detached · ${repository.head?.slice(0, 7)}`
@@ -116,9 +128,35 @@ export function BranchSwitcherDialog({
         ) : (
           <div className="branchSwitchChoices">
             <h3>Local branches</h3>
+            {(allLocalBranches.length > 0 || hasBranchSnapshot) && (
+              <input
+                className="branchFilterInput"
+                type="search"
+                autoFocus
+                placeholder="Filter, or type a new branch name"
+                aria-label="Filter local branches"
+                value={filter}
+                disabled={branchSwitcher.busy}
+                onChange={(event) => setFilter(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && localBranches[0] && !branchSwitcher.busy) {
+                    event.preventDefault();
+                    void branchSwitcher.inspect(localBranches[0].name);
+                  }
+                }}
+              />
+            )}
             {!hasBranchSnapshot && branchesLoading && <p role="status">Loading branches…</p>}
             {branchError && <p className="dialogError" role="alert">{branchError}</p>}
-            {hasBranchSnapshot && localBranches.length === 0 && <p className="navEmpty">There are no other local branches.</p>}
+            {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
+            {query && !branches.some((branch) => branch.kind === "local" && branch.name === filter.trim()) && (
+              <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected} onClick={() => void branchSwitcher.createBranch(filter)}>
+                <span className="branchItemGlyph" aria-hidden="true">+</span>
+                <span>Create branch “{filter.trim()}” from current HEAD</span>
+              </button>
+            )}
+            {hasBranchSnapshot && allLocalBranches.length === 0 && <p className="navEmpty">There are no other local branches.</p>}
+            {allLocalBranches.length > 0 && localBranches.length === 0 && <p className="navEmpty">No branch matches “{filter.trim()}”.</p>}
             {localBranches.map((branch) => (
               <button className="branchChoice" type="button" key={branch.fullName} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true">⑂</span>
