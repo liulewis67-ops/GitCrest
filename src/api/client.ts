@@ -185,6 +185,12 @@ export class GitCrestApiClient {
     });
   }
 
+  pruneRepositoryWorktrees(repoId: RepoId): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/prune`, true, {
+      method: "POST",
+    });
+  }
+
   removeRepositoryWorktree(repoId: RepoId, path: string, force = false): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/remove`, true, {
       method: "POST",

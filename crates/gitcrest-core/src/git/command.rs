@@ -871,6 +871,10 @@ impl GitCommandService {
                 ],
                 "Create worktree",
             ),
+            BranchCommand::WorktreePrune => (
+                vec!["worktree".into(), "prune".into()],
+                "Clean up missing worktrees",
+            ),
             BranchCommand::WorktreeRemove { path, force } => {
                 let mut arguments = vec!["worktree".into(), "remove".into()];
                 if force {

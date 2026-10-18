@@ -19,6 +19,8 @@ pub(crate) enum BranchCommand {
         remote_ref: String,
         path: String,
     },
+    /// Forgets worktrees whose folders no longer exist (`git worktree prune`).
+    WorktreePrune,
     WorktreeRemove {
         path: String,
         force: bool,

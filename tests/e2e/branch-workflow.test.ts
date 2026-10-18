@@ -335,3 +335,36 @@ it("opens a remote branch in a new worktree with a local tracking branch", async
     await rm(appDataPath, { recursive: true, force: true });
   }
 }, 120_000);
+
+it("cleans up worktrees whose folders were deleted outside GitCrest", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-prune-e2e-app-data-"));
+  const worktreeParent = await mkdtemp(resolve(tmpdir(), "gitcrest-prune-e2e-wt-"));
+  try {
+    await writeFile(resolve(fixture.path, "base.txt"), "base\n");
+    await git(fixture.path, "add", "base.txt");
+    await git(fixture.path, "commit", "--quiet", "-m", "base");
+    const folder = resolve(worktreeParent, "doomed");
+    await git(fixture.path, "worktree", "add", "-b", "doomed-branch", folder);
+    await rm(folder, { recursive: true, force: true });
+
+    app = await electron.launch({
+      args: [".", "--disable-gpu"],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await openRepository(window, fixture.path);
+
+    await window.getByRole("button", { name: "Missing" }).waitFor({ timeout: 15_000 });
+    await window.getByRole("button", { name: "Clean up missing" }).click();
+    await expect.poll(() => git(fixture.path, "worktree", "list", "--porcelain").then((text) => text.split("\n").filter((line) => line.startsWith("worktree ")).length), { timeout: 15_000 }).toBe(1);
+  } finally {
+    await app?.close();
+    app = undefined;
+    await fixture.cleanup();
+    await rm(appDataPath, { recursive: true, force: true });
+    await rm(worktreeParent, { recursive: true, force: true });
+  }
+}, 120_000);

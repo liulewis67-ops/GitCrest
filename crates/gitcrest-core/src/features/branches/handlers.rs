@@ -255,6 +255,37 @@ pub(super) async fn add_repository_worktree(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
+/// Forgets worktrees whose folders were deleted outside Git, so their names and paths can be reused.
+pub(super) async fn prune_repository_worktrees(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let path = target.repository_path;
+    let command = state.git_commands.clone();
+    let task = state
+        .tasks
+        .submit(
+            Some(repo_id),
+            None,
+            target.resource_key,
+            "worktreePrune",
+            move |context| async move {
+                command
+                    .execute_branch(&path, BranchCommand::WorktreePrune, context)
+                    .await
+                    .map(|()| None)
+            },
+        )
+        .await
+        .map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
 pub(super) async fn remove_repository_worktree(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,

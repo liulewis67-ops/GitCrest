@@ -5806,6 +5806,51 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
             .all(|branch| branch.get("worktreePath").is_none()),
         "the current branch never reports another worktree"
     );
+    // A worktree folder deleted outside Git is reported as prunable and can be cleaned up.
+    std::fs::remove_dir_all(&reused_dir).unwrap();
+    let worktree_count = |value: serde_json::Value| value["worktrees"].as_array().unwrap().len();
+    let stale = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/worktrees"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(stale.into_body(), usize::MAX).await.unwrap();
+    let stale: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert!(stale["worktrees"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|entry| entry["prunable"] == true));
+    assert_eq!(worktree_count(stale), 2);
+    let prune = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/worktrees/prune"),
+            "{}",
+            WRITE_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(prune.status(), StatusCode::ACCEPTED);
+    let body = to_bytes(prune.into_body(), usize::MAX).await.unwrap();
+    let prune: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let completed = wait_for_task(&app, prune["taskId"].as_str().unwrap()).await;
+    assert_eq!(completed["status"], "succeeded");
+    let cleaned = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/worktrees"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(cleaned.into_body(), usize::MAX).await.unwrap();
+    let cleaned: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(worktree_count(cleaned), 1);
     for (uri, body, expected) in [
         (
             "",

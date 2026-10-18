@@ -19,6 +19,15 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
   const [error, setError] = useState("");
   const [force, setForce] = useState(false);
 
+  async function prune() {
+    setError("");
+    try {
+      onRemoveStarted(await api.pruneRepositoryWorktrees(repoId));
+    } catch (reason) {
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : "Could not clean up the worktree list.");
+    }
+  }
+
   async function remove(path: string, force: boolean) {
     setError("");
     try {
@@ -44,7 +53,7 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onRemo
   return <>
     <div className="navDivider" />
     <div className="navGroup worktreesNavigation">
-      <div className="navGroupTitle"><span>Worktrees</span><span className="countBadge">{snapshot.worktrees.length}</span></div>
+      <div className="navGroupTitle"><span>Worktrees</span><span className="countBadge">{snapshot.worktrees.length}</span>{snapshot.worktrees.some((worktree) => worktree.prunable) && <button className="textButton" type="button" disabled={disabled} title="Forget worktrees whose folders were deleted outside GitCrest" onClick={() => void prune()}>Clean up missing</button>}</div>
       {error && <p className="dialogError" role="alert">{error}</p>}
       <ul className="branchList" aria-label="Repository worktrees">
         {snapshot.worktrees.map((worktree) => (

@@ -1001,6 +1001,32 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+  /api/v1/repositories/{repoId}/worktrees/prune:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: pruneRepositoryWorktrees
+      summary: Forget worktrees whose folders no longer exist
+      responses:
+        "202":
+          description: Clean-up task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TaskSnapshot" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Repository is unavailable.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/worktrees/remove:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
