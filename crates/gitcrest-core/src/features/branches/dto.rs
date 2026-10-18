@@ -105,4 +105,7 @@ pub(super) struct RemoveWorktreeRequest {
 pub(super) struct AddWorktreeRequest {
     pub(super) branch: String,
     pub(super) path: String,
+    /// `branch` names a remote-tracking branch such as `origin/feature`; a local tracking branch is created.
+    #[serde(default)]
+    pub(super) from_remote: bool,
 }

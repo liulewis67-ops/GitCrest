@@ -277,3 +277,54 @@ it("can force a merge commit instead of a fast-forward from the merge review", a
     await rm(appDataPath, { recursive: true, force: true });
   }
 }, 120_000);
+
+it("opens a remote branch in a new worktree with a local tracking branch", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "gitcrest-remote-wt-e2e-"));
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-remote-wt-e2e-app-data-"));
+  try {
+    const remote = resolve(root, "remote.git");
+    const repo = resolve(root, "repo");
+    const seed = resolve(root, "seed");
+    await execFileAsync("git", ["init", "--bare", "--quiet", "--initial-branch=main", remote]);
+    await execFileAsync("git", ["clone", "--quiet", remote, seed]);
+    await git(seed, "config", "user.name", "T");
+    await git(seed, "config", "user.email", "t@e.test");
+    await writeFile(resolve(seed, "a.txt"), "a\n");
+    await git(seed, "add", "a.txt");
+    await git(seed, "commit", "--quiet", "-m", "base");
+    await git(seed, "push", "--quiet", "origin", "main");
+    await git(seed, "switch", "--quiet", "--create", "feature/remote-work");
+    await writeFile(resolve(seed, "b.txt"), "b\n");
+    await git(seed, "add", "b.txt");
+    await git(seed, "commit", "--quiet", "-m", "remote work");
+    await git(seed, "push", "--quiet", "origin", "feature/remote-work");
+    await execFileAsync("git", ["clone", "--quiet", remote, repo]);
+
+    app = await electron.launch({
+      args: [".", "--disable-gpu"],
+      env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
+    });
+    const window = await app.firstWindow();
+    await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
+    await window.getByText("Core connected").waitFor({ timeout: 15_000 });
+    await openRepository(window, repo);
+
+    const row = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("origin/feature/remote-work", { exact: true }) });
+    const open = row.getByRole("button", { name: "Open origin/feature/remote-work in a new worktree" });
+    await expect.poll(async () => { await row.hover(); return open.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    await open.click();
+    const dialog = window.getByRole("dialog", { name: "Open branch in a new worktree" });
+    const folder = resolve(root, "remote-worktree");
+    await dialog.getByRole("textbox", { name: "Worktree folder" }).fill(folder);
+    await dialog.getByRole("button", { name: "Create worktree" }).click();
+
+    await expect.poll(() => git(folder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 20_000 }).toBe("feature/remote-work");
+    expect(await git(folder, "rev-parse", "--abbrev-ref", "@{upstream}")).toBe("origin/feature/remote-work");
+    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("remote-worktree");
+  } finally {
+    await app?.close();
+    app = undefined;
+    await rm(root, { recursive: true, force: true });
+    await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 120_000);

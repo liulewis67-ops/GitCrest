@@ -13,6 +13,12 @@ pub(crate) enum BranchCommand {
         branch: String,
         path: String,
     },
+    /// Creates a local branch that tracks `remote_ref` (for example `origin/feature`) in a new worktree.
+    WorktreeAddTracking {
+        local_branch: String,
+        remote_ref: String,
+        path: String,
+    },
     WorktreeRemove {
         path: String,
         force: bool,

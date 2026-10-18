@@ -2091,6 +2091,8 @@ export interface components {
             branch: string;
             /** @description Absolute path to a new or empty folder. */
             path: string;
+            /** @description branch is a remote-tracking branch such as origin/feature; a local tracking branch is created in the worktree. Defaults to false. */
+            fromRemote?: boolean;
         };
         RemoveWorktreeRequest: {
             path: string;

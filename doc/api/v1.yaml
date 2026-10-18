@@ -4382,6 +4382,7 @@ components:
       properties:
         branch: { type: string, minLength: 1, maxLength: 255 }
         path: { type: string, minLength: 1, maxLength: 4096, description: Absolute path to a new or empty folder. }
+        fromRemote: { type: boolean, description: "branch is a remote-tracking branch such as origin/feature; a local tracking branch is created in the worktree. Defaults to false." }
     RemoveWorktreeRequest:
       type: object
       additionalProperties: false

@@ -854,6 +854,23 @@ impl GitCommandService {
                 ],
                 "Create worktree",
             ),
+            BranchCommand::WorktreeAddTracking {
+                local_branch,
+                remote_ref,
+                path,
+            } => (
+                vec![
+                    "worktree".into(),
+                    "add".into(),
+                    "--track".into(),
+                    "-b".into(),
+                    local_branch.into(),
+                    "--".into(),
+                    path.into(),
+                    remote_ref.into(),
+                ],
+                "Create worktree",
+            ),
             BranchCommand::WorktreeRemove { path, force } => {
                 let mut arguments = vec!["worktree".into(), "remove".into()];
                 if force {

@@ -147,37 +147,90 @@ pub(super) async fn add_repository_worktree(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
-    branches::require_local_branch_with_git(
-        &target.repository_path,
-        &request.branch,
-        state.branch_git.as_ref(),
-    )
-    .await
-    .map_err(ApiError::from_branch_error)?;
-    let entries = state
-        .git_commands
-        .list_worktrees(&target.repository_path)
-        .await
-        .map_err(|_| {
-            ApiError::new(
-                StatusCode::INTERNAL_SERVER_ERROR,
+    let command = if request.from_remote {
+        let Some((_, local_branch)) = request.branch.split_once('/') else {
+            return Err(ApiError::new(
+                StatusCode::BAD_REQUEST,
                 ApiErrorCode::RequestInvalid,
-                "Could not list the worktrees of this repository.",
-            )
-        })?;
-    if entries
-        .iter()
-        .any(|entry| entry.branch.as_deref() == Some(request.branch.as_str()))
-    {
-        return Err(ApiError::new(
-            StatusCode::CONFLICT,
-            ApiErrorCode::RequestInvalid,
-            "That branch is already checked out in another worktree.",
-        ));
-    }
+                "A remote branch looks like origin/feature.",
+            ));
+        };
+        let references = state
+            .branch_git
+            .list_references(&target.repository_path)
+            .await
+            .map_err(|_| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ApiErrorCode::RequestInvalid,
+                    "Could not read the branches of this repository.",
+                )
+            })?;
+        if !references
+            .iter()
+            .any(|reference| reference.full_name == format!("refs/remotes/{}", request.branch))
+        {
+            return Err(ApiError::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RequestInvalid,
+                "That remote branch is not available. Fetch and try again.",
+            ));
+        }
+        branches::validate_branch_name_with_git(
+            &target.repository_path,
+            local_branch,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?;
+        branches::ensure_local_branch_name_available_with_git(
+            &target.repository_path,
+            local_branch,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?;
+        BranchCommand::WorktreeAddTracking {
+            local_branch: local_branch.to_owned(),
+            remote_ref: request.branch.clone(),
+            path: request.path.clone(),
+        }
+    } else {
+        branches::require_local_branch_with_git(
+            &target.repository_path,
+            &request.branch,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?;
+        let entries = state
+            .git_commands
+            .list_worktrees(&target.repository_path)
+            .await
+            .map_err(|_| {
+                ApiError::new(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    ApiErrorCode::RequestInvalid,
+                    "Could not list the worktrees of this repository.",
+                )
+            })?;
+        if entries
+            .iter()
+            .any(|entry| entry.branch.as_deref() == Some(request.branch.as_str()))
+        {
+            return Err(ApiError::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::RequestInvalid,
+                "That branch is already checked out in another worktree.",
+            ));
+        }
+        BranchCommand::WorktreeAdd {
+            branch: request.branch.clone(),
+            path: request.path.clone(),
+        }
+    };
     let path = target.repository_path;
-    let command = state.git_commands.clone();
-    let branch = request.branch;
+    let git_commands = state.git_commands.clone();
     let folder = request.path;
     let repositories = state.repositories.clone();
     let task = state
@@ -188,16 +241,7 @@ pub(super) async fn add_repository_worktree(
             target.resource_key,
             "worktreeCreate",
             move |context| async move {
-                command
-                    .execute_branch(
-                        &path,
-                        BranchCommand::WorktreeAdd {
-                            branch,
-                            path: folder.clone(),
-                        },
-                        context,
-                    )
-                    .await?;
+                git_commands.execute_branch(&path, command, context).await?;
                 // Register the new worktree so the app can open it right away.
                 Ok(repositories
                     .open_path(&folder)

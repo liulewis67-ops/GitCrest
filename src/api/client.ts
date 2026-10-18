@@ -177,11 +177,11 @@ export class GitCrestApiClient {
     return this.request<WorktreeSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees`);
   }
 
-  addRepositoryWorktree(repoId: RepoId, branch: string, path: string): Promise<TaskSnapshotResponse> {
+  addRepositoryWorktree(repoId: RepoId, branch: string, path: string, fromRemote = false): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/add`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ branch, path } satisfies components["schemas"]["AddWorktreeRequest"]),
+      body: JSON.stringify({ branch, path, ...(fromRemote ? { fromRemote: true } : {}) } as components["schemas"]["AddWorktreeRequest"]),
     });
   }
 

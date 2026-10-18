@@ -18,7 +18,7 @@ it("suggests a sibling folder, lets the user browse, and creates the worktree fo
   await waitFor(() => expect(folder.value).toBe("D:/trees/app-feature-login"));
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
   await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "t1" }));
-  expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "feature/login", "D:/trees/app-feature-login");
+  expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "feature/login", "D:/trees/app-feature-login", false);
 });
 
 it("shows the engine's reason when the branch is already checked out elsewhere", async () => {
@@ -28,4 +28,16 @@ it("shows the engine's reason when the branch is already checked out elsewhere",
   render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="main" disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
   expect((await screen.findByRole("alert")).textContent).toContain("already checked out in another worktree");
+});
+
+it("creates a local tracking branch in the worktree when opening a remote branch", async () => {
+  const addRepositoryWorktree = vi.fn().mockResolvedValue({ taskId: "t3" });
+  const api = { addRepositoryWorktree } as unknown as GitCrestApiClient;
+  render(<NewWorktreeDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" branch="origin/feature/login" fromRemote disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+
+  expect(screen.getByText("REMOTE BRANCH")).toBeTruthy();
+  expect(screen.getByText(/A local branch named/).textContent).toContain("feature/login");
+  expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("C:/work/app-feature-login");
+  fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
+  await waitFor(() => expect(addRepositoryWorktree).toHaveBeenCalledWith("repo_x", "origin/feature/login", "C:/work/app-feature-login", true));
 });
