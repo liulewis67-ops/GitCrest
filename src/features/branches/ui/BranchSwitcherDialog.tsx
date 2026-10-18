@@ -46,10 +46,11 @@ export function BranchSwitcherDialog({
   );
 
   const [filter, setFilter] = useState("");
+  const [cursor, setCursor] = useState(0);
   const [worktreePath, setWorktreePath] = useState("");
   const [worktreeEdited, setWorktreeEdited] = useState(false);
   useEffect(() => {
-    if (branchSwitcher.open) { setFilter(""); setWorktreeEdited(false); }
+    if (branchSwitcher.open) { setFilter(""); setCursor(0); setWorktreeEdited(false); }
   }, [branchSwitcher.open]);
 
   const suggestedWorktree = suggestWorktreePath(repository?.path, filter.trim());
@@ -144,11 +145,18 @@ export function BranchSwitcherDialog({
                 aria-label="Filter local branches"
                 value={filter}
                 disabled={branchSwitcher.busy}
-                onChange={(event) => setFilter(event.target.value)}
+                onChange={(event) => { setFilter(event.target.value); setCursor(0); }}
                 onKeyDown={(event) => {
-                  if (event.key !== "Enter" || branchSwitcher.busy) return;
+                  if (branchSwitcher.busy) return;
+                  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && localBranches.length > 0) {
+                    event.preventDefault();
+                    setCursor((current) => (Math.min(current, localBranches.length - 1) + (event.key === "ArrowDown" ? 1 : -1) + localBranches.length) % localBranches.length);
+                    return;
+                  }
+                  if (event.key !== "Enter") return;
                   event.preventDefault();
-                  if (localBranches[0]) void branchSwitcher.inspect(localBranches[0].name);
+                  const highlighted = localBranches[Math.min(cursor, localBranches.length - 1)];
+                  if (highlighted) void branchSwitcher.inspect(highlighted.name);
                   else if (query && connected) void branchSwitcher.createBranch(filter, { checkout: true });
                 }}
               />
@@ -186,8 +194,8 @@ export function BranchSwitcherDialog({
             )}
             {hasBranchSnapshot && allLocalBranches.length === 0 && <p className="navEmpty">There are no other local branches.</p>}
             {allLocalBranches.length > 0 && localBranches.length === 0 && <p className="navEmpty">No branch matches “{filter.trim()}”.</p>}
-            {localBranches.map((branch) => (
-              <button className="branchChoice" type="button" key={branch.fullName} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
+            {localBranches.map((branch, position) => (
+              <button className={`branchChoice${position === Math.min(cursor, localBranches.length - 1) ? " active" : ""}`} type="button" key={branch.fullName} ref={(node) => { if (node && position === Math.min(cursor, localBranches.length - 1)) node.scrollIntoView?.({ block: "nearest" }); }} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true">⑂</span>
                 <span>{branch.name}</span>
                 <BranchSyncBadge branch={branch} />
