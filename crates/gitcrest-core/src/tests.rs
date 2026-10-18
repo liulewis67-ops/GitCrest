@@ -5591,6 +5591,51 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
         .unwrap()
         .iter()
         .any(|branch| branch["name"] == "feature/api" && branch["kind"] == "local"));
+    let worktree_parent = tempfile::tempdir().unwrap();
+    let worktree_dir = worktree_parent.path().join("feature-wt");
+    let relative_worktree = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/repositories/{repo_id}/branches"))
+                .header("X-GitCrest-API-Version", API_VERSION)
+                .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "name": "feature/wt-bad", "worktreePath": "relative/dir" })
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(relative_worktree.status(), StatusCode::BAD_REQUEST);
+    let worktree_creation = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("/api/v1/repositories/{repo_id}/branches"))
+                .header("X-GitCrest-API-Version", API_VERSION)
+                .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                .header(CONTENT_TYPE, "application/json")
+                .body(Body::from(
+                    serde_json::json!({ "name": "feature/wt", "worktreePath": worktree_dir })
+                        .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(worktree_creation.status(), StatusCode::ACCEPTED);
+    let body = to_bytes(worktree_creation.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let worktree_creation: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let completed = wait_for_task(&app, worktree_creation["taskId"].as_str().unwrap()).await;
+    assert_eq!(completed["status"], "succeeded");
+    assert!(worktree_dir.join(".git").exists());
     let favorite = app
         .clone()
         .oneshot(

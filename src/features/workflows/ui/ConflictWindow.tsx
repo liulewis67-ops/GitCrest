@@ -120,9 +120,9 @@ export function ConflictWindow() {
     return preview;
   };
 
-  const saveDraft = async () => {
+  const saveDraft = async (): Promise<WorkflowConflictFileResponse | undefined> => {
     const currentFile = file.data;
-    if (!api || !currentFile || !currentFile.isText || action.busy) return;
+    if (!api || !currentFile || !currentFile.isText || action.busy) return undefined;
     const controller = new AbortController();
     actionControllerRef.current = controller;
     setAction({ busy: "save", message: "Saving this file to the working tree…" });
@@ -146,12 +146,12 @@ export function ConflictWindow() {
             setHasUnsavedChanges(false);
             setAction({ message: "Saved to the working tree. You can close and reopen this window to continue later." });
           }
-          return;
+          return refreshed;
         }
       }
       throw new Error("The save task has not completed yet. Refresh this file before resolving it.");
     } catch (reason) {
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) return undefined;
       setAction({ error: reason instanceof Error ? reason.message : "Could not save the conflict result." });
       try { await refreshSession(controller.signal); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
     } finally {
@@ -159,9 +159,9 @@ export function ConflictWindow() {
     }
   };
 
-  const markResolved = async () => {
-    const currentFile = file.data;
-    if (!api || !currentFile || !currentFile.isText || hasUnsavedChanges || action.busy) return;
+  const markResolved = async (fileOverride?: WorkflowConflictFileResponse) => {
+    const currentFile = fileOverride ?? file.data;
+    if (!api || !currentFile || !currentFile.isText || (hasUnsavedChanges && !fileOverride) || action.busy) return;
     const controller = new AbortController();
     actionControllerRef.current = controller;
     setAction({ busy: "resolve", message: "Staging this file as resolved…" });
@@ -374,6 +374,7 @@ export function ConflictWindow() {
                 <div className="conflictResultActions" role="group" aria-label="Conflict result actions">
                   <button type="button" onClick={() => void saveDraft()} disabled={Boolean(action.busy) || !hasUnsavedChanges}>{action.busy === "save" ? "Saving…" : "Save result"}</button>
                   <button type="button" onClick={() => void markResolved()} disabled={Boolean(action.busy) || hasUnsavedChanges}>{action.busy === "resolve" ? "Marking…" : "Mark resolved"}</button>
+                  {hasUnsavedChanges && conflictBlocks.length === 0 && <button type="button" onClick={() => void saveDraft().then((saved) => saved && markResolved(saved))} disabled={Boolean(action.busy)}>Save &amp; mark resolved</button>}
                 </div>
                 {hasUnsavedChanges ? <span>Unsaved edits · Ctrl+S saves</span> : conflictBlocks.length > 0 && <span role="status">{conflictBlocks.length} conflict {conflictBlocks.length === 1 ? "marker" : "markers"} still in the result</span>}
               </footer>
