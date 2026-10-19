@@ -1,0 +1,42 @@
+{
+  // Start the app with `pnpm debug` (or the core alone with `pnpm debug:core`), then attach here.
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Attach: Electron main",
+      "type": "node",
+      "request": "attach",
+      "port": 9229,
+      "restart": true,
+      "sourceMaps": true,
+      "outFiles": ["${workspaceFolder}/out/main/**/*.js", "${workspaceFolder}/out/preload/**/*.js"],
+      "skipFiles": ["<node_internals>/**"]
+    },
+    {
+      "name": "Attach: Renderer",
+      "type": "chrome",
+      "request": "attach",
+      "port": 9222,
+      "webRoot": "${workspaceFolder}",
+      "urlFilter": "http://localhost:5173/*"
+    },
+    {
+      "name": "Attach: gitcrest-core (Windows)",
+      "type": "cppvsdbg",
+      "request": "attach",
+      "processId": "${command:pickProcess}"
+    },
+    {
+      "name": "Attach: gitcrest-core (macOS/Linux, CodeLLDB)",
+      "type": "lldb",
+      "request": "attach",
+      "program": "${workspaceFolder}/crates/gitcrest-core/target/debug/gitcrest-core"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Attach: Electron main + renderer",
+      "configurations": ["Attach: Electron main", "Attach: Renderer"]
+    }
+  ]
+}

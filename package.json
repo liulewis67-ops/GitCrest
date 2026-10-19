@@ -6,6 +6,8 @@
   "main": "out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "debug": "node scripts/debug.mjs",
+    "debug:core": "node scripts/debug.mjs --core-only",
     "frontend:dev": "vite",
     "frontend:boundaries": "node scripts/check-frontend-import-boundaries.mjs",
     "build": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json && electron-vite build",
