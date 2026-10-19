@@ -21,7 +21,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "seed"]);
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();

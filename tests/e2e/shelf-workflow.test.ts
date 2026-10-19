@@ -32,7 +32,7 @@ describe("shelf workflow E2E", () => {
       await writeFile(sourcePath, changed);
 
       app = await electron.launch({
-        args: [".", "--disable-gpu"],
+        args: [".", "--lang=en-US", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();

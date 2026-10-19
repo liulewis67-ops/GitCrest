@@ -33,7 +33,7 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
     await git(fixture.path, "commit", "--quiet", "-am", "main change");
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -101,7 +101,7 @@ it("resolves a binary conflict by taking one whole version", async () => {
     await git(fixture.path, "commit", "--quiet", "-am", "main binary");
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -163,7 +163,7 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     await git(fixture.path, "rev-parse", "-q", "--verify", "MERGE_HEAD");
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();

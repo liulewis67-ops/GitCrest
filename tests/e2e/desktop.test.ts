@@ -28,7 +28,7 @@ describe("desktop startup E2E", () => {
       expect(fixture.path).toContain("gitcrest-e2e-");
 
       app = await electron.launch({
-        args: [".", "--disable-gpu"],
+        args: [".", "--lang=en-US", "--disable-gpu"],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();

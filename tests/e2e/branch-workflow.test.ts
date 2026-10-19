@@ -60,7 +60,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await git(fixture.path, "switch", "--quiet", main);
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -179,7 +179,7 @@ it("refuses to remove a dirty worktree until changes are explicitly discarded, a
     await writeFile(resolve(dirty, "scratch.txt"), "uncommitted\n");
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -224,7 +224,7 @@ it("creates a branch at an older commit from the commit details", async () => {
     const secondOid = await git(fixture.path, "rev-parse", "HEAD");
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -279,7 +279,7 @@ it("can force a merge commit instead of a fast-forward from the merge review", a
     await git(fixture.path, "switch", "--quiet", main);
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -326,7 +326,7 @@ it("opens a remote branch in a new worktree with a local tracking branch", async
     await execFileAsync("git", ["clone", "--quiet", remote, repo]);
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();
@@ -367,7 +367,7 @@ it("cleans up worktrees whose folders were deleted outside GitCrest", async () =
     await rm(folder, { recursive: true, force: true });
 
     app = await electron.launch({
-      args: [".", "--disable-gpu"],
+      args: [".", "--lang=en-US", "--disable-gpu"],
       env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
     });
     const window = await app.firstWindow();

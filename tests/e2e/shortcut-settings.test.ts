@@ -24,7 +24,7 @@ describe("shortcut settings E2E", () => {
       await writeFile(sourcePath, "export const shortcut = 'changed';\n");
 
       app = await electron.launch({
-        args: [".", "--user-data-dir", resolve(appDataPath, "profile")],
+        args: [".", "--lang=en-US", "--user-data-dir", resolve(appDataPath, "profile")],
         env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "gitcrest.sqlite") },
       });
       const window = await app.firstWindow();
