@@ -99,7 +99,7 @@ button:disabled { cursor: not-allowed; }
 }
 
 .titlebar button, .titlebar nav, .titlebar .connectionBadge { -webkit-app-region: no-drag; }
-.repositoryTabs { display: flex; align-self: stretch; align-items: center; gap: 3px; min-width: 0; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
+.repositoryTabs { display: flex; align-self: stretch; align-items: center; gap: 3px; min-width: 0; margin-left: 18px; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
 .repositoryTabs::-webkit-scrollbar { display: none; }
 .repositoryTab { display: flex; align-items: center; min-width: 0; max-width: 150px; height: 28px; border: 1px solid transparent; border-radius: 5px; background: transparent; }
 .repositoryTab.active { border-color: var(--line); background: var(--surface-raised); }
@@ -107,15 +107,20 @@ button:disabled { cursor: not-allowed; }
 .repositoryTab.active > button:first-child { color: var(--text); }
 .repositoryTab .closeRepositoryTab { width: 21px; height: 22px; line-height: 1; margin-right: 2px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .repositoryTab .closeRepositoryTab:hover { background: var(--line); color: var(--text); }
-.brandButton, .pageTab, .quietButton, .textButton, .panelMenu, .modeButton, .actionRow { border: 0; }
+.newRepositoryTab { flex: none; width: 28px; height: 28px; margin-left: 3px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-muted); font-size: 18px; line-height: 1; cursor: pointer; }
+.newRepositoryTab:hover, .newRepositoryTab[aria-expanded="true"] { border-color: var(--line); background: var(--surface-raised); color: var(--text); }
+.newRepositoryTabMenu { position: fixed; z-index: 50; display: grid; gap: 2px; padding: 4px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-raised); box-shadow: var(--shadow); -webkit-app-region: no-drag; }
+.newRepositoryTabMenu button { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.newRepositoryTabMenu button:hover:not(:disabled), .newRepositoryTabMenu button:focus-visible { background: var(--accent-soft); outline: none; }
+.newRepositoryTabMenu button:disabled { color: var(--text-muted); cursor: not-allowed; }
+.newRepositoryTabMenuText { display: grid; gap: 2px; min-width: 0; }
+.newRepositoryTabMenuText strong { font-size: var(--type-sm); font-weight: 600; }
+.newRepositoryTabMenuText span { color: var(--text-muted); font-size: var(--type-xs); }
+.newRepositoryTabMenu kbd { flex: none; padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text-muted); font-family: inherit; font-size: var(--type-xs); }
+.brandButton, .quietButton, .textButton, .panelMenu, .modeButton, .actionRow { border: 0; }
 .brandButton { display: inline-flex; align-items: center; gap: 8px; padding: 0; background: transparent; font-weight: 650; letter-spacing: -.025em; cursor: pointer; }
-.brandMark, .crumbMark { display: block; flex: none; width: 22px; height: 22px; }
+.brandMark { display: block; flex: none; width: 22px; height: 22px; }
 .brandName { font-size: var(--type-sm); }
-.pageTabs { display: flex; align-self: stretch; align-items: stretch; gap: 3px; margin-left: 18px; }
-.pageTab { position: relative; padding: 0 11px; background: transparent; color: var(--text-muted); font-size: var(--type-sm); cursor: pointer; }
-.pageTab:hover { color: var(--text); }
-.pageTab.active { color: var(--text); }
-.pageTab.active::after { position: absolute; right: 10px; bottom: -1px; left: 10px; height: 2px; background: var(--accent); content: ""; }
 .titlebarSpacer, .footerSpacer { flex: 1; }
 .quietButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 30px; padding: 0 9px; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
 .quietButton:hover:not(:disabled) { background: var(--surface-raised); color: var(--text); }
@@ -154,7 +159,7 @@ button:disabled { cursor: not-allowed; }
 .workspacePage { display: grid; grid-template-rows: 40px minmax(0, 1fr) 6px var(--workbench-height) 25px; min-height: 0; }
 .workspaceToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .workspaceCrumb, .toolbarActions, .viewTitle { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.crumbMark { width: 16px; height: 16px; }
+.crumbRoot { color: var(--text); font-weight: 600; }
 .workspaceCrumb { color: var(--text-secondary); font-size: var(--type-sm); }
 .crumbSlash { color: var(--line-strong); }
 .mutedText { color: var(--text-muted); }
@@ -747,7 +752,7 @@ button:disabled { cursor: not-allowed; }
 
 @media (max-width: 900px) {
   .titlebar { gap: 9px; padding-inline: 10px; }
-  .pageTabs { margin-left: 5px; }
+  .repositoryTabs { margin-left: 5px; }
   .searchShortcut > span:nth-child(2), .connectionBadge > span:last-child { display: none; }
   .connectionBadge { min-width: 10px; }
   .workArea { grid-template-columns: minmax(0, 1fr); }
@@ -759,8 +764,7 @@ button:disabled { cursor: not-allowed; }
 @media (max-width: 560px) {
   .titlebar { gap: 7px; }
   .brandName { display: none; }
-  .pageTabs { margin-left: 0; }
-  .pageTab { padding-inline: 7px; }
+  .repositoryTabs { margin-left: 0; }
   .searchShortcut { min-width: 32px; padding-inline: 6px; }
   .searchShortcut kbd { display: none; }
   .themeButton { min-width: 32px; padding-inline: 6px; }

@@ -706,7 +706,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("Core connected");
-    fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "commit-fixture" }));
     fireEvent.click((await screen.findAllByRole("button", { name: /.env.local/ }))[0]);
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select hunk 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Add to commit selection" }));
@@ -825,7 +825,7 @@ describe("App", () => {
     fireEvent.click(themeButton);
     await waitFor(() => expect(["light", "dark"]).toContain(document.documentElement.dataset.theme));
 
-    fireEvent.click(screen.getByRole("button", { name: "Workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview workspace" }));
     const separator = screen.getByRole("separator", { name: "Resize repository navigation" });
     const originalWidth = Number(separator.getAttribute("aria-valuenow"));
     fireEvent.keyDown(separator, { key: "ArrowRight" });

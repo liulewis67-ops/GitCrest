@@ -51,7 +51,6 @@ describe("shortcut settings E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Settings" }).click();
 
       const settings = window.getByRole("dialog", { name: "Settings" });

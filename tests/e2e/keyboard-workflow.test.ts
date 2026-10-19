@@ -71,7 +71,6 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
       return repositories.find((repository) => repository.path === repositoryPath)?.repoId;
     }, fixture.path);
     if (!repoId) throw new Error("The keyboard-opened repository was not registered.");
-    await enterButtonByTab(window, "Workspace");
 
     await writeFile(resolve(fixture.path, "keyboard.ts"), "export const keyboardWorkflow = true;\n");
     await enterButtonByTab(window, "Refresh working tree status");

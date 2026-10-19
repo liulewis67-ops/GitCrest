@@ -672,9 +672,13 @@ function App() {
         connected={connected}
         activeTaskCount={tasks.filter((task) => task.status === "queued" || task.status === "running").length}
         isMacPlatform={isMacPlatform}
+        openingRepository={repositoryOpening.opening}
         onPageChange={setPage}
         onSelectRepository={(repository) => void repositoryOpening.openRecent(repository)}
         onCloseRepository={closeRepositoryTab}
+        onOpenLocalRepository={() => void repositoryOpening.chooseAndOpenLocal()}
+        onCloneRepository={() => cloneSubmission.openDialog()}
+        onInitializeRepository={() => void repositoryOpening.chooseAndInitializeLocal()}
         onOpenCommandPalette={() => setPaletteOpen(true)}
         onCycleTheme={nextTheme}
         onOpenTasks={() => setTasksOpen(true)}

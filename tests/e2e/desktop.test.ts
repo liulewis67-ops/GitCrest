@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
@@ -115,7 +115,6 @@ describe("desktop startup E2E", () => {
       await window.locator(".workspaceCrumb").waitFor();
       expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
 
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'hello';\n");
       await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'base';\n");
@@ -400,7 +399,7 @@ describe("desktop startup E2E", () => {
       if (process.env.GITCREST_CAPTURE_E2E === "1") {
         const evidencePath = resolve("doc/evidence/S0.4");
         await mkdir(evidencePath, { recursive: true });
-        await window.getByRole("button", { name: "Welcome", exact: true }).click();
+        await window.getByRole("button", { name: "Go to Welcome", exact: true }).click();
         await window.screenshot({ path: resolve(evidencePath, "welcome.png") });
         const themeButton = window.getByRole("button", { name: /Color theme:/ });
         for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -408,7 +407,7 @@ describe("desktop startup E2E", () => {
           await themeButton.click();
         }
         await window.screenshot({ path: resolve(evidencePath, "welcome-dark.png") });
-        await window.getByRole("button", { name: "Workspace", exact: true }).click();
+        await window.getByRole("tab", { name: basename(fixture.path), exact: true }).click();
         await window.screenshot({ path: resolve(evidencePath, "workspace-dark.png") });
         await themeButton.click();
         await window.screenshot({ path: resolve(evidencePath, "workspace-light.png") });

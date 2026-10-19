@@ -8,12 +8,11 @@ const coreZh = {
   "language.zh": "中文",
 
   "titlebar.goWelcome": "返回欢迎页",
-  "titlebar.welcome": "欢迎",
   "titlebar.workspace": "工作区",
-  "titlebar.primaryNav": "主导航",
   "titlebar.openRepositories": "已打开的仓库",
   "titlebar.closeTabLabel": "关闭 {name} 标签页",
   "titlebar.closeTab": "关闭标签页",
+  "titlebar.newTab": "打开、克隆或初始化仓库",
   "titlebar.searchCommands": "搜索命令",
   "titlebar.themeLabel": "颜色主题：{theme}。点击切换主题",
   "titlebar.themeTitle": "主题：{theme}",

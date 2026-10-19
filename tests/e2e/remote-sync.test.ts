@@ -67,7 +67,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Push", exact: true }).click();
 
       const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
@@ -149,7 +148,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -235,7 +233,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
 
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
@@ -311,7 +308,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -338,7 +334,6 @@ describe("remote sync E2E", () => {
       await tasksDialog.getByRole("button", { name: "Close tasks" }).click();
       await execFileAsync("git", ["clone", "--quiet", "--bare", sourceRemotePath, bareRemotePath]);
 
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
       await expect.poll(async () => await window.evaluate(async (previousTaskIds) => {
         const connection = await (globalThis.window as unknown as Window & {
@@ -414,7 +409,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -529,7 +523,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -632,7 +625,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
@@ -747,7 +739,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
       await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
@@ -848,7 +839,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Pull", exact: true }).click();
       const pullDialog = window.getByRole("dialog", { name: "Pull current branch" });
       await pullDialog.locator(".pushTarget small").filter({ hasText: "1 ahead · 1 behind" }).waitFor();
@@ -1109,7 +1099,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
       const fetchTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) });
       await fetchTask.waitFor({ state: "visible" });
@@ -1255,7 +1244,6 @@ describe("remote sync E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Push", exact: true }).click();
       const pushDialog = window.getByRole("dialog", { name: "Push current branch" });
       await pushDialog.getByText(`origin/${branch}`, { exact: true }).waitFor();

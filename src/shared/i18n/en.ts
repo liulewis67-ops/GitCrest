@@ -6,12 +6,11 @@ const coreEn = {
   "language.zh": "中文",
 
   "titlebar.goWelcome": "Go to Welcome",
-  "titlebar.welcome": "Welcome",
   "titlebar.workspace": "Workspace",
-  "titlebar.primaryNav": "Primary navigation",
   "titlebar.openRepositories": "Open repositories",
   "titlebar.closeTabLabel": "Close {name} tab",
   "titlebar.closeTab": "Close tab",
+  "titlebar.newTab": "Open, clone, or initialize a repository",
   "titlebar.searchCommands": "Search commands",
   "titlebar.themeLabel": "Color theme: {theme}. Activate to cycle theme",
   "titlebar.themeTitle": "Theme: {theme}",

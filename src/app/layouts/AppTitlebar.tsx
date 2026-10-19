@@ -3,6 +3,7 @@ import { ariaShortcut, displayShortcut, type ShortcutPreferences, type Theme } f
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 import { useI18n } from "../../shared/i18n";
 import { BrandMark } from "../../shared/ui/BrandMark";
+import { NewRepositoryTabMenu } from "./NewRepositoryTabMenu";
 
 export type AppPage = "welcome" | "workspace";
 
@@ -17,9 +18,13 @@ interface AppTitlebarProps {
   connected: boolean;
   activeTaskCount: number;
   isMacPlatform: boolean;
+  openingRepository: boolean;
   onPageChange: (page: AppPage) => void;
   onSelectRepository: (repository: RepositoryResponse) => void;
   onCloseRepository: (repoId: string) => void;
+  onOpenLocalRepository: () => void;
+  onCloneRepository: () => void;
+  onInitializeRepository: () => void;
   onOpenCommandPalette: () => void;
   onCycleTheme: () => void;
   onOpenTasks: () => void;
@@ -37,9 +42,13 @@ export function AppTitlebar({
   connected,
   activeTaskCount,
   isMacPlatform,
+  openingRepository,
   onPageChange,
   onSelectRepository,
   onCloseRepository,
+  onOpenLocalRepository,
+  onCloneRepository,
+  onInitializeRepository,
   onOpenCommandPalette,
   onCycleTheme,
   onOpenTasks,
@@ -52,23 +61,20 @@ export function AppTitlebar({
 
   return (
     <header className="titlebar">
-      <button className="brandButton" type="button" onClick={() => onPageChange("welcome")} aria-label={t("titlebar.goWelcome")}>
+      <button className="brandButton" type="button" onClick={() => onPageChange("welcome")} aria-label={t("titlebar.goWelcome")} title={t("titlebar.goWelcome")}>
         <BrandMark className="brandMark" />
         <span className="brandName">GitCrest</span>
       </button>
-      <nav className="pageTabs" aria-label={t("titlebar.primaryNav")}>
-        <button type="button" className={page === "welcome" ? "pageTab active" : "pageTab"} onClick={() => onPageChange("welcome")}>{t("titlebar.welcome")}</button>
-        <button type="button" className={page === "workspace" ? "pageTab active" : "pageTab"} onClick={() => onPageChange("workspace")}>{t("titlebar.workspace")}</button>
-      </nav>
       <div className="repositoryTabs" role="tablist" aria-label={t("titlebar.openRepositories")}>
         {openRepoIds.map((repoId) => {
           const repository = repositories.find((item) => item.repoId === repoId);
           if (!repository) return null;
-          const active = selectedRepository?.repoId === repoId;
+          const selected = selectedRepository?.repoId === repoId;
+          const active = selected && page === "workspace";
           const displayName = getRepositoryDisplayName(repository.path);
           return (
             <div className={active ? "repositoryTab active" : "repositoryTab"} key={repoId}>
-              <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (!active) onSelectRepository(repository); }}>
+              <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (selected) onPageChange("workspace"); else onSelectRepository(repository); }}>
                 {displayName}
               </button>
               <button type="button" className="closeRepositoryTab" aria-label={t("titlebar.closeTabLabel", { name: displayName })} title={t("titlebar.closeTab")} onClick={() => onCloseRepository(repoId)}>×</button>
@@ -76,6 +82,15 @@ export function AppTitlebar({
           );
         })}
       </div>
+      <NewRepositoryTabMenu
+        connected={connected}
+        openingRepository={openingRepository}
+        shortcuts={shortcuts}
+        isMacPlatform={isMacPlatform}
+        onOpenLocalRepository={onOpenLocalRepository}
+        onCloneRepository={onCloneRepository}
+        onInitializeRepository={onInitializeRepository}
+      />
       <div className="titlebarSpacer" />
       <button className="quietButton searchShortcut" type="button" onClick={onOpenCommandPalette} aria-keyshortcuts={ariaShortcut(shortcuts.commandPalette, isMacPlatform)}>
         <span aria-hidden="true">⌕</span><span>{t("titlebar.searchCommands")}</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>

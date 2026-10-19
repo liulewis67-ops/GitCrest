@@ -60,7 +60,6 @@ describe("shelf workflow E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
-      await window.getByRole("button", { name: "Workspace", exact: true }).click();
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
 
       await window.getByRole("button", { name: "Shelve selected changes" }).click();

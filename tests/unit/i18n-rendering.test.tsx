@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppTitlebar } from "../../src/app/layouts/AppTitlebar";
 import { WelcomePage } from "../../src/pages/welcome/WelcomePage";
 import { readShortcutPreferences } from "../../src/features/settings";
@@ -54,9 +54,13 @@ describe("i18n rendering", () => {
         connected
         activeTaskCount={3}
         isMacPlatform={false}
+        openingRepository={false}
         onPageChange={() => undefined}
         onSelectRepository={() => undefined}
         onCloseRepository={() => undefined}
+        onOpenLocalRepository={() => undefined}
+        onCloneRepository={() => undefined}
+        onInitializeRepository={() => undefined}
         onOpenCommandPalette={() => undefined}
         onCycleTheme={() => undefined}
         onOpenTasks={() => undefined}
@@ -65,5 +69,43 @@ describe("i18n rendering", () => {
     );
     expect(screen.getByRole("button", { name: "后台任务，3 个进行中" })).toBeTruthy();
     expect(screen.getByText("内核已连接")).toBeTruthy();
+  });
+
+  it("opens, clones, or initializes a repository from the tab bar's plus menu", () => {
+    const onOpenLocalRepository = vi.fn();
+    const onCloneRepository = vi.fn();
+    const onInitializeRepository = vi.fn();
+    render(
+      <AppTitlebar
+        page="workspace"
+        openRepoIds={[]}
+        repositories={[]}
+        shortcuts={defaultShortcutPreferences}
+        theme="dark"
+        status="Connected to local Rust core"
+        connected
+        activeTaskCount={0}
+        isMacPlatform={false}
+        openingRepository={false}
+        onPageChange={() => undefined}
+        onSelectRepository={() => undefined}
+        onCloseRepository={() => undefined}
+        onOpenLocalRepository={onOpenLocalRepository}
+        onCloneRepository={onCloneRepository}
+        onInitializeRepository={onInitializeRepository}
+        onOpenCommandPalette={() => undefined}
+        onCycleTheme={() => undefined}
+        onOpenTasks={() => undefined}
+        onOpenSettings={() => undefined}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Workspace" })).toBeNull();
+    const plus = screen.getByRole("button", { name: "Open, clone, or initialize a repository" });
+    for (const [label, handler] of [[/Open local repository/, onOpenLocalRepository], [/Clone a repository/, onCloneRepository], [/Initialize a repository/, onInitializeRepository]] as const) {
+      fireEvent.click(plus);
+      fireEvent.click(screen.getByRole("menuitem", { name: label }));
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole("menu")).toBeNull();
+    }
   });
 });
