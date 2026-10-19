@@ -2,6 +2,7 @@ import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences, type Theme } from "../../features/settings";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 import { useI18n } from "../../shared/i18n";
+import { BrandMark } from "../../shared/ui/BrandMark";
 
 export type AppPage = "welcome" | "workspace";
 
@@ -52,7 +53,7 @@ export function AppTitlebar({
   return (
     <header className="titlebar">
       <button className="brandButton" type="button" onClick={() => onPageChange("welcome")} aria-label={t("titlebar.goWelcome")}>
-        <span className="brandMark" aria-hidden="true">G</span>
+        <BrandMark className="brandMark" />
         <span className="brandName">GitCrest</span>
       </button>
       <nav className="pageTabs" aria-label={t("titlebar.primaryNav")}>

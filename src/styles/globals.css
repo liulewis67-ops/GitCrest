@@ -109,7 +109,7 @@ button:disabled { cursor: not-allowed; }
 .repositoryTab .closeRepositoryTab:hover { background: var(--line); color: var(--text); }
 .brandButton, .pageTab, .quietButton, .textButton, .panelMenu, .modeButton, .actionRow { border: 0; }
 .brandButton { display: inline-flex; align-items: center; gap: 8px; padding: 0; background: transparent; font-weight: 650; letter-spacing: -.025em; cursor: pointer; }
-.brandMark, .crumbMark { display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid var(--line-strong); border-radius: 6px; color: var(--accent-strong); font-size: var(--type-sm); font-weight: 800; }
+.brandMark, .crumbMark { display: block; flex: none; width: 22px; height: 22px; }
 .brandName { font-size: var(--type-sm); }
 .pageTabs { display: flex; align-self: stretch; align-items: stretch; gap: 3px; margin-left: 18px; }
 .pageTab { position: relative; padding: 0 11px; background: transparent; color: var(--text-muted); font-size: var(--type-sm); cursor: pointer; }
@@ -154,7 +154,7 @@ button:disabled { cursor: not-allowed; }
 .workspacePage { display: grid; grid-template-rows: 40px minmax(0, 1fr) 6px var(--workbench-height) 25px; min-height: 0; }
 .workspaceToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .workspaceCrumb, .toolbarActions, .viewTitle { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.crumbMark { width: 18px; height: 18px; border-radius: 5px; font-size: var(--type-sm); }
+.crumbMark { width: 16px; height: 16px; }
 .workspaceCrumb { color: var(--text-secondary); font-size: var(--type-sm); }
 .crumbSlash { color: var(--line-strong); }
 .mutedText { color: var(--text-muted); }

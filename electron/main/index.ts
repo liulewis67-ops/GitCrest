@@ -300,6 +300,8 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     height: secondaryWindow ? 780 : 820,
     minWidth: secondaryWindow ? 760 : 960,
     minHeight: secondaryWindow ? 520 : 640,
+    // Packaged builds take the icon from the executable; development runs would otherwise show Electron's.
+    ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), "build/icons/256x256.png") }),
     title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? "Resolve conflicts · GitCrest" : "GitCrest",
     show: false,
     // The main and conflict-resolution windows drop the native title bar; their in-app header acts as the drag

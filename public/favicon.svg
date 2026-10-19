@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="6 6 52 52">
+  <style>
+    .left { fill: #147ba5; }
+    .right { fill: #287b46; }
+    .commit { stroke: #1d2732; }
+    @media (prefers-color-scheme: dark) {
+      .left { fill: #6db6d8; }
+      .right { fill: #8fcba0; }
+      .commit { stroke: #e6eaf0; }
+    }
+  </style>
+  <clipPath id="circle-cut">
+    <circle cx="32" cy="32" r="26" />
+  </clipPath>
+  <g clip-path="url(#circle-cut)">
+    <g class="left" transform="translate(32 32) rotate(125)">
+      <rect x="8.5" y="-3.2" width="11.27" height="6.4" rx="1.9" />
+      <rect x="21.97" y="-3.2" width="8.03" height="6.4" rx="1.9" />
+    </g>
+    <g class="right" transform="translate(32 32) rotate(38)">
+      <rect x="8.5" y="-3.2" width="4.37" height="6.4" rx="1.9" />
+      <rect x="15.07" y="-3.2" width="14.93" height="6.4" rx="1.9" />
+    </g>
+    <path class="commit" d="M32 24.8V13" stroke-width="4.2" />
+  </g>
+  <circle class="commit" cx="32" cy="32" r="5.2" fill="none" stroke-width="4" />
+</svg>

@@ -1,4 +1,5 @@
 import { useI18n } from "../../shared/i18n";
+import { BrandMark } from "../../shared/ui/BrandMark";
 import type { ReactNode } from "react";
 import type { RepositoryResponse } from "../../api/client";
 import type { ShortcutPreferences } from "../../features/settings";
@@ -48,7 +49,7 @@ export function WorkspacePage({
   return (
     <section className="workspacePage" aria-label={t("page.aria")}>
       <div className="workspaceToolbar">
-        <div className="workspaceCrumb"><span className="crumbMark" aria-hidden="true">G</span><span>{t("titlebar.workspace")}</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || t("page.noRepository")}</span></div>
+        <div className="workspaceCrumb"><BrandMark className="crumbMark" /><span>{t("titlebar.workspace")}</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || t("page.noRepository")}</span></div>
         <div className="toolbarActions">
           <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => onChangeWorkspaceMode("graph")}>{t("page.graph")}</button>
           <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} aria-keyshortcuts={ariaShortcut(shortcuts.openDiff, isMacPlatform)} title={!selectedFilePath ? t("page.selectToOpenDiff") : t("page.openSelectedDiff", { shortcut: displayShortcut(shortcuts.openDiff, isMacPlatform) })} onClick={() => onChangeWorkspaceMode("diff")}>{t("page.diff")}</button>
