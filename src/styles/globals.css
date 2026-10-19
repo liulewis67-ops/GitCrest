@@ -690,7 +690,7 @@ button:disabled { cursor: not-allowed; }
 .taskLogs summary { cursor: pointer; }
 .taskLogs pre { max-height: 140px; overflow: auto; padding: 8px; background: var(--surface); color: var(--text-secondary); font: var(--code-size)/var(--code-leading) var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; user-select: text; }
 .taskCancelButton { margin-top: 4px; color: var(--amber); }
-.cloneDialog { width: min(520px, 100%); overflow: hidden; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); box-shadow: var(--shadow); }
+.cloneDialog { width: min(520px, 100%); max-height: calc(100vh - min(19vh, 150px) - 20px); overflow: hidden auto; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); box-shadow: var(--shadow); }
 .cloneFormBody { display: grid; gap: 10px; padding: 14px 16px; }
 .cloneField { display: grid; gap: 5px; color: var(--text-secondary); font-size: var(--type-sm); font-weight: 600; }
 .cloneField input { min-width: 0; height: 32px; padding: 0 9px; border: 1px solid var(--line-strong); border-radius: 4px; outline-color: var(--accent); background: var(--canvas); color: var(--text); font: var(--type-sm) var(--font-mono); }
@@ -738,7 +738,7 @@ button:disabled { cursor: not-allowed; }
 .cloneDestination strong { font-size: var(--type-sm); font-weight: 600; }
 .cloneDestination small { overflow: hidden; color: var(--text-muted); font: var(--type-xs) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .cloneDestination .secondaryButton { min-height: 27px; padding: 0 8px; font-size: var(--type-xs); }
-.cloneDialogActions { display: flex; justify-content: flex-end; gap: 7px; padding: 10px 16px; border-top: 1px solid var(--line); }
+.cloneDialogActions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: 7px; padding: 10px 16px; border-top: 1px solid var(--line); background: var(--surface-raised); }
 
 @media (max-width: 1120px) {
   .workArea { grid-template-columns: var(--sidebar-width) 6px minmax(0, 1fr); }
