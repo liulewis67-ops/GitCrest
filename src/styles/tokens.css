@@ -1,4 +1,14 @@
 :root {
+  /* Type scale. 11px is the floor; see doc/visual-optimization-plan.md §4. */
+  --type-2xs: 11px;
+  --type-xs: 12px;
+  --type-sm: 13px;
+  --type-md: 14px;
+  --type-lg: 16px;
+  --type-xl: 22px;
+  --code-size: 13px;
+  --code-leading: 20px;
+
   --canvas: #171b21;
   --surface: #1d232b;
   --surface-raised: #232a33;
@@ -16,7 +26,23 @@
   --amber: #d4b477;
   --warning: var(--amber);
   --danger: #d98787;
+  --danger-soft: rgb(217 135 135 / 12%);
   --shadow: 0 18px 56px rgb(0 0 0 / 32%);
+
+  /* Git state colors: only for expressing file and ref state. */
+  --git-modified: #81c8e8;
+  --git-added: #8fcba0;
+  --git-deleted: #d98787;
+  --git-renamed: #d4b477;
+  --git-untracked: #a4afbd;
+  --git-conflicted: #e3a06f;
+  --git-ignored: #7c8998;
+
+  --diff-add-bg: color-mix(in srgb, var(--git-added) 10%, transparent);
+  --diff-del-bg: color-mix(in srgb, var(--git-deleted) 10%, transparent);
+  --diff-add-token: color-mix(in srgb, var(--git-added) 30%, transparent);
+  --diff-del-token: color-mix(in srgb, var(--git-deleted) 30%, transparent);
+  --diff-conflict-bg: color-mix(in srgb, var(--git-conflicted) 18%, transparent);
 }
 
 :root[data-theme="light"] {
@@ -38,5 +64,14 @@
   --amber: #8a641f;
   --warning: var(--amber);
   --danger: #ab4d4d;
+  --danger-soft: rgb(171 77 77 / 9%);
   --shadow: 0 18px 56px rgb(35 48 60 / 18%);
+
+  --git-modified: #086d98;
+  --git-added: #287b46;
+  --git-deleted: #ab4d4d;
+  --git-renamed: #8a641f;
+  --git-untracked: #596675;
+  --git-conflicted: #a8561a;
+  --git-ignored: #788493;
 }
