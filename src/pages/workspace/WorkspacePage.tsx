@@ -48,7 +48,7 @@ export function WorkspacePage({
   return (
     <section className="workspacePage" aria-label={t("page.aria")}>
       <div className="workspaceToolbar">
-        <div className="workspaceCrumb"><span className="crumbRoot">{t("titlebar.workspace")}</span><span className="crumbSlash">/</span><span className="mutedText">{selectedRepository?.path || t("page.noRepository")}</span></div>
+        <div className="workspaceCrumb"><span className="crumbRoot">{t("titlebar.workspace")}</span><span className="crumbSlash">/</span><span className="mutedText" title={selectedRepository?.path}>{selectedRepository?.path || t("page.noRepository")}</span></div>
         <div className="toolbarActions">
           <button className={mode === "graph" ? "modeButton active" : "modeButton"} type="button" onClick={() => onChangeWorkspaceMode("graph")}>{t("page.graph")}</button>
           <button className={mode === "diff" ? "modeButton active" : "modeButton"} type="button" disabled={!selectedFilePath} aria-keyshortcuts={ariaShortcut(shortcuts.openDiff, isMacPlatform)} title={!selectedFilePath ? t("page.selectToOpenDiff") : t("page.openSelectedDiff", { shortcut: displayShortcut(shortcuts.openDiff, isMacPlatform) })} onClick={() => onChangeWorkspaceMode("diff")}>{t("page.diff")}</button>
@@ -62,7 +62,7 @@ export function WorkspacePage({
       </div>
 
       {children}
-      <footer className="statusbar"><span className="statusIcon" aria-hidden="true">●</span>{connected ? t("page.engineReady") : connecting ? t("page.engineConnecting") : t("page.engineUnavailable")}<span className="statusbarDivider" /><span>{version || "API v1"}</span><span className="footerSpacer" /><span>{t("page.planned")}</span></footer>
+      <footer className="statusbar"><span className="statusIcon" aria-hidden="true">●</span>{connected ? t("page.engineReady") : connecting ? t("page.engineConnecting") : t("page.engineUnavailable")}<span className="statusbarDivider" /><span>{version || "API v1"}</span></footer>
     </section>
   );
 }

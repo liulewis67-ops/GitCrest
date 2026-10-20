@@ -6939,3 +6939,24 @@ async fn cors_allows_only_the_configured_renderer_origin() {
         Some("http://localhost:5175")
     );
 }
+
+#[tokio::test]
+async fn cors_exposes_the_api_version_header_to_the_renderer() {
+    let response = test_app(Some("http://localhost:5174"))
+        .oneshot(
+            Request::builder()
+                .uri("/api/version")
+                .header("Origin", "http://localhost:5174")
+                .header(AUTHORIZATION, format!("Bearer {WRITE_TOKEN}"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let exposed = response.headers()["Access-Control-Expose-Headers"]
+        .to_str()
+        .unwrap()
+        .to_ascii_lowercase();
+    assert!(exposed.contains("x-gitcrest-api-version"));
+}

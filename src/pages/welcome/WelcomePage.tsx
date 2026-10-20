@@ -60,8 +60,8 @@ export function WelcomePage({
           <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
             <section className="recentSection min-w-0" aria-labelledby="recent-heading">
               <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">
-                <div><p className="m-0 mb-[5px] text-muted text-xs font-[750]">{t("welcome.library")}</p><h2 id="recent-heading" className="m-0 text-sm font-[620] tracking-[-.02em]">{t("welcome.recent")}</h2></div>
-                <span className="quietButton compact" aria-label={t("welcome.favoritesFirstLabel")}>{t("welcome.favoritesFirst")}</span>
+                <div><h2 id="recent-heading" className="m-0 text-md font-[620] tracking-[-.01em]">{t("welcome.recent")}</h2></div>
+                <span className="text-muted text-xs" title={t("welcome.favoritesFirstLabel")}>{t("welcome.favoritesFirst")}</span>
               </div>
               {repositories.length === 0 ? (
                 <div className="emptyRepositories grid justify-items-center px-[22px] pt-[42px] pb-[34px] text-center max-[900px]:px-[12px] max-[900px]:py-[25px]">
@@ -94,7 +94,7 @@ export function WelcomePage({
             </section>
             <aside className="quickActions min-w-0" aria-labelledby="quick-heading">
               <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">
-                <div><p className="m-0 mb-[5px] text-muted text-xs font-[750]">{t("welcome.getStarted")}</p><h2 id="quick-heading" className="m-0 text-sm font-[620] tracking-[-.02em]">{t("welcome.quickActions")}</h2></div>
+                <div><h2 id="quick-heading" className="m-0 text-md font-[620] tracking-[-.01em]">{t("welcome.quickActions")}</h2></div>
               </div>
                 <button className={QUICK_ACTION_CLASS_NAME} type="button" disabled={openingRepository} onClick={() => void onOpenLocalRepository()} aria-keyshortcuts={ariaShortcut(shortcuts.openRepository, isMacPlatform)} title={t("welcome.openLocalTitle", { shortcut: displayShortcut(shortcuts.openRepository, isMacPlatform) })}>
                 <span className={QUICK_ACTION_ICON_CLASS_NAME} aria-hidden="true">↗</span><span><strong className="block text-foreground-secondary text-sm font-[620]">{t("welcome.openLocal")}</strong><small className="mt-[3px] block text-muted text-xs">{t("welcome.openLocalHint")}</small></span><span className={QUICK_ACTION_ARROW_CLASS_NAME} aria-hidden="true">→</span>

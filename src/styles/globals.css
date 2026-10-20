@@ -74,6 +74,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 button:disabled { cursor: not-allowed; }
 
+/* Browser-drawn surfaces follow the theme too: selected text and scrollbars. */
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+:root { scrollbar-color: color-mix(in srgb, var(--text-muted) 45%, transparent) transparent; }
+
 .appShell {
   width: 100%;
   height: 100vh;
@@ -125,7 +129,7 @@ button:disabled { cursor: not-allowed; }
 .brandMark { display: block; flex: none; width: 22px; height: 22px; }
 .brandName { font-size: var(--type-sm); }
 .titlebarSpacer, .footerSpacer { flex: 1; }
-.quietButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 30px; padding: 0 9px; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
+.quietButton { display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 30px; padding: 0 9px; border-radius: 5px; background: transparent; color: var(--text-secondary); font-size: var(--type-sm); white-space: nowrap; cursor: pointer; }
 .quietButton:hover:not(:disabled) { background: var(--surface-raised); color: var(--text); }
 .quietButton:disabled { color: var(--text-muted); opacity: .7; }
 .quietButton kbd, .paletteSearch kbd, .commandItem kbd { padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text-muted); font-family: inherit; font-size: var(--type-xs); }
@@ -144,7 +148,7 @@ button:disabled { cursor: not-allowed; }
     var(--canvas);
 }
 .sectionEyebrow { margin: 0 0 10px; color: var(--text-muted); font-size: var(--type-xs); font-weight: 750; }
-.primaryButton, .secondaryButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-raised); color: var(--text); font-size: var(--type-sm); font-weight: 600; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, transform .12s ease; }
+.primaryButton, .secondaryButton { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 34px; padding: 0 12px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-raised); color: var(--text); font-size: var(--type-sm); font-weight: 600; white-space: nowrap; cursor: pointer; transition: background-color .12s ease, border-color .12s ease, transform .12s ease; }
 .primaryButton { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .primaryButton:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
 .secondaryButton:hover:not(:disabled) { border-color: var(--line-strong); background: var(--surface-soft); }
@@ -157,17 +161,24 @@ button:disabled { cursor: not-allowed; }
 .compact { min-height: 26px; padding-inline: 7px; font-size: var(--type-sm); }
 .repositoryRowAction:focus-visible, .repositoryRowOpen:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 .actionRow:not(:disabled) { cursor: pointer; }
+/* One short hover response for the low-emphasis controls, so feedback eases in instead of snapping. */
+.quietButton, .modeButton, .textButton, .repositoryTab > button, .newRepositoryTab, .statusFileButton, .statusFileStageAction, .changeGroupActions button, .branchFavorite, .branchRemoteDelete, .branchAction, .commitGraphEntry, .commandItem, .iconTextButton, .dialogClose, .newRepositoryTabMenu button, .branchRowMenu button, .commitActionMenu button { transition: background-color .12s ease-out, border-color .12s ease-out, color .12s ease-out; }
 .footerDivider { width: 1px; height: 11px; background: var(--line-strong); }
 
 .workspacePage { display: grid; grid-template-rows: 40px minmax(0, 1fr) 6px var(--workbench-height) 25px; min-height: 0; }
 .workspaceToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 0 14px 0 18px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .workspaceCrumb, .toolbarActions, .viewTitle { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.workspaceCrumb > * { flex: none; white-space: nowrap; }
+/* The path gives way first, so toolbar labels never wrap at the minimum window width. */
+.workspaceCrumb { flex: 1 1 auto; }
+.workspaceCrumb > .mutedText { flex: 1 1 auto; width: 0; overflow: hidden; text-overflow: ellipsis; }
 .crumbRoot { color: var(--text); font-weight: 600; }
 .workspaceCrumb { color: var(--text-secondary); font-size: var(--type-sm); }
 .crumbSlash { color: var(--line-strong); }
 .mutedText { color: var(--text-muted); }
-.toolbarActions { height: 100%; }
-.modeButton { position: relative; align-self: stretch; padding: 0 10px; background: transparent; color: var(--text-muted); font-size: var(--type-sm); }
+.toolbarActions { flex: none; height: 100%; }
+.modeButton { position: relative; align-self: stretch; padding: 0 10px; background: transparent; color: var(--text-muted); font-size: var(--type-sm); white-space: nowrap; cursor: pointer; }
+.modeButton:hover:not(:disabled) { color: var(--text); }
 .modeButton.active { color: var(--text); }
 .modeButton.active::after { position: absolute; right: 8px; bottom: -1px; left: 8px; height: 2px; background: var(--accent); content: ""; }
 .modeButton:disabled { color: var(--text-muted); opacity: .5; }
@@ -182,7 +193,7 @@ button:disabled { cursor: not-allowed; }
 .panelMenu { padding: 0 5px; background: transparent; color: var(--text-muted); font-size: calc(15px * var(--font-scale)); }
 .navGroup { padding: 0 11px 13px; }
 .navGroupTitle { display: flex; align-items: center; justify-content: space-between; color: var(--text-secondary); font-size: var(--type-sm); font-weight: 620; }
-.countBadge { display: inline-grid; min-width: 18px; height: 18px; line-height: 1; place-items: center; padding: 0 4px; border: 1px solid var(--line); border-radius: 5px; color: var(--text-muted); font-size: var(--type-xs); font-weight: 550; }
+.countBadge { display: inline-grid; min-width: 18px; height: 18px; line-height: 1; place-items: center; padding: 0 4px; border: 1px solid var(--line); border-radius: 5px; color: var(--text-muted); font-size: var(--type-xs); font-weight: 550; font-variant-numeric: tabular-nums; }
 .navEmpty { display: block; margin-top: 8px; color: var(--text-muted); font-size: var(--type-xs); }
 .changeGroup { min-width: 0; margin-top: 11px; }
 .changeGroupTitle { display: flex; justify-content: space-between; padding: 0 1px 4px; color: var(--text-muted); font-size: var(--type-xs); font-weight: 700; text-transform: uppercase; }
@@ -268,6 +279,7 @@ button:disabled { cursor: not-allowed; }
 .commitGraphEntry { position: relative; display: flex; width: 100%; height: 100%; align-items: center; gap: 9px; padding-top: 0; padding-right: 12px; padding-bottom: 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent); background: transparent; color: var(--text); text-align: left; cursor: pointer; }
 .commitGraphEntry:hover { background: color-mix(in srgb, var(--surface-raised) 72%, transparent); }
 .commitGraphEntry.selected { background: var(--accent-soft); }
+.commitGraphEntry.selected .commitGraphMeta, .commitGraphEntry.selected .commitGraphOid { color: var(--text-secondary); }
 .commitGraphEntry:focus-visible { z-index: 2; outline: 2px solid var(--accent); outline-offset: -2px; }
 .commitGraphNode { position: absolute; top: calc(50% - 5px); width: 10px; height: 10px; border: 2px solid var(--accent); border-radius: 50%; background: var(--canvas); }
 .commitGraphNode.merge { border-color: var(--amber); background: var(--amber); box-shadow: 0 0 0 2px var(--canvas); }
@@ -398,7 +410,7 @@ button:disabled { cursor: not-allowed; }
 .commitDetails .repositoryFact { padding: 0; }
 .commitDetails .repositoryFact strong { max-width: 68%; overflow-wrap: anywhere; }
 .commitDetailMessage { padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
-.commitDetailStats { color: var(--text-muted); font-size: var(--type-xs); }
+.commitDetailStats { color: var(--text-muted); font-size: var(--type-xs); font-variant-numeric: tabular-nums; }
 .commitDetailStats strong { color: var(--text-secondary); }
 .commitDetailStats span:first-of-type { margin-left: 8px; color: var(--green); }
 .commitDetailStats span:last-of-type { margin-left: 5px; color: var(--danger); }
@@ -497,7 +509,7 @@ button:disabled { cursor: not-allowed; }
 .splitDiffRow-change .splitDiffCell:last-child { background: var(--diff-add-bg); }
 .diffSpecialState { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 8px; padding: 24px; text-align: center; }
 .diffSpecialState p { max-width: 390px; margin: 0; color: var(--text-muted); font-size: var(--type-sm); line-height: 1.6; }
-.panelFooter.mainPanelFooter { flex-shrink: 0; border-top: 1px solid var(--line); border-bottom: 0; padding: 0 12px; font-size: var(--type-2xs); }
+.panelFooter.mainPanelFooter { flex-shrink: 0; border-top: 1px solid var(--line); border-bottom: 0; padding: 0 12px; font-size: var(--type-xs); }
 .detailsPanel > .panelHeading { border-bottom: 1px solid var(--line); }
 .detailsEmpty { display: flex; flex: 0 0 44%; flex-direction: column; align-items: center; justify-content: center; padding: 15px; text-align: center; }
 .detailsGlyph { display: grid; width: 29px; height: 29px; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--text-muted); font-size: calc(18px * var(--font-scale)); }
@@ -523,7 +535,7 @@ button:disabled { cursor: not-allowed; }
 .workbenchSection:last-child { border-right: 0; }
 .workbenchTitle { display: flex; align-items: center; gap: 7px; color: var(--text-secondary); font-size: var(--type-sm); font-weight: 640; }
 .workbenchSection > p { margin: 17px 0 4px; color: var(--text); font-size: var(--type-sm); }
-.workbenchSection > small { display: block; color: var(--text-muted); font-size: var(--type-2xs); line-height: 1.45; }
+.workbenchSection > small { display: block; color: var(--text-muted); font-size: var(--type-xs); line-height: 1.45; }
 .stagedEmpty { display: grid; min-height: 42px; place-items: center; margin: 8px 0 7px; border: 1px dashed var(--line-strong); border-radius: 5px; color: var(--text-muted); font-size: var(--type-xs); }
 .commitSection { display: flex; flex-direction: column; gap: 5px; min-height: 0; overflow: auto; }
 .commitMessageHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -560,8 +572,8 @@ button:disabled { cursor: not-allowed; }
 .commitSelectionNotice { color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.35; }
 .amendAdvisory { margin: 0; color: var(--warning); font-size: var(--type-sm); line-height: 1.35; }
 .commitSelectionNotice button { padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; text-decoration: underline; cursor: pointer; }
-.commitControls { display: flex; align-items: center; justify-content: space-between; }
-.commitSplit { position: relative; display: inline-flex; align-items: stretch; }
+.commitControls { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.commitSplit { position: relative; display: inline-flex; flex: none; align-items: stretch; }
 .commitSplit .commitButton { border-top-right-radius: 0; border-bottom-right-radius: 0; }
 .commitSplitMenuButton { min-width: 28px; border: 1px solid var(--line-strong); border-left: 0; border-radius: 0 4px 4px 0; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
 .commitSplit.danger .commitButton { background: color-mix(in srgb, var(--danger) 84%, var(--surface-raised)); }
@@ -687,6 +699,8 @@ button:disabled { cursor: not-allowed; }
 .taskCenterActions { display: flex; gap: 7px; }
 .taskCenterHeader h2 { margin: 2px 0 0; font-size: calc(16px * var(--font-scale)); font-weight: 620; }
 .taskCenterError { margin: 10px 14px 0; color: var(--danger); font-size: var(--type-sm); }
+/* Push and Pull put a retry action after the message; keep it apart from the sentence. */
+.taskCenterError:has(> button) { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
 .taskCenterEmpty { padding: 26px 16px; color: var(--text-muted); font-size: var(--type-sm); }
 .taskList { overflow: auto; padding: 8px 12px 14px; }
 .taskCard { padding: 12px 3px; border-bottom: 1px solid var(--line); }
@@ -783,7 +797,6 @@ button:disabled { cursor: not-allowed; }
   .workspaceCrumb .mutedText, .workspaceCrumb .crumbSlash { display: none; }
   .workbench { grid-template-columns: 1fr; }
   .stagedSection { display: none; }
-  .statusbar > span:last-child { display: none; }
 }
 
 .remoteManagerHeading { gap: 5px; }

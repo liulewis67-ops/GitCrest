@@ -85,6 +85,23 @@ describe("history feature models", () => {
     expect((api.getRepositoryCommits as ReturnType<typeof vi.fn>)).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps ref badges when only the history filters change", async () => {
+    const mainRef = { name: "main", fullName: "refs/heads/main", oid: "one", kind: "local" as const, upstream: null };
+    const { api } = cancellableApi({
+      getRepositoryCommits: vi.fn().mockResolvedValue(page("repo_a", 0, [commit("one")], null)),
+      getRepositoryRefs: vi.fn().mockResolvedValue({ ...refs("repo_a"), refs: [mainRef] }),
+    });
+    const { result, rerender } = renderHook(
+      ({ filters }) => useRepositoryHistory(api, "repo_a", filters, 0),
+      { initialProps: { filters: NO_FILTERS } },
+    );
+    await waitFor(() => expect(result.current.refs).toEqual([mainRef]));
+
+    rerender({ filters: { author: "Ada" } });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.refs).toEqual([mainRef]);
+  });
+
   it("keeps a cold message search loading until the complete indexed page is ready", async () => {
     const messageFilters: CommitHistoryFilters = { message: "needle" };
     const { api } = cancellableApi({

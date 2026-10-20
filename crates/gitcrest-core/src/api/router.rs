@@ -74,7 +74,9 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
                     AUTHORIZATION,
                     CONTENT_TYPE,
                     HeaderName::from_static("x-gitcrest-api-version"),
-                ]),
+                ])
+                // The renderer checks this header on every versioned response.
+                .expose_headers([HeaderName::from_static("x-gitcrest-api-version")]),
         )
     } else {
         api

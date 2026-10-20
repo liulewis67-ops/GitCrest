@@ -58,6 +58,15 @@ describe("theme palettes", () => {
     expect(palette.accentSoft).toMatch(/^rgb\(\d+ \d+ \d+ \/ 9%\)$/);
   });
 
+  it("keeps muted text and filled-button text readable in every built-in theme", () => {
+    for (const theme of BUILT_IN_THEMES) {
+      const { palette } = theme;
+      expect(contrastRatio(palette.textMuted, palette.canvas), `${theme.id} muted on canvas`).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(palette.textMuted, palette.surface), `${theme.id} muted on surface`).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(palette.onAccent, palette.accent), `${theme.id} on accent`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("lets pinned tokens win and keeps dependent tokens in step", () => {
     const palette = derivePalette("dark", darkSeeds, { accentStrong: "#ff0000" });
     expect(palette.accentStrong).toBe("#ff0000");

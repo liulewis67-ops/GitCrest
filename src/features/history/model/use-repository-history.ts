@@ -100,13 +100,11 @@ export function useRepositoryHistory(
     activeController.current = controller;
     offsetsInFlight.current.clear();
     setCommits([]);
-    setRefs([]);
     setNextOffset(0);
     setLoading(true);
     setLoadingMore(false);
     setSearchPending(false);
     setError("");
-    setRefsError("");
     void readPage(0, generation, controller.signal);
     return () => {
       controller.abort();
@@ -117,6 +115,8 @@ export function useRepositoryHistory(
 
   useEffect(() => {
     const controller = new AbortController();
+    // Refs are cleared only here, next to their refetch: a filter change reloads commits but keeps the badges.
+    setRefs([]);
     setRefsError("");
     void api.withSignal(controller.signal).getRepositoryRefs(repoId).then((snapshot) => {
       if (!controller.signal.aborted) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);

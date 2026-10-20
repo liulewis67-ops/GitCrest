@@ -50,7 +50,7 @@ export function WorkspaceDetailsPanel({
 
   return (
     <aside className="detailsPanel" aria-label={t("details.aria")}>
-      <div className="panelHeading">{repository ? t("details.headingRepository") : t("details.headingCommit")}</div>
+      <div className="panelHeading">{repository && !isFullGitObjectId(selectedCommit) ? t("details.headingRepository") : t("details.headingCommit")}</div>
       {repository && isFullGitObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">{t("details.loading")}</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} onCreateBranch={onCreateBranch} /></Suspense> : repository ? (
         <div className="repositoryDetails">
           <span className="detailsGlyph" aria-hidden="true">G</span>

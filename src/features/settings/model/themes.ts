@@ -98,8 +98,9 @@ export function derivePalette(base: ThemeBase, seeds: ThemeSeeds, overrides: Par
     line: mix(surface, text, 0.13),
     lineStrong: mix(surface, text, 0.21),
     text,
-    textSecondary: mix(text, canvas, 0.3),
-    textMuted: mix(text, canvas, 0.48),
+    // Light canvases need a heavier mix to keep muted metadata and placeholders at 4.5:1.
+    textSecondary: mix(text, canvas, dark ? 0.3 : 0.26),
+    textMuted: mix(text, canvas, dark ? 0.42 : 0.34),
     accent,
     accentStrong: mix(accent, dark ? "#ffffff" : "#000000", 0.16),
     onAccent: readableOn(accent),
@@ -132,19 +133,19 @@ export function derivePalette(base: ThemeBase, seeds: ThemeSeeds, overrides: Par
 // GitCrest Dark and Light reproduce tokens.css exactly; tokens.css stays the fallback before scripts run.
 const GITCREST_DARK_PALETTE: ThemePalette = {
   canvas: "#171b21", surface: "#1d232b", surfaceRaised: "#232a33", surfaceSoft: "#20262e", line: "#333b46", lineStrong: "#424c59",
-  text: "#e6eaf0", textSecondary: "#a4afbd", textMuted: "#7c8998",
+  text: "#e6eaf0", textSecondary: "#a4afbd", textMuted: "#8693a2",
   accent: "#6db6d8", accentStrong: "#81c8e8", onAccent: "#10232c",
   green: "#8fcba0", amber: "#d4b477", danger: "#d98787",
-  gitModified: "#81c8e8", gitAdded: "#8fcba0", gitDeleted: "#d98787", gitRenamed: "#d4b477", gitUntracked: "#a4afbd", gitConflicted: "#e3a06f", gitIgnored: "#7c8998",
+  gitModified: "#81c8e8", gitAdded: "#8fcba0", gitDeleted: "#d98787", gitRenamed: "#d4b477", gitUntracked: "#a4afbd", gitConflicted: "#e3a06f", gitIgnored: "#8693a2",
   accentSoft: "rgb(109 182 216 / 13%)", greenSoft: "rgb(95 172 117 / 12%)", dangerSoft: "rgb(217 135 135 / 12%)", shadow: DARK_SHADOW,
 };
 
 const GITCREST_LIGHT_PALETTE: ThemePalette = {
   canvas: "#f1f3f5", surface: "#fafbfc", surfaceRaised: "#ffffff", surfaceSoft: "#f4f6f8", line: "#dfe4e9", lineStrong: "#cbd3dc",
-  text: "#1d2732", textSecondary: "#596675", textMuted: "#788493",
-  accent: "#147ba5", accentStrong: "#086d98", onAccent: "#10232c",
+  text: "#1d2732", textSecondary: "#505c6a", textMuted: "#646f7d",
+  accent: "#147ba5", accentStrong: "#086d98", onAccent: "#ffffff",
   green: "#287b46", amber: "#8a641f", danger: "#ab4d4d",
-  gitModified: "#086d98", gitAdded: "#287b46", gitDeleted: "#ab4d4d", gitRenamed: "#8a641f", gitUntracked: "#596675", gitConflicted: "#a8561a", gitIgnored: "#788493",
+  gitModified: "#086d98", gitAdded: "#287b46", gitDeleted: "#ab4d4d", gitRenamed: "#8a641f", gitUntracked: "#505c6a", gitConflicted: "#a8561a", gitIgnored: "#646f7d",
   accentSoft: "rgb(20 123 165 / 9%)", greenSoft: "rgb(57 148 82 / 9%)", dangerSoft: "rgb(171 77 77 / 9%)", shadow: LIGHT_SHADOW,
 };
 

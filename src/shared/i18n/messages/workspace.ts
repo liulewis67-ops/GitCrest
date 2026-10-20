@@ -116,5 +116,4 @@ export const workspace = {
   "page.engineReady": ["Git engine ready", "Git 引擎就绪"],
   "page.engineConnecting": ["Connecting to Git engine", "正在连接 Git 引擎"],
   "page.engineUnavailable": ["Git engine unavailable", "Git 引擎不可用"],
-  "page.planned": ["Repository actions planned for S1", "仓库操作计划于 S1 提供"],
 } as const;

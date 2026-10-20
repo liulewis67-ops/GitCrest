@@ -44,6 +44,8 @@ const SettingsPage = lazy(() => loadSettingsPage().then(({ SettingsPage }) => ({
 const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
 const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
 
+const TASK_LIFECYCLE_EVENTS: ReadonlySet<string> = new Set(["task.started", "task.completed", "task.failed"]);
+
 function App() {
   const { t } = useI18n();
   const isMacPlatform = navigator.platform.toLowerCase().includes("mac");
@@ -104,6 +106,9 @@ function App() {
   const { apiRef, status, version, setStatus } = useCoreConnection({
     onConnected: (api) => refreshRepositories(api, true),
     onEvent: (api, event, sequenceGap, isActive) => {
+      // Read task state as soon as a task starts or ends. Waiting for the 1s poll left finished
+      // tasks counted as running, which kept Commit and the remote actions blocked meanwhile.
+      if (TASK_LIFECYCLE_EVENTS.has(event.type)) void refreshTasks();
       const plan = getRepositoryEventRefreshPlan(
         event,
         sequenceGap,

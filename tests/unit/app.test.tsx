@@ -63,6 +63,39 @@ describe("App", () => {
     expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories");
   });
 
+  it("reloads the task list as soon as a task finishes instead of waiting for the poll", async () => {
+    let onEvent: ((event: components["schemas"]["EventEnvelope"]) => void) | undefined;
+    const subscribeToEvents = vi.fn(async (listener: typeof onEvent) => {
+      onEvent = listener;
+      return vi.fn();
+    });
+    Object.defineProperty(window, "gitcrest", {
+      configurable: true,
+      value: {
+        getSidecarConnection: vi.fn().mockResolvedValue({
+          baseUrl: "http://127.0.0.1:43210",
+          token: "test-session-token",
+          windowAccess: "readWrite",
+        }),
+        subscribeToEvents,
+        chooseRepository: vi.fn(),
+      },
+    });
+    const fetcher = vi.fn<typeof fetch>(async (input) => String(input).endsWith("/api/version")
+      ? new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 })
+      : new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    vi.stubGlobal("fetch", fetcher);
+
+    render(<App />);
+    expect(await screen.findByText("Core connected")).toBeDefined();
+    await waitFor(() => expect(subscribeToEvents).toHaveBeenCalledOnce());
+    const taskRequests = () => fetcher.mock.calls.filter(([input]) => String(input).endsWith("/api/v1/tasks")).length;
+    const before = taskRequests();
+
+    onEvent?.({ ...resyncEvent, eventId: "event-2", type: "task.completed", repoId: "repo_a", payload: {} });
+    await waitFor(() => expect(taskRequests()).toBe(before + 1));
+  });
+
   it("opens a keyboard-accessible command palette with reasons for unavailable actions", async () => {
     const chooseRepository = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(window, "gitcrest", {
