@@ -711,12 +711,16 @@ describe("App", () => {
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select hunk 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Add to commit selection" }));
     expect(screen.getByText(/Other staged changes stay in the index/)).toBeDefined();
-    const textarea = await screen.findByRole("textbox", { name: "Commit message" });
+    const summary = await screen.findByRole("textbox", { name: "Commit message" });
+    const description = screen.getByRole("textbox", { name: "Commit description (optional)" });
     await waitFor(() => expect(screen.getByRole("button", { name: "Commit" }).hasAttribute("disabled")).toBe(true));
     expect(screen.getByText(/Review sensitive staged files/)).toBeDefined();
+    fireEvent.change(description, { target: { value: "Loads local overrides before defaults.\n" } });
+    expect(screen.getByRole("button", { name: "Commit" }).hasAttribute("disabled")).toBe(true);
     fireEvent.change(screen.getByRole("combobox", { name: "Message template" }), { target: { value: "conventional" } });
-    expect((textarea as HTMLTextAreaElement).value).toBe("feat: ");
-    fireEvent.change(textarea, { target: { value: "feat: add environment config" } });
+    expect((summary as HTMLInputElement).value).toBe("feat: ");
+    expect((description as HTMLTextAreaElement).value).toBe("Loads local overrides before defaults.\n");
+    fireEvent.change(summary, { target: { value: "feat: add environment config" } });
     const commitButton = screen.getByRole("button", { name: "Commit" });
     await waitFor(() => expect(commitButton.hasAttribute("disabled")).toBe(false));
     fireEvent.click(screen.getByRole("checkbox", { name: "Amend" }));
@@ -727,7 +731,7 @@ describe("App", () => {
     const request = fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/commits"));
     expect(request?.[1]?.method).toBe("POST");
     expect(JSON.parse(String(request?.[1]?.body))).toEqual({
-      message: "feat: add environment config", amend: true, signOff: true, sign: false,
+      message: "feat: add environment config\n\nLoads local overrides before defaults.", amend: true, signOff: true, sign: false,
       selections: [{ path: ".env.local", revision: "sha256:staged-fixture", selections: [{ hunkIndex: 0 }] }],
     });
     expect(await screen.findByRole("dialog", { name: "Tasks" })).toBeDefined();

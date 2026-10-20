@@ -527,6 +527,7 @@ button:disabled { cursor: not-allowed; }
 .stagedEmpty { display: grid; min-height: 42px; place-items: center; margin: 8px 0 7px; border: 1px dashed var(--line-strong); border-radius: 5px; color: var(--text-muted); font-size: var(--type-xs); }
 .commitSection { display: flex; flex-direction: column; gap: 5px; min-height: 0; overflow: auto; }
 .commitMessageHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.commitMessageTools { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .commitAiTrigger { flex: 0 0 auto; font-size: var(--type-sm); }
 .commitAiAssistant { display: grid; gap: 7px; max-height: 210px; overflow: auto; padding: 8px; border: 1px solid var(--line-strong); border-radius: 5px; background: var(--surface-soft); }
 .commitAiHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -546,9 +547,15 @@ button:disabled { cursor: not-allowed; }
 .commitAiActions, .commitAiError { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .commitAiError { justify-content: space-between; color: var(--danger); font-size: var(--type-sm); }
 .commitSection select { align-self: flex-start; max-width: 100%; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: var(--type-sm); }
-.commitSection textarea { flex: 1; min-height: 36px; resize: none; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: var(--type-sm); line-height: 1.4; }
-.commitSection textarea::placeholder { color: var(--text-muted); }
-.commitSection textarea:disabled { opacity: .65; }
+.commitSection textarea { flex: 1; min-height: 52px; resize: none; padding: 7px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: var(--type-sm); line-height: 1.4; }
+.commitSection textarea::placeholder, .commitSummaryField input::placeholder { color: var(--text-muted); }
+.commitSection textarea:disabled, .commitSummaryField input:disabled { opacity: .65; }
+.commitSummaryField { position: relative; display: flex; flex: none; }
+.commitSummaryField input { flex: 1; min-width: 0; padding: 6px 52px 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: var(--type-sm); font-weight: 560; }
+.commitSummaryLength { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); color: var(--text-muted); font-size: var(--type-xs); font-variant-numeric: tabular-nums; cursor: default; }
+.commitSummaryLength.over { color: var(--warning); font-weight: 640; }
+.commitDescriptionLabel { margin-top: 2px; color: var(--text-secondary); font-size: var(--type-xs); font-weight: 600; }
+.commitDescriptionLabel span { color: var(--text-muted); font-weight: 400; }
 .commitAdvisory { margin: 0; color: var(--warning); font-size: var(--type-sm); line-height: 1.35; overflow-wrap: anywhere; }
 .commitSelectionNotice { color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.35; }
 .amendAdvisory { margin: 0; color: var(--warning); font-size: var(--type-sm); line-height: 1.35; }

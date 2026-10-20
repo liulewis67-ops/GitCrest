@@ -65,6 +65,10 @@ function App() {
   const {
     message: commitMessage,
     setMessage: setCommitMessage,
+    summary: commitSummary,
+    setSummary: setCommitSummary,
+    description: commitDescription,
+    setDescription: setCommitDescription,
     template: commitTemplate,
     amend: amendCommit,
     setAmend: setAmendCommit,
@@ -318,7 +322,7 @@ function App() {
     retryDiff: diffQuery.retry,
   });
   const commitBusy = commitSubmission.busy;
-  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitMessage.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
+  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitSummary.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const {
     busy: stagingBusy,
     stageChanges,
@@ -848,13 +852,15 @@ function App() {
             <CommitWorkbench
               repository={selectedRepository}
               status={{ snapshot: activeStatus, error: activeStatusError, loading: activeStatusLoading, workingCount, stagedCount, hasConflicts, sensitiveStagedPaths }}
-              commit={{ message: commitMessage, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
+              commit={{ message: commitMessage, summary: commitSummary, description: commitDescription, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
               connected={connected}
               hasActiveRepositoryTask={hasActiveRepositoryTask}
               api={apiRef.current}
               onChangeMessage={setCommitMessage}
+              onChangeSummary={setCommitSummary}
+              onChangeDescription={setCommitDescription}
               onChangeTemplate={chooseCommitTemplate}
               onClearSelections={() => setCommitSelections([])}
               onAssistantOpenChange={setCommitAssistantOpen}
