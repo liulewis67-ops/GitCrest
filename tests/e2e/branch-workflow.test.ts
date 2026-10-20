@@ -21,7 +21,11 @@ async function chooseRowMenuItem(window: Page, row: Locator, branch: string, ite
   const more = row.getByRole("button", { name: `More actions for ${branch}` });
   await expect.poll(async () => { await row.hover(); return more.isEnabled(); }, { timeout: 20_000 }).toBe(true);
   await more.click();
-  await window.getByRole("menuitem", { name: item }).click();
+  // Items follow the branch list, which can still be catching up with a change made just before
+  // (e.g. a removed worktree); wait for the app rather than clicking a disabled item.
+  const menuItem = window.getByRole("menuitem", { name: item });
+  await expect.poll(() => menuItem.isEnabled(), { timeout: 15_000 }).toBe(true);
+  await menuItem.click();
 }
 
 async function openRepository(window: Page, path: string) {

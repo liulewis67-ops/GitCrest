@@ -35,7 +35,8 @@ export class TaskRefreshPlanner {
       kind = "staging";
     } else if (task.operation === "commit") {
       kind = "commit";
-    } else if (task.operation.startsWith("branch")) {
+    } else if (task.operation.startsWith("branch") || task.operation.startsWith("worktree")) {
+      // Worktree tasks change which branches are checked out where, which the branch list shows.
       kind = "branch";
     } else if (task.operation.startsWith("remote")) {
       kind = "remote";

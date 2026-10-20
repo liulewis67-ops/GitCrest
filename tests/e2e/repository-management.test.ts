@@ -9,6 +9,8 @@ import { createAuthenticationFailureServer, type AuthenticationFailureServer } f
 import { createTempGitRepository } from "../fixtures/temp-repo";
 
 const execFileAsync = promisify(execFile);
+// The Welcome quick action; anchored because the titlebar "+" button's label also contains "initialize a repository".
+const INITIALIZE_QUICK_ACTION = /^Initialize a repository/;
 
 it("initializes a repository in the selected project folder and keeps its files", async () => {
   const projectPath = await mkdtemp(resolve(tmpdir(), "gitcrest-init-e2e-project-"));
@@ -29,7 +31,7 @@ it("initializes a repository in the selected project folder and keeps its files"
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, projectPath);
 
-    await window.getByRole("button", { name: "Initialize a repository" }).click();
+    await window.getByRole("button", { name: INITIALIZE_QUICK_ACTION }).click();
     await window.locator(".workspaceCrumb").filter({ hasText: projectPath }).waitFor({ timeout: 10_000 });
     expect((await execFileAsync("git", ["-C", projectPath, "rev-parse", "--show-toplevel"])).stdout.trim().replace(/\//g, "\\")).toBe(projectPath);
     expect(await readFile(projectFile, "utf8")).toBe("# Existing project\n");
@@ -59,8 +61,8 @@ it("leaves the project unchanged when repository initialization is cancelled in 
       dialog.showOpenDialog = async () => ({ canceled: true, filePaths: [] });
     });
 
-    await window.getByRole("button", { name: "Initialize a repository" }).click();
-    await window.getByRole("button", { name: "Initialize a repository" }).waitFor({ state: "visible" });
+    await window.getByRole("button", { name: INITIALIZE_QUICK_ACTION }).click();
+    await window.getByRole("button", { name: INITIALIZE_QUICK_ACTION }).waitFor({ state: "visible" });
     await expect(execFileAsync("git", ["-C", projectPath, "rev-parse", "--show-toplevel"])).rejects.toThrow();
     expect(await readFile(projectFile, "utf8")).toBe("# Keep this project unchanged\n");
     expect(await window.locator(".workspaceCrumb").count()).toBe(0);
@@ -134,7 +136,9 @@ it("reports when the selected repository path disappears before it can be opened
 it.skipIf(process.platform !== "win32")("reports an access error for a folder denied to the current Windows user", async () => {
   const projectPath = await mkdtemp(resolve(tmpdir(), "gitcrest-open-denied-e2e-project-"));
   const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-open-denied-e2e-app-data-"));
-  const identity = await execFileAsync("whoami", ["/user", "/fo", "csv", "/nh"]);
+  // The Windows whoami, not a GNU one that Git for Windows may put first on PATH.
+  const whoami = resolve(process.env.SystemRoot ?? "C:\\Windows", "System32", "whoami.exe");
+  const identity = await execFileAsync(whoami, ["/user", "/fo", "csv", "/nh"]);
   const userSid = identity.stdout.match(/S-1-5-[\d-]+/)?.[0];
   if (!userSid) throw new Error("Could not determine the current Windows user SID for the ACL fixture.");
   let app: ElectronApplication | undefined;
@@ -197,7 +201,7 @@ it("keeps a failed Git template initialization out of the selected project folde
       dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [destination] });
     }, projectPath);
 
-    await window.getByRole("button", { name: "Initialize a repository" }).click();
+    await window.getByRole("button", { name: INITIALIZE_QUICK_ACTION }).click();
     const errorAlert = window.getByRole("alert");
     await errorAlert.waitFor({ state: "visible" });
     expect(await errorAlert.innerText()).toBe("Git could not initialize this folder.");
