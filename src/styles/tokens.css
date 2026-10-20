@@ -1,11 +1,13 @@
 :root {
-  /* Type scale. 11px is the floor; see doc/visual-optimization-plan.md §4. */
-  --type-2xs: 11px;
-  --type-xs: 12px;
-  --type-sm: 13px;
-  --type-md: 14px;
-  --type-lg: 16px;
-  --type-xl: 22px;
+  /* Type scale. 11px is the floor; see doc/visual-optimization-plan.md §4.
+     --font-scale follows Settings → Appearance → Interface text size (13px = 1). */
+  --font-scale: 1;
+  --type-2xs: max(11px, calc(11px * var(--font-scale)));
+  --type-xs: calc(12px * var(--font-scale));
+  --type-sm: calc(13px * var(--font-scale));
+  --type-md: calc(14px * var(--font-scale));
+  --type-lg: calc(16px * var(--font-scale));
+  --type-xl: calc(22px * var(--font-scale));
   --code-size: 13px;
   --code-leading: 20px;
 
@@ -21,6 +23,7 @@
   --accent: #6db6d8;
   --accent-strong: #81c8e8;
   --accent-soft: rgb(109 182 216 / 13%);
+  --on-accent: #10232c;
   --green: #8fcba0;
   --green-soft: rgb(95 172 117 / 12%);
   --amber: #d4b477;

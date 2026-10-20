@@ -3,8 +3,9 @@ import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
-import { SettingsDialog } from "../../src/features/settings/ui/SettingsDialog";
+import { SettingsPage } from "../../src/features/settings/ui/SettingsPage";
 import { defaultShortcutPreferences } from "../../src/features/settings/model/shortcut-preferences";
+import { reloadAppearance } from "../../src/features/settings/model/appearance-store";
 import { PrivacyScopePreview } from "../../src/features/settings/ui/PrivacyScopePreview";
 
 afterEach(cleanup);
@@ -27,7 +28,7 @@ it("moves focus into settings, traps Tab, and restores the opener on close", asy
   });
   function Harness() {
     const [open, setOpen] = useState(false);
-    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsDialog api={api} onClose={() => setOpen(false)} />}</>;
+    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsPage api={api} onClose={() => setOpen(false)} />}</>;
   }
   render(<Harness />);
 
@@ -56,7 +57,7 @@ it("aborts AI settings loading when the settings dialog closes", async () => {
   const api = cancellableApi({ getAiSettings: vi.fn(() => pending.promise) }, signals);
   function Harness() {
     const [open, setOpen] = useState(false);
-    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsDialog api={api} onClose={() => setOpen(false)} />}</>;
+    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsPage api={api} onClose={() => setOpen(false)} />}</>;
   }
   render(<Harness />);
 
@@ -74,7 +75,7 @@ it("records a replacement shortcut and rejects an existing assignment", async ()
     getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
   });
   const onShortcutsChange = vi.fn();
-  render(<SettingsDialog api={api} onClose={vi.fn()} onShortcutsChange={onShortcutsChange} />);
+  render(<SettingsPage api={api} onClose={vi.fn()} onShortcutsChange={onShortcutsChange} />);
 
   const commandPalette = screen.getByRole("button", { name: "Record shortcut for Open command palette" });
   fireEvent.click(commandPalette);
@@ -92,7 +93,7 @@ it("saves provider configuration without sending a model request", async () => {
     setAiSettings: vi.fn().mockResolvedValue({ provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false }),
     setAiCredential: vi.fn(), deleteAiCredential: vi.fn(),
   });
-  render(<SettingsDialog api={api} onClose={vi.fn()} />);
+  render(<SettingsPage api={api} onClose={vi.fn()} />);
   await screen.findByRole("combobox", { name: "AI provider" });
   fireEvent.change(screen.getByRole("combobox", { name: "AI provider" }), { target: { value: "ollama" } });
   fireEvent.change(screen.getByLabelText("Model"), { target: { value: "qwen" } });
@@ -109,7 +110,7 @@ it("submits cloud keys through the credential API and clears the field", async (
     setAiCredential: vi.fn().mockResolvedValue({ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true }),
     deleteAiCredential: vi.fn(),
   });
-  render(<SettingsDialog api={api} onClose={vi.fn()} />);
+  render(<SettingsPage api={api} onClose={vi.fn()} />);
   const keyInput = await screen.findByLabelText("Cloud API key");
   fireEvent.change(keyInput, { target: { value: "private-test-key" } });
   fireEvent.click(screen.getByRole("button", { name: "Save API key" }));
@@ -199,4 +200,59 @@ it("requires reviewed diff display and an explicit confirmation before provider 
   fireEvent.click(send);
   await waitFor(() => expect(api.requestAiReview).toHaveBeenCalledWith("repo_fixture", "Summarize the selected changes and note any risks.", [{ path: "src/only.ts", scope: "workingTree", revision: "sha256:reviewed" }]));
   expect(await screen.findByText("Reviewed response")).toBeTruthy();
+});
+
+function settingsApi() {
+  return cancellableApi({
+    getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
+  });
+}
+
+it("applies a built-in theme from the gallery and switches a fixed color mode to show it", async () => {
+  window.localStorage.clear();
+  reloadAppearance();
+  render(<SettingsPage api={settingsApi()} onClose={() => {}} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "Light" }));
+  expect(document.documentElement.dataset.theme).toBe("light");
+
+  fireEvent.click(screen.getByRole("button", { name: /^Midnight, Dark/ }));
+  expect(document.documentElement.dataset.themeId).toBe("midnight");
+  expect((screen.getByRole("radio", { name: "Dark" }) as HTMLInputElement).checked).toBe(true);
+  expect(screen.getByRole("button", { name: /^Midnight, Dark, Used in dark mode, showing now$/ }).getAttribute("aria-pressed")).toBe("true");
+});
+
+it("previews theme edits live, restores on cancel, and saves a duplicated theme", async () => {
+  window.localStorage.clear();
+  reloadAppearance();
+  render(<SettingsPage api={settingsApi()} onClose={() => {}} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
+
+  fireEvent.click(screen.getByRole("button", { name: "Duplicate GitCrest Dark" }));
+  fireEvent.click(screen.getByRole("button", { name: "Violet" }));
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#a48bf0");
+  expect(document.documentElement.dataset.themeId).toMatch(/^custom-/);
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(document.documentElement.dataset.themeId).toBe("gitcrest-dark");
+  expect(document.documentElement.style.getPropertyValue("--accent")).toBe("#6db6d8");
+
+  fireEvent.click(screen.getByRole("button", { name: "Duplicate GitCrest Dark" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Name" }), { target: { value: "Violet night" } });
+  fireEvent.change(screen.getByRole("textbox", { name: "Background" }), { target: { value: "#101010" } });
+  fireEvent.click(screen.getByRole("button", { name: "Create theme" }));
+  await screen.findByText("Saved “Violet night” and switched to it.");
+  expect(document.documentElement.style.getPropertyValue("--canvas")).toBe("#101010");
+  screen.getByRole("button", { name: /^Violet night, Dark, Used in dark mode, showing now$/ });
+  expect(window.localStorage.getItem("gitcrest-appearance-v1")).toContain("Violet night");
+});
+
+it("drops an unsaved theme draft when Settings closes", async () => {
+  window.localStorage.clear();
+  reloadAppearance();
+  const { unmount } = render(<SettingsPage api={settingsApi()} onClose={() => {}} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
+  fireEvent.click(screen.getByRole("button", { name: "New theme" }));
+  fireEvent.click(screen.getByRole("button", { name: "Rose" }));
+  expect(document.documentElement.dataset.themeId).toMatch(/^custom-/);
+  unmount();
+  expect(document.documentElement.dataset.themeId).toBe("gitcrest-dark");
 });

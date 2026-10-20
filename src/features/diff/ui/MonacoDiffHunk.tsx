@@ -1,6 +1,7 @@
 import { useI18n } from "../../../shared/i18n";
-import { DiffEditor } from "@monaco-editor/react";
+import { DiffEditor, useMonaco, type Monaco } from "@monaco-editor/react";
 import { useEffect, useState } from "react";
+import { codeFontStack, hexWithAlpha, useAppearance, type AppearanceSnapshot } from "../../settings";
 import { parseDiffHunkSyntax } from "../model/tree-sitter";
 
 const LANGUAGE_LOADERS: Record<string, () => Promise<unknown>> = {
@@ -22,6 +23,45 @@ function loadLanguage(language: string): Promise<unknown> {
   const loading = loader();
   registeredLanguages.set(language, loading);
   return loading;
+}
+
+const definedMonacoThemes = new Set<string>();
+
+function hashText(text: string): string {
+  let hash = 5381;
+  for (let index = 0; index < text.length; index += 1) hash = ((hash << 5) + hash + text.charCodeAt(index)) | 0;
+  return (hash >>> 0).toString(36);
+}
+
+/** Defines (once) a Monaco theme matching the active GitCrest palette and returns its name. */
+function ensureMonacoTheme(monaco: Monaco | null, { activeTheme }: AppearanceSnapshot): string {
+  const { palette, base } = activeTheme;
+  const name = `gitcrest-${base}-${hashText(JSON.stringify(palette))}`;
+  if (!monaco || definedMonacoThemes.has(name)) return name;
+  monaco.editor.defineTheme(name, {
+    base: base === "dark" ? "vs-dark" : "vs",
+    inherit: true,
+    rules: [],
+    colors: {
+      "editor.background": palette.surface,
+      "editor.foreground": palette.text,
+      "editorGutter.background": palette.surface,
+      "editorLineNumber.foreground": palette.textMuted,
+      "editorLineNumber.activeForeground": palette.textSecondary,
+      "editor.selectionBackground": hexWithAlpha(palette.accent, 0.28),
+      "editor.inactiveSelectionBackground": hexWithAlpha(palette.accent, 0.16),
+      "editorWidget.background": palette.surfaceRaised,
+      "diffEditor.border": palette.line,
+      "diffEditor.insertedLineBackground": hexWithAlpha(palette.gitAdded, 0.1),
+      "diffEditor.removedLineBackground": hexWithAlpha(palette.gitDeleted, 0.1),
+      "diffEditor.insertedTextBackground": hexWithAlpha(palette.gitAdded, 0.24),
+      "diffEditor.removedTextBackground": hexWithAlpha(palette.gitDeleted, 0.24),
+      "scrollbarSlider.background": hexWithAlpha(palette.textMuted, 0.22),
+      "scrollbarSlider.hoverBackground": hexWithAlpha(palette.textMuted, 0.34),
+    },
+  });
+  definedMonacoThemes.add(name);
+  return name;
 }
 
 const monacoGlobal = globalThis as typeof globalThis & {
@@ -48,6 +88,8 @@ interface MonacoDiffHunkProps {
 
 export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar, label, height }: MonacoDiffHunkProps) {
   const { t } = useI18n();
+  const appearance = useAppearance();
+  const monaco = useMonaco();
   const [languageReady, setLanguageReady] = useState(language === "plaintext");
   const [languageFailed, setLanguageFailed] = useState(false);
   const [parseState, setParseState] = useState<"loading" | "parsed" | "recovered" | "language" | "tooLarge" | "parserUnavailable">(treeSitterGrammar ? "loading" : "language");
@@ -77,8 +119,9 @@ export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar
   }, [treeSitterGrammar, original, modified]);
 
   if (!languageReady || parseState === "loading") return <div className="monacoDiffLoading" role="status">{t("mz.loading")}</div>;
-  const themePreference = document.documentElement.dataset.theme;
-  const prefersDark = themePreference === "dark" || (themePreference === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+  // Defined during render so the theme exists before DiffEditor switches to it.
+  const monacoTheme = ensureMonacoTheme(monaco, appearance);
+  const codeSize = appearance.typography.codeFontSize;
   return (
     <div className="monacoDiffHunk" aria-label={label} data-tree-sitter-state={parseState}>
       {languageFailed && <div className="diffSyntaxFallback" role="status">{t("mz.loadFailed")}</div>}
@@ -90,8 +133,12 @@ export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar
         language={languageFailed || parseState === "language" || parseState === "tooLarge" || parseState === "parserUnavailable" ? "plaintext" : language}
         original={original}
         modified={modified}
-        theme={prefersDark ? "vs-dark" : "vs"}
+        theme={monacoTheme}
+        beforeMount={(instance) => { ensureMonacoTheme(instance, appearance); }}
         options={{
+          fontFamily: codeFontStack(appearance.typography),
+          fontSize: codeSize,
+          lineHeight: Math.round(codeSize * 1.54),
           automaticLayout: true,
           diffAlgorithm: "advanced",
           ignoreTrimWhitespace: false,

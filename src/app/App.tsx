@@ -9,7 +9,7 @@ import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
 import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
 import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
-import { ariaShortcut, displayShortcut, loadSettingsDialog, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus } from "../features/settings";
+import { ariaShortcut, displayShortcut, loadSettingsPage, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus, type SettingsSectionId } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
@@ -40,7 +40,7 @@ const PushDialog = lazy(() => loadPushDialog().then(({ PushDialog }) => ({ defau
 const PullDialog = lazy(() => loadPullDialog().then(({ PullDialog }) => ({ default: PullDialog })));
 const PushTargetDialog = lazy(() => loadPushTargetDialog().then(({ PushTargetDialog }) => ({ default: PushTargetDialog })));
 const DiscardChangesDialog = lazy(() => loadDiscardChangesDialog().then(({ DiscardChangesDialog }) => ({ default: DiscardChangesDialog })));
-const SettingsDialog = lazy(() => loadSettingsDialog().then(({ SettingsDialog }) => ({ default: SettingsDialog })));
+const SettingsPage = lazy(() => loadSettingsPage().then(({ SettingsPage }) => ({ default: SettingsPage })));
 const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
 const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
 
@@ -58,7 +58,8 @@ function App() {
   const [localBranchAction, setLocalBranchAction] = useState<LocalBranchAction>();
   const [createBranchAt, setCreateBranchAt] = useState<string>();
   const [worktreeForBranch, setWorktreeForBranch] = useState<{ name: string; fromRemote: boolean }>();
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Settings covers the content area while open; the page underneath stays mounted.
+  const [settingsView, setSettingsView] = useState<{ section?: SettingsSectionId }>();
   const { updateStatus, checkForUpdates, installUpdate } = useUpdateStatus();
   const { shortcuts, setShortcuts } = useShortcutPreferences();
   const {
@@ -612,7 +613,7 @@ function App() {
       changeWorkspaceMode("graph");
       historyRequests.openTagEditor(repoId, oid);
     },
-    openSettings: () => setSettingsOpen(true),
+    openSettings: () => setSettingsView({}),
     commit: () => { void commitChanges("commit"); },
     commitAndPush: () => { void commitChanges("commitAndPush"); },
     pull: openPullDialog,
@@ -640,6 +641,7 @@ function App() {
   const commands: CommandPaletteCommand[] = [
     { id: "welcome", label: t("cmd.welcome"), detail: t("cmd.welcomeDetail"), available: true, run: () => setPage("welcome") },
     { id: "workspace", label: t("cmd.workspace"), detail: t("cmd.workspaceDetail"), available: true, run: () => setPage("workspace") },
+    { id: "appearance", label: t("cmd.appearance"), detail: t("cmd.appearanceDetail"), available: true, run: () => setSettingsView({ section: "appearance" }) },
     { id: "theme", label: t("cmd.theme"), detail: t("cmd.themeDetail", { current: t(`theme.${theme}`), next: t(`theme.${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`) }), available: true, run: nextTheme },
     { id: "open", label: t("cmd.open"), detail: t("cmd.openDetail"), available: true, run: () => { void repositoryOpening.chooseAndOpenLocal(); } },
     { id: "branch-switcher", label: t("cmd.branchSwitcher"), detail: t("cmd.branchSwitcherDetail", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) }), available: Boolean(selectedRepository && connected && selectedRepository.availability === "available"), run: branchSwitcher.openSwitcher },
@@ -673,8 +675,8 @@ function App() {
         activeTaskCount={tasks.filter((task) => task.status === "queued" || task.status === "running").length}
         isMacPlatform={isMacPlatform}
         openingRepository={repositoryOpening.opening}
-        onPageChange={setPage}
-        onSelectRepository={(repository) => void repositoryOpening.openRecent(repository)}
+        onPageChange={(nextPage) => { setSettingsView(undefined); setPage(nextPage); }}
+        onSelectRepository={(repository) => { setSettingsView(undefined); void repositoryOpening.openRecent(repository); }}
         onCloseRepository={closeRepositoryTab}
         onOpenLocalRepository={() => void repositoryOpening.chooseAndOpenLocal()}
         onCloneRepository={() => cloneSubmission.openDialog()}
@@ -682,7 +684,7 @@ function App() {
         onOpenCommandPalette={() => setPaletteOpen(true)}
         onCycleTheme={nextTheme}
         onOpenTasks={() => setTasksOpen(true)}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={() => setSettingsView((open) => open ? undefined : {})}
       />
 
       {page === "welcome" ? (
@@ -868,6 +870,10 @@ function App() {
         </WorkspacePage>
       )}
 
+      {settingsView && apiRef.current && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.dialog")}</div>}>
+          <SettingsPage api={apiRef.current} repoId={selectedRepository?.repoId} initialSection={settingsView.section} onClose={() => setSettingsView(undefined)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={checkForUpdates} onInstallUpdate={installUpdate} />
+        </Suspense>}
+
       {branchSwitcher.open && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.branchSwitcher")}</div>}>
           <BranchSwitcherDialog
             repository={selectedRepository}
@@ -907,7 +913,6 @@ function App() {
       {pushTargetDialogOpen && <PushTargetDialog remotes={activeRemotes} branches={activeBranches} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask || !canCommit} disabledReason={hasActiveRepositoryTask ? t("app.waitTask") : !canCommit ? t("app.stageFirst") : remoteDisabledReason} onChoose={(target) => { setPushTargetDialogOpen(false); void commitChanges("commitAndPushTo", target); }} onClose={() => setPushTargetDialogOpen(false)} />}
       {pullOpen && <PullDialog snapshot={pullPreflight} loading={pullLoading} busy={pullBusy} error={pullError} disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} disabledReason={pullDisabledReason} onRefresh={() => void refreshPullPreflight()} onPull={(strategy) => void submitPull(strategy)} onClose={() => setPullOpen(false)} />}
       {tasksOpen && <TaskCenter api={apiRef.current} tasks={tasks} error={tasksError} actionId={taskActionId} onClose={() => setTasksOpen(false)} onRefresh={() => void refreshTasks()} onCancel={(taskId) => void cancelTask(taskId)} onCopy={(task) => void copyTaskLogs(task)} onRetryClone={(task) => cloneSubmission.retryFromTask(task)} onConfigureCredentials={configureTaskCredentials} onReviewPush={reviewTaskPush} onRecoverWorkflow={(task, _preview, action) => void recoverWorkflow(task, action)} onOpenConflictWindow={(task) => void openConflictWindow(task)} />}
-      {settingsOpen && apiRef.current && <SettingsDialog api={apiRef.current} repoId={selectedRepository?.repoId} onClose={() => setSettingsOpen(false)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={checkForUpdates} onInstallUpdate={installUpdate} />}
       {discardSelection && <DiscardChangesDialog repositoryPath={discardSelection.repositoryPath} path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveDiscardRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
       {createBranchAt && selectedRepository && apiRef.current && <Suspense fallback={null}><CreateBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} startOid={createBranchAt} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setCreateBranchAt(undefined)} onStarted={(task) => { prependTask(task); setCreateBranchAt(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {worktreeForBranch && selectedRepository && apiRef.current && <Suspense fallback={null}><NewWorktreeDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} branch={worktreeForBranch.name} fromRemote={worktreeForBranch.fromRemote} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setWorktreeForBranch(undefined)} onStarted={(task) => { prependTask(task); setWorktreeForBranch(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
