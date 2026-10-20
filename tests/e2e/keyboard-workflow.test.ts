@@ -118,8 +118,12 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
       });
       return (await response.json() as { branch: string }).branch;
     }, repoId), { timeout: 15_000 }).toBe("keyboard-target");
-    const postSwitchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    if (await postSwitchTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
+    // The app opens Tasks once the switch is accepted, which can land after the core has already
+    // switched; wait for it so it can't take focus in the middle of the next steps.
+    await window.getByRole("dialog", { name: "Tasks" }).waitFor();
+    await enterButtonByTab(window, "Close tasks");
+    await window.getByRole("dialog", { name: "Tasks" }).waitFor({ state: "detached" });
+    await window.getByRole("button", { name: "Background tasks, 0 active" }).waitFor();
 
     const resetBaseOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
     await execFileAsync("git", ["-C", fixture.path, "branch", "keyboard-reset-base", resetBaseOid]);
@@ -145,8 +149,10 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     const resetTarget = resetDialog.locator("#reset-target");
     await expect.poll(() => resetTarget.isDisabled(), { timeout: 15_000 }).toBe(false);
     await focusControlByTab(window, "reset-target");
-    const resetTargetIndex = await resetTarget.locator("option").evaluateAll((options, targetOid) => options.findIndex((option) => option.textContent?.includes("keyboard-reset-base") && option.getAttribute("value") === targetOid), resetBaseOid);
-    if (resetTargetIndex < 1) throw new Error("The keyboard reset target was not available in the branch commit list.");
+    // keyboard-reset-base was created outside the app; it shows up once the ref watcher refreshes branches.
+    const findResetTargetIndex = () => resetTarget.locator("option").evaluateAll((options, targetOid) => options.findIndex((option) => option.textContent?.includes("keyboard-reset-base") && option.getAttribute("value") === targetOid), resetBaseOid);
+    await expect.poll(findResetTargetIndex, { timeout: 15_000, message: "The keyboard reset target was not available in the branch commit list." }).toBeGreaterThan(0);
+    const resetTargetIndex = await findResetTargetIndex();
     await window.keyboard.press("Home");
     for (let index = 0; index < resetTargetIndex; index += 1) await window.keyboard.press("ArrowDown");
     await window.keyboard.press("Enter");
@@ -249,6 +255,10 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
 }, 75_000);
 
 async function enterButtonByTab(page: Page, label: string) {
+  // Buttons are briefly disabled or absent while a task or status refresh is running, and Tab skips
+  // them then; start walking only once the target can actually take focus.
+  await expect.poll(() => page.evaluate((expected) => [...document.querySelectorAll("button")].some((button) =>
+    !button.disabled && button.getClientRects().length > 0 && `${button.getAttribute("aria-label") || ""} ${button.innerText}`.includes(expected)), label), { timeout: 15_000 }).toBe(true);
   for (let attempt = 0; attempt < 80; attempt += 1) {
     const focusedButton = await page.evaluate(() => {
       const active = document.activeElement;
