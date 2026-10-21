@@ -6,16 +6,24 @@ use std::{collections::HashMap, sync::Mutex};
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroizing;
 
+mod accounts;
 mod askpass;
 mod keyring;
 
+pub use accounts::{
+    is_valid_account_id, system_account_secret_store, AccountSecret, AccountSecretStore,
+    AccountSelections, ASKPASS_ACCOUNTS_ENV,
+};
 pub use askpass::answer_askpass_prompt;
+
+#[cfg(test)]
+pub use accounts::MemoryAccountSecretStore;
 
 #[cfg(test)]
 pub use askpass::{parse_askpass_prompt, AskpassPromptKind};
 
 #[cfg(test)]
-use askpass::answer_askpass_prompt_with_manager;
+use askpass::{answer_askpass_prompt_with_manager, answer_askpass_prompt_with_stores};
 
 const MAX_CREDENTIAL_BYTES: usize = 64 * 1024;
 
@@ -418,6 +426,63 @@ mod tests {
         assert_eq!(
             answer_askpass_prompt_with_manager(
                 "Password for 'https://other.example.com/org/repo.git': ",
+                &manager,
+            ),
+            Err(CredentialError::Unavailable)
+        );
+    }
+
+    #[test]
+    fn askpass_prefers_the_selected_account_and_falls_back_to_host_credentials() {
+        let manager = manager();
+        manager
+            .set("gitlab.com", "legacy-user", "legacy-token")
+            .unwrap();
+        let accounts = MemoryAccountSecretStore::default();
+        let github_account = format!("acct_{}", "a".repeat(32));
+        accounts
+            .set(
+                &github_account,
+                &AccountSecret {
+                    git_username: "octocat".into(),
+                    token: Zeroizing::new("account-token".into()),
+                },
+            )
+            .unwrap();
+        let selections = AccountSelections::default();
+        selections.replace(vec![("github.com".into(), github_account.clone())]);
+        let selections = selections.env_value().unwrap();
+
+        let answer = |prompt: &str| {
+            answer_askpass_prompt_with_stores(prompt, &selections, Some(&accounts), &manager)
+        };
+        assert_eq!(
+            answer("Username for 'https://github.com/org/repo.git': ")
+                .unwrap()
+                .as_str(),
+            "octocat"
+        );
+        assert_eq!(
+            answer("Password for 'https://octocat@github.com/org/repo.git': ")
+                .unwrap()
+                .as_str(),
+            "account-token"
+        );
+        assert_eq!(
+            answer("Password for 'https://gitlab.com/org/repo.git': ")
+                .unwrap()
+                .as_str(),
+            "legacy-token"
+        );
+        assert_eq!(
+            answer("Password for 'https://github.example.com/org/repo.git': "),
+            Err(CredentialError::Unavailable)
+        );
+        assert_eq!(
+            answer_askpass_prompt_with_stores(
+                "Password for 'https://github.com/org/repo.git': ",
+                "github.com=not-an-account-id",
+                Some(&accounts),
                 &manager,
             ),
             Err(CredentialError::Unavailable)

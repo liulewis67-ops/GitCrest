@@ -89,7 +89,9 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         repository_git,
         repository_filesystem.clone(),
     );
-    let git_commands = GitCommandService::default();
+    let account_selections = crate::credentials::AccountSelections::default();
+    let git_commands =
+        GitCommandService::default().with_account_selections(account_selections.clone());
     let remote_preflight_read: Arc<dyn RemotePreflightReadPort> = Arc::new(git_commands.clone());
     let remote_pull_recovery: Arc<dyn RemotePullRecoveryPort> = Arc::new(git_commands.clone());
     let remote_commands: Arc<dyn RemoteCommandPort> = Arc::new(git_commands.clone());
@@ -110,6 +112,12 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         clone_filesystem,
     );
     let events = EventBus::default();
+    let accounts = crate::features::accounts::AccountService::new(
+        Arc::new(store.clone()),
+        credentials::system_account_secret_store(),
+        Arc::new(crate::features::accounts::providers::HttpHostingProfileClient),
+        account_selections,
+    );
     let state = AppState {
         read_write_token: Arc::new(config.write_token),
         read_only_token: config.read_only_token.map(Arc::new),
@@ -136,6 +144,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         clones,
         credentials: credentials::CredentialManager::system(),
         ai_credentials: credentials::AiCredentialManager::system(),
+        accounts,
         events: events.clone(),
     };
     let app = app_router(state, config.cors_origin);

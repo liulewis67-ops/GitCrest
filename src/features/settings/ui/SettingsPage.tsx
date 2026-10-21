@@ -16,6 +16,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { SETTINGS_SECTIONS, type SettingsSectionId } from "./settings-sections";
 import type { UpdateStatus } from "../../../api/update-status";
 import { LOCALES, useI18n } from "../../../shared/i18n";
+import { AccountsSection } from "../../accounts";
 
 export function SettingsPage({
   api,
@@ -199,6 +200,8 @@ export function SettingsPage({
                 </div>
               </div>
             </section>
+
+            <AccountsSection api={api} />
 
             <section className="settingsSection" id="settings-section-appearance" aria-labelledby="settings-appearance-title">
               <h3 id="settings-appearance-title" tabIndex={-1}>{t("settings.section.appearance")}</h3>

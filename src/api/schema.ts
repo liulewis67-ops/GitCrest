@@ -404,6 +404,116 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** List signed-in GitHub and GitLab accounts and which one Git uses for each host */
+        get: operations["listAccounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/tokens": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate an access token with the provider and sign in as its user
+         * @description Signing in again as the same provider user replaces that account's token. The first account on a host becomes the one Git uses for it.
+         */
+        post: operations["signInWithToken"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{accountId}": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                accountId: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Sign out and forget the account's token
+         * @description When the account was the one Git used for its host, another account on that host takes over.
+         */
+        delete: operations["signOutAccount"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{accountId}/select": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                accountId: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Make this account the one Git uses for its host */
+        post: operations["selectAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/{accountId}/validate": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                accountId: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Check the stored token with the provider and refresh the profile
+         * @description A rejected or missing token sets the account state to needsReauth instead of failing.
+         */
+        post: operations["validateAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/ai/settings": {
         parameters: {
             query?: never;
@@ -2111,6 +2221,38 @@ export interface components {
             username: string | null;
             isConfigured: boolean;
         };
+        /** @enum {string} */
+        HostingProvider: "github" | "gitlab";
+        TokenSignInRequest: {
+            provider: components["schemas"]["HostingProvider"];
+            /** @description Host name such as github.com, gitlab.com or a self-managed instance, optionally with a non-default port. */
+            host: string;
+            /** @description Personal access token. Surrounding whitespace is ignored. */
+            token: string;
+        };
+        Account: {
+            accountId: string;
+            provider: components["schemas"]["HostingProvider"];
+            host: string;
+            login: string;
+            displayName: string | null;
+            /** @description HTTPS avatar URL reported by the provider. */
+            avatarUrl: string | null;
+            /** @enum {string} */
+            authKind: "token";
+            /** @description Token scopes when the provider reports them; empty when unknown. */
+            scopes: string[];
+            tokenExpiresAtMs: number | null;
+            /** @enum {string} */
+            state: "active" | "needsReauth";
+            /** @description Whether Git uses this account for its host. */
+            selected: boolean;
+            createdAtMs: number;
+            lastValidatedAtMs: number;
+        };
+        AccountList: {
+            accounts: components["schemas"]["Account"][];
+        };
         AiSettings: {
             /** @enum {string} */
             provider: "none" | "openAiCompatible" | "ollama";
@@ -2351,7 +2493,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "ACCOUNT_INPUT_INVALID" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_TOKEN_REJECTED" | "ACCOUNT_PROVIDER_UNREACHABLE" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -2463,6 +2605,7 @@ export interface components {
         ApiVersion: "1";
         /** @description `hunks` (default) returns changes with three lines of context; staging selections address these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides in full; its revision and indexes are not accepted by staging, discard, or commit selections. */
         DiffContext: "hunks" | "full";
+        AccountId: string;
     };
     requestBodies: never;
     headers: {
@@ -3673,6 +3816,243 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             406: components["responses"]["UnsupportedVersion"];
             /** @description The system credential store is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    listAccounts: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Account metadata only; tokens are never returned. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Account storage is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    signInWithToken: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TokenSignInRequest"];
+            };
+        };
+        responses: {
+            /** @description The signed-in account; the token is never returned. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The provider rejected the token. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The provider could not be reached or answered unexpectedly. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Account storage or the system credential store is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    signOutAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                accountId: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Signed out. */
+            204: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The account is not signed in. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Account storage or the system credential store is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    selectAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                accountId: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The selected account. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The account is not signed in. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Account storage is unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    validateAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                accountId: components["parameters"]["AccountId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The account after validation. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The account is not signed in. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The provider could not be reached or answered unexpectedly. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Account storage or the system credential store is unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

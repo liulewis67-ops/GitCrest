@@ -852,6 +852,95 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "503": { description: The system credential store is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/accounts:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: listAccounts
+      summary: List signed-in GitHub and GitLab accounts and which one Git uses for each host
+      responses:
+        "200":
+          description: Account metadata only; tokens are never returned.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/AccountList" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Account storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/accounts/tokens:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    post:
+      operationId: signInWithToken
+      summary: Validate an access token with the provider and sign in as its user
+      description: Signing in again as the same provider user replaces that account's token. The first account on a host becomes the one Git uses for it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/TokenSignInRequest" }
+      responses:
+        "200":
+          description: The signed-in account; the token is never returned.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "422": { description: The provider rejected the token., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "502": { description: The provider could not be reached or answered unexpectedly., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Account storage or the system credential store is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/accounts/{accountId}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/AccountId"
+    delete:
+      operationId: signOutAccount
+      summary: Sign out and forget the account's token
+      description: When the account was the one Git used for its host, another account on that host takes over.
+      responses:
+        "204": { description: Signed out., headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The account is not signed in., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Account storage or the system credential store is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/accounts/{accountId}/select:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/AccountId"
+    post:
+      operationId: selectAccount
+      summary: Make this account the one Git uses for its host
+      responses:
+        "200":
+          description: The selected account.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The account is not signed in., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Account storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/accounts/{accountId}/validate:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/AccountId"
+    post:
+      operationId: validateAccount
+      summary: Check the stored token with the provider and refresh the profile
+      description: A rejected or missing token sets the account state to needsReauth instead of failing.
+      responses:
+        "200":
+          description: The account after validation.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/Account" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The account is not signed in., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "502": { description: The provider could not be reached or answered unexpectedly., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Account storage or the system credential store is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/ai/settings:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -3709,6 +3798,11 @@ components:
         type: string
         enum: [hunks, full]
         default: hunks
+    AccountId:
+      name: accountId
+      in: path
+      required: true
+      schema: { type: string, pattern: "^acct_[0-9a-f]{32}$" }
   schemas:
     RepoId:
       type: string
@@ -4414,6 +4508,41 @@ components:
         host: { type: string }
         username: { type: [string, "null"] }
         isConfigured: { type: boolean }
+    HostingProvider:
+      type: string
+      enum: [github, gitlab]
+    TokenSignInRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, host, token]
+      properties:
+        provider: { $ref: "#/components/schemas/HostingProvider" }
+        host: { type: string, minLength: 1, maxLength: 260, description: "Host name such as github.com, gitlab.com or a self-managed instance, optionally with a non-default port." }
+        token: { type: string, minLength: 1, maxLength: 65536, writeOnly: true, description: Personal access token. Surrounding whitespace is ignored. }
+    Account:
+      type: object
+      additionalProperties: false
+      required: [accountId, provider, host, login, displayName, avatarUrl, authKind, scopes, tokenExpiresAtMs, state, selected, createdAtMs, lastValidatedAtMs]
+      properties:
+        accountId: { type: string, pattern: "^acct_[0-9a-f]{32}$" }
+        provider: { $ref: "#/components/schemas/HostingProvider" }
+        host: { type: string }
+        login: { type: string }
+        displayName: { type: [string, "null"] }
+        avatarUrl: { type: [string, "null"], description: HTTPS avatar URL reported by the provider. }
+        authKind: { type: string, enum: [token] }
+        scopes: { type: array, items: { type: string }, description: Token scopes when the provider reports them; empty when unknown. }
+        tokenExpiresAtMs: { type: [integer, "null"] }
+        state: { type: string, enum: [active, needsReauth] }
+        selected: { type: boolean, description: Whether Git uses this account for its host. }
+        createdAtMs: { type: integer }
+        lastValidatedAtMs: { type: integer }
+    AccountList:
+      type: object
+      additionalProperties: false
+      required: [accounts]
+      properties:
+        accounts: { type: array, items: { $ref: "#/components/schemas/Account" } }
     AiSettings:
       type: object
       additionalProperties: false
@@ -4916,6 +5045,10 @@ components:
         - REMOTE_NOT_FOUND
         - CREDENTIAL_INPUT_INVALID
         - CREDENTIALS_UNAVAILABLE
+        - ACCOUNT_INPUT_INVALID
+        - ACCOUNT_NOT_FOUND
+        - ACCOUNT_TOKEN_REJECTED
+        - ACCOUNT_PROVIDER_UNREACHABLE
         - PULL_PREFLIGHT_UNAVAILABLE
         - PULL_TARGET_UNAVAILABLE
         - PULL_PREFLIGHT_STALE

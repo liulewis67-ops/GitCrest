@@ -8,7 +8,7 @@ use serde::Serialize;
 use crate::{
     domain::error::{ConflictError, RepositoryError, WorkflowError},
     features::{
-        branches, commits, credentials,
+        accounts, branches, commits, credentials,
         diff::DiffError,
         history,
         remotes::{self, pull, push},
@@ -69,6 +69,10 @@ pub(crate) enum ApiErrorCode {
     RemoteNotFound,
     CredentialInputInvalid,
     CredentialsUnavailable,
+    AccountInputInvalid,
+    AccountNotFound,
+    AccountTokenRejected,
+    AccountProviderUnreachable,
     AiProviderUnavailable,
     PullPreflightUnavailable,
     PullTargetUnavailable,
@@ -640,6 +644,37 @@ impl ApiError {
                 ApiErrorCode::CredentialsUnavailable,
                 "The system credential store is unavailable. Unlock it or check its desktop service, then retry.",
             ),
+        }
+    }
+
+    pub(crate) fn from_account_error(error: accounts::AccountError) -> Self {
+        match error {
+            accounts::AccountError::InvalidInput => Self::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::AccountInputInvalid,
+                "Enter a host name such as github.com and an access token without spaces.",
+            ),
+            accounts::AccountError::NotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::AccountNotFound,
+                "This account is no longer signed in.",
+            ),
+            accounts::AccountError::TokenRejected => Self::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                ApiErrorCode::AccountTokenRejected,
+                "The provider rejected this token. Check that it is current and can read your profile.",
+            ),
+            accounts::AccountError::ProviderUnreachable => Self::new(
+                StatusCode::BAD_GATEWAY,
+                ApiErrorCode::AccountProviderUnreachable,
+                "The provider could not be reached or did not answer as expected. Check the host and your connection, then retry.",
+            ),
+            accounts::AccountError::StorageUnavailable => {
+                Self::from_repository_error(RepositoryError::StorageUnavailable)
+            }
+            accounts::AccountError::CredentialsUnavailable => {
+                Self::from_credential_error(credentials::CredentialError::Unavailable)
+            }
         }
     }
 

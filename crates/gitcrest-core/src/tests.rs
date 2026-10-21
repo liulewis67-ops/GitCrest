@@ -65,6 +65,41 @@ fn test_credentials() -> features::credentials::CredentialManager {
     ))
 }
 
+/// Accepts `valid-token` as the GitHub/GitLab user `octocat`; every other token is rejected.
+struct TestProfiles;
+
+impl features::accounts::providers::HostingProfileClient for TestProfiles {
+    fn fetch_profile<'a>(
+        &'a self,
+        _provider: crate::domain::account::HostingProvider,
+        _api_base_url: &'a str,
+        token: &'a str,
+    ) -> features::accounts::providers::ProfileFuture<'a> {
+        let result = if token == "valid-token" {
+            Ok(features::accounts::providers::HostingProfile {
+                remote_user_id: "1".into(),
+                login: "octocat".into(),
+                display_name: Some("The Octocat".into()),
+                avatar_url: None,
+                scopes: Some(vec!["repo".into()]),
+                token_expires_at_ms: None,
+            })
+        } else {
+            Err(features::accounts::providers::ProfileError::TokenRejected)
+        };
+        Box::pin(async move { result })
+    }
+}
+
+fn test_accounts() -> features::accounts::AccountService {
+    features::accounts::AccountService::new(
+        Arc::new(crate::storage::RepositoryStore::default()),
+        Arc::new(crate::credentials::MemoryAccountSecretStore::default()),
+        Arc::new(TestProfiles),
+        crate::credentials::AccountSelections::default(),
+    )
+}
+
 fn test_app(cors_origin: Option<&str>) -> Router {
     let repositories = RepositoryManager::default();
     let status = features::status::StatusService::new(repositories.clone());
@@ -79,6 +114,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
         credentials: test_credentials(),
         ai_credentials: test_ai_credentials(),
+        accounts: test_accounts(),
         events: EventBus::default(),
         shelf_store: Arc::new(repositories.store()),
         shelf_patch_checker: Arc::new(GitCommandService::default()),
@@ -243,6 +279,7 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             conflict_token: None,
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
+            accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
@@ -477,6 +514,133 @@ async fn credential_api_returns_metadata_only_and_removes_credentials_idempotent
 }
 
 #[tokio::test]
+async fn account_api_signs_in_switches_and_signs_out_without_returning_tokens() {
+    let app = test_app(None);
+    let rejected = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/accounts/tokens",
+            r#"{"provider":"github","host":"github.com","token":"expired-token"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(rejected).await,
+        (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "ACCOUNT_TOKEN_REJECTED".into()
+        )
+    );
+    let invalid = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/accounts/tokens",
+            r#"{"provider":"bitbucket","host":"bitbucket.org","token":"valid-token"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(invalid).await,
+        (StatusCode::BAD_REQUEST, "ACCOUNT_INPUT_INVALID".into())
+    );
+    let read_only = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            "/api/v1/accounts/tokens",
+            r#"{"provider":"github","host":"github.com","token":"valid-token"}"#,
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(read_only.status(), StatusCode::FORBIDDEN);
+
+    let signed_in = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/accounts/tokens",
+            r#"{"provider":"github","host":"GitHub.com","token":"valid-token"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(signed_in.status(), StatusCode::OK);
+    let body = to_bytes(signed_in.into_body(), usize::MAX).await.unwrap();
+    assert!(!String::from_utf8_lossy(&body).contains("valid-token"));
+    let account: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(account["provider"], "github");
+    assert_eq!(account["host"], "github.com");
+    assert_eq!(account["login"], "octocat");
+    assert_eq!(account["authKind"], "token");
+    assert_eq!(account["state"], "active");
+    assert_eq!(account["selected"], true);
+    let account_id = account["accountId"].as_str().unwrap().to_owned();
+
+    let listed = app
+        .clone()
+        .oneshot(request("/api/v1/accounts", Some(READ_ONLY_TOKEN)))
+        .await
+        .unwrap();
+    assert_eq!(listed.status(), StatusCode::OK);
+    let body = to_bytes(listed.into_body(), usize::MAX).await.unwrap();
+    assert!(!String::from_utf8_lossy(&body).contains("valid-token"));
+    let listed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["accounts"][0]["accountId"], account_id.as_str());
+
+    let selected = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/accounts/{account_id}/select"),
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(selected.status(), StatusCode::OK);
+    let validated = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/accounts/{account_id}/validate"),
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(validated.status(), StatusCode::OK);
+
+    let signed_out = app
+        .clone()
+        .oneshot(json_request(
+            Method::DELETE,
+            &format!("/api/v1/accounts/{account_id}"),
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(signed_out.status(), StatusCode::NO_CONTENT);
+    let missing = app
+        .clone()
+        .oneshot(json_request(
+            Method::DELETE,
+            &format!("/api/v1/accounts/{account_id}"),
+            "",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(missing).await,
+        (StatusCode::NOT_FOUND, "ACCOUNT_NOT_FOUND".into())
+    );
+    let malformed = app
+        .oneshot(json_request(Method::POST, "/api/v1/accounts/../select", ""))
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn ai_settings_and_credentials_never_return_the_api_key() {
     let app = test_app(None);
     let configured = app.clone().oneshot(json_request(
@@ -677,6 +841,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             ),
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
+            accounts: test_accounts(),
             events: EventBus::default(),
         },
         None,
@@ -1627,6 +1792,7 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
+            accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
@@ -2619,6 +2785,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             conflict_token: None,
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
+            accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
             shelf_patch_checker: Arc::new(GitCommandService::default()),
@@ -2762,6 +2929,7 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             conflict_token: None,
             credentials: test_credentials(),
             ai_credentials: test_ai_credentials(),
+            accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
             shelf_patch_checker: Arc::new(GitCommandService::default()),

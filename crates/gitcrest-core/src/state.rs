@@ -54,5 +54,6 @@ pub(crate) struct AppState {
     pub(crate) clones: CloneService,
     pub(crate) credentials: credentials::CredentialManager,
     pub(crate) ai_credentials: credentials::AiCredentialManager,
+    pub(crate) accounts: crate::features::accounts::AccountService,
     pub(crate) events: EventBus,
 }

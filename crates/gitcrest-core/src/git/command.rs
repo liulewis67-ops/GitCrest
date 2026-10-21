@@ -17,6 +17,7 @@ use tokio::{
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
 
+use crate::credentials::{AccountSelections, ASKPASS_ACCOUNTS_ENV};
 use crate::execution::{TaskContext, TaskFailure};
 use crate::{
     domain::{
@@ -77,12 +78,14 @@ impl GitOperation {
 #[derive(Clone, Debug)]
 pub struct GitCommandService {
     pub(super) git_program: String,
+    account_selections: AccountSelections,
 }
 
 impl Default for GitCommandService {
     fn default() -> Self {
         Self {
             git_program: "git".into(),
+            account_selections: AccountSelections::default(),
         }
     }
 }
@@ -269,7 +272,14 @@ impl GitCommandService {
     pub fn with_program(git_program: impl Into<String>) -> Self {
         Self {
             git_program: git_program.into(),
+            account_selections: AccountSelections::default(),
         }
+    }
+
+    /// Git network commands authenticate as the account selected for each host.
+    pub fn with_account_selections(mut self, account_selections: AccountSelections) -> Self {
+        self.account_selections = account_selections;
+        self
     }
 
     pub async fn list_worktrees(
@@ -427,7 +437,7 @@ impl GitCommandService {
         operation: GitOperation,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let environment = askpass_environment()?;
+        let environment = askpass_environment(&self.account_selections)?;
         run_command(
             &self.git_program,
             operation.arguments().iter().map(OsString::from).collect(),
@@ -474,7 +484,7 @@ impl GitCommandService {
             }),
             None,
             Vec::new(),
-            askpass_environment()?,
+            askpass_environment(&self.account_selections)?,
             Some(repository_path),
             match strategy {
                 RemotePullStrategy::Merge => "Pull with merge",
@@ -1095,7 +1105,7 @@ impl GitCommandService {
             }),
             None,
             Vec::new(),
-            askpass_environment()?,
+            askpass_environment(&self.account_selections)?,
             Some(repository_path),
             if force_with_lease {
                 "Push with lease"
@@ -1137,7 +1147,7 @@ impl GitCommandService {
             )),
             None,
             Vec::new(),
-            askpass_environment()?,
+            askpass_environment(&self.account_selections)?,
             Some(repository_path),
             "Delete remote branch",
             task.clone(),
@@ -1174,7 +1184,7 @@ impl GitCommandService {
         parent: &Path,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let environment = askpass_environment()?;
+        let environment = askpass_environment(&self.account_selections)?;
         run_command(
             &self.git_program,
             [
@@ -1784,18 +1794,54 @@ async fn workflow_command_result(
     }
 }
 
-fn askpass_environment() -> Result<Vec<(OsString, OsString)>, TaskFailure> {
+fn askpass_environment(
+    account_selections: &AccountSelections,
+) -> Result<Vec<(OsString, OsString)>, TaskFailure> {
     let executable = std::env::current_exe().map_err(|_| {
         TaskFailure::Failed("The Git credential helper could not be located".into())
     })?;
-    Ok(vec![
+    let mut environment = vec![
         (OsString::from("GIT_ASKPASS"), executable.into_os_string()),
         (
             OsString::from("GIT_ASKPASS_REQUIRE"),
             OsString::from("force"),
         ),
         (OsString::from("GITCREST_GIT_ASKPASS"), OsString::from("1")),
-    ])
+    ];
+    environment.extend(account_environment(account_selections));
+    Ok(environment)
+}
+
+/// Tells askpass which signed-in account answers for each host. Git consults credential helpers
+/// before askpass, so a configured helper such as Git Credential Manager would otherwise answer for
+/// these hosts with whatever it has stored; an empty URL-scoped `credential.helper` clears the
+/// helper list for that host only.
+fn account_environment(account_selections: &AccountSelections) -> Vec<(OsString, OsString)> {
+    let Some(selections) = account_selections.env_value() else {
+        return Vec::new();
+    };
+    let hosts = account_selections.hosts();
+    let mut environment = vec![
+        (
+            OsString::from(ASKPASS_ACCOUNTS_ENV),
+            OsString::from(selections),
+        ),
+        (
+            OsString::from("GIT_CONFIG_COUNT"),
+            OsString::from(hosts.len().to_string()),
+        ),
+    ];
+    for (index, host) in hosts.iter().enumerate() {
+        environment.push((
+            OsString::from(format!("GIT_CONFIG_KEY_{index}")),
+            OsString::from(format!("credential.https://{host}.helper")),
+        ));
+        environment.push((
+            OsString::from(format!("GIT_CONFIG_VALUE_{index}")),
+            OsString::new(),
+        ));
+    }
+    environment
 }
 
 struct TemporaryIndex {
@@ -2255,6 +2301,43 @@ mod tests {
 
     use super::*;
     use crate::features::tasks::{TaskService, TaskStatus};
+
+    #[test]
+    fn hands_selected_accounts_to_askpass_and_bypasses_helpers_only_for_their_hosts() {
+        let selections = AccountSelections::default();
+        assert!(account_environment(&selections).is_empty());
+
+        let github = format!("acct_{}", "a".repeat(32));
+        let gitlab = format!("acct_{}", "b".repeat(32));
+        selections.replace(vec![
+            ("github.com".into(), github.clone()),
+            ("gitlab.example.com:8443".into(), gitlab.clone()),
+        ]);
+        let environment: Vec<(String, String)> = account_environment(&selections)
+            .into_iter()
+            .map(|(key, value)| (key.into_string().unwrap(), value.into_string().unwrap()))
+            .collect();
+        assert_eq!(
+            environment,
+            vec![
+                (
+                    ASKPASS_ACCOUNTS_ENV.to_string(),
+                    format!("github.com={github};gitlab.example.com:8443={gitlab}")
+                ),
+                ("GIT_CONFIG_COUNT".into(), "2".into()),
+                (
+                    "GIT_CONFIG_KEY_0".into(),
+                    "credential.https://github.com.helper".into()
+                ),
+                ("GIT_CONFIG_VALUE_0".into(), String::new()),
+                (
+                    "GIT_CONFIG_KEY_1".into(),
+                    "credential.https://gitlab.example.com:8443.helper".into()
+                ),
+                ("GIT_CONFIG_VALUE_1".into(), String::new()),
+            ]
+        );
+    }
 
     fn git(path: &Path, args: &[&str]) {
         let output = StdCommand::new("git")

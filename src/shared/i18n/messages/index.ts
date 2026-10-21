@@ -15,5 +15,6 @@ import { remotes } from "./remotes";
 import { remotes2 } from "./remotes2";
 import { workspace } from "./workspace";
 import { settings } from "./settings";
+import { accounts } from "./accounts";
 
-export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings } as const;
+export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts } as const;

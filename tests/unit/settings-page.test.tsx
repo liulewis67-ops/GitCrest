@@ -12,7 +12,7 @@ afterEach(cleanup);
 
 function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
   let api: Record<string, unknown>;
-  api = { ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
+  api = { listAccounts: vi.fn().mockResolvedValue({ accounts: [] }), ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
   return api as unknown as GitCrestApiClient;
 }
 
@@ -51,7 +51,7 @@ it("moves focus into settings, traps Tab, and restores the opener on close", asy
   await waitFor(() => expect(document.activeElement).toBe(opener));
 });
 
-it("aborts AI settings loading when the settings dialog closes", async () => {
+it("aborts AI settings and account loading when the settings dialog closes", async () => {
   const pending = deferred<Awaited<ReturnType<GitCrestApiClient["getAiSettings"]>>>();
   const signals: AbortSignal[] = [];
   const api = cancellableApi({ getAiSettings: vi.fn(() => pending.promise) }, signals);
@@ -63,10 +63,10 @@ it("aborts AI settings loading when the settings dialog closes", async () => {
 
   fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
   const dialog = await screen.findByRole("dialog", { name: "Settings" });
-  await waitFor(() => expect(signals).toHaveLength(1));
+  await waitFor(() => expect(signals).toHaveLength(2));
   fireEvent.click(within(dialog).getByRole("button", { name: "Close settings" }));
   await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
-  expect(signals[0]?.aborted).toBe(true);
+  expect(signals.every((signal) => signal.aborted)).toBe(true);
   await act(async () => pending.resolve({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }));
 });
 

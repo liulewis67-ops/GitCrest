@@ -8,6 +8,7 @@ use crate::domain::shelf::{ShelfRecord, ShelfSnapshot};
 #[cfg(test)]
 use crate::domain::{commit::CommitSearchEntry, diff::DiffScope};
 
+mod accounts;
 mod branch_favorites;
 pub(crate) mod cloning;
 pub(crate) mod conflicts;
@@ -113,7 +114,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 17).unwrap();
+        connection.pragma_update(None, "user_version", 18).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -156,7 +157,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 16);
+        assert_eq!(version, 17);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }
@@ -235,7 +236,12 @@ mod tests {
             .unwrap();
         assert_eq!(sort_order_columns, 0);
         store
-            .replace_history_search_index("repo-1", "new-fingerprint", &test_index_basis(), std::slice::from_ref(&entry))
+            .replace_history_search_index(
+                "repo-1",
+                "new-fingerprint",
+                &test_index_basis(),
+                std::slice::from_ref(&entry),
+            )
             .unwrap();
         assert_eq!(
             store
@@ -474,7 +480,12 @@ mod tests {
             message: "Persistent file-backed search entry".into(),
         };
         store
-            .replace_history_search_index("repo-1", "refs-v1", &test_index_basis(), std::slice::from_ref(&entry))
+            .replace_history_search_index(
+                "repo-1",
+                "refs-v1",
+                &test_index_basis(),
+                std::slice::from_ref(&entry),
+            )
             .unwrap();
         let other_entry = CommitSearchEntry {
             oid: "d".repeat(40),

@@ -38,6 +38,9 @@ export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflic
 export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowConflictSuggestionRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
+export type HostingProvider = components["schemas"]["HostingProvider"];
+export type AccountResponse = components["schemas"]["Account"];
+export type AccountListResponse = components["schemas"]["AccountList"];
 export type AiSettingsResponse = components["schemas"]["AiSettings"];
 export type AiReplyResponse = components["schemas"]["AiReply"];
 export type AiFileSelection = components["schemas"]["AiFileSelection"];
@@ -303,6 +306,30 @@ export class GitCrestApiClient {
   deleteCredential(host: string): Promise<void> {
     const query = new URLSearchParams({ host });
     return this.request<void>(`/api/v1/credentials?${query}`, true, { method: "DELETE" });
+  }
+
+  listAccounts(): Promise<AccountListResponse> {
+    return this.request<AccountListResponse>("/api/v1/accounts");
+  }
+
+  signInWithToken(provider: HostingProvider, host: string, token: string): Promise<AccountResponse> {
+    return this.request<AccountResponse>("/api/v1/accounts/tokens", true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, host, token } satisfies components["schemas"]["TokenSignInRequest"]),
+    });
+  }
+
+  selectAccount(accountId: string): Promise<AccountResponse> {
+    return this.request<AccountResponse>(`/api/v1/accounts/${encodeURIComponent(accountId)}/select`, true, { method: "POST" });
+  }
+
+  validateAccount(accountId: string): Promise<AccountResponse> {
+    return this.request<AccountResponse>(`/api/v1/accounts/${encodeURIComponent(accountId)}/validate`, true, { method: "POST" });
+  }
+
+  signOutAccount(accountId: string): Promise<void> {
+    return this.request<void>(`/api/v1/accounts/${encodeURIComponent(accountId)}`, true, { method: "DELETE" });
   }
 
   getAiSettings(): Promise<AiSettingsResponse> {

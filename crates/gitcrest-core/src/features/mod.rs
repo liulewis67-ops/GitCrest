@@ -1,3 +1,4 @@
+pub(crate) mod accounts;
 pub(crate) mod branches;
 pub(crate) mod commits;
 pub(crate) mod credentials;
