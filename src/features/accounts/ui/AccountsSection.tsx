@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { AccountResponse, GitCrestApiClient, HostingProvider } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
+import { HostCredentials } from "../../credentials";
 import { DEFAULT_HOSTS, groupAccountsByHost, tokenCreationUrl, tokenExpiry } from "../model/accounts";
 
 interface SignInDraft {
@@ -9,7 +10,13 @@ interface SignInDraft {
   token: string;
 }
 
-export function AccountsSection({ api }: { api: GitCrestApiClient }) {
+interface AccountsSectionProps {
+  api: GitCrestApiClient;
+  /** HTTPS hosts to show credential cards for, such as the remotes of the repository that asked to sign in. */
+  credentialHosts?: readonly string[];
+}
+
+export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) {
   const { t } = useI18n();
   const [accounts, setAccounts] = useState<AccountResponse[]>();
   const [draft, setDraft] = useState<SignInDraft>();
@@ -173,6 +180,7 @@ export function AccountsSection({ api }: { api: GitCrestApiClient }) {
       ))}
       {error && <p className="formError" role="alert">{error}</p>}
       {notice && <p className="settingsNotice" role="status">{notice}</p>}
+      <HostCredentials api={api} initialHosts={credentialHosts} />
     </section>
   );
 }

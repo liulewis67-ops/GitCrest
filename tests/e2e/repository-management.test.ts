@@ -348,7 +348,7 @@ it("retries a failed clone from Task Center after the remote becomes available",
   }
 }, 60_000);
 
-it("opens HTTPS credentials when retrying a clone that failed authentication", async () => {
+it("opens account settings from a clone retry and returns to the clone draft", async () => {
   const cloneParent = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-auth-parent-"));
   const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-clone-auth-app-data-"));
   const gitConfigPath = resolve(appDataPath, "gitconfig");
@@ -395,7 +395,12 @@ it("opens HTTPS credentials when retrying a clone that failed authentication", a
     expect(await retryDialog.getByRole("textbox", { name: "Remote URL" }).inputValue()).toBe(authenticationServer.remoteUrl);
     expect(await retryDialog.getByRole("textbox", { name: "Folder name" }).inputValue()).toBe("private-project");
     expect(await retryDialog.getByRole("button", { name: "Start clone" }).isEnabled()).toBe(true);
-    await retryDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` }).waitFor();
+    await retryDialog.getByRole("button", { name: "Manage accounts" }).click();
+    const settingsDialog = window.getByRole("dialog", { name: "Settings" });
+    await settingsDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` }).waitFor();
+    await settingsDialog.getByRole("button", { name: "Close settings" }).click();
+    expect(await retryDialog.getByRole("textbox", { name: "Remote URL" }).inputValue()).toBe(authenticationServer.remoteUrl);
+    expect(await retryDialog.getByRole("textbox", { name: "Folder name" }).inputValue()).toBe("private-project");
   } finally {
     await app?.close();
     await authenticationServer?.close();
@@ -483,12 +488,15 @@ it("clones successfully after saving credentials for an authentication-failed re
     const retryDialog = window.getByRole("dialog", { name: "Clone repository" });
     expect(await retryDialog.getByRole("textbox", { name: "Remote URL" }).inputValue()).toBe(authenticationServer.remoteUrl);
     expect(await retryDialog.getByRole("textbox", { name: "Folder name" }).inputValue()).toBe("authenticated-project");
-    const credentialCard = retryDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
+    await retryDialog.getByRole("button", { name: "Manage accounts" }).click();
+    const settingsDialog = window.getByRole("dialog", { name: "Settings" });
+    const credentialCard = settingsDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
     await credentialCard.getByLabel("Username").fill(username);
     await credentialCard.getByLabel("Token or password").fill(token);
     await credentialCard.getByRole("button", { name: "Save credential" }).click();
     await credentialCard.getByText("Credential saved to the system credential store.").waitFor();
     credentialSaved = true;
+    await settingsDialog.getByRole("button", { name: "Close settings" }).click();
     await retryDialog.getByRole("button", { name: "Start clone" }).click();
 
     await window.locator(".workspaceCrumb").filter({ hasText: clonePath }).waitFor({ timeout: 30_000 });
@@ -595,12 +603,15 @@ it("removes the partial destination when an active clone is cancelled", async ()
     await failedClone.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
     await failedClone.getByRole("button", { name: "Retry clone" }).click();
     const retryDialog = window.getByRole("dialog", { name: "Clone repository" });
-    const credentialCard = retryDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
+    await retryDialog.getByRole("button", { name: "Manage accounts" }).click();
+    const settingsDialog = window.getByRole("dialog", { name: "Settings" });
+    const credentialCard = settingsDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
     await credentialCard.getByLabel("Username").fill(username);
     await credentialCard.getByLabel("Token or password").fill(token);
     await credentialCard.getByRole("button", { name: "Save credential" }).click();
     await credentialCard.getByText("Credential saved to the system credential store.").waitFor();
     credentialSaved = true;
+    await settingsDialog.getByRole("button", { name: "Close settings" }).click();
     await retryDialog.getByRole("button", { name: "Start clone" }).click();
 
     await authenticationServer.waitForAuthenticatedRequest();

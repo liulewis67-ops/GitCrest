@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 it("focuses the remote URL field when opened and closes with Escape", async () => {
   const onClose = vi.fn();
-  render(<CloneDialog parentPath="C:/repositories" error="" busy={false} renderCredentialEditor={() => null} onChooseParent={vi.fn()} onClose={onClose} onSubmit={vi.fn()} />);
+  render(<CloneDialog parentPath="C:/repositories" error="" busy={false} onManageAccounts={vi.fn()} onChooseParent={vi.fn()} onClose={onClose} onSubmit={vi.fn()} />);
   const dialog = screen.getByRole("dialog", { name: "Clone repository" });
   const remoteUrl = screen.getByRole("textbox", { name: "Remote URL" });
   await waitFor(() => expect(document.activeElement).toBe(remoteUrl));
@@ -16,9 +16,11 @@ it("focuses the remote URL field when opened and closes with Escape", async () =
   expect(onClose).toHaveBeenCalledOnce();
 });
 
-it("delegates HTTPS credential UI to the app composition layer", () => {
-  const renderCredentialEditor = vi.fn(() => null);
-  render(<CloneDialog initialRemoteUrl="https://Example.test:443/org/repo.git" parentPath="C:/repositories" error="" busy renderCredentialEditor={renderCredentialEditor} onChooseParent={vi.fn()} onClose={vi.fn()} onSubmit={vi.fn()} />);
+it("hands sign-in to Settings with the typed draft and the remote's HTTPS host", () => {
+  const onManageAccounts = vi.fn();
+  render(<CloneDialog initialRemoteUrl="https://Example.test:443/org/repo.git" parentPath="C:/repositories" error="" busy={false} onManageAccounts={onManageAccounts} onChooseParent={vi.fn()} onClose={vi.fn()} onSubmit={vi.fn()} />);
+  expect(screen.queryByLabelText("Token or password")).toBeNull();
 
-  expect(renderCredentialEditor).toHaveBeenCalledWith("example.test", true);
+  fireEvent.click(screen.getByRole("button", { name: "Manage accounts" }));
+  expect(onManageAccounts).toHaveBeenCalledWith({ remoteUrl: "https://Example.test:443/org/repo.git", parentPath: "C:/repositories", directoryName: "repo" }, ["example.test"]);
 });

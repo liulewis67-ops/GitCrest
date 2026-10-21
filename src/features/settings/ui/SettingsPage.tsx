@@ -23,6 +23,7 @@ export function SettingsPage({
   repoId,
   onClose,
   initialSection,
+  credentialHosts,
   shortcuts = defaultShortcutPreferences,
   onShortcutsChange = () => {},
   updateStatus,
@@ -33,6 +34,7 @@ export function SettingsPage({
   repoId?: string;
   onClose: () => void;
   initialSection?: SettingsSectionId;
+  credentialHosts?: readonly string[];
   shortcuts?: ShortcutPreferences;
   onShortcutsChange?: (shortcuts: ShortcutPreferences) => void;
   updateStatus?: UpdateStatus;
@@ -201,7 +203,7 @@ export function SettingsPage({
               </div>
             </section>
 
-            <AccountsSection api={api} />
+            <AccountsSection api={api} credentialHosts={credentialHosts} />
 
             <section className="settingsSection" id="settings-section-appearance" aria-labelledby="settings-appearance-title">
               <h3 id="settings-appearance-title" tabIndex={-1}>{t("settings.section.appearance")}</h3>

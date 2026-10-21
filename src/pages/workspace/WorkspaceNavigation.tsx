@@ -4,7 +4,6 @@ import type { RepositoryStatusGroup } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { loadRemoteManager } from "../../features/remotes";
 import { BranchRowMenu, BranchSyncBadge, WorktreeList } from "../../features/branches";
-import type { CredentialEditorRenderer } from "../../features/credentials";
 import { useI18n } from "../../shared/i18n";
 
 const RemoteManager = lazy(() => loadRemoteManager().then(({ RemoteManager }) => ({ default: RemoteManager })));
@@ -36,8 +35,7 @@ interface WorkspaceNavigationProps {
   remoteActionBusy: boolean;
   remoteDisabledReason: string;
   api?: GitCrestApiClient;
-  renderCredentialEditor: CredentialEditorRenderer;
-  credentialManagerOpenRequest: number;
+  onManageAccounts: (hosts: string[]) => void;
   historyRefreshKey: number;
   shelfComposerRequest: number;
   shelfComposerAfterSwitch?: ShelfSwitchState;
@@ -58,7 +56,6 @@ interface WorkspaceNavigationProps {
   onWorktreeRemoveStarted: (task: TaskSnapshotResponse) => void;
   onManageBranch: (name: string, mode: "rename" | "delete") => void;
   onToggleBranchFavorite: (fullName: string, favorite: boolean) => void;
-  onFetchRepository: () => void;
   onRefreshRepositoryRemotes: (repoId: string) => void;
   onAddRepositoryRemote: (name: string, url: string) => void;
   onSetRepositoryRemoteUrl: (name: string, url: string) => void;
@@ -80,11 +77,11 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
     workingCount, stagedCount, stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope,
     activeBranches, hasBranchSnapshot, activeBranchError, activeBranchesLoading, orderedBranches,
     activeRemotes, activeRemoteError, activeRemotesLoading, remoteActionBusy, remoteDisabledReason,
-    api, renderCredentialEditor, credentialManagerOpenRequest, historyRefreshKey, shelfComposerRequest, shelfComposerAfterSwitch,
+    api, onManageAccounts, historyRefreshKey, shelfComposerRequest, shelfComposerAfterSwitch,
     connected, connecting, hasActiveRepositoryTask, shortcuts, isMacPlatform,
     onStageChanges: stageChanges, onRefreshRepositoryStatus: refreshRepositoryStatus,
     onRefreshRepositoryBranches: refreshRepositoryBranches, onOpenFileDiff: openFileDiff,
-    onDeleteRemoteBranch, onSwitchBranch, onMergeBranch, onOpenWorktree, onNewWorktreeForBranch, onWorktreeRemoveStarted, onManageBranch, onToggleBranchFavorite: toggleBranchFavorite, onFetchRepository: fetchRepository,
+    onDeleteRemoteBranch, onSwitchBranch, onMergeBranch, onOpenWorktree, onNewWorktreeForBranch, onWorktreeRemoveStarted, onManageBranch, onToggleBranchFavorite: toggleBranchFavorite,
     onRefreshRepositoryRemotes: refreshRepositoryRemotes, onAddRepositoryRemote: addRepositoryRemote,
     onSetRepositoryRemoteUrl: setRepositoryRemoteUrl, onDeleteRepositoryRemote: deleteRepositoryRemote,
     onSetRepositoryDefaultRemote: setRepositoryDefaultRemote, onSetRepositoryBranchUpstream: setRepositoryBranchUpstream,
@@ -160,9 +157,7 @@ export function WorkspaceNavigation(props: WorkspaceNavigationProps) {
               <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">{t("nav.loadingRemotes")}</div>}><RemoteManager
                 snapshot={activeRemotes}
                 branches={activeBranches}
-                renderCredentialEditor={renderCredentialEditor}
-                openRequest={credentialManagerOpenRequest}
-                onFetch={() => void fetchRepository()}
+                onManageAccounts={onManageAccounts}
                 loading={activeRemotesLoading}
                 busy={remoteActionBusy}
                 disabled={!selectedRepository || !connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}

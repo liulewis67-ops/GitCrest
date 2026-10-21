@@ -26,7 +26,17 @@ const branches: BranchSnapshotResponse = {
   ],
 };
 
-const emptyCredentialEditor = () => null;
+it("sends sign-in management to Settings with the HTTPS hosts of the remotes", () => {
+  const onManageAccounts = vi.fn();
+  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" onManageAccounts={onManageAccounts} onRefresh={vi.fn()} onAdd={vi.fn()} onSetUrl={vi.fn()} onDelete={vi.fn()} onSetDefault={vi.fn()} onSetUpstream={vi.fn()} />);
+  fireEvent.click(screen.getByRole("button", { name: "Manage remotes" }));
+  const dialog = screen.getByRole("dialog", { name: "Manage remotes" });
+  expect(within(dialog).queryByLabelText("Token or password")).toBeNull();
+
+  fireEvent.click(within(dialog).getByRole("button", { name: "Manage accounts" }));
+  expect(onManageAccounts).toHaveBeenCalledWith(["example.test"]);
+  expect(screen.queryByRole("dialog", { name: "Manage remotes" })).toBeNull();
+});
 
 it("exposes remote configuration and upstream actions through labeled controls", () => {
   const onAdd = vi.fn();
@@ -34,7 +44,7 @@ it("exposes remote configuration and upstream actions through labeled controls",
   const onDelete = vi.fn();
   const onSetDefault = vi.fn();
   const onSetUpstream = vi.fn();
-  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" renderCredentialEditor={emptyCredentialEditor} onRefresh={vi.fn()} onAdd={onAdd} onSetUrl={onSetUrl} onDelete={onDelete} onSetDefault={onSetDefault} onSetUpstream={onSetUpstream} />);
+  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" onManageAccounts={vi.fn()} onRefresh={vi.fn()} onAdd={onAdd} onSetUrl={onSetUrl} onDelete={onDelete} onSetDefault={onSetDefault} onSetUpstream={onSetUpstream} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Manage remotes" }));
   const dialog = screen.getByRole("dialog", { name: "Manage remotes" });
@@ -64,7 +74,7 @@ it("exposes remote configuration and upstream actions through labeled controls",
 
 it("requires a second explicit action before removing a remote", () => {
   const onDelete = vi.fn();
-  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" renderCredentialEditor={emptyCredentialEditor} onRefresh={vi.fn()} onAdd={vi.fn()} onSetUrl={vi.fn()} onDelete={onDelete} onSetDefault={vi.fn()} onSetUpstream={vi.fn()} />);
+  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" onManageAccounts={vi.fn()} onRefresh={vi.fn()} onAdd={vi.fn()} onSetUrl={vi.fn()} onDelete={onDelete} onSetDefault={vi.fn()} onSetUpstream={vi.fn()} />);
 
   fireEvent.click(screen.getByRole("button", { name: "Manage remotes" }));
   const dialog = screen.getByRole("dialog", { name: "Manage remotes" });
@@ -77,7 +87,7 @@ it("requires a second explicit action before removing a remote", () => {
 });
 
 it("moves focus into remote management and closes it with Escape", async () => {
-  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" renderCredentialEditor={emptyCredentialEditor} onRefresh={vi.fn()} onAdd={vi.fn()} onSetUrl={vi.fn()} onDelete={vi.fn()} onSetDefault={vi.fn()} onSetUpstream={vi.fn()} />);
+  render(<RemoteManager snapshot={snapshot} branches={branches} loading={false} busy={false} disabled={false} disabledReason="" error="" onManageAccounts={vi.fn()} onRefresh={vi.fn()} onAdd={vi.fn()} onSetUrl={vi.fn()} onDelete={vi.fn()} onSetDefault={vi.fn()} onSetUpstream={vi.fn()} />);
   const opener = screen.getByRole("button", { name: "Manage remotes" });
   opener.focus();
   fireEvent.click(opener);

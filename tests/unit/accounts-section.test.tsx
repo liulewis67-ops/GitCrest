@@ -130,3 +130,13 @@ it("offers to replace the token of an account that needs sign-in", async () => {
   expect(screen.getByRole("radio", { name: "GitLab" })).toHaveProperty("checked", true);
   expect(screen.getByLabelText("Host")).toHaveProperty("value", "gitlab.example.com");
 });
+
+it("shows HTTPS credential cards for the hosts the settings were opened with", async () => {
+  const api = apiWith({
+    listAccounts: vi.fn().mockResolvedValue({ accounts: [] }),
+    getCredentialStatus: vi.fn((host: string) => Promise.resolve({ host, username: "lewis", isConfigured: true })),
+  });
+  render(<AccountsSection api={api} credentialHosts={["gitea.example.test"]} />);
+  const card = await screen.findByRole("article", { name: "HTTPS credential for gitea.example.test" });
+  expect(await within(card).findByText("Saved")).toBeTruthy();
+});

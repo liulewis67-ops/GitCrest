@@ -1,8 +1,7 @@
 import { useI18n } from "../../../shared/i18n";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../api/client";
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
-import type { CredentialEditorRenderer } from "../../credentials";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 interface RemoteManagerProps {
@@ -13,9 +12,7 @@ interface RemoteManagerProps {
   disabled: boolean;
   disabledReason: string;
   error: string;
-  renderCredentialEditor: CredentialEditorRenderer;
-  openRequest?: number;
-  onFetch?: () => void;
+  onManageAccounts: (hosts: string[]) => void;
   onRefresh: () => void;
   onAdd: (name: string, url: string) => void;
   onSetUrl: (name: string, url: string) => void;
@@ -24,7 +21,7 @@ interface RemoteManagerProps {
   onSetUpstream: (localBranch: string, remoteName: string, remoteBranch: string) => void;
 }
 
-export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, renderCredentialEditor, openRequest, onFetch, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream }: RemoteManagerProps) {
+export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, onManageAccounts, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream }: RemoteManagerProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -35,16 +32,8 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
   const [localBranch, setLocalBranch] = useState("");
   const [upstreamRemote, setUpstreamRemote] = useState("");
   const [upstreamBranch, setUpstreamBranch] = useState("");
-  const [recoveryMode, setRecoveryMode] = useState(false);
   const manageButtonRef = useRef<HTMLButtonElement>(null);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(() => setOpen(false), busy, () => manageButtonRef.current, open);
-
-  useEffect(() => {
-    if (openRequest) {
-      setOpen(true);
-      setRecoveryMode(true);
-    }
-  }, [openRequest]);
 
   const remoteList = Array.isArray(snapshot?.remotes) ? snapshot.remotes : undefined;
   const branchList = Array.isArray(branches?.branches) ? branches.branches : [];
@@ -124,9 +113,9 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
             </section>
 
             <section className="credentialSection" aria-labelledby="credential-section-title">
-              <div className="remoteDialogSectionTitle"><h3 id="credential-section-title">{t("rm.httpsCreds")}</h3><span>{credentialHosts.length}</span></div>
-              {credentialHosts.length === 0 ? <p className="cloneHelp">{t("rm.addHttps")}</p> : credentialHosts.map((host) => <div key={host}>{renderCredentialEditor(host, disabled || busy)}</div>)}
-              {recoveryMode && <div className="credentialRecoveryAction"><p className="cloneHelp">{t("rm.afterCred")}</p><button className="secondaryButton" type="button" disabled={disabled || busy || !onFetch} onClick={() => { setRecoveryMode(false); onFetch?.(); }}>{t("rm.retryFetch")}</button></div>}
+              <h3 id="credential-section-title">{t("rm.signIn")}</h3>
+              <p className="cloneHelp">{t("rm.signInHelp")}</p>
+              <button className="secondaryButton" type="button" disabled={busy} onClick={() => { setOpen(false); onManageAccounts(credentialHosts); }}>{t("rm.manageAccounts")}</button>
             </section>
 
             <form className="remoteAddForm" onSubmit={submitAdd}>

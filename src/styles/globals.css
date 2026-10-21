@@ -750,8 +750,10 @@ button:disabled { cursor: not-allowed; }
 .credentialCard { display: grid; gap: 8px; margin: 7px 0; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .credentialStatus { color: var(--text-muted); font-size: var(--type-xs); }
 .credentialNotice { margin: 0; color: var(--green); font-size: var(--type-xs); }
-.credentialSection { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.credentialRecoveryAction, .taskCredentialRecovery { display: grid; justify-items: start; gap: 8px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
+.credentialSection { display: grid; justify-items: start; gap: 7px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.credentialSection h3 { margin: 0; color: var(--text); font-size: var(--type-sm); font-weight: 600; }
+.credentialSection .cloneHelp { margin: 0; }
+.taskCredentialRecovery { display: grid; justify-items: start; gap: 8px; margin-top: 9px; padding-top: 9px; border-top: 1px solid var(--line); }
 .taskCredentialRecovery { margin-top: 8px; }
 .pushDialog { width: min(680px, 100%); max-height: min(88vh, 850px); display: flex; flex-direction: column; }
 .pushTargetDialog { width: min(440px, 100%); }
@@ -782,6 +784,8 @@ button:disabled { cursor: not-allowed; }
 .pushPreviewSection li:has(> code:only-child) code { overflow-wrap: anywhere; white-space: normal; }
 .pushDialog .cloneDialogActions { flex-wrap: wrap; align-items: center; }
 .pushDialog .cloneDialogActions .primaryButton { margin-left: auto; }
+.cloneSignIn { display: grid; justify-items: start; gap: 4px; margin-top: -5px; }
+.cloneSignIn .cloneHelp { margin: 0; }
 .cloneHelp { margin: -5px 0 0; color: var(--text-muted); font-size: var(--type-xs); line-height: 1.5; }
 .cloneDestination { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .cloneDestination div { display: grid; min-width: 0; gap: 4px; }
@@ -914,6 +918,11 @@ button:disabled { cursor: not-allowed; }
 .accountActions .secondaryButton { min-height: 28px; font-size: var(--type-xs); }
 .accountSignInForm .settingsFieldStack { justify-items: start; }
 .accountSignInForm .settingsHint a { color: var(--accent-strong); }
+.hostCredentials { display: grid; gap: 8px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
+.hostCredentials h4 { margin: 0; color: var(--text); font-size: var(--type-sm); }
+.hostCredentialsLookup { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
+.hostCredentialsLookup .cloneField { flex: 1 1 220px; }
+.hostCredentials .credentialCard { margin: 0; }
 .themeGallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; margin: 0; padding: 0; list-style: none; }
 .themeCard { display: grid; align-content: start; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface-soft); }
 .themeCard.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

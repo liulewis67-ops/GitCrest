@@ -76,6 +76,12 @@ export function useCloneSubmission({
     openDialog();
   }
 
+  /** Closes the dialog but keeps what was typed, so it reopens unchanged. */
+  function stashDraft(next: CloneDraft) {
+    setDraft(next);
+    setDialogOpen(false);
+  }
+
   function openDialog() {
     setError("");
     setDialogOpen(true);
@@ -112,5 +118,5 @@ export function useCloneSubmission({
     for (const task of tasks) void openClonedRepositoryRef.current?.(task);
   }, [tasks]);
 
-  return { busy, error, draft, dialogOpen, submit, prepareRetry, retryFromTask, openDialog, closeDialog };
+  return { busy, error, draft, dialogOpen, submit, prepareRetry, retryFromTask, stashDraft, openDialog, closeDialog };
 }

@@ -1,7 +1,6 @@
 import { useI18n } from "../../../shared/i18n";
 import { useState } from "react";
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
-import type { CredentialEditorRenderer } from "../../credentials";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 interface CloneDialogProps {
@@ -10,7 +9,7 @@ interface CloneDialogProps {
   parentPath?: string;
   error: string;
   busy: boolean;
-  renderCredentialEditor: CredentialEditorRenderer;
+  onManageAccounts: (draft: { remoteUrl: string; parentPath: string; directoryName: string }, hosts: string[]) => void;
   onChooseParent: () => Promise<string | undefined>;
   onClose: () => void;
   onSubmit: (remoteUrl: string, parentPath: string, directoryName: string) => void;
@@ -21,7 +20,7 @@ function folderFromRemote(remote: string): string {
   return normalized.split(/[/:]/).pop()?.replace(/\.git$/i, "") || "";
 }
 
-export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", parentPath, error, busy, renderCredentialEditor, onChooseParent, onClose, onSubmit }: CloneDialogProps) {
+export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", parentPath, error, busy, onManageAccounts, onChooseParent, onClose, onSubmit }: CloneDialogProps) {
   const { t } = useI18n();
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const [remoteUrl, setRemoteUrl] = useState(initialRemoteUrl);
@@ -47,8 +46,7 @@ export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", 
         <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("clone.eyebrow")}</p><h2 id="clone-title">{t("clone.title")}</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose} aria-label={t("clone.closeAria")}>{t("common.close")}</button></div>
         <div className="cloneFormBody">
           <label className="cloneField">{t("clone.remoteUrl")}<input autoFocus data-dialog-initial-focus value={remoteUrl} onChange={(event) => { setRemoteUrl(event.target.value); if (!folderEdited) setDirectoryName(folderFromRemote(event.target.value)); }} placeholder="https://host/owner/repository.git" autoComplete="url" /></label>
-          <p className="cloneHelp">{t("clone.credHelp")}</p>
-          {credentialHost && renderCredentialEditor(credentialHost, busy)}
+          <div className="cloneSignIn"><p className="cloneHelp">{t("clone.credHelp")}</p><button className="textButton" type="button" disabled={busy} onClick={() => onManageAccounts({ remoteUrl: remoteUrl.trim(), parentPath: selectedParent, directoryName: directoryName.trim() }, credentialHost ? [credentialHost] : [])}>{t("clone.manageAccounts")}</button></div>
         </div>
         <form onSubmit={(event) => { event.preventDefault(); onSubmit(remoteUrl.trim(), selectedParent, directoryName.trim()); }}>
           <div className="cloneFormBody">

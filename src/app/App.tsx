@@ -15,7 +15,7 @@ import { getRepositoryDisplayName } from "../shared/lib/repository-display-name"
 import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
 import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
-import { loadCredentialEditor, type CredentialEditorRenderer } from "../features/credentials";
+import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
 import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { isFullGitObjectId, useHistoryViewRequests } from "../features/history";
@@ -42,7 +42,6 @@ const PushTargetDialog = lazy(() => loadPushTargetDialog().then(({ PushTargetDia
 const DiscardChangesDialog = lazy(() => loadDiscardChangesDialog().then(({ DiscardChangesDialog }) => ({ default: DiscardChangesDialog })));
 const SettingsPage = lazy(() => loadSettingsPage().then(({ SettingsPage }) => ({ default: SettingsPage })));
 const CommitWorkbench = lazy(() => loadCommitWorkbench().then(({ CommitWorkbench }) => ({ default: CommitWorkbench })));
-const CredentialEditor = lazy(() => loadCredentialEditor().then(({ CredentialEditor }) => ({ default: CredentialEditor })));
 
 const TASK_LIFECYCLE_EVENTS: ReadonlySet<string> = new Set(["task.started", "task.completed", "task.failed"]);
 
@@ -52,7 +51,6 @@ function App() {
   const commandKey = isMacPlatform ? "⌘" : "Ctrl";
   const [repositories, setRepositories] = useState<RepositoryResponse[]>([]);
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
-  const [credentialManagerOpenRequest, setCredentialManagerOpenRequest] = useState(0);
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const historyRequests = useHistoryViewRequests();
   const [shelfComposerRequest, setShelfComposerRequest] = useState<{ id: number; repoId?: string }>({ id: 0 });
@@ -61,7 +59,7 @@ function App() {
   const [createBranchAt, setCreateBranchAt] = useState<string>();
   const [worktreeForBranch, setWorktreeForBranch] = useState<{ name: string; fromRemote: boolean }>();
   // Settings covers the content area while open; the page underneath stays mounted.
-  const [settingsView, setSettingsView] = useState<{ section?: SettingsSectionId }>();
+  const [settingsView, setSettingsView] = useState<{ section?: SettingsSectionId; credentialHosts?: string[]; reopenClone?: boolean }>();
   const { updateStatus, checkForUpdates, installUpdate } = useUpdateStatus();
   const { shortcuts, setShortcuts } = useShortcutPreferences();
   const {
@@ -499,13 +497,21 @@ function App() {
     addCommitDiffSelection(document.path, document.revision, selections);
   }
 
+  function openAccountSettings(credentialHosts: string[] = [], reopenClone = false) {
+    setSettingsView({ section: "accounts", credentialHosts, reopenClone });
+  }
+
+  function closeSettings() {
+    const reopenClone = settingsView?.reopenClone;
+    setSettingsView(undefined);
+    if (reopenClone) cloneSubmission.openDialog();
+  }
+
   function configureTaskCredentials(task: TaskSnapshotResponse) {
-    if (task.repoId) {
-      const repository = repositories.find((entry) => entry.repoId === task.repoId);
-      if (repository) activateRepository(repository);
-    }
+    const remotes = task.repoId ? remoteSnapshots[task.repoId]?.remotes ?? [] : [];
+    const hosts = remotes.flatMap((remote) => remote.fetchUrls.map(httpsHostFromRemote).filter((host): host is string => Boolean(host)));
     setTasksOpen(false);
-    setCredentialManagerOpenRequest((current) => current + 1);
+    openAccountSettings([...new Set(hosts)]);
   }
 
   function activateRepository(repository: RepositoryResponse) {
@@ -645,11 +651,6 @@ function App() {
     "--details-width": `${detailsWidth}px`,
     "--workbench-height": `${workbenchHeight}px`,
   } as CSSProperties;
-  const renderCredentialEditor: CredentialEditorRenderer = (host, disabled) => (
-    <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.credentials")}</div>}>
-      <CredentialEditor key={host} api={apiRef.current} host={host} disabled={disabled} />
-    </Suspense>
-  );
 
   const commands: CommandPaletteCommand[] = [
     { id: "welcome", label: t("cmd.welcome"), detail: t("cmd.welcomeDetail"), available: true, run: () => setPage("welcome") },
@@ -760,8 +761,7 @@ function App() {
               remoteActionBusy={remoteMutations.busy}
               remoteDisabledReason={remoteDisabledReason}
               api={apiRef.current}
-              renderCredentialEditor={renderCredentialEditor}
-              credentialManagerOpenRequest={credentialManagerOpenRequest}
+              onManageAccounts={(hosts) => openAccountSettings(hosts)}
               historyRefreshKey={historyRequests.refreshKey}
               shelfComposerRequest={shelfComposerRequest.repoId === selectedRepository?.repoId ? shelfComposerRequest.id : 0}
               shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch?.repoId === selectedRepository?.repoId ? branchSwitchShelfFlow.shelfComposerAfterSwitch : undefined}
@@ -782,7 +782,6 @@ function App() {
               onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
               onMergeBranch={(oid, name) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, "merge", name); }}
               onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository?.repoId, fullName, favorite)}
-              onFetchRepository={() => void fetchRepository()}
               onRefreshRepositoryRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}
               onAddRepositoryRemote={remoteMutations.addRepositoryRemote}
               onSetRepositoryRemoteUrl={remoteMutations.setRepositoryRemoteUrl}
@@ -890,7 +889,7 @@ function App() {
       )}
 
       {settingsView && apiRef.current && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.dialog")}</div>}>
-          <SettingsPage api={apiRef.current} repoId={selectedRepository?.repoId} initialSection={settingsView.section} onClose={() => setSettingsView(undefined)} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={checkForUpdates} onInstallUpdate={installUpdate} />
+          <SettingsPage api={apiRef.current} repoId={selectedRepository?.repoId} initialSection={settingsView.section} credentialHosts={settingsView.credentialHosts} onClose={closeSettings} shortcuts={shortcuts} onShortcutsChange={setShortcuts} updateStatus={updateStatus} onCheckForUpdates={checkForUpdates} onInstallUpdate={installUpdate} />
         </Suspense>}
 
       {branchSwitcher.open && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.branchSwitcher")}</div>}>
@@ -940,7 +939,7 @@ function App() {
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
       {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
-      {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} renderCredentialEditor={renderCredentialEditor} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
+      {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} onManageAccounts={(draft, hosts) => { cloneSubmission.stashDraft(draft); openAccountSettings(hosts, true); }} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>
   );

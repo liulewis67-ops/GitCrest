@@ -356,7 +356,7 @@ describe("remote sync E2E", () => {
     }
   }, 60_000);
 
-  it("opens the remote credential manager after an authentication-failed fetch", async () => {
+  it("opens account settings for the remote host after an authentication-failed fetch", async () => {
     const fixture = await createTempGitRepository();
     const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-fetch-auth-app-data-"));
     const gitConfigPath = resolve(appDataPath, "gitconfig");
@@ -418,14 +418,14 @@ describe("remote sync E2E", () => {
       await fetchTask.getByText("authentication:", { exact: false }).waitFor();
       await fetchTask.getByRole("button", { name: "Configure credentials" }).click();
 
-      const remoteDialog = window.getByRole("dialog", { name: "Manage remotes" });
-      await remoteDialog.getByRole("heading", { name: "HTTPS credentials" }).waitFor();
+      const settingsDialog = window.getByRole("dialog", { name: "Settings" });
+      await settingsDialog.getByRole("heading", { name: "Other HTTPS hosts" }).waitFor();
       try {
-        await remoteDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` }).waitFor({ timeout: 5_000 });
+        await settingsDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` }).waitFor({ timeout: 5_000 });
       } catch {
-        throw new Error(`Expected the failed remote host credential card; credential section showed: ${await remoteDialog.locator(".credentialSection").innerText()}`);
+        throw new Error(`Expected the failed remote host credential card; host credentials showed: ${await settingsDialog.locator(".hostCredentials").innerText()}`);
       }
-      await remoteDialog.getByRole("button", { name: "Retry fetch" }).waitFor();
+      expect(await window.getByRole("dialog", { name: "Manage remotes" }).count()).toBe(0);
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(baselineHead);
       expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain"])).stdout.trim()).toBe("");
     } finally {
@@ -533,14 +533,15 @@ describe("remote sync E2E", () => {
       expect(authenticationServer.authenticatedRequestCount()).toBe(0);
       await failedFetch.getByRole("button", { name: "Configure credentials" }).click();
 
-      const remoteDialog = window.getByRole("dialog", { name: "Manage remotes" });
-      const credentialCard = remoteDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
+      const settingsDialog = window.getByRole("dialog", { name: "Settings" });
+      const credentialCard = settingsDialog.getByRole("article", { name: `HTTPS credential for ${authenticationServer.host}` });
       await credentialCard.getByLabel("Username").fill(username);
       await credentialCard.getByLabel("Token or password").fill(token);
       await credentialCard.getByRole("button", { name: "Save credential" }).click();
       await credentialCard.getByText("Credential saved to the system credential store.").waitFor();
       credentialSaved = true;
-      await remoteDialog.getByRole("button", { name: "Retry fetch" }).click();
+      await settingsDialog.getByRole("button", { name: "Close settings" }).click();
+      await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const readFetchTasks = () => window.evaluate(async () => {
         const connection = await (globalThis.window as unknown as Window & {
