@@ -2461,6 +2461,8 @@ export interface components {
     };
     parameters: {
         ApiVersion: "1";
+        /** @description `hunks` (default) returns changes with three lines of context; staging selections address these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides in full; its revision and indexes are not accepted by staging, discard, or commit selections. */
+        DiffContext: "hunks" | "full";
     };
     requestBodies: never;
     headers: {
@@ -2783,6 +2785,8 @@ export interface operations {
             query: {
                 path: string;
                 scope: "workingTree" | "index";
+                /** @description `hunks` (default) returns changes with three lines of context; staging selections address these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides in full; its revision and indexes are not accepted by staging, discard, or commit selections. */
+                context?: components["parameters"]["DiffContext"];
             };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
@@ -5311,6 +5315,8 @@ export interface operations {
         parameters: {
             query: {
                 path: string;
+                /** @description `hunks` (default) returns changes with three lines of context; staging selections address these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides in full; its revision and indexes are not accepted by staging, discard, or commit selections. */
+                context?: components["parameters"]["DiffContext"];
             };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];

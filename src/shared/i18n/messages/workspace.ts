@@ -89,6 +89,7 @@ export const workspace = {
   "main.chooseFileHint": ["Select a file from Changes to review its working tree or staged diff.", "从“变更”中选择文件，即可查看其工作区或暂存区差异。"],
   "main.readingDiff": ["Reading file diff…", "正在读取文件差异…"],
   "main.retryDiff": ["Retry diff", "重试读取差异"],
+  "main.closeDiff": ["Close diff and return to the commit graph", "关闭差异并返回提交图"],
   "main.loadingDiffViewer": ["Loading diff viewer…", "正在加载差异查看器…"],
   "main.preparingDiff": ["Preparing file diff…", "正在准备文件差异…"],
   "main.fileGone": ["This file is no longer in the latest change snapshot.", "此文件已不在最新的变更快照中。"],

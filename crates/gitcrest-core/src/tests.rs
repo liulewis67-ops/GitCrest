@@ -583,13 +583,14 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
         .iter()
         .find(|file| file.path == "selected.txt")
         .unwrap();
-    let preview = features::diff::read(
+    let preview = features::diff::read_with_context(
         &crate::git::command::GitCommandService::default(),
         &crate::storage::diff::DiffWorktreeAdapter,
         repository.repo_id.clone(),
         &repository_path,
         selected_file,
         domain::diff::DiffScope::WorkingTree,
+        domain::diff::DiffContext::Hunks,
     )
     .await
     .unwrap();

@@ -7,6 +7,16 @@ pub(crate) enum DiffScope {
     Commit,
 }
 
+/// How much unchanged text a patch carries around each change.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum DiffContext {
+    /// Three lines of context: the hunks that staging selections address.
+    #[default]
+    Hunks,
+    /// The whole file as a single hunk, for reading both sides in full.
+    FullFile,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct DiffSelection {
     pub(crate) hunk_index: usize,

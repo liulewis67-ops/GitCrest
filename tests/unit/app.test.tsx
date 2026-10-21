@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { components } from "../../src/api/schema";
 import App from "../../src/app/App";
+
+vi.mock("../../src/features/diff/ui/MonacoFileDiff", () => ({
+  MonacoFileDiff: (props: { original: string; modified: string; label: string }) => createElement(
+    "pre",
+    { "aria-label": props.label },
+    `${props.original}||${props.modified}`,
+  ),
+}));
 
 const resyncEvent: components["schemas"]["EventEnvelope"] = {
   eventId: "event-1",
@@ -593,7 +602,18 @@ describe("App", () => {
     render(<App />);
     await screen.findByText("Core connected");
     fireEvent.click((await screen.findAllByRole("button", { name: /readme\.txt/ }))[0]);
+    expect((await screen.findByLabelText("Side-by-side comparison of readme.txt")).textContent).toBe("old content||new content");
+    expect(screen.getByText("Your version")).toBeDefined();
+    const diffQueries = () => fetcher.mock.calls
+      .map(([input]) => new URL(String(input)))
+      .filter((url) => url.pathname.endsWith("/diff"))
+      .map((url) => url.searchParams.get("context"));
+    expect(diffQueries()).toEqual(["full"]);
+    expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Select lines…" }));
     expect(await screen.findByText((_, element) => element?.tagName === "CODE" && element.textContent === "old content")).toBeDefined();
+    expect(diffQueries()).toEqual(["full", null]);
     expect(screen.getByText((_, element) => element?.tagName === "CODE" && element.textContent === "new content")).toBeDefined();
     expect(screen.getByText("WORKING TREE ↔ INDEX")).toBeDefined();
     expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
@@ -741,6 +761,7 @@ describe("App", () => {
     await screen.findByText("Core connected");
     fireEvent.click(await screen.findByRole("tab", { name: "commit-fixture" }));
     fireEvent.click((await screen.findAllByRole("button", { name: /.env.local/ }))[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "Select lines…" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "Select hunk 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Add to commit selection" }));
     expect(screen.getByText(/Other staged changes stay in the index/)).toBeDefined();

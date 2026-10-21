@@ -108,6 +108,8 @@ describe("desktop startup E2E", () => {
       });
       expect(opened.body.repoId).toMatch(/^repo_[0-9a-f]{64}$/);
 
+      // The diff layout is a saved preference; start from the full-file default whatever an earlier run chose.
+      await window.evaluate(() => window.localStorage.removeItem("gitcrest-diff-view-v1"));
       await window.reload();
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       expect(await window.locator(".repositoryList").innerText()).toContain(fixture.path);
@@ -213,6 +215,14 @@ describe("desktop startup E2E", () => {
       await window.getByRole("button", { name: "modified src/example.ts" }).click();
       const rendererErrors: string[] = [];
       window.on("console", (message) => { if (message.type() === "error") rendererErrors.push(message.text()); });
+      const fullFileDiff = window.locator(".monacoFileDiff");
+      await fullFileDiff.locator(".view-lines").first().waitFor({ state: "visible", timeout: 15_000 });
+      await window.getByText("Difference 1 of 1").waitFor();
+      const fullFileText = await fullFileDiff.innerText();
+      expect(fullFileText).toContain("hello");
+      expect(fullFileText).toContain("welcome");
+      expect(await window.locator(".fileDiffSides").innerText()).toContain("Your version");
+      await window.getByRole("button", { name: "Select lines…" }).click();
       await window.getByRole("button", { name: "Monaco view" }).click();
       const monacoLines = window.locator(".monacoDiffHunk .view-lines");
       await monacoLines.first().waitFor({ state: "visible", timeout: 15_000 });

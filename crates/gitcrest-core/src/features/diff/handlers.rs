@@ -15,7 +15,7 @@ use super::{
     dto::{CommitDiffQuery, DiffDocumentDto, DiffQuery},
     service,
 };
-use crate::domain::diff::DiffScope;
+use crate::domain::diff::{DiffContext, DiffScope};
 use crate::domain::status::{ChangeCategory, ChangeKind, StatusFile};
 
 pub(super) async fn repository_diff(
@@ -31,6 +31,7 @@ pub(super) async fn repository_diff(
         )
     })?;
     let scope: DiffScope = query.scope.into();
+    let context: DiffContext = query.context.into();
     let repository_path = state
         .repository_targets
         .read_repository_path(&repo_id)
@@ -52,13 +53,14 @@ pub(super) async fn repository_diff(
         state
             .status
             .snapshot_paths(&repo_id, std::slice::from_ref(&query.path),),
-        service::read(
+        service::read_with_context(
             &state.git_commands,
             state.diff_worktree.as_ref(),
             repo_id.clone(),
             &repository_path,
             &candidate,
             scope,
+            context,
         ),
     );
     let snapshot = snapshot.map_err(ApiError::from_repository_error)?;
@@ -82,13 +84,14 @@ pub(super) async fn repository_diff(
             )
         })
     {
-        return service::read(
+        return service::read_with_context(
             &state.git_commands,
             state.diff_worktree.as_ref(),
             repo_id,
             &repository_path,
             file,
             scope,
+            context,
         )
         .await
         .map(DiffDocumentDto::from)
@@ -135,6 +138,7 @@ pub(super) async fn repository_commit_file_diff(
         &oid,
         commit.parents.first().map(String::as_str),
         &query.path,
+        query.context.into(),
     )
     .await
     .map(DiffDocumentDto::from)

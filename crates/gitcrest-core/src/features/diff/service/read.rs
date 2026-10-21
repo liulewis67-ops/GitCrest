@@ -4,21 +4,32 @@ use sha2::{Digest, Sha256};
 
 use super::*;
 use crate::{
-    domain::diff::DiffWorktreeEntryKind,
+    domain::diff::{DiffContext, DiffWorktreeEntryKind},
     ports::diff::{DiffGitPort, DiffWorktreePort},
 };
 
-pub async fn read<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
+/// Reads a changed file for display. Only [`DiffContext::Hunks`] documents share the hunk and
+/// row indexes that staging selections address.
+pub async fn read_with_context<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
     git: &G,
     worktree: &W,
     repo_id: String,
     repository_path: &Path,
     file: &StatusFile,
     scope: DiffScope,
+    context: DiffContext,
 ) -> Result<DiffDocument, DiffError> {
-    read_with_patch(git, worktree, repo_id, repository_path, file, scope)
-        .await
-        .map(|result| result.document)
+    read_patch(
+        git,
+        worktree,
+        repo_id,
+        repository_path,
+        file,
+        scope,
+        context,
+    )
+    .await
+    .map(|result| result.document)
 }
 
 pub async fn read_commit_file<G: DiffGitPort + ?Sized>(
@@ -28,13 +39,14 @@ pub async fn read_commit_file<G: DiffGitPort + ?Sized>(
     oid: &str,
     parent_oid: Option<&str>,
     relative_path: &str,
+    context: DiffContext,
 ) -> Result<DiffDocument, DiffError> {
     validate_repo_relative_path(relative_path)?;
     if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
         return Err(DiffError::InvalidPath);
     }
     let patch = git
-        .read_commit_file_patch(repository_path, oid, parent_oid, relative_path)
+        .read_commit_file_patch(repository_path, oid, parent_oid, relative_path, context)
         .await?;
     let parsed = parse_diff(&patch);
     let mut document = DiffDocument {
@@ -66,6 +78,27 @@ pub async fn read_with_patch<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Siz
     repository_path: &Path,
     file: &StatusFile,
     scope: DiffScope,
+) -> Result<DiffRead, DiffError> {
+    read_patch(
+        git,
+        worktree,
+        repo_id,
+        repository_path,
+        file,
+        scope,
+        DiffContext::Hunks,
+    )
+    .await
+}
+
+async fn read_patch<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Sized>(
+    git: &G,
+    worktree: &W,
+    repo_id: String,
+    repository_path: &Path,
+    file: &StatusFile,
+    scope: DiffScope,
+    context: DiffContext,
 ) -> Result<DiffRead, DiffError> {
     validate_repo_relative_path(&file.path)?;
     let mut document = DiffDocument {
@@ -122,7 +155,7 @@ pub async fn read_with_patch<G: DiffGitPort + ?Sized, W: DiffWorktreePort + ?Siz
     let untracked =
         scope == DiffScope::WorkingTree && file.categories.contains(&ChangeCategory::Untracked);
     let patch = git
-        .read_file_patch(repository_path, &file.path, scope, untracked)
+        .read_file_patch(repository_path, &file.path, scope, untracked, context)
         .await?;
     document.revision = revision_for(scope, &file.path, &patch);
     let parsed = parse_diff(&patch);

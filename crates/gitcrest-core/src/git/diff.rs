@@ -10,24 +10,36 @@ use tokio::{
     process::Command,
 };
 
-use crate::domain::{diff::DiffScope, error::DiffError};
+use crate::domain::{
+    diff::{DiffContext, DiffScope},
+    error::DiffError,
+};
 
 const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ERROR_BYTES: usize = 16 * 1024;
 const DIFF_DEADLINE: Duration = Duration::from_secs(10);
+
+fn unified_argument(context: DiffContext) -> OsString {
+    OsString::from(match context {
+        DiffContext::Hunks => "--unified=3",
+        // Git clamps context to the file, so the patch is one hunk spanning every line.
+        DiffContext::FullFile => "--unified=2147483647",
+    })
+}
 
 pub(crate) async fn read_file_patch(
     repository_path: &Path,
     relative_path: &str,
     scope: DiffScope,
     untracked: bool,
+    context: DiffContext,
 ) -> Result<Vec<u8>, DiffError> {
     let mut arguments = vec![
         OsString::from("--literal-pathspecs"),
         OsString::from("diff"),
         OsString::from("--no-ext-diff"),
         OsString::from("--no-color"),
-        OsString::from("--unified=3"),
+        unified_argument(context),
     ];
     if scope == DiffScope::Index {
         arguments.push("--cached".into());
@@ -48,6 +60,7 @@ pub(crate) async fn read_commit_file_patch(
     oid: &str,
     parent_oid: Option<&str>,
     relative_path: &str,
+    context: DiffContext,
 ) -> Result<Vec<u8>, DiffError> {
     let mut arguments = vec![
         OsString::from("--literal-pathspecs"),
@@ -58,7 +71,7 @@ pub(crate) async fn read_commit_file_patch(
         }),
         OsString::from("--no-ext-diff"),
         OsString::from("--no-color"),
-        OsString::from("--unified=3"),
+        unified_argument(context),
     ];
     if let Some(parent_oid) = parent_oid {
         arguments.push(parent_oid.into());

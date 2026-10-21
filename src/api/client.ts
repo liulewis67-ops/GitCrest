@@ -7,6 +7,7 @@ export type RepositoryResponse = components["schemas"]["Repository"];
 export type StatusSnapshotResponse = components["schemas"]["StatusSnapshot"];
 export type TaskSnapshotResponse = components["schemas"]["TaskSnapshot"];
 export type DiffDocumentResponse = components["schemas"]["DiffDocument"];
+export type DiffContext = components["parameters"]["DiffContext"];
 export type BlameDocumentResponse = components["schemas"]["BlameDocument"];
 export type StagingRequest = components["schemas"]["StagingRequest"];
 export type StagingPatchRequest = components["schemas"]["StagingPatchRequest"];
@@ -129,8 +130,9 @@ export class GitCrestApiClient {
     );
   }
 
-  getFileDiff(repoId: RepoId, path: string, scope: "workingTree" | "index"): Promise<DiffDocumentResponse> {
+  getFileDiff(repoId: RepoId, path: string, scope: "workingTree" | "index", context: DiffContext = "hunks"): Promise<DiffDocumentResponse> {
     const query = new URLSearchParams({ path, scope });
+    if (context !== "hunks") query.set("context", context);
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/diff?${query}`);
   }
 
@@ -152,8 +154,9 @@ export class GitCrestApiClient {
     return this.request<CommitDetailResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(oid)}`);
   }
 
-  getRepositoryCommitDiff(repoId: RepoId, oid: string, path: string): Promise<DiffDocumentResponse> {
+  getRepositoryCommitDiff(repoId: RepoId, oid: string, path: string, context: DiffContext = "hunks"): Promise<DiffDocumentResponse> {
     const query = new URLSearchParams({ path });
+    if (context !== "hunks") query.set("context", context);
     return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/commits/${encodeURIComponent(oid)}/diff?${query}`);
   }
 

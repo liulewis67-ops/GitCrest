@@ -94,8 +94,10 @@ impl DiffGitPort for GitCommandService {
         relative_path: &str,
         scope: crate::domain::diff::DiffScope,
         untracked: bool,
+        context: crate::domain::diff::DiffContext,
     ) -> Result<Vec<u8>, crate::domain::error::DiffError> {
-        super::diff::read_file_patch(repository_path, relative_path, scope, untracked).await
+        super::diff::read_file_patch(repository_path, relative_path, scope, untracked, context)
+            .await
     }
 
     async fn read_commit_file_patch(
@@ -104,8 +106,16 @@ impl DiffGitPort for GitCommandService {
         oid: &str,
         parent_oid: Option<&str>,
         relative_path: &str,
+        context: crate::domain::diff::DiffContext,
     ) -> Result<Vec<u8>, crate::domain::error::DiffError> {
-        super::diff::read_commit_file_patch(repository_path, oid, parent_oid, relative_path).await
+        super::diff::read_commit_file_patch(
+            repository_path,
+            oid,
+            parent_oid,
+            relative_path,
+            context,
+        )
+        .await
     }
 }
 

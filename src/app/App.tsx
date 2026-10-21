@@ -19,7 +19,7 @@ import { loadCredentialEditor, type CredentialEditorRenderer } from "../features
 import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { isFullGitObjectId, useHistoryViewRequests } from "../features/history";
-import { loadDiscardChangesDialog, useRepositoryDiffQuery } from "../features/diff";
+import { loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, useOpenCreatedWorktree, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
 import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
@@ -287,6 +287,7 @@ function App() {
   const selectedFileScope = activeTabState?.selectedFileScope;
   const selectedDiffCommitOid = activeTabState?.selectedDiffCommitOid;
   const selectedDiffFile = (activeStatus?.files || []).find((file) => file.path === selectedFilePath);
+  const { preferences: diffViewPreferences, updatePreferences: updateDiffViewPreferences } = useDiffViewPreferences();
   const diffQuery = useRepositoryDiffQuery({
     api: apiRef.current,
     mode,
@@ -294,7 +295,10 @@ function App() {
     path: selectedFilePath,
     scope: selectedFileScope,
     commitOid: selectedDiffCommitOid,
+    context: diffViewPreferences.layout === "full" ? "full" : "hunks",
   });
+  // A commit's file list stays beside its diff so the next file is one click away.
+  const showDetailsPanel = mode === "graph" || selectedFileScope === "commit";
   const { state: diffState, activeKey: activeDiffKey } = diffQuery;
   const { groups: statusGroups, stagedCount, hasConflicts, workingCount } = summarizeRepositoryStatus(activeStatus);
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
@@ -732,7 +736,7 @@ function App() {
           onFetchRepository={() => void fetchRepository()}
           onOpenBranchSwitcher={branchSwitcher.openSwitcher}
         >
-          <div className={`workArea${mode === "diff" ? " diffMode" : ""}`}>
+          <div className={`workArea${mode === "diff" ? " diffMode" : ""}${showDetailsPanel ? "" : " detailsHidden"}`}>
             <WorkspaceNavigation
               selectedRepository={selectedRepository}
               activeStatus={activeStatus}
@@ -831,13 +835,17 @@ function App() {
                 onDiscardSelection={requestDiscard}
                 onCommitSelection={addDiffSelectionToCommit}
                 onOpenDiffWindow={(path, scope, oid) => void openDiffWindow(path, scope, oid)}
+                diffViewPreferences={diffViewPreferences}
+                onChangeDiffViewPreferences={updateDiffViewPreferences}
+                onCloseDiff={() => changeWorkspaceMode("graph")}
               />
             </Suspense>
-            {mode === "graph" && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label={t("app.resizeDetails")} onResize={setDetailsWidth} />}
+            {showDetailsPanel && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label={t("app.resizeDetails")} onResize={setDetailsWidth} />}
 
-            {mode === "graph" && <WorkspaceDetailsPanel
+            {showDetailsPanel && <WorkspaceDetailsPanel
               repository={selectedRepository}
               selectedCommit={selectedCommit}
+              selectedFilePath={mode === "diff" && selectedFileScope === "commit" ? selectedFilePath : undefined}
               api={apiRef.current}
               connected={connected}
               hasActiveRepositoryTask={hasActiveRepositoryTask}

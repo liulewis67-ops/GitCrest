@@ -2,7 +2,7 @@ mod read;
 use read::parse_hunk_header;
 #[cfg(test)]
 use read::{parse_diff, validate_repo_relative_path};
-pub use read::{read, read_commit_file, read_with_patch};
+pub use read::{read_commit_file, read_with_context, read_with_patch};
 #[cfg(test)]
 use std::path::Path;
 
@@ -196,6 +196,26 @@ mod tests {
             "{}",
             String::from_utf8_lossy(&output.stderr)
         );
+    }
+
+    async fn read(
+        git: &crate::git::command::GitCommandService,
+        worktree: &crate::storage::diff::DiffWorktreeAdapter,
+        repo_id: String,
+        repository_path: &Path,
+        file: &StatusFile,
+        scope: DiffScope,
+    ) -> Result<DiffDocument, DiffError> {
+        read_with_context(
+            git,
+            worktree,
+            repo_id,
+            repository_path,
+            file,
+            scope,
+            crate::domain::diff::DiffContext::Hunks,
+        )
+        .await
     }
 
     async fn fixture() -> (tempfile::TempDir, std::path::PathBuf) {
@@ -456,5 +476,66 @@ mod tests {
             .await,
             Err(DiffError::TooLarge)
         );
+    }
+
+    #[tokio::test]
+    async fn full_file_context_returns_one_hunk_with_both_complete_sides() {
+        let (_directory, root) = fixture().await;
+        let lines: Vec<String> = (1..=20).map(|line| format!("line {line}")).collect();
+        tokio::fs::write(root.join("readme.txt"), format!("{}\n", lines.join("\n")))
+            .await
+            .unwrap();
+        git(&root, &["commit", "--quiet", "-am", "twenty lines"]);
+        let mut changed = lines.clone();
+        changed[9] = "line 10 changed".into();
+        tokio::fs::write(root.join("readme.txt"), format!("{}\n", changed.join("\n")))
+            .await
+            .unwrap();
+        let snapshot = status::read("repo-test".into(), &root).await.unwrap();
+        let file = snapshot
+            .files
+            .iter()
+            .find(|file| file.path == "readme.txt")
+            .unwrap();
+        let git_service = crate::git::command::GitCommandService::default();
+        let worktree = crate::storage::diff::DiffWorktreeAdapter;
+
+        let hunks = read(
+            &git_service,
+            &worktree,
+            "repo-test".into(),
+            &root,
+            file,
+            DiffScope::WorkingTree,
+        )
+        .await
+        .unwrap();
+        assert_eq!(hunks.hunks[0].rows.len(), 7);
+
+        let full = read_with_context(
+            &git_service,
+            &worktree,
+            "repo-test".into(),
+            &root,
+            file,
+            DiffScope::WorkingTree,
+            crate::domain::diff::DiffContext::FullFile,
+        )
+        .await
+        .unwrap();
+        assert_eq!(full.hunks.len(), 1);
+        let old: Vec<&str> = full.hunks[0]
+            .rows
+            .iter()
+            .filter_map(|row| row.old_text.as_deref())
+            .collect();
+        let new: Vec<&str> = full.hunks[0]
+            .rows
+            .iter()
+            .filter_map(|row| row.new_text.as_deref())
+            .collect();
+        assert_eq!(old, lines);
+        assert_eq!(new, changed);
+        assert_ne!(full.revision, hunks.revision);
     }
 }

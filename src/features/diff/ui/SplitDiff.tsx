@@ -4,6 +4,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { splitInlineDiff } from "../model/inline-diff";
 import { monacoLanguageForPath } from "../model/monaco-language";
 import { exceedsMonacoViewLimits } from "../model/monaco-view-limits";
+import { DiffStatusNotice } from "./DiffStatusNotice";
 
 const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({ default: module.MonacoDiffHunk })));
 
@@ -15,9 +16,10 @@ interface SplitDiffProps {
   disabled: boolean;
   readOnly?: boolean;
   onOpenWindow?: () => void;
+  onShowFullFile?: () => void;
 }
 
-export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile }: SplitDiffProps) {
   const { t } = useI18n();
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
@@ -64,18 +66,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [document.revision, navigateHunk, navigableHunks.length]);
-  if (document.status !== "text") {
-    const descriptions: Record<DiffDocumentResponse["status"], string> = {
-      text: t("sd.text"),
-      binary: t("sd.binary"),
-      empty: t("sd.empty"),
-      conflicted: t("sd.conflicted"),
-      ignored: t("sd.ignored"),
-      symlink: t("sd.symlink"),
-      submodule: t("sd.submodule"),
-    };
-    return <div className="diffSpecialState" role="status"><span className={`diffStateBadge diffState-${document.status}`}>{document.status}</span><p>{descriptions[document.status]}</p></div>;
-  }
+  if (document.status !== "text") return <DiffStatusNotice status={document.status} />;
 
   return (
     <div
@@ -86,6 +77,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
       <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
       <div className="splitDiffNavigation" aria-label={t("sd.navAria")}>
         <span>{navigableHunks.length ? t("sd.changes", { current: activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1, total: navigableHunks.length }) : t("sd.noChanges")}</span>
+        {onShowFullFile && <button type="button" title={t("fd.fullFileTitle")} onClick={onShowFullFile}>{t("fd.fullFile")}</button>}
         <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>{t("sd.splitView")}</button>
         <button type="button" aria-pressed={view === "monaco"} disabled={monacoDegraded} title={monacoDegraded ? t("sd.monacoTooLargeTitle") : undefined} onClick={() => setView("monaco")}>{t("sd.monacoView")}</button>
         {onOpenWindow && <button type="button" onClick={onOpenWindow}>{t("sd.openWindow")}</button>}

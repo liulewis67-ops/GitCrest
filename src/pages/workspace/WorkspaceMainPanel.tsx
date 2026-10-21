@@ -3,11 +3,12 @@ import { lazy, Suspense, useEffect, type RefObject } from "react";
 import type { DiffDocumentResponse, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../api/client";
 import type { WorkspaceSession } from "../../features/repositories";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
-import { loadSplitDiff } from "../../features/diff";
+import { loadFileDiffViewer, loadSplitDiff, type DiffViewPreferences } from "../../features/diff";
 import { isFullGitObjectId, loadCommitGraph } from "../../features/history";
 
 const CommitGraph = lazy(loadCommitGraph);
 const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));
+const FileDiffViewer = lazy(() => loadFileDiffViewer().then(({ FileDiffViewer }) => ({ default: FileDiffViewer })));
 
 interface WorkspaceMainPanelProps {
   mode: "graph" | "diff";
@@ -42,6 +43,9 @@ interface WorkspaceMainPanelProps {
   onDiscardSelection: (document: DiffDocumentResponse, selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   onCommitSelection: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
   onOpenDiffWindow: (path: string, scope: "workingTree" | "index" | "commit", commitOid?: string) => void;
+  diffViewPreferences: DiffViewPreferences;
+  onChangeDiffViewPreferences: (change: Partial<DiffViewPreferences>) => void;
+  onCloseDiff: () => void;
 }
 
 export function WorkspaceMainPanel({
@@ -77,6 +81,9 @@ export function WorkspaceMainPanel({
   onDiscardSelection,
   onCommitSelection,
   onOpenDiffWindow,
+  diffViewPreferences,
+  onChangeDiffViewPreferences,
+  onCloseDiff,
 }: WorkspaceMainPanelProps) {
   const { t } = useI18n();
   useEffect(() => {
@@ -88,7 +95,7 @@ export function WorkspaceMainPanel({
 
   return (
     <section className="mainPanel" aria-label={mode === "graph" ? t("main.commitGraph") : t("main.fileDiff")}>
-      <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? t("main.commitGraph") : t("main.diffViewer")}</span><span className="subtleTag">{t("main.local")}</span></div><button className="quietButton compact" type="button" disabled={!repository || statusLoading} onClick={() => { if (repository) onRefreshStatus(repository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? t("main.refreshingLabel") : t("main.refreshLabel")} title={statusLoading ? t("main.refreshingLabel") : t("main.refreshTitle", { shortcut: displayShortcut(shortcuts.refreshStatus, isMacPlatform) })}>{statusLoading ? t("main.refreshing") : t("main.refresh")}</button></div>
+      <div className="panelHeading mainPanelHeading"><div className="viewTitle"><span className="viewGlyph" aria-hidden="true">◌</span><span>{mode === "graph" ? t("main.commitGraph") : t("main.diffViewer")}</span>{mode === "diff" && selectedFilePath && <span className="viewTitleFile" title={selectedFilePath}>{selectedFilePath.split("/").pop()}</span>}<span className="subtleTag">{t("main.local")}</span></div><div className="mainPanelHeadingActions"><button className="quietButton compact" type="button" disabled={!repository || statusLoading} onClick={() => { if (repository) onRefreshStatus(repository.repoId, true); }} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? t("main.refreshingLabel") : t("main.refreshLabel")} title={statusLoading ? t("main.refreshingLabel") : t("main.refreshTitle", { shortcut: displayShortcut(shortcuts.refreshStatus, isMacPlatform) })}>{statusLoading ? t("main.refreshing") : t("main.refresh")}</button>{mode === "diff" && <button className="quietButton compact mainPanelClose" type="button" aria-label={t("main.closeDiff")} title={t("main.closeDiff")} onClick={onCloseDiff}>✕</button>}</div></div>
       {mode === "graph" ? repository && api && isFullGitObjectId(repository.head) ? <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">{t("main.loadingHistory")}</div>}><CommitGraph
         key={repository.repoId}
         api={api}
@@ -110,8 +117,9 @@ export function WorkspaceMainPanel({
       </div></div>
         : !repository || !selectedFilePath || !selectedFileScope ? <div className="graphViewport"><div className="diffSpecialState"><h2>{t("main.chooseFile")}</h2><p>{t("main.chooseFileHint")}</p></div></div>
           : diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
-            : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button></div>
-              : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={() => onOpenDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></Suspense></div>
+            : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button>{diffViewPreferences.layout === "full" && <button className="secondaryButton" type="button" onClick={() => onChangeDiffViewPreferences({ layout: "hunks" })}>{t("fd.hunks")}</button>}</div>
+              : diffState.document && diffViewPreferences.layout === "full" ? <div className="fileDiffViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><FileDiffViewer document={diffState.document} commitOid={selectedDiffCommitOid} preferences={diffViewPreferences} onChangePreferences={onChangeDiffViewPreferences} onShowHunks={() => onChangeDiffViewPreferences({ layout: "hunks" })} onOpenWindow={() => onOpenDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} /></Suspense></div>
+              : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={() => onOpenDiffWindow(selectedFilePath, selectedFileScope ?? "workingTree", selectedDiffCommitOid)} onShowFullFile={() => onChangeDiffViewPreferences({ layout: "full" })} disabled={diffState.document.scope === "commit" || stagingBusy || hasActiveStagingTask || commitBusy} /></Suspense></div>
                 : <div className="graphViewport"><div className="diffSpecialState" role="status"><p>{selectedDiffFile ? t("main.preparingDiff") : t("main.fileGone")}</p></div></div>}
       <div className="panelFooter mainPanelFooter"><span>{t("main.historyLocal")}</span><span className="footerSpacer" />{version || t("welcome.localEngine")}</div>
     </section>

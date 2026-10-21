@@ -286,6 +286,7 @@ paths:
           schema:
             type: string
             enum: [workingTree, index]
+        - $ref: "#/components/parameters/DiffContext"
       responses:
         "200":
           description: Text hunks, binary state, or an explicit unsupported content state.
@@ -2151,6 +2152,8 @@ paths:
     get:
       operationId: getRepositoryCommitDiff
       summary: Read a commit file diff against its first parent
+      parameters:
+        - $ref: "#/components/parameters/DiffContext"
       responses:
         "200":
           description: Read-only file diff for the selected commit.
@@ -3694,6 +3697,18 @@ components:
       schema:
         type: string
         const: "1"
+    DiffContext:
+      name: context
+      in: query
+      required: false
+      description: >-
+        `hunks` (default) returns changes with three lines of context; staging selections address
+        these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides
+        in full; its revision and indexes are not accepted by staging, discard, or commit selections.
+      schema:
+        type: string
+        enum: [hunks, full]
+        default: hunks
   schemas:
     RepoId:
       type: string

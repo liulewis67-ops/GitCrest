@@ -1,6 +1,6 @@
 import { t } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
-import { GitCrestApiError, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse } from "../../../api/client";
+import { GitCrestApiError, type DiffContext, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse } from "../../../api/client";
 import type { WorkspaceMode } from "../../repositories";
 
 export type RepositoryDiffQueryState = {
@@ -17,13 +17,14 @@ type Options = {
   path?: string;
   scope?: "workingTree" | "index" | "commit";
   commitOid?: string;
+  context?: DiffContext;
 };
 
-export function useRepositoryDiffQuery({ api, mode, repository, path, scope, commitOid }: Options) {
+export function useRepositoryDiffQuery({ api, mode, repository, path, scope, commitOid, context = "hunks" }: Options) {
   const [state, setState] = useState<RepositoryDiffQueryState>({ key: "", loading: false });
   const [retryVersion, setRetryVersion] = useState(0);
   const key = repository && path && scope
-    ? `${repository.repoId}:${scope}:${commitOid || ""}:${path}`
+    ? `${repository.repoId}:${scope}:${commitOid || ""}:${context}:${path}`
     : "";
 
   useEffect(() => {
@@ -34,12 +35,12 @@ export function useRepositoryDiffQuery({ api, mode, repository, path, scope, com
     if (!api) return;
 
     let active = true;
-    const requestKey = `${repository.repoId}:${scope}:${commitOid || ""}:${path}`;
+    const requestKey = `${repository.repoId}:${scope}:${commitOid || ""}:${context}:${path}`;
     setState({ key: requestKey, loading: true });
     const request = scope === "commit" && commitOid
-      ? api.getRepositoryCommitDiff(repository.repoId, commitOid, path)
+      ? api.getRepositoryCommitDiff(repository.repoId, commitOid, path, context)
       : scope === "workingTree" || scope === "index"
-        ? api.getFileDiff(repository.repoId, path, scope)
+        ? api.getFileDiff(repository.repoId, path, scope, context)
         : Promise.reject(new Error(t("err.commitDiffUnavailable")));
     request
       .then((document) => { if (active) setState({ key: requestKey, loading: false, document }); })
@@ -48,7 +49,7 @@ export function useRepositoryDiffQuery({ api, mode, repository, path, scope, com
         if (active) setState({ key: requestKey, loading: false, error: message || (error instanceof Error ? error.message : t("err.readDiff")) });
       });
     return () => { active = false; };
-  }, [mode, repository?.repoId, path, scope, commitOid, retryVersion, api]);
+  }, [mode, repository?.repoId, path, scope, commitOid, context, retryVersion, api]);
 
   function retry() {
     setRetryVersion((current) => current + 1);

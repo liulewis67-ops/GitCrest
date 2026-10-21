@@ -11,6 +11,7 @@ const CommitDetails = lazy(loadCommitDetails);
 interface WorkspaceDetailsPanelProps {
   repository?: RepositoryResponse;
   selectedCommit?: string;
+  selectedFilePath?: string;
   api?: GitCrestApiClient;
   connected: boolean;
   hasActiveRepositoryTask: boolean;
@@ -27,6 +28,7 @@ interface WorkspaceDetailsPanelProps {
 export function WorkspaceDetailsPanel({
   repository,
   selectedCommit,
+  selectedFilePath,
   api,
   connected,
   hasActiveRepositoryTask,
@@ -51,7 +53,7 @@ export function WorkspaceDetailsPanel({
   return (
     <aside className="detailsPanel" aria-label={t("details.aria")}>
       <div className="panelHeading">{repository && !isFullGitObjectId(selectedCommit) ? t("details.headingRepository") : t("details.headingCommit")}</div>
-      {repository && isFullGitObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">{t("details.loading")}</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} onCreateBranch={onCreateBranch} /></Suspense> : repository ? (
+      {repository && isFullGitObjectId(selectedCommit) && api ? <Suspense fallback={<div className="detailsEmpty" role="status" aria-live="polite">{t("details.loading")}</div>}><CommitDetails api={api} repoId={repository.repoId} oid={selectedCommit} selectedPath={selectedFilePath} onOpenFile={onOpenFile} onOpenDiffWindow={onOpenDiffWindow} workflowDisabledReason={workflowDisabledReason} openTagRequest={openTagRequest} onTagRequestHandled={onTagRequestHandled} tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)} cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)} onWorkflow={onWorkflow} onCreateBranch={onCreateBranch} /></Suspense> : repository ? (
         <div className="repositoryDetails">
           <span className="detailsGlyph" aria-hidden="true">G</span>
           <h2>{getRepositoryDisplayName(repository.path)}</h2>

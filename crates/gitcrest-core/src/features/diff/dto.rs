@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
 use crate::domain::{
-    diff::{DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffScope},
+    diff::{
+        DiffContentStatus, DiffContext, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffScope,
+    },
     status::ChangeKind,
 };
 
@@ -182,10 +184,31 @@ impl From<DiffRow> for DiffRowDto {
 pub(super) struct DiffQuery {
     pub(super) path: String,
     pub(super) scope: DiffScopeDto,
+    #[serde(default)]
+    pub(super) context: DiffContextDto,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CommitDiffQuery {
     pub(super) path: String,
+    #[serde(default)]
+    pub(super) context: DiffContextDto,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum DiffContextDto {
+    #[default]
+    Hunks,
+    Full,
+}
+
+impl From<DiffContextDto> for DiffContext {
+    fn from(context: DiffContextDto) -> Self {
+        match context {
+            DiffContextDto::Hunks => Self::Hunks,
+            DiffContextDto::Full => Self::FullFile,
+        }
+    }
 }

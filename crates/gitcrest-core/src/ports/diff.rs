@@ -1,7 +1,7 @@
 use std::{future::Future, path::Path, pin::Pin};
 
 use crate::domain::{
-    diff::{DiffScope, DiffWorktreeEntryKind},
+    diff::{DiffContext, DiffScope, DiffWorktreeEntryKind},
     error::DiffError,
 };
 
@@ -23,6 +23,7 @@ pub(crate) trait DiffGitPort: Send + Sync {
         relative_path: &str,
         scope: DiffScope,
         untracked: bool,
+        context: DiffContext,
     ) -> Result<Vec<u8>, DiffError>;
 
     async fn read_commit_file_patch(
@@ -31,5 +32,6 @@ pub(crate) trait DiffGitPort: Send + Sync {
         oid: &str,
         parent_oid: Option<&str>,
         relative_path: &str,
+        context: DiffContext,
     ) -> Result<Vec<u8>, DiffError>;
 }
