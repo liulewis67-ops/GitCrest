@@ -50,7 +50,7 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
     <span className={`commitGraphNode${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
     <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
     <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
-    {refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}
+    {refNames.length > 0 && <span className="commitGraphRefs" title={refNames.join(", ")}>{refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}{refNames.length > 1 && <span className="commitRefMore" aria-hidden="true">+{refNames.length - 1}</span>}</span>}
   </button>;
 });
 
@@ -59,6 +59,10 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
   const { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, resetFilters } = useHistoryFilters();
+  // Message search covers most lookups; the other filters stay folded until asked for or in use.
+  const advancedFilterCount = ((["sha", "author", "branch", "path", "since", "until"] as const)).filter((key) => Boolean(filters[key])).length;
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const showAdvancedFilters = filtersOpen;
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
   const renderedWindowRef = useRef({ first: 0, height: 520 });
   const restoredRepo = useRef<string>();
@@ -185,15 +189,21 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   }
 
   return <div className="historyWorkspace">
-    <form className="historyFilters" aria-label={t("hist.filtersAria")} onSubmit={submitFilters}>
+    <form className={`historyFilters${showAdvancedFilters ? " expanded" : ""}`} aria-label={t("hist.filtersAria")} onSubmit={submitFilters}>
+      <div className="historySearchRow">
+        <label className="historyMessageSearch"><span className="srOnly">{t("hist.message")}</span><input ref={messageSearchRef} aria-label={t("hist.messageAria")} aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setDraftFilter("message", event.target.value)} placeholder={t("hist.messagePlaceholder")} /></label>
+        <button className={`quietButton compact historyFilterToggle${advancedFilterCount ? " active" : ""}`} type="button" aria-expanded={showAdvancedFilters} aria-controls={`history-filters-${repoId}`} aria-label={showAdvancedFilters ? t("hv.hideFilters") : t("hv.showFilters")} title={showAdvancedFilters ? t("hv.hideFilters") : t("hv.showFilters")} onClick={() => setFiltersOpen((open) => !open)}>{advancedFilterCount ? t("hv.filtersActive", { count: advancedFilterCount }) : t("hv.filters")}</button>
+      </div>
+      {showAdvancedFilters && <div className="historyAdvancedFilters" id={`history-filters-${repoId}`}>
       <label>{t("hist.sha")}<input aria-label={t("hist.shaAria")} value={draftFilters.sha || ""} onChange={(event) => setDraftFilter("sha", event.target.value)} placeholder={t("hist.shaPlaceholder")} /></label>
       <label>{t("hist.author")}<input aria-label={t("hist.authorAria")} value={draftFilters.author || ""} onChange={(event) => setDraftFilter("author", event.target.value)} placeholder={t("hist.authorPlaceholder")} /></label>
-      <label>{t("hist.message")}<input ref={messageSearchRef} aria-label={t("hist.messageAria")} aria-keyshortcuts={searchShortcut} value={draftFilters.message || ""} onChange={(event) => setDraftFilter("message", event.target.value)} placeholder={t("hist.messagePlaceholder")} /></label>
       <label>{t("hist.branch")}<select aria-label={t("hist.branchAria")} value={draftFilters.branch || ""} onChange={(event) => setDraftFilter("branch", event.target.value)}><option value="">{t("hist.allBranches")}</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
       <label>{t("hist.path")}<input aria-label={t("hist.pathAria")} value={draftFilters.path || ""} onChange={(event) => setDraftFilter("path", event.target.value)} placeholder={t("hist.pathPlaceholder")} /></label>
       <label>{t("hist.since")}<input aria-label={t("hist.sinceAria")} type="date" value={draftFilters.since || ""} onChange={(event) => setDraftFilter("since", event.target.value)} /></label>
       <label>{t("hist.until")}<input aria-label={t("hist.untilAria")} type="date" value={draftFilters.until || ""} onChange={(event) => setDraftFilter("until", event.target.value)} /></label>
       <div className="historyFilterActions"><button className="secondaryButton" type="submit">{t("hist.search")}</button>{hasFilters && <button className="textButton" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}</div>
+      </div>}
+      {!showAdvancedFilters && hasFilters && <button className="textButton historyClearInline" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}
     </form>
     <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label={t("main.graphView")}>
     {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? t("hist.preparing") : t("hist.loading")}</div>

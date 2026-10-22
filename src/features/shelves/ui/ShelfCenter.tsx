@@ -27,6 +27,7 @@ export function ShelfCenter({
   afterCreateAction,
   onTaskSubmitted,
   onComposerClosed,
+  onComposerRequestHandled,
 }: {
   api: GitCrestApiClient;
   repoId: string;
@@ -39,6 +40,8 @@ export function ShelfCenter({
   afterCreateAction?: ShelfAfterCreateAction;
   onTaskSubmitted: (task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) => void;
   onComposerClosed?: () => void;
+  /** Called once a request has opened the composer, so a later remount does not open it again. */
+  onComposerRequestHandled?: () => void;
 }) {
   const { t } = useI18n();
   const [shelves, setShelves] = useState<ShelfResponse[]>([]);
@@ -123,6 +126,7 @@ export function ShelfCenter({
     if (openComposerRequest > 0) {
       setComposerOpen(true);
       setLoadError("");
+      onComposerRequestHandled?.();
     }
   }, [openComposerRequest]);
 

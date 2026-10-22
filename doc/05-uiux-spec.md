@@ -13,6 +13,8 @@ GitCrest 的界面应像专业工程工具，而不是营销产品。整体风�
 
 ## 2. 主窗口
 
+> 布局更新（2026-10）：主窗口改为 Changes / History / Branches 三个任务视图，见[信息架构 §3](03-information-architecture.md#3-主窗口布局)。下文 2.2–2.5 描述的各面板内容仍然适用，但它们只在对应视图中出现：左侧栏的变更与 Shelves 属于 Changes，分支、Worktrees 与 Remotes 属于 Branches；右侧详情区为可选面板；底部工作区收敛为仅在 Changes 视图、且有内容可提交时出现的提交编辑器；不再有状态栏，内核连接异常时在标题栏显示。
+
 ### 2.1 标题栏
 
 内容：

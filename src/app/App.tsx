@@ -1,5 +1,5 @@
 import { useI18n } from "../shared/i18n";
-import { lazy, Suspense, useEffect, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { requireGitCrestBridge } from "../api/bridge";
 import { AppTitlebar, type AppPage } from "./layouts/AppTitlebar";
@@ -7,18 +7,21 @@ import { CommandPalette, type CommandPaletteCommand } from "./layouts/CommandPal
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
-import { WorkspaceNavigation } from "../pages/workspace/WorkspaceNavigation";
-import { WorkspaceDetailsPanel } from "../pages/workspace/WorkspaceDetailsPanel";
+import { ChangesSidebar, changeCode } from "../pages/workspace/ChangesSidebar";
+import { BranchesSidebar } from "../pages/workspace/BranchesSidebar";
+import { CommitInspector } from "../pages/workspace/CommitInspector";
+import { WorkspaceDiffPanel } from "../pages/workspace/WorkspaceDiffPanel";
+import { ViewLayout } from "../pages/workspace/ViewLayout";
 import { ariaShortcut, displayShortcut, loadSettingsPage, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus, type SettingsSectionId } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
-import { ResizeSeparator } from "../shared/ui/ResizeSeparator";
-import { getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
+import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
+import { getComposerVisibility, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
-import { getRepositoryEventRefreshPlan, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
-import { summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
-import { isFullGitObjectId, useHistoryViewRequests } from "../features/history";
+import { DEFAULT_WORKSPACE_MODE, DETAILS_WIDTH, HISTORY_LIST_WIDTH, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
+import { listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
+import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, useOpenCreatedWorktree, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
@@ -35,7 +38,8 @@ const NewWorktreeDialog = lazy(() => loadNewWorktreeDialog().then(({ NewWorktree
 const LocalBranchDialog = lazy(() => loadLocalBranchDialog().then(({ LocalBranchDialog }) => ({ default: LocalBranchDialog })));
 const BranchSwitcherDialog = lazy(() => loadBranchSwitcherDialog().then(({ BranchSwitcherDialog }) => ({ default: BranchSwitcherDialog })));
 const CloneDialog = lazy(() => loadCloneDialog().then(({ CloneDialog }) => ({ default: CloneDialog })));
-const WorkspaceMainPanel = lazy(() => import("../pages/workspace/WorkspaceMainPanel").then(({ WorkspaceMainPanel }) => ({ default: WorkspaceMainPanel })));
+const CommitGraph = lazy(loadCommitGraph);
+const CommitChanges = lazy(loadCommitChanges);
 const PushDialog = lazy(() => loadPushDialog().then(({ PushDialog }) => ({ default: PushDialog })));
 const PullDialog = lazy(() => loadPullDialog().then(({ PullDialog }) => ({ default: PullDialog })));
 const PushTargetDialog = lazy(() => loadPushTargetDialog().then(({ PushTargetDialog }) => ({ default: PushTargetDialog })));
@@ -209,13 +213,24 @@ function App() {
     getApi: () => apiRef.current,
     getSelectedRepositoryId: () => selectedRepository?.repoId,
     branchSwitcher,
-    requestShelfComposer: (repoId) => setShelfComposerRequest((request) => ({ id: request.id + 1, repoId })),
+    requestShelfComposer: (repoId) => requestShelfComposer(repoId),
     onBranchSwitchReview: branchSwitcher.reviewAfterShelf,
     appendTask: prependTask,
     setTaskError: setTasksError,
     openTaskCenter: () => setTasksOpen(true),
   });
-  const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || "graph" : "graph";
+  const mode = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId]?.mode || DEFAULT_WORKSPACE_MODE : DEFAULT_WORKSPACE_MODE;
+  const { preferences: panelPreferences, setSidebarHidden, setInspectorOpen } = usePanelPreferences();
+  const windowSizeClass = useWindowSizeClass();
+  // Below the wide breakpoint the inspector floats over the content instead of narrowing it.
+  const inspectorOverlay = windowSizeClass !== "wide";
+  // A floating inspector is opened per view and per visit; it never reopens by itself.
+  const [overlayInspectorFor, setOverlayInspectorFor] = useState<WorkspaceMode>();
+  const [focusMode, setFocusMode] = useState(false);
+  const [composerExpanded, setComposerExpanded] = useState<boolean>();
+  const [notice, setNotice] = useState("");
+  const sidebarVisible = !focusMode && !panelPreferences.sidebarHidden[mode];
+  const inspectorVisible = mode !== "changes" && !focusMode && (inspectorOverlay ? overlayInspectorFor === mode : panelPreferences.inspectorOpen[mode]);
   const rememberGraphScroll = useWorkspaceGraphScroll(selectedRepository?.repoId, mode, setWorkspaceSession);
   const { selectedCommit, selectCommit } = useWorkspaceCommitSelection(
     selectedRepository?.repoId,
@@ -245,14 +260,12 @@ function App() {
     setPage,
   });
   const rememberCommitAction = useWorkspaceCommitAction(selectedRepository?.repoId, setWorkspaceSession);
-  const graphViewportRef = useRef<HTMLDivElement>(null);
   const { theme, nextTheme } = useThemePreference();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const { sidebarWidth, setSidebarWidth, detailsWidth, setDetailsWidth, workbenchHeight, setWorkbenchHeight } = useWorkspaceLayout(selectedRepository?.repoId);
+  const { sidebarWidth, setSidebarWidth, historyListWidth, setHistoryListWidth, detailsWidth, setDetailsWidth } = useWorkspaceLayout(selectedRepository?.repoId);
   const connected = status === "Connected to local Rust core";
   useAdoptInProgressWorkflow({ getApi: () => apiRef.current, repoId: selectedRepository?.availability === "available" ? selectedRepository.repoId : undefined, connected, onAdopted: prependTask });
-  const connecting = status.startsWith("Starting");
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
   const activeStatusError = selectedRepository ? statusErrors[selectedRepository.repoId] : undefined;
   const activeStatusLoading = selectedRepository ? statusLoadingByRepo[selectedRepository.repoId] === true : false;
@@ -283,22 +296,28 @@ function App() {
   const activeCommitAction: CommitAction = activeTabState?.commitAction || "commit";
   const selectedFilePath = activeTabState?.selectedFilePath;
   const selectedFileScope = activeTabState?.selectedFileScope;
-  const selectedDiffCommitOid = activeTabState?.selectedDiffCommitOid;
+  const historyFilePath = activeTabState?.selectedCommitFilePath;
+  const historyFileOid = activeTabState?.selectedDiffCommitOid;
   const selectedDiffFile = (activeStatus?.files || []).find((file) => file.path === selectedFilePath);
   const { preferences: diffViewPreferences, updatePreferences: updateDiffViewPreferences } = useDiffViewPreferences();
+  const { groups: statusGroups, stagedCount, hasConflicts, conflictCount, workingCount } = summarizeRepositoryStatus(activeStatus);
+  const reviewableFiles = listReviewableFiles(statusGroups);
+  // Each view reads its own file: Changes a working-tree or staged file, History a file of the selected commit.
+  const diffTarget = mode === "changes" && selectedFilePath && selectedFileScope
+    ? { path: selectedFilePath, scope: selectedFileScope, commitOid: undefined }
+    : mode === "history" && historyFilePath && isFullGitObjectId(historyFileOid) && historyFileOid === selectedCommit
+      ? { path: historyFilePath, scope: "commit" as const, commitOid: historyFileOid }
+      : undefined;
   const diffQuery = useRepositoryDiffQuery({
     api: apiRef.current,
-    mode,
+    enabled: Boolean(diffTarget),
     repository: selectedRepository,
-    path: selectedFilePath,
-    scope: selectedFileScope,
-    commitOid: selectedDiffCommitOid,
+    path: diffTarget?.path,
+    scope: diffTarget?.scope,
+    commitOid: diffTarget?.commitOid,
     context: diffViewPreferences.layout === "full" ? "full" : "hunks",
   });
-  // A commit's file list stays beside its diff so the next file is one click away.
-  const showDetailsPanel = mode === "graph" || selectedFileScope === "commit";
   const { state: diffState, activeKey: activeDiffKey } = diffQuery;
-  const { groups: statusGroups, stagedCount, hasConflicts, workingCount } = summarizeRepositoryStatus(activeStatus);
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
@@ -526,6 +545,83 @@ function App() {
     workspaceSessionActions.changeMode(selectedRepository.repoId, nextMode);
   }
 
+  function toggleSidebar() {
+    if (!selectedRepository) return;
+    if (focusMode) {
+      setFocusMode(false);
+      setSidebarHidden(mode, false);
+      return;
+    }
+    setSidebarHidden(mode, !panelPreferences.sidebarHidden[mode]);
+  }
+
+  function openInspector(view: "history" | "branches") {
+    setFocusMode(false);
+    if (inspectorOverlay) setOverlayInspectorFor(view);
+    else setInspectorOpen(view, true);
+  }
+
+  function closeInspector() {
+    if (inspectorOverlay) setOverlayInspectorFor(undefined);
+    else setInspectorOpen(mode, false);
+    requestAnimationFrame(() => document.getElementById("inspector-toggle")?.focus());
+  }
+
+  function toggleInspector() {
+    if (!selectedRepository || mode === "changes") return;
+    if (inspectorVisible) closeInspector();
+    else openInspector(mode);
+  }
+
+  function toggleFocusMode() {
+    if (!selectedRepository || mode === "branches") return;
+    setFocusMode((current) => !current);
+  }
+
+  /** Esc outside dialogs: leave focus mode first, then close a floating inspector. */
+  function dismissTransientPanels() {
+    if (focusMode) setFocusMode(false);
+    else if (inspectorOverlay && overlayInspectorFor === mode && mode !== "changes") closeInspector();
+  }
+
+  function requestShelfComposer(repoId: string) {
+    changeWorkspaceMode("changes");
+    setFocusMode(false);
+    setSidebarHidden("changes", false);
+    setShelfComposerRequest((request) => ({ id: request.id + 1, repoId }));
+  }
+
+  function focusCommitMessage(attempt = 0) {
+    const input = document.getElementById("commit-message");
+    if (input) input.focus();
+    else if (attempt < 30) requestAnimationFrame(() => focusCommitMessage(attempt + 1));
+  }
+
+  function showCommitComposer() {
+    changeWorkspaceMode("changes");
+    setFocusMode(false);
+    setComposerExpanded(true);
+    focusCommitMessage();
+  }
+
+  function openTagEditor(oid: string) {
+    if (!selectedRepository || !isFullGitObjectId(oid)) return;
+    const view = mode === "branches" ? "branches" : "history";
+    if (mode === "changes") changeWorkspaceMode("history");
+    openInspector(view);
+    historyRequests.openTagEditor(selectedRepository.repoId, oid);
+  }
+
+  async function copyCommitSha(oid: string) {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(oid);
+      setNotice(t("hv.copied", { oid: oid.slice(0, 7) }));
+    } catch {
+      setNotice(t("hv.copyFailed"));
+    }
+  }
+
   function openFileDiff(path: string, scope: "workingTree" | "index") {
     const repoId = selectedRepository?.repoId;
     if (!repoId) return;
@@ -569,6 +665,8 @@ function App() {
     },
     reportError: setTasksError,
     onTerminalPlan: (task, plan) => {
+      // Staging runs without opening the task center; a failure still has to be seen.
+      if (plan.kind === "staging" && task.status === "failed") setTasksOpen(true);
       if (plan.kind !== "commit") return;
       const commitContext = commitSubmission.takeTaskContext(task.taskId);
       if (task.status === "succeeded" && commitContext?.message === commitMessage) setCommitMessage("");
@@ -589,6 +687,39 @@ function App() {
       void refreshRepositoryRemotes(selectedRepository.repoId);
     }
   }, [selectedRepository?.repoId]);
+
+  // Transient panel state belongs to one repository and one window size.
+  useEffect(() => {
+    setFocusMode(false);
+    setOverlayInspectorFor(undefined);
+    setComposerExpanded(undefined);
+  }, [selectedRepository?.repoId]);
+
+  useEffect(() => {
+    setOverlayInspectorFor(undefined);
+  }, [windowSizeClass]);
+
+  useEffect(() => {
+    if (mode === "branches") setFocusMode(false);
+  }, [mode]);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(""), 2400);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  // Keep the Changes selection on a file that still exists: follow it between staged and
+  // unstaged, fall back to the first changed file, or clear it once the tree is clean.
+  const reviewableKey = reviewableFiles.map((file) => `${file.scope}:${file.path}`).join("\n");
+  useEffect(() => {
+    const repoId = selectedRepository?.repoId;
+    if (!repoId || !activeStatus || activeStatus.repoId !== repoId) return;
+    const current = selectedFilePath && selectedFileScope ? { path: selectedFilePath, scope: selectedFileScope } : undefined;
+    const next = reconcileWorkingSelection(reviewableFiles, current);
+    if (next?.path === current?.path && next?.scope === current?.scope) return;
+    workspaceSessionActions.selectWorkingFile(repoId, next);
+  }, [reviewableKey, selectedRepository?.repoId, activeStatus?.repoId, selectedFilePath, selectedFileScope]);
 
   useGlobalShortcuts({
     page,
@@ -618,23 +749,23 @@ function App() {
     fetch: () => { void fetchRepository(); },
     push: openPushDialog,
     refreshStatus: (repoId) => { void refreshRepositoryStatus(repoId, true); },
-    openDiff: () => changeWorkspaceMode("diff"),
+    openDiff: () => changeWorkspaceMode("changes"),
     searchCommits: (repoId) => {
-      changeWorkspaceMode("graph");
+      if (mode === "changes") changeWorkspaceMode("history");
+      // History's search box sits in the commit list, so the list has to be on screen.
+      if (mode !== "branches") setSidebarHidden("history", false);
+      setFocusMode(false);
       historyRequests.focusSearch(repoId);
     },
     openShelfComposer: () => {
-      if (!selectedRepository) return;
-      setShelfComposerRequest((request) => ({ id: request.id + 1, repoId: selectedRepository.repoId }));
+      if (selectedRepository) requestShelfComposer(selectedRepository.repoId);
     },
     cherryPick: (repoId, targetOid) => workflowDialog.open(repoId, targetOid, "cherryPick"),
-    createTag: (repoId, oid) => {
-      changeWorkspaceMode("graph");
-      historyRequests.openTagEditor(repoId, oid);
-    },
+    createTag: (_repoId, oid) => openTagEditor(oid),
     openSettings: () => setSettingsView({}),
-    commit: () => { void commitChanges("commit"); },
-    commitAndPush: () => { void commitChanges("commitAndPush"); },
+    // Committing belongs to Changes; elsewhere the shortcut would commit a draft the user cannot see.
+    commit: () => { if (mode === "changes") void commitChanges("commit"); },
+    commitAndPush: () => { if (mode === "changes") void commitChanges("commitAndPush"); },
     pull: openPullDialog,
     rebase: workflowDialog.openRebase,
     openBranchSwitcher: branchSwitcher.openSwitcher,
@@ -642,15 +773,19 @@ function App() {
       setPaletteOpen((open) => !open);
       setPaletteQuery("");
     },
-    openCommitAssistant: () => setCommitAssistantOpen(true),
+    openCommitAssistant: () => {
+      changeWorkspaceMode("changes");
+      setFocusMode(false);
+      setCommitAssistantOpen(true);
+    },
     closeCommandPalette: () => setPaletteOpen(false),
+    showView: changeWorkspaceMode,
+    toggleSidebar,
+    toggleInspector,
+    toggleFocusMode,
+    dismissTransientPanels,
   });
 
-  const layoutStyle = {
-    "--sidebar-width": `${sidebarWidth}px`,
-    "--details-width": `${detailsWidth}px`,
-    "--workbench-height": `${workbenchHeight}px`,
-  } as CSSProperties;
 
   const commands: CommandPaletteCommand[] = [
     { id: "welcome", label: t("cmd.welcome"), detail: t("cmd.welcomeDetail"), available: true, run: () => setPage("welcome") },
@@ -667,8 +802,117 @@ function App() {
     { id: "push", label: t("cmd.push"), detail: t("cmd.pushDetail"), available: Boolean(selectedRepository), run: () => openPushDialog() },
     { id: "ai-commit-message", label: t("cmd.ai"), detail: t("cmd.aiDetail", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) }), available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
     { id: "clone", label: t("cmd.clone"), detail: t("cmd.cloneDetail"), available: connected, run: () => cloneSubmission.openDialog() },
-    { id: "diff", label: t("cmd.diff"), detail: t("cmd.diffDetail"), available: Boolean(selectedFilePath), run: () => changeWorkspaceMode("diff") },
+    { id: "view-changes", label: t("cmd.viewChanges"), detail: t("cmd.viewChangesDetail", { shortcut: displayShortcut(shortcuts.viewChanges, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("changes") },
+    { id: "view-history", label: t("cmd.viewHistory"), detail: t("cmd.viewHistoryDetail", { shortcut: displayShortcut(shortcuts.viewHistory, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("history") },
+    { id: "view-branches", label: t("cmd.viewBranches"), detail: t("cmd.viewBranchesDetail", { shortcut: displayShortcut(shortcuts.viewBranches, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("branches") },
+    { id: "toggle-sidebar", label: t("cmd.toggleSidebar"), detail: t("cmd.toggleSidebarDetail", { shortcut: displayShortcut(shortcuts.toggleSidebar, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace"), run: toggleSidebar },
+    { id: "toggle-details", label: t("cmd.toggleDetails"), detail: t("cmd.toggleDetailsDetail", { shortcut: displayShortcut(shortcuts.toggleInspector, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace" && mode !== "changes"), run: toggleInspector },
+    { id: "focus-mode", label: t("cmd.focus"), detail: t("cmd.focusDetail", { shortcut: displayShortcut(shortcuts.focusMode, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace" && diffTarget), run: toggleFocusMode },
+    { id: "manage-remotes", label: t("cmd.manageRemotes"), detail: t("cmd.manageRemotesDetail"), available: Boolean(selectedRepository), run: () => { changeWorkspaceMode("branches"); setSidebarHidden("branches", false); setFocusMode(false); } },
   ];
+  const composer = getComposerVisibility({
+    inChangesView: mode === "changes" && !focusMode,
+    statusReady: Boolean(activeStatus),
+    stagedCount,
+    workingCount,
+    draft: `${commitSummary}${commitDescription}`,
+    amend: amendCommit,
+    assistantOpen: commitAssistantOpen,
+    selectionCount: commitSelections.length,
+    expandedOverride: composerExpanded,
+  });
+  const currentBranch = activeBranches?.branches?.find((branch) => branch.kind === "local" && branch.isCurrent);
+  const workflowDisabledReason = !connected
+    ? t("details.connectFirst")
+    : selectedRepository?.availability !== "available"
+      ? t("details.repoUnavailable")
+      : hasActiveRepositoryTask ? t("details.waitTask") : undefined;
+  const inspectorSize = { width: detailsWidth, min: DETAILS_WIDTH.min, max: DETAILS_WIDTH.max, label: t("app.resizeDetails"), onResize: setDetailsWidth };
+  const changesIndex = reviewableFiles.findIndex((file) => file.path === selectedFilePath && file.scope === selectedFileScope);
+
+  function openReviewableFile(index: number) {
+    const file = reviewableFiles[index];
+    if (file) openFileDiff(file.path, file.scope);
+  }
+
+  function renderDiffPanel(target: NonNullable<typeof diffTarget>, extra: { status?: { code: string; kind: string }; fileMissing?: boolean; fileNavigation?: CommitFileNavigation }) {
+    return <WorkspaceDiffPanel
+      path={target.path}
+      scope={target.scope}
+      commitOid={target.commitOid}
+      status={extra.status}
+      activeDiffKey={activeDiffKey}
+      diffState={diffState}
+      fileMissing={extra.fileMissing}
+      selectionDisabled={stagingBusy || hasActiveStagingTask || commitBusy}
+      fileNavigation={extra.fileNavigation}
+      focusMode={focusMode}
+      shortcuts={shortcuts}
+      isMacPlatform={isMacPlatform}
+      diffViewPreferences={diffViewPreferences}
+      onChangeDiffViewPreferences={updateDiffViewPreferences}
+      onToggleFocusMode={toggleFocusMode}
+      onRetryDiff={diffQuery.retry}
+      onStageSelection={stageSelectedChanges}
+      onDiscardSelection={requestDiscard}
+      onCommitSelection={addDiffSelectionToCommit}
+      onOpenDiffWindow={(path, scope, oid) => void openDiffWindow(path, scope, oid)}
+    />;
+  }
+
+  function renderCommitGraph() {
+    if (!selectedRepository || !apiRef.current) return null;
+    if (!isFullGitObjectId(selectedRepository.head)) {
+      return <div className="viewEmpty"><h2>{selectedRepository.head ? t("main.connectingHistory") : t("hv.noCommits")}</h2><p>{t("hv.noCommitsHint")}</p></div>;
+    }
+    return <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">{t("main.loadingHistory")}</div>}>
+      <CommitGraph
+        key={`${selectedRepository.repoId}:${mode}`}
+        api={apiRef.current}
+        repoId={selectedRepository.repoId}
+        selectedOid={selectedCommit}
+        initialScrollTop={workspaceSession.tabs[selectedRepository.repoId]?.graphScrollTop || 0}
+        refreshKey={historyRequests.refreshKey}
+        focusSearchRequest={historyRequests.searchFocusRequest}
+        searchShortcut={ariaShortcut(shortcuts.searchCommits, isMacPlatform)}
+        onFocusSearchHandled={historyRequests.markSearchFocusHandled}
+        onScrollPosition={rememberGraphScroll}
+        onSelect={selectCommit}
+      />
+    </Suspense>;
+  }
+
+  function renderCommitActions(oid: string) {
+    return <CommitActionsMenu
+      oid={oid}
+      workflowDisabledReason={workflowDisabledReason}
+      onWorkflow={(action: CommitWorkflowAction, target) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, target, action); }}
+      onCreateBranch={setCreateBranchAt}
+      onCreateTag={openTagEditor}
+      onCopySha={(target) => void copyCommitSha(target)}
+    />;
+  }
+
+  function renderInspector(withActions: boolean) {
+    if (!selectedRepository) return null;
+    return <CommitInspector
+      repository={selectedRepository}
+      selectedCommit={selectedCommit}
+      api={apiRef.current}
+      overlay={inspectorOverlay}
+      showFiles={mode !== "history"}
+      selectedFilePath={mode === "history" && historyFileOid === selectedCommit ? historyFilePath : undefined}
+      openTagRequest={historyRequests.tagEditorRequest}
+      shortcuts={shortcuts}
+      isMacPlatform={isMacPlatform}
+      actions={withActions && isFullGitObjectId(selectedCommit) ? renderCommitActions(selectedCommit) : undefined}
+      onClose={closeInspector}
+      onOpenFile={openCommitFileDiff}
+      onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
+      onTagRequestHandled={historyRequests.markTagEditorHandled}
+    />;
+  }
+
   const paletteContext = page === "welcome"
     ? t("app.ctxWelcome")
     : selectedRepository
@@ -676,14 +920,13 @@ function App() {
       : t("app.ctxNoRepo");
 
   return (
-    <main className="appShell" style={layoutStyle}>
+    <main className="appShell">
       <AppTitlebar
         page={page}
         openRepoIds={workspaceSession.openRepoIds}
         repositories={repositories}
         selectedRepository={selectedRepository}
         shortcuts={shortcuts}
-        theme={theme}
         status={status}
         connected={connected}
         activeTaskCount={tasks.filter((task) => task.status === "queued" || task.status === "running").length}
@@ -696,7 +939,6 @@ function App() {
         onCloneRepository={() => cloneSubmission.openDialog()}
         onInitializeRepository={() => void repositoryOpening.chooseAndInitializeLocal()}
         onOpenCommandPalette={() => setPaletteOpen(true)}
-        onCycleTheme={nextTheme}
         onOpenTasks={() => setTasksOpen(true)}
         onOpenSettings={() => setSettingsView((open) => open ? undefined : {})}
       />
@@ -720,171 +962,185 @@ function App() {
         />
       ) : (
         <WorkspacePage
-          selectedRepository={selectedRepository}
-          selectedFilePath={selectedFilePath}
+          repository={selectedRepository}
           mode={mode}
+          changedFileCount={activeStatus ? reviewableFiles.length : undefined}
+          conflictCount={conflictCount}
+          currentBranch={currentBranch}
+          remoteCount={activeRemotes && Array.isArray(activeRemotes.remotes) ? activeRemotes.remotes.length : undefined}
           shortcuts={shortcuts}
           isMacPlatform={isMacPlatform}
           connected={connected}
-          connecting={connecting}
-          version={version}
           hasActiveRepositoryTask={hasActiveRepositoryTask}
           pushDisabledReason={pushDisabledReason}
           pullDisabledReason={pullDisabledReason}
-          onChangeWorkspaceMode={changeWorkspaceMode}
+          sidebarVisible={sidebarVisible}
+          inspectorAvailable={mode !== "changes"}
+          inspectorOpen={inspectorVisible}
+          focusMode={focusMode}
+          openingRepository={repositoryOpening.opening}
+          onChangeMode={changeWorkspaceMode}
           onOpenPushDialog={openPushDialog}
           onOpenPullDialog={openPullDialog}
           onFetchRepository={() => void fetchRepository()}
           onOpenBranchSwitcher={branchSwitcher.openSwitcher}
+          onToggleSidebar={toggleSidebar}
+          onToggleInspector={toggleInspector}
+          onOpenTasks={() => setTasksOpen(true)}
+          onCreateBranchAtHead={() => { if (isFullGitObjectId(selectedRepository?.head)) setCreateBranchAt(selectedRepository.head); }}
+          onOpenRepository={() => void repositoryOpening.chooseAndOpenLocal()}
         >
-          <div className={`workArea${mode === "diff" ? " diffMode" : ""}${showDetailsPanel ? "" : " detailsHidden"}`}>
-            <WorkspaceNavigation
-              selectedRepository={selectedRepository}
-              activeStatus={activeStatus}
-              activeStatusError={activeStatusError}
-              activeStatusLoading={activeStatusLoading}
+          {selectedRepository && mode === "changes" && <ViewLayout
+            className="changesLayout"
+            sidebar={sidebarVisible ? <ChangesSidebar
+              repository={selectedRepository}
+              api={apiRef.current}
+              status={activeStatus}
+              statusError={activeStatusError}
+              statusLoading={activeStatusLoading}
               statusGroups={statusGroups}
               workingCount={workingCount}
               stagedCount={stagedCount}
+              hasConflicts={hasConflicts}
               stagingBusy={stagingBusy}
               hasActiveStagingTask={hasActiveStagingTask}
               selectedFilePath={selectedFilePath}
               selectedFileScope={selectedFileScope}
-              activeBranches={activeBranches}
-              hasBranchSnapshot={hasBranchSnapshot}
-              activeBranchError={activeBranchError}
-              activeBranchesLoading={activeBranchesLoading}
-              orderedBranches={orderedBranches}
-              activeRemotes={activeRemotes}
-              activeRemoteError={activeRemoteError}
-              activeRemotesLoading={activeRemotesLoading}
-              remoteActionBusy={remoteMutations.busy}
-              remoteDisabledReason={remoteDisabledReason}
-              api={apiRef.current}
-              onManageAccounts={(hosts) => openAccountSettings(hosts)}
-              historyRefreshKey={historyRequests.refreshKey}
-              shelfComposerRequest={shelfComposerRequest.repoId === selectedRepository?.repoId ? shelfComposerRequest.id : 0}
-              shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch?.repoId === selectedRepository?.repoId ? branchSwitchShelfFlow.shelfComposerAfterSwitch : undefined}
               connected={connected}
-              connecting={connecting}
               hasActiveRepositoryTask={hasActiveRepositoryTask}
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
+              historyRefreshKey={historyRequests.refreshKey}
+              shelfComposerRequest={shelfComposerRequest.repoId === selectedRepository.repoId ? shelfComposerRequest.id : 0}
+              shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch?.repoId === selectedRepository.repoId ? branchSwitchShelfFlow.shelfComposerAfterSwitch : undefined}
               onStageChanges={(action, path) => void stageChanges(action, path)}
-              onRefreshRepositoryStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
-              onRefreshRepositoryBranches={(repoId) => void refreshRepositoryBranches(repoId)}
+              onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
               onOpenFileDiff={openFileDiff}
-              onDeleteRemoteBranch={remoteBranchDelete.open}
-              onSwitchBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
-              onManageBranch={(name, mode) => setLocalBranchAction({ name, mode })}
-              onWorktreeRemoveStarted={(task) => { prependTask(task); setTasksError(""); setTasksOpen(true); }}
-              onNewWorktreeForBranch={(name, fromRemote) => setWorktreeForBranch({ name, fromRemote })}
-              onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
-              onMergeBranch={(oid, name) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, "merge", name); }}
-              onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository?.repoId, fullName, favorite)}
-              onRefreshRepositoryRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}
-              onAddRepositoryRemote={remoteMutations.addRepositoryRemote}
-              onSetRepositoryRemoteUrl={remoteMutations.setRepositoryRemoteUrl}
-              onDeleteRepositoryRemote={remoteMutations.deleteRepositoryRemote}
-              onSetRepositoryDefaultRemote={remoteMutations.setRepositoryDefaultRemote}
-              onSetRepositoryBranchUpstream={remoteMutations.setRepositoryBranchUpstream}
               onShelfTaskSubmitted={(task, switchTarget) => {
-                if (selectedRepository) void refreshRepositoryStatus(selectedRepository.repoId);
-                if (task) {
-                  prependTask(task);
-                }
+                void refreshRepositoryStatus(selectedRepository.repoId);
+                if (task) prependTask(task);
                 branchSwitchShelfFlow.onShelfComposerTaskSubmitted(task, switchTarget);
                 void refreshTasks();
               }}
               onShelfComposerClosed={branchSwitchShelfFlow.onShelfComposerClosed}
-            />
-            <ResizeSeparator orientation="vertical" edge="left" value={sidebarWidth} min={190} max={340} label={t("app.resizeNav")} onResize={setSidebarWidth} />
-
-            <Suspense fallback={<section className="mainPanel" aria-label={mode === "graph" ? t("main.commitGraph") : t("main.fileDiff")}><div className="graphViewport" role="status" aria-live="polite">{t("app.loadingView")}</div></section>}>
-              <WorkspaceMainPanel
-                mode={mode}
+              onShelfComposerRequestHandled={() => setShelfComposerRequest((request) => ({ id: request.id }))}
+            /> : undefined}
+            sidebarSize={{ width: sidebarWidth, min: SIDEBAR_WIDTH.min, max: SIDEBAR_WIDTH.max, label: t("app.resizeNav"), onResize: setSidebarWidth }}
+            inspectorSize={inspectorSize}
+            inspectorOverlay={false}
+          >
+            {!activeStatus ? activeStatusError
+              ? <div className="viewEmpty" role="alert"><p>{activeStatusError}</p><button className="secondaryButton" type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId, true)}>{t("nav.retry")}</button></div>
+              : <div className="viewEmpty" role="status"><span className="loadingSpinner" aria-hidden="true" /><p>{t("nav.loadingStatus")}</p></div>
+              : reviewableFiles.length === 0 ? <div className="viewEmpty cleanState" role="status">
+                <span className="viewEmptyGlyph" aria-hidden="true">✓</span>
+                <h2>{t("chg.cleanTitle")}</h2>
+                <p>{t("chg.cleanBody")}</p>
+                <button className="secondaryButton" type="button" onClick={() => changeWorkspaceMode("history")}>{t("chg.browseHistory")}</button>
+              </div>
+                : diffTarget ? renderDiffPanel(diffTarget, {
+                  status: changesIndex >= 0 ? { code: changeCode(reviewableFiles[changesIndex].kind), kind: reviewableFiles[changesIndex].kind } : undefined,
+                  fileMissing: !selectedDiffFile,
+                  fileNavigation: changesIndex >= 0 ? { index: changesIndex, total: reviewableFiles.length, onPrevious: () => openReviewableFile(changesIndex - 1), onNext: () => openReviewableFile(changesIndex + 1) } : undefined,
+                })
+                  : <div className="viewEmpty"><h2>{t("chg.selectFile")}</h2><p>{t("chg.selectFileHint")}</p></div>}
+            {composer.visible && <Suspense fallback={null}>
+              <CommitWorkbench
                 repository={selectedRepository}
-                api={apiRef.current}
-                statusLoading={activeStatusLoading}
+                status={{ snapshot: activeStatus, stagedCount, hasConflicts, sensitiveStagedPaths }}
+                commit={{ message: commitMessage, summary: commitSummary, description: commitDescription, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
+                expanded={composer.expanded}
                 shortcuts={shortcuts}
                 isMacPlatform={isMacPlatform}
-                selectedCommit={selectedCommit}
-                workspaceSession={workspaceSession}
-                historyRefreshKey={historyRequests.refreshKey}
-              historySearchFocusRequest={historyRequests.searchFocusRequest}
-                graphViewportRef={graphViewportRef}
-                openingRepository={repositoryOpening.opening}
-                selectedFilePath={selectedFilePath}
-                selectedFileScope={selectedFileScope}
-                selectedDiffCommitOid={selectedDiffCommitOid}
-                activeDiffKey={activeDiffKey}
-                diffState={diffState}
-                selectedDiffFile={selectedDiffFile}
-                stagingBusy={stagingBusy}
-                hasActiveStagingTask={hasActiveStagingTask}
-                commitBusy={commitBusy}
-                version={version}
-                onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
-              onFocusSearchHandled={historyRequests.markSearchFocusHandled}
-                onGraphScrollPosition={rememberGraphScroll}
-                onSelectCommit={selectCommit}
-                onOpenRepository={() => void repositoryOpening.chooseAndOpenLocal()}
-                onRetryDiff={diffQuery.retry}
-                onStageSelection={stageSelectedChanges}
-                onDiscardSelection={requestDiscard}
-                onCommitSelection={addDiffSelectionToCommit}
-                onOpenDiffWindow={(path, scope, oid) => void openDiffWindow(path, scope, oid)}
-                diffViewPreferences={diffViewPreferences}
-                onChangeDiffViewPreferences={updateDiffViewPreferences}
-                onCloseDiff={() => changeWorkspaceMode("graph")}
+                connected={connected}
+                hasActiveRepositoryTask={hasActiveRepositoryTask}
+                api={apiRef.current}
+                onExpandedChange={setComposerExpanded}
+                onChangeMessage={setCommitMessage}
+                onChangeSummary={setCommitSummary}
+                onChangeDescription={setCommitDescription}
+                onChangeTemplate={chooseCommitTemplate}
+                onClearSelections={() => setCommitSelections([])}
+                onAssistantOpenChange={setCommitAssistantOpen}
+                onSelectAmend={setAmendCommit}
+                onSelectSignOff={setSignOffCommit}
+                onSelectSign={setSignCommit}
+                onSubmit={runCommitAction}
+                onChooseAction={chooseCommitAction}
+                onToggleActionMenu={() => setCommitActionMenuOpen((open) => !open)}
               />
-            </Suspense>
-            {showDetailsPanel && <ResizeSeparator orientation="vertical" edge="right" value={detailsWidth} min={220} max={420} label={t("app.resizeDetails")} onResize={setDetailsWidth} />}
+            </Suspense>}
+          </ViewLayout>}
 
-            {showDetailsPanel && <WorkspaceDetailsPanel
+          {selectedRepository && mode === "history" && <ViewLayout
+            className="historyLayout"
+            sidebar={sidebarVisible ? <aside className="sidePanel historyListPanel" aria-label={t("hv.aria")}>{renderCommitGraph()}</aside> : undefined}
+            sidebarSize={{ width: historyListWidth, min: HISTORY_LIST_WIDTH.min, max: HISTORY_LIST_WIDTH.max, label: t("panel.resizeHistoryList"), onResize: setHistoryListWidth }}
+            inspector={inspectorVisible ? renderInspector(false) : undefined}
+            inspectorSize={inspectorSize}
+            inspectorOverlay={inspectorOverlay}
+          >
+            {isFullGitObjectId(selectedCommit) && apiRef.current ? <Suspense fallback={<div className="viewEmpty" role="status"><p>{t("hv.loadingCommit")}</p></div>}>
+              <CommitChanges
+                api={apiRef.current}
+                repoId={selectedRepository.repoId}
+                oid={selectedCommit}
+                openPath={historyFilePath}
+                openPathOid={historyFileOid}
+                filesHidden={focusMode}
+                onOpenFile={openCommitFileDiff}
+                onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
+                actions={!focusMode && renderCommitActions(selectedCommit)}
+                renderDiff={(navigation) => diffTarget?.scope === "commit" ? renderDiffPanel(diffTarget, { fileNavigation: navigation }) : null}
+              />
+            </Suspense> : isFullGitObjectId(selectedRepository.head) ? <div className="viewEmpty"><h2>{t("hv.selectCommit")}</h2><p>{t("hv.selectCommitHint")}</p></div>
+              : <div className="viewEmpty"><h2>{t("hv.noCommits")}</h2><p>{t("hv.noCommitsHint")}</p></div>}
+          </ViewLayout>}
+
+          {selectedRepository && mode === "branches" && <ViewLayout
+            className="branchesLayout"
+            sidebar={sidebarVisible ? <BranchesSidebar
               repository={selectedRepository}
-              selectedCommit={selectedCommit}
-              selectedFilePath={mode === "diff" && selectedFileScope === "commit" ? selectedFilePath : undefined}
               api={apiRef.current}
+              branches={activeBranches}
+              orderedBranches={orderedBranches}
+              branchError={activeBranchError}
+              branchesLoading={activeBranchesLoading}
+              remotes={activeRemotes}
+              remoteError={activeRemoteError}
+              remotesLoading={activeRemotesLoading}
+              remoteActionBusy={remoteMutations.busy}
+              remoteDisabledReason={remoteDisabledReason}
               connected={connected}
               hasActiveRepositoryTask={hasActiveRepositoryTask}
-              openTagRequest={historyRequests.tagEditorRequest}
+              historyRefreshKey={historyRequests.refreshKey}
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
-              onOpenFile={openCommitFileDiff}
-              onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
-              onTagRequestHandled={historyRequests.markTagEditorHandled}
-              onCreateBranch={setCreateBranchAt}
-              onWorkflow={(action, oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, action); }}
-            />}
-          </div>
-
-          <ResizeSeparator orientation="horizontal" edge="bottom" value={workbenchHeight} min={144} max={360} label={t("app.resizeWorkbench")} onResize={setWorkbenchHeight} />
-          <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("load.commit")}</div>}>
-            <CommitWorkbench
-              repository={selectedRepository}
-              status={{ snapshot: activeStatus, error: activeStatusError, loading: activeStatusLoading, workingCount, stagedCount, hasConflicts, sensitiveStagedPaths }}
-              commit={{ message: commitMessage, summary: commitSummary, description: commitDescription, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
-              shortcuts={shortcuts}
-              isMacPlatform={isMacPlatform}
-              connected={connected}
-              hasActiveRepositoryTask={hasActiveRepositoryTask}
-              api={apiRef.current}
-              onChangeMessage={setCommitMessage}
-              onChangeSummary={setCommitSummary}
-              onChangeDescription={setCommitDescription}
-              onChangeTemplate={chooseCommitTemplate}
-              onClearSelections={() => setCommitSelections([])}
-              onAssistantOpenChange={setCommitAssistantOpen}
-              onSelectAmend={setAmendCommit}
-              onSelectSignOff={setSignOffCommit}
-              onSelectSign={setSignCommit}
-              onSubmit={runCommitAction}
-              onChooseAction={chooseCommitAction}
-              onToggleActionMenu={() => setCommitActionMenuOpen((open) => !open)}
-            />
-          </Suspense>
-
+              onManageAccounts={(hosts) => openAccountSettings(hosts)}
+              onRefreshBranches={(repoId) => void refreshRepositoryBranches(repoId)}
+              onOpenBranchSwitcher={branchSwitcher.openSwitcher}
+              onDeleteRemoteBranch={remoteBranchDelete.open}
+              onSwitchBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
+              onMergeBranch={(oid, name) => workflowDialog.open(selectedRepository.repoId, oid, "merge", name)}
+              onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
+              onNewWorktreeForBranch={(name, fromRemote) => setWorktreeForBranch({ name, fromRemote })}
+              onWorktreeRemoveStarted={(task) => { prependTask(task); setTasksError(""); setTasksOpen(true); }}
+              onManageBranch={(name, branchMode) => setLocalBranchAction({ name, mode: branchMode })}
+              onToggleBranchFavorite={(fullName, favorite) => void toggleBranchFavorite(selectedRepository.repoId, fullName, favorite)}
+              onRefreshRemotes={(repoId) => void refreshRepositoryRemotes(repoId)}
+              onAddRemote={remoteMutations.addRepositoryRemote}
+              onSetRemoteUrl={remoteMutations.setRepositoryRemoteUrl}
+              onDeleteRemote={remoteMutations.deleteRepositoryRemote}
+              onSetDefaultRemote={remoteMutations.setRepositoryDefaultRemote}
+              onSetBranchUpstream={remoteMutations.setRepositoryBranchUpstream}
+            /> : undefined}
+            sidebarSize={{ width: sidebarWidth, min: SIDEBAR_WIDTH.min, max: SIDEBAR_WIDTH.max, label: t("app.resizeNav"), onResize: setSidebarWidth }}
+            inspector={inspectorVisible ? renderInspector(true) : undefined}
+            inspectorSize={inspectorSize}
+            inspectorOverlay={inspectorOverlay}
+          >
+            <section className="graphPanel" aria-label={t("bs.graphAria")}>{renderCommitGraph()}</section>
+          </ViewLayout>}
         </WorkspacePage>
       )}
 
@@ -907,7 +1163,7 @@ function App() {
             shelveAriaShortcut={ariaShortcut(shortcuts.shelve, isMacPlatform)}
             onCommitChanges={() => {
               branchSwitcher.close();
-              requestAnimationFrame(() => document.getElementById("commit-message")?.focus());
+              showCommitComposer();
             }}
             onShelveAndSwitch={() => void branchSwitchShelfFlow.openShelfComposerForBranchSwitch()}
             onChooseWorktreeParent={() => requireGitCrestBridge().chooseCloneParent()}
@@ -939,6 +1195,7 @@ function App() {
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
       {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
+      {notice && <div className="appNotice" role="status" aria-live="polite">{notice}</div>}
       {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} onManageAccounts={(draft, hosts) => { cloneSubmission.stashDraft(draft); openAccountSettings(hosts, true); }} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>

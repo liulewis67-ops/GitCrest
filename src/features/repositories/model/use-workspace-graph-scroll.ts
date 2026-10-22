@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
-import type { WorkspaceSession } from "./workspace-session";
+import { DEFAULT_WORKSPACE_MODE, type WorkspaceMode, type WorkspaceSession } from "./workspace-session";
 
 export function useWorkspaceGraphScroll(
   repoId: string | undefined,
-  mode: "graph" | "diff",
+  mode: WorkspaceMode,
   setWorkspaceSession: Dispatch<SetStateAction<WorkspaceSession>>,
 ) {
   const pendingScrollRef = useRef<{ repoId: string; scrollTop: number }>();
@@ -14,7 +14,7 @@ export function useWorkspaceGraphScroll(
   }, []);
 
   return useCallback((scrollTop: number) => {
-    if (!repoId || mode !== "graph" || !Number.isFinite(scrollTop)) return;
+    if (!repoId || mode === "changes" || !Number.isFinite(scrollTop)) return;
     pendingScrollRef.current = { repoId, scrollTop: Math.max(0, scrollTop) };
     if (timerRef.current !== undefined) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(() => {
@@ -26,7 +26,7 @@ export function useWorkspaceGraphScroll(
         ...current,
         tabs: {
           ...current.tabs,
-          [latest.repoId]: { ...(current.tabs[latest.repoId] || { mode: "graph", graphScrollTop: 0 }), graphScrollTop: latest.scrollTop },
+          [latest.repoId]: { ...(current.tabs[latest.repoId] || { mode: DEFAULT_WORKSPACE_MODE, graphScrollTop: 0 }), graphScrollTop: latest.scrollTop },
         },
       }));
     }, 120);

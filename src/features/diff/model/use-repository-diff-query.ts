@@ -1,7 +1,6 @@
 import { t } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type DiffContext, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse } from "../../../api/client";
-import type { WorkspaceMode } from "../../repositories";
 
 export type RepositoryDiffQueryState = {
   key: string;
@@ -12,7 +11,8 @@ export type RepositoryDiffQueryState = {
 
 type Options = {
   api?: GitCrestApiClient;
-  mode: WorkspaceMode;
+  /** False while no view shows this diff, so nothing is requested. */
+  enabled: boolean;
   repository?: RepositoryResponse;
   path?: string;
   scope?: "workingTree" | "index" | "commit";
@@ -20,7 +20,7 @@ type Options = {
   context?: DiffContext;
 };
 
-export function useRepositoryDiffQuery({ api, mode, repository, path, scope, commitOid, context = "hunks" }: Options) {
+export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, commitOid, context = "hunks" }: Options) {
   const [state, setState] = useState<RepositoryDiffQueryState>({ key: "", loading: false });
   const [retryVersion, setRetryVersion] = useState(0);
   const key = repository && path && scope
@@ -28,7 +28,7 @@ export function useRepositoryDiffQuery({ api, mode, repository, path, scope, com
     : "";
 
   useEffect(() => {
-    if (mode !== "diff" || !repository || !path || !scope) {
+    if (!enabled || !repository || !path || !scope) {
       setState({ key: "", loading: false });
       return;
     }
@@ -49,7 +49,7 @@ export function useRepositoryDiffQuery({ api, mode, repository, path, scope, com
         if (active) setState({ key: requestKey, loading: false, error: message || (error instanceof Error ? error.message : t("err.readDiff")) });
       });
     return () => { active = false; };
-  }, [mode, repository?.repoId, path, scope, commitOid, context, retryVersion, api]);
+  }, [enabled, repository?.repoId, path, scope, commitOid, context, retryVersion, api]);
 
   function retry() {
     setRetryVersion((current) => current + 1);

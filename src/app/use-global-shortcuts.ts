@@ -51,6 +51,11 @@ type GlobalShortcutActions = {
   toggleCommandPalette: () => void;
   openCommitAssistant: () => void;
   closeCommandPalette: () => void;
+  showView: (view: "changes" | "history" | "branches") => void;
+  toggleSidebar: () => void;
+  toggleInspector: () => void;
+  toggleFocusMode: () => void;
+  dismissTransientPanels: () => void;
 };
 
 export function useGlobalShortcuts(context: GlobalShortcutContext, actions: GlobalShortcutActions) {
@@ -61,10 +66,18 @@ export function useGlobalShortcuts(context: GlobalShortcutContext, actions: Glob
     function onKeyDown(event: globalThis.KeyboardEvent) {
       if (event.isComposing) return;
       const target = event.target instanceof HTMLElement ? event.target : undefined;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       if (target?.closest('[role="dialog"], [role="alertdialog"]') && event.key !== "Escape") return;
 
       const { context: state, actions: run } = latest.current;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) {
+        // View switches mean nothing to a text field, so they work while typing; everything else is left to the field.
+        const view = (["viewChanges", "viewHistory", "viewBranches"] as const).find((action) => matchesShortcut(event, state.shortcuts[action], state.isMacPlatform));
+        if (view && state.page === "workspace" && state.repository) {
+          event.preventDefault();
+          run.showView(view === "viewChanges" ? "changes" : view === "viewHistory" ? "history" : "branches");
+        }
+        return;
+      }
       const { shortcuts, isMacPlatform, page, connected, repository } = state;
       const repositoryAvailable = repository?.availability === "available";
 
@@ -131,8 +144,28 @@ export function useGlobalShortcuts(context: GlobalShortcutContext, actions: Glob
       } else if (page === "workspace" && matchesShortcut(event, shortcuts.aiCommitMessage, isMacPlatform) && repository && state.stagedCount > 0 && !state.hasConflicts && !state.commitBusy) {
         event.preventDefault();
         run.openCommitAssistant();
+      } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.viewChanges, isMacPlatform)) {
+        event.preventDefault();
+        run.showView("changes");
+      } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.viewHistory, isMacPlatform)) {
+        event.preventDefault();
+        run.showView("history");
+      } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.viewBranches, isMacPlatform)) {
+        event.preventDefault();
+        run.showView("branches");
+      } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.toggleSidebar, isMacPlatform)) {
+        event.preventDefault();
+        run.toggleSidebar();
+      } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.toggleInspector, isMacPlatform)) {
+        event.preventDefault();
+        run.toggleInspector();
+      } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.focusMode, isMacPlatform)) {
+        event.preventDefault();
+        run.toggleFocusMode();
       } else if (event.key === "Escape") {
         run.closeCommandPalette();
+        // Esc inside a dialog or menu belongs to it; elsewhere it leaves focus mode or closes a floating panel.
+        if (!target?.closest('[role="dialog"], [role="alertdialog"], [role="menu"]')) run.dismissTransientPanels();
       }
     }
 

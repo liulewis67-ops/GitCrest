@@ -43,6 +43,8 @@ async function openRepository(window: Page, path: string) {
   await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
   await window.locator(".repositoryRowOpen").click();
   await window.locator(".workspaceCrumb").waitFor();
+  // Branch rows, worktrees and the graph live in the Branches view.
+  await window.getByRole("tab", { name: "Branches" }).click();
 }
 
 it("creates, switches, merges and adds worktrees for branches from the UI", async () => {
@@ -235,6 +237,7 @@ it("creates a branch at an older commit from the commit details", async () => {
     await window.waitForLoadState("domcontentloaded", { timeout: 10_000 });
     await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, fixture.path);
+    await window.getByRole("tab", { name: "History" }).click();
 
     await window.getByText("first commit", { exact: true }).first().click();
     // The command palette reaches the same dialog from the keyboard.
@@ -251,7 +254,9 @@ it("creates a branch at an older commit from the commit details", async () => {
     // The same dialog can check the branch out in a new worktree instead.
     const worktreePath = resolve(worktreeParent, "from-second");
     await window.getByText("second commit", { exact: true }).first().click();
-    await window.getByRole("button", { name: "Branch here" }).click();
+    // Commit operations sit behind the selected commit's actions menu.
+    await window.getByRole("button", { name: `Actions for commit ${secondOid.slice(0, 7)}` }).click();
+    await window.getByRole("menuitem", { name: "Create branch here…" }).click();
     const second = window.getByRole("dialog", { name: "Create branch here" });
     await second.getByRole("textbox", { name: "Branch name" }).fill("wt-from-second");
     await second.getByRole("radio", { name: "Check it out in a new worktree" }).check();

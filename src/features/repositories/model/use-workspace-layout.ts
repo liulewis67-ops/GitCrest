@@ -9,10 +9,14 @@ function readStoredNumber(key: string, fallback: number, min: number, max: numbe
   }
 }
 
+export const SIDEBAR_WIDTH = { fallback: 264, min: 200, max: 400 } as const;
+export const HISTORY_LIST_WIDTH = { fallback: 380, min: 280, max: 640 } as const;
+export const DETAILS_WIDTH = { fallback: 304, min: 260, max: 440 } as const;
+
 export function useWorkspaceLayout(repoId?: string) {
-  const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber("gitcrest-sidebar-width", 236, 190, 340));
-  const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", 284, 220, 420));
-  const [workbenchHeight, setWorkbenchHeight] = useState(() => readStoredNumber("gitcrest-workbench-height", 204, 144, 360));
+  const [sidebarWidth, setSidebarWidth] = useState(() => readStoredNumber("gitcrest-sidebar-width", SIDEBAR_WIDTH.fallback, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max));
+  const [historyListWidth, setHistoryListWidth] = useState(() => readStoredNumber("gitcrest-history-list-width", HISTORY_LIST_WIDTH.fallback, HISTORY_LIST_WIDTH.min, HISTORY_LIST_WIDTH.max));
+  const [detailsWidth, setDetailsWidth] = useState(() => readStoredNumber("gitcrest-details-width", DETAILS_WIDTH.fallback, DETAILS_WIDTH.min, DETAILS_WIDTH.max));
   const [layoutLoadedFor, setLayoutLoadedFor] = useState<string>();
 
   useEffect(() => {
@@ -21,9 +25,9 @@ export function useWorkspaceLayout(repoId?: string) {
       return;
     }
     setLayoutLoadedFor(undefined);
-    setSidebarWidth(readStoredNumber(`gitcrest-layout-${repoId}-sidebar-width`, readStoredNumber("gitcrest-sidebar-width", 236, 190, 340), 190, 340));
-    setDetailsWidth(readStoredNumber(`gitcrest-layout-${repoId}-details-width`, readStoredNumber("gitcrest-details-width", 284, 220, 420), 220, 420));
-    setWorkbenchHeight(readStoredNumber(`gitcrest-layout-${repoId}-workbench-height`, readStoredNumber("gitcrest-workbench-height", 204, 144, 360), 144, 360));
+    setSidebarWidth(readStoredNumber(`gitcrest-layout-${repoId}-sidebar-width`, readStoredNumber("gitcrest-sidebar-width", SIDEBAR_WIDTH.fallback, SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max), SIDEBAR_WIDTH.min, SIDEBAR_WIDTH.max));
+    setHistoryListWidth(readStoredNumber(`gitcrest-layout-${repoId}-history-list-width`, readStoredNumber("gitcrest-history-list-width", HISTORY_LIST_WIDTH.fallback, HISTORY_LIST_WIDTH.min, HISTORY_LIST_WIDTH.max), HISTORY_LIST_WIDTH.min, HISTORY_LIST_WIDTH.max));
+    setDetailsWidth(readStoredNumber(`gitcrest-layout-${repoId}-details-width`, readStoredNumber("gitcrest-details-width", DETAILS_WIDTH.fallback, DETAILS_WIDTH.min, DETAILS_WIDTH.max), DETAILS_WIDTH.min, DETAILS_WIDTH.max));
     setLayoutLoadedFor(repoId);
   }, [repoId]);
 
@@ -31,12 +35,12 @@ export function useWorkspaceLayout(repoId?: string) {
     if (!repoId || layoutLoadedFor !== repoId) return;
     try {
       window.localStorage.setItem(`gitcrest-layout-${repoId}-sidebar-width`, String(sidebarWidth));
+      window.localStorage.setItem(`gitcrest-layout-${repoId}-history-list-width`, String(historyListWidth));
       window.localStorage.setItem(`gitcrest-layout-${repoId}-details-width`, String(detailsWidth));
-      window.localStorage.setItem(`gitcrest-layout-${repoId}-workbench-height`, String(workbenchHeight));
     } catch {
       // Layout resizing remains available for this session if storage is unavailable.
     }
-  }, [layoutLoadedFor, repoId, sidebarWidth, detailsWidth, workbenchHeight]);
+  }, [layoutLoadedFor, repoId, sidebarWidth, historyListWidth, detailsWidth]);
 
-  return { sidebarWidth, setSidebarWidth, detailsWidth, setDetailsWidth, workbenchHeight, setWorkbenchHeight };
+  return { sidebarWidth, setSidebarWidth, historyListWidth, setHistoryListWidth, detailsWidth, setDetailsWidth };
 }

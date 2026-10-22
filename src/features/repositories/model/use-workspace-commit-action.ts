@@ -1,7 +1,7 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { CommitAction } from "../../commits";
-import type { WorkspaceSession } from "./workspace-session";
+import { DEFAULT_WORKSPACE_MODE, type WorkspaceSession } from "./workspace-session";
 
 export function useWorkspaceCommitAction(
   repoId: string | undefined,
@@ -14,7 +14,7 @@ export function useWorkspaceCommitAction(
       tabs: {
         ...current.tabs,
         [repoId]: {
-          ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }),
+          ...(current.tabs[repoId] || { mode: DEFAULT_WORKSPACE_MODE, graphScrollTop: 0 }),
           commitAction: action,
         },
       },

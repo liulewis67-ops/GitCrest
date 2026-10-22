@@ -1,5 +1,5 @@
 export { useWorkspaceSessionState } from "./model/use-workspace-session-state";
-export { useWorkspaceLayout } from "./model/use-workspace-layout";
+export { useWorkspaceLayout, SIDEBAR_WIDTH, HISTORY_LIST_WIDTH, DETAILS_WIDTH } from "./model/use-workspace-layout";
 export { useWorkspaceGraphScroll } from "./model/use-workspace-graph-scroll";
 export { useWorkspaceCommitSelection } from "./model/use-workspace-commit-selection";
 export { useWorkspaceCommitAction } from "./model/use-workspace-commit-action";
@@ -12,3 +12,5 @@ export { useRepositoryTabLifecycle } from "./model/use-repository-tab-lifecycle"
 export { getRepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";
 export type { RepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";
 export type { WorkspaceMode, WorkspaceSession } from "./model/workspace-session";
+export { WORKSPACE_MODES, DEFAULT_WORKSPACE_MODE } from "./model/workspace-session";
+export { usePanelPreferences, type PanelPreferences } from "./model/use-panel-preferences";

@@ -1,6 +1,19 @@
 import type { Dispatch, SetStateAction } from "react";
 import type { RepositoryResponse } from "../../../api/client";
-import type { WorkspaceMode, WorkspaceSession } from "./workspace-session";
+import { DEFAULT_WORKSPACE_MODE, type RepositoryTabState, type WorkspaceMode, type WorkspaceSession } from "./workspace-session";
+
+function updateTab(session: WorkspaceSession, repoId: string, change: Partial<RepositoryTabState>): WorkspaceSession {
+  return {
+    ...session,
+    tabs: {
+      ...session.tabs,
+      [repoId]: {
+        ...(session.tabs[repoId] || { mode: DEFAULT_WORKSPACE_MODE, graphScrollTop: 0 }),
+        ...change,
+      },
+    },
+  };
+}
 
 export function useWorkspaceSessionActions(setSession: Dispatch<SetStateAction<WorkspaceSession>>) {
   function activateRepository(repository: RepositoryResponse) {
@@ -12,54 +25,32 @@ export function useWorkspaceSessionActions(setSession: Dispatch<SetStateAction<W
         ...current.tabs,
         [repository.repoId]: current.tabs[repository.repoId]
           ? { ...current.tabs[repository.repoId], selectedCommit: current.tabs[repository.repoId].selectedCommit || repository.head || undefined }
-          : { mode: "graph", selectedCommit: repository.head || undefined, graphScrollTop: 0 },
+          : { mode: DEFAULT_WORKSPACE_MODE, selectedCommit: repository.head || undefined, graphScrollTop: 0 },
       },
     }));
   }
 
   function changeMode(repoId: string, mode: WorkspaceMode) {
-    setSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: {
-          ...(current.tabs[repoId] || { graphScrollTop: 0 }),
-          mode,
-        },
-      },
-    }));
+    setSession((current) => updateTab(current, repoId, { mode }));
   }
 
+  /** Opens a working-tree or staged file in Changes. History keeps its own file selection. */
   function openFileDiff(repoId: string, path: string, scope: "workingTree" | "index") {
-    setSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: {
-          ...(current.tabs[repoId] || { graphScrollTop: 0 }),
-          mode: "diff",
-          selectedFilePath: path,
-          selectedFileScope: scope,
-          selectedDiffCommitOid: undefined,
-        },
-      },
-    }));
+    setSession((current) => updateTab(current, repoId, { mode: "changes", selectedFilePath: path, selectedFileScope: scope }));
   }
 
+  /** Moves the Changes selection without switching views, e.g. after a status refresh. Undefined clears it. */
+  function selectWorkingFile(repoId: string, selection?: { path: string; scope: "workingTree" | "index" }) {
+    setSession((current) => updateTab(current, repoId, { selectedFilePath: selection?.path, selectedFileScope: selection?.scope }));
+  }
+
+  /** Opens one file of a commit in History and selects that commit. */
   function openCommitFileDiff(repoId: string, path: string, oid: string) {
-    setSession((current) => ({
-      ...current,
-      tabs: {
-        ...current.tabs,
-        [repoId]: {
-          ...(current.tabs[repoId] || { graphScrollTop: 0 }),
-          mode: "diff",
-          selectedCommit: oid,
-          selectedFilePath: path,
-          selectedFileScope: "commit",
-          selectedDiffCommitOid: oid,
-        },
-      },
+    setSession((current) => updateTab(current, repoId, {
+      mode: "history",
+      selectedCommit: oid,
+      selectedCommitFilePath: path,
+      selectedDiffCommitOid: oid,
     }));
   }
 
@@ -89,5 +80,5 @@ export function useWorkspaceSessionActions(setSession: Dispatch<SetStateAction<W
     };
   }
 
-  return { activateRepository, changeMode, openFileDiff, openCommitFileDiff, closeTab, restoreAvailableRepositories };
+  return { activateRepository, changeMode, openFileDiff, selectWorkingFile, openCommitFileDiff, closeTab, restoreAvailableRepositories };
 }

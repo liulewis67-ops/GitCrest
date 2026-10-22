@@ -67,19 +67,23 @@
 
 ## 3. 主窗口布局
 
-采用高密度三栏加底部工作区布局，中央主区在两种模式间切换：
+主窗口按任务组织为三个视图，每个仓库 Tab 记住自己的视图。同一时间只显示当前任务需要的面板，可选面板隐藏时不留空位，中央内容占满剩余宽度。
 
 ```text
-Title Bar: Repo Tabs / Search / Command / Sync Status
-Left:   Changes (modified files only) / Branches / Remotes / Shelves
-Center: [Graph mode]  Commit Graph
-        [Diff  mode]  IDEA-style Split Diff (full-width; right panel collapses)
-Right:  Commit Detail (only in Graph mode)
-Bottom: Working Tree / Staged / Commit Form
-Status: Current branch / ahead-behind / background tasks / AI mode
+Title Bar: Repo Tabs / Command Palette / Tasks (运行中才突出) / Settings / Core status (正常时只显示圆点)
+Toolbar:   [Changes n | History | Branches]  path   branch ▾  [Fetch | Pull ↓n | Push ↑n]  ◧ ◨
+Banner:    合并/变基/挑选提交/二分查找进行中、冲突（任何视图都显示）
+
+Changes:   变更文件（冲突/已暂存/未暂存/未跟踪/忽略分组）+ Shelves | 工作区 Diff | 底部提交编辑器
+History:   提交列表（搜索 + 可展开筛选） | 所选提交：标题、文件列表、Diff | 可选提交详情
+Branches:  分支浏览器（筛选、本地/远程）、Worktrees、Remotes | 提交图 | 提交详情
 ```
 
-模式切换入口常驻于中央主区顶部；快捷键 `Cmd/Ctrl+H` 回到 Graph，`Cmd/Ctrl+D` 进入 Diff。
+- 提交编辑器只属于 Changes 视图：工作区干净时隐藏；只有未暂存变更时收起为一行；有已暂存内容或草稿时展开。草稿在切换视图时保留。
+- 提交详情（inspector）在 History 默认隐藏、在 Branches 默认显示；窗口宽度 ≥1440px 时停靠在右侧，更窄时浮于内容之上，Esc 关闭。
+- 专注模式隐藏侧栏、工具栏与提交详情，只保留 Diff 与文件间导航；Esc 恢复。
+- 提交操作（合并、挑选、还原、建分支、打标签、复制 SHA）收在所选提交的“⋯”菜单中，仍经过原有确认对话框。
+- 视图切换：`Cmd/Ctrl+1/2/3`；侧栏 `Cmd/Ctrl+Shift+B`；提交详情 `Cmd/Ctrl+Shift+D`；专注模式 `Cmd/Ctrl+Shift+M`。
 
 ## 4. 导航模型
 
@@ -88,12 +92,12 @@ Status: Current branch / ahead-behind / background tasks / AI mode
 | 入口 | 目标 |
 |---|---|
 | 仓库 Tab | 切换仓库上下文 |
-| Changes 列表 | 列出未暂存 / 已暂存 / 冲突文件；点击直接进入 Diff 模式 |
-| 提交图 | 浏览历史、查看提交详情 |
-| 提交详情中的文件 | 进入 Diff 模式查看该提交的文件差异 |
-| 模式切换按钮 | 在 Graph 与 Diff 模式间切换 |
-| 工作区 | 暂存、取消暂存、提交 |
-| 分支列表 | 切换、创建、删除、收藏 |
+| 视图 Tab（Changes / History / Branches） | 在三个任务视图间切换，唯一的视图导航 |
+| Changes 列表 | 列出冲突 / 已暂存 / 未暂存文件；点击在中央显示该文件 Diff |
+| History 提交列表 | 选择提交后在中央显示其文件与 Diff |
+| 提交图（Branches） | 浏览拓扑；提交详情中的文件跳到 History 查看 Diff |
+| 分支选择器 | 工具栏中的当前分支，打开带搜索的切换器 |
+| 分支浏览器 | 切换、合并、创建、重命名、删除、收藏 |
 | 命令面板 | 全局操作入口 |
 
 ### 命令面板分类
@@ -132,7 +136,8 @@ Status: Current branch / ahead-behind / background tasks / AI mode
 - Shelve 条目。
 - 用户快捷键。
 - AI provider 和隐私偏好。
-- UI 布局尺寸。
+- UI 布局尺寸（每个仓库的侧栏、提交列表、提交详情宽度）。
+- 每个视图的侧栏与提交详情显示状态（本机全局）。
 
 不持久化：
 

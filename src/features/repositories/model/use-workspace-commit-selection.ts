@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 import type { Dispatch, SetStateAction } from "react";
-import type { WorkspaceSession } from "./workspace-session";
+import { DEFAULT_WORKSPACE_MODE, type WorkspaceSession } from "./workspace-session";
 
 export function useWorkspaceCommitSelection(
   repoId: string | undefined,
@@ -18,7 +18,7 @@ export function useWorkspaceCommitSelection(
       ...current,
       tabs: {
         ...current.tabs,
-        [repoId]: { ...(current.tabs[repoId] || { mode: "graph", graphScrollTop: 0 }), selectedCommit: oid },
+        [repoId]: { ...(current.tabs[repoId] || { mode: DEFAULT_WORKSPACE_MODE, graphScrollTop: 0 }), selectedCommit: oid },
       },
     }));
   }, [repoId, setSession]);

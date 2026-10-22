@@ -8,6 +8,12 @@
   --type-md: calc(14px * var(--font-scale));
   --type-lg: calc(16px * var(--font-scale));
   --type-xl: calc(22px * var(--font-scale));
+  /* Spacing scale: 4 tight gaps, 8 related controls, 12 compact padding, 16 sections, 24 major groups. */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
   --code-size: 13px;
   --code-leading: 20px;
 

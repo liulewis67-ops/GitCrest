@@ -14,10 +14,11 @@ describe("parseWorkspaceSession", () => {
       activeRepoId: "repo-b",
       tabs: {
         "repo-a": {
-          mode: "diff",
+          mode: "history",
           selectedCommit: "abc123",
           selectedFilePath: "src/main.rs",
           selectedFileScope: "index",
+          selectedCommitFilePath: "src/lib.rs",
           selectedDiffCommitOid: "def456",
           graphScrollTop: 120.5,
           commitAction: "commitAndPush",
@@ -35,17 +36,33 @@ describe("parseWorkspaceSession", () => {
       activeRepoId: "repo-b",
       tabs: {
         "repo-a": {
-          mode: "diff",
+          mode: "history",
           selectedCommit: "abc123",
           selectedFilePath: "src/main.rs",
           selectedFileScope: "index",
+          selectedCommitFilePath: "src/lib.rs",
           selectedDiffCommitOid: "def456",
           graphScrollTop: 120.5,
           commitAction: "commitAndPush",
         },
-        "repo-b": { mode: "graph", graphScrollTop: 0 },
+        "repo-b": { mode: "changes", graphScrollTop: 0 },
       },
     });
+  });
+
+  it("maps sessions saved with the Graph and Diff modes onto the task view showing the same content", () => {
+    const session = parseWorkspaceSession(JSON.stringify({
+      openRepoIds: ["graph", "working", "commit"],
+      tabs: {
+        graph: { mode: "graph", graphScrollTop: 10 },
+        working: { mode: "diff", selectedFilePath: "a.txt", selectedFileScope: "workingTree", graphScrollTop: 0 },
+        commit: { mode: "diff", selectedFilePath: "b.txt", selectedFileScope: "commit", selectedDiffCommitOid: "c0ffee", graphScrollTop: 0 },
+      },
+    }));
+    expect(session.tabs.graph).toEqual({ mode: "history", graphScrollTop: 10 });
+    expect(session.tabs.working).toEqual({ mode: "changes", selectedFilePath: "a.txt", selectedFileScope: "workingTree", graphScrollTop: 0 });
+    // A historical file never becomes a working-tree selection.
+    expect(session.tabs.commit).toEqual({ mode: "history", selectedCommitFilePath: "b.txt", selectedDiffCommitOid: "c0ffee", graphScrollTop: 0 });
   });
 
   it("drops non-finite scroll positions and invalid top-level fields", () => {
@@ -55,7 +72,7 @@ describe("parseWorkspaceSession", () => {
       tabs: { "repo-a": { graphScrollTop: Number.POSITIVE_INFINITY } },
     }))).toEqual({
       openRepoIds: [],
-      tabs: { "repo-a": { mode: "graph", graphScrollTop: 0 } },
+      tabs: { "repo-a": { mode: "changes", graphScrollTop: 0 } },
     });
   });
 });

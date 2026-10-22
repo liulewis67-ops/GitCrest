@@ -74,7 +74,8 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
 
     await writeFile(resolve(fixture.path, "keyboard.ts"), "export const keyboardWorkflow = true;\n");
     await enterButtonByTab(window, "Refresh working tree status");
-    await window.getByText("keyboard.ts", { exact: true }).waitFor();
+    const changesList = window.getByRole("complementary", { name: "Working tree changes" });
+    await changesList.getByText("keyboard.ts", { exact: true }).waitFor();
     expect(await window.getByRole("button", { name: "Stage all", exact: true }).isDisabled()).toBe(false);
     await window.keyboard.press("Control+Shift+a");
     await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("keyboard.ts").waitFor();
@@ -100,9 +101,12 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
       return response.status;
     }, { repoId, name: "keyboard-target" });
     expect(branchCreation).toBe(202);
-    await window.locator(".branchItemName").filter({ hasText: "keyboard-target" }).waitFor();
+    // Shortcuts are left to an open dialog, so close Tasks before Mod+3 shows Branches and the new row.
     const branchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
     if (await branchTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
+    await branchTasksDialog.waitFor({ state: "detached" });
+    await window.keyboard.press("Control+3");
+    await window.locator(".branchItemName").filter({ hasText: "keyboard-target" }).waitFor();
     await window.keyboard.press("Control+b");
     const switchDialog = window.getByRole("dialog", { name: "Switch branch" });
     await switchDialog.waitFor();
@@ -128,8 +132,9 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     const resetBaseOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
     await execFileAsync("git", ["-C", fixture.path, "branch", "keyboard-reset-base", resetBaseOid]);
     await writeFile(resolve(fixture.path, "reset-trigger.ts"), "export const reviewedReset = true;\n");
+    await window.keyboard.press("Control+1");
     await enterButtonByTab(window, "Refresh working tree status");
-    await window.getByText("reset-trigger.ts", { exact: true }).waitFor();
+    await changesList.getByText("reset-trigger.ts", { exact: true }).waitFor();
     await window.keyboard.press("Control+Shift+a");
     await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("reset-trigger.ts").waitFor();
     const resetCommitMessage = window.getByRole("textbox", { name: "Commit message", exact: true });
@@ -141,6 +146,10 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await expect.poll(() => window.getByRole("button", { name: "Commit", exact: true }).isDisabled(), { timeout: 15_000 }).toBe(false);
     await window.keyboard.press("Control+Enter");
     await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim(), { timeout: 15_000 }).toBe("keyboard reset review");
+    // The commit opens Tasks, which keeps keyboard focus; close it so Ctrl+K reaches the palette.
+    const commitTasksDialog = window.getByRole("dialog", { name: "Tasks" });
+    if (await commitTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
+    await commitTasksDialog.waitFor({ state: "detached" });
     await window.keyboard.press("Control+k");
     await window.keyboard.type("Reset current branch");
     await enterButtonByTab(window, "Reset current branch");

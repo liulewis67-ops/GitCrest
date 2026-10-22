@@ -256,27 +256,39 @@ describe("App", () => {
         chooseRepository,
       },
     });
-    const fetcher = vi.fn<typeof fetch>()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 }))
-      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(repository), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, worktrees: [{ path: "C:/fixture", head: null, branch: "main", detached: false, locked: false, prunable: false, isCurrent: true }] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ adopted: false, task: null }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, refreshedAtMs: 1, files: [
-        { path: "README.md", indexStatus: "M", worktreeStatus: "M", kind: "modified", categories: ["staged", "unstaged"], modeChanged: false },
-        { path: "src/new-name.ts", originalPath: "src/old-name.ts", indexStatus: "R", worktreeStatus: ".", kind: "renamed", categories: ["staged"], modeChanged: false },
-        { path: "scripts/tool.sh", indexStatus: ".", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: true },
-        { path: "new file.txt", indexStatus: "?", worktreeStatus: "?", kind: "untracked", categories: ["untracked"], modeChanged: false },
-        { path: "conflict.txt", indexStatus: "U", worktreeStatus: "U", kind: "conflicted", categories: ["conflicted"], modeChanged: false },
-        { path: "ignored.log", indexStatus: "!", worktreeStatus: "!", kind: "ignored", categories: ["ignored"], modeChanged: false },
-      ] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(branchSnapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ repoId: repository.repoId, defaultRemote: null, remotes: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(favoriteBranchSnapshot), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }), { status: 500, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify({ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify([{ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "running", phase: "Receiving objects", progress: 35, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false }]), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
+    const statusFiles = [
+      { path: "README.md", indexStatus: "M", worktreeStatus: "M", kind: "modified", categories: ["staged", "unstaged"], modeChanged: false },
+      { path: "src/new-name.ts", originalPath: "src/old-name.ts", indexStatus: "R", worktreeStatus: ".", kind: "renamed", categories: ["staged"], modeChanged: false },
+      { path: "scripts/tool.sh", indexStatus: ".", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: true },
+      { path: "new file.txt", indexStatus: "?", worktreeStatus: "?", kind: "untracked", categories: ["untracked"], modeChanged: false },
+      { path: "conflict.txt", indexStatus: "U", worktreeStatus: "U", kind: "conflicted", categories: ["conflicted"], modeChanged: false },
+      { path: "ignored.log", indexStatus: "!", worktreeStatus: "!", kind: "ignored", categories: ["ignored"], modeChanged: false },
+    ];
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "X-GitCrest-API-Version": "1" } });
+    let statusReads = 0;
+    let favorite = false;
+    let opened = false;
+    // Routed by URL: which panels load data depends on the active view, so call order is not fixed.
+    const fetcher = vi.fn<typeof fetch>(async (input, init) => {
+      const url = new URL(String(input));
+      const method = init?.method ?? "GET";
+      const path = url.pathname;
+      if (path === "/api/version") return new Response(JSON.stringify({ name: "gitcrest-core", version: "0.1.0", apiVersion: 1 }), { status: 200 });
+      if (path === "/api/v1/repositories" && method === "POST") { opened = true; return json(repository); }
+      if (path === "/api/v1/repositories") return json(opened ? [repository] : []);
+      if (path.endsWith("/status")) {
+        statusReads += 1;
+        return statusReads === 1 ? json({ repoId: repository.repoId, refreshedAtMs: 1, files: statusFiles }) : json({ error: { code: "REPOSITORY_STATUS_FAILED", message: "Git status failed." } }, 500);
+      }
+      if (path.endsWith("/branches/favorite")) { favorite = true; return json(favoriteBranchSnapshot); }
+      if (path.endsWith("/branches")) return json(favorite ? favoriteBranchSnapshot : branchSnapshot);
+      if (path.endsWith("/remotes")) return json({ repoId: repository.repoId, defaultRemote: null, remotes: [] });
+      if (path.endsWith("/worktrees")) return json({ repoId: repository.repoId, worktrees: [{ path: "C:/fixture", head: null, branch: "main", detached: false, locked: false, prunable: false, isCurrent: true }] });
+      if (path.endsWith("/fetch") && method === "POST") return json({ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "queued", phase: "Waiting", progress: null, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 1, cancelRequested: false }, 202);
+      if (path === "/api/v1/tasks") return json([{ taskId: "task-fetch", repoId: repository.repoId, operation: "fetch", status: "running", phase: "Receiving objects", progress: 35, message: null, errorCategory: null, logs: [], createdAtMs: 1, updatedAtMs: 2, cancelRequested: false }]);
+      if (path.includes("adopt")) return json({ adopted: false, task: null });
+      return json([]);
+    });
     vi.stubGlobal("fetch", fetcher);
 
     render(<App />);
@@ -285,24 +297,33 @@ describe("App", () => {
 
     expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
-    await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(9));
-    expect(JSON.parse(String(fetcher.mock.calls[2][1]?.body))).toEqual({ path: "C:/fixture" });
-    expect(fetcher.mock.calls.some(([input]) => String(input).includes("/api/v1/repositories/repo_fixture/status"))).toBe(true);
-    expect(screen.getByText("main", { selector: ".branchItemName" })).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Add refs/heads/main to favorites" }));
-    expect(await screen.findByRole("button", { name: "Remove refs/heads/main from favorites" })).toBeDefined();
-    expect(fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/branches/favorite"))?.[1]?.method).toBe("PUT");
-    expect(screen.getByRole("region", { name: "Staged changes" })).toBeDefined();
+    expect(JSON.parse(String(fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname === "/api/v1/repositories" && init?.method === "POST")?.[1]?.body))).toEqual({ path: "C:/fixture" });
+    // A repository opens in Changes: changed files grouped by state, conflicts first; no branch list here.
+    expect(screen.getByRole("tab", { name: /Changes/ }).getAttribute("aria-selected")).toBe("true");
+    expect(await screen.findByRole("region", { name: "Staged changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Unstaged changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Untracked changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Conflicted changes" })).toBeDefined();
     expect(screen.getByRole("region", { name: "Ignored changes" })).toBeDefined();
-    expect(screen.getByText("scripts/tool.sh")).toBeDefined();
+    expect(screen.getByRole("button", { name: "modified scripts/tool.sh" })).toBeDefined();
     expect(screen.getByRole("button", { name: "untracked new file.txt" })).toBeDefined();
     expect(screen.getByText("mode", { exact: true })).toBeDefined();
+    expect(screen.queryByRole("list", { name: "Repository branches" })).toBeNull();
+    // The conflict is announced above every view.
+    expect(screen.getByText("1 conflicted file")).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Refresh working tree status" }));
     expect(await screen.findByText("Refresh failed. Showing the last snapshot.")).toBeDefined();
     expect(screen.getByText("new file.txt")).toBeDefined();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Branches" }));
+    expect(await screen.findByText("main", { selector: ".branchItemName" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Add refs/heads/main to favorites" }));
+    expect(await screen.findByRole("button", { name: "Remove refs/heads/main from favorites" })).toBeDefined();
+    expect(fetcher.mock.calls.find(([input]) => new URL(String(input)).pathname.endsWith("/branches/favorite"))?.[1]?.method).toBe("PUT");
+    // Without remotes there is nothing to fetch, pull or push from the toolbar; the palette still offers Fetch.
+    expect(screen.getByText("No remotes")).toBeDefined();
+    expect(screen.queryByRole("group", { name: "Synchronize with remotes" })).toBeNull();
+
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     fireEvent.click(screen.getByRole("button", { name: /Fetch from remotes/ }));
     const taskDialog = await screen.findByRole("dialog", { name: "Tasks" });
@@ -408,6 +429,9 @@ describe("App", () => {
       if (url.pathname === `/api/v1/repositories/${repository.repoId}`) return response(repository);
       if (url.pathname.endsWith("/status")) return response({ repoId: repository.repoId, refreshedAtMs: 1, files: [] });
       if (url.pathname.endsWith("/branches")) return response(branches);
+      if (url.pathname.endsWith("/remotes")) return response({ repoId: repository.repoId, defaultRemote: null, remotes: [] });
+      if (url.pathname.endsWith("/worktrees")) return response({ repoId: repository.repoId, worktrees: [] });
+      if (url.pathname.endsWith("/commits") || url.pathname.endsWith("/refs")) return response([]);
       if (url.pathname.endsWith("/branches/switch-preflight")) return response({ repoId: repository.repoId, current: "main", target: "feature/row", isClean: true, dirtyFiles: [], potentiallyOverwrittenPaths: [] });
       if (url.pathname.endsWith("/workflows/preflight")) return response({ repoId: repository.repoId, action: "merge", targetOid: "b".repeat(40), targetSubject: "Row commit", headOid: "a".repeat(40), isClean: true, dirtyPaths: [], omittedDirtyPathCount: 0, conflictedPaths: [], operationInProgress: null, canStart: true });
       throw new Error(`Unexpected API request: ${url}`);
@@ -418,6 +442,7 @@ describe("App", () => {
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
     await screen.findByText("C:/rows", { selector: ".workspaceCrumb .mutedText" });
+    fireEvent.click(screen.getByRole("tab", { name: "Branches" }));
     expect(screen.queryByRole("button", { name: "Switch to main" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Switch to feature/row" }));
     const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
@@ -570,7 +595,7 @@ describe("App", () => {
 
   it("opens a structured split diff from Changes and preserves the selected file", async () => {
     window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
-      openRepoIds: ["repo_diff"], activeRepoId: "repo_diff", tabs: { repo_diff: { mode: "graph", graphScrollTop: 0 } },
+      openRepoIds: ["repo_diff"], activeRepoId: "repo_diff", tabs: { repo_diff: { mode: "history", graphScrollTop: 0 } },
     }));
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
@@ -601,6 +626,10 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("Core connected");
+    // History never shows the working tree or the commit composer.
+    expect(await screen.findByRole("tab", { name: "History", selected: true })).toBeDefined();
+    expect(screen.queryByRole("region", { name: "Commit" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: /readme\.txt/ }))[0]);
     expect((await screen.findByLabelText("Side-by-side comparison of readme.txt")).textContent).toBe("old content||new content");
     expect(screen.getByText("Your version")).toBeDefined();
@@ -618,9 +647,12 @@ describe("App", () => {
     expect(screen.getByText("WORKING TREE ↔ INDEX")).toBeDefined();
     expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Graph" }));
-    expect(screen.getByRole("complementary", { name: "Commit details" })).toBeDefined();
-    fireEvent.click(screen.getByRole("button", { name: "Diff" }));
+    // Unstaged changes only: the composer stays one row until there is something to commit.
+    const composer = screen.getByRole("region", { name: "Commit" });
+    expect(within(composer).queryByRole("textbox", { name: "Commit description (optional)" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: "History" }));
+    expect(screen.queryByRole("region", { name: "Commit" })).toBeNull();
+    fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));
     expect(await screen.findByText((_, element) => element?.tagName === "CODE" && element.textContent === "new content")).toBeDefined();
     expect(fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith("/diff")).length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1" }));
@@ -661,6 +693,8 @@ describe("App", () => {
       if (url.pathname === "/api/v1/repositories/repo_alpha") return response(repositories[0]);
       if (url.pathname === "/api/v1/repositories/repo_beta") return response(repositories[1]);
       if (url.pathname.endsWith("/status")) return response({ repoId: url.pathname.includes("repo_alpha") ? "repo_alpha" : "repo_beta", refreshedAtMs: 1, files: [] });
+      if (url.pathname.endsWith("/remotes")) return response({ repoId: url.pathname.includes("repo_alpha") ? "repo_alpha" : "repo_beta", defaultRemote: null, remotes: [] });
+      if (url.pathname.endsWith("/shelves")) return response([]);
       if (url.pathname.endsWith("/branches")) {
         const repoId = url.pathname.includes("repo_alpha") ? "repo_alpha" : "repo_beta";
         const branchName = repoId === "repo_alpha" ? "main" : "feature";
@@ -675,38 +709,36 @@ describe("App", () => {
     const firstRun = render(<App />);
     expect(await screen.findByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(screen.getByRole("tab", { name: "alpha" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("button", { name: "Diff" }).className).toContain("active");
+    // A tab saved in the old Diff mode reopens in Changes, which has no commit inspector.
+    expect(screen.getByRole("tab", { name: /Changes/ }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Graph" }));
-    expect(screen.getByText("abc123", { selector: ".repositoryFact strong" })).toBeDefined();
-    expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270");
-
-    fireEvent.click(screen.getByRole("button", { name: "Graph" }));
-    const graphViewport = screen.getByRole("region", { name: "Commit graph view" });
-    Object.defineProperty(graphViewport, "scrollTop", { configurable: true, writable: true, value: 193 });
-    fireEvent.scroll(graphViewport);
-    await waitFor(() => expect(JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}").tabs.repo_alpha.graphScrollTop).toBe(193));
+    const separator = screen.getByRole("separator", { name: "Resize repository navigation" });
+    expect(separator.getAttribute("aria-valuenow")).toBe("270");
+    fireEvent.keyDown(separator, { key: "ArrowRight" });
+    expect(separator.getAttribute("aria-valuenow")).toBe("286");
+    fireEvent.keyDown(separator, { key: "ArrowLeft" });
 
     fireEvent.click(screen.getByRole("tab", { name: "beta" }));
     expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
+    // The old Graph mode reopens in History; each tab keeps its own view.
+    expect(screen.getByRole("tab", { name: "History" }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("separator", { name: "Resize commit list" })).toBeDefined();
+    fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
-    expect(screen.getByRole("button", { name: "Graph" }).className).toContain("active");
     const savedSession = JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}");
     expect(savedSession.activeRepoId).toBe("repo_beta");
-    expect(savedSession.tabs.repo_alpha).toMatchObject({ selectedCommit: "abc123", graphScrollTop: 193 });
-    expect(savedSession.tabs.repo_beta).toMatchObject({ selectedCommit: "def456", graphScrollTop: 23 });
+    expect(savedSession.tabs.repo_alpha).toMatchObject({ mode: "changes", selectedCommit: "abc123", graphScrollTop: 147 });
+    expect(savedSession.tabs.repo_beta).toMatchObject({ mode: "changes", selectedCommit: "def456", graphScrollTop: 23 });
 
     firstRun.unmount();
     render(<App />);
     expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(screen.getByRole("tab", { name: "beta" }).getAttribute("aria-selected")).toBe("true");
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
-    expect((screen.getByRole("region", { name: "Commit graph view" }) as HTMLDivElement).scrollTop).toBe(23);
 
     fireEvent.click(screen.getByRole("button", { name: "Close beta tab" }));
     expect(screen.getByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("270"));
-    expect((screen.getByRole("region", { name: "Commit graph view" }) as HTMLDivElement).scrollTop).toBe(193);
     const closedBetaRequests = ["/status", "/branches", "/remotes"].map((suffix) => fetcher.mock.calls.filter(([input]) => {
       const url = new URL(String(input));
       return url.pathname.includes("repo_beta") && url.pathname.endsWith(suffix);
@@ -730,7 +762,7 @@ describe("App", () => {
 
   it("submits a commit only after staged changes and a message are ready", async () => {
     window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
-      openRepoIds: ["repo_commit"], activeRepoId: "repo_commit", tabs: { repo_commit: { mode: "graph", graphScrollTop: 0 } },
+      openRepoIds: ["repo_commit"], activeRepoId: "repo_commit", tabs: { repo_commit: { mode: "changes", graphScrollTop: 0 } },
     }));
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
@@ -812,7 +844,7 @@ describe("App", () => {
       changedPaths: ["change.txt"], changedPathCount: 1, omittedChangedPathCount: 0,
     };
     window.localStorage.setItem("gitcrest-workspace-session-v1", JSON.stringify({
-      openRepoIds: [repository.repoId], activeRepoId: repository.repoId, tabs: { [repository.repoId]: { mode: "graph", graphScrollTop: 0 } },
+      openRepoIds: [repository.repoId], activeRepoId: repository.repoId, tabs: { [repository.repoId]: { mode: "changes", graphScrollTop: 0 } },
     }));
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
@@ -862,7 +894,7 @@ describe("App", () => {
     expect(fetcher.mock.calls.filter(([input, init]) => new URL(String(input)).pathname.endsWith("/commits") && init?.method === "POST")).toHaveLength(1);
   });
 
-  it("cycles themes and exposes keyboard-adjustable panel separators", async () => {
+  it("cycles themes from the command palette", async () => {
     Object.defineProperty(window, "gitcrest", {
       configurable: true,
       value: {
@@ -879,14 +911,10 @@ describe("App", () => {
     }), { status: 200 })));
 
     render(<App />);
-    const themeButton = screen.getByRole("button", { name: /Color theme/ });
-    fireEvent.click(themeButton);
+    // Theme lives in Settings and the palette; the titlebar keeps only global essentials.
+    expect(screen.queryByRole("button", { name: /Color theme/ })).toBeNull();
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.click(screen.getByRole("button", { name: /Cycle color theme/ }));
     await waitFor(() => expect(["light", "dark"]).toContain(document.documentElement.dataset.theme));
-
-    fireEvent.click(screen.getByRole("button", { name: "Preview workspace" }));
-    const separator = screen.getByRole("separator", { name: "Resize repository navigation" });
-    const originalWidth = Number(separator.getAttribute("aria-valuenow"));
-    fireEvent.keyDown(separator, { key: "ArrowRight" });
-    expect(Number(separator.getAttribute("aria-valuenow"))).toBe(originalWidth + 16);
   });
 });

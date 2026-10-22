@@ -97,7 +97,9 @@ describe("CommitGraph", () => {
     expect(list.querySelectorAll('[role="listitem"]').length).toBeLessThan(40);
 
     fireEvent.change(screen.getByRole("textbox", { name: "Filter by message" }), { target: { value: "merge" } });
-    fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    // Message search submits on Enter; the other filters stay folded until asked for.
+    expect(screen.queryByRole("textbox", { name: "Filter by author" })).toBeNull();
+    fireEvent.submit(screen.getByRole("form", { name: "Commit history filters" }));
     await waitFor(() => expect(getRepositoryCommits).toHaveBeenCalledWith("repo_fixture", 0, 50, { message: "merge" }));
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo_fixture", 0, 50, {}));

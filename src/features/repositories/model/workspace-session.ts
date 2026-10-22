@@ -1,12 +1,18 @@
 import type { CommitAction } from "../../commits";
 
-export type WorkspaceMode = "graph" | "diff";
+/** The task a repository tab is showing: local changes, commit history, or branch topology. */
+export type WorkspaceMode = "changes" | "history" | "branches";
+
+export const WORKSPACE_MODES: readonly WorkspaceMode[] = ["changes", "history", "branches"];
 
 export type RepositoryTabState = {
   mode: WorkspaceMode;
   selectedCommit?: string;
+  /** Working-tree file open in Changes; never a historical file. */
   selectedFilePath?: string;
-  selectedFileScope?: "workingTree" | "index" | "commit";
+  selectedFileScope?: "workingTree" | "index";
+  /** File of `selectedDiffCommitOid` open in History. */
+  selectedCommitFilePath?: string;
   selectedDiffCommitOid?: string;
   graphScrollTop: number;
   commitAction?: CommitAction;
@@ -20,8 +26,20 @@ export type WorkspaceSession = {
 
 const WORKSPACE_SESSION_KEY = "gitcrest-workspace-session-v1";
 
+export const DEFAULT_WORKSPACE_MODE: WorkspaceMode = "changes";
+
 function emptyWorkspaceSession(): WorkspaceSession {
   return { openRepoIds: [], tabs: {} };
+}
+
+type StoredTabState = Partial<Omit<RepositoryTabState, "mode" | "selectedFileScope">> & { mode?: unknown; selectedFileScope?: unknown };
+
+/** Sessions saved before the task views used "graph" and "diff"; map them onto the view that shows the same content. */
+function parseMode(candidate: StoredTabState): WorkspaceMode {
+  if (candidate.mode === "changes" || candidate.mode === "history" || candidate.mode === "branches") return candidate.mode;
+  if (candidate.mode === "graph") return "history";
+  if (candidate.mode === "diff") return candidate.selectedFileScope === "commit" ? "history" : "changes";
+  return DEFAULT_WORKSPACE_MODE;
 }
 
 export function parseWorkspaceSession(serialized: string | null): WorkspaceSession {
@@ -36,12 +54,17 @@ export function parseWorkspaceSession(serialized: string | null): WorkspaceSessi
     if (session.tabs && typeof session.tabs === "object") {
       for (const [repoId, state] of Object.entries(session.tabs)) {
         if (!state || typeof state !== "object") continue;
-        const candidate = state as Partial<RepositoryTabState>;
+        const candidate = state as StoredTabState;
+        const legacyCommitFile = candidate.selectedFileScope === "commit" && typeof candidate.selectedFilePath === "string";
+        const workingFile = (candidate.selectedFileScope === "workingTree" || candidate.selectedFileScope === "index") && typeof candidate.selectedFilePath === "string";
+        const commitFilePath = typeof candidate.selectedCommitFilePath === "string"
+          ? candidate.selectedCommitFilePath
+          : legacyCommitFile ? candidate.selectedFilePath : undefined;
         tabs[repoId] = {
-          mode: candidate.mode === "diff" ? "diff" : "graph",
+          mode: parseMode(candidate),
           ...(typeof candidate.selectedCommit === "string" ? { selectedCommit: candidate.selectedCommit } : {}),
-          ...(typeof candidate.selectedFilePath === "string" ? { selectedFilePath: candidate.selectedFilePath } : {}),
-          ...(candidate.selectedFileScope === "workingTree" || candidate.selectedFileScope === "index" || candidate.selectedFileScope === "commit" ? { selectedFileScope: candidate.selectedFileScope } : {}),
+          ...(workingFile ? { selectedFilePath: candidate.selectedFilePath, selectedFileScope: candidate.selectedFileScope as "workingTree" | "index" } : {}),
+          ...(commitFilePath ? { selectedCommitFilePath: commitFilePath } : {}),
           ...(typeof candidate.selectedDiffCommitOid === "string" ? { selectedDiffCommitOid: candidate.selectedDiffCommitOid } : {}),
           ...(candidate.commitAction === "commit" || candidate.commitAction === "commitAndPush" || candidate.commitAction === "commitAndPushTo" || candidate.commitAction === "commitAndPushForce" ? { commitAction: candidate.commitAction } : {}),
           graphScrollTop: typeof candidate.graphScrollTop === "number" && Number.isFinite(candidate.graphScrollTop)

@@ -49,7 +49,6 @@ describe("i18n rendering", () => {
         openRepoIds={[]}
         repositories={[]}
         shortcuts={defaultShortcutPreferences}
-        theme="dark"
         status="Connected to local Rust core"
         connected
         activeTaskCount={3}
@@ -62,7 +61,6 @@ describe("i18n rendering", () => {
         onCloneRepository={() => undefined}
         onInitializeRepository={() => undefined}
         onOpenCommandPalette={() => undefined}
-        onCycleTheme={() => undefined}
         onOpenTasks={() => undefined}
         onOpenSettings={() => undefined}
       />,
@@ -81,7 +79,6 @@ describe("i18n rendering", () => {
         openRepoIds={[]}
         repositories={[]}
         shortcuts={defaultShortcutPreferences}
-        theme="dark"
         status="Connected to local Rust core"
         connected
         activeTaskCount={0}
@@ -94,7 +91,6 @@ describe("i18n rendering", () => {
         onCloneRepository={onCloneRepository}
         onInitializeRepository={onInitializeRepository}
         onOpenCommandPalette={() => undefined}
-        onCycleTheme={() => undefined}
         onOpenTasks={() => undefined}
         onOpenSettings={() => undefined}
       />,

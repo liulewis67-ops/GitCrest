@@ -66,8 +66,8 @@ export function useStagingOperations({
     setTaskError("");
     try {
       const request: StagingRequest = { action, ...(path ? { path } : {}) };
+      // Staging is quick and local: its progress shows in the titlebar, and the task center opens only if it fails.
       appendTask(await api.stageRepositoryChanges(repoId, request));
-      openTaskCenter();
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setTaskError(message || (error instanceof Error ? error.message : t("err.stagingStart")));
@@ -105,7 +105,6 @@ export function useStagingOperations({
         selections,
       };
       appendTask(await api.stageSelectedDiffHunks(repository.repoId, request));
-      openTaskCenter();
     } catch (error) {
       const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       setTaskError(message || (error instanceof Error ? error.message : t("err.partialStaging")));

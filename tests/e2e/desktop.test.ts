@@ -282,9 +282,11 @@ describe("desktop startup E2E", () => {
       await window.waitForFunction(() => [...document.querySelectorAll('button[title^="Switch branches"]')].some((button) => button.textContent?.includes("feature/e2e")), undefined, { timeout: 15_000 });
 
       await window.setViewportSize({ width: 900, height: 820 });
-      expect(await window.locator(".navigationPanel").isVisible()).toBe(false);
-      expect(await window.locator(".mainPanel").isVisible()).toBe(true);
-      expect(await window.locator(".commitSection").isVisible()).toBe(false);
+      // Narrow windows keep the view tabs and content, drop the path, and never scroll sideways.
+      expect(await window.getByRole("tablist", { name: "Workspace views" }).isVisible()).toBe(true);
+      expect(await window.locator(".viewMain").isVisible()).toBe(true);
+      expect(await window.locator(".workspaceCrumb").isVisible()).toBe(false);
+      expect(await window.evaluate(() => document.documentElement.scrollWidth <= globalThis.innerWidth)).toBe(true);
       await window.setViewportSize({ width: 1280, height: 820 });
 
       const mainOid = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", originalBranch])).stdout.trim();
@@ -376,16 +378,15 @@ describe("desktop startup E2E", () => {
         return Boolean(button && !button.disabled);
       }, undefined, { timeout: 5000 });
       await stageAllButton.click();
-      const stageAllTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "stageAll" }) });
-      await stageAllTask.waitFor({ state: "visible", timeout: 5000 });
-      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "stageAll" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 10_000 });
-      expect((await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only", "--", "src/undo-me.ts"])).stdout.trim()).toBe("src/undo-me.ts");
-      const stageTasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      await stageTasksDialog.getByRole("button", { name: "Close tasks" }).click();
-      await stageTasksDialog.waitFor({ state: "hidden" });
+      await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only", "--", "src/undo-me.ts"])).stdout.trim(), { timeout: 10_000 }).toBe("src/undo-me.ts");
+      await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("src/undo-me.ts").waitFor();
+      // Undo is refused while the staging task still counts as running.
+      await window.getByRole("button", { name: "Background tasks, 0 active" }).waitFor({ timeout: 10_000 });
+      // Successful staging reports through the titlebar; the Tasks dialog stays closed.
+      expect(await window.getByRole("dialog", { name: "Tasks" }).count()).toBe(0);
       const refreshStatusButton = window.getByRole("button", { name: "Refresh working tree status" });
       await refreshStatusButton.focus();
-      expect(await window.evaluate(() => document.activeElement?.textContent?.trim())).toBe("Refresh ↻");
+      expect(await window.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe("Refresh working tree status");
       await window.keyboard.press("Control+z");
       const undoTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "undoRecentOperation" }) });
       await undoTask.waitFor({ state: "visible", timeout: 5000 });

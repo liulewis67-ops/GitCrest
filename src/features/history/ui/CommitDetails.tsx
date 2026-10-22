@@ -11,6 +11,7 @@ export function CommitDetails({
   repoId,
   oid,
   selectedPath,
+  showFiles = true,
   onOpenFile,
   onOpenDiffWindow,
   onWorkflow,
@@ -25,6 +26,8 @@ export function CommitDetails({
   repoId: string;
   oid?: string;
   selectedPath?: string;
+  /** The History view lists files beside the diff, so its inspector leaves them out. */
+  showFiles?: boolean;
   onOpenFile?: (path: string, oid: string) => void;
   onOpenDiffWindow?: (path: string, oid: string) => void;
   onWorkflow?: (action: "merge" | "cherryPick" | "revert", oid: string) => void;
@@ -70,9 +73,9 @@ export function CommitDetails({
   }
   return <div className="commitDetails">
     <div className="repositoryFact"><span>{t("cd.commit")}</span><strong className="monoText" title={detail.oid}>{detail.oid.slice(0, 12)}</strong></div>
-    <button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>{t("cd.copySha")}</button>
+    <div className="commitDetailLinks"><button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitId()}>{t("cd.copySha")}</button>
     {copyMessage && <p className="commitCopyStatus" role="status">{copyMessage}</p>}
-    <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={tagCreation.toggleEditor}>{tagCreation.editorOpen ? t("cd.cancelTag") : t("cd.createTag")}</button>
+    <button className="textButton commitCopyButton" type="button" aria-keyshortcuts={tagShortcut} onClick={tagCreation.toggleEditor}>{tagCreation.editorOpen ? t("cd.cancelTag") : t("cd.createTag")}</button></div>
     {onWorkflow && <div className="commitWorkflowActions" aria-label={t("cd.actionsAria")}><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("merge", commitOid)}>{t("cd.merge")}</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} aria-keyshortcuts={cherryPickShortcut} title={workflowDisabledReason} onClick={() => onWorkflow("cherryPick", commitOid)}>{t("cd.cherryPick")}</button><button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason} onClick={() => onWorkflow("revert", commitOid)}>{t("cd.revert")}</button>{onCreateBranch && <button className="quietButton compact" type="button" disabled={Boolean(workflowDisabledReason)} title={workflowDisabledReason ?? t("cd.createBranchTitle")} onClick={() => onCreateBranch(commitOid)}>{t("cd.branchHere")}</button>}</div>}
     {tagCreation.editorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
       <label>{t("cd.tagName")}<input aria-label={t("cd.tagName")} value={tagCreation.name} maxLength={255} required onChange={(event) => tagCreation.setName(event.target.value)} placeholder="v1.0.0" /></label>
@@ -81,10 +84,11 @@ export function CommitDetails({
       <button className="secondaryButton" type="submit" disabled={tagCreation.busy || !tagCreation.name.trim()}>{tagCreation.busy ? t("cd.creatingTag") : t("cd.createAnnotated")}</button>
     </form>}
     {tagCreation.status && <p className="commitCopyStatus" role="status">{tagCreation.status}</p>}
-    <div className="repositoryFact"><span>{t("cd.author")}</span><strong>{detail.authorName}</strong></div>
+    <div className="repositoryFact"><span>{t("cd.author")}</span><strong title={detail.authorEmail}>{detail.authorName}</strong></div>
     <div className="repositoryFact"><span>{t("cd.date")}</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
+    {detail.parents.length > 0 && <div className="repositoryFact"><span>{t("cd.parents")}</span><strong className="monoText">{detail.parents.map((parent) => parent.slice(0, 8)).join(" ")}</strong></div>}
     <div className="commitDetailMessage">{detail.message}</div>
     <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> {t("cd.files")} <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
-    <div className="commitDetailFiles" aria-label={t("cd.changedFiles")}>{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className={`commitDetailFile${file.path === selectedPath ? " selected" : ""}`} type="button" aria-label={t("cd.openDiffFor", { path: file.path })} aria-pressed={file.path === selectedPath} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, detail.oid)}>↗</button>}</div>)}</div>
+    {showFiles && <div className="commitDetailFiles" aria-label={t("cd.changedFiles")}>{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className={`commitDetailFile${file.path === selectedPath ? " selected" : ""}`} type="button" aria-label={t("cd.openDiffFor", { path: file.path })} aria-pressed={file.path === selectedPath} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, detail.oid)}>↗</button>}</div>)}</div>}
   </div>;
 }

@@ -11,8 +11,6 @@ export const app = {
   "app.stageFirst": ["Stage changes and enter a commit message first.", "请先暂存变更并输入提交说明。"],
   "app.resizeNav": ["Resize repository navigation", "调整仓库导航宽度"],
   "app.resizeDetails": ["Resize commit details", "调整提交详情宽度"],
-  "app.resizeWorkbench": ["Resize changes and commit area", "调整变更与提交区域高度"],
-  "app.loadingView": ["Loading workspace view…", "正在加载工作区视图…"],
   "app.ctxWelcome": ["WELCOME", "欢迎"],
   "app.ctxWorkspace": ["WORKSPACE · {name}", "工作区 · {name}"],
   "app.ctxNoRepo": ["WORKSPACE · NO REPOSITORY", "工作区 · 无仓库"],
@@ -43,8 +41,6 @@ export const app = {
   "cmd.aiDetail": ["Review staged diffs and ask the configured AI provider ({shortcut})", "检查暂存差异并询问已配置的 AI 服务商（{shortcut}）"],
   "cmd.clone": ["Clone repository", "克隆仓库"],
   "cmd.cloneDetail": ["Clone a remote using Git credentials", "使用 Git 凭据克隆远程仓库"],
-  "cmd.diff": ["Open Diff view", "打开差异视图"],
-  "cmd.diffDetail": ["Review the selected changed file", "查看所选的变更文件"],
 
   "remote.unavailable": ["This repository is unavailable.", "此仓库不可用。"],
   "remote.manageNoRepo": ["Open a repository to manage remotes.", "打开仓库后可管理远程。"],
