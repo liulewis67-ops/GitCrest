@@ -78,7 +78,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await changesList.getByText("keyboard.ts", { exact: true }).waitFor();
     expect(await window.getByRole("button", { name: "Stage all", exact: true }).isDisabled()).toBe(false);
     await window.keyboard.press("Control+Shift+a");
-    await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("keyboard.ts").waitFor();
+    await expect.poll(() => window.getByRole("checkbox", { name: "Stage keyboard.ts", exact: true }).isChecked(), { timeout: 15_000 }).toBe(true);
 
     const taskDialog = window.getByRole("dialog", { name: "Tasks" });
     if (await taskDialog.count()) await enterButtonByTab(window, "Close tasks");
@@ -136,7 +136,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     await enterButtonByTab(window, "Refresh working tree status");
     await changesList.getByText("reset-trigger.ts", { exact: true }).waitFor();
     await window.keyboard.press("Control+Shift+a");
-    await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("reset-trigger.ts").waitFor();
+    await expect.poll(() => window.getByRole("checkbox", { name: "Stage reset-trigger.ts", exact: true }).isChecked(), { timeout: 15_000 }).toBe(true);
     const resetCommitMessage = window.getByRole("textbox", { name: "Commit message", exact: true });
     await resetCommitMessage.focus();
     await window.keyboard.press("Control+a");

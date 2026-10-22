@@ -71,11 +71,20 @@ pub fn command(
     snapshot: &StatusSnapshot,
     request: &StagingRequest,
 ) -> Result<StagingOperation, StagingError> {
-    if matches!(
+    let path_list = matches!(
         request.action,
-        StagingAction::StageAll | StagingAction::UnstageAll
-    ) && request.path.is_some()
+        StagingAction::StagePaths | StagingAction::UnstagePaths
+    );
+    if (path_list
+        || matches!(
+            request.action,
+            StagingAction::StageAll | StagingAction::UnstageAll
+        ))
+        && request.path.is_some()
     {
+        return Err(StagingError::InvalidRequest);
+    }
+    if !path_list && request.paths.is_some() {
         return Err(StagingError::InvalidRequest);
     }
     if matches!(
@@ -88,6 +97,9 @@ pub fn command(
     match request.action {
         StagingAction::StageAll => Ok(StagingOperation::StageAll),
         StagingAction::UnstageAll => Ok(StagingOperation::UnstageAll),
+        StagingAction::StagePaths | StagingAction::UnstagePaths => {
+            path_list_command(snapshot, request)
+        }
         StagingAction::StageFile | StagingAction::UnstageFile => {
             let path = request
                 .path
@@ -119,6 +131,73 @@ pub fn command(
             }
         }
     }
+}
+
+/// Upper bound on one path-list request; larger selections use the all-file actions.
+const MAX_STAGING_PATHS: usize = 10_000;
+
+fn path_list_command(
+    snapshot: &StatusSnapshot,
+    request: &StagingRequest,
+) -> Result<StagingOperation, StagingError> {
+    let paths = request
+        .paths
+        .as_deref()
+        .filter(|paths| !paths.is_empty() && paths.len() <= MAX_STAGING_PATHS)
+        .ok_or(StagingError::InvalidRequest)?;
+    let mut seen = std::collections::HashSet::new();
+    let mut files = Vec::with_capacity(paths.len());
+    for path in paths {
+        validate_relative_path(path)?;
+        if !seen.insert(path.as_str()) {
+            return Err(StagingError::InvalidRequest);
+        }
+        let file = snapshot
+            .files
+            .iter()
+            .find(|file| &file.path == path)
+            .ok_or(StagingError::FileNotChanged)?;
+        if file.is_conflicted() {
+            return Err(StagingError::ConflictMustBeResolvedFirst);
+        }
+        files.push(file);
+    }
+    if request.action == StagingAction::StagePaths {
+        if files.iter().any(|file| file.is_ignored()) {
+            return Err(StagingError::FileNotChanged);
+        }
+        return Ok(StagingOperation::StagePaths(paths.to_vec()));
+    }
+    if files
+        .iter()
+        .any(|file| !file.categories.contains(&ChangeCategory::Staged))
+    {
+        return Err(StagingError::FileNotStaged);
+    }
+    // Newly added files have nothing in HEAD to restore, and an unborn branch has no HEAD at all.
+    if files
+        .iter()
+        .all(|file| file.index_status == "A" || file.kind == ChangeKind::Added)
+    {
+        return Ok(StagingOperation::UnstageAddedPaths(paths.to_vec()));
+    }
+    let mut restore = Vec::with_capacity(files.len());
+    for file in files {
+        if file.kind == ChangeKind::Renamed {
+            let original = file
+                .original_path
+                .as_deref()
+                .ok_or(StagingError::InvalidRequest)?;
+            validate_relative_path(original)?;
+            if !restore.iter().any(|path: &String| path == original) {
+                restore.push(original.to_owned());
+            }
+        }
+        if !restore.contains(&file.path) {
+            restore.push(file.path.clone());
+        }
+    }
+    Ok(StagingOperation::UnstageSelectedPaths(restore))
 }
 
 fn unstage_file(file: &StatusFile) -> Result<StagingOperation, StagingError> {
@@ -257,7 +336,137 @@ mod tests {
         StagingRequest {
             action,
             path: path.map(str::to_owned),
+            paths: None,
         }
+    }
+
+    fn paths_request(action: StagingAction, paths: &[&str]) -> StagingRequest {
+        StagingRequest {
+            action,
+            path: None,
+            paths: Some(paths.iter().map(|path| (*path).to_owned()).collect()),
+        }
+    }
+
+    fn staged_paths(root: &Path) -> Vec<String> {
+        let mut paths: Vec<String> = git_output(root, &["diff", "--cached", "--name-only"])
+            .lines()
+            .map(str::to_owned)
+            .collect();
+        paths.sort();
+        paths
+    }
+
+    #[tokio::test]
+    async fn staging_and_unstaging_a_path_list_touches_only_those_files() {
+        let (_directory, root) = fixture().await;
+        std::fs::write(root.join("tracked.txt"), "changed\n").unwrap();
+        std::fs::remove_file(root.join("deleted.txt")).unwrap();
+        std::fs::write(root.join("new file.txt"), "new\n").unwrap();
+        std::fs::write(root.join("other.txt"), "untracked\n").unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
+        run(
+            &root,
+            command(
+                &snapshot,
+                &paths_request(
+                    StagingAction::StagePaths,
+                    &["tracked.txt", "deleted.txt", "new file.txt"],
+                ),
+            )
+            .unwrap(),
+        );
+        assert_eq!(
+            staged_paths(&root),
+            ["deleted.txt", "new file.txt", "tracked.txt"]
+        );
+
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
+        run(
+            &root,
+            command(
+                &snapshot,
+                &paths_request(
+                    StagingAction::UnstagePaths,
+                    &["tracked.txt", "new file.txt"],
+                ),
+            )
+            .unwrap(),
+        );
+        assert_eq!(staged_paths(&root), ["deleted.txt"]);
+        // Unstaging never touches the working tree.
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt")).unwrap(),
+            "changed\n"
+        );
+        assert!(root.join("new file.txt").exists());
+    }
+
+    #[tokio::test]
+    async fn unstaging_added_files_works_before_the_first_commit() {
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("repo");
+        std::fs::create_dir(&root).unwrap();
+        git(&root, &["init", "--quiet"]);
+        std::fs::write(root.join("a.txt"), "a\n").unwrap();
+        std::fs::write(root.join("b.txt"), "b\n").unwrap();
+        git(&root, &["add", "."]);
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
+        run(
+            &root,
+            command(
+                &snapshot,
+                &paths_request(StagingAction::UnstagePaths, &["a.txt", "b.txt"]),
+            )
+            .unwrap(),
+        );
+        assert!(staged_paths(&root).is_empty());
+    }
+
+    #[tokio::test]
+    async fn path_lists_reject_duplicates_unknown_files_and_mixed_shapes() {
+        let (_directory, root) = fixture().await;
+        std::fs::write(root.join("tracked.txt"), "changed\n").unwrap();
+        let snapshot = crate::features::status::read("repo".into(), &root)
+            .await
+            .unwrap();
+        for request in [
+            paths_request(StagingAction::StagePaths, &[]),
+            paths_request(StagingAction::StagePaths, &["tracked.txt", "tracked.txt"]),
+            paths_request(StagingAction::StagePaths, &["../outside.txt"]),
+            StagingRequest {
+                action: StagingAction::StageFile,
+                path: Some("tracked.txt".into()),
+                paths: Some(vec!["tracked.txt".into()]),
+            },
+            StagingRequest {
+                action: StagingAction::StagePaths,
+                path: Some("tracked.txt".into()),
+                paths: Some(vec!["tracked.txt".into()]),
+            },
+        ] {
+            assert!(command(&snapshot, &request).is_err());
+        }
+        assert_eq!(
+            command(
+                &snapshot,
+                &paths_request(StagingAction::StagePaths, &["missing.txt"])
+            ),
+            Err(StagingError::FileNotChanged)
+        );
+        assert_eq!(
+            command(
+                &snapshot,
+                &paths_request(StagingAction::UnstagePaths, &["tracked.txt"])
+            ),
+            Err(StagingError::FileNotStaged)
+        );
     }
 
     #[tokio::test]

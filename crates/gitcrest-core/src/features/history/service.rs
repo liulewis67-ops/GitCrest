@@ -23,11 +23,11 @@ pub(crate) use self::commit_detail::read_commit;
 #[cfg(test)]
 use self::commit_history::{read_page, valid_date, valid_filters};
 pub(crate) use self::refs::read_refs;
+#[cfg(test)]
+use self::search_index::build_history_search_index;
 pub(crate) use self::search_index::read_page_indexed;
 #[cfg(test)]
 use self::search_index::refs_fingerprint;
-#[cfg(test)]
-use self::search_index::build_history_search_index;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum HistoryError {
@@ -162,7 +162,8 @@ async fn run_git_bulk_with_deadline(
                     return Ok::<_, std::io::Error>(output);
                 }
                 if output.len() + read > maximum_output {
-                    output.extend_from_slice(&buffer[..maximum_output.saturating_sub(output.len())]);
+                    output
+                        .extend_from_slice(&buffer[..maximum_output.saturating_sub(output.len())]);
                     output.push(0);
                     return Ok(output);
                 }
@@ -446,10 +447,13 @@ mod tests {
             .into_iter()
             .map(|entry| entry.oid)
             .collect();
-        let expected: Vec<String> = git(path, &["log", "--format=%H", "HEAD", "--branches", "--remotes"])
-            .lines()
-            .map(str::to_owned)
-            .collect();
+        let expected: Vec<String> = git(
+            path,
+            &["log", "--format=%H", "HEAD", "--branches", "--remotes"],
+        )
+        .lines()
+        .map(str::to_owned)
+        .collect();
         assert_eq!(indexed, expected);
         indexed
     }
@@ -476,7 +480,9 @@ mod tests {
             .await
             .unwrap()
             .repo_id;
-        let first_basis = store.index_basis(&repo_id).expect("full build records a basis");
+        let first_basis = store
+            .index_basis(&repo_id)
+            .expect("full build records a basis");
         assert_eq!(first_basis.max_commit_time, base + 100);
 
         // Newer commits on main and on a side branch: incremental path.

@@ -12,6 +12,8 @@ type Selection = Array<{ hunkIndex: number; rowIndex?: number }>;
 interface WorkspaceDiffPanelProps {
   path: string;
   scope: "workingTree" | "index" | "commit";
+  /** A partly staged file has both an unstaged and a staged diff; this switches between them. */
+  scopeOptions?: { available: Array<"workingTree" | "index">; onChange: (scope: "workingTree" | "index") => void };
   commitOid?: string;
   /** Status letter and kind shown before the path, for working-tree files. */
   status?: { code: string; kind: string };
@@ -39,6 +41,7 @@ interface WorkspaceDiffPanelProps {
 export function WorkspaceDiffPanel({
   path,
   scope,
+  scopeOptions,
   commitOid,
   status,
   activeDiffKey,
@@ -71,7 +74,9 @@ export function WorkspaceDiffPanel({
       <div className="diffPanelHeader">
         {status && <span className={`statusFileCode status-${status.kind}`} aria-label={status.kind}>{status.code}</span>}
         <span className="diffPanelPath" title={path}><strong>{name}</strong>{directory && <span className="diffPanelDirectory">{directory.slice(0, -1)}</span>}</span>
-        {scopeLabel && <span className="diffScopeTag">{scopeLabel}</span>}
+        {scopeOptions && scope !== "commit" ? <span className="diffScopeSwitch" role="group" aria-label={t("cp.diffScopeAria")}>
+          {scopeOptions.available.map((option) => <button key={option} type="button" aria-pressed={option === scope} className={option === scope ? "active" : undefined} onClick={() => { if (option !== scope) scopeOptions.onChange(option); }}>{option === "index" ? t("grp.staged") : t("grp.unstaged")}</button>)}
+        </span> : scopeLabel && <span className="diffScopeTag">{scopeLabel}</span>}
         <span className="diffPanelSpacer" />
         {fileNavigation && fileNavigation.total > 1 && <span className="diffFileNav" role="group" aria-label={t("chg.filePosition", { current: fileNavigation.index + 1, total: fileNavigation.total })}>
           <button className="quietButton compact iconButton" type="button" aria-label={t("chg.prevFile")} title={t("chg.prevFile")} disabled={fileNavigation.index <= 0} onClick={fileNavigation.onPrevious}><span aria-hidden="true">‹</span></button>

@@ -4,6 +4,16 @@ use crate::domain::{
     diff::DiffScope,
     staging::{ShelfPatchAction, StagingOperation},
 };
+/// Paths go to Git on stdin, NUL-separated, so a long selection never exceeds the command-line limit.
+fn nul_separated(paths: Vec<String>) -> Vec<u8> {
+    let mut input = Vec::new();
+    for path in paths {
+        input.extend_from_slice(path.as_bytes());
+        input.push(0);
+    }
+    input
+}
+
 pub(crate) fn staging_invocation(
     operation: StagingOperation,
 ) -> (Vec<OsString>, Option<Vec<u8>>, &'static str, &'static str) {
@@ -34,6 +44,52 @@ pub(crate) fn staging_invocation(
             arguments.push(path.into());
             return (arguments, None, "Stage file", "git add <selected path>");
         }
+        StagingOperation::StagePaths(paths) => (
+            [
+                "--literal-pathspecs",
+                "add",
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>(),
+            Some(nul_separated(paths)),
+            "Stage selected files",
+            "git add <selected paths>",
+        ),
+        StagingOperation::UnstageSelectedPaths(paths) => (
+            [
+                "--literal-pathspecs",
+                "restore",
+                "--staged",
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>(),
+            Some(nul_separated(paths)),
+            "Unstage selected files",
+            "git restore --staged <selected paths>",
+        ),
+        StagingOperation::UnstageAddedPaths(paths) => (
+            [
+                "--literal-pathspecs",
+                "rm",
+                "--cached",
+                "--force",
+                "--quiet",
+                "--pathspec-from-file=-",
+                "--pathspec-file-nul",
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>(),
+            Some(nul_separated(paths)),
+            "Unstage added files",
+            "git rm --cached <selected paths>",
+        ),
         StagingOperation::UnstagePath(path) => {
             let mut arguments = ["--literal-pathspecs", "restore", "--staged", "--"]
                 .into_iter()

@@ -5,7 +5,10 @@ pub(crate) enum StagingOperation {
     StageAll,
     UnstageAll,
     StagePath(String),
+    StagePaths(Vec<String>),
     UnstagePath(String),
+    UnstageSelectedPaths(Vec<String>),
+    UnstageAddedPaths(Vec<String>),
     UnstageAddedPath(String),
     UnstageRenamedPath {
         original_path: String,

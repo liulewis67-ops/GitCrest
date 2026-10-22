@@ -7,7 +7,7 @@ import { CommandPalette, type CommandPaletteCommand } from "./layouts/CommandPal
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
-import { ChangesSidebar, changeCode } from "../pages/workspace/ChangesSidebar";
+import { CommitPanel, changeCode, type CommitPanelTab } from "../pages/workspace/CommitPanel";
 import { BranchesSidebar } from "../pages/workspace/BranchesSidebar";
 import { CommitInspector } from "../pages/workspace/CommitInspector";
 import { WorkspaceDiffPanel } from "../pages/workspace/WorkspaceDiffPanel";
@@ -16,11 +16,11 @@ import { ariaShortcut, displayShortcut, loadSettingsPage, THEME_CYCLE, useShortc
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
-import { getComposerVisibility, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
+import { isComposerVisible, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
 import { DEFAULT_WORKSPACE_MODE, DETAILS_WIDTH, HISTORY_LIST_WIDTH, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
-import { listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
+import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, useOpenCreatedWorktree, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
@@ -227,7 +227,7 @@ function App() {
   // A floating inspector is opened per view and per visit; it never reopens by itself.
   const [overlayInspectorFor, setOverlayInspectorFor] = useState<WorkspaceMode>();
   const [focusMode, setFocusMode] = useState(false);
-  const [composerExpanded, setComposerExpanded] = useState<boolean>();
+  const [commitPanelTab, setCommitPanelTab] = useState<CommitPanelTab>("commit");
   const [notice, setNotice] = useState("");
   const sidebarVisible = !focusMode && !panelPreferences.sidebarHidden[mode];
   const inspectorVisible = mode !== "changes" && !focusMode && (inspectorOverlay ? overlayInspectorFor === mode : panelPreferences.inspectorOpen[mode]);
@@ -300,8 +300,9 @@ function App() {
   const historyFileOid = activeTabState?.selectedDiffCommitOid;
   const selectedDiffFile = (activeStatus?.files || []).find((file) => file.path === selectedFilePath);
   const { preferences: diffViewPreferences, updatePreferences: updateDiffViewPreferences } = useDiffViewPreferences();
-  const { groups: statusGroups, stagedCount, hasConflicts, conflictCount, workingCount } = summarizeRepositoryStatus(activeStatus);
-  const reviewableFiles = listReviewableFiles(statusGroups);
+  const { stagedCount, hasConflicts, conflictCount, workingCount } = summarizeRepositoryStatus(activeStatus);
+  const changeTree = buildChangeTree(activeStatus);
+  const reviewableFiles = listReviewableFiles(changeTree);
   // Each view reads its own file: Changes a working-tree or staged file, History a file of the selected commit.
   const diffTarget = mode === "changes" && selectedFilePath && selectedFileScope
     ? { path: selectedFilePath, scope: selectedFileScope, commitOid: undefined }
@@ -588,6 +589,7 @@ function App() {
     changeWorkspaceMode("changes");
     setFocusMode(false);
     setSidebarHidden("changes", false);
+    setCommitPanelTab("shelves");
     setShelfComposerRequest((request) => ({ id: request.id + 1, repoId }));
   }
 
@@ -600,7 +602,8 @@ function App() {
   function showCommitComposer() {
     changeWorkspaceMode("changes");
     setFocusMode(false);
-    setComposerExpanded(true);
+    setSidebarHidden("changes", false);
+    setCommitPanelTab("commit");
     focusCommitMessage();
   }
 
@@ -692,7 +695,7 @@ function App() {
   useEffect(() => {
     setFocusMode(false);
     setOverlayInspectorFor(undefined);
-    setComposerExpanded(undefined);
+    setCommitPanelTab("commit");
   }, [selectedRepository?.repoId]);
 
   useEffect(() => {
@@ -711,7 +714,7 @@ function App() {
 
   // Keep the Changes selection on a file that still exists: follow it between staged and
   // unstaged, fall back to the first changed file, or clear it once the tree is clean.
-  const reviewableKey = reviewableFiles.map((file) => `${file.scope}:${file.path}`).join("\n");
+  const reviewableKey = reviewableFiles.map((file) => `${file.scopes.join(",")}:${file.path}`).join("\n");
   useEffect(() => {
     const repoId = selectedRepository?.repoId;
     if (!repoId || !activeStatus || activeStatus.repoId !== repoId) return;
@@ -776,6 +779,8 @@ function App() {
     openCommitAssistant: () => {
       changeWorkspaceMode("changes");
       setFocusMode(false);
+      setSidebarHidden("changes", false);
+      setCommitPanelTab("commit");
       setCommitAssistantOpen(true);
     },
     closeCommandPalette: () => setPaletteOpen(false),
@@ -810,16 +815,13 @@ function App() {
     { id: "focus-mode", label: t("cmd.focus"), detail: t("cmd.focusDetail", { shortcut: displayShortcut(shortcuts.focusMode, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace" && diffTarget), run: toggleFocusMode },
     { id: "manage-remotes", label: t("cmd.manageRemotes"), detail: t("cmd.manageRemotesDetail"), available: Boolean(selectedRepository), run: () => { changeWorkspaceMode("branches"); setSidebarHidden("branches", false); setFocusMode(false); } },
   ];
-  const composer = getComposerVisibility({
+  const composerVisible = isComposerVisible({
     inChangesView: mode === "changes" && !focusMode,
     statusReady: Boolean(activeStatus),
     stagedCount,
     workingCount,
     draft: `${commitSummary}${commitDescription}`,
     amend: amendCommit,
-    assistantOpen: commitAssistantOpen,
-    selectionCount: commitSelections.length,
-    expandedOverride: composerExpanded,
   });
   const currentBranch = activeBranches?.branches?.find((branch) => branch.kind === "local" && branch.isCurrent);
   const workflowDisabledReason = !connected
@@ -828,15 +830,17 @@ function App() {
       ? t("details.repoUnavailable")
       : hasActiveRepositoryTask ? t("details.waitTask") : undefined;
   const inspectorSize = { width: detailsWidth, min: DETAILS_WIDTH.min, max: DETAILS_WIDTH.max, label: t("app.resizeDetails"), onResize: setDetailsWidth };
-  const changesIndex = reviewableFiles.findIndex((file) => file.path === selectedFilePath && file.scope === selectedFileScope);
+  const changesIndex = reviewableFiles.findIndex((file) => file.path === selectedFilePath);
+  const selectedReviewable = changesIndex >= 0 ? reviewableFiles[changesIndex] : undefined;
 
   function openReviewableFile(index: number) {
     const file = reviewableFiles[index];
-    if (file) openFileDiff(file.path, file.scope);
+    if (file) openFileDiff(file.path, file.scopes[0]);
   }
 
-  function renderDiffPanel(target: NonNullable<typeof diffTarget>, extra: { status?: { code: string; kind: string }; fileMissing?: boolean; fileNavigation?: CommitFileNavigation }) {
+  function renderDiffPanel(target: NonNullable<typeof diffTarget>, extra: { status?: { code: string; kind: string }; fileMissing?: boolean; scopes?: Array<"workingTree" | "index">; fileNavigation?: CommitFileNavigation }) {
     return <WorkspaceDiffPanel
+      scopeOptions={extra.scopes && extra.scopes.length > 1 && target.scope !== "commit" ? { available: extra.scopes, onChange: (scope) => openFileDiff(target.path, scope) } : undefined}
       path={target.path}
       scope={target.scope}
       commitOid={target.commitOid}
@@ -992,13 +996,13 @@ function App() {
         >
           {selectedRepository && mode === "changes" && <ViewLayout
             className="changesLayout"
-            sidebar={sidebarVisible ? <ChangesSidebar
+            sidebar={sidebarVisible ? <CommitPanel
               repository={selectedRepository}
               api={apiRef.current}
               status={activeStatus}
               statusError={activeStatusError}
               statusLoading={activeStatusLoading}
-              statusGroups={statusGroups}
+              tree={changeTree}
               workingCount={workingCount}
               stagedCount={stagedCount}
               hasConflicts={hasConflicts}
@@ -1010,12 +1014,39 @@ function App() {
               hasActiveRepositoryTask={hasActiveRepositoryTask}
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
+              tab={commitPanelTab}
               historyRefreshKey={historyRequests.refreshKey}
               shelfComposerRequest={shelfComposerRequest.repoId === selectedRepository.repoId ? shelfComposerRequest.id : 0}
               shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch?.repoId === selectedRepository.repoId ? branchSwitchShelfFlow.shelfComposerAfterSwitch : undefined}
-              onStageChanges={(action, path) => void stageChanges(action, path)}
+              composer={composerVisible ? <Suspense fallback={null}>
+                <CommitWorkbench
+                  repository={selectedRepository}
+                  status={{ snapshot: activeStatus, stagedCount, hasConflicts, sensitiveStagedPaths }}
+                  commit={{ message: commitMessage, summary: commitSummary, description: commitDescription, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
+                  shortcuts={shortcuts}
+                  isMacPlatform={isMacPlatform}
+                  connected={connected}
+                  hasActiveRepositoryTask={hasActiveRepositoryTask}
+                  api={apiRef.current}
+                  onChangeMessage={setCommitMessage}
+                  onChangeSummary={setCommitSummary}
+                  onChangeDescription={setCommitDescription}
+                  onChangeTemplate={chooseCommitTemplate}
+                  onClearSelections={() => setCommitSelections([])}
+                  onAssistantOpenChange={setCommitAssistantOpen}
+                  onSelectAmend={setAmendCommit}
+                  onSelectSignOff={setSignOffCommit}
+                  onSelectSign={setSignCommit}
+                  onSubmit={runCommitAction}
+                  onChooseAction={chooseCommitAction}
+                  onToggleActionMenu={() => setCommitActionMenuOpen((open) => !open)}
+                />
+              </Suspense> : undefined}
+              onTabChange={setCommitPanelTab}
+              onStageChanges={(action, target) => void stageChanges(action, target)}
               onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
               onOpenFileDiff={openFileDiff}
+              onShelve={() => requestShelfComposer(selectedRepository.repoId)}
               onShelfTaskSubmitted={(task, switchTarget) => {
                 void refreshRepositoryStatus(selectedRepository.repoId);
                 if (task) prependTask(task);
@@ -1039,37 +1070,12 @@ function App() {
                 <button className="secondaryButton" type="button" onClick={() => changeWorkspaceMode("history")}>{t("chg.browseHistory")}</button>
               </div>
                 : diffTarget ? renderDiffPanel(diffTarget, {
-                  status: changesIndex >= 0 ? { code: changeCode(reviewableFiles[changesIndex].kind), kind: reviewableFiles[changesIndex].kind } : undefined,
+                  status: selectedReviewable ? { code: changeCode(selectedReviewable.kind), kind: selectedReviewable.kind } : undefined,
                   fileMissing: !selectedDiffFile,
+                  scopes: selectedReviewable?.scopes,
                   fileNavigation: changesIndex >= 0 ? { index: changesIndex, total: reviewableFiles.length, onPrevious: () => openReviewableFile(changesIndex - 1), onNext: () => openReviewableFile(changesIndex + 1) } : undefined,
                 })
                   : <div className="viewEmpty"><h2>{t("chg.selectFile")}</h2><p>{t("chg.selectFileHint")}</p></div>}
-            {composer.visible && <Suspense fallback={null}>
-              <CommitWorkbench
-                repository={selectedRepository}
-                status={{ snapshot: activeStatus, stagedCount, hasConflicts, sensitiveStagedPaths }}
-                commit={{ message: commitMessage, summary: commitSummary, description: commitDescription, template: commitTemplate, selections: commitSelections, selectionRepoId: commitSelectionRepoId, activeAction: activeCommitAction, actionLabel: commitActionLabel, actionIsDanger: commitActionIsDanger, actionMenuOpen: commitActionMenuOpen, assistantOpen: commitAssistantOpen, amend: amendCommit, signOff: signOffCommit, sign: signCommit, busy: commitBusy, canCommit }}
-                expanded={composer.expanded}
-                shortcuts={shortcuts}
-                isMacPlatform={isMacPlatform}
-                connected={connected}
-                hasActiveRepositoryTask={hasActiveRepositoryTask}
-                api={apiRef.current}
-                onExpandedChange={setComposerExpanded}
-                onChangeMessage={setCommitMessage}
-                onChangeSummary={setCommitSummary}
-                onChangeDescription={setCommitDescription}
-                onChangeTemplate={chooseCommitTemplate}
-                onClearSelections={() => setCommitSelections([])}
-                onAssistantOpenChange={setCommitAssistantOpen}
-                onSelectAmend={setAmendCommit}
-                onSelectSignOff={setSignOffCommit}
-                onSelectSign={setSignCommit}
-                onSubmit={runCommitAction}
-                onChooseAction={chooseCommitAction}
-                onToggleActionMenu={() => setCommitActionMenuOpen((open) => !open)}
-              />
-            </Suspense>}
           </ViewLayout>}
 
           {selectedRepository && mode === "history" && <ViewLayout

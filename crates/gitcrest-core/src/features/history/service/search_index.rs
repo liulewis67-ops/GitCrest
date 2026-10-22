@@ -500,9 +500,13 @@ async fn try_prepend_new_commits(
     lost_arguments.push("--not".into());
     lost_arguments.extend(tips.iter().map(std::ffi::OsString::from));
     lost_arguments.push("--".into());
-    let lost =
-        run_git_bulk_with_deadline(repository_path, &lost_arguments, 1024, HISTORY_INDEX_DEADLINE)
-            .await?;
+    let lost = run_git_bulk_with_deadline(
+        repository_path,
+        &lost_arguments,
+        1024,
+        HISTORY_INDEX_DEADLINE,
+    )
+    .await?;
     if !lost.is_empty() {
         return Ok(false);
     }

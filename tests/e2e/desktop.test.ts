@@ -154,7 +154,8 @@ describe("desktop startup E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "add", "src/commit-ai.ts"]);
       await writeFile(resolve(fixture.path, "src/commit-ai.ts"), "export const reviewedTitle = 'unstaged';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
-      await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("src/commit-ai.ts").waitFor();
+      // Staged, then edited again: the Commit panel shows the file as partly staged.
+      await expect.poll(() => window.getByRole("checkbox", { name: "Stage src/commit-ai.ts", exact: true }).evaluate((box) => (box as HTMLInputElement).indeterminate), { timeout: 15_000 }).toBe(true);
       await window.keyboard.press("Control+g");
       const commitAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
       await commitAssistant.locator(".privacyDiffPreview summary").waitFor({ timeout: 5000 }).catch(async () => { throw new Error(`Commit assistant did not prepare staged diffs: ${await commitAssistant.innerText()}`); });
@@ -371,15 +372,15 @@ describe("desktop startup E2E", () => {
       const stagedBeforeUndo = (await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only"])).stdout.trim();
       await writeFile(resolve(fixture.path, "src/undo-me.ts"), "export const undoMe = true;\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
-      await window.getByText("src/undo-me.ts", { exact: true }).waitFor();
+      await window.getByRole("button", { name: "untracked src/undo-me.ts", exact: true }).waitFor();
       const stageAllButton = window.getByRole("button", { name: "Stage all", exact: true });
       await window.waitForFunction(() => {
-        const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.textContent?.trim() === "Stage all");
+        const button = [...document.querySelectorAll<HTMLButtonElement>("button")].find((candidate) => candidate.getAttribute("aria-label") === "Stage all");
         return Boolean(button && !button.disabled);
       }, undefined, { timeout: 5000 });
       await stageAllButton.click();
       await expect.poll(async () => (await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only", "--", "src/undo-me.ts"])).stdout.trim(), { timeout: 10_000 }).toBe("src/undo-me.ts");
-      await window.getByRole("region", { name: "Staged changes", exact: true }).getByText("src/undo-me.ts").waitFor();
+      await expect.poll(() => window.getByRole("checkbox", { name: "Stage src/undo-me.ts", exact: true }).isChecked(), { timeout: 15_000 }).toBe(true);
       // Undo is refused while the staging task still counts as running.
       await window.getByRole("button", { name: "Background tasks, 0 active" }).waitFor({ timeout: 10_000 });
       // Successful staging reports through the titlebar; the Tasks dialog stays closed.

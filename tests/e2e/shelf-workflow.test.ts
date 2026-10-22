@@ -62,6 +62,8 @@ describe("shelf workflow E2E", () => {
       await window.locator(".workspaceCrumb").waitFor();
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
 
+      // Shelves share the Commit panel, under their own tab.
+      await window.getByRole("tab", { name: "Shelves" }).click();
       await window.getByRole("button", { name: "Shelve selected changes" }).click();
       const composer = window.getByRole("dialog", { name: "Shelve selected changes" });
       await composer.getByRole("textbox", { name: "Name" }).fill("E2E working-tree shelf");

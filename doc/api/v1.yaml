@@ -3959,11 +3959,19 @@ components:
       properties:
         action:
           type: string
-          enum: [stageFile, unstageFile, stageAll, unstageAll]
+          enum: [stageFile, unstageFile, stageAll, unstageAll, stagePaths, unstagePaths]
         path:
           type: string
           minLength: 1
-          description: Repository-relative path, required for file actions and forbidden for all-file actions.
+          description: Repository-relative path, required for stageFile and unstageFile and forbidden for every other action.
+        paths:
+          type: array
+          minItems: 1
+          maxItems: 10000
+          items:
+            type: string
+            minLength: 1
+          description: Distinct repository-relative paths, required for stagePaths and unstagePaths and forbidden for every other action. All of them are staged or unstaged by one Git command.
     CommitPage:
       type: object
       additionalProperties: false

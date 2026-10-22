@@ -52,6 +52,8 @@ pub(crate) async fn stage_repository(
         staging::StagingAction::UnstageFile => "unstageFile",
         staging::StagingAction::StageAll => "stageAll",
         staging::StagingAction::UnstageAll => "unstageAll",
+        staging::StagingAction::StagePaths => "stagePaths",
+        staging::StagingAction::UnstagePaths => "unstagePaths",
     };
     let status_service = state.status.clone();
     let undo_store = state.undo_store.clone();

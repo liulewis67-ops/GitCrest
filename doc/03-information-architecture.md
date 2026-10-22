@@ -74,12 +74,14 @@ Title Bar: Repo Tabs / Command Palette / Tasks (运行中才突出) / Settings /
 Toolbar:   [Changes n | History | Branches]  path   branch ▾  [Fetch | Pull ↓n | Push ↑n]  ◧ ◨
 Banner:    合并/变基/挑选提交/二分查找进行中、冲突（任何视图都显示）
 
-Changes:   变更文件（冲突/已暂存/未暂存/未跟踪/忽略分组）+ Shelves | 工作区 Diff | 底部提交编辑器
+Changes:   提交面板 [Commit | Shelves]（工具栏、变更树、提交编辑器） | 工作区 Diff（全高）
 History:   提交列表（搜索 + 可展开筛选） | 所选提交：标题、文件列表、Diff | 可选提交详情
 Branches:  分支浏览器（筛选、本地/远程）、Worktrees、Remotes | 提交图 | 提交详情
 ```
 
-- 提交编辑器只属于 Changes 视图：工作区干净时隐藏；只有未暂存变更时收起为一行；有已暂存内容或草稿时展开。草稿在切换视图时保留。
+- 提交面板参照 IntelliJ 的 Commit 工具窗口：顶部为 Commit 与 Shelves 两个标签；Commit 标签下依次是图标工具栏（刷新、全部暂存、全部取消暂存、搁置、展开/折叠）、变更树和提交编辑器。
+- 变更树分组：合并冲突、Changes（所有已跟踪文件的变更，不再按已暂存/未暂存拆分）、Unversioned Files（尚未 git add 的文件）、Ignored Files（默认折叠）。每个文件前的复选框表示是否已暂存：勾选=全部暂存，半选=部分暂存，未勾选=未暂存；分组复选框一次暂存或取消暂存整组（core 的 stagePaths / unstagePaths 动作）。部分暂存的文件可在 Diff 头部切换查看未暂存与已暂存部分。
+- 提交编辑器位于提交面板底部（Amend 等选项、摘要、说明、Commit 与 Commit and Push to…）；工作区干净且没有草稿时隐藏。草稿在切换视图时保留。
 - 提交详情（inspector）在 History 默认隐藏、在 Branches 默认显示；窗口宽度 ≥1440px 时停靠在右侧，更窄时浮于内容之上，Esc 关闭。
 - 专注模式隐藏侧栏、工具栏与提交详情，只保留 Diff 与文件间导航；Esc 恢复。
 - 提交操作（合并、挑选、还原、建分支、打标签、复制 SHA）收在所选提交的“⋯”菜单中，仍经过原有确认对话框。
@@ -93,7 +95,7 @@ Branches:  分支浏览器（筛选、本地/远程）、Worktrees、Remotes | �
 |---|---|
 | 仓库 Tab | 切换仓库上下文 |
 | 视图 Tab（Changes / History / Branches） | 在三个任务视图间切换，唯一的视图导航 |
-| Changes 列表 | 列出冲突 / 已暂存 / 未暂存文件；点击在中央显示该文件 Diff |
+| 提交面板变更树 | 冲突 / Changes / Unversioned Files 分组，复选框暂存；点击文件在中央显示 Diff |
 | History 提交列表 | 选择提交后在中央显示其文件与 Diff |
 | 提交图（Branches） | 浏览拓扑；提交详情中的文件跳到 History 查看 Diff |
 | 分支选择器 | 工具栏中的当前分支，打开带搜索的切换器 |

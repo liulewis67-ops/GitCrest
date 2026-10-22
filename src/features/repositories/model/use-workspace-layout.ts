@@ -9,7 +9,8 @@ function readStoredNumber(key: string, fallback: number, min: number, max: numbe
   }
 }
 
-export const SIDEBAR_WIDTH = { fallback: 264, min: 200, max: 400 } as const;
+// Wide enough for the Commit panel's file names and commit form.
+export const SIDEBAR_WIDTH = { fallback: 340, min: 220, max: 640 } as const;
 export const HISTORY_LIST_WIDTH = { fallback: 380, min: 280, max: 640 } as const;
 export const DETAILS_WIDTH = { fallback: 304, min: 260, max: 440 } as const;
 

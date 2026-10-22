@@ -455,9 +455,9 @@ impl HistorySearchIndexPort for RepositoryStore {
             &basis,
             &entries,
         )
-            .map_err(|error| {
-                eprintln!("[gitcrest-core] History search index storage error: {error}");
-                crate::domain::error::RepositoryError::StorageUnavailable
-            })
+        .map_err(|error| {
+            eprintln!("[gitcrest-core] History search index storage error: {error}");
+            crate::domain::error::RepositoryError::StorageUnavailable
+        })
     }
 }

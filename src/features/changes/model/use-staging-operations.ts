@@ -58,14 +58,15 @@ export function useStagingOperations({
     setDiscardSelection(undefined);
   }
 
-  async function stageChanges(action: StagingRequest["action"], path?: string) {
+  /** `target` is one path for the file actions, or a list for stagePaths and unstagePaths. */
+  async function stageChanges(action: StagingRequest["action"], target?: string | string[]) {
     const api = getApi();
     const repoId = repository?.repoId;
     if (!api || !repoId || busy || hasActiveStagingTask) return;
     setBusy(true);
     setTaskError("");
     try {
-      const request: StagingRequest = { action, ...(path ? { path } : {}) };
+      const request: StagingRequest = { action, ...(Array.isArray(target) ? { paths: target } : target ? { path: target } : {}) };
       // Staging is quick and local: its progress shows in the titlebar, and the task center opens only if it fails.
       appendTask(await api.stageRepositoryChanges(repoId, request));
     } catch (error) {

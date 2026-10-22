@@ -300,11 +300,19 @@ describe("App", () => {
     expect(JSON.parse(String(fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname === "/api/v1/repositories" && init?.method === "POST")?.[1]?.body))).toEqual({ path: "C:/fixture" });
     // A repository opens in Changes: changed files grouped by state, conflicts first; no branch list here.
     expect(screen.getByRole("tab", { name: /Changes/ }).getAttribute("aria-selected")).toBe("true");
-    expect(await screen.findByRole("region", { name: "Staged changes" })).toBeDefined();
-    expect(screen.getByRole("region", { name: "Unstaged changes" })).toBeDefined();
-    expect(screen.getByRole("region", { name: "Untracked changes" })).toBeDefined();
-    expect(screen.getByRole("region", { name: "Conflicted changes" })).toBeDefined();
-    expect(screen.getByRole("region", { name: "Ignored changes" })).toBeDefined();
+    // Tracked changes share one group; a checkbox per file says whether it is staged.
+    const changes = await screen.findByRole("region", { name: "Changes" });
+    expect(screen.getByRole("region", { name: "Unversioned Files" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Merge Conflicts" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Ignored Files" })).toBeDefined();
+    expect(within(changes).getByText("3 files")).toBeDefined();
+    const readme = within(changes).getByRole("checkbox", { name: "Stage README.md" }) as HTMLInputElement;
+    expect(readme.indeterminate).toBe(true);
+    expect((within(changes).getByRole("checkbox", { name: "Stage src/new-name.ts" }) as HTMLInputElement).checked).toBe(true);
+    expect((within(changes).getByRole("checkbox", { name: "Stage scripts/tool.sh" }) as HTMLInputElement).checked).toBe(false);
+    // Ignored files are folded away, and conflicts cannot be staged from a checkbox.
+    expect(screen.queryByRole("button", { name: "ignored ignored.log" })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Merge Conflicts" })).queryByRole("checkbox")).toBeNull();
     expect(screen.getByRole("button", { name: "modified scripts/tool.sh" })).toBeDefined();
     expect(screen.getByRole("button", { name: "untracked new file.txt" })).toBeDefined();
     expect(screen.getByText("mode", { exact: true })).toBeDefined();
@@ -647,9 +655,10 @@ describe("App", () => {
     expect(screen.getByText("WORKING TREE ↔ INDEX")).toBeDefined();
     expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
 
-    // Unstaged changes only: the composer stays one row until there is something to commit.
+    // The commit form sits under the file list whenever there is something to commit.
     const composer = screen.getByRole("region", { name: "Commit" });
-    expect(within(composer).queryByRole("textbox", { name: "Commit description (optional)" })).toBeNull();
+    expect(within(composer).getByRole("textbox", { name: "Commit description (optional)" })).toBeDefined();
+    expect((within(composer).getByRole("button", { name: "Commit" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.queryByRole("region", { name: "Commit" })).toBeNull();
     fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));

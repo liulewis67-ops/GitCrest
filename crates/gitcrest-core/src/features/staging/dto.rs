@@ -7,6 +7,9 @@ pub enum StagingAction {
     UnstageFile,
     StageAll,
     UnstageAll,
+    /// Stages a chosen set of files in one Git command, e.g. one group of the Changes list.
+    StagePaths,
+    UnstagePaths,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
@@ -76,4 +79,6 @@ pub struct StagingRequest {
     pub action: StagingAction,
     #[serde(default)]
     pub path: Option<String>,
+    #[serde(default)]
+    pub paths: Option<Vec<String>>,
 }

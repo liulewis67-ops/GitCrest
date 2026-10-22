@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { GitCrestApiClient, RepositoryResponse } from "../../src/api/client";
+import type { GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../src/api/client";
+import { CommitPanel } from "../../src/pages/workspace/CommitPanel";
+import { buildChangeTree } from "../../src/features/changes/model/repository-status-summary";
 import { WorkspacePage } from "../../src/pages/workspace/WorkspacePage";
 import { CommitChanges } from "../../src/features/history/ui/CommitChanges";
 import { CommitActionsMenu } from "../../src/features/history/ui/CommitActionsMenu";
@@ -157,5 +159,86 @@ describe("CommitActionsMenu", () => {
     fireEvent.keyDown(menu, { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
     expect(document.activeElement).toBe(button);
+  });
+});
+
+describe("CommitPanel", () => {
+  const status = {
+    repoId: "repo",
+    refreshedAtMs: 1,
+    files: [
+      { path: "src/a.ts", indexStatus: ".", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false },
+      { path: "src/b.ts", indexStatus: "M", worktreeStatus: "M", kind: "modified", categories: ["staged", "unstaged"], modeChanged: false },
+      { path: "c.ts", indexStatus: "M", worktreeStatus: ".", kind: "modified", categories: ["staged"], modeChanged: false },
+      { path: "new.txt", indexStatus: "?", worktreeStatus: "?", kind: "untracked", categories: ["untracked"], modeChanged: false },
+    ],
+  } as StatusSnapshotResponse;
+
+  function renderPanel(overrides: Partial<Parameters<typeof CommitPanel>[0]> = {}) {
+    const handlers = { onTabChange: vi.fn(), onStageChanges: vi.fn(), onRefreshStatus: vi.fn(), onOpenFileDiff: vi.fn(), onShelve: vi.fn(), onShelfTaskSubmitted: vi.fn(), onShelfComposerClosed: vi.fn(), onShelfComposerRequestHandled: vi.fn() };
+    render(<CommitPanel
+      repository={repository}
+      status={status}
+      statusLoading={false}
+      tree={buildChangeTree(status)}
+      workingCount={3}
+      stagedCount={2}
+      hasConflicts={false}
+      stagingBusy={false}
+      hasActiveStagingTask={false}
+      connected
+      hasActiveRepositoryTask={false}
+      shortcuts={defaultShortcutPreferences}
+      isMacPlatform={false}
+      tab="commit"
+      historyRefreshKey={0}
+      shelfComposerRequest={0}
+      composer={<p>composer</p>}
+      {...handlers}
+      {...overrides}
+    />);
+    return handlers;
+  }
+
+  it("lists tracked changes and unversioned files with a checkbox that stages or unstages each file", () => {
+    const { onStageChanges } = renderPanel();
+    expect(screen.getByRole("tab", { name: "Commit" }).getAttribute("aria-selected")).toBe("true");
+    const changes = screen.getByRole("region", { name: "Changes" });
+    expect(within(changes).getByText("3 files")).toBeDefined();
+    expect(within(screen.getByRole("region", { name: "Unversioned Files" })).getByText("1 file")).toBeDefined();
+    fireEvent.click(within(changes).getByRole("checkbox", { name: "Stage src/a.ts" }));
+    expect(onStageChanges).toHaveBeenLastCalledWith("stageFile", "src/a.ts");
+    fireEvent.click(within(changes).getByRole("checkbox", { name: "Stage src/b.ts" }));
+    expect(onStageChanges).toHaveBeenLastCalledWith("stageFile", "src/b.ts");
+    fireEvent.click(within(changes).getByRole("checkbox", { name: "Stage c.ts" }));
+    expect(onStageChanges).toHaveBeenLastCalledWith("unstageFile", "c.ts");
+    expect(screen.getByText("composer")).toBeDefined();
+  });
+
+  it("stages a whole group in one request, and unstages it once every file is staged", () => {
+    const { onStageChanges } = renderPanel();
+    const groupBox = screen.getByRole("checkbox", { name: "Stage every file in Changes" }) as HTMLInputElement;
+    expect(groupBox.indeterminate).toBe(true);
+    fireEvent.click(groupBox);
+    expect(onStageChanges).toHaveBeenLastCalledWith("stagePaths", ["src/a.ts", "src/b.ts"]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Stage every file in Unversioned Files" }));
+    expect(onStageChanges).toHaveBeenLastCalledWith("stagePaths", ["new.txt"]);
+    cleanup();
+    const staged = { ...status, files: status.files.filter((file) => file.path === "c.ts") } as StatusSnapshotResponse;
+    const second = renderPanel({ status: staged, tree: buildChangeTree(staged) });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Stage every file in Changes" }));
+    expect(second.onStageChanges).toHaveBeenLastCalledWith("unstagePaths", ["c.ts"]);
+  });
+
+  it("opens the diff a file has, and folds groups", () => {
+    const { onOpenFileDiff } = renderPanel();
+    fireEvent.click(screen.getByRole("button", { name: "modified c.ts" }));
+    expect(onOpenFileDiff).toHaveBeenLastCalledWith("c.ts", "index");
+    fireEvent.click(screen.getByRole("button", { name: "modified src/b.ts" }));
+    expect(onOpenFileDiff).toHaveBeenLastCalledWith("src/b.ts", "workingTree");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse Changes" }));
+    expect(screen.queryByRole("button", { name: "modified c.ts" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
+    expect(screen.getByRole("button", { name: "modified c.ts" })).toBeDefined();
   });
 });

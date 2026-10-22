@@ -1787,9 +1787,11 @@ export interface components {
         };
         StagingRequest: {
             /** @enum {string} */
-            action: "stageFile" | "unstageFile" | "stageAll" | "unstageAll";
-            /** @description Repository-relative path, required for file actions and forbidden for all-file actions. */
+            action: "stageFile" | "unstageFile" | "stageAll" | "unstageAll" | "stagePaths" | "unstagePaths";
+            /** @description Repository-relative path, required for stageFile and unstageFile and forbidden for every other action. */
             path?: string;
+            /** @description Distinct repository-relative paths, required for stagePaths and unstagePaths and forbidden for every other action. All of them are staged or unstaged by one Git command. */
+            paths?: string[];
         };
         CommitPage: {
             repoId: components["schemas"]["RepoId"];

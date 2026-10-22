@@ -1,34 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { getComposerVisibility } from "../../src/features/commits/model/composer-visibility";
-import { listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus } from "../../src/features/changes/model/repository-status-summary";
+import { isComposerVisible } from "../../src/features/commits/model/composer-visibility";
+import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus } from "../../src/features/changes/model/repository-status-summary";
 import { DEFAULT_PANEL_PREFERENCES, readPanelPreferences } from "../../src/features/repositories/model/use-panel-preferences";
 import type { StatusSnapshotResponse } from "../../src/api/client";
 
-const base = { inChangesView: true, statusReady: true, stagedCount: 0, workingCount: 0, draft: "", amend: false, assistantOpen: false, selectionCount: 0 };
+const base = { inChangesView: true, statusReady: true, stagedCount: 0, workingCount: 0, draft: "", amend: false };
 
-describe("getComposerVisibility", () => {
-  it("hides the composer for a clean working tree and outside the Changes view", () => {
-    expect(getComposerVisibility(base)).toEqual({ visible: false, expanded: false });
-    expect(getComposerVisibility({ ...base, inChangesView: false, stagedCount: 2 })).toEqual({ visible: false, expanded: false });
-    expect(getComposerVisibility({ ...base, statusReady: false, stagedCount: 2 })).toEqual({ visible: false, expanded: false });
+describe("isComposerVisible", () => {
+  it("hides the commit form for a clean working tree and outside the Changes view", () => {
+    expect(isComposerVisible(base)).toBe(false);
+    expect(isComposerVisible({ ...base, inChangesView: false, stagedCount: 2 })).toBe(false);
+    expect(isComposerVisible({ ...base, statusReady: false, stagedCount: 2 })).toBe(false);
   });
 
-  it("stays one row with only unstaged changes and expands once something is staged or written", () => {
-    expect(getComposerVisibility({ ...base, workingCount: 3 })).toEqual({ visible: true, expanded: false });
-    expect(getComposerVisibility({ ...base, stagedCount: 1 })).toEqual({ visible: true, expanded: true });
-    expect(getComposerVisibility({ ...base, workingCount: 1, draft: "fix: typo" })).toEqual({ visible: true, expanded: true });
+  it("shows it while there is anything to commit", () => {
+    expect(isComposerVisible({ ...base, workingCount: 3 })).toBe(true);
+    expect(isComposerVisible({ ...base, stagedCount: 1 })).toBe(true);
+    expect(isComposerVisible({ ...base, amend: true })).toBe(true);
   });
 
   it("keeps a draft visible after the tree becomes clean so it is never lost from view", () => {
-    expect(getComposerVisibility({ ...base, draft: "unfinished message" }).visible).toBe(true);
-  });
-
-  it("follows the user's own choice except while an option or tool needs the full form", () => {
-    expect(getComposerVisibility({ ...base, stagedCount: 1, expandedOverride: false }).expanded).toBe(false);
-    expect(getComposerVisibility({ ...base, workingCount: 1, expandedOverride: true }).expanded).toBe(true);
-    expect(getComposerVisibility({ ...base, stagedCount: 1, amend: true, expandedOverride: false }).expanded).toBe(true);
-    expect(getComposerVisibility({ ...base, stagedCount: 1, assistantOpen: true, expandedOverride: false }).expanded).toBe(true);
-    expect(getComposerVisibility({ ...base, stagedCount: 1, selectionCount: 2, expandedOverride: false }).expanded).toBe(true);
+    expect(isComposerVisible({ ...base, draft: "unfinished message" })).toBe(true);
+    expect(isComposerVisible({ ...base, draft: "   " })).toBe(false);
   });
 });
 
@@ -36,27 +29,46 @@ function snapshot(files: Array<{ path: string; categories: StatusSnapshotRespons
   return { repoId: "repo", refreshedAtMs: 1, files: files.map((file) => ({ path: file.path, indexStatus: ".", worktreeStatus: "M", kind: file.kind ?? "modified", categories: file.categories, modeChanged: false })) };
 }
 
-describe("working tree selection", () => {
-  it("lists conflicts first and leaves ignored files out of review", () => {
-    const { groups, conflictCount } = summarizeRepositoryStatus(snapshot([
-      { path: "a.txt", categories: ["unstaged"] },
-      { path: "b.txt", categories: ["conflicted"], kind: "conflicted" },
-      { path: "c.log", categories: ["ignored"], kind: "ignored" },
-      { path: "d.txt", categories: ["staged", "unstaged"] },
-    ]));
-    expect(conflictCount).toBe(1);
-    expect(listReviewableFiles(groups).map((file) => `${file.scope}:${file.path}`)).toEqual(["workingTree:b.txt", "index:d.txt", "workingTree:a.txt", "workingTree:d.txt"]);
+describe("change tree", () => {
+  const status = snapshot([
+    { path: "a.txt", categories: ["unstaged"] },
+    { path: "b.txt", categories: ["conflicted"], kind: "conflicted" },
+    { path: "c.log", categories: ["ignored"], kind: "ignored" },
+    { path: "d.txt", categories: ["staged", "unstaged"] },
+    { path: "e.txt", categories: ["staged"], kind: "added" },
+    { path: "new.txt", categories: ["untracked"], kind: "untracked" },
+  ]);
+
+  it("puts tracked changes in one group whatever their index state, apart from unversioned files", () => {
+    const groups = buildChangeTree(status);
+    const byId = Object.fromEntries(groups.map((group) => [group.id, group.files.map(({ file, stage }) => `${file.path}:${stage}`)]));
+    expect(groups.map((group) => group.id)).toEqual(["conflicts", "changes", "unversioned", "ignored"]);
+    expect(byId).toEqual({
+      conflicts: ["b.txt:unstaged"],
+      changes: ["a.txt:unstaged", "d.txt:partial", "e.txt:staged"],
+      unversioned: ["new.txt:unstaged"],
+      ignored: ["c.log:unstaged"],
+    });
+    expect(summarizeRepositoryStatus(status).conflictCount).toBe(1);
   });
 
-  it("keeps a valid selection, follows a file between staged and unstaged, and falls back or clears", () => {
-    const files = listReviewableFiles(summarizeRepositoryStatus(snapshot([
+  it("lists reviewable files in panel order with the diffs each one has", () => {
+    expect(listReviewableFiles(buildChangeTree(status)).map((file) => `${file.path}:${file.scopes.join("+")}`)).toEqual([
+      "b.txt:workingTree", "a.txt:workingTree", "d.txt:workingTree+index", "e.txt:index", "new.txt:workingTree",
+    ]);
+  });
+
+  it("keeps a valid selection, follows a file once it is staged or unstaged, and falls back or clears", () => {
+    const files = listReviewableFiles(buildChangeTree(snapshot([
       { path: "a.txt", categories: ["unstaged"] },
       { path: "b.txt", categories: ["staged"] },
-    ])).groups);
+      { path: "c.txt", categories: ["staged", "unstaged"] },
+    ])));
     expect(reconcileWorkingSelection(files, { path: "a.txt", scope: "workingTree" })).toEqual({ path: "a.txt", scope: "workingTree" });
     expect(reconcileWorkingSelection(files, { path: "b.txt", scope: "workingTree" })).toEqual({ path: "b.txt", scope: "index" });
-    expect(reconcileWorkingSelection(files, { path: "gone.txt", scope: "index" })).toEqual({ path: "b.txt", scope: "index" });
-    expect(reconcileWorkingSelection(files, undefined)).toEqual({ path: "b.txt", scope: "index" });
+    expect(reconcileWorkingSelection(files, { path: "c.txt", scope: "index" })).toEqual({ path: "c.txt", scope: "index" });
+    expect(reconcileWorkingSelection(files, { path: "gone.txt", scope: "index" })).toEqual({ path: "a.txt", scope: "workingTree" });
+    expect(reconcileWorkingSelection(files, undefined)).toEqual({ path: "a.txt", scope: "workingTree" });
     expect(reconcileWorkingSelection([], { path: "a.txt", scope: "workingTree" })).toBeUndefined();
   });
 });
