@@ -24,7 +24,7 @@ export const shortcutActions = [
   { id: "cherryPick", label: "Cherry-pick selected commit", defaultBinding: "Mod+Shift+C" },
   { id: "createTag", label: "Tag selected commit", defaultBinding: "Mod+T" },
   { id: "aiCommitMessage", label: "Generate commit message", defaultBinding: "Mod+G" },
-  { id: "viewChanges", label: "Show Changes", defaultBinding: "Mod+1" },
+  { id: "viewChanges", label: "Show Workspace", defaultBinding: "Mod+1" },
   { id: "viewHistory", label: "Show History", defaultBinding: "Mod+2" },
   { id: "viewBranches", label: "Show Branches", defaultBinding: "Mod+3" },
   { id: "toggleSidebar", label: "Show or hide the sidebar", defaultBinding: "Mod+Shift+B" },

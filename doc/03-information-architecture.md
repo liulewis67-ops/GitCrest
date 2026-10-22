@@ -71,10 +71,10 @@
 
 ```text
 Title Bar: Repo Tabs / Command Palette / Tasks (运行中才突出) / Settings / Core status (正常时只显示圆点)
-Toolbar:   [Changes n | History | Branches]  path   branch ▾  [Fetch | Pull ↓n | Push ↑n]  ◧ ◨
+Toolbar:   [Workspace n | History | Branches]  path   branch ▾  [Fetch | Pull ↓n | Push ↑n]  ◧ ◨
 Banner:    合并/变基/挑选提交/二分查找进行中、冲突（任何视图都显示）
 
-Changes:   提交面板 [Commit | Shelves]（工具栏、变更树、提交编辑器） | 工作区 Diff（全高）
+Workspace: 提交面板 [Commit | Shelves]（工具栏、变更树、提交编辑器） | 工作区 Diff（全高）
 History:   提交列表（搜索 + 可展开筛选） | 所选提交：标题、文件列表、Diff | 可选提交详情
 Branches:  分支浏览器（筛选、本地/远程）、Worktrees、Remotes | 提交图 | 提交详情
 ```
@@ -94,7 +94,7 @@ Branches:  分支浏览器（筛选、本地/远程）、Worktrees、Remotes | �
 | 入口 | 目标 |
 |---|---|
 | 仓库 Tab | 切换仓库上下文 |
-| 视图 Tab（Changes / History / Branches） | 在三个任务视图间切换，唯一的视图导航 |
+| 视图 Tab（Workspace / History / Branches） | 在三个任务视图间切换，唯一的视图导航 |
 | 提交面板变更树 | 冲突 / Changes / Unversioned Files 分组，复选框暂存；点击文件在中央显示 Diff |
 | History 提交列表 | 选择提交后在中央显示其文件与 Diff |
 | 提交图（Branches） | 浏览拓扑；提交详情中的文件跳到 History 查看 Diff |

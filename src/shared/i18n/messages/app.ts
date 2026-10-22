@@ -18,7 +18,7 @@ export const app = {
   "cmd.welcome": ["Go to Welcome", "前往欢迎页"],
   "cmd.welcomeDetail": ["Return to recent repositories and quick actions", "返回最近仓库与快捷操作"],
   "cmd.workspace": ["Go to Workspace", "前往工作区"],
-  "cmd.workspaceDetail": ["Open the Changes, Graph, and Commit workspace", "打开变更、图谱与提交工作区"],
+  "cmd.workspaceDetail": ["Return to the open repositories", "返回已打开的仓库"],
   "cmd.theme": ["Cycle color theme", "切换颜色主题"],
   "cmd.themeDetail": ["Current: {current}; next: {next}", "当前：{current}；下一个：{next}"],
   "cmd.open": ["Open local repository", "打开本地仓库"],

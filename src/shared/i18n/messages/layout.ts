@@ -1,10 +1,10 @@
 export const layout = {
   // Task views
   "view.navAria": ["Workspace views", "工作区视图"],
-  "view.changes": ["Changes", "变更"],
+  "view.changes": ["Workspace", "工作区"],
   "view.history": ["History", "历史"],
   "view.branches": ["Branches", "分支"],
-  "view.changesTitle": ["Review and commit local changes ({shortcut})", "查看并提交本地变更（{shortcut}）"],
+  "view.changesTitle": ["Review, stage and commit local changes ({shortcut})", "查看、暂存并提交本地变更（{shortcut}）"],
   "view.historyTitle": ["Browse commits and what they changed ({shortcut})", "浏览提交及其变更（{shortcut}）"],
   "view.branchesTitle": ["Explore the commit graph and manage branches ({shortcut})", "查看提交图并管理分支（{shortcut}）"],
   "view.changedFiles": ["{count} changed files", "{count} 个已变更文件"],
@@ -134,7 +134,7 @@ export const layout = {
   "shell.tasksRunning": ["{count} running", "{count} 个运行中"],
 
   // Command palette
-  "cmd.viewChanges": ["Show Changes", "显示变更"],
+  "cmd.viewChanges": ["Show Workspace", "显示工作区"],
   "cmd.viewChangesDetail": ["Review, stage and commit local changes ({shortcut})", "查看、暂存并提交本地变更（{shortcut}）"],
   "cmd.viewHistory": ["Show History", "显示历史"],
   "cmd.viewHistoryDetail": ["Browse commits and their diffs ({shortcut})", "浏览提交及其差异（{shortcut}）"],
@@ -150,7 +150,7 @@ export const layout = {
   "cmd.manageRemotesDetail": ["Add, edit, or remove remotes and upstreams in Branches", "在“分支”中添加、编辑或删除远程仓库与上游"],
 
   // Shortcut labels
-  "sc.viewChanges": ["Show Changes", "显示变更"],
+  "sc.viewChanges": ["Show Workspace", "显示工作区"],
   "sc.viewHistory": ["Show History", "显示历史"],
   "sc.viewBranches": ["Show Branches", "显示分支"],
   "sc.toggleSidebar": ["Show or hide the sidebar", "显示或隐藏侧栏"],

@@ -299,7 +299,7 @@ describe("App", () => {
     expect(chooseRepository).toHaveBeenCalledOnce();
     expect(JSON.parse(String(fetcher.mock.calls.find(([input, init]) => new URL(String(input)).pathname === "/api/v1/repositories" && init?.method === "POST")?.[1]?.body))).toEqual({ path: "C:/fixture" });
     // A repository opens in Changes: changed files grouped by state, conflicts first; no branch list here.
-    expect(screen.getByRole("tab", { name: /Changes/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Workspace/ }).getAttribute("aria-selected")).toBe("true");
     // Tracked changes share one group; a checkbox per file says whether it is staged.
     const changes = await screen.findByRole("region", { name: "Changes" });
     expect(screen.getByRole("region", { name: "Unversioned Files" })).toBeDefined();
@@ -637,7 +637,7 @@ describe("App", () => {
     // History never shows the working tree or the commit composer.
     expect(await screen.findByRole("tab", { name: "History", selected: true })).toBeDefined();
     expect(screen.queryByRole("region", { name: "Commit" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Workspace/ }));
     fireEvent.click((await screen.findAllByRole("button", { name: /readme\.txt/ }))[0]);
     expect((await screen.findByLabelText("Side-by-side comparison of readme.txt")).textContent).toBe("old content||new content");
     expect(screen.getByText("Your version")).toBeDefined();
@@ -661,7 +661,7 @@ describe("App", () => {
     expect((within(composer).getByRole("button", { name: "Commit" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.queryByRole("region", { name: "Commit" })).toBeNull();
-    fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Workspace/ }));
     expect(await screen.findByText((_, element) => element?.tagName === "CODE" && element.textContent === "new content")).toBeDefined();
     expect(fetcher.mock.calls.filter(([input]) => new URL(String(input)).pathname.endsWith("/diff")).length).toBeGreaterThanOrEqual(2);
     fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1" }));
@@ -719,7 +719,7 @@ describe("App", () => {
     expect(await screen.findByText("C:/alpha", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(screen.getByRole("tab", { name: "alpha" }).getAttribute("aria-selected")).toBe("true");
     // A tab saved in the old Diff mode reopens in Changes, which has no commit inspector.
-    expect(screen.getByRole("tab", { name: /Changes/ }).getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("tab", { name: /Workspace/ }).getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByRole("complementary", { name: "Commit details" })).toBeNull();
     const separator = screen.getByRole("separator", { name: "Resize repository navigation" });
     expect(separator.getAttribute("aria-valuenow")).toBe("270");
@@ -732,7 +732,7 @@ describe("App", () => {
     // The old Graph mode reopens in History; each tab keeps its own view.
     expect(screen.getByRole("tab", { name: "History" }).getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("separator", { name: "Resize commit list" })).toBeDefined();
-    fireEvent.click(screen.getByRole("tab", { name: /Changes/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Workspace/ }));
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
     const savedSession = JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}");
     expect(savedSession.activeRepoId).toBe("repo_beta");

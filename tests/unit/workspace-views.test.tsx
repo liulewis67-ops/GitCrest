@@ -46,7 +46,7 @@ describe("WorkspacePage", () => {
   it("offers one tab list for the task views and moves between them with arrow keys", () => {
     const { onChangeMode } = renderPage();
     const tabs = within(screen.getByRole("tablist", { name: "Workspace views" })).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Changes3", "History", "Branches"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Workspace3", "History", "Branches"]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("workspace-tab-changes");
     fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
