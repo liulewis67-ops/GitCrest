@@ -722,23 +722,47 @@ button:disabled { cursor: not-allowed; }
 .splitDiffFileMeta small { overflow: hidden; color: var(--text-muted); font: var(--type-2xs) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .diffScopeBadge, .diffStateBadge { flex: 0 0 auto; padding: 3px 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--text-muted); font-size: var(--type-2xs); font-weight: 720; }
 .diffState-binary { color: var(--amber); }.diffState-conflicted { color: var(--git-conflicted); }.diffState-symlink, .diffState-submodule { color: var(--accent-strong); }
-.diffWindow { display: grid; grid-template-rows: auto minmax(0, 1fr); width: 100vw; height: 100vh; overflow: hidden; background: var(--canvas); color: var(--text); }
-/* Frameless on Windows and Linux, so the header is also the window's drag region. */
-.diffWindowHeader { display: flex; align-items: center; gap: 16px; min-width: 0; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--surface-raised); -webkit-app-region: drag; }
-.diffWindowHeader > div:first-child { display: grid; flex: 1; min-width: 0; gap: 4px; padding-block: 10px; }
+.diffWindow { display: flex; flex-direction: column; width: 100vw; height: 100vh; overflow: hidden; background: var(--canvas); color: var(--text); }
+/* The header is the window's title bar, drawn like the main titlebar; frameless windows drag by it. */
+.diffWindowHeader { display: flex; flex: none; align-items: center; gap: var(--space-4); min-width: 0; height: 46px; padding: 0 14px 0 16px; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); background: var(--canvas); -webkit-app-region: drag; }
 .diffWindowHeader button { -webkit-app-region: no-drag; }
-.diffWindowHeader strong { overflow: hidden; font: var(--type-sm) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
-.diffWindowViewToggle { display: flex; gap: 4px; }
-.diffWindowViewToggle button, .commitDetailFileWindow { border: 1px solid var(--line-strong); border-radius: 4px; padding: 5px 9px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
-.diffWindowViewToggle button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
-.diffWindowContent { min-height: 0; overflow: auto; }
+/* The file name stays whole; its directory is what gives way when the window narrows. */
+.diffWindowTitle { display: flex; flex: 1; align-items: center; gap: 9px; min-width: 0; }
+.diffWindowBrand { display: block; flex: none; width: 18px; height: 18px; }
+.diffWindowTitle h1 { display: flex; align-items: baseline; gap: 8px; min-width: 0; margin: 0; overflow: hidden; font-size: var(--type-sm); font-weight: 400; white-space: nowrap; }
+.diffWindowFileName { flex: none; max-width: 100%; overflow: hidden; color: var(--text); font-weight: 650; letter-spacing: -.01em; text-overflow: ellipsis; }
+.diffWindowDirectory { min-width: 0; overflow: hidden; color: var(--text-muted); font: var(--type-xs) var(--font-mono); text-overflow: ellipsis; }
+.diffWindowScope, .diffWindowReadOnly { flex: none; padding: 2px 7px; border-radius: 9px; font-size: var(--type-2xs); font-weight: 650; white-space: nowrap; }
+.diffWindowScope { --scope-color: var(--accent-strong); background: color-mix(in srgb, var(--scope-color) 14%, transparent); color: var(--scope-color); }
+.scope-workingTree { --scope-color: var(--amber); }
+.scope-index { --scope-color: var(--green); }
+.scope-commit { --scope-color: var(--accent-strong); }
+.diffWindowReadOnly { border: 1px solid var(--line-strong); color: var(--text-muted); }
+.diffWindowViewToggle .viewTab { height: 26px; padding: 0 10px 0 8px; font-size: var(--type-xs); }
+.diffWindowViewToggle .viewTab:disabled { opacity: .45; cursor: not-allowed; }
+.diffWindowViewToggle .viewTabIcon { width: 14px; height: 14px; }
+.commitDetailFileWindow { border: 1px solid var(--line-strong); border-radius: 4px; padding: 5px 9px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
+.diffWindowContent { flex: 1; min-height: 0; overflow: auto; background: var(--surface); }
 .diffWindowContent > .splitDiff { min-height: 100%; }
-.diffWindowTabs { display: flex; align-items: stretch; gap: 3px; min-width: 0; overflow-x: auto; padding: 4px 8px 0; border-bottom: 1px solid var(--line); background: var(--surface); }
-.diffWindowTab { display: flex; align-items: center; min-width: 140px; max-width: 280px; border: 1px solid transparent; border-bottom: 0; border-radius: 5px 5px 0 0; color: var(--text-muted); }
-.diffWindowTab.active { border-color: var(--line); background: var(--canvas); color: var(--text); }
-.diffWindowTabSelect { display: grid; flex: 1; min-width: 0; gap: 2px; border: 0; padding: 6px 8px; background: transparent; color: inherit; text-align: left; font: var(--type-sm) var(--font-mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.diffWindowTabSelect span { color: var(--text-muted); font: var(--type-2xs) var(--font-sans); }
-.diffWindowTabClose { border: 0; padding: 5px 7px; background: transparent; color: var(--text-muted); cursor: pointer; }
+/* Without the file row, the navigation row and column labels stick from the top. */
+.splitDiff.noFileMeta .splitDiffNavigation { top: 0; }
+.splitDiff.noFileMeta .splitDiffColumns { top: 32px; }
+/* Sibling files are document tabs hanging from the strip; the active one opens into the diff below. */
+.diffWindowTabs { display: flex; flex: none; align-items: flex-end; gap: 2px; min-width: 0; height: 36px; padding: 0 10px; overflow-x: auto; overflow-y: hidden; background: var(--canvas); box-shadow: inset 0 -1px 0 var(--line); scrollbar-width: none; }
+.diffWindowTabs::-webkit-scrollbar { display: none; }
+.diffWindowTab { position: relative; display: flex; flex: 0 1 auto; align-items: center; min-width: 110px; max-width: 220px; height: 30px; padding-right: 4px; border: 1px solid transparent; border-bottom: 0; border-radius: 7px 7px 0 0; color: var(--text-muted); transition: background-color .12s ease-out; }
+.diffWindowTab:hover:not(.active) { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.diffWindowTab.active { z-index: 1; border-color: var(--line); background: var(--surface-raised); color: var(--text); }
+.diffWindowTab.active::after { position: absolute; top: -1px; right: 9px; left: 9px; height: 2px; border-radius: 0 0 2px 2px; background: var(--accent); content: ""; }
+.diffWindowTabSelect { display: flex; flex: 1; align-items: center; gap: 7px; align-self: stretch; min-width: 0; padding: 0 4px 0 10px; border: 0; background: transparent; color: inherit; font-size: var(--type-xs); font-weight: 520; white-space: nowrap; cursor: pointer; }
+.diffWindowTabSelect:focus-visible { outline-offset: -3px; }
+.diffWindowTab.active .diffWindowTabSelect { font-weight: 600; }
+.diffWindowTabName { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.diffWindowScopeDot { flex: none; width: 7px; height: 7px; border-radius: 50%; background: var(--scope-color, var(--text-muted)); }
+.diffWindowTabClose { display: grid; flex: none; width: 20px; height: 20px; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); opacity: 0; cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out, opacity .12s ease-out; }
+.diffWindowTab.active .diffWindowTabClose, .diffWindowTab:hover .diffWindowTabClose, .diffWindowTab:focus-within .diffWindowTabClose { opacity: 1; }
+.diffWindowTabClose:hover { background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text); }
+.diffWindowTabClose svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
 .diffWindowTabLimit { align-self: center; padding: 4px 9px; color: var(--text-muted); font-size: var(--type-xs); white-space: nowrap; }
 .unifiedDiff { padding-bottom: 28px; font: var(--code-size)/var(--code-leading) var(--font-mono); }
 .unifiedDiffHunk { margin: 0 0 12px; border-bottom: 1px solid var(--line); }

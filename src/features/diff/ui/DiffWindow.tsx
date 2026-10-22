@@ -3,6 +3,7 @@ import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
 import { useCoreRestartCount } from "../../../shared/hooks/use-core-restart-count";
+import { BrandMark } from "../../../shared/ui/BrandMark";
 import { WindowControls } from "../../../shared/ui/WindowControls";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../settings";
 
@@ -171,37 +172,71 @@ export function DiffWindow() {
     if (activeTabKey === tab.key) setActiveTabKey(next[Math.max(0, index - 1)]?.key || next[0]?.key || "");
   }
 
+  const headerPath = activeTab?.path || initialPath;
+  const headerScope = activeTab?.scope || (initialScope as DiffTab["scope"] | null);
+  const toggleTitle = t("dw.toggleTitle", { shortcut: displayShortcut(shortcuts.toggleDiffView, isMac) });
+
   return (
     <main className="diffWindow" aria-label={t("dw.aria")}>
+      {/* The header is the window's title bar: which file and side, how to read it, and the window controls. */}
       <header className="diffWindowHeader">
-        <div><span className="sectionEyebrow">{t("dw.eyebrow")}</span><strong title={activeTab?.path || initialPath}>{activeTab?.path || initialPath || t("dw.fileDiff")}</strong></div>
-        <div className="diffWindowViewToggle" role="group" aria-label={t("dw.layout")}>
-          <button type="button" aria-pressed={view === "split"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={t("dw.toggleTitle", { shortcut: displayShortcut(shortcuts.toggleDiffView, isMac) })} onClick={() => setView("split")}>{t("dw.split")}</button>
-          <button type="button" aria-pressed={view === "unified"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={t("dw.toggleTitle", { shortcut: displayShortcut(shortcuts.toggleDiffView, isMac) })} onClick={() => setView("unified")}>{t("dw.unified")}</button>
-          <button type="button" aria-pressed={view === "blame"} disabled={blameDisabled} title={blameDisabled ? t("dw.blameDisabled") : t("dw.blameShow")} onClick={() => void openBlame()}>{t("dw.blame")}</button>
+        <div className="diffWindowTitle">
+          <BrandMark className="diffWindowBrand" />
+          {headerPath
+            ? <h1 title={headerPath}><span className="diffWindowFileName">{fileName(headerPath)}</span>{directoryName(headerPath) && <span className="diffWindowDirectory">{directoryName(headerPath)}</span>}</h1>
+            : <h1><span className="diffWindowFileName">{t("dw.fileDiff")}</span></h1>}
+          {headerScope && <span className={`diffWindowScope scope-${headerScope}`}>{scopeLabel(headerScope, t)}</span>}
+          <span className="diffWindowReadOnly">{t("dw.readOnly")}</span>
+        </div>
+        <div className="viewSwitcher diffWindowViewToggle" role="group" aria-label={t("dw.layout")}>
+          <button type="button" className={view === "split" ? "viewTab active" : "viewTab"} aria-pressed={view === "split"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={toggleTitle} onClick={() => setView("split")}>
+            <svg className="viewTabIcon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M8 2.5v11" /></svg>{t("dw.split")}
+          </button>
+          <button type="button" className={view === "unified" ? "viewTab active" : "viewTab"} aria-pressed={view === "unified"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={toggleTitle} onClick={() => setView("unified")}>
+            <svg className="viewTabIcon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 8h12" /></svg>{t("dw.unified")}
+          </button>
+          <button type="button" className={view === "blame" ? "viewTab active" : "viewTab"} aria-pressed={view === "blame"} disabled={blameDisabled} title={blameDisabled ? t("dw.blameDisabled") : t("dw.blameShow")} onClick={() => void openBlame()}>
+            <svg className="viewTabIcon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="5" r="2" /><path d="M2 13c0-1.9 1.3-3.2 3-3.2s3 1.3 3 3.2M10 5h4M10 8h4M10 11h4" /></svg>{t("dw.blame")}
+          </button>
         </div>
         <WindowControls controls={getGitCrestBridge()?.windowControls} />
       </header>
-      <nav className="diffWindowTabs" aria-label={t("dw.tabsAria")}>
+      {/* Sibling files only earn a tab strip when there is more than one to move between. */}
+      {tabs.length > 1 && <nav className="diffWindowTabs" aria-label={t("dw.tabsAria")}>
         {tabs.map((tab) => <div className={`diffWindowTab${tab.key === activeTabKey ? " active" : ""}`} key={tab.key}>
-          <button type="button" className="diffWindowTabSelect" aria-current={tab.key === activeTabKey ? "page" : undefined} onClick={() => setActiveTabKey(tab.key)}>
-            <span>{tab.scope === "commit" ? t("dw.tabCommit") : tab.scope === "index" ? t("dw.tabStaged") : t("dw.tabWorktree")}</span>{tab.path}
+          <button type="button" className="diffWindowTabSelect" aria-current={tab.key === activeTabKey ? "page" : undefined} title={`${scopeLabel(tab.scope, t)} · ${tab.path}`} onClick={() => setActiveTabKey(tab.key)}>
+            <span className={`diffWindowScopeDot scope-${tab.scope}`} aria-hidden="true" />
+            <span className="diffWindowTabName">{fileName(tab.path)}</span>
+            <span className="srOnly">{scopeLabel(tab.scope, t)} · {tab.path}</span>
           </button>
-          {tabs.length > 1 && <button type="button" className="diffWindowTabClose" aria-label={t("dw.closeTab", { path: tab.path })} onClick={() => closeTab(tab)}>×</button>}
+          <button type="button" className="diffWindowTabClose" aria-label={t("dw.closeTab", { path: tab.path })} title={t("titlebar.closeTab")} onClick={() => closeTab(tab)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7" /></svg></button>
         </div>)}
         {tabsTruncated && <span className="diffWindowTabLimit" role="status">{t("dw.tabLimit", { count: MAX_DIFF_TABS })}</span>}
-      </nav>
+      </nav>}
       <section className="diffWindowContent" aria-label={t("dw.contentAria")}>
         {error ? <div className="diffSpecialState" role="alert"><p>{error}</p></div>
           : loading && !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
             : view === "blame" ? loading ? <div className="diffSpecialState" role="status">{t("dw.loadingBlame")}</div> : blame ? <BlameView document={blame} /> : <div className="diffSpecialState" role="status">{t("dw.noBlame")}</div>
               : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
                 : view === "split"
-                  ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly /></Suspense>
+                  ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} /></Suspense>
                   : <UnifiedDiff document={document} />}
       </section>
     </main>
   );
+}
+
+function fileName(path: string) {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+
+function directoryName(path: string) {
+  const slash = path.lastIndexOf("/");
+  return slash > 0 ? path.slice(0, slash) : "";
+}
+
+function scopeLabel(scope: DiffTab["scope"], t: ReturnType<typeof useI18n>["t"]) {
+  return scope === "commit" ? t("dw.tabCommit") : scope === "index" ? t("dw.tabStaged") : t("dw.tabWorktree");
 }
 
 function tabKey(path: string, scope: DiffTab["scope"], commitOid?: string) {
@@ -238,14 +273,13 @@ function UnifiedDiff({ document }: { document: DiffDocumentResponse }) {
     return <div className="diffSpecialState" role="status"><span className={`diffStateBadge diffState-${document.status}`}>{document.status}</span><p>{document.status === "binary" ? t("dw.binaryNote") : t("dw.noTextDiff")}</p></div>;
   }
   return <div className="unifiedDiff" aria-label={t("dw.unifiedAria", { path: document.path })}>
-    <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong></div>
     {document.hunks.map((hunk, hunkIndex) => <section className="unifiedDiffHunk" aria-label={t("sd.hunkAria", { n: hunkIndex + 1 })} key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`}>
       <header>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</header>
       {hunk.rows.map((row, rowIndex) => row.kind === "context"
         ? <div className="unifiedDiffRow" role="group" aria-label={t("sd.contextLine", { line: row.oldLine ?? row.newLine ?? t("sd.unknown"), text: row.oldText ?? row.newText ?? "" })} key={rowIndex}><span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code> {row.oldText ?? row.newText ?? ""}</code></div>
         : <Fragment key={rowIndex}>
-          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion" role="group" aria-label={t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })}><span>{row.oldLine ?? ""}</span><span /> <code>-{row.oldText}</code></div>}
-          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition" role="group" aria-label={t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}><span /> <span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
+          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion" role="group" aria-label={t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })}><span>{row.oldLine ?? ""}</span><span /><code>-{row.oldText}</code></div>}
+          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition" role="group" aria-label={t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}><span /><span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
         </Fragment>)}
     </section>)}
   </div>;

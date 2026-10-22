@@ -17,9 +17,11 @@ interface SplitDiffProps {
   readOnly?: boolean;
   onOpenWindow?: () => void;
   onShowFullFile?: () => void;
+  /** Hosts that already name the file and its side, like the Diff window header, drop the file row. */
+  showFileMeta?: boolean;
 }
 
-export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true }: SplitDiffProps) {
   const { t } = useI18n();
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
@@ -70,11 +72,11 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
 
   return (
     <div
-      className="splitDiff"
+      className={showFileMeta ? "splitDiff" : "splitDiff noFileMeta"}
       aria-label={t("sd.diffAria", { scope: document.scope, path: document.path })}
       tabIndex={0}
     >
-      <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>
+      {showFileMeta && <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>}
       <div className="splitDiffNavigation" aria-label={t("sd.navAria")}>
         <span>{navigableHunks.length ? t("sd.changes", { current: activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1, total: navigableHunks.length }) : t("sd.noChanges")}</span>
         {onShowFullFile && <button type="button" title={t("fd.fullFileTitle")} onClick={onShowFullFile}>{t("fd.fullFile")}</button>}
