@@ -840,6 +840,10 @@ button:disabled { cursor: not-allowed; }
 .commitSummaryField input:disabled { opacity: .65; }
 .commitSummaryField { position: relative; display: flex; flex: none; }
 .commitSummaryField input { flex: 1; min-width: 0; padding: 6px 52px 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--canvas); color: var(--text); font-size: var(--type-sm); font-weight: 560; }
+/* The message fields lift on focus instead of taking the hard outline other controls get: a faint accent hairline
+   just outside the edge, and a tight contact shadow beneath it. */
+.commitSummaryField input, .commitDescription { transition: box-shadow .12s ease-out, background-color .12s ease-out; }
+.commitSummaryField input:focus-visible, .commitDescription:focus-visible { outline: none; background: var(--surface-raised); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent), 0 2px 3px -1px rgb(0 0 0 / 14%); }
 .commitSummaryLength { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); color: var(--text-muted); font-size: var(--type-xs); font-variant-numeric: tabular-nums; cursor: default; }
 .commitSummaryLength.over { color: var(--warning); font-weight: 640; }
 .commitAdvisory { margin: 0; color: var(--warning); font-size: var(--type-sm); line-height: 1.35; overflow-wrap: anywhere; }
