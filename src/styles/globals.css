@@ -283,20 +283,33 @@ button:disabled { cursor: not-allowed; }
 .toolbarIcon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .changeTree { flex: 1; min-height: 96px; padding: var(--space-1) var(--space-1) var(--space-2); overflow: auto; }
 .changeTree ul { margin: 0; padding: 0; list-style: none; }
-.changeTreeGroup + .changeTreeGroup { margin-top: 2px; }
-.changeTreeGroupRow, .changeTreeRow { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 28px; border-radius: 5px; }
-.changeTreeGroupRow { padding-right: var(--space-2); }
-.changeTreeRow { padding-left: 22px; }
+/* Two levels that never share an edge: group headers sit flush left and stick while their files
+   scroll; files hang off a guide line, their checkboxes lined up under the group name. */
+.changeTreeGroup + .changeTreeGroup { margin-top: var(--space-1); padding-top: var(--space-1); border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.changeTreeGroupRow, .changeTreeRow { display: flex; align-items: center; min-width: 0; border-radius: 5px; }
+.changeTreeGroupRow { position: sticky; top: 0; z-index: 1; gap: 6px; min-height: 30px; padding-right: var(--space-1); background: var(--surface); }
+.changeTreeGroupRow > .treeCheckbox, .changeTreeGroupRow > .treeCheckboxSpacer { margin-right: 2px; }
+.changeTreeGroup ul { position: relative; margin-left: 22px; padding-bottom: 2px; }
+.changeTreeGroup ul::before { position: absolute; top: 0; bottom: 6px; left: -13px; border-left: 1px solid var(--line); content: ""; }
+.changeTreeRow { gap: var(--space-2); min-height: 28px; padding-left: 22px; }
 .changeTreeRow:hover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
 .changeTreeRow.selected { background: var(--accent-soft); }
-.treeToggle { display: grid; flex: none; width: 18px; height: 18px; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); font-size: var(--type-2xs); cursor: pointer; }
+.changeTreeRow.selected .changeTreeName { font-weight: 600; }
+.treeToggle { display: grid; flex: none; width: 18px; height: 18px; place-items: center; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.treeToggle svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease-out; }
+.treeToggle[aria-expanded="true"] svg { transform: rotate(90deg); }
 .treeToggle:hover { background: var(--surface-raised); color: var(--text); }
 .treeCheckbox { flex: none; width: 14px; height: 14px; margin: 0; accent-color: var(--accent); cursor: pointer; }
 .treeCheckbox:disabled { cursor: not-allowed; opacity: .55; }
 .treeCheckboxSpacer { flex: none; width: 14px; }
-.changeTreeGroupName { padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--type-sm); font-weight: 620; cursor: pointer; }
-.changeTreeGroupCount { color: var(--text-muted); font-size: var(--type-xs); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.changeTreeGroupName { min-width: 0; overflow: hidden; padding: 0; border: 0; background: transparent; color: var(--text); font: inherit; font-size: var(--type-sm); font-weight: 650; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.changeTreeGroupCount { flex: none; display: inline-grid; min-width: 20px; height: 18px; place-items: center; margin-left: auto; padding: 0 6px; border-radius: 9px; background: color-mix(in srgb, var(--text-muted) 14%, transparent); color: var(--text-secondary); font-size: var(--type-2xs); font-weight: 650; font-variant-numeric: tabular-nums; }
+.group-changes .changeTreeGroupCount { background: var(--accent-soft); color: var(--accent-strong); }
 .group-conflicts .changeTreeGroupName { color: var(--git-conflicted); }
+.group-conflicts .changeTreeGroupCount { background: color-mix(in srgb, var(--git-conflicted) 16%, transparent); color: var(--git-conflicted); }
+.group-ignored .changeTreeGroupName { color: var(--text-secondary); font-weight: 560; }
+/* Status letters inside the tree are soft chips, so the file name stays the loudest thing on the row. */
+.changeTree .statusFileCode { flex: 0 0 18px; height: 18px; border: 0; border-radius: 4px; background: color-mix(in srgb, currentColor 14%, transparent); }
 .changeTreeFile { display: flex; flex: 1; align-items: baseline; gap: 6px; min-width: 0; min-height: 26px; padding: 3px var(--space-2) 3px 0; border: 0; background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--type-sm); text-align: left; white-space: nowrap; cursor: pointer; }
 .changeTreeFile .statusFileCode { align-self: center; }
 .changeTreeFile:focus-visible { outline-offset: -2px; }

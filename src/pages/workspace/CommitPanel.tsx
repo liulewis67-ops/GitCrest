@@ -189,7 +189,7 @@ export function CommitPanel({
             return (
               <section className={`changeTreeGroup group-${group.id}`} key={group.id} aria-label={label}>
                 <div className="changeTreeGroupRow">
-                  <button className="treeToggle" type="button" aria-expanded={open} aria-label={open ? t("cp.collapseGroup", { group: label }) : t("cp.expandGroup", { group: label })} onClick={() => toggleGroup(group.id)}><span aria-hidden="true">{open ? "▾" : "▸"}</span></button>
+                  <button className="treeToggle" type="button" aria-expanded={open} aria-label={open ? t("cp.collapseGroup", { group: label }) : t("cp.expandGroup", { group: label })} onClick={() => toggleGroup(group.id)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m6 4 4 4-4 4" /></svg></button>
                   {checkable ? <Checkbox
                     checked={allStaged}
                     indeterminate={someStaged && !allStaged}
@@ -198,7 +198,7 @@ export function CommitPanel({
                     onToggle={() => toggleGroupFiles(group.files)}
                   /> : <span className="treeCheckboxSpacer" aria-hidden="true" />}
                   <button className="changeTreeGroupName" type="button" tabIndex={-1} onClick={() => toggleGroup(group.id)}>{label}</button>
-                  <span className="changeTreeGroupCount">{filesLabel(group.files.length)}</span>
+                  <span className="changeTreeGroupCount" title={filesLabel(group.files.length)}><span aria-hidden="true">{group.files.length}</span><span className="srOnly">{filesLabel(group.files.length)}</span></span>
                 </div>
                 {open && <ul>{group.files.map((entry) => fileRow(group.id, entry))}</ul>}
               </section>
