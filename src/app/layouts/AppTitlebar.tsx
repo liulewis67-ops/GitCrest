@@ -1,12 +1,16 @@
+import { getGitCrestBridge } from "../../api/bridge";
 import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 import { useI18n } from "../../shared/i18n";
 import { BrandMark } from "../../shared/ui/BrandMark";
+import { WindowControls } from "../../shared/ui/WindowControls";
 import { NewRepositoryTabMenu } from "./NewRepositoryTabMenu";
 import { SettingsMenu } from "./SettingsMenu";
 
 export type AppPage = "welcome" | "workspace";
+
+const windowControls = getGitCrestBridge()?.windowControls;
 
 interface AppTitlebarProps {
   page: AppPage;
@@ -109,6 +113,7 @@ export function AppTitlebar({
         <span className={connected ? "srOnly" : undefined}>{connectionLabel}</span>
       </div>
       {!connected && !connecting && onRestartCore && <button className="quietButton compact" type="button" title={status} onClick={onRestartCore}>{t("titlebar.restartCore")}</button>}
+      <WindowControls controls={windowControls} />
     </header>
   );
 }

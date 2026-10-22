@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
 import { useCoreRestartCount } from "../../../shared/hooks/use-core-restart-count";
+import { WindowControls } from "../../../shared/ui/WindowControls";
 import { baseForBlock, choiceText, findConflictBlocks, replaceConflictBlock, type ConflictBlock } from "../model/conflict-blocks";
 import { splitLines } from "../model/line-diff";
 import { countConflicts, merge3, renderMerge3, type NonConflictingMode } from "../model/merge3";
@@ -321,6 +322,7 @@ export function ConflictWindow() {
     <header className="conflictWindowHeader">
       <div><p className="sectionEyebrow">{t("cf.eyebrow", { op: currentSession.data?.operation || t("cf.workflow") })}</p><h1>{t("cf.title")}</h1></div>
       <div className="conflictWindowProgress" role="status">{currentSession.data ? t("cf.unresolved", { count: currentSession.data.conflictedPaths.length }) : t("cf.waiting")}</div>
+      <WindowControls controls={getGitCrestBridge()?.windowControls} />
     </header>
     {currentSession.error && <p className="taskCenterError" role="alert">{currentSession.error}</p>}
     {currentSession.loading && <p className="diffSpecialState" role="status">{t("cf.loadingTask")}</p>}

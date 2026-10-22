@@ -1,6 +1,7 @@
 import type { CoreStatus } from "./core-status";
 import type { UpdateStatus } from "./update-status";
 import type { components } from "./schema";
+import type { WindowControlsBridge } from "../shared/ui/WindowControls";
 
 export interface GitCrestSidecarConnection {
   baseUrl: string;
@@ -11,6 +12,8 @@ export interface GitCrestSidecarConnection {
 export type GitCrestEventEnvelope = components["schemas"]["EventEnvelope"];
 
 export interface GitCrestBridge {
+  /** Present in frameless windows (Windows and Linux), whose headers draw their own controls. */
+  windowControls?: WindowControlsBridge;
   getSidecarConnection: () => Promise<GitCrestSidecarConnection>;
   chooseRepository: () => Promise<string | undefined>;
   chooseCloneParent: () => Promise<string | undefined>;

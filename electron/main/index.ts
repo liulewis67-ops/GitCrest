@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BrowserWindow, app, dialog, ipcMain, shell, type WebContents } from "electron";
+import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type { CoreStatus } from "../../src/api/core-status";
 import { CoreRestartPolicy } from "./core-supervisor";
 import { onSidecarUnexpectedExit, startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
@@ -230,6 +230,26 @@ ipcMain.handle("gitcrest:choose-clone-parent", async (event) => {
   return selection.canceled ? undefined : selection.filePaths[0];
 });
 
+function senderWindow(event: IpcMainInvokeEvent): BrowserWindow {
+  const window = BrowserWindow.fromWebContents(event.sender);
+  if (!window || !windowAccessByContentsId.has(event.sender.id)) {
+    throw new Error("This window is not authorized to control its frame.");
+  }
+  return window;
+}
+
+ipcMain.handle("gitcrest:window-control", (event, action: unknown) => {
+  const window = senderWindow(event);
+  if (action === "minimize") window.minimize();
+  else if (action === "toggleMaximize") {
+    if (window.isMaximized()) window.unmaximize();
+    else window.maximize();
+  } else if (action === "close") window.close();
+  else throw new Error("Unknown window control.");
+});
+
+ipcMain.handle("gitcrest:is-window-maximized", (event) => senderWindow(event).isMaximized());
+
 function connectEventStream(contentsId: number, stream: EventStream): void {
   if (stream.stopped || stream.webContents.isDestroyed() || !sidecarConnection) {
     return;
@@ -389,16 +409,13 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), "build/icons/256x256.png") }),
     title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? "Resolve conflicts · GitCrest" : "GitCrest",
     show: false,
-    // The main and conflict-resolution windows drop the native title bar; their in-app header acts as the drag
-    // region and Windows/Linux keep native window controls through a transparent overlay.
-    ...(diffRequest
-      ? {}
-      : {
-          titleBarStyle: "hidden" as const,
-          ...(process.platform === "darwin"
-            ? { trafficLightPosition: { x: 14, y: 15 } }
-            : { titleBarOverlay: { color: "#00000000", symbolColor: "#8a96a5", height: 46 } }),
-        }),
+    // Windows and Linux windows are frameless: each in-app header is the drag region and draws its own window
+    // controls. macOS keeps the traffic lights over the main and conflict headers, and a native frame on Diff windows.
+    ...(process.platform !== "darwin"
+      ? { frame: false }
+      : diffRequest
+        ? {}
+        : { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 14, y: 15 } }),
     webPreferences: {
       preload: join(__dirname, "../preload/index.mjs"),
       contextIsolation: true,
@@ -410,6 +427,9 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
   window.once("ready-to-show", () => {
     window.show();
   });
+  // The drawn maximize button swaps to a restore icon, however the window got maximized.
+  window.on("maximize", () => window.webContents.send("gitcrest:window-maximized", true));
+  window.on("unmaximize", () => window.webContents.send("gitcrest:window-maximized", false));
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     openExternalHttpUrl(url);

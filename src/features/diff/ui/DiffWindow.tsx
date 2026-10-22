@@ -3,6 +3,7 @@ import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
 import { useCoreRestartCount } from "../../../shared/hooks/use-core-restart-count";
+import { WindowControls } from "../../../shared/ui/WindowControls";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../settings";
 
 type View = "split" | "unified" | "blame";
@@ -179,6 +180,7 @@ export function DiffWindow() {
           <button type="button" aria-pressed={view === "unified"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={t("dw.toggleTitle", { shortcut: displayShortcut(shortcuts.toggleDiffView, isMac) })} onClick={() => setView("unified")}>{t("dw.unified")}</button>
           <button type="button" aria-pressed={view === "blame"} disabled={blameDisabled} title={blameDisabled ? t("dw.blameDisabled") : t("dw.blameShow")} onClick={() => void openBlame()}>{t("dw.blame")}</button>
         </div>
+        <WindowControls controls={getGitCrestBridge()?.windowControls} />
       </header>
       <nav className="diffWindowTabs" aria-label={t("dw.tabsAria")}>
         {tabs.map((tab) => <div className={`diffWindowTab${tab.key === activeTabKey ? " active" : ""}`} key={tab.key}>

@@ -23,7 +23,21 @@ export interface ConflictWindowRequest {
   taskId: string;
 }
 
+// Only frameless windows draw their own controls; macOS keeps its native traffic lights.
+const windowControls = process.platform === "darwin" ? undefined : {
+  minimize: (): Promise<void> => ipcRenderer.invoke("gitcrest:window-control", "minimize"),
+  toggleMaximize: (): Promise<void> => ipcRenderer.invoke("gitcrest:window-control", "toggleMaximize"),
+  close: (): Promise<void> => ipcRenderer.invoke("gitcrest:window-control", "close"),
+  isMaximized: (): Promise<boolean> => ipcRenderer.invoke("gitcrest:is-window-maximized"),
+  subscribeToMaximized: (listener: (maximized: boolean) => void): (() => void) => {
+    const handleMaximized = (_event: Electron.IpcRendererEvent, maximized: boolean): void => listener(maximized);
+    ipcRenderer.on("gitcrest:window-maximized", handleMaximized);
+    return () => ipcRenderer.removeListener("gitcrest:window-maximized", handleMaximized);
+  },
+};
+
 const api = {
+  windowControls,
   getSidecarConnection: (): Promise<SidecarConnection> => {
     return ipcRenderer.invoke("gitcrest:get-sidecar-connection");
   },

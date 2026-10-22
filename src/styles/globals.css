@@ -97,8 +97,7 @@ button:disabled { cursor: not-allowed; }
   align-items: center;
   gap: 16px;
   min-width: 0;
-  /* Right inset keeps content clear of the native window-controls overlay. */
-  padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + 14px) 0 18px;
+  padding: 0 14px 0 18px;
   border-top: 1px solid var(--line-strong);
   /* The bottom rule is painted as an inset shadow so the active repository tab can cover it
      and open straight into the workspace toolbar underneath. */
@@ -108,6 +107,16 @@ button:disabled { cursor: not-allowed; }
 }
 
 .titlebar button, .titlebar nav, .titlebar .connectionBadge { -webkit-app-region: no-drag; }
+/* Window controls drawn by frameless windows: full header height, flush with the right edge. */
+.windowControls { display: flex; flex: none; align-self: stretch; -webkit-app-region: no-drag; }
+.windowControls button { display: grid; width: 46px; place-items: center; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--text-secondary); cursor: default; transition: background-color .1s ease-out, color .1s ease-out; }
+.windowControls button:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+.windowControls button:active { background: color-mix(in srgb, var(--text) 16%, transparent); }
+.windowControls .windowClose:hover, .windowControls .windowClose:active { background: #c42b1c; color: #fff; }
+.windowControls button:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+.windowControls svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1; shape-rendering: crispEdges; }
+.windowControls .windowClose svg { shape-rendering: geometricPrecision; }
+.titlebar:has(> .windowControls), .conflictWindowHeader:has(> .windowControls), .diffWindowHeader:has(> .windowControls) { padding-right: 0; }
 /* Repository tabs are document tabs: they hang from the bottom of the titlebar, and the active
    one shares the toolbar's surface so the tab and its workspace read as one sheet. */
 .repositoryTabs { display: flex; align-self: stretch; align-items: flex-end; min-width: 0; margin-left: 10px; padding-top: 7px; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
@@ -578,8 +587,8 @@ button:disabled { cursor: not-allowed; }
 .workflowRecovery { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .workflowRecovery .taskCenterActions { flex-wrap: wrap; align-items: center; }
 .conflictWindow { display: flex; flex-direction: column; min-width: 0; min-height: 100vh; background: var(--canvas); color: var(--text); }
-/* Same drawn title bar as the main window: top rule, drag region, and room for the window-controls overlay. */
-.conflictWindowHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 46px; padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + 14px) 0 18px; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); background: var(--surface); -webkit-app-region: drag; }
+/* Same drawn title bar as the main window: top rule, drag region, and the window controls at the right. */
+.conflictWindowHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 46px; padding: 0 14px 0 18px; border-top: 1px solid var(--line-strong); border-bottom: 1px solid var(--line); background: var(--surface); -webkit-app-region: drag; }
 .conflictWindowHeader > div:first-child { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
 .conflictWindowHeader .sectionEyebrow { margin: 0; }
 .conflictWindowHeader h1 { margin: 0; font-size: var(--type-sm); font-weight: 650; letter-spacing: -.01em; }
@@ -714,8 +723,10 @@ button:disabled { cursor: not-allowed; }
 .diffScopeBadge, .diffStateBadge { flex: 0 0 auto; padding: 3px 5px; border: 1px solid var(--line); border-radius: 3px; color: var(--text-muted); font-size: var(--type-2xs); font-weight: 720; }
 .diffState-binary { color: var(--amber); }.diffState-conflicted { color: var(--git-conflicted); }.diffState-symlink, .diffState-submodule { color: var(--accent-strong); }
 .diffWindow { display: grid; grid-template-rows: auto minmax(0, 1fr); width: 100vw; height: 100vh; overflow: hidden; background: var(--canvas); color: var(--text); }
-.diffWindowHeader { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-raised); }
-.diffWindowHeader > div:first-child { display: grid; min-width: 0; gap: 4px; }
+/* Frameless on Windows and Linux, so the header is also the window's drag region. */
+.diffWindowHeader { display: flex; align-items: center; gap: 16px; min-width: 0; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--surface-raised); -webkit-app-region: drag; }
+.diffWindowHeader > div:first-child { display: grid; flex: 1; min-width: 0; gap: 4px; padding-block: 10px; }
+.diffWindowHeader button { -webkit-app-region: no-drag; }
 .diffWindowHeader strong { overflow: hidden; font: var(--type-sm) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .diffWindowViewToggle { display: flex; gap: 4px; }
 .diffWindowViewToggle button, .commitDetailFileWindow { border: 1px solid var(--line-strong); border-radius: 4px; padding: 5px 9px; background: var(--surface); color: var(--text-secondary); cursor: pointer; }
