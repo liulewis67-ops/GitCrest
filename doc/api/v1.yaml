@@ -581,6 +581,11 @@ paths:
           in: query
           required: true
           schema: { type: string, minLength: 1, maxLength: 255 }
+        - name: remote
+          in: query
+          required: false
+          description: The name is a remote-tracking branch such as origin/feature. It is compared with its last fetched state.
+          schema: { type: boolean, default: false }
       responses:
         "200":
           description: Branch switch preflight details.
@@ -607,12 +612,16 @@ paths:
         schema: { $ref: "#/components/schemas/RepoId" }
     post:
       operationId: switchRepositoryBranch
-      summary: Queue a local branch switch when local changes do not overlap the target branch
+      summary: Queue a branch switch when local changes do not overlap the target branch
+      description: >-
+        With remote set, the remote branch is fetched first and checked out through a local
+        tracking branch: an existing one is fast-forwarded when it has no commits of its own,
+        otherwise a new one named after the remote branch is created.
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/BranchNameRequest" }
+            schema: { $ref: "#/components/schemas/BranchSwitchRequest" }
       responses:
         "202":
           description: Switch task accepted.
@@ -4129,14 +4138,30 @@ components:
       properties:
         fullName: { type: string, minLength: 1 }
         favorite: { type: boolean }
+    BranchSwitchRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        remote:
+          type: boolean
+          default: false
+          description: The name is a remote-tracking branch such as origin/feature.
     BranchSwitchPreflight:
       type: object
       additionalProperties: false
-      required: [repoId, current, target, isClean, dirtyFiles, potentiallyOverwrittenPaths]
+      required: [repoId, current, target, localBranch, createsLocalBranch, isClean, dirtyFiles, potentiallyOverwrittenPaths]
       properties:
         repoId: { $ref: "#/components/schemas/RepoId" }
         current: { type: [string, "null"] }
         target: { type: string }
+        localBranch:
+          type: string
+          description: The local branch that will be checked out; for a remote target, the branch that tracks it.
+        createsLocalBranch:
+          type: boolean
+          description: No local branch tracks the remote target yet, so one is created.
         isClean: { type: boolean }
         dirtyFiles: { type: array, items: { type: string } }
         potentiallyOverwrittenPaths: { type: array, items: { type: string } }

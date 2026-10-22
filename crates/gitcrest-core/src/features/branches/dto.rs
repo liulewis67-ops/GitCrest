@@ -13,6 +13,10 @@ pub(super) struct BranchSwitchPreflight {
     pub(super) repo_id: String,
     pub(super) current: Option<String>,
     pub(super) target: String,
+    /// The local branch that will be checked out; for a remote target, the branch that tracks it.
+    pub(super) local_branch: String,
+    /// A remote target has no local branch tracking it yet, so one is created.
+    pub(super) creates_local_branch: bool,
     pub(super) is_clean: bool,
     pub(super) dirty_files: Vec<String>,
     pub(super) potentially_overwritten_paths: Vec<String>,
@@ -22,12 +26,19 @@ pub(super) struct BranchSwitchPreflight {
 #[serde(deny_unknown_fields)]
 pub(super) struct BranchNameQuery {
     pub(super) name: String,
+    /// `name` is a remote-tracking branch such as `origin/feature`.
+    #[serde(default)]
+    pub(super) remote: bool,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct SwitchBranchRequest {
     pub(super) name: String,
+    /// `name` is a remote-tracking branch such as `origin/feature`: it is fetched first, then
+    /// checked out through a local tracking branch that is created or fast-forwarded as needed.
+    #[serde(default)]
+    pub(super) remote: bool,
 }
 
 #[derive(Deserialize)]

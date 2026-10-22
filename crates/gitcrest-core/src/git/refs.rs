@@ -94,7 +94,12 @@ impl BranchGitPort for GitBranchAdapter {
     ) -> BranchGitFuture<'a, Vec<String>> {
         Box::pin(async move {
             let current_ref = normalize_current_ref(current);
-            let target_ref = format!("refs/heads/{target}");
+            // A full ref such as refs/remotes/origin/feature is used as is; a bare name is a local branch.
+            let target_ref = if target.starts_with("refs/") {
+                target.to_owned()
+            } else {
+                format!("refs/heads/{target}")
+            };
             let output = self
                 .run_git(
                     repository_path,

@@ -452,6 +452,34 @@ impl GitCommandService {
         .await
     }
 
+    /// Fetches one branch of one remote, refreshing its remote-tracking ref.
+    pub async fn fetch_remote_branch(
+        &self,
+        repository_path: &Path,
+        remote_name: &str,
+        remote_branch: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        run_command(
+            &self.git_program,
+            vec![
+                "fetch".into(),
+                "--progress".into(),
+                "--".into(),
+                remote_name.into(),
+                remote_branch.into(),
+            ],
+            None,
+            None,
+            Vec::new(),
+            askpass_environment(&self.account_selections)?,
+            Some(repository_path),
+            "Fetch remote branch",
+            task,
+        )
+        .await
+    }
+
     pub async fn execute_pull(
         &self,
         repository_path: &Path,
@@ -889,6 +917,35 @@ impl GitCommandService {
                     name.into(),
                 ],
                 "Switch branch",
+            ),
+            BranchCommand::SwitchTracking {
+                local_branch,
+                remote_ref,
+            } => (
+                vec![
+                    "switch".into(),
+                    "--track".into(),
+                    "--create".into(),
+                    local_branch.into(),
+                    "--".into(),
+                    remote_ref.into(),
+                ],
+                "Create tracking branch and switch",
+            ),
+            BranchCommand::FastForward {
+                name,
+                new_oid,
+                expected_oid,
+            } => (
+                vec![
+                    "update-ref".into(),
+                    "-m".into(),
+                    "gitcrest: fast-forward to remote branch".into(),
+                    format!("refs/heads/{name}").into(),
+                    new_oid.into(),
+                    expected_oid.into(),
+                ],
+                "Fast-forward branch",
             ),
             BranchCommand::WorktreeAdd { branch, path } => (
                 vec![

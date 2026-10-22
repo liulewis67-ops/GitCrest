@@ -826,7 +826,13 @@ button:disabled { cursor: not-allowed; }
 .branchChoice:hover:not(:disabled), .branchChoice:focus-visible, .branchChoice.active:not(:disabled) { border-color: var(--line-strong); background: var(--accent-soft); }
 .branchChoice > span:nth-child(2) { overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
 .branchFavoriteMark { color: var(--amber); }
-.branchRemoteNote, .branchSwitcherHint { margin: 0; color: var(--text-muted); font-size: var(--type-xs); line-height: 1.5; }
+/* Remote branches: a cloud glyph, and a tag saying whether a local branch is updated or created. */
+.branchSwitchChoices h3.branchChoicesHeading { margin-top: var(--space-2); }
+.branchChoice .remoteGlyph { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
+.branchChoiceTag { flex: none; max-width: 45%; overflow: hidden; padding: 1px 7px; border-radius: 9px; background: color-mix(in srgb, var(--text-muted) 12%, transparent); color: var(--text-muted); font-size: var(--type-2xs); text-overflow: ellipsis; white-space: nowrap; }
+.branchChoiceTag.new { background: var(--accent-soft); color: var(--accent-strong); }
+.branchRemotePlan { margin: 0; padding: var(--space-2) 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.5; }
+.branchSwitcherHint { margin: 0; color: var(--text-muted); font-size: var(--type-xs); line-height: 1.5; }
 .branchSwitcherHint { display: flex; align-items: center; gap: 8px; border-top: 1px solid var(--line); padding-top: 9px; }
 .branchSwitcherHint span { margin-left: auto; }
 .branchSwitcherHint kbd { padding: 2px 4px; border: 1px solid var(--line-strong); border-radius: 3px; background: var(--surface); font: inherit; }

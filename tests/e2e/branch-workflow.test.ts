@@ -77,7 +77,7 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     // Create a branch and switch to it by typing a new name in the switcher and pressing Enter.
     await window.keyboard.press("Control+b");
     const switcher = window.getByRole("dialog", { name: "Switch branch" });
-    const filter = switcher.getByRole("searchbox", { name: "Filter local branches" });
+    const filter = switcher.getByRole("searchbox", { name: "Filter branches" });
     await filter.fill("feature/ux");
     await filter.press("Enter");
     await expect.poll(() => git(fixture.path, "rev-parse", "--abbrev-ref", "HEAD"), { timeout: 15_000 }).toBe("feature/ux");
@@ -87,13 +87,13 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     const worktreePath = resolve(worktreeParent, "wt-folder");
     await window.keyboard.press("Control+b");
     const second = window.getByRole("dialog", { name: "Switch branch" });
-    await second.getByRole("searchbox", { name: "Filter local branches" }).fill("feature/wt");
+    await second.getByRole("searchbox", { name: "Filter branches" }).fill("feature/wt");
     await second.getByRole("textbox", { name: "Worktree folder" }).fill(fixture.path);
     await second.getByText(/already contains files/).waitFor({ timeout: 10_000 });
     expect(await second.getByRole("button", { name: /in a new worktree/ }).isDisabled()).toBe(true);
     await second.getByRole("textbox", { name: "Worktree folder" }).fill(worktreePath);
     // Shift+Enter from the filter box creates the typed name in the worktree folder.
-    await second.getByRole("searchbox", { name: "Filter local branches" }).press("Shift+Enter");
+    await second.getByRole("searchbox", { name: "Filter branches" }).press("Shift+Enter");
     await expect.poll(() => access(resolve(worktreePath, ".git")).then(() => true, () => false), { timeout: 15_000 }).toBe(true);
     await expect.poll(() => git(worktreePath, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/wt");
 

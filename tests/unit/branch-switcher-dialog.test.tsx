@@ -21,7 +21,7 @@ function renderDialog(onOpenWorktree?: (path: string) => void, extra: BranchSnap
   render(<BranchSwitcherDialog
     repository={repository}
     branchSwitcher={branchSwitcher}
-    branches={[branch("main", true), branch("feature/alpha"), branch("feature/beta"), branch("release"), ...extra]}
+    branches={[{ ...branch("main", true), upstream: "origin/main" }, branch("feature/alpha"), branch("feature/beta"), branch("release"), ...extra]}
     hasBranchSnapshot
     branchesLoading={false}
     connected
@@ -33,7 +33,7 @@ function renderDialog(onOpenWorktree?: (path: string) => void, extra: BranchSnap
     onShelveAndSwitch={vi.fn()}
     onOpenWorktree={onOpenWorktree}
   />);
-  return { inspect, createBranch, filter: screen.getByRole("searchbox", { name: "Filter local branches" }) };
+  return { inspect, createBranch, filter: screen.getByRole("searchbox", { name: "Filter branches" }) };
 }
 
 it("moves through the filtered branches with the arrow keys and switches to the highlighted one", () => {
@@ -79,7 +79,7 @@ it("flags a non-empty worktree folder for a new branch before anything is submit
     openSwitcher: vi.fn(), close: vi.fn(), chooseAnother: vi.fn(), inspect: vi.fn(), continueSwitch: vi.fn(), createBranch: vi.fn(), reviewAfterShelf: vi.fn(), runWhileBusy: vi.fn(),
   } as unknown as Parameters<typeof BranchSwitcherDialog>[0]["branchSwitcher"];
   render(<BranchSwitcherDialog repository={repository} branchSwitcher={branchSwitcher} branches={[branch("main", true)]} hasBranchSnapshot branchesLoading={false} connected hasActiveRepositoryTask={false} branchSwitcherShortcut="Ctrl+B" shelveShortcut="Ctrl+Shift+S" shelveAriaShortcut="Control+Shift+S" onCommitChanges={vi.fn()} onShelveAndSwitch={vi.fn()} api={api} />);
-  fireEvent.change(screen.getByRole("searchbox", { name: "Filter local branches" }), { target: { value: "brand-new" } });
+  fireEvent.change(screen.getByRole("searchbox", { name: "Filter branches" }), { target: { value: "brand-new" } });
   expect((await screen.findByRole("alert", {}, { timeout: 2000 })).textContent).toContain("already contains files");
   expect((screen.getByRole("button", { name: /in a new worktree/ }) as HTMLButtonElement).disabled).toBe(true);
   expect(checkWorktreeFolder).toHaveBeenCalledWith("repo_x", "C:/work/repo-brand-new");
@@ -95,4 +95,29 @@ it("creates the typed branch in a new worktree with Shift+Enter, but only when a
   fireEvent.change(filter, { target: { value: "brand-new" } });
   fireEvent.keyDown(filter, { key: "Enter", shiftKey: true });
   expect(createBranch).toHaveBeenCalledWith("brand-new", { worktreePath: "C:/work/repo-brand-new" });
+});
+
+const remote = (name: string): BranchSnapshotResponse["branches"][number] => ({
+  name, fullName: `refs/remotes/${name}`, oid: "c".repeat(40), kind: "remote", isCurrent: false, isFavorite: false, upstream: null, upstreamGone: false, ahead: null, behind: null,
+});
+
+it("lists remote branches after the local ones and inspects them as remote targets", () => {
+  const { inspect, filter } = renderDialog(undefined, [
+    { ...branch("feature/beta"), name: "feature/tracked", fullName: "refs/heads/feature/tracked", upstream: "origin/feature/tracked" },
+    remote("origin/HEAD"),
+    remote("origin/main"),
+    remote("origin/feature/tracked"),
+    remote("origin/feature/fresh"),
+  ]);
+  expect(screen.getByRole("heading", { name: "Remote branches" })).toBeTruthy();
+  // The current branch's own upstream and the symbolic origin/HEAD are not switch targets.
+  expect(screen.queryByRole("button", { name: /origin\/main/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: /origin\/HEAD/ })).toBeNull();
+  expect(screen.getByRole("button", { name: /origin\/feature\/tracked.*updates feature\/tracked/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: /origin\/feature\/fresh.*new local branch/ }));
+  expect(inspect).toHaveBeenLastCalledWith("origin/feature/fresh", true);
+
+  fireEvent.change(filter, { target: { value: "fresh" } });
+  fireEvent.keyDown(filter, { key: "Enter" });
+  expect(inspect).toHaveBeenLastCalledWith("origin/feature/fresh", true);
 });

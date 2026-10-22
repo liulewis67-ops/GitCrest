@@ -9,6 +9,19 @@ pub(crate) enum BranchCommand {
     Switch {
         name: String,
     },
+    /// Creates `local_branch` at `remote_ref` (for example `origin/feature`), sets it to track
+    /// that remote branch, and checks it out.
+    SwitchTracking {
+        local_branch: String,
+        remote_ref: String,
+    },
+    /// Moves a local branch that is not checked out forward to `new_oid`, but only while it still
+    /// points at `expected_oid`.
+    FastForward {
+        name: String,
+        new_oid: String,
+        expected_oid: String,
+    },
     WorktreeAdd {
         branch: String,
         path: String,

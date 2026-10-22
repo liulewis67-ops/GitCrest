@@ -269,7 +269,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Queue a local branch switch when local changes do not overlap the target branch */
+        /**
+         * Queue a branch switch when local changes do not overlap the target branch
+         * @description With remote set, the remote branch is fetched first and checked out through a local tracking branch: an existing one is fast-forwarded when it has no commits of its own, otherwise a new one named after the remote branch is created.
+         */
         post: operations["switchRepositoryBranch"];
         delete?: never;
         options?: never;
@@ -1911,10 +1914,22 @@ export interface components {
             fullName: string;
             favorite: boolean;
         };
+        BranchSwitchRequest: {
+            name: string;
+            /**
+             * @description The name is a remote-tracking branch such as origin/feature.
+             * @default false
+             */
+            remote: boolean;
+        };
         BranchSwitchPreflight: {
             repoId: components["schemas"]["RepoId"];
             current: string | null;
             target: string;
+            /** @description The local branch that will be checked out; for a remote target, the branch that tracks it. */
+            localBranch: string;
+            /** @description No local branch tracks the remote target yet, so one is created. */
+            createsLocalBranch: boolean;
             isClean: boolean;
             dirtyFiles: string[];
             potentiallyOverwrittenPaths: string[];
@@ -3308,6 +3323,8 @@ export interface operations {
         parameters: {
             query: {
                 name: string;
+                /** @description The name is a remote-tracking branch such as origin/feature. It is compared with its last fetched state. */
+                remote?: boolean;
             };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
@@ -3357,7 +3374,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["BranchNameRequest"];
+                "application/json": components["schemas"]["BranchSwitchRequest"];
             };
         };
         responses: {

@@ -74,7 +74,16 @@ export function BranchSwitcherDialog({
   const localBranches = query
     ? allLocalBranches.filter((branch) => branch.name.toLowerCase().includes(query))
     : allLocalBranches;
-  const hasRemoteBranches = branches.some((branch) => branch.kind === "remote");
+  // Remote branches switch through a local tracking branch; the one the current branch tracks is a pull, not a switch.
+  const currentUpstream = branches.find((branch) => branch.kind === "local" && branch.isCurrent)?.upstream;
+  const trackedBy = new Map(branches.filter((branch) => branch.kind === "local" && branch.upstream).map((branch) => [branch.upstream!, branch.name]));
+  const allRemoteBranches = branches.filter((branch) => branch.kind === "remote" && !branch.fullName.endsWith("/HEAD") && branch.name !== currentUpstream);
+  const remoteBranches = query
+    ? allRemoteBranches.filter((branch) => branch.name.toLowerCase().includes(query))
+    : allRemoteBranches;
+  const choices = [...localBranches.map((branch) => ({ branch, remote: false })), ...remoteBranches.map((branch) => ({ branch, remote: true }))];
+  const highlightedIndex = Math.min(cursor, choices.length - 1);
+  const targetPreflight = branchSwitcher.preflight;
   const currentBranch = repository.detached
     ? t("bs.detached", { oid: repository.head?.slice(0, 7) ?? "" })
     : repository.branch || t("bs.unborn");
@@ -107,6 +116,9 @@ export function BranchSwitcherDialog({
           <div className="branchSwitchDetails">
             <button className="textButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.chooseAnother}>{t("bs.chooseAnother")}</button>
             <h3>{branchSwitcher.targetName}</h3>
+            {branchSwitcher.targetRemote && targetPreflight && <p className="branchRemotePlan">{targetPreflight.createsLocalBranch
+              ? t("bs.remoteCreates", { remote: branchSwitcher.targetName, local: targetPreflight.localBranch })
+              : t("bs.remoteUpdates", { remote: branchSwitcher.targetName, local: targetPreflight.localBranch })}</p>}
             {branchSwitcher.busy && !branchSwitcher.preflight && <p role="status">{t("bs.checking")}</p>}
             {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
             {branchSwitcher.preflight?.isClean && <p className="branchCleanNotice" role="status">{t("bs.clean")}</p>}
@@ -146,7 +158,7 @@ export function BranchSwitcherDialog({
         ) : (
           <div className="branchSwitchChoices">
             <h3>{t("bs.localBranches")}</h3>
-            {(allLocalBranches.length > 0 || hasBranchSnapshot) && (
+            {(allLocalBranches.length > 0 || allRemoteBranches.length > 0 || hasBranchSnapshot) && (
               <input
                 className="branchFilterInput"
                 type="search"
@@ -158,9 +170,9 @@ export function BranchSwitcherDialog({
                 onChange={(event) => { setFilter(event.target.value); setCursor(0); }}
                 onKeyDown={(event) => {
                   if (branchSwitcher.busy) return;
-                  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && localBranches.length > 0) {
+                  if ((event.key === "ArrowDown" || event.key === "ArrowUp") && choices.length > 0) {
                     event.preventDefault();
-                    setCursor((current) => (Math.min(current, localBranches.length - 1) + (event.key === "ArrowDown" ? 1 : -1) + localBranches.length) % localBranches.length);
+                    setCursor((current) => (Math.min(current, choices.length - 1) + (event.key === "ArrowDown" ? 1 : -1) + choices.length) % choices.length);
                     return;
                   }
                   if (event.key !== "Enter") return;
@@ -174,9 +186,10 @@ export function BranchSwitcherDialog({
                     }
                     return;
                   }
-                  const highlighted = localBranches[Math.min(cursor, localBranches.length - 1)];
-                  if (highlighted?.worktreePath && onOpenWorktree) { branchSwitcher.close(); onOpenWorktree(highlighted.worktreePath); }
-                  else if (highlighted) void branchSwitcher.inspect(highlighted.name);
+                  const highlighted = choices[highlightedIndex];
+                  if (highlighted?.remote) void branchSwitcher.inspect(highlighted.branch.name, true);
+                  else if (highlighted?.branch.worktreePath && onOpenWorktree) { branchSwitcher.close(); onOpenWorktree(highlighted.branch.worktreePath); }
+                  else if (highlighted) void branchSwitcher.inspect(highlighted.branch.name);
                   else if (query && connected) void branchSwitcher.createBranch(filter, { checkout: true });
                 }}
               />
@@ -215,7 +228,7 @@ export function BranchSwitcherDialog({
               </div>
             )}
             {hasBranchSnapshot && allLocalBranches.length === 0 && <p className="navEmpty">{t("bs.noOthers")}</p>}
-            {allLocalBranches.length > 0 && localBranches.length === 0 && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim() })}</p>}
+            {allLocalBranches.length + allRemoteBranches.length > 0 && choices.length === 0 && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim() })}</p>}
             {localBranches.map((branch, position) => branch.worktreePath && onOpenWorktree ? (
               <div className="branchChoice inWorktree" key={branch.fullName}>
                 <span className="branchItemGlyph" aria-hidden="true">⧉</span>
@@ -224,7 +237,7 @@ export function BranchSwitcherDialog({
                 <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>{t("bs.openWorktree")}</button>
               </div>
             ) : (
-              <button className={`branchChoice${position === Math.min(cursor, localBranches.length - 1) ? " active" : ""}`} type="button" key={branch.fullName} ref={(node) => { if (node && position === Math.min(cursor, localBranches.length - 1)) node.scrollIntoView?.({ block: "nearest" }); }} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
+              <button className={`branchChoice${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} ref={(node) => { if (node && position === highlightedIndex) node.scrollIntoView?.({ block: "nearest" }); }} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
                 <span className="branchItemGlyph" aria-hidden="true">⑂</span>
                 <span>{branch.name}</span>
                 <BranchSyncBadge branch={branch} />
@@ -232,14 +245,28 @@ export function BranchSwitcherDialog({
                 <span className="actionArrow" aria-hidden="true">→</span>
               </button>
             ))}
-            {hasRemoteBranches && <p className="branchRemoteNote">{t("bs.remoteNote")}</p>}
+            {remoteBranches.length > 0 && <>
+              <h3 className="branchChoicesHeading">{t("bs.remoteBranches")}</h3>
+              {remoteBranches.map((branch, index) => {
+                const position = localBranches.length + index;
+                const local = trackedBy.get(branch.name);
+                return (
+                  <button className={`branchChoice remote${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} ref={(node) => { if (node && position === highlightedIndex) node.scrollIntoView?.({ block: "nearest" }); }} disabled={branchSwitcher.busy || !connected} title={local ? t("bs.remoteTrackedTitle", { remote: branch.name, local }) : t("bs.remoteNewTitle", { remote: branch.name })} onClick={() => void branchSwitcher.inspect(branch.name, true)}>
+                    <svg className="branchItemGlyph remoteGlyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 12.5h7a3 3 0 0 0 .4-5.97A4 4 0 0 0 4.2 7.6 2.5 2.5 0 0 0 4.5 12.5Z" /></svg>
+                    <span>{branch.name}</span>
+                    <small className={local ? "branchChoiceTag" : "branchChoiceTag new"}>{local ? t("bs.remoteTracked", { name: local }) : t("bs.remoteNew")}</small>
+                    <span className="actionArrow" aria-hidden="true">→</span>
+                  </button>
+                );
+              })}
+            </>}
           </div>
         )}
         <div className="dialogActions">
           <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>{t("bs.cancel")}</button>
           {branchSwitcher.targetName && branchSwitcher.preflight?.isClean && (
             <button className="primaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.continueSwitch()}>
-              {branchSwitcher.busy ? t("bs.switching") : t("bs.switchTo", { name: branchSwitcher.targetName })}
+              {branchSwitcher.busy ? t("bs.switching") : branchSwitcher.targetRemote ? t("bs.fetchSwitch", { name: branchSwitcher.preflight.localBranch }) : t("bs.switchTo", { name: branchSwitcher.targetName })}
             </button>
           )}
         </div>

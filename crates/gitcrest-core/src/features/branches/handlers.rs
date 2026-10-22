@@ -855,6 +855,114 @@ pub(super) async fn delete_repository_branch(
     Ok((StatusCode::ACCEPTED, Json(task)))
 }
 
+/// How a switch to a remote-tracking branch such as `origin/feature` is carried out: through the
+/// local branch that already tracks it, or through a new tracking branch named after it.
+struct RemoteSwitchPlan {
+    remote_name: String,
+    remote_branch: String,
+    /// `refs/remotes/<remote>/<branch>`.
+    remote_ref: String,
+    local_branch: String,
+    creates_local_branch: bool,
+}
+
+async fn plan_remote_switch(
+    state: &AppState,
+    repository_path: &std::path::Path,
+    name: &str,
+    current: Option<&str>,
+) -> Result<RemoteSwitchPlan, ApiError> {
+    let Some((remote_name, remote_branch)) = name
+        .split_once('/')
+        .filter(|(remote, branch)| !remote.is_empty() && !branch.is_empty() && *branch != "HEAD")
+    else {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A remote branch looks like origin/feature.",
+        ));
+    };
+    let references = state
+        .branch_git
+        .list_references(repository_path)
+        .await
+        .map_err(|_| {
+            ApiError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                ApiErrorCode::RequestInvalid,
+                "Could not read the branches of this repository.",
+            )
+        })?;
+    let remote_ref = format!("refs/remotes/{name}");
+    if !references
+        .iter()
+        .any(|reference| reference.full_name == remote_ref)
+    {
+        return Err(ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::BranchNotFound,
+            "That remote branch is not available. Fetch and try again.",
+        ));
+    }
+    // Prefer the tracking branch named like the remote branch when several track it.
+    let tracking = references
+        .iter()
+        .filter(|reference| {
+            reference.full_name.starts_with("refs/heads/")
+                && reference.upstream.as_deref() == Some(name)
+        })
+        .min_by_key(|reference| reference.name != remote_branch);
+    let (local_branch, creates_local_branch) = match tracking {
+        Some(local) => {
+            if current == Some(local.name.as_str()) {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    ApiErrorCode::BranchCurrent,
+                    format!("The current branch already tracks {name}. Pull to update it."),
+                ));
+            }
+            if local.worktree_path.is_some() {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    ApiErrorCode::RequestInvalid,
+                    format!(
+                        "{} tracks {name} and is checked out in another worktree. Open that worktree instead.",
+                        local.name
+                    ),
+                ));
+            }
+            (local.name.clone(), false)
+        }
+        None => {
+            if references
+                .iter()
+                .any(|reference| reference.full_name == format!("refs/heads/{remote_branch}"))
+            {
+                return Err(ApiError::new(
+                    StatusCode::CONFLICT,
+                    ApiErrorCode::BranchAlreadyExists,
+                    format!("A local branch named {remote_branch} already exists but does not track {name}. Switch to it from the local branches instead."),
+                ));
+            }
+            branches::validate_branch_name_with_git(
+                repository_path,
+                remote_branch,
+                state.branch_git.as_ref(),
+            )
+            .await
+            .map_err(ApiError::from_branch_error)?;
+            (remote_branch.to_owned(), true)
+        }
+    };
+    Ok(RemoteSwitchPlan {
+        remote_name: remote_name.to_owned(),
+        remote_branch: remote_branch.to_owned(),
+        remote_ref,
+        local_branch,
+        creates_local_branch,
+    })
+}
+
 pub(super) async fn preflight_branch_switch(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,
@@ -867,7 +975,42 @@ pub(super) async fn preflight_branch_switch(
             "A target branch name is required.",
         )
     })?;
-    let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
+    // A remote target is compared with its last fetched state; the switch fetches and checks again.
+    let (target, metadata, compare_ref, local_branch, creates_local_branch) = if request.remote {
+        let target = state
+            .repository_targets
+            .task_target(&repo_id)
+            .await
+            .map_err(ApiError::from_repository_error)?;
+        let metadata = state
+            .repositories
+            .refresh_metadata(&repo_id)
+            .await
+            .map_err(ApiError::from_repository_error)?;
+        let plan = plan_remote_switch(
+            &state,
+            &target.repository_path,
+            &request.name,
+            metadata.branch.as_deref(),
+        )
+        .await?;
+        (
+            target,
+            metadata,
+            plan.remote_ref,
+            plan.local_branch,
+            plan.creates_local_branch,
+        )
+    } else {
+        let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
+        (
+            target,
+            metadata,
+            request.name.clone(),
+            request.name.clone(),
+            false,
+        )
+    };
     let snapshot = state
         .status
         .snapshot(&repo_id)
@@ -882,7 +1025,7 @@ pub(super) async fn preflight_branch_switch(
     let potentially_overwritten_paths = branches::overlapping_dirty_paths_with_git(
         &target.repository_path,
         metadata.head.as_deref(),
-        &request.name,
+        &compare_ref,
         &dirty_files,
         state.branch_git.as_ref(),
     )
@@ -892,6 +1035,8 @@ pub(super) async fn preflight_branch_switch(
         repo_id,
         current: metadata.branch,
         target: request.name,
+        local_branch,
+        creates_local_branch,
         is_clean: dirty_files.is_empty(),
         dirty_files,
         potentially_overwritten_paths,
@@ -910,6 +1055,9 @@ pub(super) async fn switch_repository_branch(
             "A target branch name is required.",
         )
     })?;
+    if request.remote {
+        return switch_to_remote_branch(state, repo_id, request.name).await;
+    }
     let (target, metadata) = branch_for_mutation(&state, &repo_id, &request.name).await?;
     branches::ensure_branch_not_current(metadata.branch.as_deref(), &request.name)
         .map_err(ApiError::from_branch_error)?;
@@ -965,6 +1113,120 @@ pub(super) async fn switch_repository_branch(
             }
             command.execute_branch(&path, BranchCommand::Switch { name: target_name }, context).await?;
             repositories
+                .refresh_metadata(&repo_for_check)
+                .await
+                .map_err(|_| TaskFailure::Failed("Branch switched but repository metadata could not be refreshed.".into()))?;
+            Ok(None)
+        }).await.map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+/// Fetches the remote branch, then checks it out through a local tracking branch: a new one is
+/// created at the fetched commit, or the existing one is fast-forwarded to it when it has no
+/// commits of its own. A tracking branch that has diverged is checked out as it is.
+async fn switch_to_remote_branch(
+    state: AppState,
+    repo_id: String,
+    name: String,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    plan_remote_switch(
+        &state,
+        &target.repository_path,
+        &name,
+        metadata.branch.as_deref(),
+    )
+    .await?;
+    let expected_head = metadata.head.clone();
+    let expected_branch = metadata.branch.clone();
+    let path = target.repository_path;
+    let repo_for_check = repo_id.clone();
+    let task_state = state.clone();
+    let task = state
+        .tasks
+        .submit(Some(repo_id), None, target.resource_key, "branchSwitchRemote", move |context| async move {
+            let state = task_state;
+            // Plan again now that the task holds the repository: branches may have changed since the request.
+            let plan = plan_remote_switch(&state, &path, &name, expected_branch.as_deref()).await
+                .map_err(|error| TaskFailure::Failed(error.message))?;
+            state.git_commands
+                .fetch_remote_branch(&path, &plan.remote_name, &plan.remote_branch, context.clone())
+                .await?;
+            let fresh_repository = state.repositories
+                .refresh_metadata(&repo_for_check)
+                .await
+                .map_err(|_| TaskFailure::Failed("Could not verify the current branch before switching.".into()))?;
+            if fresh_repository.head != expected_head || fresh_repository.branch != expected_branch {
+                return Err(TaskFailure::Failed("The current branch changed. Review branch state and retry the switch.".into()));
+            }
+            let references = state.branch_git.list_references(&path).await
+                .map_err(|_| TaskFailure::Failed("Could not read the fetched remote branch.".into()))?;
+            let Some(remote_oid) = references.iter()
+                .find(|reference| reference.full_name == plan.remote_ref)
+                .map(|reference| reference.oid.clone())
+            else {
+                return Err(TaskFailure::Failed(format!("{name} no longer exists on the remote.")));
+            };
+            // Where the working tree will end up, and the fast-forward that moves the local branch there.
+            let (checkout_ref, fast_forward) = if plan.creates_local_branch {
+                (plan.remote_ref.clone(), None)
+            } else {
+                let local_oid = references.iter()
+                    .find(|reference| reference.full_name == format!("refs/heads/{}", plan.local_branch))
+                    .map(|reference| reference.oid.clone())
+                    .ok_or_else(|| TaskFailure::Failed(format!("{} no longer exists.", plan.local_branch)))?;
+                let local_only_commits = state.branch_git
+                    .unmerged_commit_count(&path, &plan.remote_ref, &plan.local_branch)
+                    .await
+                    .map_err(|_| TaskFailure::Failed("Could not compare the local branch with the remote branch.".into()))?;
+                if local_oid == remote_oid {
+                    (plan.remote_ref.clone(), None)
+                } else if local_only_commits == 0 {
+                    (plan.remote_ref.clone(), Some((local_oid, remote_oid)))
+                } else {
+                    context.log(format!(
+                        "{} has {local_only_commits} commit(s) that are not on {name}, so it was not fast-forwarded. Pull to combine them.",
+                        plan.local_branch
+                    )).await;
+                    (format!("refs/heads/{}", plan.local_branch), None)
+                }
+            };
+            let fresh_status = state.status.snapshot(&repo_for_check).await
+                .map_err(|_| TaskFailure::Failed("Could not verify the working tree before switching.".into()))?;
+            let fresh_dirty_paths = fresh_status.files.iter()
+                .filter(|file| file.has_unignored_changes())
+                .map(|file| file.path.clone())
+                .collect::<Vec<_>>();
+            match branches::ensure_no_dirty_path_overlap_with_git(&path, fresh_repository.head.as_deref(), &checkout_ref, &fresh_dirty_paths, state.branch_git.as_ref()).await {
+                Ok(()) => {}
+                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::Failed("Local edits overlap files that differ on the remote branch. Commit or shelve the listed changes before retrying.".into())),
+                Err(_) => return Err(TaskFailure::Failed("Could not verify whether local edits overlap the remote branch.".into())),
+            }
+            if plan.creates_local_branch {
+                state.git_commands.execute_branch(&path, BranchCommand::SwitchTracking {
+                    local_branch: plan.local_branch.clone(),
+                    remote_ref: name.clone(),
+                }, context).await?;
+            } else {
+                if let Some((expected_oid, new_oid)) = fast_forward {
+                    state.git_commands.execute_branch(&path, BranchCommand::FastForward {
+                        name: plan.local_branch.clone(),
+                        new_oid,
+                        expected_oid,
+                    }, context.clone()).await?;
+                }
+                state.git_commands.execute_branch(&path, BranchCommand::Switch { name: plan.local_branch.clone() }, context).await?;
+            }
+            state.repositories
                 .refresh_metadata(&repo_for_check)
                 .await
                 .map_err(|_| TaskFailure::Failed("Branch switched but repository metadata could not be refreshed.".into()))?;

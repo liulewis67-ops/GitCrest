@@ -3000,6 +3000,204 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
 }
 
 #[tokio::test]
+async fn switching_to_a_remote_branch_fetches_and_tracks_it() {
+    let directory = tempfile::tempdir().unwrap();
+    let repository_path = directory.path().join("repo");
+    let writer_path = directory.path().join("writer");
+    let bare_path = directory.path().join("remote.git");
+    std::fs::create_dir(&repository_path).unwrap();
+    let git = |path: &std::path::Path, args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&repository_path, &["init", "--quiet", "-b", "main"]);
+    git(
+        &repository_path,
+        &["config", "user.name", "Remote Switch Test"],
+    );
+    git(
+        &repository_path,
+        &["config", "user.email", "remote-switch@example.invalid"],
+    );
+    std::fs::write(repository_path.join("seed.txt"), "seed\n").unwrap();
+    git(&repository_path, &["add", "seed.txt"]);
+    git(&repository_path, &["commit", "--quiet", "-m", "seed"]);
+    let bare = std::process::Command::new("git")
+        .args(["init", "--bare", "--quiet"])
+        .arg(&bare_path)
+        .output()
+        .unwrap();
+    assert!(bare.status.success());
+    git(
+        &repository_path,
+        &["remote", "add", "origin", bare_path.to_str().unwrap()],
+    );
+    git(
+        &repository_path,
+        &["push", "--quiet", "-u", "origin", "main"],
+    );
+    let clone = std::process::Command::new("git")
+        .args(["clone", "--quiet"])
+        .arg(&bare_path)
+        .arg(&writer_path)
+        .output()
+        .unwrap();
+    assert!(clone.status.success());
+    git(&writer_path, &["config", "user.name", "Remote Writer"]);
+    git(
+        &writer_path,
+        &["config", "user.email", "remote-writer@example.invalid"],
+    );
+    git(&writer_path, &["switch", "--quiet", "-c", "feature/remote"]);
+    std::fs::write(writer_path.join("feature.txt"), "first\n").unwrap();
+    git(&writer_path, &["add", "feature.txt"]);
+    git(&writer_path, &["commit", "--quiet", "-m", "feature"]);
+    git(
+        &writer_path,
+        &["push", "--quiet", "origin", "feature/remote"],
+    );
+    git(&repository_path, &["fetch", "--quiet", "origin"]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": repository_path }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(opened.status(), StatusCode::OK);
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repository: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let repo_id = repository["repoId"].as_str().unwrap().to_owned();
+
+    let preflight = |app: Router, repo_id: String| async move {
+        let response = app
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches/switch-preflight?name=origin%2Ffeature%2Fremote&remote=true"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+    };
+    let switch = |app: Router, repo_id: String| async move {
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("/api/v1/repositories/{repo_id}/branches/switch"),
+                &serde_json::json!({ "name": "origin/feature/remote", "remote": true }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::ACCEPTED);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await
+    };
+
+    // No local branch tracks it yet: one is created, named after the remote branch.
+    let first = preflight(app.clone(), repo_id.clone()).await;
+    assert_eq!(first["localBranch"], "feature/remote");
+    assert_eq!(first["createsLocalBranch"], true);
+    assert_eq!(first["isClean"], true);
+    assert_eq!(
+        switch(app.clone(), repo_id.clone()).await["status"],
+        "succeeded"
+    );
+    assert_eq!(
+        git(&repository_path, &["branch", "--show-current"]),
+        "feature/remote"
+    );
+    assert_eq!(
+        git(
+            &repository_path,
+            &["rev-parse", "--abbrev-ref", "@{upstream}"]
+        ),
+        "origin/feature/remote"
+    );
+    assert!(repository_path.join("feature.txt").exists());
+
+    // Switching to the remote branch it already tracks is a pull, not a switch.
+    let current = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/branches/switch"),
+            &serde_json::json!({ "name": "origin/feature/remote", "remote": true }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let (status, code) = error_code(current).await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(code, "BRANCH_CURRENT");
+
+    // A newer remote commit is fetched by the switch itself and fast-forwards the tracking branch.
+    git(&repository_path, &["switch", "--quiet", "main"]);
+    std::fs::write(writer_path.join("feature.txt"), "second\n").unwrap();
+    git(&writer_path, &["commit", "--quiet", "-am", "newer feature"]);
+    git(
+        &writer_path,
+        &["push", "--quiet", "origin", "feature/remote"],
+    );
+    let second = preflight(app.clone(), repo_id.clone()).await;
+    assert_eq!(second["localBranch"], "feature/remote");
+    assert_eq!(second["createsLocalBranch"], false);
+    assert_eq!(
+        switch(app.clone(), repo_id.clone()).await["status"],
+        "succeeded"
+    );
+    assert_eq!(
+        git(&repository_path, &["branch", "--show-current"]),
+        "feature/remote"
+    );
+    assert_eq!(
+        std::fs::read_to_string(repository_path.join("feature.txt"))
+            .unwrap()
+            .replace("\r\n", "\n"),
+        "second\n"
+    );
+    assert_eq!(
+        git(&repository_path, &["rev-parse", "HEAD"]),
+        git(&writer_path, &["rev-parse", "HEAD"])
+    );
+
+    // A local branch of the same name that tracks something else is never taken over.
+    git(&repository_path, &["switch", "--quiet", "main"]);
+    git(
+        &repository_path,
+        &["branch", "--quiet", "--unset-upstream", "feature/remote"],
+    );
+    let (status, code) = error_code(
+        app.clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{repo_id}/branches/switch-preflight?name=origin%2Ffeature%2Fremote&remote=true"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(code, "BRANCH_ALREADY_EXISTS");
+}
+
+#[tokio::test]
 async fn pull_api_requires_a_clean_reviewed_snapshot_and_explicit_strategy() {
     let directory = tempfile::tempdir().unwrap();
     let repository_path = directory.path().join("repo");

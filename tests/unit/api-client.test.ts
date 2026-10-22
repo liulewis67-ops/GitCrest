@@ -326,7 +326,7 @@ describe("GitCrestApiClient", () => {
     expect(preflightUrl.searchParams.get("name")).toBe("feature/ui");
     expect(fetcher.mock.calls[0][1]?.method).toBeUndefined();
     expect(String(fetcher.mock.calls[1][0])).toBe(`${baseUrl}/api/v1/repositories/repo_fixture/branches/switch`);
-    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ name: "feature/ui" }));
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ name: "feature/ui", remote: false }));
   });
 
   it("reads sanitized remote configuration through a versioned repository request", async () => {

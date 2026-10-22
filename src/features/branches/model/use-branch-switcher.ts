@@ -24,6 +24,8 @@ function errorMessage(error: unknown, fallback: string) {
 export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted, openTaskCenter }: BranchSwitcherOptions) {
   const [open, setOpen] = useState(false);
   const [targetName, setTargetName] = useState("");
+  /** The target is a remote-tracking branch such as origin/feature. */
+  const [targetRemote, setTargetRemote] = useState(false);
   const [preflight, setPreflight] = useState<BranchSwitchPreflightResponse>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -32,6 +34,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     const repository = getRepository();
     if (!repository || repository.availability !== "available") return;
     setTargetName("");
+    setTargetRemote(false);
     setPreflight(undefined);
     setError("");
     setOpen(true);
@@ -44,20 +47,22 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
 
   function chooseAnother() {
     setTargetName("");
+    setTargetRemote(false);
     setPreflight(undefined);
     setError("");
   }
 
-  async function inspect(name: string) {
+  async function inspect(name: string, remote = false) {
     const api = getApi();
     const repository = getRepository();
     if (!api || !repository) return;
     setTargetName(name);
+    setTargetRemote(remote);
     setPreflight(undefined);
     setError("");
     setBusy(true);
     try {
-      setPreflight(await api.preflightRepositoryBranchSwitch(repository.repoId, name));
+      setPreflight(await api.preflightRepositoryBranchSwitch(repository.repoId, name, remote));
     } catch (reason) {
       setError(errorMessage(reason, t("bm.checkSwitch")));
     } finally {
@@ -72,10 +77,10 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     setBusy(true);
     setError("");
     try {
-      const nextPreflight = await api.preflightRepositoryBranchSwitch(repository.repoId, targetName);
+      const nextPreflight = await api.preflightRepositoryBranchSwitch(repository.repoId, targetName, targetRemote);
       setPreflight(nextPreflight);
       if (nextPreflight.potentiallyOverwrittenPaths.length > 0) return;
-      onTaskAccepted(await api.switchRepositoryBranch(repository.repoId, targetName));
+      onTaskAccepted(await api.switchRepositoryBranch(repository.repoId, targetName, targetRemote));
       close();
       openTaskCenter();
     } catch (reason) {
@@ -103,8 +108,9 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     }
   }
 
-  function reviewAfterShelf(target: string, nextPreflight: BranchSwitchPreflightResponse, message: string) {
+  function reviewAfterShelf(target: string, remote: boolean, nextPreflight: BranchSwitchPreflightResponse, message: string) {
     setTargetName(target);
+    setTargetRemote(remote);
     setPreflight(nextPreflight);
     setError(message);
     setOpen(true);
@@ -123,6 +129,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     open,
     setOpen,
     targetName,
+    targetRemote,
     preflight,
     error,
     setError,
