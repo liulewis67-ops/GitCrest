@@ -124,6 +124,8 @@ export const layout = {
   "bs.filterPlaceholder": ["Filter branches…", "筛选分支…"],
   "bs.local": ["Local", "本地"],
   "bs.remote": ["Remote", "远程"],
+  "bs.showLocal": ["Show local branches", "显示本地分支"],
+  "bs.hideLocal": ["Hide local branches", "隐藏本地分支"],
   "bs.showRemote": ["Show remote branches", "显示远程分支"],
   "bs.hideRemote": ["Hide remote branches", "隐藏远程分支"],
   "bs.noMatch": ["No branches match “{query}”.", "没有匹配“{query}”的分支。"],

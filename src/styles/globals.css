@@ -380,13 +380,41 @@ button:disabled { cursor: not-allowed; }
 
 /* Branches */
 .graphPanel { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
-.branchGroupLabel { display: flex; align-items: center; justify-content: space-between; margin-top: var(--space-2); padding: var(--space-1) var(--space-1) 2px; color: var(--text-muted); font-size: var(--type-2xs); font-weight: 700; letter-spacing: .02em; text-transform: uppercase; }
+/* Branches sidebar, three levels: panel sections (Branches, Worktrees, Remotes) divided by rules,
+   sticky Local / Remote groups that fold, then branch rows whose actions appear on hover. */
+.branchGroupLabel { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; min-height: 30px; margin-top: var(--space-1); padding: 0 var(--space-1) 0 0; background: var(--surface); }
 .branchGroupLabel:first-child { margin-top: 0; }
-.branchGroupLabel button { display: inline-flex; align-items: center; gap: 4px; padding: 0; border: 0; background: transparent; color: inherit; font: inherit; letter-spacing: inherit; text-transform: inherit; cursor: pointer; }
+.branchItem + .branchGroupLabel { margin-top: var(--space-2); border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent); }
+.branchGroupLabel button { display: inline-flex; flex: 1; align-items: center; gap: 6px; min-width: 0; min-height: 26px; padding: 0 4px 0 2px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; font-size: var(--type-sm); font-weight: 650; text-align: left; cursor: pointer; }
+.branchGroupLabel button:hover:not(:disabled) { background: var(--surface-raised); }
 .branchGroupLabel button:disabled { cursor: default; }
-.branchesSidebar .branchList { max-height: none; margin: 0; }
-.branchesSidebar .navGroup { padding: var(--space-3) var(--space-1) 0; }
+.branchGroupLabel button svg { flex: none; width: 12px; height: 12px; color: var(--text-muted); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; transition: transform .12s ease-out; }
+.branchGroupLabel button[aria-expanded="true"] svg { transform: rotate(90deg); }
+.branchGroupCount { display: inline-grid; flex: none; min-width: 20px; height: 18px; place-items: center; padding: 0 6px; border-radius: 9px; background: color-mix(in srgb, var(--text-muted) 14%, transparent); color: var(--text-secondary); font-size: var(--type-2xs); font-weight: 650; font-variant-numeric: tabular-nums; }
+.branchesSidebar .branchList { gap: 1px; max-height: none; margin: 0; }
+.branchesSidebar .branchList > .branchItem { min-height: 28px; margin-left: 14px; padding: 0 2px 0 6px; }
+.branchesSidebar .branchItem:hover:not(.current) { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
+.branchesSidebar .branchItem.current .branchItemName { font-weight: 600; }
+.branchesSidebar .branchItem.current .branchItemGlyph { color: var(--accent-strong); }
+.branchItemGlyph svg { display: block; width: 14px; height: 14px; margin: 0 auto; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.branchesSidebar .branchItemGlyph { flex-basis: 16px; }
+.branchRemotePrefix { color: var(--text-muted); opacity: .75; }
+.branchesSidebar .branchCurrentLabel { padding: 1px 6px; border-radius: 9px; background: color-mix(in srgb, var(--accent) 18%, transparent); }
+/* Row actions stay out of the way until the row is hovered or focused; a set favourite stays visible. */
+.branchesSidebar .branchItem .branchRemoteDelete, .branchesSidebar .branchItem .branchFavorite:not(.active) { opacity: 0; }
+.branchesSidebar .branchItem:hover .branchRemoteDelete, .branchesSidebar .branchItem:focus-within .branchRemoteDelete { opacity: .65; }
+.branchesSidebar .branchItem:hover .branchFavorite, .branchesSidebar .branchItem:focus-within .branchFavorite { opacity: 1; }
+.branchesSidebar .branchItem .branchRemoteDelete:hover:not(:disabled) { opacity: 1; }
+.branchesSidebar .branchItem .branchFavorite.active { background: transparent; }
+.branchSwitcherButton { border: 1px solid var(--line); }
+/* Worktrees and Remotes are their own sections under the branch tree, titled like the panel header. */
 .branchesSidebar .navDivider { display: none; }
+.branchesSidebar .navGroup { margin: var(--space-3) calc(var(--space-2) * -1) 0; padding: var(--space-3) var(--space-3) 0; border-top: 1px solid var(--line); }
+.branchesSidebar .navGroupTitle { gap: 6px; min-height: 26px; color: var(--text); font-size: var(--type-sm); font-weight: 620; }
+.branchesSidebar .navGroupTitle > span:first-child { flex: 1; }
+.branchesSidebar .navGroup .branchList { margin: var(--space-1) 0 0; }
+.branchesSidebar .navGroup .branchList > .branchItem { margin-left: 0; }
+.remoteRefreshIcon { display: block; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Inspector */
 .inspector .sidePanelHeader { border-bottom: 1px solid var(--line); }
@@ -989,8 +1017,8 @@ button:disabled { cursor: not-allowed; }
 .iconTextButton:hover:not(:disabled) { border-color: var(--line); color: var(--text); background: var(--surface-soft); }
 .iconTextButton:focus-visible, .textButton:focus-visible, .dangerTextButton:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .iconTextButton:disabled { opacity: .5; cursor: not-allowed; }
-.remoteList { display: grid; gap: 2px; margin: 4px 0 0; padding: 0; list-style: none; }
-.remoteItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; min-width: 0; padding: 5px 7px; border-radius: 4px; }
+.remoteList { display: grid; gap: 4px; margin: var(--space-1) 0 0; padding: 0; list-style: none; }
+.remoteItem { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 6px; min-width: 0; padding: 7px var(--space-2); border: 1px solid var(--line); border-radius: 6px; background: var(--surface-soft); }
 .remoteItem:hover { background: var(--surface-soft); }
 .remoteName { overflow: hidden; color: var(--text); font: var(--type-sm) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
 .remoteDefaultTag { align-self: center; padding: 2px 4px; border-radius: 3px; color: var(--green); background: var(--green-soft); font: var(--type-2xs) var(--font-ui); }

@@ -70,7 +70,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
       <div className="navGroupTitle remoteManagerHeading">
         <span>{t("rm.title")}</span>
         {remoteList && <span className="countBadge">{remoteList.length}</span>}
-        <button className="iconTextButton" type="button" disabled={disabled || loading} onClick={onRefresh} aria-label={t("rm.refresh")} title={t("rm.refresh")}>↻</button>
+        <button className="iconTextButton" type="button" disabled={disabled || loading} onClick={onRefresh} aria-label={t("rm.refresh")} title={t("rm.refresh")}><svg className="remoteRefreshIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M13 8a5 5 0 1 1-1.46-3.54" /><path d="M13 3v2.5h-2.5" /></svg></button>
         <button ref={manageButtonRef} className="iconTextButton" type="button" disabled={disabled} title={disabled ? disabledReason : t("rm.manageTitle")} onClick={() => setOpen(true)} aria-label={t("rm.manageTitle")}>{t("rm.manage")}</button>
       </div>
       {!snapshot && loading && <div className="navEmpty" role="status">{t("rm.loading")}</div>}
