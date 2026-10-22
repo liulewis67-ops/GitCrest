@@ -48,6 +48,14 @@ Rust sidecar 绑定随机空闲端口后，在 stdout 输出一行 JSON：
 
 Electron main 解析 ready 消息后创建窗口，并通过 preload bridge 向 renderer 提供连接信息。
 
+sidecar 在 ready 之前退出或超时，启动错误会附带其 stderr 的最后几行（例如数据库路径与原因），便于用户判断。ready 之后意外退出时，Electron main 负责恢复：
+
+- 自动重启 sidecar，延迟依次为 0.5s、1s、2s；60 秒内最多自动重启 3 次，超过后停止并进入失败状态。
+- 新 sidecar 使用新的端口和 token。main 把已有的事件流迁移到新 sidecar，并通过 `gitcrest:core-status` 通知所有窗口（`restarting` / `ready` / `failed`）。
+- 主窗口在 `restarting` 期间禁用需要内核的操作，收到 `ready` 后重新获取连接并刷新仓库列表，保留已打开的 Tab 和提交草稿；Diff 与冲突窗口重新连接，冲突窗口保留未保存的编辑。
+- 失败状态在标题栏显示「重启内核」，用户触发的重启重新计算自动重启次数。
+- 退出应用时取消待执行的重启，并关闭 sidecar 的 stdin 让其正常退出。
+
 ## 4. 安全边界
 
 - Rust sidecar 不监听 `0.0.0.0`。

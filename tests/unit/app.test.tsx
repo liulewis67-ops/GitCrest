@@ -566,6 +566,14 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Favorite project" }));
     expect(await screen.findByRole("button", { name: "Remove project from favorites" })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Remove project from recent repositories" }));
+    // Removing deletes the shelves GitCrest keeps for the repository, so nothing is sent before confirming.
+    const confirmation = screen.getByRole("alertdialog", { name: "Remove “project” from recent repositories?" });
+    expect(confirmation.textContent).toContain("Shelved changes cannot be recovered");
+    fireEvent.click(screen.getByRole("button", { name: "Keep repository" }));
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(3);
+    fireEvent.click(screen.getByRole("button", { name: "Remove project from recent repositories" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove and delete shelves" }));
     await waitFor(() => expect(screen.queryByText("C:/project")).toBeNull());
     expect(String(fetcher.mock.calls[2][0])).toBe("http://127.0.0.1:43210/api/v1/repositories/repo_fixture/favorite");
     expect(fetcher.mock.calls[3][1]?.method).toBe("DELETE");

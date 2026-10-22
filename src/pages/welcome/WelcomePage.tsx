@@ -1,7 +1,9 @@
+import { useState } from "react";
 import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { getRepositoryDisplayName } from "../../shared/lib/repository-display-name";
 import { useI18n } from "../../shared/i18n";
+import { useDialogFocus } from "../../shared/hooks/use-dialog-focus";
 
 const REPOSITORY_ROW_ACTION_CLASS_NAME = "repositoryRowAction min-h-[28px] rounded-[4px] border border-transparent bg-transparent px-[5px] text-muted text-xs cursor-pointer hover:border-line-strong hover:text-foreground";
 const QUICK_ACTION_CLASS_NAME = "actionRow grid grid-cols-[31px_minmax(0,1fr)_auto] items-center w-full min-h-[58px] border-b border-line bg-transparent px-[4px] py-[8px] text-left enabled:hover:bg-surface-soft";
@@ -42,6 +44,14 @@ export function WelcomePage({
   onForgetRepository,
 }: WelcomePageProps) {
   const { t } = useI18n();
+  // Removing a recent repository also deletes what GitCrest keeps for it, shelves included, so it is confirmed first.
+  const [removeCandidate, setRemoveCandidate] = useState<RepositoryResponse>();
+  const { dialogRef: removeDialogRef, onKeyDown: onRemoveDialogKeyDown } = useDialogFocus<HTMLElement>(() => setRemoveCandidate(undefined), false, undefined, Boolean(removeCandidate));
+  const confirmRemove = () => {
+    if (!removeCandidate) return;
+    setRemoveCandidate(undefined);
+    void onForgetRepository(removeCandidate);
+  };
   return (
 <section className="welcomePage flex min-h-0 flex-col overflow-y-auto px-[clamp(30px,8vw,112px)] pt-[clamp(30px,6vh,64px)] pb-[20px] max-[1120px]:px-[clamp(26px,6vw,72px)] max-[900px]:px-[24px] max-[900px]:pt-[30px] max-[900px]:pb-[16px]" aria-labelledby="welcome-title">
           <div className="welcomeIntro max-w-[710px]">
@@ -86,7 +96,7 @@ export function WelcomePage({
                       </button>
                       <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" aria-label={repository.isFavorite ? t("welcome.unfavorite", { name: getRepositoryDisplayName(repository.path) }) : t("welcome.favorite", { name: getRepositoryDisplayName(repository.path) })} onClick={() => void onToggleFavorite(repository)}>{repository.isFavorite ? "★" : "☆"}</button>
                       {repository.availability === "missing" && <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" onClick={() => void onOpenLocalRepository()}>{t("welcome.locate")}</button>}
-                      <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" aria-label={t("welcome.removeRecent", { name: getRepositoryDisplayName(repository.path) })} onClick={() => void onForgetRepository(repository)}>{t("welcome.remove")}</button>
+                      <button className={REPOSITORY_ROW_ACTION_CLASS_NAME} type="button" aria-label={t("welcome.removeRecent", { name: getRepositoryDisplayName(repository.path) })} onClick={() => setRemoveCandidate(repository)}>{t("welcome.remove")}</button>
                     </div>
                   ))}
                 </div>
@@ -116,6 +126,14 @@ export function WelcomePage({
             <span className="max-[560px]:hidden">{version || t("welcome.localEngine")}</span>
             <button type="button" className="textButton" onClick={() => onNavigateWorkspace()}>{t("welcome.explore")} <span aria-hidden="true">→</span></button>
           </footer>
+          {removeCandidate && <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setRemoveCandidate(undefined); }}>
+            <section ref={removeDialogRef} className="dialogCard repositoryRemoveDialog" role="alertdialog" aria-modal="true" aria-labelledby="repository-remove-title" aria-describedby="repository-remove-description" onKeyDown={onRemoveDialogKeyDown}>
+              <div className="dialogHeading"><div><h2 id="repository-remove-title">{t("welcome.removeConfirmTitle", { name: getRepositoryDisplayName(removeCandidate.path) })}</h2></div></div>
+              <p id="repository-remove-description">{t("welcome.removeConfirmBody")}</p>
+              <code>{removeCandidate.path}</code>
+              <div className="dialogActions"><button className="secondaryButton" type="button" data-dialog-initial-focus onClick={() => setRemoveCandidate(undefined)}>{t("welcome.removeConfirmKeep")}</button><button className="dangerButton" type="button" onClick={confirmRemove}>{t("welcome.removeConfirmAction")}</button></div>
+            </section>
+          </div>}
         </section>
   );
 }

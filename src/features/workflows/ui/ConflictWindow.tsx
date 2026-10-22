@@ -2,6 +2,7 @@ import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
+import { useCoreRestartCount } from "../../../shared/hooks/use-core-restart-count";
 import { baseForBlock, choiceText, findConflictBlocks, replaceConflictBlock, type ConflictBlock } from "../model/conflict-blocks";
 import { splitLines } from "../model/line-diff";
 import { countConflicts, merge3, renderMerge3, type NonConflictingMode } from "../model/merge3";
@@ -38,11 +39,18 @@ export function ConflictWindow() {
   const { reset: resetHistory } = history;
   const selectedPathRef = useRef(selectedPath);
   const actionControllerRef = useRef<AbortController | null>(null);
+  const coreRestarts = useCoreRestartCount();
+  // Unsaved edits survive reconnecting to a restarted core: the reloaded file takes them back.
+  const carriedDraftRef = useRef<{ path: string; draft: string }>();
   selectedPathRef.current = selectedPath;
   const sessionKey = `${repoId}:${taskId}`;
   const fileKey = `${sessionKey}:${selectedPath}`;
 
   useEffect(() => () => actionControllerRef.current?.abort(), []);
+
+  useEffect(() => {
+    if (coreRestarts > 0 && hasUnsavedChanges && selectedPathRef.current) carriedDraftRef.current = { path: selectedPathRef.current, draft };
+  }, [coreRestarts]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,7 +82,7 @@ export function ConflictWindow() {
       if (!controller.signal.aborted) setSession({ key: sessionKey, loading: false, error: reason instanceof Error ? reason.message : t("cf.loadTask") });
     });
     return () => controller.abort();
-  }, [repoId, taskId, sessionKey]);
+  }, [repoId, taskId, sessionKey, coreRestarts]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,8 +101,12 @@ export function ConflictWindow() {
     void api.withSignal(controller.signal).getRepositoryWorkflowConflictFile(repoId, taskId, selectedPath).then((response) => {
       if (!controller.signal.aborted && selectedPathRef.current === selectedPath) {
         setFile({ key: fileKey, loading: false, data: response });
-        setDraft(response.resultContent ?? "");
-        setTotalBlocks(response.isText ? findConflictBlocks(response.resultContent ?? "").length : 0);
+        const carried = carriedDraftRef.current?.path === selectedPath && response.isText ? carriedDraftRef.current.draft : undefined;
+        carriedDraftRef.current = undefined;
+        const content = carried ?? response.resultContent ?? "";
+        setDraft(content);
+        if (carried !== undefined) setHasUnsavedChanges(true);
+        setTotalBlocks(response.isText ? findConflictBlocks(content).length : 0);
         setActiveBlock(0);
       }
     }).catch((reason: unknown) => {

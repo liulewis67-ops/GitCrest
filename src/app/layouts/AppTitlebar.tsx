@@ -16,6 +16,10 @@ interface AppTitlebarProps {
   shortcuts: ShortcutPreferences;
   status: string;
   connected: boolean;
+  /** Whether the core is still starting or restarting; read from the status text when omitted. */
+  connecting?: boolean;
+  /** Offered while the core is unavailable, so a stopped core can be started again without quitting. */
+  onRestartCore?: () => void;
   activeTaskCount: number;
   isMacPlatform: boolean;
   openingRepository: boolean;
@@ -38,6 +42,8 @@ export function AppTitlebar({
   shortcuts,
   status,
   connected,
+  connecting: connectingProp,
+  onRestartCore,
   activeTaskCount,
   isMacPlatform,
   openingRepository,
@@ -52,7 +58,7 @@ export function AppTitlebar({
   onOpenSettings,
 }: AppTitlebarProps) {
   const { t } = useI18n();
-  const connecting = status.startsWith("Starting");
+  const connecting = connectingProp ?? status.startsWith("Starting");
   const connectionLabel = connected ? t("titlebar.coreConnected") : connecting ? t("titlebar.coreStarting") : t("titlebar.coreUnavailable");
 
   return (
@@ -102,6 +108,7 @@ export function AppTitlebar({
         <span className="connectionDot" aria-hidden="true" />
         <span className={connected ? "srOnly" : undefined}>{connectionLabel}</span>
       </div>
+      {!connected && !connecting && onRestartCore && <button className="quietButton compact" type="button" title={status} onClick={onRestartCore}>{t("titlebar.restartCore")}</button>}
     </header>
   );
 }

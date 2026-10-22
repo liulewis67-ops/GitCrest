@@ -2,6 +2,7 @@ import { useI18n } from "../../../shared/i18n";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
+import { useCoreRestartCount } from "../../../shared/hooks/use-core-restart-count";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../settings";
 
 type View = "split" | "unified" | "blame";
@@ -30,6 +31,8 @@ export function DiffWindow() {
   const [loading, setLoading] = useState(false);
   const [tabsTruncated, setTabsTruncated] = useState(false);
   const [view, setView] = useState<View>("split");
+  const coreRestarts = useCoreRestartCount();
+  const tabsLoadedRef = useRef(false);
   const [shortcuts, setShortcuts] = useState<ShortcutPreferences>(() => {
     try {
       return readShortcutPreferences(window.localStorage.getItem(SHORTCUT_PREFERENCES_KEY));
@@ -78,6 +81,14 @@ export function DiffWindow() {
     void bridge.getSidecarConnection().then(async (connection) => {
       if (connection.windowAccess !== "readOnly") throw new Error(t("dw.readOnlyOnly"));
       const client = new GitCrestApiClient(connection.baseUrl, connection.token).withSignal(controller.signal);
+      // A restarted core keeps the open tabs; only the client moves to the new core.
+      if (tabsLoadedRef.current) {
+        if (active) {
+          setError("");
+          setApi(client);
+        }
+        return;
+      }
       const initial: DiffTab = {
         key: tabKey(initialPath, initialScope as DiffTab["scope"], initialCommitOid),
         path: initialPath,
@@ -95,6 +106,7 @@ export function DiffWindow() {
         setTabs(uniqueTabs.slice(0, MAX_DIFF_TABS));
         setActiveTabKey(initial.key);
         setApi(client);
+        tabsLoadedRef.current = true;
       }
     }).catch((reason: unknown) => {
       if (active) setError(reason instanceof Error ? reason.message : t("dw.loadFilesFailed"));
@@ -103,7 +115,7 @@ export function DiffWindow() {
       active = false;
       controller.abort();
     };
-  }, [initialCommitOid, initialPath, initialScope, repoId]);
+  }, [initialCommitOid, initialPath, initialScope, repoId, coreRestarts]);
 
   useEffect(() => {
     if (!api || !activeTab) return;

@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell, type WebContents } from "electron";
-import { startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
+import type { CoreStatus } from "../../src/api/core-status";
+import { CoreRestartPolicy } from "./core-supervisor";
+import { onSidecarUnexpectedExit, startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
 import { UpdateController, type UpdateEventSource } from "./update-controller";
 import { getLinuxUpdateManifestPublicKey, isUpdateFeedConfigured } from "./update-config";
 import { requireLinuxUpdateInfoSignature } from "./update-manifest-signature";
@@ -11,6 +13,11 @@ import WebSocket from "ws";
 let mainWindow: BrowserWindow | undefined;
 let sidecarConnection: SidecarConnection | undefined;
 let finishingQuit = false;
+// The generation goes up each time a core becomes ready, so a window can tell a restarted core from the one it used.
+let coreStatus: CoreStatus = { state: "restarting", message: "Starting local GitCrest core..." };
+let coreGeneration = 0;
+let coreRestartTimer: ReturnType<typeof setTimeout> | undefined;
+const coreRestartPolicy = new CoreRestartPolicy();
 type WindowAccess = "readWrite" | "readOnly" | "conflictResolution";
 interface DiffWindowRequest {
   repoId: string;
@@ -91,8 +98,11 @@ function openExternalHttpUrl(url: string): void {
 
 ipcMain.handle("gitcrest:get-sidecar-connection", (event) => {
   const windowAccess = windowAccessByContentsId.get(event.sender.id);
-  if (!windowAccess || !sidecarConnection) {
+  if (!windowAccess) {
     throw new Error("This window is not authorized to access the GitCrest API.");
+  }
+  if (!sidecarConnection) {
+    throw new Error(coreStatus.state === "ready" ? "The GitCrest core is not running." : coreStatus.message);
   }
 
   return {
@@ -101,6 +111,72 @@ ipcMain.handle("gitcrest:get-sidecar-connection", (event) => {
     windowAccess,
   };
 });
+
+ipcMain.handle("gitcrest:get-core-status", (event) => {
+  assertApplicationWindow(event.sender.id);
+  return coreStatus;
+});
+
+ipcMain.handle("gitcrest:restart-core", async (event) => {
+  if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
+    throw new Error("Only the main window can restart the GitCrest core.");
+  }
+  if (coreStatus.state !== "failed") return coreStatus;
+  coreRestartPolicy.reset();
+  await restartCore();
+  return coreStatus;
+});
+
+function publishCoreStatus(status: CoreStatus): void {
+  coreStatus = status;
+  for (const window of BrowserWindow.getAllWindows()) {
+    if (windowAccessByContentsId.has(window.webContents.id) && !window.webContents.isDestroyed()) {
+      window.webContents.send("gitcrest:core-status", status);
+    }
+  }
+}
+
+async function restartCore(): Promise<void> {
+  if (finishingQuit) return;
+  publishCoreStatus({ state: "restarting", message: "Restarting the GitCrest core..." });
+  try {
+    sidecarConnection = await startSidecar();
+  } catch (error) {
+    if (!finishingQuit) handleCoreExit(error instanceof Error ? error.message : String(error));
+    return;
+  }
+  if (finishingQuit) return;
+  coreGeneration += 1;
+  // Event streams live here, so they move to the new core and its tokens without the windows subscribing again.
+  for (const [contentsId, stream] of eventStreamsByContentsId) {
+    if (stream.reconnectTimer) clearTimeout(stream.reconnectTimer);
+    stream.reconnectTimer = undefined;
+    stream.attempts = 0;
+    const socket = stream.socket;
+    stream.socket = undefined;
+    socket?.close(1000, "core restarted");
+    connectEventStream(contentsId, stream);
+  }
+  publishCoreStatus({ state: "ready", generation: coreGeneration });
+}
+
+function handleCoreExit(message: string): void {
+  sidecarConnection = undefined;
+  if (finishingQuit || coreRestartTimer) return;
+  console.error(`[gitcrest-core] ${message}`);
+  const delayMs = coreRestartPolicy.nextRestartDelay(Date.now());
+  if (delayMs === undefined) {
+    publishCoreStatus({ state: "failed", message });
+    return;
+  }
+  publishCoreStatus({ state: "restarting", message });
+  coreRestartTimer = setTimeout(() => {
+    coreRestartTimer = undefined;
+    void restartCore();
+  }, delayMs);
+}
+
+onSidecarUnexpectedExit(handleCoreExit);
 
 ipcMain.handle("gitcrest:get-update-status", (event) => {
   if (!windowAccessByContentsId.has(event.sender.id)) {
@@ -233,9 +309,10 @@ function stopEventStream(contentsId: number): void {
 
 ipcMain.handle("gitcrest:connect-events", (event) => {
   const windowAccess = windowAccessByContentsId.get(event.sender.id);
-  if (!windowAccess || !sidecarConnection) {
+  if (!windowAccess) {
     throw new Error("This window is not authorized to access GitCrest events.");
   }
+  // Without a running core the stream is only registered; restartCore connects it once the core is ready.
   if (!eventStreamsByContentsId.has(event.sender.id)) {
     const stream: EventStream = { webContents: event.sender, windowAccess, attempts: 0, stopped: false };
     eventStreamsByContentsId.set(event.sender.id, stream);
@@ -292,7 +369,15 @@ function parseDiffWindowRequest(value: unknown): DiffWindowRequest {
 }
 
 async function createWindow(windowAccess: WindowAccess = "readWrite", diffRequest?: DiffWindowRequest, conflictRequest?: ConflictWindowRequest): Promise<void> {
-  sidecarConnection = await startSidecar();
+  if (!sidecarConnection) {
+    if (coreStatus.state === "failed") throw new Error(coreStatus.message);
+    // During a restart the window opens at once and connects when the core reports ready.
+    if (coreGeneration === 0) {
+      sidecarConnection = await startSidecar();
+      coreGeneration = 1;
+      coreStatus = { state: "ready", generation: coreGeneration };
+    }
+  }
   const secondaryWindow = Boolean(diffRequest || conflictRequest);
 
   const window = new BrowserWindow({
@@ -373,6 +458,7 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
 }
 
 app.whenReady().then(() => createWindow()).catch((error: unknown) => {
+  if (finishingQuit) return;
   const message = error instanceof Error ? error.message : String(error);
   dialog.showErrorBox("GitCrest could not start", message);
   app.quit();
@@ -380,7 +466,9 @@ app.whenReady().then(() => createWindow()).catch((error: unknown) => {
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
-    void createWindow();
+    createWindow().catch((error: unknown) => {
+      dialog.showErrorBox("GitCrest could not open a window", error instanceof Error ? error.message : String(error));
+    });
   }
 });
 
@@ -388,6 +476,8 @@ app.on("before-quit", (event) => {
   if (finishingQuit) return;
   event.preventDefault();
   finishingQuit = true;
+  if (coreRestartTimer) clearTimeout(coreRestartTimer);
+  coreRestartTimer = undefined;
   void stopSidecar().finally(() => app.quit());
 });
 

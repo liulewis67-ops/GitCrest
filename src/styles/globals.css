@@ -917,7 +917,7 @@ button:disabled { cursor: not-allowed; }
 .shelfActions .primaryButton, .shelfActions .secondaryButton { min-height: 27px; padding: 0 7px; font-size: var(--type-2xs); }
 .shelfInlineError { overflow-wrap: anywhere; color: var(--danger); font-size: var(--type-2xs); line-height: 1.45; }
 .shelfBackdrop { z-index: 20; align-items: center; padding: 18px; }
-.shelfComposer, .shelfDeleteDialog { display: grid; gap: 10px; width: min(620px, 100%); max-height: min(760px, 90vh); overflow: auto; padding: 16px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-raised); box-shadow: var(--shadow); }
+.shelfComposer, .shelfDeleteDialog, .repositoryRemoveDialog { display: grid; gap: 10px; width: min(620px, 100%); max-height: min(760px, 90vh); overflow: auto; padding: 16px; border: 1px solid var(--line-strong); border-radius: 9px; background: var(--surface-raised); box-shadow: var(--shadow); }
 .shelfField { display: grid; gap: 5px; color: var(--text-secondary); font-size: var(--type-xs); font-weight: 600; }
 .shelfField input, .shelfField textarea, .shelfField select { width: 100%; min-width: 0; padding: 7px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--canvas); color: var(--text); font-size: var(--type-sm); font-weight: 400; }
 .shelfField textarea { resize: vertical; }
@@ -930,7 +930,8 @@ button:disabled { cursor: not-allowed; }
 .shelfHunkPicker summary { cursor: pointer; }
 .shelfHunkActions { display: flex; gap: 8px; }
 .shelfHunkChoice code { overflow: hidden; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-2xs); }
-.shelfDeleteDialog > p { margin: 0; color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.5; }
+.repositoryRemoveDialog > code { overflow-wrap: anywhere; color: var(--text-secondary); font-size: var(--type-xs); }
+.shelfDeleteDialog > p, .repositoryRemoveDialog > p { margin: 0; color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.5; }
 .dangerButton { min-height: 29px; padding: 0 10px; border: 1px solid color-mix(in srgb, var(--danger) 60%, transparent); border-radius: 5px; background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--danger); cursor: pointer; font-size: var(--type-xs); font-weight: 650; }
 .dangerButton:disabled { cursor: not-allowed; opacity: .55; }
 

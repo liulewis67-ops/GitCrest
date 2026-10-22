@@ -60,6 +60,26 @@ export class GitCrestApiError extends Error {
   }
 }
 
+/** Reads an error response, which a proxy or the HTTP layer may send without the API error shape. */
+async function readErrorBody(response: Response): Promise<ApiErrorResponse> {
+  const text = await response.text().catch(() => "");
+  try {
+    const body = JSON.parse(text) as Partial<ApiErrorResponse>;
+    if (body.error && typeof body.error.code === "string" && typeof body.error.message === "string") {
+      return body as ApiErrorResponse;
+    }
+  } catch {
+    // Not JSON: described below from the status and text.
+  }
+  const detail = text.trim().slice(0, 200);
+  return {
+    error: {
+      code: "INTERNAL_ERROR",
+      message: `The GitCrest core answered with HTTP ${response.status}${detail ? `: ${detail}` : "."}`,
+    },
+  };
+}
+
 export class GitCrestApiClient {
   constructor(
     private readonly baseUrl: string,
@@ -743,10 +763,16 @@ export class GitCrestApiClient {
       headers.set("X-GitCrest-API-Version", "1");
     }
 
-    const response = await this.fetcher(new URL(path, this.baseUrl), { ...init, headers });
+    let response: Response;
+    try {
+      response = await this.fetcher(new URL(path, this.baseUrl), { ...init, headers });
+    } catch (error) {
+      // An aborted request stays an AbortError; a refused connection gets a message a person can act on.
+      if (init.signal?.aborted || (error as { name?: unknown } | undefined)?.name === "AbortError") throw error;
+      throw new Error("The local GitCrest core did not respond. If it stopped, GitCrest restarts it; try again in a moment.");
+    }
     if (!response.ok) {
-      const body = (await response.json()) as ApiErrorResponse;
-      throw new GitCrestApiError(response.status, body);
+      throw new GitCrestApiError(response.status, await readErrorBody(response));
     }
 
     if (versioned && response.headers.get("X-GitCrest-API-Version") !== "1") {

@@ -19,6 +19,36 @@ describe("GitCrestApiClient", () => {
     await expect(request).rejects.toMatchObject({ name: "AbortError" });
   });
 
+  it("reports an error response that is not the API error shape with its status and text", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response("Payload Too Large", { status: 413 }));
+    const request = new GitCrestApiClient(baseUrl, token, fetcher).listRepositories();
+
+    await expect(request).rejects.toBeInstanceOf(GitCrestApiError);
+    await expect(request).rejects.toMatchObject({
+      status: 413,
+      body: { error: { code: "INTERNAL_ERROR", message: "The GitCrest core answered with HTTP 413: Payload Too Large" } },
+    });
+  });
+
+  it("keeps the API error body when the core sends one", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(
+      JSON.stringify({ error: { code: "REPOSITORY_NOT_FOUND", message: "Repository not found." } }),
+      { status: 404, headers: { "Content-Type": "application/json" } },
+    ));
+
+    await expect(new GitCrestApiClient(baseUrl, token, fetcher).listRepositories()).rejects.toMatchObject({
+      status: 404,
+      body: { error: { code: "REPOSITORY_NOT_FOUND", message: "Repository not found." } },
+    });
+  });
+
+  it("explains a refused connection instead of surfacing the network error", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockRejectedValue(new TypeError("Failed to fetch"));
+
+    await expect(new GitCrestApiClient(baseUrl, token, fetcher).listRepositories())
+      .rejects.toThrow("The local GitCrest core did not respond");
+  });
+
   it("stores AI provider settings and cloud credentials through separate versioned APIs", async () => {
     const settings = { provider: "openAiCompatible" as const, baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true };
     const fetcher = vi.fn<typeof fetch>()

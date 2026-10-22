@@ -66,10 +66,15 @@ fn run_git_askpass() -> Result<(), credentials::CredentialError> {
 async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::from_env()?;
     let database_path = config.database_path;
+    let display_path = database_path.display().to_string();
+    // The cause and path reach the startup error the desktop app shows, so a locked, unwritable or
+    // damaged database can be told apart.
     let store = tokio::task::spawn_blocking(move || RepositoryStore::open(&database_path))
         .await
-        .map_err(|_| "Could not initialize the repository database")?
-        .map_err(|_| "Could not initialize the repository database")?;
+        .map_err(|_| format!("Could not initialize the repository database at {display_path}"))?
+        .map_err(|error| {
+            format!("Could not initialize the repository database at {display_path}: {error}")
+        })?;
     let repository_catalog: Arc<dyn crate::ports::repository::RepositoryCatalogPort> =
         Arc::new(store.clone());
     let repository_git: Arc<dyn RepositoryGitPort> = Arc::new(GitRepositoryAdapter);

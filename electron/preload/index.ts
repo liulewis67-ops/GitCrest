@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { components } from "../../src/api/schema";
+import type { CoreStatus } from "../../src/api/core-status";
 import type { UpdateStatus } from "../../src/api/update-status";
 
 type EventEnvelope = components["schemas"]["EventEnvelope"];
@@ -34,6 +35,13 @@ const api = {
   },
   openDiffWindow: (request: DiffWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-diff-window", request),
   openConflictWindow: (request: ConflictWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-conflict-window", request),
+  getCoreStatus: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:get-core-status"),
+  restartCore: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:restart-core"),
+  subscribeToCoreStatus: (listener: (status: CoreStatus) => void): (() => void) => {
+    const handleCoreStatus = (_event: Electron.IpcRendererEvent, status: CoreStatus): void => listener(status);
+    ipcRenderer.on("gitcrest:core-status", handleCoreStatus);
+    return () => ipcRenderer.removeListener("gitcrest:core-status", handleCoreStatus);
+  },
   getUpdateStatus: (): Promise<UpdateStatus> => ipcRenderer.invoke("gitcrest:get-update-status"),
   checkForUpdates: (): Promise<UpdateStatus> => ipcRenderer.invoke("gitcrest:check-for-updates"),
   installUpdate: (): Promise<boolean> => ipcRenderer.invoke("gitcrest:install-update"),

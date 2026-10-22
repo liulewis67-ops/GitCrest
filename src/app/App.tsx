@@ -85,6 +85,7 @@ function App() {
     selectionRepoId: commitSelectionRepoId,
     addDiffSelection: addCommitDiffSelection,
     chooseTemplate: chooseCommitTemplate,
+    clearCommitted: clearCommittedDraft,
   } = useCommitDraft(selectedRepository?.repoId);
   const [commitAssistantOpen, setCommitAssistantOpen] = useState(false);
   const [commitActionMenuOpen, setCommitActionMenuOpen] = useState(false);
@@ -105,8 +106,12 @@ function App() {
     refreshRepositories,
     setError: setOpenError,
   });
-  const { apiRef, status, version, setStatus } = useCoreConnection({
-    onConnected: (api) => refreshRepositories(api, true),
+  const { apiRef, status, connectionState, version, setConnectionProblem, restartCore } = useCoreConnection({
+    onConnected: async (api, reconnected) => {
+      // A restarted core keeps the open tabs; only the first connection restores the saved workspace.
+      await refreshRepositories(api, !reconnected);
+      if (reconnected) void refreshTasks();
+    },
     onEvent: (api, event, sequenceGap, isActive) => {
       // Read task state as soon as a task starts or ends. Waiting for the 1s poll left finished
       // tasks counted as running, which kept Commit and the remote actions blocked meanwhile.
@@ -119,9 +124,11 @@ function App() {
       );
       if (!plan) return;
       if (plan.refreshRepositories) {
-        void refreshRepositories(api).catch((syncError: unknown) => {
+        void refreshRepositories(api).then(() => {
+          if (plan.reportRepositoryRefreshError && isActive()) setConnectionProblem(undefined);
+        }, (syncError: unknown) => {
           if (plan.reportRepositoryRefreshError && isActive()) {
-            setStatus(syncError instanceof Error ? syncError.message : t("app.refreshFailed"));
+            setConnectionProblem(syncError instanceof Error ? syncError.message : t("app.refreshFailed"));
           }
         });
       }
@@ -264,7 +271,7 @@ function App() {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
   const { sidebarWidth, setSidebarWidth, historyListWidth, setHistoryListWidth, detailsWidth, setDetailsWidth } = useWorkspaceLayout(selectedRepository?.repoId);
-  const connected = status === "Connected to local Rust core";
+  const connected = connectionState === "connected";
   useAdoptInProgressWorkflow({ getApi: () => apiRef.current, repoId: selectedRepository?.availability === "available" ? selectedRepository.repoId : undefined, connected, onAdopted: prependTask });
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
   const activeStatusError = selectedRepository ? statusErrors[selectedRepository.repoId] : undefined;
@@ -672,9 +679,9 @@ function App() {
       if (plan.kind === "staging" && task.status === "failed") setTasksOpen(true);
       if (plan.kind !== "commit") return;
       const commitContext = commitSubmission.takeTaskContext(task.taskId);
-      if (task.status === "succeeded" && commitContext?.message === commitMessage) setCommitMessage("");
-      if (task.status === "succeeded" && commitContext?.selections === JSON.stringify(commitSelections)) {
-        setCommitSelections([]);
+      // The commit may finish after the user switched tabs, so it clears its own repository's draft.
+      if (task.status === "succeeded" && task.repoId && commitContext) {
+        clearCommittedDraft(task.repoId, commitContext.message, commitContext.selections);
       }
       const intent = commitContext?.intent;
       if (task.status === "succeeded" && task.repoId && intent && intent.action !== "commit") {
@@ -933,6 +940,8 @@ function App() {
         shortcuts={shortcuts}
         status={status}
         connected={connected}
+        connecting={connectionState === "connecting"}
+        onRestartCore={() => void restartCore()}
         activeTaskCount={tasks.filter((task) => task.status === "queued" || task.status === "running").length}
         isMacPlatform={isMacPlatform}
         openingRepository={repositoryOpening.opening}
