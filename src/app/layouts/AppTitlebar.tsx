@@ -70,9 +70,10 @@ export function AppTitlebar({
           return (
             <div className={active ? "repositoryTab active" : "repositoryTab"} key={repoId}>
               <button type="button" role="tab" aria-selected={active} title={repository.path} onClick={() => { if (selected) onPageChange("workspace"); else onSelectRepository(repository); }}>
-                {displayName}
+                <svg className="repositoryTabIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M12.5 11V3.25a.75.75 0 0 0-.75-.75H5a1.5 1.5 0 0 0-1.5 1.5v8" /><path d="M3.5 12a1.5 1.5 0 0 1 1.5-1.5h7.5V13.5H5A1.5 1.5 0 0 1 3.5 12Z" /></svg>
+                <span className="repositoryTabName">{displayName}</span>
               </button>
-              <button type="button" className="closeRepositoryTab" aria-label={t("titlebar.closeTabLabel", { name: displayName })} title={t("titlebar.closeTab")} onClick={() => onCloseRepository(repoId)}>×</button>
+              <button type="button" className="closeRepositoryTab" aria-label={t("titlebar.closeTabLabel", { name: displayName })} title={t("titlebar.closeTab")} onClick={() => onCloseRepository(repoId)}><svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4.5 4.5 7 7M11.5 4.5l-7 7" /></svg></button>
             </div>
           );
         })}

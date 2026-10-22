@@ -44,6 +44,11 @@ interface WorkspacePageProps {
 const VIEW_LABEL = { changes: "view.changes", history: "view.history", branches: "view.branches" } as const;
 const VIEW_TITLE = { changes: "view.changesTitle", history: "view.historyTitle", branches: "view.branchesTitle" } as const;
 const VIEW_SHORTCUT = { changes: "viewChanges", history: "viewHistory", branches: "viewBranches" } as const;
+const VIEW_ICON = {
+  changes: <><path d="M9.5 2.5H4.75a1.25 1.25 0 0 0-1.25 1.25v8.5a1.25 1.25 0 0 0 1.25 1.25h6.5a1.25 1.25 0 0 0 1.25-1.25V5.5Z" /><path d="M9.5 2.5v3h3" /><path d="M8 7.25v3.5M6.25 9h3.5" /></>,
+  history: <><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3.25l2.25 1.25" /></>,
+  branches: <><circle cx="4.75" cy="3.75" r="1.25" /><circle cx="4.75" cy="12.25" r="1.25" /><circle cx="11.25" cy="5.25" r="1.25" /><path d="M4.75 5v6M11.25 6.5c0 2.5-6.5 1.5-6.5 4.5" /></>,
+} as const;
 const STATE_LABEL = { merging: "state.merging", rebasing: "state.rebasing", cherryPicking: "state.cherryPicking", bisecting: "state.bisecting" } as const;
 
 export function WorkspacePage({
@@ -131,12 +136,13 @@ export function WorkspacePage({
               onClick={() => onChangeMode(view)}
               onKeyDown={(event) => onTabKeyDown(event, index)}
             >
-              {t(VIEW_LABEL[view])}
+              <svg className="viewTabIcon" viewBox="0 0 16 16" aria-hidden="true">{VIEW_ICON[view]}</svg>
+              <span>{t(VIEW_LABEL[view])}</span>
               {view === "changes" && Boolean(changedFileCount) && <span className={`viewTabCount${conflictCount ? " conflicted" : ""}`} aria-label={t("view.changedFiles", { count: changedFileCount ?? 0 })}>{changedFileCount}</span>}
             </button>
           ))}
         </div>
-        <div className="workspaceCrumb" title={repository.path}><span className="mutedText">{repository.path}</span></div>
+        <div className="workspaceCrumb" title={repository.path}><svg className="workspaceCrumbIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.25c0-.69.56-1.25 1.25-1.25h2.5l1.5 1.5h4.5c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25Z" /></svg><span className="mutedText">{repository.path}</span></div>
         <div className="toolbarActions">
           <button className={`quietButton compact branchSelector${repository.detached ? " detached" : ""}`} type="button" disabled={!repositoryReady} aria-keyshortcuts={ariaShortcut(shortcuts.branchSwitcher, isMacPlatform)} title={t("page.switchBranches", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) })} onClick={() => onOpenBranchSwitcher()}>
             <span className="branchGlyph" aria-hidden="true">⑂</span>

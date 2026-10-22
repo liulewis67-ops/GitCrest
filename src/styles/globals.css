@@ -100,22 +100,40 @@ button:disabled { cursor: not-allowed; }
   /* Right inset keeps content clear of the native window-controls overlay. */
   padding: 0 calc(100vw - env(titlebar-area-width, 100vw) + 14px) 0 18px;
   border-top: 1px solid var(--line-strong);
-  border-bottom: 1px solid var(--line);
-  background: var(--surface);
+  /* The bottom rule is painted as an inset shadow so the active repository tab can cover it
+     and open straight into the workspace toolbar underneath. */
+  box-shadow: inset 0 -1px 0 var(--line);
+  background: var(--canvas);
   -webkit-app-region: drag;
 }
 
 .titlebar button, .titlebar nav, .titlebar .connectionBadge { -webkit-app-region: no-drag; }
-.repositoryTabs { display: flex; align-self: stretch; align-items: center; gap: 3px; min-width: 0; margin-left: 18px; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
+/* Repository tabs are document tabs: they hang from the bottom of the titlebar, and the active
+   one shares the toolbar's surface so the tab and its workspace read as one sheet. */
+.repositoryTabs { display: flex; align-self: stretch; align-items: flex-end; min-width: 0; margin-left: 10px; padding-top: 7px; overflow-x: auto; scrollbar-width: none; -webkit-app-region: no-drag; }
 .repositoryTabs::-webkit-scrollbar { display: none; }
-.repositoryTab { display: flex; align-items: center; min-width: 0; max-width: 150px; height: 28px; border: 1px solid transparent; border-radius: 5px; background: transparent; }
-.repositoryTab.active { border-color: var(--line); background: var(--surface-raised); }
-.repositoryTab > button:first-child { overflow: hidden; min-width: 0; padding: 0 6px; border: 0; background: transparent; color: var(--text-muted); font-size: var(--type-sm); text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
-.repositoryTab.active > button:first-child { color: var(--text); }
-.repositoryTab .closeRepositoryTab { width: 21px; height: 22px; line-height: 1; margin-right: 2px; padding: 0; border: 0; border-radius: 4px; background: transparent; color: var(--text-muted); cursor: pointer; }
-.repositoryTab .closeRepositoryTab:hover { background: var(--line); color: var(--text); }
-.newRepositoryTab { flex: none; width: 28px; height: 28px; margin-left: 3px; padding: 0; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text-muted); font-size: calc(18px * var(--font-scale)); line-height: 1; cursor: pointer; }
-.newRepositoryTab:hover, .newRepositoryTab[aria-expanded="true"] { border-color: var(--line); background: var(--surface-raised); color: var(--text); }
+.repositoryTab { position: relative; display: flex; flex: 0 1 auto; align-items: center; min-width: 96px; max-width: 200px; height: 100%; padding-right: 5px; border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; background: transparent; transition: background-color .12s ease-out; }
+.repositoryTab:hover:not(.active) { background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.repositoryTab.active { z-index: 1; border-color: var(--line); background: var(--surface); }
+.repositoryTab.active::after { position: absolute; top: -1px; right: 10px; left: 10px; height: 2px; border-radius: 0 0 2px 2px; background: var(--accent); content: ""; }
+/* Hairlines between resting tabs; they drop out next to a hovered or active tab. */
+.repositoryTab + .repositoryTab::before { position: absolute; top: 25%; bottom: 25%; left: -1px; border-left: 1px solid var(--line-strong); content: ""; }
+.repositoryTab.active::before, .repositoryTab.active + .repositoryTab::before, .repositoryTab:hover::before, .repositoryTab:hover + .repositoryTab::before { display: none; }
+.repositoryTab > button:first-child { display: flex; flex: 1; align-items: center; gap: 7px; align-self: stretch; overflow: hidden; min-width: 0; padding: 0 4px 0 11px; border: 0; background: transparent; color: var(--text-muted); font-size: var(--type-sm); font-weight: 520; white-space: nowrap; cursor: pointer; }
+.repositoryTab > button:first-child:focus-visible { outline-offset: -3px; }
+.repositoryTab:hover > button:first-child { color: var(--text-secondary); }
+.repositoryTab.active > button:first-child { color: var(--text); font-weight: 600; }
+.repositoryTabName { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.repositoryTabIcon { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+.repositoryTab.active .repositoryTabIcon { color: var(--accent-strong); opacity: 1; }
+/* Close stays out of the way until the tab is active, hovered or focused. */
+.repositoryTab .closeRepositoryTab { display: grid; flex: none; width: 20px; height: 20px; place-items: center; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); opacity: 0; cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out, opacity .12s ease-out; }
+.repositoryTab.active .closeRepositoryTab, .repositoryTab:hover .closeRepositoryTab, .repositoryTab:focus-within .closeRepositoryTab { opacity: 1; }
+.repositoryTab .closeRepositoryTab:hover { background: color-mix(in srgb, var(--text-muted) 18%, transparent); color: var(--text); }
+.closeRepositoryTab svg, .newRepositoryTab svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; }
+.newRepositoryTab svg { width: 14px; height: 14px; }
+.newRepositoryTab { display: grid; flex: none; align-self: flex-end; width: 28px; height: 28px; place-items: center; margin: 0 0 4px -12px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.newRepositoryTab:hover, .newRepositoryTab[aria-expanded="true"] { background: var(--surface); color: var(--text); }
 .newRepositoryTabMenu { position: fixed; z-index: 50; display: grid; gap: 2px; padding: 4px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface-raised); box-shadow: var(--shadow); -webkit-app-region: no-drag; }
 .newRepositoryTabMenu button { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 10px; border: 0; border-radius: 4px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
 .newRepositoryTabMenu button:hover:not(:disabled), .newRepositoryTabMenu button:focus-visible { background: var(--accent-soft); outline: none; }
@@ -133,7 +151,7 @@ button:disabled { cursor: not-allowed; }
 .quietButton:hover:not(:disabled) { background: var(--surface-raised); color: var(--text); }
 .quietButton:disabled { color: var(--text-muted); opacity: .7; }
 .quietButton kbd, .paletteSearch kbd, .commandItem kbd { padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text-muted); font-family: inherit; font-size: var(--type-xs); }
-.searchShortcut { border: 1px solid var(--line); background: var(--canvas); }
+.searchShortcut { border: 1px solid var(--line); background: var(--surface); }
 .searchShortcut > span:first-child { font-size: calc(16px * var(--font-scale)); line-height: 1; }
 .connectionBadge { display: inline-flex; align-items: center; gap: 6px; min-width: 7px; color: var(--amber); font-size: var(--type-sm); white-space: nowrap; }
 .connectionBadge.failed { color: var(--danger); font-weight: 600; }
@@ -167,18 +185,26 @@ button:disabled { cursor: not-allowed; }
 
 /* Workspace shell: one toolbar row, an optional state banner, then the active task view. */
 .workspacePage { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
-.workspaceToolbar { display: flex; flex: none; align-items: center; gap: var(--space-3); min-height: 40px; padding: 0 var(--space-3) 0 var(--space-2); border-bottom: 1px solid var(--line); background: var(--surface); }
-.viewSwitcher { display: flex; flex: none; align-items: stretch; align-self: stretch; gap: 2px; }
-.viewTab { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 0 var(--space-3); border: 0; background: transparent; color: var(--text-muted); font-size: var(--type-sm); font-weight: 560; white-space: nowrap; cursor: pointer; transition: color .12s ease-out; }
-.viewTab:hover { color: var(--text); }
-.viewTab.active { color: var(--text); }
-.viewTab.active::after { position: absolute; right: var(--space-2); bottom: -1px; left: var(--space-2); height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); content: ""; }
-.viewTab:focus-visible { outline-offset: -4px; }
+/* The view switcher is a segmented control, so it never reads as another row of panel tabs. */
+.workspaceToolbar { display: flex; flex: none; align-items: center; gap: var(--space-4); min-height: 46px; padding: 0 var(--space-3); border-bottom: 1px solid var(--line); background: var(--surface); }
+.viewSwitcher { display: flex; flex: none; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--canvas); }
+.viewTab { display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 var(--space-3) 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--text-muted); font-size: var(--type-sm); font-weight: 560; white-space: nowrap; cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out, box-shadow .12s ease-out; }
+.viewTab:hover:not(.active) { background: color-mix(in srgb, var(--surface-raised) 60%, transparent); color: var(--text-secondary); }
+.viewTab.active { background: var(--surface-raised); color: var(--text); box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgb(0 0 0 / 8%); }
+.viewTab:focus-visible { outline-offset: 0; }
+.viewTabIcon { flex: none; width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.viewTab.active .viewTabIcon { color: var(--accent-strong); }
 .viewTabCount { display: inline-grid; min-width: 18px; height: 17px; place-items: center; padding: 0 5px; border-radius: 9px; background: var(--accent-soft); color: var(--accent-strong); font-size: var(--type-2xs); font-weight: 650; font-variant-numeric: tabular-nums; }
 .viewTabCount.conflicted { background: color-mix(in srgb, var(--git-conflicted) 16%, transparent); color: var(--git-conflicted); }
 /* The path gives way first, so toolbar labels never wrap at the minimum window width. */
-.workspaceCrumb { flex: 1 1 auto; width: 0; min-width: 0; overflow: hidden; color: var(--text-muted); font-size: var(--type-xs); text-overflow: ellipsis; white-space: nowrap; }
-.workspaceCrumb > .mutedText { overflow: hidden; text-overflow: ellipsis; }
+.workspaceCrumb { display: flex; flex: 1 1 auto; align-items: center; gap: 6px; width: 0; min-width: 0; overflow: hidden; color: var(--text-muted); font-size: var(--type-xs); white-space: nowrap; }
+.workspaceCrumb > .mutedText { min-width: 0; overflow: hidden; font-family: var(--font-mono); text-overflow: ellipsis; }
+/* Branch, sync and panel controls match the switcher's height so the toolbar has one baseline. */
+.workspaceToolbar .branchSelector, .workspaceToolbar .panelToggle { min-height: 30px; }
+.workspaceToolbar .panelToggle { width: 30px; min-width: 30px; }
+.workspaceToolbar .syncGroup { height: 30px; }
+.workspaceToolbar .syncButton { padding: 0 10px; }
+.workspaceCrumbIcon { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.2; stroke-linejoin: round; opacity: .85; }
 .mutedText { color: var(--text-muted); }
 .toolbarActions { display: flex; flex: none; align-items: center; gap: var(--space-2); }
 .toolbarDivider { height: 16px; border-left: 1px solid var(--line); }
@@ -242,18 +268,20 @@ button:disabled { cursor: not-allowed; }
 /* Changes */
 
 /* Commit panel: Commit | Shelves tabs, an icon toolbar, the change tree, and the commit form below it. */
-.commitPanelTabs { display: flex; flex: none; align-items: stretch; gap: 2px; min-height: 36px; padding: 0 var(--space-2); border-bottom: 1px solid var(--line); }
-.commitPanelTab { position: relative; padding: 0 var(--space-2); border: 0; background: transparent; color: var(--text-muted); font-size: var(--type-sm); font-weight: 560; cursor: pointer; }
-.commitPanelTab:hover { color: var(--text); }
+/* A tool-window header: smaller and quieter than the view switcher above it, with its toolbar on a row of its own. */
+.commitPanelTabs { display: flex; flex: none; align-items: stretch; gap: var(--space-1); min-height: 38px; padding: 0 var(--space-2); border-bottom: 1px solid var(--line); }
+.commitPanelTab { position: relative; padding: 0 var(--space-2); border: 0; background: transparent; color: var(--text-muted); font-size: var(--type-xs); font-weight: 600; letter-spacing: .01em; cursor: pointer; transition: color .12s ease-out; }
+.commitPanelTab:hover { color: var(--text-secondary); }
 .commitPanelTab.active { color: var(--text); }
-.commitPanelTab.active::after { position: absolute; right: var(--space-1); bottom: -1px; left: var(--space-1); height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); content: ""; }
+.commitPanelTab.active::after { position: absolute; right: var(--space-2); bottom: -1px; left: var(--space-2); height: 2px; border-radius: 2px 2px 0 0; background: var(--accent); content: ""; }
 .commitPanelTab:focus-visible { outline-offset: -4px; }
 .commitPanelBody { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .shelvesBody { padding: var(--space-2) var(--space-1); overflow: auto; }
 .shelvesBody .navGroup { padding: 0 var(--space-2) var(--space-2); }
-.commitPanelToolbar { display: flex; flex: none; align-items: center; gap: 2px; padding: var(--space-1) var(--space-2); }
+.commitPanelToolbar { display: flex; flex: none; align-items: center; gap: 2px; padding: var(--space-1) 6px; border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent); background: var(--surface-soft); }
+.commitPanelToolbar .toolbarDivider { margin-inline: var(--space-1); }
 .toolbarIcon { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
-.changeTree { flex: 1; min-height: 96px; padding: 0 var(--space-1) var(--space-2); overflow: auto; }
+.changeTree { flex: 1; min-height: 96px; padding: var(--space-1) var(--space-1) var(--space-2); overflow: auto; }
 .changeTree ul { margin: 0; padding: 0; list-style: none; }
 .changeTreeGroup + .changeTreeGroup { margin-top: 2px; }
 .changeTreeGroupRow, .changeTreeRow { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 28px; border-radius: 5px; }

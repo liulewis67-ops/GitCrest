@@ -64,7 +64,7 @@ export function NewRepositoryTabMenu({ connected, openingRepository, shortcuts, 
 
   return <>
     <button ref={buttonRef} className="newRepositoryTab" type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("titlebar.newTab")} title={t("titlebar.newTab")} onClick={toggle}>
-      <span aria-hidden="true">+</span>
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
     </button>
     {position && <div ref={menuRef} className="newRepositoryTabMenu" role="menu" aria-label={t("titlebar.newTab")} style={{ top: position.top, left: position.left, width: MENU_WIDTH }}>
       {items.map((item) => (
