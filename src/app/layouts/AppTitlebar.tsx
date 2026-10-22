@@ -4,6 +4,7 @@ import { getRepositoryDisplayName } from "../../shared/lib/repository-display-na
 import { useI18n } from "../../shared/i18n";
 import { BrandMark } from "../../shared/ui/BrandMark";
 import { NewRepositoryTabMenu } from "./NewRepositoryTabMenu";
+import { SettingsMenu } from "./SettingsMenu";
 
 export type AppPage = "welcome" | "workspace";
 
@@ -95,7 +96,7 @@ export function AppTitlebar({
       <button className={`quietButton taskCenterButton${activeTaskCount > 0 ? " running" : ""}`} type="button" onClick={onOpenTasks} aria-label={t("titlebar.tasksLabel", { count: activeTaskCount })} title={t("titlebar.tasksLabel", { count: activeTaskCount })}>
         {activeTaskCount > 0 ? <><span className="loadingSpinner small" aria-hidden="true" /><span>{t("shell.tasksRunning", { count: activeTaskCount })}</span></> : <><svg className="titlebarIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h6" /></svg><span className="titlebarLabel">{t("titlebar.tasks")}</span></>}
       </button>
-      <button className="quietButton settingsButton" type="button" onClick={onOpenSettings} aria-label={t("titlebar.settings")} aria-keyshortcuts={ariaShortcut(shortcuts.settings, isMacPlatform)} title={t("titlebar.settingsTitle", { shortcut: displayShortcut(shortcuts.settings, isMacPlatform) })}><svg className="titlebarIcon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="2.25" /><path d="M8 1.75v1.5M8 12.75v1.5M14.25 8h-1.5M3.25 8h-1.5M12.42 3.58l-1.06 1.06M4.64 11.36l-1.06 1.06M12.42 12.42l-1.06-1.06M4.64 4.64 3.58 3.58" /></svg></button>
+      <SettingsMenu shortcuts={shortcuts} isMacPlatform={isMacPlatform} onOpenSettings={onOpenSettings} />
       {/* A healthy connection is a quiet dot; starting or failing shows its label. */}
       <div className={`connectionBadge ${connected ? "connected" : connecting ? "starting" : "failed"}`} role="status" aria-live="polite" aria-label={status} title={status}>
         <span className="connectionDot" aria-hidden="true" />

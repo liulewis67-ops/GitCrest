@@ -142,6 +142,23 @@ button:disabled { cursor: not-allowed; }
 .newRepositoryTabMenuText strong { font-size: var(--type-sm); font-weight: 600; }
 .newRepositoryTabMenuText span { color: var(--text-muted); font-size: var(--type-xs); }
 .newRepositoryTabMenu kbd { flex: none; padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text-muted); font-family: inherit; font-size: var(--type-xs); }
+/* Quick settings under the gear: theme and language switch in place, the Settings page is below them. */
+.settingsButton.active { background: var(--surface-raised); color: var(--text); }
+.quickSettingsMenu { position: fixed; z-index: 50; display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface-raised); box-shadow: var(--shadow); -webkit-app-region: no-drag; }
+.quickSettingsGroup { display: grid; gap: 6px; }
+.quickSettingsLabel { color: var(--text-muted); font-size: var(--type-xs); font-weight: 650; }
+.quickSettingsOptions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 7px; background: var(--canvas); }
+.quickSettingsOptions.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.quickSettingsOption { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-width: 0; height: 30px; padding: 0 6px; border: 0; border-radius: 5px; background: transparent; color: var(--text-muted); font: inherit; font-size: var(--type-sm); white-space: nowrap; cursor: pointer; transition: background-color .12s ease-out, color .12s ease-out, box-shadow .12s ease-out; }
+.quickSettingsOption > span { overflow: hidden; text-overflow: ellipsis; }
+.quickSettingsOption svg { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
+.quickSettingsOption:hover:not([aria-checked="true"]) { background: color-mix(in srgb, var(--surface-raised) 70%, transparent); color: var(--text-secondary); }
+.quickSettingsOption[aria-checked="true"] { background: var(--surface-raised); color: var(--text); font-weight: 600; box-shadow: 0 0 0 1px var(--line), 0 1px 2px rgb(0 0 0 / 8%); }
+.quickSettingsOption[aria-checked="true"] svg { color: var(--accent-strong); }
+.quickSettingsOption:focus-visible, .quickSettingsLink:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 0; }
+.quickSettingsLink { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin: 0 calc(var(--space-2) * -1) calc(var(--space-2) * -1); padding: 8px var(--space-2); border: 0; border-top: 1px solid var(--line); border-radius: 0 0 5px 5px; background: transparent; color: var(--text); font: inherit; font-size: var(--type-sm); text-align: left; cursor: pointer; }
+.quickSettingsLink:hover { background: var(--accent-soft); }
+.quickSettingsLink kbd { flex: none; padding: 2px 5px; border: 1px solid var(--line-strong); border-radius: 4px; color: var(--text-muted); font-family: inherit; font-size: var(--type-xs); }
 .brandButton, .quietButton, .textButton, .panelMenu, .modeButton, .actionRow { border: 0; }
 .brandButton { display: inline-flex; align-items: center; gap: 8px; padding: 0; background: transparent; font-weight: 650; letter-spacing: -.025em; cursor: pointer; }
 .brandMark { display: block; flex: none; width: 22px; height: 22px; }

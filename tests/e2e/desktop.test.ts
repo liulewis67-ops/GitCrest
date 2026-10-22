@@ -68,6 +68,7 @@ describe("desktop startup E2E", () => {
       if (!mockAddress || typeof mockAddress === "string") throw new Error("Could not bind the loopback AI test server.");
 
       await window.getByRole("button", { name: "Settings" }).click();
+      await window.getByRole("menuitem", { name: /All settings/ }).click();
       const settingsDialog = window.getByRole("dialog", { name: "Settings" });
       await settingsDialog.waitFor();
       await settingsDialog.getByRole("combobox", { name: "AI provider" }).selectOption("ollama");
@@ -131,6 +132,7 @@ describe("desktop startup E2E", () => {
       await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'changed';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
       await window.getByRole("button", { name: "Settings" }).click();
+      await window.getByRole("menuitem", { name: /All settings/ }).click();
       const privacyDialog = window.getByRole("dialog", { name: "Settings" });
       await privacyDialog.locator(".privacyScopeList").waitFor();
       await privacyDialog.locator(".privacyScopeList input").first().check();

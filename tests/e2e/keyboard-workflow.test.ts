@@ -44,6 +44,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     if (!providerAddress || typeof providerAddress === "string") throw new Error("Could not bind the loopback AI test server.");
     const providerEndpoint = `http://127.0.0.1:${providerAddress.port}`;
     await window.getByRole("button", { name: "Settings" }).click();
+    await window.getByRole("menuitem", { name: /All settings/ }).click();
     const settingsDialog = window.getByRole("dialog", { name: "Settings" });
     await settingsDialog.getByRole("combobox", { name: "AI provider" }).selectOption("ollama");
     await settingsDialog.getByRole("textbox", { name: "AI endpoint" }).fill(providerEndpoint);

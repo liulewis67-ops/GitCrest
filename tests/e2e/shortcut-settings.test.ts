@@ -52,6 +52,7 @@ describe("shortcut settings E2E", () => {
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
       await window.getByRole("button", { name: "Settings" }).click();
+      await window.getByRole("menuitem", { name: /All settings/ }).click();
 
       const settings = window.getByRole("dialog", { name: "Settings" });
       const shelveBinding = settings.getByRole("button", { name: "Record shortcut for Shelve changes" });
