@@ -824,10 +824,15 @@ button:disabled { cursor: not-allowed; }
 .unifiedDiffDeletion { background: var(--diff-del-bg); }
 .unifiedDiffAddition { background: var(--diff-add-bg); }
 .blameView { padding-bottom: 24px; font: var(--code-size)/var(--code-leading) var(--font-mono); }
-.blameLine { display: grid; grid-template-columns: 56px 80px minmax(90px, 150px) minmax(100px, 240px) minmax(0, 1fr); min-height: 22px; align-items: center; border-bottom: 1px solid var(--line); }
-.blameLine > span { overflow: hidden; padding: 2px 6px; color: var(--text-muted); text-overflow: ellipsis; white-space: nowrap; }
-.blameLine .blameLineNumber { text-align: right; user-select: none; }
-.blameLine .blameCommit { color: var(--accent-strong); }
+/* An editor-style gutter: the day and author of each line, then its number, then the code. */
+.blameLine { display: grid; grid-template-columns: minmax(170px, 230px) 48px minmax(0, 1fr); min-height: 22px; align-items: stretch; }
+.blameLine > span { color: var(--text-muted); user-select: none; }
+.blameAnnotation { display: flex; align-items: flex-start; gap: var(--space-3); min-width: 0; padding: 2px 10px; border-right: 1px solid var(--line); background: var(--surface); cursor: default; }
+/* Wide enough for the longest short date (2024/10/23), so authors line up. */
+.blameDate { flex: none; min-width: 10ch; font-variant-numeric: tabular-nums; }
+.blameAuthor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blameLine:hover .blameAnnotation { background: var(--surface-soft); color: var(--text-secondary); }
+.blameLine .blameLineNumber { padding: 2px 8px; text-align: right; }
 .blameLine code { overflow: hidden; padding: 2px 8px; color: var(--text); white-space: pre-wrap; overflow-wrap: anywhere; }
 .commitDetailFileRow { display: flex; align-items: stretch; gap: 3px; }
 .commitDetailFileRow .commitDetailFile { flex: 1; min-width: 0; }

@@ -1,4 +1,4 @@
-import { useI18n } from "../../../shared/i18n";
+import { getLocale, useI18n } from "../../../shared/i18n";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
@@ -253,15 +253,37 @@ function tabsFromStatus(snapshot: StatusSnapshotResponse): DiffTab[] {
   });
 }
 
-function BlameView({ document }: { document: BlameDocumentResponse }) {
+const blameDateFormatters = new Map<string, { day: Intl.DateTimeFormat; full: Intl.DateTimeFormat }>();
+
+function blameDateFormatter() {
+  const language = getLocale() === "zh" ? "zh-CN" : undefined;
+  const cacheKey = language ?? "default";
+  let formatter = blameDateFormatters.get(cacheKey);
+  if (!formatter) {
+    formatter = {
+      day: new Intl.DateTimeFormat(language, { dateStyle: "short" }),
+      full: new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }),
+    };
+    blameDateFormatters.set(cacheKey, formatter);
+  }
+  return formatter;
+}
+
+/**
+ * Each line is annotated with only the day it was committed and its author, like an editor's blame
+ * gutter; the commit, its subject and the exact time stay in the annotation's tooltip.
+ */
+export function BlameView({ document }: { document: BlameDocumentResponse }) {
   const { t } = useI18n();
+  const dates = blameDateFormatter();
   return <div className="blameView" aria-label={t("dw.blameAria", { path: document.path })}>
     <div className="splitDiffFileMeta"><span className="diffScopeBadge">{t("dw.blameBadge", { rev: document.revision ? document.revision.slice(0, 12) : "HEAD" })}</span><strong>{document.path}</strong></div>
     {document.lines.map((line) => <div className="blameLine" key={line.lineNumber}>
+      <span className="blameAnnotation" title={`${line.commitOid.slice(0, 8)} ${line.summary}\n${line.authorName} <${line.authorEmail}>\n${dates.full.format(new Date(line.committedAtMs))}`}>
+        <span className="blameDate">{dates.day.format(new Date(line.committedAtMs))}</span>
+        <span className="blameAuthor">{line.authorName}</span>
+      </span>
       <span className="blameLineNumber">{line.lineNumber}</span>
-      <span className="blameCommit" title={line.commitOid}>{line.commitOid.slice(0, 8)}</span>
-      <span className="blameAuthor" title={line.authorEmail}>{line.authorName}</span>
-      <span className="blameSummary" title={line.summary}>{line.summary}</span>
       <code>{line.text}</code>
     </div>)}
   </div>;
