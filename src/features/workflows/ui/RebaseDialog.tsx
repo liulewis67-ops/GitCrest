@@ -15,10 +15,12 @@ type RebaseTodoItem = components["schemas"]["RebaseTodoItem"];
 
 const ACTIONS: RebaseTodoItem["action"][] = ["pick", "reword", "edit", "squash", "fixup", "drop"];
 
-export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStarted }: {
+export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, onClose, onStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   branches?: BranchSnapshotResponse;
+  /** The branch tip to rebase onto at first, as when the dialog opens from a branch's menu. */
+  initialOntoOid?: string;
   disabled: boolean;
   onClose: () => void;
   onStarted: (task: TaskSnapshotResponse) => void;
@@ -30,7 +32,7 @@ export function RebaseDialog({ api, repoId, branches, disabled, onClose, onStart
   );
   const currentBranch = branches?.branches.find((branch) => branch.isCurrent);
   const defaultTarget = targets.find((branch) => branch.fullName === currentBranch?.upstream) || targets[0];
-  const [ontoOid, setOntoOid] = useState("");
+  const [ontoOid, setOntoOid] = useState(initialOntoOid || "");
   const [preview, setPreview] = useState<RebasePreviewResponse>();
   const [backupSnapshot, setBackupSnapshot] = useState<RebaseBackupSnapshotResponse>();
   const [selectedBackup, setSelectedBackup] = useState("");

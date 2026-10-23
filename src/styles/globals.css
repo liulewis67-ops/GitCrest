@@ -440,6 +440,12 @@ button:disabled { cursor: not-allowed; }
 .branchesSidebar .branchItem:hover:not(.current) { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); }
 .branchesSidebar .branchItem.current .branchItemName { font-weight: 600; }
 .branchesSidebar .branchItem.current .branchItemGlyph { color: var(--accent-strong); }
+/* The branch whose history the graph shows: an accent edge, so it reads apart from the checked-out branch. */
+.branchesSidebar .branchItem { cursor: pointer; }
+.branchesSidebar .branchItem.selected { box-shadow: inset 2px 0 0 var(--accent); background: color-mix(in srgb, var(--accent-soft) 85%, transparent); color: var(--text); }
+.branchesSidebar .branchItem.menuOpen:not(.selected) { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
+.branchItemSelect { display: flex; flex: 1; align-items: center; min-width: 0; padding: 0; border: 0; border-radius: var(--radius-4); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.branchItemSelect:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 .branchItemGlyph svg { display: block; width: 14px; height: 14px; margin: 0 auto; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; }
 .branchesSidebar .branchItemGlyph { flex-basis: 16px; }
 .branchRemotePrefix { color: var(--text-muted); opacity: .75; }
@@ -491,6 +497,10 @@ button:disabled { cursor: not-allowed; }
 .historyFilterToggle[aria-expanded="true"], .historyFilterToggle.active { border-color: var(--accent); color: var(--accent-strong); }
 .historyAdvancedFilters { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: var(--space-2); }
 .historyClearInline { align-self: flex-start; padding: 0; font-size: var(--type-xs); }
+.historyBranchScope { display: flex; align-items: center; gap: var(--space-2); min-width: 0; padding: 6px var(--space-3); border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface)); font-size: var(--type-xs); }
+.historyBranchScopeLabel { flex: none; color: var(--text-secondary); }
+.historyBranchScope .commitRefBadge { min-width: 0; max-width: none; }
+.historyBranchScope .textButton { flex: none; margin-left: auto; padding: 0; font-size: var(--type-xs); }
 @container (max-width: 420px) {
   .historyListPanel .commitGraphOid { display: none; }
   .historyListPanel .commitRefBadge { max-width: 96px; }

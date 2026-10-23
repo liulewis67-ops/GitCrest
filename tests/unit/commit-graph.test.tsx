@@ -25,6 +25,32 @@ function commit(index: number) {
 }
 
 describe("CommitGraph", () => {
+  it("shows one branch's history when scoped to it, and offers the way back to every branch", async () => {
+    const getRepositoryCommits = vi.fn(async () => ({ repoId: "repo_fixture", offset: 0, limit: 50, commits: [commit(0)], nextOffset: null }));
+    const api = cancellableApi({
+      getRepositoryCommits,
+      getRepositoryRefs: vi.fn(async () => ({ repoId: "repo_fixture", head: commit(0).oid, branch: "main", detached: false, refs: [] })),
+    });
+    const onClearBranchScope = vi.fn();
+    const props = { api, repoId: "repo_fixture", initialScrollTop: 0, onScrollPosition: vi.fn(), onSelect: vi.fn(), onClearBranchScope };
+    const { rerender } = render(<CommitGraph {...props} />);
+    await screen.findByRole("list", { name: "Commit history" });
+    expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo_fixture", 0, 50, {});
+    expect(screen.queryByText("History of")).toBeNull();
+
+    rerender(<CommitGraph {...props} branchScope="origin/bootbase" />);
+    await waitFor(() => expect(getRepositoryCommits).toHaveBeenLastCalledWith("repo_fixture", 0, 50, { branch: "origin/bootbase" }));
+    expect(screen.getByText("History of")).toBeDefined();
+    expect(screen.getByText("origin/bootbase", { selector: ".historyBranchScope .commitRefBadge" })).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Show history filters" }));
+    const branchFilter = screen.getByRole("combobox", { name: "Filter by branch" }) as HTMLSelectElement;
+    expect(branchFilter.disabled).toBe(true);
+    // The scope is not one of the filters the user set, so it is not counted or cleared with them.
+    expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show all branches" }));
+    expect(onClearBranchScope).toHaveBeenCalledOnce();
+  });
+
   it("draws commit parent edges when timestamp order places the parent first", async () => {
     const parent = { ...commit(3), parents: [] };
     const child = { ...commit(2), parents: [parent.oid] };

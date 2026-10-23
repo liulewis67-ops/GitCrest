@@ -460,6 +460,19 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Merge refs/heads/feature/row into the current branch" }));
     expect(await screen.findByText("Row commit")).toBeDefined();
     expect(fetcher.mock.calls.some(([input]) => String(input).includes("action=merge") && String(input).includes("b".repeat(40)))).toBe(true);
+
+    // Choosing a branch narrows the commit graph to its history until the scope is cleared.
+    const commitsRequests = () => fetcher.mock.calls.map(([input]) => new URL(String(input))).filter((url) => url.pathname.endsWith("/commits"));
+    const lastCommitsRequest = () => commitsRequests()[commitsRequests().length - 1];
+    expect(commitsRequests().every((url) => !url.searchParams.has("branch"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Show history of feature/row" }));
+    await waitFor(() => expect(lastCommitsRequest()?.searchParams.get("branch")).toBe("feature/row"));
+    expect(screen.getByRole("button", { name: "Show history of feature/row" }).getAttribute("aria-pressed")).toBe("true");
+    const requestsBefore = commitsRequests().length;
+    fireEvent.click(screen.getByRole("button", { name: "Show all branches" }));
+    await waitFor(() => expect(commitsRequests().length).toBeGreaterThan(requestsBefore));
+    expect(lastCommitsRequest()?.searchParams.has("branch")).toBe(false);
+    expect(screen.queryByRole("button", { name: "Show all branches" })).toBeNull();
   });
 
   it("continues a reviewed branch switch after the selected changes are shelved", async () => {

@@ -29,6 +29,10 @@ type CommitGraphProps = {
   /** Narrows the graph to one file's commits, as "Show History" on a changed file asks. */
   pathFilterRequest?: { repoId: string; path: string; sequence: number };
   onPathFilterHandled?: (sequence: number) => void;
+  /** Shows only the commits reachable from this branch, as choosing a branch in the Branches view asks. */
+  branchScope?: string;
+  /** Returns from a branch's history to the default view of every branch. */
+  onClearBranchScope?: () => void;
   onScrollPosition: (scrollTop: number) => void;
   onSelect: (oid: string) => void;
 };
@@ -63,14 +67,16 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
   </button>;
 });
 
-export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, pathFilterRequest, onPathFilterHandled, onScrollPosition, onSelect }: CommitGraphProps) {
+export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, pathFilterRequest, onPathFilterHandled, branchScope, onClearBranchScope, onScrollPosition, onSelect }: CommitGraphProps) {
   const { t } = useI18n();
   const rowHeight = GRAPH_ROW_HEIGHT[useAppearance().style.density];
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
-  const { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, showPath, resetFilters } = useHistoryFilters();
+  const { draftFilters, filters: chosenFilters, hasFilters, setDraftFilter, applyFilters, showPath, resetFilters } = useHistoryFilters();
+  // A branch chosen in the sidebar takes the place of the branch filter, which is kept for when the branch is cleared.
+  const filters = useMemo(() => branchScope ? { ...chosenFilters, branch: branchScope } : chosenFilters, [branchScope, chosenFilters]);
   // Message search covers most lookups; the other filters stay folded until asked for or in use.
-  const advancedFilterCount = ((["sha", "author", "branch", "path", "since", "until"] as const)).filter((key) => Boolean(filters[key])).length;
+  const advancedFilterCount = ((["sha", "author", "branch", "path", "since", "until"] as const)).filter((key) => Boolean(chosenFilters[key])).length;
   const [filtersOpen, setFiltersOpen] = useState(false);
   const showAdvancedFilters = filtersOpen;
   const [viewport, setViewport] = useState({ top: 0, height: 520 });
@@ -102,6 +108,17 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     setFiltersOpen(true);
     onPathFilterHandled?.(pathFilterRequest.sequence);
   }, [pathFilterRequest, onPathFilterHandled, repoId]);
+
+  // Another branch's history starts at its tip.
+  const shownScope = useRef(branchScope);
+  useEffect(() => {
+    if (shownScope.current === branchScope) return;
+    shownScope.current = branchScope;
+    const node = viewportRef.current;
+    if (node) node.scrollTop = 0;
+    setViewport((current) => ({ ...current, top: 0 }));
+    onScrollPosition(0);
+  }, [branchScope, onScrollPosition]);
 
   useEffect(() => {
     const node = viewportRef.current;
@@ -215,7 +232,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
       {showAdvancedFilters && <div className="historyAdvancedFilters" id={`history-filters-${repoId}`}>
       <label>{t("hist.sha")}<input aria-label={t("hist.shaAria")} value={draftFilters.sha || ""} onChange={(event) => setDraftFilter("sha", event.target.value)} placeholder={t("hist.shaPlaceholder")} /></label>
       <label>{t("hist.author")}<input aria-label={t("hist.authorAria")} value={draftFilters.author || ""} onChange={(event) => setDraftFilter("author", event.target.value)} placeholder={t("hist.authorPlaceholder")} /></label>
-      <label>{t("hist.branch")}<select aria-label={t("hist.branchAria")} value={draftFilters.branch || ""} onChange={(event) => setDraftFilter("branch", event.target.value)}><option value="">{t("hist.allBranches")}</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
+      <label>{t("hist.branch")}<select aria-label={t("hist.branchAria")} value={branchScope || draftFilters.branch || ""} disabled={Boolean(branchScope)} title={branchScope ? t("bs.scopeFilterTitle") : undefined} onChange={(event) => setDraftFilter("branch", event.target.value)}><option value="">{t("hist.allBranches")}</option>{refs.map((ref) => <option value={ref.name} key={ref.fullName}>{ref.name}</option>)}</select></label>
       <label>{t("hist.path")}<input aria-label={t("hist.pathAria")} value={draftFilters.path || ""} onChange={(event) => setDraftFilter("path", event.target.value)} placeholder={t("hist.pathPlaceholder")} /></label>
       <label>{t("hist.since")}<input aria-label={t("hist.sinceAria")} type="date" value={draftFilters.since || ""} onChange={(event) => setDraftFilter("since", event.target.value)} /></label>
       <label>{t("hist.until")}<input aria-label={t("hist.untilAria")} type="date" value={draftFilters.until || ""} onChange={(event) => setDraftFilter("until", event.target.value)} /></label>
@@ -223,6 +240,11 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
       </div>}
       {!showAdvancedFilters && hasFilters && <button className="textButton historyClearInline" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}
     </form>
+    {branchScope && <div className="historyBranchScope">
+      <span className="historyBranchScopeLabel">{t("bs.scopeLabel")}</span>
+      <span className="commitRefBadge" title={branchScope}>{branchScope}</span>
+      {onClearBranchScope && <button className="textButton" type="button" onClick={onClearBranchScope}>{t("bs.scopeClear")}</button>}
+    </div>}
     <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label={t("main.graphView")}>
     {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? t("hist.preparing") : t("hist.loading")}</div>
       : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={retry}>{t("hist.retry")}</button></div>

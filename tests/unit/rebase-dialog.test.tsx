@@ -147,3 +147,9 @@ it("aborts a rebase backup read when the dialog unmounts", async () => {
   expect(signals[0]?.aborted).toBe(true);
   await act(async () => pending.resolve({ ...backups, backups: [] }));
 });
+
+it("starts on the branch it was opened for", () => {
+  const api = cancellableApi({ getRepositoryRebaseBackups: vi.fn(() => new Promise(() => undefined)) });
+  render(<RebaseDialog api={api} repoId="repo_fixture" branches={branches} initialOntoOid={"c".repeat(40)} disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+  expect((screen.getByLabelText("Rebase current branch onto") as HTMLSelectElement).value).toBe("c".repeat(40));
+});

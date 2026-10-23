@@ -61,6 +61,8 @@ function App() {
   const [tasksOpen, setTasksOpen] = useState(false);
   const [localBranchAction, setLocalBranchAction] = useState<LocalBranchAction>();
   const [createBranchAt, setCreateBranchAt] = useState<string>();
+  /** The branch chosen in the Branches view, whose history its commit graph shows. */
+  const [historyBranch, setHistoryBranch] = useState<{ repoId: string; fullName: string }>();
   const [worktreeForBranch, setWorktreeForBranch] = useState<{ name: string; fromRemote: boolean }>();
   // Settings covers the content area while open; the page underneath stays mounted.
   const [settingsView, setSettingsView] = useState<{ section?: SettingsSectionId; credentialHosts?: string[]; reopenClone?: boolean }>();
@@ -289,6 +291,10 @@ function App() {
     || Number(left.kind === "remote") - Number(right.kind === "remote")
     || left.name.localeCompare(right.name)) : [];
   const activeTabState = selectedRepository ? workspaceSession.tabs[selectedRepository.repoId] : undefined;
+  // A chosen branch that has since been deleted or renamed falls back to every branch's history.
+  const shownHistoryBranch = historyBranch && historyBranch.repoId === selectedRepository?.repoId
+    ? activeBranches?.branches.find((branch) => branch.fullName === historyBranch.fullName)
+    : undefined;
 
   function isRepositoryTabOpen(repoId: string): boolean {
     return workspaceSessionRef.current.openRepoIds.includes(repoId);
@@ -660,6 +666,16 @@ function App() {
     }
   }
 
+  async function copyBranchName(name: string) {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+      await navigator.clipboard.writeText(name);
+      setNotice(t("bs.copiedName", { name }));
+    } catch {
+      setNotice(t("bs.copyNameFailed"));
+    }
+  }
+
   function openFileDiff(path: string, scope: "workingTree" | "index") {
     const repoId = selectedRepository?.repoId;
     if (!repoId) return;
@@ -917,6 +933,8 @@ function App() {
         onFocusSearchHandled={historyRequests.markSearchFocusHandled}
         pathFilterRequest={mode === "history" ? historyRequests.pathFilterRequest : undefined}
         onPathFilterHandled={historyRequests.markPathFilterHandled}
+        branchScope={mode === "branches" ? shownHistoryBranch?.name : undefined}
+        onClearBranchScope={() => setHistoryBranch(undefined)}
         onScrollPosition={rememberGraphScroll}
         onSelect={selectCommit}
       />
@@ -1174,12 +1192,21 @@ function App() {
               historyRefreshKey={historyRequests.refreshKey}
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
+              selectedBranch={shownHistoryBranch?.fullName}
+              onSelectBranch={(branch) => {
+                setHistoryBranch({ repoId: selectedRepository.repoId, fullName: branch.fullName });
+                if (isFullGitObjectId(branch.oid)) selectCommit(branch.oid);
+              }}
               onManageAccounts={(hosts) => openAccountSettings(hosts)}
               onRefreshBranches={(repoId) => void refreshRepositoryBranches(repoId)}
               onOpenBranchSwitcher={branchSwitcher.openSwitcher}
               onDeleteRemoteBranch={remoteBranchDelete.open}
               onSwitchBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
+              onCheckoutRemoteBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name, true); }}
               onMergeBranch={(oid, name) => workflowDialog.open(selectedRepository.repoId, oid, "merge", name)}
+              onRebaseOnto={workflowDialog.openRebaseOnto}
+              onCreateBranchFrom={setCreateBranchAt}
+              onCopyBranchName={(name) => void copyBranchName(name)}
               onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
               onNewWorktreeForBranch={(name, fromRemote) => setWorktreeForBranch({ name, fromRemote })}
               onWorktreeRemoveStarted={(task) => { prependTask(task); setTasksError(""); setTasksOpen(true); }}
@@ -1250,7 +1277,7 @@ function App() {
       {worktreeForBranch && selectedRepository && apiRef.current && <Suspense fallback={null}><NewWorktreeDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} branch={worktreeForBranch.name} fromRemote={worktreeForBranch.fromRemote} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setWorktreeForBranch(undefined)} onStarted={(task) => { prependTask(task); setWorktreeForBranch(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {localBranchAction && selectedRepository && apiRef.current && <Suspense fallback={null}><LocalBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} action={localBranchAction} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setLocalBranchAction(undefined)} onStarted={(task) => { prependTask(task); setLocalBranchAction(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} targetLabel={workflowDialog.context.targetLabel} onClose={workflowDialog.close} onStarted={workflowDialog.startTask} />}
-      {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
+      {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} initialOntoOid={workflowDialog.rebaseOnto} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
       {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
       {notice && <div className="appNotice" role="status" aria-live="polite">{notice}</div>}
