@@ -450,6 +450,47 @@ it("resolves the active conflict from the keyboard with Alt+1, Alt+2 and Alt+3",
   expect(editor.value).toBe("A\nmid\nD\nmid2\nE\nF\n");
 });
 
+const smartStages = { base: "a\nb\nc\nm\nx = 1;\nz\n", ours: "a\nB\nc\nm\nx = 2;\nz\n", theirs: "a\nb\nC\nm\nx = 3;\nz\n" };
+const smartMarked = "a\n<<<<<<< ours\nB\nc\n=======\nb\nC\n>>>>>>> theirs\nm\n<<<<<<< ours\nx = 2;\n=======\nx = 3;\n>>>>>>> theirs\nz\n";
+const overlapLeft = "a\nB\nC\nm\n<<<<<<< ours\nx = 2;\n=======\nx = 3;\n>>>>>>> theirs\nz\n";
+
+it("smart merges non-overlapping conflicts in one click and leaves overlapping ones to the user", async () => {
+  const editor = await mountConflict(smartMarked, smartStages, "8");
+  const bar = screen.getByRole("group", { name: "Smart Merge" });
+  expect(bar.textContent).toContain("1 of 2 remaining conflicts don't overlap and can be merged in one click. 1 conflict overlaps and needs your decision.");
+  expect(screen.getByText("Non-overlapping")).toBeTruthy();
+  expect(screen.getByText("Overlapping")).toBeTruthy();
+  expect(screen.getByLabelText("Smart Merge preview for conflict 1").textContent).toContain("B");
+  expect(screen.getByLabelText("Smart Merge preview for conflict 1").textContent).toContain("C");
+  expect(screen.getByLabelText("Unresolved result for conflict 2").textContent).toContain("x = 1;");
+  expect(screen.queryByRole("button", { name: "Smart merge conflict 2" })).toBeNull();
+
+  fireEvent.click(screen.getByRole("button", { name: "Smart Merge" }));
+  expect(editor.value).toBe(overlapLeft);
+  expect(screen.getByText(/Smart Merge resolved 1 non-overlapping conflict\. 1 conflict overlaps and needs your decision\./)).toBeTruthy();
+  expect(screen.getByText("1 of 2 resolved · 1 remaining")).toBeTruthy();
+  expect(screen.getByRole("group", { name: "Smart Merge" }).textContent).toContain("The remaining conflict overlaps.");
+  expect((screen.getByRole("button", { name: "Smart Merge" }) as HTMLButtonElement).disabled).toBe(true);
+
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  expect(editor.value).toBe(smartMarked);
+});
+
+it("smart merges a single block from its row or with Alt+4, but not after a side is ignored", async () => {
+  const editor = await mountConflict(smartMarked, smartStages, "9");
+  const main = screen.getByRole("main", { name: "Conflict resolution window" });
+  fireEvent.click(screen.getByRole("button", { name: "Ignore ours for conflict 1" }));
+  expect((screen.getByRole("button", { name: "Smart merge conflict 1" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.keyDown(main, { key: "4", code: "Digit4", altKey: true });
+  expect(editor.value).toBe(smartMarked);
+  fireEvent.click(screen.getByRole("button", { name: "Ignore ours for conflict 1" }));
+  fireEvent.keyDown(main, { key: "4", code: "Digit4", altKey: true });
+  expect(editor.value).toBe(overlapLeft);
+  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+  fireEvent.click(screen.getByRole("button", { name: "Smart merge conflict 1" }));
+  expect(editor.value).toBe(overlapLeft);
+});
+
 it("lets the user take a whole side for a binary file and for a delete/modify conflict", async () => {
   const repoId = `repo_${"8".repeat(64)}`;
   window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-8-1`);

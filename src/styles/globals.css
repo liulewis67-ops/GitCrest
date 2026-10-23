@@ -1360,6 +1360,26 @@ button:disabled { cursor: not-allowed; }
 .conflictGutter { flex-direction: column; gap: 6px; }
 .conflictGutter .conflictIgnore { color: var(--text-secondary); }
 .conflictGutter .conflictIgnore[aria-pressed="true"] { border-color: var(--amber); background: var(--surface); color: var(--amber); }
+/* Smart Merge: one bar says how many conflicts combine on their own; each block is tagged and previews the merge. */
+.conflictSmartBar { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); color: var(--text-secondary); font-size: var(--type-sm); }
+.conflictSmartBar.ready { border-color: color-mix(in srgb, var(--green) 45%, var(--line)); background: color-mix(in srgb, var(--green) 7%, var(--surface)); }
+.conflictSmartBar p { margin: 0; line-height: 1.45; }
+.conflictSmartBar .conflictSmartButton { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 4px 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: transparent; color: var(--text-secondary); font-size: var(--type-sm); font-weight: 650; cursor: pointer; }
+.conflictSmartBar .conflictSmartButton:not(:disabled) { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.conflictSmartBar .conflictSmartButton:hover:not(:disabled) { filter: brightness(1.08); }
+.conflictSmartBar .conflictSmartButton:disabled { opacity: .5; cursor: not-allowed; }
+.conflictSmartCount { min-width: 18px; padding: 0 5px; border-radius: var(--radius-8); background: color-mix(in srgb, var(--on-accent) 22%, transparent); font-variant-numeric: tabular-nums; text-align: center; }
+.conflictMerge article > header > div { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.conflictMerge .conflictTag { padding: 0 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-8); font-size: var(--type-xs); font-weight: 600; line-height: 18px; }
+.conflictMerge .conflictTag.mergeable { border-color: color-mix(in srgb, var(--green) 50%, var(--line)); background: var(--green-soft); color: var(--green); }
+.conflictMerge .conflictTag.overlapping { border-color: color-mix(in srgb, var(--amber) 55%, var(--line)); background: color-mix(in srgb, var(--amber) 10%, transparent); color: var(--amber); }
+.conflictMerge article.mergeable:not(.active) { border-color: color-mix(in srgb, var(--green) 30%, var(--line)); }
+.conflictSide.merged { flex: 1; background: color-mix(in srgb, var(--green) 5%, var(--surface)); }
+.conflictSide.merged .conflictLine.added, .conflictSide.merged .conflictLine.changed { background: color-mix(in srgb, var(--green) 14%, transparent); }
+.conflictSide.merged .conflictWord { background: color-mix(in srgb, var(--green) 34%, transparent); }
+.conflictResultChoices { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding: 6px; }
+.conflictResultChoices button { margin: 0; }
+.conflictResultCell .conflictSmartButton:not(:disabled) { border-color: color-mix(in srgb, var(--green) 55%, var(--line)); color: var(--green); font-weight: 650; }
 
 /* Commit rows keep their subject readable: refs shrink and truncate first. */
 .commitGraphRefs { display: flex; flex: 0 1 auto; gap: var(--space-1); min-width: 0; max-width: 45%; overflow: hidden; }

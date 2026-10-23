@@ -7,6 +7,7 @@ import { WindowControls } from "../../../shared/ui/WindowControls";
 import { baseForBlock, choiceText, findConflictBlocks, replaceConflictBlock, type ConflictBlock } from "../model/conflict-blocks";
 import { splitLines } from "../model/line-diff";
 import { countConflicts, merge3, renderMerge3, type NonConflictingMode } from "../model/merge3";
+import { applySmartMerge, smartMergeBlock, type SmartMergeOutcome } from "../model/smart-merge";
 import { useDraftHistory } from "../model/use-draft-history";
 import { ConflictBlockRow, type IgnoredSides } from "./ConflictBlockRow";
 import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
@@ -220,6 +221,15 @@ export function ConflictWindow() {
     () => stages ? merge3(splitLines(stages.baseContent), splitLines(stages.oursContent), splitLines(stages.theirsContent)) : null,
     [stages],
   );
+  // Outcomes depend only on a block's content and the stages, so typing in the editor reuses them.
+  const smartCache = useMemo(() => new Map<string, SmartMergeOutcome>(), [regions]);
+  const smartOutcomes = conflictBlocks.map((block) => {
+    const key = `${block.id}\u0000${block.base ?? "\u0001"}`;
+    let outcome = smartCache.get(key);
+    if (!outcome) { outcome = smartMergeBlock(block, regions); smartCache.set(key, outcome); }
+    return outcome;
+  });
+  const mergeableBlocks = smartOutcomes.filter((outcome) => outcome.kind === "merged").length;
   const canRebuild = Boolean(regions && stages && stages.oursContent !== null && stages.theirsContent !== null);
   const availableModes: Record<NonConflictingMode, boolean> = {
     all: Boolean(regions?.some((region) => region.kind === "ours" || region.kind === "theirs")),
@@ -261,6 +271,19 @@ export function ConflictWindow() {
     changeDraft(content ?? "");
     setIgnored({});
   };
+  const smartMergeAll = () => {
+    const { content, merged } = applySmartMerge(draft, conflictBlocks, smartOutcomes);
+    if (merged === 0) return;
+    const remaining = conflictBlocks.length - merged;
+    const mergedIds = new Set(conflictBlocks.filter((_block, index) => smartOutcomes[index].kind === "merged").map((block) => block.id));
+    changeDraft(content);
+    setIgnored((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !mergedIds.has(id))));
+    setActiveBlock(0);
+    // The first block left is the first one that needs a decision; bring it into view once it has rendered.
+    window.requestAnimationFrame(() => blockRefs.current[0]?.scrollIntoView?.({ block: "center", behavior: "smooth" }));
+    const left = remaining === 0 ? t("cf.smartLeftNone") : t(remaining === 1 ? "cf.smartDecideOne" : "cf.smartDecideMany", { count: remaining });
+    setAction({ message: t(merged === 1 ? "cf.smartMergedOne" : "cf.smartMergedMany", { count: merged, left }) });
+  };
   const applyNonConflicting = (mode: NonConflictingMode) => {
     setPendingApply(null);
     if (!regions) return;
@@ -292,10 +315,19 @@ export function ConflictWindow() {
   return <main className="conflictWindow" aria-label={t("cf.aria")} onKeyDown={(event) => {
     // event.code keeps Alt+digit working on layouts where Alt changes the produced character.
     const digit = /^(?:Digit|Numpad)([123])$/.exec(event.code)?.[1] ?? event.key;
-    const quickChoice = ({ "1": "ours", "2": "theirs", "3": "both" } as Record<string, "ours" | "theirs" | "both">)[digit];
+    const quickChoice = ({ "1": "ours", "2": "theirs", "3": "both", "4": "smart" } as Record<string, "ours" | "theirs" | "both" | "smart">)[digit];
     if (event.altKey && !event.ctrlKey && !event.metaKey && quickChoice && !busy) {
-      const block = conflictBlocks[Math.min(activeBlock, conflictBlocks.length - 1)];
+      const position = Math.min(activeBlock, conflictBlocks.length - 1);
+      const block = conflictBlocks[position];
       const skipped = ignored[block?.id ?? ""] ?? {};
+      if (quickChoice === "smart") {
+        const outcome = smartOutcomes[position];
+        if (block && outcome?.kind === "merged" && !skipped.ours && !skipped.theirs) {
+          event.preventDefault();
+          resolveBlock(block, outcome.text);
+        }
+        return;
+      }
       if (block && !(quickChoice !== "theirs" && skipped.ours) && !(quickChoice !== "ours" && skipped.theirs)) {
         event.preventDefault();
         resolveBlock(block, choiceText(block, quickChoice));
@@ -367,6 +399,10 @@ export function ConflictWindow() {
                 <button type="button" disabled={busy} onClick={() => useEntire(currentFile.data?.theirsContent ?? null)}>{t("cf.entireTheirs")}</button>
               </div>
             </div>
+            {conflictBlocks.length > 0 && <div className={`conflictSmartBar${mergeableBlocks > 0 ? " ready" : ""}`} role="group" aria-label={t("cf.smartAria")}>
+              <p role="status">{smartSummary(t, mergeableBlocks, conflictBlocks.length)}</p>
+              <button type="button" className="conflictSmartButton" title={mergeableBlocks > 0 ? t("cf.smartMergeTitle") : t("cf.smartMergeNoneTitle")} disabled={busy || mergeableBlocks === 0} onClick={smartMergeAll}>{t("cf.smartMerge")}{mergeableBlocks > 0 && <span className="conflictSmartCount" aria-hidden="true">{mergeableBlocks}</span>}</button>
+            </div>}
             {pendingApply && <div className="conflictConfirm" role="group" aria-label={t("cf.confirmApplyAria")}>
               <span>{t("cf.confirmApply")}</span>
               <div className="conflictToolbarGroup">
@@ -380,6 +416,7 @@ export function ConflictWindow() {
                 key={block.id}
                 block={block}
                 base={baseForBlock(block, regions)}
+                smart={smartOutcomes[position]}
                 ignored={ignored[block.id] ?? {}}
                 busy={busy}
                 active={position === activeBlock}
@@ -387,6 +424,7 @@ export function ConflictWindow() {
                 onActivate={() => setActiveBlock(position)}
                 onApply={(choice) => resolveBlock(block, choiceText(block, choice))}
                 onIgnore={(side) => ignoreSide(block, side)}
+                onSmartMerge={() => { const outcome = smartOutcomes[position]; if (outcome.kind === "merged") resolveBlock(block, outcome.text); }}
               />)}
             </section>}
             <details className="conflictStageDetails">
@@ -425,6 +463,13 @@ export function ConflictWindow() {
       </section>
     </div>}
   </main>;
+}
+
+function smartSummary(t: ReturnType<typeof useI18n>["t"], mergeable: number, total: number) {
+  const overlapping = total - mergeable;
+  if (mergeable === 0) return total === 1 ? t("cf.smartNoneOne") : t("cf.smartNoneMany", { count: total });
+  if (overlapping === 0) return total === 1 ? t("cf.smartOneReady") : t("cf.smartAllReady", { total });
+  return `${t("cf.smartReady", { mergeable, total })} ${t(overlapping === 1 ? "cf.smartDecideOne" : "cf.smartDecideMany", { count: overlapping })}`;
 }
 
 function updateDraft(content: string, savedContent: string, setDraft: (content: string) => void, setHasUnsavedChanges: (dirty: boolean) => void) {
