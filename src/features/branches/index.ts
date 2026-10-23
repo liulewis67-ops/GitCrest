@@ -7,6 +7,7 @@ export { useRemoteBranchDeleteSession } from "./model/use-remote-branch-delete-s
 export const loadLocalBranchDialog = () => import("./ui/LocalBranchDialog");
 export type { LocalBranchAction } from "./ui/LocalBranchDialog";
 export { WorktreeList } from "./ui/WorktreeList";
+export { WorktreeSwitcher } from "./ui/WorktreeSwitcher";
 export { BranchSyncBadge } from "./ui/BranchSyncBadge";
 export const loadCreateBranchDialog = () => import("./ui/CreateBranchDialog");
 export const loadNewWorktreeDialog = () => import("./ui/NewWorktreeDialog");

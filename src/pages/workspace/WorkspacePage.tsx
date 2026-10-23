@@ -28,6 +28,8 @@ interface WorkspacePageProps {
   inspectorOpen: boolean;
   focusMode: boolean;
   openingRepository: boolean;
+  /** The worktree picker drawn before the branch; it draws nothing when there are no linked worktrees. */
+  worktreeSwitcher?: ReactNode;
   children: ReactNode;
   onChangeMode: (mode: WorkspaceMode) => void;
   onOpenPushDialog: () => void;
@@ -69,6 +71,7 @@ export function WorkspacePage({
   inspectorOpen,
   focusMode,
   openingRepository,
+  worktreeSwitcher,
   children,
   onChangeMode,
   onOpenPushDialog,
@@ -144,6 +147,7 @@ export function WorkspacePage({
         </div>
         <div className="workspaceCrumb" title={repository.path}><svg className="workspaceCrumbIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4.25c0-.69.56-1.25 1.25-1.25h2.5l1.5 1.5h4.5c.69 0 1.25.56 1.25 1.25v5.5c0 .69-.56 1.25-1.25 1.25h-8.5c-.69 0-1.25-.56-1.25-1.25Z" /></svg><span className="mutedText">{repository.path}</span></div>
         <div className="toolbarActions">
+          {worktreeSwitcher}
           <button className={`quietButton compact branchSelector${repository.detached ? " detached" : ""}`} type="button" disabled={!repositoryReady} aria-keyshortcuts={ariaShortcut(shortcuts.branchSwitcher, isMacPlatform)} title={t("page.switchBranches", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) })} onClick={() => onOpenBranchSwitcher()}>
             <span className="branchGlyph" aria-hidden="true">⑂</span>
             <span className="branchSelectorName">{repository.detached ? t("page.detached", { oid: repository.head?.slice(0, 7) ?? "" }) : repository.branch || t("page.unbornBranch")}</span>

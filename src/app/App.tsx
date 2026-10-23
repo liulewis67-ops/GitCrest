@@ -23,7 +23,7 @@ import { DEFAULT_WORKSPACE_MODE, DETAILS_WIDTH, HISTORY_LIST_WIDTH, SIDEBAR_WIDT
 import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
-import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, useOpenCreatedWorktree, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
+import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, useOpenCreatedWorktree, WorktreeSwitcher, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
 import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAdoptInProgressWorkflow, useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
@@ -1022,6 +1022,13 @@ function App() {
           inspectorOpen={inspectorVisible}
           focusMode={focusMode}
           openingRepository={repositoryOpening.opening}
+          worktreeSwitcher={selectedRepository && apiRef.current ? <WorktreeSwitcher
+            api={apiRef.current}
+            repoId={selectedRepository.repoId}
+            refreshKey={historyRequests.refreshKey}
+            disabled={!connected || repositoryOpening.opening}
+            onOpen={(path) => void repositoryOpening.openAtPath(path)}
+          /> : undefined}
           onChangeMode={changeWorkspaceMode}
           onOpenPushDialog={openPushDialog}
           onOpenPullDialog={openPullDialog}

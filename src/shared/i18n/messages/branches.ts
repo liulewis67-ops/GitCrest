@@ -45,6 +45,14 @@ export const branches = {
   "wt.removeTitle": ["Remove {path} (the branch is kept)", "移除 {path}（保留分支）"],
   "wt.remove": ["Remove", "移除"],
 
+  // Worktree picker beside the branch in the workspace toolbar
+  "wts.title": ["Current worktree: {path}. Open another worktree", "当前工作树：{path}。打开其他工作树"],
+  "wts.filter": ["Filter worktrees", "筛选工作树"],
+  "wts.main": ["Main worktree", "主工作树"],
+  "wts.linked": ["Linked worktrees", "关联工作树"],
+  "wts.noMatch": ["No worktree matches “{query}”.", "没有匹配“{query}”的工作树。"],
+  "wts.missingTitle": ["{path} no longer exists. Clean it up from the Branches view.", "{path} 已不存在。可在“分支”视图中清理。"],
+
   "lb.inspectFailed": ["Could not inspect this branch.", "无法检查此分支。"],
   "lb.renameFailed": ["Could not rename this branch.", "无法重命名此分支。"],
   "lb.deleteFailed": ["Could not delete this branch.", "无法删除此分支。"],
