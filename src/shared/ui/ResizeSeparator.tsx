@@ -1,4 +1,4 @@
-import { useRef, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
 interface ResizeSeparatorProps {
   orientation: "vertical" | "horizontal";
@@ -11,6 +11,9 @@ interface ResizeSeparatorProps {
   onResize: (value: number) => void;
 }
 
+/** While a rule is dragged, the whole window keeps its resize cursor and nothing gets text-selected. */
+const RESIZING_CLASS = { vertical: "resizingColumns", horizontal: "resizingRows" } as const;
+
 export function ResizeSeparator({
   orientation,
   edge,
@@ -21,14 +24,24 @@ export function ResizeSeparator({
   onResize,
 }: ResizeSeparatorProps) {
   const drag = useRef<{ pointerId: number; coordinate: number; value: number }>();
+  const [dragging, setDragging] = useState(false);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const root = document.documentElement;
+    root.classList.add(RESIZING_CLASS[orientation]);
+    return () => root.classList.remove(RESIZING_CLASS[orientation]);
+  }, [dragging, orientation]);
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
     event.currentTarget.setPointerCapture(event.pointerId);
     drag.current = {
       pointerId: event.pointerId,
       coordinate: orientation === "vertical" ? event.clientX : event.clientY,
       value,
     };
+    setDragging(true);
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -38,6 +51,12 @@ export function ResizeSeparator({
       ? (event.clientY - drag.current.coordinate) * (edge === "bottom" ? -1 : 1)
       : (event.clientX - drag.current.coordinate) * sign;
     onResize(Math.max(min, Math.min(max, drag.current.value + delta)));
+  }
+
+  function endDrag(event: PointerEvent<HTMLDivElement>) {
+    if (drag.current?.pointerId !== event.pointerId) return;
+    drag.current = undefined;
+    setDragging(false);
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
@@ -60,7 +79,8 @@ export function ResizeSeparator({
 
   return (
     <div
-      className={`resizeSeparator ${orientation}`}
+      className={`resizeSeparator ${orientation}${dragging ? " dragging" : ""}`}
+      data-edge={edge}
       role="separator"
       aria-label={label}
       aria-orientation={orientation}
@@ -70,8 +90,9 @@ export function ResizeSeparator({
       tabIndex={0}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={() => { drag.current = undefined; }}
-      onPointerCancel={() => { drag.current = undefined; }}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onLostPointerCapture={endDrag}
       onKeyDown={onKeyDown}
     />
   );

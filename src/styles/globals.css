@@ -288,7 +288,6 @@ button:disabled { cursor: not-allowed; }
 .sidePanel, .detailsPanel { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface); }
 .sidePanel { border-right: 1px solid var(--line); }
 .detailsPanel { border-left: 1px solid var(--line); }
-.viewLayout > .resizeSeparator { margin-inline: -3px; }
 .sidePanelHeader { display: flex; flex: none; align-items: center; gap: 6px; min-height: 36px; padding: 0 var(--space-2) 0 var(--space-3); }
 .sidePanelTitle { color: var(--text); font-size: var(--type-sm); font-weight: 620; }
 .sidePanelSpacer { flex: 1; }
@@ -406,8 +405,7 @@ button:disabled { cursor: not-allowed; }
 .commitChangesBody { display: grid; flex: 1; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); min-height: 0; }
 .commitChangesBody.filesHidden { grid-template-columns: minmax(0, 1fr); }
 /* A dragged file list keeps its width, but never takes more than 45% from the diff in a narrow window. */
-.commitChangesBody.resizable { grid-template-columns: min(var(--commit-files-width), 45%) 6px minmax(0, 1fr); }
-.commitChangesBody > .resizeSeparator { margin-inline: -3px; }
+.commitChangesBody.resizable { grid-template-columns: min(var(--commit-files-width), 45%) 0px minmax(0, 1fr); }
 .commitFileList { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--line); background: var(--surface); }
 .commitFileList ul { margin: 0; padding: 0 var(--space-1) var(--space-2); list-style: none; }
 .commitFileRow { display: flex; align-items: center; gap: 2px; border-radius: var(--radius-5); }
@@ -428,7 +426,6 @@ button:disabled { cursor: not-allowed; }
 /* History: the commit graph above the selected commit's changes, split by a draggable rule. */
 .historySplit { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .historyGraphPane { flex: 0 0 var(--history-graph-height); container-type: inline-size; }
-.historySplit > .resizeSeparator { flex: none; height: 6px; margin-block: -3px; }
 .historyChangesPane { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; border-top: 1px solid var(--line); }
 .historySplit > .historyChangesPane:first-child { border-top: 0; }
 /* Branches sidebar, three levels: panel sections (Branches, Worktrees, Remotes) divided by rules,
@@ -870,13 +867,35 @@ button:disabled { cursor: not-allowed; }
 .repositoryFact { display: flex; justify-content: space-between; gap: 10px; width: 100%; padding-top: 8px; border-top: 1px solid var(--line); color: var(--text-muted); font-size: var(--type-2xs); }
 .repositoryFact strong { max-width: 65%; color: var(--text-secondary); font-size: var(--type-2xs); font-weight: 520; text-align: right; overflow-wrap: anywhere; }
 .monoText { font-family: var(--font-mono); }
-.resizeSeparator { position: relative; z-index: 1; touch-action: none; }
-.resizeSeparator.vertical { cursor: col-resize; }
-.resizeSeparator.horizontal { cursor: row-resize; }
-.resizeSeparator::after { position: absolute; display: block; background: transparent; content: ""; }
-.resizeSeparator.vertical::after { top: 0; right: 2px; bottom: 0; left: 2px; }
-.resizeSeparator.horizontal::after { top: 2px; right: 0; bottom: 2px; left: 0; }
-.resizeSeparator:hover::after, .resizeSeparator:focus-visible::after { background: var(--accent); opacity: .5; }
+/* Splitters. At rest the line is the resized panel's own 1px border; the splitter takes no layout space
+   and is a transparent 10px hit area laid over that border. It reaches 3px back, where the neighbor
+   before it keeps its scrollbar, and 7px forward. Its states only tint a narrow band and recolor the line:
+   hover is neutral and firmer, dragging is a 2px accent line, keyboard focus a 2px strong accent line on a
+   soft accent band. ::before is the band, ::after the line. */
+.resizeSeparator { --splitter-back: 3px; --splitter-line-offset: 0px; position: relative; z-index: 2; touch-action: none; outline: none; }
+/* A panel on the left draws its border on its right edge, the pixel just before the track. */
+.resizeSeparator[data-edge="left"] { --splitter-line-offset: -1px; }
+.resizeSeparator.vertical { margin-inline: calc(var(--splitter-back) * -1) -7px; cursor: col-resize; }
+.resizeSeparator.horizontal { flex: none; height: 10px; margin-block: calc(var(--splitter-back) * -1) -7px; cursor: row-resize; }
+.resizeSeparator::before, .resizeSeparator::after { position: absolute; background: transparent; content: ""; pointer-events: none; transition: background-color .12s ease-out, box-shadow .12s ease-out; }
+.resizeSeparator.vertical::before { top: 0; bottom: 0; left: calc(var(--splitter-back) - 3px); width: 6px; }
+.resizeSeparator.horizontal::before { right: 0; left: 0; top: calc(var(--splitter-back) - 3px); height: 6px; }
+.resizeSeparator.vertical::after { top: 0; bottom: 0; left: calc(var(--splitter-back) + var(--splitter-line-offset)); width: 1px; }
+.resizeSeparator.horizontal::after { right: 0; left: 0; top: calc(var(--splitter-back) + var(--splitter-line-offset)); height: 1px; }
+/* Hover waits a moment, so sweeping the pointer across panels does not flash every splitter. */
+.resizeSeparator:hover::before { background: color-mix(in srgb, var(--text) 5%, transparent); transition-delay: .15s; }
+.resizeSeparator:hover::after { background: var(--line-strong); transition-delay: .15s; }
+/* Keyboard focus is shown by the line and band below, not the app-wide focus outline. */
+.resizeSeparator:focus-visible { outline: none; }
+.resizeSeparator:focus-visible::before { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.resizeSeparator:focus-visible::after, .resizeSeparator.dragging::after { transition-delay: 0s; }
+.resizeSeparator.vertical:focus-visible::after, .resizeSeparator.vertical.dragging::after { left: calc(var(--splitter-back) - 1px); width: 2px; }
+.resizeSeparator.horizontal:focus-visible::after, .resizeSeparator.horizontal.dragging::after { top: calc(var(--splitter-back) - 1px); height: 2px; }
+.resizeSeparator:focus-visible::after { background: var(--accent-strong); }
+.resizeSeparator.dragging::before { background: transparent; }
+.resizeSeparator.dragging::after { background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
+:root.resizingColumns, :root.resizingColumns * { cursor: col-resize !important; user-select: none !important; }
+:root.resizingRows, :root.resizingRows * { cursor: row-resize !important; user-select: none !important; }
 .commitAiTrigger { flex: 0 0 auto; font-size: var(--type-sm); }
 .commitAiAssistant { display: grid; gap: 7px; max-height: 210px; overflow: auto; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-5); background: var(--surface-soft); }
 .commitAiHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

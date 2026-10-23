@@ -29,7 +29,7 @@ export function HistorySplit({ graph, changes, graphHeight, minGraphHeight, maxG
   }, []);
 
   // Cap the graph so the changes keep their minimum; the stored height comes back once the window grows.
-  const max = available ? Math.max(minGraphHeight, Math.min(maxGraphHeight, available - CHANGES_MIN_HEIGHT - 6)) : maxGraphHeight;
+  const max = available ? Math.max(minGraphHeight, Math.min(maxGraphHeight, available - CHANGES_MIN_HEIGHT)) : maxGraphHeight;
   const height = Math.min(graphHeight, max);
   return (
     <div ref={container} className="historySplit" style={{ "--history-graph-height": `${height}px` } as CSSProperties}>

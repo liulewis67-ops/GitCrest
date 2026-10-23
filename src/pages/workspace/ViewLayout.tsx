@@ -19,9 +19,9 @@ export function ViewLayout({ className, sidebar, sidebarSize, inspector, inspect
 }) {
   const dockedInspector = Boolean(inspector) && !inspectorOverlay;
   const columns = [
-    sidebar ? "var(--view-sidebar-width) 6px" : "",
+    sidebar ? "var(--view-sidebar-width) 0px" : "",
     "minmax(0, 1fr)",
-    dockedInspector ? "6px var(--view-inspector-width)" : "",
+    dockedInspector ? "0px var(--view-inspector-width)" : "",
   ].filter(Boolean).join(" ");
   const style = {
     "--view-sidebar-width": `${sidebarSize.width}px`,
