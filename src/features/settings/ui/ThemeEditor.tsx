@@ -4,21 +4,28 @@ import { normalizeHex, type Hex } from "../model/color";
 import { previewTheme, saveCustomTheme } from "../model/appearance-store";
 import {
   ACCENT_PRESETS,
-  ADVANCED_TOKENS,
   BUILT_IN_THEMES,
   CODE_FONT_SIZES,
   contrastChecks,
   DEFAULT_THEME_ID,
   derivePalette,
+  fixContrast,
   sanitizeThemeName,
+  STYLE_FIELDS,
+  STYLE_OPTIONS,
   THEME_NAME_MAX_LENGTH,
   THEME_SEEDS,
+  TOKEN_GROUPS,
   UI_FONT_SIZES,
   type CustomTheme,
+  type StyleField,
   type ThemeBase,
   type ThemeSeed,
+  type ThemeStyle,
   type AdvancedThemeToken,
 } from "../model/themes";
+import { useAppearance } from "../model/use-theme-preference";
+import { styleOptionKey } from "./StyleSettings";
 
 function ColorField({ id, label, pickerLabel, value, pinned, onChange, onReset, resetLabel }: {
   id: string;
@@ -65,7 +72,9 @@ export function ThemeEditor({ initialTheme, isNew, takenNames, onDone }: {
   onDone: (saved?: CustomTheme) => void;
 }) {
   const { t } = useI18n();
+  const { preferences } = useAppearance();
   const [theme, setTheme] = useState<CustomTheme>(initialTheme);
+  const [fixedContrast, setFixedContrast] = useState(false);
   const palette = useMemo(() => derivePalette(theme.base, theme.seeds, theme.overrides), [theme]);
   const checks = useMemo(() => contrastChecks(palette), [palette]);
   const name = sanitizeThemeName(theme.name);
@@ -74,6 +83,7 @@ export function ThemeEditor({ initialTheme, isNew, takenNames, onDone }: {
 
   // Every edit shows live across the app; leaving without saving restores the saved theme.
   useEffect(() => { previewTheme(theme); }, [theme]);
+  useEffect(() => { if (failing) setFixedContrast(false); }, [failing]);
 
   function setSeed(seed: ThemeSeed, value: Hex) {
     setTheme((current) => ({ ...current, seeds: { ...current.seeds, [seed]: value } }));
@@ -105,6 +115,22 @@ export function ThemeEditor({ initialTheme, isNew, takenNames, onDone }: {
       if (!Object.keys(typography).length) delete next.typography;
       return next;
     });
+  }
+
+  function setStyleOverride(field: StyleField, value: string) {
+    setTheme((current) => {
+      const style: Partial<Record<StyleField, string>> = { ...current.style };
+      if (value) style[field] = value;
+      else delete style[field];
+      const next: CustomTheme = { ...current, style: style as Partial<ThemeStyle> };
+      if (!Object.keys(style).length) delete next.style;
+      return next;
+    });
+  }
+
+  function fixReadability() {
+    setTheme(fixContrast);
+    setFixedContrast(true);
   }
 
   function cancel() {
@@ -180,21 +206,27 @@ export function ThemeEditor({ initialTheme, isNew, takenNames, onDone }: {
       <details className="themeEditorGroup themeEditorAdvanced">
         <summary>{t("editor.advanced", { count: Object.keys(theme.overrides).length })}</summary>
         <p className="settingsHint">{t("editor.advancedHelp")}</p>
-        <div className="colorFieldGrid">
-          {ADVANCED_TOKENS.map((token) => (
-            <ColorField
-              key={token}
-              id={`theme-token-${token}`}
-              label={t(`editor.token.${token}`)}
-              pickerLabel={t("editor.picker", { label: t(`editor.token.${token}`) })}
-              value={palette[token]}
-              pinned={Boolean(theme.overrides[token])}
-              onChange={(value) => setOverride(token, value)}
-              onReset={theme.overrides[token] ? () => setOverride(token, undefined) : undefined}
-              resetLabel={t("editor.resetToken", { label: t(`editor.token.${token}`) })}
-            />
-          ))}
-        </div>
+        {TOKEN_GROUPS.map((group) => (
+          <section className="themeTokenGroup" key={group.id} aria-labelledby={`theme-token-group-${group.id}`}>
+            <h4 id={`theme-token-group-${group.id}`}>{t(`editor.group.${group.id}`)}</h4>
+            {group.id === "graph" && <p className="settingsHint">{t("editor.group.graphHelp")}</p>}
+            <div className="colorFieldGrid">
+              {group.tokens.map((token: AdvancedThemeToken) => (
+                <ColorField
+                  key={token}
+                  id={`theme-token-${token}`}
+                  label={t(`editor.token.${token}`)}
+                  pickerLabel={t("editor.picker", { label: t(`editor.token.${token}`) })}
+                  value={palette[token]}
+                  pinned={Boolean(theme.overrides[token])}
+                  onChange={(value) => setOverride(token, value)}
+                  onReset={theme.overrides[token] ? () => setOverride(token, undefined) : undefined}
+                  resetLabel={t("editor.resetToken", { label: t(`editor.token.${token}`) })}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
       </details>
 
       <fieldset className="themeEditorGroup">
@@ -214,16 +246,42 @@ export function ThemeEditor({ initialTheme, isNew, takenNames, onDone }: {
         </div>
       </fieldset>
 
+      <fieldset className="themeEditorGroup">
+        <legend>{t("editor.style")}</legend>
+        <div className="settingsFieldGrid">
+          {STYLE_FIELDS.map((field) => (
+            <label key={field}>{t(`appearance.style.${field}`)}
+              <select value={theme.style?.[field] ?? ""} onChange={(event) => setStyleOverride(field, event.target.value)}>
+                <option value="">{t("editor.useGlobalStyle", { value: t(styleOptionKey(field, preferences.style[field])) })}</option>
+                {(STYLE_OPTIONS[field] as readonly ThemeStyle[typeof field][]).map((value) => <option key={value} value={value}>{t(styleOptionKey(field, value))}</option>)}
+              </select>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+
       <div className="themeEditorPreview" aria-hidden="true">
         <div className="themePreviewRow"><span className="themePreviewBadge" style={{ color: palette.gitModified }}>M</span><span>src/app/App.tsx</span></div>
         <div className="themePreviewRow"><span className="themePreviewBadge" style={{ color: palette.gitAdded }}>A</span><span>src/features/settings/model/themes.ts</span></div>
         <div className="themePreviewRow"><span className="themePreviewBadge" style={{ color: palette.gitDeleted }}>D</span><span>src/legacy/theme.css</span></div>
         <div className="themePreviewRow"><span className="themePreviewBadge" style={{ color: palette.gitConflicted }}>U</span><span className="themePreviewMuted">README.md</span></div>
+        <div className="themePreviewCode" style={{ background: palette.surface }}>
+          <div><span style={{ color: palette.syntaxComment }}>{`// ${t("editor.group.syntax")}`}</span></div>
+          <div><span style={{ color: palette.syntaxKeyword }}>export function</span> load(user: <span style={{ color: palette.syntaxType }}>User</span>) {"{"}</div>
+          <div>{"  "}<span style={{ color: palette.syntaxKeyword }}>return</span> {"{ "}<span style={{ color: palette.syntaxTag }}>name</span>: <span style={{ color: palette.syntaxString }}>&quot;dark&quot;</span>, <span style={{ color: palette.syntaxTag }}>size</span>: <span style={{ color: palette.syntaxNumber }}>13</span>{" };"}</div>
+          <div>{"}"}</div>
+        </div>
+        <div className="themePreviewLanes">
+          {TOKEN_GROUPS[3].tokens.map((token) => <span key={token} style={{ background: palette[token] }} />)}
+        </div>
         <div className="themePreviewButtons"><span className="primaryButton">{t("editor.previewPrimary")}</span><span className="secondaryButton">{t("editor.previewSecondary")}</span><span className="themePreviewLink">{t("editor.previewLink")}</span></div>
       </div>
 
       <div className="contrastReport" aria-live="polite">
-        <p className={failing ? "contrastSummary warn" : "contrastSummary"}>{failing ? t("editor.contrastFailing", { count: failing }) : t("editor.contrastOk")}</p>
+        <div className="contrastSummaryRow">
+          <p className={failing ? "contrastSummary warn" : "contrastSummary"}>{failing ? t("editor.contrastFailing", { count: failing }) : fixedContrast ? t("editor.fixContrastDone") : t("editor.contrastOk")}</p>
+          {failing > 0 && <button type="button" className="secondaryButton compact" onClick={fixReadability}>{t("editor.fixContrast")}</button>}
+        </div>
         <ul>
           {checks.map((check) => (
             <li key={check.id} className={check.passes ? "pass" : "fail"}>

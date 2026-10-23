@@ -65,3 +65,57 @@ const LIGHT_INK: Hex = "#ffffff";
 export function readableOn(background: Hex): Hex {
   return contrastRatio(DARK_INK, background) >= contrastRatio(LIGHT_INK, background) ? DARK_INK : LIGHT_INK;
 }
+
+function toHsl(hex: Hex): readonly [number, number, number] {
+  const [red, green, blue] = toRgb(hex).map((channel) => channel / 255);
+  const max = Math.max(red, green, blue);
+  const min = Math.min(red, green, blue);
+  const lightness = (max + min) / 2;
+  if (max === min) return [0, 0, lightness];
+  const delta = max - min;
+  const saturation = lightness > 0.5 ? delta / (2 - max - min) : delta / (max + min);
+  const hue = max === red ? (green - blue) / delta + (green < blue ? 6 : 0)
+    : max === green ? (blue - red) / delta + 2
+      : (red - green) / delta + 4;
+  return [hue * 60, saturation, lightness];
+}
+
+function fromHsl(hue: number, saturation: number, lightness: number): Hex {
+  const chroma = (1 - Math.abs(2 * lightness - 1)) * saturation;
+  const sector = (((hue % 360) + 360) % 360) / 60;
+  const second = chroma * (1 - Math.abs((sector % 2) - 1));
+  const [red, green, blue] = sector < 1 ? [chroma, second, 0]
+    : sector < 2 ? [second, chroma, 0]
+      : sector < 3 ? [0, chroma, second]
+        : sector < 4 ? [0, second, chroma]
+          : sector < 5 ? [second, 0, chroma]
+            : [chroma, 0, second];
+  const offset = lightness - chroma / 2;
+  return fromRgb([red, green, blue].map((channel) => (channel + offset) * 255) as unknown as Rgb);
+}
+
+/**
+ * Turns the hue by `degrees`, keeping lightness, so a derived color has the same weight as `hex`.
+ * `minSaturation` (0–1) keeps a gray or muted source from producing hues that all look alike.
+ */
+export function rotateHue(hex: Hex, degrees: number, minSaturation = 0): Hex {
+  const [hue, saturation, lightness] = toHsl(hex);
+  return fromHsl(hue + degrees, Math.max(saturation, minSaturation), lightness);
+}
+
+/** `hex` with its hue set to `hue` degrees, keeping lightness; see `rotateHue` for `minSaturation`. */
+export function withHue(hex: Hex, hue: number, minSaturation = 0): Hex {
+  const [, saturation, lightness] = toHsl(hex);
+  return fromHsl(hue, Math.max(saturation, minSaturation), lightness);
+}
+
+/** Returns `foreground`, moved just far enough toward white or black (whichever `background` is further from) to reach `minimum`:1. */
+export function ensureContrast(foreground: Hex, background: Hex, minimum: number): Hex {
+  if (contrastRatio(foreground, background) >= minimum) return foreground;
+  const target: Hex = relativeLuminance(background) < 0.5 ? "#ffffff" : "#000000";
+  for (let step = 1; step <= 20; step += 1) {
+    const candidate = mix(foreground, target, step / 20);
+    if (contrastRatio(candidate, background) >= minimum) return candidate;
+  }
+  return target;
+}

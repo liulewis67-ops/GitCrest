@@ -18,6 +18,7 @@ import {
   type ThemeDefinition,
 } from "../model/themes";
 import { useAppearance } from "../model/use-theme-preference";
+import { StyleSettings } from "./StyleSettings";
 import { ThemeEditor } from "./ThemeEditor";
 
 type Editing = { theme: CustomTheme; isNew: boolean };
@@ -43,7 +44,15 @@ export function AppearanceSettings() {
   }
 
   function editableCopy(theme: ThemeDefinition, name: string): CustomTheme {
-    return { id: newCustomThemeId(), name: uniqueThemeName(name, themeNames), base: theme.base, seeds: { ...theme.seeds }, overrides: { ...theme.overrides }, ...(theme.typography ? { typography: { ...theme.typography } } : {}) };
+    return {
+      id: newCustomThemeId(),
+      name: uniqueThemeName(name, themeNames),
+      base: theme.base,
+      seeds: { ...theme.seeds },
+      overrides: { ...theme.overrides },
+      ...(theme.typography ? { typography: { ...theme.typography } } : {}),
+      ...(theme.style ? { style: { ...theme.style } } : {}),
+    };
   }
 
   function startEditing(next: Editing) {
@@ -176,6 +185,8 @@ export function AppearanceSettings() {
           })}
         </ul>
       </div>
+
+      <StyleSettings themeName={themeName} />
 
       <div className="settingsCard">
         <div className="settingsSectionHeading">

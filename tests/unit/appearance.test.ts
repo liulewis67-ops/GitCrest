@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from "vitest";
-import { contrastRatio, mix, normalizeHex, readableOn } from "../../src/features/settings/model/color";
+import { contrastRatio, ensureContrast, mix, normalizeHex, readableOn, rotateHue } from "../../src/features/settings/model/color";
 import {
   ADVANCED_TOKENS,
   BUILT_IN_THEMES,
+  contrastChecks,
   derivePalette,
+  fixContrast,
+  GRAPH_LANE_TOKENS,
+  paletteVariables,
   parseCustomTheme,
   THEME_TOKENS,
   uniqueThemeName,
@@ -20,6 +24,8 @@ import {
   resetAppearance,
   saveCustomTheme,
   selectTheme,
+  setMotion,
+  setStyle,
   setThemeMode,
   setTypography,
 } from "../../src/features/settings/model/appearance-store";
@@ -49,6 +55,20 @@ describe("color helpers", () => {
     expect(readableOn("#ffffff")).not.toBe("#ffffff");
     expect(readableOn("#0b1a3a")).toBe("#ffffff");
   });
+
+  it("rotates hues without changing how light a color is", () => {
+    expect(rotateHue("#ff0000", 120)).toBe("#00ff00");
+    expect(rotateHue("#ff0000", -120)).toBe("#0000ff");
+    expect(rotateHue("#808080", 90)).toBe("#808080");
+    expect(rotateHue("#808080", 0, 0.5)).not.toBe("#808080");
+  });
+
+  it("moves a color only as far as needed to reach a contrast ratio", () => {
+    expect(ensureContrast("#ffffff", "#000000", 4.5)).toBe("#ffffff");
+    const lifted = ensureContrast("#333333", "#1d232b", 4.5);
+    expect(contrastRatio(lifted, "#1d232b")).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio(ensureContrast("#dddddd", "#fafbfc", 3), "#fafbfc")).toBeGreaterThanOrEqual(3);
+  });
 });
 
 describe("theme palettes", () => {
@@ -67,6 +87,38 @@ describe("theme palettes", () => {
     }
   });
 
+  it("passes every readability check in every built-in theme, with six distinct graph lanes", () => {
+    for (const theme of BUILT_IN_THEMES) {
+      expect(contrastChecks(theme.palette).filter((check) => !check.passes).map((check) => check.id), theme.id).toEqual([]);
+      expect(new Set(GRAPH_LANE_TOKENS.map((token) => theme.palette[token])).size, theme.id).toBe(6);
+    }
+  });
+
+  it("names lane and syntax variables the way tokens.css does", () => {
+    const variables = paletteVariables(BUILT_IN_THEMES[0].palette);
+    expect(variables).toHaveProperty("--graph-lane-1");
+    expect(variables).toHaveProperty("--syntax-keyword");
+    expect(variables["--surface-raised"]).toBe("#232a33");
+  });
+
+  it("recolors syntax and lanes from a new accent unless they are pinned", () => {
+    const blue = derivePalette("dark", darkSeeds);
+    const rose = derivePalette("dark", { ...darkSeeds, accent: "#ee8fb0" }, { syntaxString: "#123456" });
+    expect(rose.graphLane1).not.toBe(blue.graphLane1);
+    expect(rose.syntaxKeyword).not.toBe(blue.syntaxKeyword);
+    expect(rose.syntaxString).toBe("#123456");
+  });
+
+  it("fixes failing readability checks with the smallest set of changes", () => {
+    const unreadable = customTheme({ seeds: { ...darkSeeds, text: "#2a2f36", accent: "#2b3440" }, overrides: { graphLane3: "#1e232a", line: "#445566" } });
+    expect(contrastChecks(derivePalette(unreadable.base, unreadable.seeds, unreadable.overrides)).some((check) => !check.passes)).toBe(true);
+    const fixed = fixContrast(unreadable);
+    const palette = derivePalette(fixed.base, fixed.seeds, fixed.overrides);
+    expect(contrastChecks(palette).filter((check) => !check.passes).map((check) => check.id)).toEqual([]);
+    expect(fixed.seeds.canvas).toBe(darkSeeds.canvas);
+    expect(fixed.overrides.line).toBe("#445566");
+  });
+
   it("lets pinned tokens win and keeps dependent tokens in step", () => {
     const palette = derivePalette("dark", darkSeeds, { accentStrong: "#ff0000" });
     expect(palette.accentStrong).toBe("#ff0000");
@@ -80,6 +132,12 @@ describe("theme palettes", () => {
     expect(parsed?.overrides).toEqual({ line: "#123456" });
     expect(parsed?.typography).toEqual({ uiFontSize: 16 });
     expect(ADVANCED_TOKENS).not.toContain("canvas");
+  });
+
+  it("keeps only known style choices on a theme", () => {
+    const parsed = parseCustomTheme({ ...customTheme(), style: { radius: "round", density: "huge", shadow: 3, extra: "x" } });
+    expect(parsed?.style).toEqual({ radius: "round" });
+    expect(parseCustomTheme({ ...customTheme(), style: { density: "huge" } })).not.toHaveProperty("style");
   });
 
   it("suffixes names that are already taken", () => {
@@ -103,6 +161,13 @@ describe("stored appearance", () => {
     expect(parsed.darkThemeId).toBe("gitcrest-dark");
     expect(parsed.customThemes.map((theme) => theme.id)).toEqual(["custom-test-1"]);
     expect(parsed.typography).toMatchObject({ uiFontSize: 12, codeFontSize: 20, uiFontFamily: "Inter color: red" });
+    expect(parsed).toMatchObject({ style: { radius: "default", density: "default", shadow: "default", graphColors: "accent" }, motion: "system" });
+  });
+
+  it("reads stored style and motion choices field by field", () => {
+    const parsed = parseAppearance(JSON.stringify({ style: { radius: "square", density: "dense", graphColors: "lanes" }, motion: "reduced" }));
+    expect(parsed.style).toEqual({ radius: "square", density: "default", shadow: "default", graphColors: "lanes" });
+    expect(parsed.motion).toBe("reduced");
   });
 
   it("carries the old light/dark preference over when nothing new is stored", () => {
@@ -172,12 +237,29 @@ describe("appearance store", () => {
     expect(style.getPropertyValue("--code-size")).toBe("18px");
   });
 
-  it("resets mode, slots and text but keeps custom themes", () => {
+  it("applies style and motion to the document, with theme style on top", () => {
+    setThemeMode("dark");
+    setStyle({ radius: "square", density: "compact", shadow: "none", graphColors: "lanes" });
+    setMotion("reduced");
+    const root = document.documentElement;
+    expect(root.style.getPropertyValue("--radius-scale")).toBe("0");
+    expect(Number(root.style.getPropertyValue("--density"))).toBeLessThan(1);
+    expect(root.style.getPropertyValue("--shadow")).toBe("none");
+    expect(root.dataset).toMatchObject({ density: "compact", graphColors: "lanes", motion: "reduced" });
+    saveCustomTheme(customTheme({ style: { radius: "round", density: "comfortable" } }));
+    expect(getAppearance().style).toEqual({ radius: "round", density: "comfortable", shadow: "none", graphColors: "lanes" });
+    expect(root.dataset.density).toBe("comfortable");
+    expect(getAppearance().preferences.style.radius).toBe("square");
+  });
+
+  it("resets mode, slots, text and style but keeps custom themes", () => {
     saveCustomTheme(customTheme());
     setTypography({ uiFontSize: 16 });
+    setStyle({ density: "compact" });
+    setMotion("full");
     resetAppearance();
     const { preferences } = getAppearance();
-    expect(preferences).toMatchObject({ mode: "system", darkThemeId: "gitcrest-dark", typography: { uiFontSize: 13 } });
+    expect(preferences).toMatchObject({ mode: "system", darkThemeId: "gitcrest-dark", typography: { uiFontSize: 13 }, style: { density: "default" }, motion: "system" });
     expect(preferences.customThemes).toHaveLength(1);
   });
 });
@@ -188,6 +270,19 @@ describe("theme files", () => {
     expect(imported.id).not.toBe("custom-test-1");
     expect(imported.name).toBe("Ocean 2");
     expect(imported).toMatchObject({ base: "dark", seeds: { accent: "#a48bf0" }, typography: { uiFontSize: 14 } });
+  });
+
+  it("carries a theme's style and syntax colors through a file", () => {
+    const imported = parseThemeFile(serializeThemeFile(customTheme({ style: { graphColors: "lanes" }, overrides: { syntaxKeyword: "#ff00aa" } })), []);
+    expect(imported).toMatchObject({ style: { graphColors: "lanes" }, overrides: { syntaxKeyword: "#ff00aa" } });
+  });
+
+  it("still imports version 1 files, which have no style", () => {
+    const { style, ...v1 } = customTheme({ style: { radius: "round" } });
+    expect(style).toBeDefined();
+    const imported = parseThemeFile(JSON.stringify({ format: "gitcrest-theme", version: 1, ...v1 }), []);
+    expect(imported).not.toHaveProperty("style");
+    expect(imported.seeds.accent).toBe("#a48bf0");
   });
 
   it("rejects files that aren't GitCrest themes", () => {

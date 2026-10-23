@@ -3,6 +3,7 @@ export type { Theme } from "./model/use-theme-preference";
 export { codeFontStack, startAppearance } from "./model/appearance-store";
 export type { AppearanceSnapshot } from "./model/appearance-store";
 export { hexWithAlpha } from "./model/color";
+export { GRAPH_ROW_HEIGHT } from "./model/themes";
 export type { ThemePalette } from "./model/themes";
 export { useUpdateStatus } from "./model/use-update-status";
 export { useShortcutPreferences } from "./model/use-shortcut-preferences";

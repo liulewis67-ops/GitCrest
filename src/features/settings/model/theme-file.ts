@@ -6,8 +6,9 @@ export const THEME_FILE_SUFFIX = ".gitcrest-theme.json";
 const MAX_THEME_FILE_BYTES = 64 * 1024;
 
 export function serializeThemeFile(theme: CustomTheme): string {
-  const { name, base, seeds, overrides, typography } = theme;
-  return `${JSON.stringify({ format: THEME_FILE_FORMAT, version: 1, name, base, seeds, overrides, ...(typography ? { typography } : {}) }, null, 2)}\n`;
+  const { name, base, seeds, overrides, typography, style } = theme;
+  // Version 2 adds the optional style block; version 1 files still import and simply have none.
+  return `${JSON.stringify({ format: THEME_FILE_FORMAT, version: 2, name, base, seeds, overrides, ...(typography ? { typography } : {}), ...(style ? { style } : {}) }, null, 2)}\n`;
 }
 
 export function themeFileName(theme: CustomTheme): string {

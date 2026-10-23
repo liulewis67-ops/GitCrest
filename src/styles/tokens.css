@@ -16,6 +16,19 @@
   --space-6: 24px;
   --code-size: 13px;
   --code-leading: 20px;
+  /* Corner radii, named by their default size. --radius-scale follows Settings → Appearance → Corners. */
+  --radius-scale: 1;
+  --radius-2: calc(2px * var(--radius-scale));
+  --radius-3: calc(3px * var(--radius-scale));
+  --radius-4: calc(4px * var(--radius-scale));
+  --radius-5: calc(5px * var(--radius-scale));
+  --radius-6: calc(6px * var(--radius-scale));
+  --radius-7: calc(7px * var(--radius-scale));
+  --radius-8: calc(8px * var(--radius-scale));
+  --radius-9: calc(9px * var(--radius-scale));
+  --radius-12: calc(12px * var(--radius-scale));
+  /* List row heights are multiplied by --density, which follows Settings → Appearance → Density. */
+  --density: 1;
 
   --canvas: #171b21;
   --surface: #1d232b;
@@ -46,6 +59,20 @@
   --git-untracked: #a4afbd;
   --git-conflicted: #e3a06f;
   --git-ignored: #8693a2;
+
+  /* Code colors in the diff editor, and commit graph lanes when Settings → Appearance colors them. */
+  --syntax-comment: #8693a2;
+  --syntax-keyword: #bd6dd8;
+  --syntax-string: #8fcba0;
+  --syntax-number: #d4b477;
+  --syntax-type: #6dd8d4;
+  --syntax-tag: #d79981;
+  --graph-lane-1: #6db6d8;
+  --graph-lane-2: #d86db6;
+  --graph-lane-3: #b6d86d;
+  --graph-lane-4: #8f6dd8;
+  --graph-lane-5: #d88f6d;
+  --graph-lane-6: #6dd88f;
 
   --diff-add-bg: color-mix(in srgb, var(--git-added) 10%, transparent);
   --diff-del-bg: color-mix(in srgb, var(--git-deleted) 10%, transparent);
@@ -84,4 +111,17 @@
   --git-untracked: #505c6a;
   --git-conflicted: #a8561a;
   --git-ignored: #646f7d;
+
+  --syntax-comment: #646f7d;
+  --syntax-keyword: #8114a5;
+  --syntax-string: #287b46;
+  --syntax-number: #8a641f;
+  --syntax-type: #0f7c78;
+  --syntax-tag: #9e563b;
+  --graph-lane-1: #147ba5;
+  --graph-lane-2: #a5147b;
+  --graph-lane-3: #6f9512;
+  --graph-lane-4: #3e14a5;
+  --graph-lane-5: #a53e14;
+  --graph-lane-6: #139d3b;
 }

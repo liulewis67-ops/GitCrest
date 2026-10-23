@@ -1,19 +1,28 @@
 import {
   BUILT_IN_THEMES,
+  DEFAULT_STYLE,
   DEFAULT_THEME_ID,
   DEFAULT_TYPOGRAPHY,
+  DENSITY_SCALE,
   paletteVariables,
   parseCustomTheme,
+  parseStyle,
   parseTypography,
+  RADIUS_SCALE,
   resolveCustomTheme,
+  shadowFor,
   type CustomTheme,
   type ThemeBase,
   type ThemeDefinition,
+  type ThemeStyle,
   type Typography,
 } from "./themes";
 
 export const THEME_MODES = ["system", "light", "dark"] as const;
 export type ThemeMode = typeof THEME_MODES[number];
+/** `system` follows the OS reduce-motion setting; the other two override it. */
+export const MOTION_PREFERENCES = ["system", "reduced", "full"] as const;
+export type MotionPreference = typeof MOTION_PREFERENCES[number];
 
 export interface AppearancePreferences {
   version: 1;
@@ -22,6 +31,8 @@ export interface AppearancePreferences {
   darkThemeId: string;
   customThemes: CustomTheme[];
   typography: Typography;
+  style: ThemeStyle;
+  motion: MotionPreference;
 }
 
 export interface AppearanceSnapshot {
@@ -33,6 +44,8 @@ export interface AppearanceSnapshot {
   activeTheme: ThemeDefinition;
   /** Global sizes with the active theme's own size overrides applied. */
   typography: Typography;
+  /** Global style with the active theme's own style choices applied. */
+  style: ThemeStyle;
 }
 
 export const APPEARANCE_STORAGE_KEY = "gitcrest-appearance-v1";
@@ -45,6 +58,8 @@ export const DEFAULT_APPEARANCE: AppearancePreferences = {
   darkThemeId: DEFAULT_THEME_ID.dark,
   customThemes: [],
   typography: DEFAULT_TYPOGRAPHY,
+  style: DEFAULT_STYLE,
+  motion: "system",
 };
 
 const DEFAULT_UI_FONT = `Inter, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", "Noto Sans CJK SC", ui-sans-serif, system-ui, sans-serif`;
@@ -89,6 +104,8 @@ export function parseAppearance(stored: string | null, legacyMode: string | null
     darkThemeId: validSlot(source.darkThemeId, "dark", themes),
     customThemes,
     typography: parseTypography(source.typography),
+    style: parseStyle(source.style),
+    motion: MOTION_PREFERENCES.includes(source.motion as MotionPreference) ? source.motion as MotionPreference : "system",
   };
 }
 
@@ -133,16 +150,23 @@ function buildSnapshot(): AppearanceSnapshot {
     resolvedBase: activeTheme.base,
     activeTheme,
     typography: { ...preferences.typography, ...activeTheme.typography },
+    style: { ...preferences.style, ...activeTheme.style },
   };
 }
 
 function applyToDocument() {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  const { activeTheme, typography } = snapshot;
+  const { activeTheme, typography, style } = snapshot;
   root.dataset.theme = activeTheme.base;
   root.dataset.themeId = activeTheme.id;
+  root.dataset.density = style.density;
+  root.dataset.graphColors = style.graphColors;
+  root.dataset.motion = preferences.motion;
   for (const [name, value] of Object.entries(paletteVariables(activeTheme.palette))) root.style.setProperty(name, value);
+  root.style.setProperty("--shadow", shadowFor(activeTheme.base, style.shadow));
+  root.style.setProperty("--radius-scale", String(RADIUS_SCALE[style.radius]));
+  root.style.setProperty("--density", String(DENSITY_SCALE[style.density]));
   root.style.setProperty("--font-scale", String(typography.uiFontSize / BASE_UI_FONT_SIZE));
   root.style.setProperty("--code-size", `${typography.codeFontSize}px`);
   root.style.setProperty("--code-leading", `${Math.round(typography.codeFontSize * 1.54)}px`);
@@ -245,6 +269,14 @@ export function deleteCustomTheme(id: string) {
 
 export function setTypography(changes: Partial<Typography>) {
   commit({ ...preferences, typography: parseTypography({ ...preferences.typography, ...changes }) });
+}
+
+export function setStyle(changes: Partial<ThemeStyle>) {
+  commit({ ...preferences, style: parseStyle({ ...preferences.style, ...changes }) });
+}
+
+export function setMotion(motion: MotionPreference) {
+  if (motion !== preferences.motion) commit({ ...preferences, motion });
 }
 
 /** Shows `theme` live without saving it; pass undefined to go back to the saved appearance. */

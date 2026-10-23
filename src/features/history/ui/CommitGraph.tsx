@@ -1,4 +1,5 @@
 import { useI18n } from "../../../shared/i18n";
+import { GRAPH_ROW_HEIGHT, useAppearance } from "../../settings";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent, UIEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
@@ -7,8 +8,13 @@ import { useHistoryFilters } from "../model/use-history-filters";
 import { useRepositoryHistory } from "../model/use-repository-history";
 import { formatCommitDate } from "./format-commit-date";
 
-const ROW_HEIGHT = 52;
 const OVERSCAN = 8;
+const LANE_COLORS = 6;
+
+/** The class that gives a lane its color when Settings → Appearance colors graph lanes. */
+function laneClass(lane: number) {
+  return `graphLane${(lane % LANE_COLORS) + 1}`;
+}
 type CommitSummary = components["schemas"]["CommitSummary"];
 
 type CommitGraphProps = {
@@ -50,7 +56,7 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
 }) {
   const { t } = useI18n();
   return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${refNames.length ? `, ${refNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
-    <span className={`commitGraphNode${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
+    <span className={`commitGraphNode ${laneClass(lane)}${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
     <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
     <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
     {refNames.length > 0 && <span className="commitGraphRefs" title={refNames.join(", ")}>{refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}{refNames.length > 1 && <span className="commitRefMore" aria-hidden="true">+{refNames.length - 1}</span>}</span>}
@@ -59,6 +65,7 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
 
 export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, pathFilterRequest, onPathFilterHandled, onScrollPosition, onSelect }: CommitGraphProps) {
   const { t } = useI18n();
+  const rowHeight = GRAPH_ROW_HEIGHT[useAppearance().style.density];
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
   const { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, showPath, resetFilters } = useHistoryFilters();
@@ -77,10 +84,10 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     node.scrollTop = initialScrollTop;
     restoredRepo.current = repoId;
     const height = node.clientHeight || 520;
-    const first = Math.max(0, Math.floor(node.scrollTop / ROW_HEIGHT) - OVERSCAN);
+    const first = Math.max(0, Math.floor(node.scrollTop / rowHeight) - OVERSCAN);
     renderedWindowRef.current = { first, height };
     setViewport({ top: node.scrollTop, height });
-  }, [initialScrollTop, loading, repoId]);
+  }, [initialScrollTop, loading, repoId, rowHeight]);
 
   useEffect(() => {
     if (focusSearchRequest?.repoId !== repoId) return;
@@ -107,7 +114,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
   const laneLayout = useMemo(() => {
     const laneByOid = new Map<string, number>();
     const indexByOid = new Map(commits.map((commit, index) => [commit.oid, index]));
-    const edgesByFrom: { to: number; fromLane: number; toLane: number }[][] = Array.from({ length: commits.length }, () => []);
+    const edgesByFrom: { to: number; fromLane: number; toLane: number; merge: boolean }[][] = Array.from({ length: commits.length }, () => []);
     let nextLane = 0;
     commits.forEach((commit, index) => {
       let lane = laneByOid.get(commit.oid);
@@ -120,7 +127,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
           laneByOid.set(parent, parentLane);
         }
         const targetIndex = indexByOid.get(parent);
-        edgesByFrom[index].push({ to: targetIndex ?? index + 1, fromLane: lane, toLane: parentLane });
+        edgesByFrom[index].push({ to: targetIndex ?? index + 1, fromLane: lane, toLane: parentLane, merge: parentIndex > 0 });
       });
     });
     return { laneByOid, edgesByFrom, maxLane: Math.max(0, nextLane - 1) };
@@ -135,23 +142,23 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     return namesByOid;
   }, [refs]);
 
-  const firstVisible = Math.max(0, Math.floor(viewport.top / ROW_HEIGHT) - OVERSCAN);
-  const visibleCount = Math.ceil(viewport.height / ROW_HEIGHT) + OVERSCAN * 2;
+  const firstVisible = Math.max(0, Math.floor(viewport.top / rowHeight) - OVERSCAN);
+  const visibleCount = Math.ceil(viewport.height / rowHeight) + OVERSCAN * 2;
   const lastVisible = Math.min(commits.length, firstVisible + visibleCount);
   const visibleCommits = commits.slice(firstVisible, lastVisible);
-  const graphHeight = commits.length * ROW_HEIGHT;
+  const graphHeight = commits.length * rowHeight;
   const graphWidth = Math.max(112, laneLayout.maxLane * 20 + 44);
 
   function onScroll(event: UIEvent<HTMLDivElement>) {
     const node = event.currentTarget;
     const top = node.scrollTop;
     const height = node.clientHeight || 520;
-    const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN);
+    const first = Math.max(0, Math.floor(top / rowHeight) - OVERSCAN);
     if (first !== renderedWindowRef.current.first || height !== renderedWindowRef.current.height) {
       renderedWindowRef.current = { first, height };
       setViewport({ top, height });
     }
-    if (!loadingMore && node.scrollHeight - node.scrollTop - node.clientHeight < ROW_HEIGHT * 10) {
+    if (!loadingMore && node.scrollHeight - node.scrollTop - node.clientHeight < rowHeight * 10) {
       loadMore();
     }
   }
@@ -165,21 +172,21 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     event.preventDefault();
     onSelect(commits[targetIndex].oid);
     const node = viewportRef.current;
-    if (node && (targetIndex * ROW_HEIGHT < node.scrollTop || (targetIndex + 1) * ROW_HEIGHT > node.scrollTop + node.clientHeight)) {
-      node.scrollTop = Math.max(0, targetIndex * ROW_HEIGHT - node.clientHeight / 2);
+    if (node && (targetIndex * rowHeight < node.scrollTop || (targetIndex + 1) * rowHeight > node.scrollTop + node.clientHeight)) {
+      node.scrollTop = Math.max(0, targetIndex * rowHeight - node.clientHeight / 2);
       const height = node.clientHeight || 520;
-      const first = Math.max(0, Math.floor(node.scrollTop / ROW_HEIGHT) - OVERSCAN);
+      const first = Math.max(0, Math.floor(node.scrollTop / rowHeight) - OVERSCAN);
       renderedWindowRef.current = { first, height };
       setViewport({ top: node.scrollTop, height });
     }
     requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`[data-commit-index="${targetIndex}"]`)?.focus());
-  }, [commits, onSelect]);
+  }, [commits, onSelect, rowHeight]);
 
-  const visibleStart = firstVisible * ROW_HEIGHT;
-  const visibleEnd = lastVisible * ROW_HEIGHT;
+  const visibleStart = firstVisible * rowHeight;
+  const visibleEnd = lastVisible * rowHeight;
   const visibleEdges = visibleCommits.flatMap((_, relativeIndex) => {
     const from = firstVisible + relativeIndex;
-    return laneLayout.edgesByFrom[from].filter((edge) => edge.to * ROW_HEIGHT >= visibleStart && edge.to * ROW_HEIGHT <= visibleEnd)
+    return laneLayout.edgesByFrom[from].filter((edge) => edge.to * rowHeight >= visibleStart && edge.to * rowHeight <= visibleEnd)
       .map((edge) => ({ from, ...edge }));
   });
   function submitFilters(event: FormEvent<HTMLFormElement>) {
@@ -225,10 +232,11 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
               {visibleEdges.map((edge) => {
                 const x1 = edge.fromLane * 20 + 22;
                 const x2 = edge.toLane * 20 + 22;
-                const y1 = edge.from * ROW_HEIGHT + ROW_HEIGHT / 2;
-                const y2 = edge.to * ROW_HEIGHT + ROW_HEIGHT / 2;
+                const y1 = edge.from * rowHeight + rowHeight / 2;
+                const y2 = edge.to * rowHeight + rowHeight / 2;
                 const direction = edge.to >= edge.from ? 1 : -1;
-                return <path key={`${edge.from}-${edge.to}-${edge.fromLane}-${edge.toLane}`} d={`M ${x1} ${y1} C ${x1} ${y1 + direction * ROW_HEIGHT / 2}, ${x2} ${y2 - direction * ROW_HEIGHT / 2}, ${x2} ${y2}`} />;
+                // A merged-in branch keeps its own color; otherwise the line takes the color of the lane it leaves.
+                return <path key={`${edge.from}-${edge.to}-${edge.fromLane}-${edge.toLane}`} className={laneClass(edge.merge ? edge.toLane : edge.fromLane)} d={`M ${x1} ${y1} C ${x1} ${y1 + direction * rowHeight / 2}, ${x2} ${y2 - direction * rowHeight / 2}, ${x2} ${y2}`} />;
               })}
             </svg>
             <div className="commitGraphList" role="list" aria-label={t("hist.listAria")}>
@@ -238,7 +246,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
                 const lane = laneLayout.laneByOid.get(commit.oid) || 0;
                 const refNames = refNamesByOid.get(commit.oid) || NO_REFS;
                 const selected = selectedOid === commit.oid;
-                return <div className="commitGraphRow" role="listitem" key={commit.oid} style={{ height: ROW_HEIGHT }}>
+                return <div className="commitGraphRow" role="listitem" key={commit.oid} style={{ height: rowHeight }}>
                   <CommitGraphEntry
                     commit={commit}
                     index={index}

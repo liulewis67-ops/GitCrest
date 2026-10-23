@@ -1,5 +1,5 @@
 import type { Monaco } from "@monaco-editor/react";
-import { hexWithAlpha, type AppearanceSnapshot } from "../../settings";
+import { hexWithAlpha, type AppearanceSnapshot, type ThemePalette } from "../../settings";
 
 const LANGUAGE_LOADERS: Record<string, () => Promise<unknown>> = {
   bat: () => import("../../../../node_modules/monaco-editor/esm/vs/languages/definitions/bat/register.js"),
@@ -58,6 +58,19 @@ function hashText(text: string): string {
   return (hash >>> 0).toString(36);
 }
 
+/** Monaco token scopes for each theme syntax color. Scopes match by prefix, so `string` also covers `string.escape`. */
+function syntaxRules(palette: ThemePalette) {
+  const scopes: Array<[keyof ThemePalette, string[]]> = [
+    ["syntaxComment", ["comment"]],
+    ["syntaxKeyword", ["keyword", "storage"]],
+    ["syntaxString", ["string", "regexp", "attribute.value"]],
+    ["syntaxNumber", ["number", "constant"]],
+    ["syntaxType", ["type", "namespace", "predefined"]],
+    ["syntaxTag", ["tag", "metatag", "attribute.name", "string.key", "variable.predefined"]],
+  ];
+  return scopes.flatMap(([token, tokens]) => tokens.map((scope) => ({ token: scope, foreground: palette[token].slice(1) })));
+}
+
 /** Defines (once) a Monaco theme matching the active GitCrest palette and returns its name. */
 export function ensureMonacoTheme(monaco: Monaco | null, { activeTheme }: AppearanceSnapshot): string {
   const { palette, base } = activeTheme;
@@ -66,7 +79,7 @@ export function ensureMonacoTheme(monaco: Monaco | null, { activeTheme }: Appear
   monaco.editor.defineTheme(name, {
     base: base === "dark" ? "vs-dark" : "vs",
     inherit: true,
-    rules: [],
+    rules: syntaxRules(palette),
     colors: {
       "editor.background": palette.surface,
       "editor.foreground": palette.text,

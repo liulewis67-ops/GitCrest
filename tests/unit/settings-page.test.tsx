@@ -256,3 +256,38 @@ it("drops an unsaved theme draft when Settings closes", async () => {
   unmount();
   expect(document.documentElement.dataset.themeId).toBe("gitcrest-dark");
 });
+
+it("changes global style from the Style card and lets a theme override it", async () => {
+  window.localStorage.clear();
+  reloadAppearance();
+  render(<SettingsPage api={settingsApi()} onClose={() => {}} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
+
+  fireEvent.click(within(screen.getByRole("radiogroup", { name: "Density" })).getByRole("radio", { name: "Compact" }));
+  fireEvent.click(within(screen.getByRole("radiogroup", { name: "Commit graph" })).getByRole("radio", { name: "Color per lane" }));
+  fireEvent.click(within(screen.getByRole("radiogroup", { name: "Motion" })).getByRole("radio", { name: "Reduced" }));
+  expect(document.documentElement.dataset).toMatchObject({ density: "compact", graphColors: "lanes", motion: "reduced" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Duplicate GitCrest Dark" }));
+  const density = screen.getByRole("combobox", { name: "Density" });
+  expect(within(density).getByRole("option", { name: "Use global (Compact)" })).toBeTruthy();
+  fireEvent.change(density, { target: { value: "comfortable" } });
+  expect(document.documentElement.dataset.density).toBe("comfortable");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(document.documentElement.dataset.density).toBe("compact");
+});
+
+it("fixes low-contrast colors in the theme editor on request", async () => {
+  window.localStorage.clear();
+  reloadAppearance();
+  render(<SettingsPage api={settingsApi()} onClose={() => {}} />);
+  fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
+  fireEvent.click(screen.getByRole("button", { name: "Duplicate GitCrest Dark" }));
+  expect(screen.queryByRole("button", { name: "Fix readability" })).toBeNull();
+
+  fireEvent.change(screen.getByRole("textbox", { name: "Text" }), { target: { value: "#2a2f36" } });
+  screen.getByText(/readability check\(s\) below the recommended contrast/);
+  fireEvent.click(screen.getByRole("button", { name: "Fix readability" }));
+  screen.getByText("Adjusted the colors that were below the recommended contrast.");
+  expect(screen.queryByRole("button", { name: "Fix readability" })).toBeNull();
+});

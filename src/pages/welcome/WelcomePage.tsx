@@ -5,9 +5,9 @@ import { getRepositoryDisplayName } from "../../shared/lib/repository-display-na
 import { useI18n } from "../../shared/i18n";
 import { useDialogFocus } from "../../shared/hooks/use-dialog-focus";
 
-const REPOSITORY_ROW_ACTION_CLASS_NAME = "repositoryRowAction min-h-[28px] rounded-[4px] border border-transparent bg-transparent px-[5px] text-muted text-xs cursor-pointer hover:border-line-strong hover:text-foreground";
+const REPOSITORY_ROW_ACTION_CLASS_NAME = "repositoryRowAction min-h-[28px] rounded-[var(--radius-4)] border border-transparent bg-transparent px-[5px] text-muted text-xs cursor-pointer hover:border-line-strong hover:text-foreground";
 const QUICK_ACTION_CLASS_NAME = "actionRow grid grid-cols-[31px_minmax(0,1fr)_auto] items-center w-full min-h-[58px] border-b border-line bg-transparent px-[4px] py-[8px] text-left enabled:hover:bg-surface-soft";
-const QUICK_ACTION_ICON_CLASS_NAME = "actionIcon grid place-items-center w-[24px] h-[24px] border border-line rounded-[6px] text-accent-strong text-[14px]";
+const QUICK_ACTION_ICON_CLASS_NAME = "actionIcon grid place-items-center w-[24px] h-[24px] border border-line rounded-[var(--radius-6)] text-accent-strong text-[14px]";
 const QUICK_ACTION_ARROW_CLASS_NAME = "text-muted text-sm";
 
 interface WelcomePageProps {
@@ -66,7 +66,7 @@ export function WelcomePage({
               <button className="textButton" type="button" onClick={() => onNavigateWorkspace()}>{t("welcome.previewWorkspace")}</button>
             </div>
           </div>
-          {openError && <div className="max-w-[720px] mt-[13px] border border-[color-mix(in_srgb,var(--danger),transparent_55%)] rounded-[5px] bg-[color-mix(in_srgb,var(--danger),transparent_93%)] px-[11px] py-[9px] text-danger text-sm" role="alert">{openError}</div>}
+          {openError && <div className="max-w-[720px] mt-[13px] border border-[color-mix(in_srgb,var(--danger),transparent_55%)] rounded-[var(--radius-5)] bg-[color-mix(in_srgb,var(--danger),transparent_93%)] px-[11px] py-[9px] text-danger text-sm" role="alert">{openError}</div>}
           <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
             <section className="recentSection min-w-0" aria-labelledby="recent-heading">
               <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">
