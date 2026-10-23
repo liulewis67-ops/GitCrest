@@ -1,6 +1,6 @@
 import { useI18n } from "../../../shared/i18n";
-import { DiffEditor, useMonaco } from "@monaco-editor/react";
-import { useEffect, useState } from "react";
+import { DiffEditor, useMonaco, type MonacoDiffEditor } from "@monaco-editor/react";
+import { useEffect, useRef, useState } from "react";
 import { codeFontStack, useAppearance } from "../../settings";
 import { parseDiffHunkSyntax } from "../model/tree-sitter";
 import { ensureMonacoTheme, loadMonacoLanguage } from "./monaco-setup";
@@ -12,15 +12,41 @@ interface MonacoDiffHunkProps {
   treeSitterGrammar: string | null;
   label: string;
   height: number;
+  /** Blame for each line of `modified`, drawn before its line number; empty strings leave a line blank. */
+  modifiedGutter?: string[];
 }
 
-export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar, label, height }: MonacoDiffHunkProps) {
+// Monaco's default width of the line-number gutter, in characters.
+const DEFAULT_LINE_NUMBER_CHARS = 5;
+
+/** Monaco's gutter only draws text, so blame is written into the new side's line numbers, padded to line up. */
+function applyModifiedGutter(diffEditor: MonacoDiffEditor, gutter: string[] | undefined) {
+  const modifiedEditor = diffEditor.getModifiedEditor();
+  if (!gutter) {
+    modifiedEditor.updateOptions({ lineNumbers: "on", lineNumbersMinChars: DEFAULT_LINE_NUMBER_CHARS });
+    return;
+  }
+  const labelWidth = gutter.reduce((width, label) => Math.max(width, label.length), 0);
+  const numberWidth = String(Math.max(gutter.length, 1)).length;
+  modifiedEditor.updateOptions({
+    lineNumbers: (lineNumber) => `${(gutter[lineNumber - 1] ?? "").padEnd(labelWidth)}  ${lineNumber}`,
+    lineNumbersMinChars: labelWidth + 2 + numberWidth,
+  });
+}
+
+export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar, label, height, modifiedGutter }: MonacoDiffHunkProps) {
   const { t } = useI18n();
   const appearance = useAppearance();
   const monaco = useMonaco();
   const [languageReady, setLanguageReady] = useState(language === "plaintext");
   const [languageFailed, setLanguageFailed] = useState(false);
   const [parseState, setParseState] = useState<"loading" | "parsed" | "recovered" | "language" | "tooLarge" | "parserUnavailable">(treeSitterGrammar ? "loading" : "language");
+  const diffEditorRef = useRef<MonacoDiffEditor>();
+  const gutterRef = useRef(modifiedGutter);
+  gutterRef.current = modifiedGutter;
+  useEffect(() => {
+    if (diffEditorRef.current) applyModifiedGutter(diffEditorRef.current, modifiedGutter);
+  }, [modifiedGutter]);
   useEffect(() => {
     let cancelled = false;
     setLanguageReady(language === "plaintext");
@@ -63,6 +89,10 @@ export function MonacoDiffHunk({ original, modified, language, treeSitterGrammar
         modified={modified}
         theme={monacoTheme}
         beforeMount={(instance) => { ensureMonacoTheme(instance, appearance); }}
+        onMount={(diffEditor) => {
+          diffEditorRef.current = diffEditor;
+          applyModifiedGutter(diffEditor, gutterRef.current);
+        }}
         options={{
           fontFamily: codeFontStack(appearance.typography),
           fontSize: codeSize,

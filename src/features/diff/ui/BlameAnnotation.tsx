@@ -42,6 +42,15 @@ function blameDateFormatter() {
   return formatter;
 }
 
+const GUTTER_AUTHOR_CHARS = 12;
+
+/** The same day and author as plain text, for gutters that draw text only (Monaco's line numbers). */
+export function blameGutterLabel(line?: BlameLine): string {
+  if (!line) return "";
+  const author = line.authorName.length > GUTTER_AUTHOR_CHARS ? `${line.authorName.slice(0, GUTTER_AUTHOR_CHARS - 1)}…` : line.authorName;
+  return `${blameDateFormatter().day.format(new Date(line.committedAtMs))} ${author}`;
+}
+
 /** The day a line was committed and its author; the commit, its subject and the exact time are in the tooltip. */
 export function BlameAnnotation({ line }: { line?: BlameLine }) {
   if (!line) return <span className="blameAnnotation" />;

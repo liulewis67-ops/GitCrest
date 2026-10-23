@@ -5,7 +5,7 @@ import { splitInlineDiff } from "../model/inline-diff";
 import { monacoLanguageForPath } from "../model/monaco-language";
 import { exceedsMonacoViewLimits } from "../model/monaco-view-limits";
 import { DiffStatusNotice } from "./DiffStatusNotice";
-import { BlameAnnotation, type BlameLookup } from "./BlameAnnotation";
+import { BlameAnnotation, blameGutterLabel, type BlameLookup } from "./BlameAnnotation";
 
 const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({ default: module.MonacoDiffHunk })));
 
@@ -34,6 +34,10 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
   const readOnly = readOnlyOverride || document.scope === "commit";
   const language = monacoLanguageForPath(document.path);
   const monacoDegraded = exceedsMonacoViewLimits(document.hunks);
+  // Monaco view shows each hunk's new-side lines in order; blame labels follow the same order.
+  const monacoGutters = useMemo(() => blame
+    ? document.hunks.map((hunk) => hunk.rows.flatMap((row) => row.newText === null || row.newText === undefined ? [] : [blameGutterLabel(blame(row.newLine, row.newText))]))
+    : undefined, [blame, document.hunks]);
   const navigableHunks = useMemo(() => document.status === "text"
     ? document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.some((row) => row.kind === "change") ? [hunkIndex] : [])
     : [], [document.hunks, document.status]);
@@ -136,6 +140,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
               language={language.id}
               treeSitterGrammar={language.treeSitterGrammar}
               height={Math.min(480, Math.max(120, hunk.rows.length * 20 + 24))}
+              modifiedGutter={monacoGutters?.[hunkIndex]}
             />
           </Suspense>}
           {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => (

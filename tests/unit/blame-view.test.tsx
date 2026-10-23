@@ -1,11 +1,16 @@
 // @vitest-environment jsdom
-import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { createElement } from "react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BlameDocumentResponse, DiffDocumentResponse } from "../../src/api/client";
 import { createBlameLookup } from "../../src/features/diff/ui/BlameAnnotation";
 import { SplitDiff } from "../../src/features/diff/ui/SplitDiff";
 import { UnifiedDiff } from "../../src/features/diff/ui/DiffWindow";
 import { setLocale } from "../../src/shared/i18n";
+
+vi.mock("../../src/features/diff/ui/MonacoDiffHunk", () => ({
+  MonacoDiffHunk: (props: { modified: string; modifiedGutter?: string[] }) => createElement("pre", { "data-testid": "monaco-diff-hunk", "data-gutter": JSON.stringify(props.modifiedGutter ?? null) }, props.modified),
+}));
 
 afterEach(() => {
   cleanup();
@@ -87,6 +92,17 @@ describe("Blame in the Diff window layouts", () => {
     expect(annotation("Deleted line 2: export const removed = 0;")?.textContent).toBe("");
     expect(annotation("Added line 2: export const added = 1;")?.textContent).toBe("");
     expect(annotation("Context line 3: export const kept = 2;")?.textContent).toBe(`${day}canghe`);
+  });
+
+  it("labels Monaco's new-side lines in order, blank where the split cells are blank", async () => {
+    act(() => setLocale("zh"));
+    const { rerender } = render(<SplitDiff document={diff} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} blame={createBlameLookup(blame)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Monaco 视图" }));
+    const hunk = await screen.findByTestId("monaco-diff-hunk");
+    expect(JSON.parse(hunk.getAttribute("data-gutter") ?? "null")).toEqual(["2024/3/3 canghe", "", "2024/3/3 canghe"]);
+
+    rerender(<SplitDiff document={diff} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} />);
+    expect(screen.getByTestId("monaco-diff-hunk").getAttribute("data-gutter")).toBe("null");
   });
 
   it("leaves both layouts unchanged while blame is off", () => {
