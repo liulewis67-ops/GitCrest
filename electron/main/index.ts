@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type { CoreStatus } from "../../src/api/core-status";
@@ -228,6 +228,16 @@ ipcMain.handle("gitcrest:choose-clone-parent", async (event) => {
     properties: ["openDirectory", "createDirectory"],
   });
   return selection.canceled ? undefined : selection.filePaths[0];
+});
+
+ipcMain.handle("gitcrest:show-item-in-folder", (event, value: unknown) => {
+  if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
+    throw new Error("Only the main window can reveal files.");
+  }
+  if (typeof value !== "string" || !isAbsolute(value) || value.length > 4096) {
+    throw new Error("Invalid file path to reveal.");
+  }
+  shell.showItemInFolder(value);
 });
 
 function senderWindow(event: IpcMainInvokeEvent): BrowserWindow {

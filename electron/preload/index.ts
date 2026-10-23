@@ -49,6 +49,7 @@ const api = {
   },
   openDiffWindow: (request: DiffWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-diff-window", request),
   openConflictWindow: (request: ConflictWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-conflict-window", request),
+  showItemInFolder: (path: string): Promise<void> => ipcRenderer.invoke("gitcrest:show-item-in-folder", path),
   getCoreStatus: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:get-core-status"),
   restartCore: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:restart-core"),
   subscribeToCoreStatus: (listener: (status: CoreStatus) => void): (() => void) => {

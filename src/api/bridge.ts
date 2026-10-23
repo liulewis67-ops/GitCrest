@@ -24,6 +24,8 @@ export interface GitCrestBridge {
     commitOid?: string;
   }) => Promise<void>;
   openConflictWindow: (request: { repoId: string; taskId: string }) => Promise<void>;
+  /** Opens the system file manager with the file selected. */
+  showItemInFolder?: (path: string) => Promise<void>;
   getCoreStatus?: () => Promise<CoreStatus>;
   restartCore?: () => Promise<CoreStatus>;
   subscribeToCoreStatus?: (listener: (status: CoreStatus) => void) => () => void;

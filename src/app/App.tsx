@@ -1,7 +1,7 @@
 import { useI18n } from "../shared/i18n";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
-import { requireGitCrestBridge } from "../api/bridge";
+import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { AppTitlebar, type AppPage } from "./layouts/AppTitlebar";
 import { CommandPalette, type CommandPaletteCommand } from "./layouts/CommandPalette";
 import { useCoreConnection } from "./use-core-connection";
@@ -57,7 +57,7 @@ function App() {
   const [selectedRepository, setSelectedRepository] = useState<RepositoryResponse>();
   const [pushTargetDialogOpen, setPushTargetDialogOpen] = useState(false);
   const historyRequests = useHistoryViewRequests();
-  const [shelfComposerRequest, setShelfComposerRequest] = useState<{ id: number; repoId?: string }>({ id: 0 });
+  const [shelfComposerRequest, setShelfComposerRequest] = useState<{ id: number; repoId?: string; preselect?: { paths: string[]; scope: "workingTree" | "index" } }>({ id: 0 });
   const [tasksOpen, setTasksOpen] = useState(false);
   const [localBranchAction, setLocalBranchAction] = useState<LocalBranchAction>();
   const [createBranchAt, setCreateBranchAt] = useState<string>();
@@ -592,12 +592,40 @@ function App() {
     else if (inspectorOverlay && overlayInspectorFor === mode && mode !== "changes") closeInspector();
   }
 
-  function requestShelfComposer(repoId: string) {
+  function requestShelfComposer(repoId: string, preselect?: { paths: string[]; scope: "workingTree" | "index" }) {
     changeWorkspaceMode("changes");
     setFocusMode(false);
     setSidebarHidden("changes", false);
     setCommitPanelTab("shelves");
-    setShelfComposerRequest((request) => ({ id: request.id + 1, repoId }));
+    setShelfComposerRequest((request) => ({ id: request.id + 1, repoId, preselect }));
+  }
+
+  function showFileHistory(path: string) {
+    if (!selectedRepository) return;
+    historyRequests.showFileHistory(selectedRepository.repoId, path);
+    changeWorkspaceMode("history");
+  }
+
+  /** Rollback from the file tree: the whole unstaged diff goes to the same confirmation as a hunk discard. */
+  async function rollbackFile(path: string) {
+    const api = apiRef.current;
+    if (!api || !selectedRepository) return;
+    try {
+      const document = await api.getFileDiff(selectedRepository.repoId, path, "workingTree");
+      if (document.status !== "text" || document.hunks.length === 0) {
+        setNotice(t("ctx.rollbackNoText", { path }));
+        return;
+      }
+      requestDiscard(document, document.hunks.map((_, hunkIndex) => ({ hunkIndex })));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t("ctx.rollbackNoText", { path }));
+    }
+  }
+
+  function revealFile(absolutePath: string) {
+    void getGitCrestBridge()?.showItemInFolder?.(absolutePath).catch((error: unknown) => {
+      setNotice(error instanceof Error ? error.message : String(error));
+    });
   }
 
   function focusCommitMessage(attempt = 0) {
@@ -887,6 +915,8 @@ function App() {
         focusSearchRequest={historyRequests.searchFocusRequest}
         searchShortcut={ariaShortcut(shortcuts.searchCommits, isMacPlatform)}
         onFocusSearchHandled={historyRequests.markSearchFocusHandled}
+        pathFilterRequest={mode === "history" ? historyRequests.pathFilterRequest : undefined}
+        onPathFilterHandled={historyRequests.markPathFilterHandled}
         onScrollPosition={rememberGraphScroll}
         onSelect={selectCommit}
       />
@@ -1026,6 +1056,7 @@ function App() {
               tab={commitPanelTab}
               historyRefreshKey={historyRequests.refreshKey}
               shelfComposerRequest={shelfComposerRequest.repoId === selectedRepository.repoId ? shelfComposerRequest.id : 0}
+              shelfComposerPreselect={shelfComposerRequest.repoId === selectedRepository.repoId ? shelfComposerRequest.preselect : undefined}
               shelfComposerAfterSwitch={branchSwitchShelfFlow.shelfComposerAfterSwitch?.repoId === selectedRepository.repoId ? branchSwitchShelfFlow.shelfComposerAfterSwitch : undefined}
               composer={composerVisible ? <Suspense fallback={null}>
                 <CommitWorkbench
@@ -1055,6 +1086,11 @@ function App() {
               onStageChanges={(action, target) => void stageChanges(action, target)}
               onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
               onOpenFileDiff={openFileDiff}
+              onOpenDiffWindow={(path, scope) => void openDiffWindow(path, scope)}
+              onShelveFiles={(paths, scope) => requestShelfComposer(selectedRepository.repoId, { paths, scope })}
+              onRollbackFile={(path) => void rollbackFile(path)}
+              onShowFileHistory={showFileHistory}
+              onRevealFile={revealFile}
               onShelve={() => requestShelfComposer(selectedRepository.repoId)}
               onShelfTaskSubmitted={(task, switchTarget) => {
                 void refreshRepositoryStatus(selectedRepository.repoId);

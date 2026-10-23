@@ -24,6 +24,26 @@ it("moves focus into the shelf composer and closes it with Escape", async () => 
   expect(screen.queryByRole("dialog", { name: "Shelve selected changes" })).toBeNull();
 });
 
+it("opens the composer with a file chosen from the file tree already selected and named", async () => {
+  const files = [
+    { path: "src/staged.ts", indexStatus: "M", worktreeStatus: ".", kind: "modified", categories: ["staged"], modeChanged: false },
+    { path: "src/other.ts", indexStatus: "M", worktreeStatus: ".", kind: "modified", categories: ["staged"], modeChanged: false },
+  ] as import("../../src/api/client").StatusSnapshotResponse["files"];
+  const diff = { repoId: "repo_fixture", path: "src/staged.ts", scope: "index", status: "text", revision: "rev-1", changeKind: "modified", hunks: [{ oldStart: 1, oldLines: 1, newStart: 1, newLines: 2, rows: [] }] };
+  const api = {
+    listRepositoryShelves: vi.fn().mockResolvedValue([]),
+    getFileDiff: vi.fn().mockResolvedValue(diff),
+  } as unknown as import("../../src/api/client").GitCrestApiClient;
+  render(<ShelfCenter api={api} repoId="repo_fixture" headOid={"a".repeat(40)} files={files} statusReady disabled={false} refreshKey={0} openComposerRequest={1} composerPreselect={{ paths: ["src/staged.ts"], scope: "index" }} onTaskSubmitted={vi.fn()} />);
+
+  await screen.findByRole("dialog", { name: "Shelve selected changes" });
+  expect(api.getFileDiff).toHaveBeenCalledWith("repo_fixture", "src/staged.ts", "index");
+  expect((screen.getByRole("textbox", { name: "Name" }) as HTMLInputElement).value).toBe("staged.ts");
+  expect((screen.getByRole("combobox") as HTMLSelectElement).value).toBe("index");
+  await waitFor(() => expect((screen.getByRole("checkbox", { name: /src\/staged\.ts/ }) as HTMLInputElement).checked).toBe(true));
+  expect((screen.getByRole("checkbox", { name: /src\/other\.ts/ }) as HTMLInputElement).checked).toBe(false);
+});
+
 it("puts the safe action first in shelf deletion confirmation", async () => {
   renderShelfCenter([{
     shelfId: "shelf_fixture", repoId: "repo_fixture", name: "draft", description: "",

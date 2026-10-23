@@ -88,6 +88,27 @@ export const layout = {
   "cp.partialTag": ["partly staged", "部分暂存"],
   "cp.diffScopeAria": ["Which part of the file to compare", "要比较文件的哪一部分"],
 
+  // Right-click menu on a file in the Commit panel
+  "ctx.menuLabel": ["Actions for {path}", "{path} 的操作"],
+  "ctx.showDiff": ["Show Diff", "显示差异"],
+  "ctx.openDiffWindow": ["Open in Diff Window", "在差异窗口中打开"],
+  "ctx.add": ["Add to Git", "添加到 Git"],
+  "ctx.stage": ["Stage", "暂存"],
+  "ctx.unstage": ["Unstage", "取消暂存"],
+  "ctx.shelve": ["Shelve Changes…", "搁置变更…"],
+  "ctx.shelveTitle": ["Set this file's changes aside in a shelf and restore it to the last commit", "将此文件的变更存入搁置区，并将文件恢复到上次提交的状态"],
+  "ctx.rollback": ["Rollback…", "回滚…"],
+  "ctx.rollbackTitle": ["Discard this file's unstaged changes after you confirm", "确认后丢弃此文件未暂存的变更"],
+  "ctx.rollbackStagedOnly": ["Only unstaged changes can be rolled back. Unstage the file first.", "只能回滚未暂存的变更。请先取消暂存该文件。"],
+  "ctx.history": ["Show History", "显示历史"],
+  "ctx.historyNone": ["A newly added file has no commit history yet.", "新添加的文件还没有提交历史。"],
+  "ctx.copyPath": ["Copy Path", "复制路径"],
+  "ctx.copyRelativePath": ["Copy Relative Path", "复制相对路径"],
+  "ctx.revealExplorer": ["Show in Explorer", "在资源管理器中显示"],
+  "ctx.revealFinder": ["Reveal in Finder", "在访达中显示"],
+  "ctx.revealFiles": ["Show in File Manager", "在文件管理器中显示"],
+  "ctx.rollbackNoText": ["{path} has no text changes to roll back.", "{path} 没有可回滚的文本变更。"],
+
   // History view
   "hv.aria": ["Commit history", "提交历史"],
   "hv.commitAria": ["Selected commit", "所选提交"],

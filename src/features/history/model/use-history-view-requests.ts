@@ -11,9 +11,16 @@ export interface HistorySearchFocusRequest {
   sequence: number;
 }
 
+export interface HistoryPathFilterRequest {
+  repoId: string;
+  path: string;
+  sequence: number;
+}
+
 export function useHistoryViewRequests() {
   const [tagEditorRequest, setTagEditorRequest] = useState<CommitTagRequest>();
   const [searchFocusRequest, setSearchFocusRequest] = useState<HistorySearchFocusRequest>();
+  const [pathFilterRequest, setPathFilterRequest] = useState<HistoryPathFilterRequest>();
   const [refreshKey, setRefreshKey] = useState(0);
 
   function refresh() {
@@ -36,6 +43,14 @@ export function useHistoryViewRequests() {
     setSearchFocusRequest((current) => current?.sequence === sequence ? undefined : current);
   }
 
+  function showFileHistory(repoId: string, path: string) {
+    setPathFilterRequest((current) => ({ repoId, path, sequence: (current?.sequence || 0) + 1 }));
+  }
+
+  function markPathFilterHandled(sequence: number) {
+    setPathFilterRequest((current) => current?.sequence === sequence ? undefined : current);
+  }
+
   return {
     tagEditorRequest,
     refreshKey,
@@ -45,5 +60,8 @@ export function useHistoryViewRequests() {
     searchFocusRequest,
     focusSearch,
     markSearchFocusHandled,
+    pathFilterRequest,
+    showFileHistory,
+    markPathFilterHandled,
   };
 }

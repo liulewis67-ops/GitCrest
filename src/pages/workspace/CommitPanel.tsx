@@ -1,8 +1,9 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { GitCrestApiClient, RepositoryResponse, StagingRequest, StatusSnapshotResponse, TaskSnapshotResponse } from "../../api/client";
 import type { ChangeTreeFile, ChangeTreeGroup } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n } from "../../shared/i18n";
+import { ContextMenu, type ContextMenuItem } from "../../shared/ui/ContextMenu";
 
 const ShelfCenter = lazy(() => import("../../features/shelves").then(({ ShelfCenter }) => ({ default: ShelfCenter })));
 
@@ -44,6 +45,30 @@ function Icon({ name }: { name: "refresh" | "shelve" | "expand" | "collapse" | "
   return <svg className="toolbarIcon" viewBox="0 0 16 16" aria-hidden="true">{paths[name]}</svg>;
 }
 
+function MenuIcon({ name }: { name: "diff" | "window" | "add" | "remove" | "shelve" | "rollback" | "history" | "copy" | "reveal" }) {
+  const paths = {
+    diff: <><path d="M5 2.5v7M1.5 6h7" /><path d="M8.5 12.5h6" /></>,
+    window: <><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M2.5 6h11" /></>,
+    add: <path d="M8 3.5v9M3.5 8h9" />,
+    remove: <path d="M3.5 8h9" />,
+    shelve: <><path d="M2.5 9.5v3h11v-3" /><path d="M8 2.5v7" /><path d="m5 6.5 3 3 3-3" /></>,
+    rollback: <><path d="M5.5 3.5 3 6l2.5 2.5" /><path d="M3 6h6.5a3.5 3.5 0 0 1 0 7H7" /></>,
+    history: <><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></>,
+    copy: <><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" /></>,
+    reveal: <path d="M2.5 4.5a1 1 0 0 1 1-1h3L8 5h4.5a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1Z" />,
+  };
+  return <svg viewBox="0 0 16 16">{paths[name]}</svg>;
+}
+
+type FileMenu = { group: ChangeTreeGroup["id"]; entry: ChangeTreeFile; x: number; y: number; anchor: HTMLElement };
+
+/** The file's path on disk, written with the separators of the repository's own path. */
+export function absoluteFilePath(repositoryPath: string, path: string): string {
+  const windows = /^[a-zA-Z]:[\\/]|^\\\\/.test(repositoryPath);
+  const root = repositoryPath.replace(/[\\/]+$/, "");
+  return windows ? `${root}/${path}`.replace(/\//g, "\\") : `${root}/${path}`;
+}
+
 interface CommitPanelProps {
   repository: RepositoryResponse;
   api?: GitCrestApiClient;
@@ -65,6 +90,7 @@ interface CommitPanelProps {
   tab: CommitPanelTab;
   historyRefreshKey: number;
   shelfComposerRequest: number;
+  shelfComposerPreselect?: { paths: string[]; scope: DiffScope };
   shelfComposerAfterSwitch?: ShelfSwitchState;
   /** The commit form, drawn below the file tree. */
   composer?: ReactNode;
@@ -72,6 +98,12 @@ interface CommitPanelProps {
   onStageChanges: (action: StagingRequest["action"], target?: string | string[]) => void;
   onRefreshStatus: (repoId: string, forceRefresh?: boolean) => void;
   onOpenFileDiff: (path: string, scope: DiffScope) => void;
+  /** Right-click actions on a file; an item is left out of the menu when its handler is not given. */
+  onOpenDiffWindow?: (path: string, scope: DiffScope) => void;
+  onShelveFiles?: (paths: string[], scope: DiffScope) => void;
+  onRollbackFile?: (path: string) => void;
+  onShowFileHistory?: (path: string) => void;
+  onRevealFile?: (absolutePath: string) => void;
   onShelve: () => void;
   onShelfTaskSubmitted: (task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) => void;
   onShelfComposerClosed: () => void;
@@ -86,8 +118,8 @@ interface CommitPanelProps {
 export function CommitPanel({
   repository, api, status, statusError, statusLoading, tree, workingCount, stagedCount, hasConflicts,
   stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope, connected, hasActiveRepositoryTask,
-  shortcuts, isMacPlatform, tab, historyRefreshKey, shelfComposerRequest, shelfComposerAfterSwitch, composer,
-  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
+  shortcuts, isMacPlatform, tab, historyRefreshKey, shelfComposerRequest, shelfComposerPreselect, shelfComposerAfterSwitch, composer,
+  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
 }: CommitPanelProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState<ReadonlySet<ChangeTreeGroup["id"]>>(() => new Set(["ignored"]));
@@ -96,6 +128,8 @@ export function CommitPanel({
   const bulkBlocked = stagingBlocked || hasConflicts;
   const visibleGroups = tree.filter((group) => group.files.length > 0);
   const filesLabel = (count: number) => t(count === 1 ? "cp.filesOne" : "cp.filesMany", { count });
+  const [fileMenu, setFileMenu] = useState<FileMenu>();
+  const shelveBlocked = !connected || repository.availability !== "available" || hasActiveRepositoryTask;
 
   function toggleGroup(id: ChangeTreeGroup["id"]) {
     setCollapsed((current) => {
@@ -117,6 +151,54 @@ export function CommitPanel({
     }
   }
 
+  function openFileMenu(event: MouseEvent<HTMLElement>, group: ChangeTreeGroup["id"], entry: ChangeTreeFile) {
+    event.preventDefault();
+    const anchor = event.currentTarget.querySelector<HTMLElement>(".changeTreeFile") ?? event.currentTarget;
+    // The context-menu key reports no pointer position, so the menu then opens under the row.
+    const fromKeyboard = event.clientX === 0 && event.clientY === 0;
+    const rect = anchor.getBoundingClientRect();
+    setFileMenu({ group, entry, anchor, x: fromKeyboard ? rect.left + 24 : event.clientX, y: fromKeyboard ? rect.bottom : event.clientY });
+  }
+
+  // Streamlined from IntelliJ's VCS menu to the everyday actions: review, add or stage, shelve, roll back,
+  // history, and getting at the file on disk.
+  function fileMenuItems({ group, entry }: FileMenu): ContextMenuItem[] {
+    const { file, stage, scopes } = entry;
+    const tracked = group === "changes";
+    const items: ContextMenuItem[] = [];
+    const add = (item: ContextMenuItem) => items.push(items.length === 0 ? { ...item, separatorBefore: false } : item);
+    if (group !== "ignored") {
+      add({ id: "diff", label: t("ctx.showDiff"), icon: <MenuIcon name="diff" />, onSelect: () => onOpenFileDiff(file.path, scopes[0]) });
+      if (onOpenDiffWindow && group !== "conflicts") add({ id: "window", label: t("ctx.openDiffWindow"), icon: <MenuIcon name="window" />, onSelect: () => onOpenDiffWindow(file.path, scopes[0]) });
+    }
+    if (group === "unversioned") {
+      add({ id: "add", label: t("ctx.add"), icon: <MenuIcon name="add" />, separatorBefore: true, disabled: stagingBlocked || stage === "staged", onSelect: () => onStageChanges("stageFile", file.path) });
+    } else if (tracked) {
+      add({ id: "stage", label: t("ctx.stage"), icon: <MenuIcon name="add" />, separatorBefore: true, disabled: stagingBlocked || stage === "staged", onSelect: () => onStageChanges("stageFile", file.path) });
+      add({ id: "unstage", label: t("ctx.unstage"), icon: <MenuIcon name="remove" />, disabled: stagingBlocked || stage === "unstaged", onSelect: () => onStageChanges("unstageFile", file.path) });
+    }
+    if (onShelveFiles && (tracked || group === "unversioned")) {
+      const scope: DiffScope = scopes.includes("workingTree") ? "workingTree" : "index";
+      add({ id: "shelve", label: t("ctx.shelve"), title: t("ctx.shelveTitle"), icon: <MenuIcon name="shelve" />, separatorBefore: true, disabled: shelveBlocked, onSelect: () => onShelveFiles([file.path], scope) });
+    }
+    if (onRollbackFile && tracked) {
+      const rollbackable = scopes.includes("workingTree");
+      add({ id: "rollback", label: t("ctx.rollback"), icon: <MenuIcon name="rollback" />, danger: true, disabled: stagingBlocked || !rollbackable, title: rollbackable ? t("ctx.rollbackTitle") : t("ctx.rollbackStagedOnly"), onSelect: () => onRollbackFile(file.path) });
+    }
+    if (onShowFileHistory && (tracked || group === "conflicts")) {
+      add({ id: "history", label: t("ctx.history"), icon: <MenuIcon name="history" />, separatorBefore: true, disabled: file.kind === "added", title: file.kind === "added" ? t("ctx.historyNone") : undefined, onSelect: () => onShowFileHistory(file.path) });
+    }
+    const copy = (text: string) => { void navigator.clipboard?.writeText(text).catch(() => undefined); };
+    add({ id: "copy", label: t("ctx.copyPath"), icon: <MenuIcon name="copy" />, separatorBefore: true, onSelect: () => copy(absoluteFilePath(repository.path, file.path)) });
+    add({ id: "copy-relative", label: t("ctx.copyRelativePath"), onSelect: () => copy(file.path) });
+    if (onRevealFile) {
+      const platform = navigator.platform.toLowerCase();
+      const label = platform.includes("mac") ? t("ctx.revealFinder") : platform.includes("win") ? t("ctx.revealExplorer") : t("ctx.revealFiles");
+      add({ id: "reveal", label, icon: <MenuIcon name="reveal" />, disabled: file.kind === "deleted", onSelect: () => onRevealFile(absoluteFilePath(repository.path, file.path)) });
+    }
+    return items;
+  }
+
   function fileRow(group: ChangeTreeGroup["id"], entry: ChangeTreeFile) {
     const { file, stage, scopes } = entry;
     const selected = selectedFilePath === file.path;
@@ -124,7 +206,7 @@ export function CommitPanel({
     const checkable = group === "changes" || group === "unversioned";
     const openScope = selected && selectedFileScope && scopes.includes(selectedFileScope) ? selectedFileScope : scopes[0];
     return (
-      <li className={`changeTreeRow${selected ? " selected" : ""}`} key={file.path}>
+      <li className={`changeTreeRow${selected ? " selected" : ""}${fileMenu?.entry.file.path === file.path ? " menuOpen" : ""}`} key={file.path} onContextMenu={(event) => openFileMenu(event, group, entry)}>
         {checkable ? <Checkbox
           checked={stage === "staged"}
           indeterminate={stage === "partial"}
@@ -206,6 +288,15 @@ export function CommitPanel({
           })}
         </div>
         {composer}
+        {fileMenu && <ContextMenu
+          key={`${fileMenu.entry.file.path}:${fileMenu.x}:${fileMenu.y}`}
+          x={fileMenu.x}
+          y={fileMenu.y}
+          label={t("ctx.menuLabel", { path: fileMenu.entry.file.path })}
+          items={fileMenuItems(fileMenu)}
+          returnFocusTo={fileMenu.anchor}
+          onClose={() => setFileMenu(undefined)}
+        />}
       </div> : null}
 
       {/* Mounted only with its tab: a shelf request switches here first, so the composer dialog is never inside a hidden panel. */}
@@ -220,6 +311,7 @@ export function CommitPanel({
           disabled={!connected || repository.availability !== "available" || hasActiveRepositoryTask}
           refreshKey={historyRefreshKey}
           openComposerRequest={shelfComposerRequest}
+          composerPreselect={shelfComposerPreselect}
           afterCreateAction={shelfComposerAfterSwitch ? { switchTarget: shelfComposerAfterSwitch.target, existingShelfIds: shelfComposerAfterSwitch.existingShelfIds } : undefined}
           onTaskSubmitted={onShelfTaskSubmitted}
           onComposerClosed={onShelfComposerClosed}

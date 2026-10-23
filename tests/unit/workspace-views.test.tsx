@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../src/api/client";
-import { CommitPanel } from "../../src/pages/workspace/CommitPanel";
+import { absoluteFilePath, CommitPanel } from "../../src/pages/workspace/CommitPanel";
 import { buildChangeTree } from "../../src/features/changes/model/repository-status-summary";
 import { WorkspacePage } from "../../src/pages/workspace/WorkspacePage";
 import { CommitChanges } from "../../src/features/history/ui/CommitChanges";
@@ -240,5 +240,69 @@ describe("CommitPanel", () => {
     expect(screen.queryByRole("button", { name: "modified c.ts" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Expand all" }));
     expect(screen.getByRole("button", { name: "modified c.ts" })).toBeDefined();
+  });
+
+  function openMenu(name: string) {
+    fireEvent.contextMenu(screen.getByRole("button", { name }), { clientX: 40, clientY: 60 });
+    return screen.getByRole("menu");
+  }
+
+  it("offers to add an unversioned file to Git, shelve it, and copy or reveal it", () => {
+    const onShelveFiles = vi.fn();
+    const onRevealFile = vi.fn();
+    const { onStageChanges } = renderPanel({ onShelveFiles, onRevealFile, onRollbackFile: vi.fn(), onShowFileHistory: vi.fn() });
+    const menu = openMenu("untracked new.txt");
+    expect(menu.getAttribute("aria-label")).toBe("Actions for new.txt");
+    expect(within(menu).queryByRole("menuitem", { name: "Rollback…" })).toBeNull();
+    expect(within(menu).queryByRole("menuitem", { name: "Show History" })).toBeNull();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Add to Git" }));
+    expect(onStageChanges).toHaveBeenLastCalledWith("stageFile", "new.txt");
+    expect(screen.queryByRole("menu")).toBeNull();
+    fireEvent.click(within(openMenu("untracked new.txt")).getByRole("menuitem", { name: "Shelve Changes…" }));
+    expect(onShelveFiles).toHaveBeenLastCalledWith(["new.txt"], "workingTree");
+    const reveal = within(openMenu("untracked new.txt")).getByRole("menuitem", { name: /Show in|Reveal in/ });
+    fireEvent.click(reveal);
+    expect(onRevealFile).toHaveBeenLastCalledWith("C:\\repo\\new.txt");
+  });
+
+  it("stages, shelves, rolls back and shows the history of a tracked change", () => {
+    const onShelveFiles = vi.fn();
+    const onRollbackFile = vi.fn();
+    const onShowFileHistory = vi.fn();
+    const { onStageChanges } = renderPanel({ onShelveFiles, onRollbackFile, onShowFileHistory });
+    let menu = openMenu("modified src/b.ts");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Unstage" }));
+    expect(onStageChanges).toHaveBeenLastCalledWith("unstageFile", "src/b.ts");
+    fireEvent.click(within(openMenu("modified src/b.ts")).getByRole("menuitem", { name: "Rollback…" }));
+    expect(onRollbackFile).toHaveBeenLastCalledWith("src/b.ts");
+    fireEvent.click(within(openMenu("modified src/b.ts")).getByRole("menuitem", { name: "Show History" }));
+    expect(onShowFileHistory).toHaveBeenLastCalledWith("src/b.ts");
+    // A fully staged file has nothing unstaged to roll back, and shelves its staged side.
+    menu = openMenu("modified c.ts");
+    expect((within(menu).getByRole("menuitem", { name: "Stage" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((within(menu).getByRole("menuitem", { name: "Rollback…" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Shelve Changes…" }));
+    expect(onShelveFiles).toHaveBeenLastCalledWith(["c.ts"], "index");
+  });
+
+  it("closes the file menu with Escape and returns focus to the file", () => {
+    renderPanel({ onShelveFiles: vi.fn(), onOpenDiffWindow: vi.fn() });
+    const file = screen.getByRole("button", { name: "modified src/a.ts" });
+    const menu = openMenu("modified src/a.ts");
+    expect(document.activeElement?.textContent).toBe("Show Diff");
+    fireEvent.keyDown(menu, { key: "ArrowDown" });
+    expect(document.activeElement?.textContent).toBe("Open in Diff Window");
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(file);
+  });
+});
+
+describe("absoluteFilePath", () => {
+  it("joins a repository-relative path with the repository's own separators", () => {
+    expect(absoluteFilePath("C:\\work\\repo", "src/a.ts")).toBe("C:\\work\\repo\\src\\a.ts");
+    expect(absoluteFilePath("C:/repo/", "src/a.ts")).toBe("C:\\repo\\src\\a.ts");
+    expect(absoluteFilePath("\\\\server\\share\\repo", "a.ts")).toBe("\\\\server\\share\\repo\\a.ts");
+    expect(absoluteFilePath("/home/me/repo", "src/a.ts")).toBe("/home/me/repo/src/a.ts");
   });
 });

@@ -20,6 +20,9 @@ type CommitGraphProps = {
   focusSearchRequest?: { repoId: string; sequence: number };
   searchShortcut?: string;
   onFocusSearchHandled?: (sequence: number) => void;
+  /** Narrows the graph to one file's commits, as "Show History" on a changed file asks. */
+  pathFilterRequest?: { repoId: string; path: string; sequence: number };
+  onPathFilterHandled?: (sequence: number) => void;
   onScrollPosition: (scrollTop: number) => void;
   onSelect: (oid: string) => void;
 };
@@ -54,11 +57,11 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
   </button>;
 });
 
-export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, onScrollPosition, onSelect }: CommitGraphProps) {
+export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refreshKey = 0, focusSearchRequest, searchShortcut, onFocusSearchHandled, pathFilterRequest, onPathFilterHandled, onScrollPosition, onSelect }: CommitGraphProps) {
   const { t } = useI18n();
   const viewportRef = useRef<HTMLDivElement>(null);
   const messageSearchRef = useRef<HTMLInputElement>(null);
-  const { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, resetFilters } = useHistoryFilters();
+  const { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, showPath, resetFilters } = useHistoryFilters();
   // Message search covers most lookups; the other filters stay folded until asked for or in use.
   const advancedFilterCount = ((["sha", "author", "branch", "path", "since", "until"] as const)).filter((key) => Boolean(filters[key])).length;
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -84,6 +87,14 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     messageSearchRef.current?.focus();
     onFocusSearchHandled?.(focusSearchRequest.sequence);
   }, [focusSearchRequest, onFocusSearchHandled, repoId]);
+
+  // The path filter sits with the other folded filters, so they open to show why the list is shorter.
+  useEffect(() => {
+    if (pathFilterRequest?.repoId !== repoId) return;
+    showPath(pathFilterRequest.path);
+    setFiltersOpen(true);
+    onPathFilterHandled?.(pathFilterRequest.sequence);
+  }, [pathFilterRequest, onPathFilterHandled, repoId]);
 
   useEffect(() => {
     const node = viewportRef.current;

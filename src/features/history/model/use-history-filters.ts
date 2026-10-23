@@ -15,6 +15,12 @@ export function useHistoryFilters() {
     ) as CommitHistoryFilters);
   }
 
+  /** Replaces every filter with one path, as when a file's history is opened from elsewhere. */
+  function showPath(path: string) {
+    setDraftFilters({ path });
+    setFilters({ path });
+  }
+
   function resetFilters() {
     setDraftFilters({});
     setFilters({});
@@ -22,5 +28,5 @@ export function useHistoryFilters() {
 
   const hasFilters = Object.values(filters).some((value) => typeof value === "string" && value.length > 0);
 
-  return { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, resetFilters };
+  return { draftFilters, filters, hasFilters, setDraftFilter, applyFilters, showPath, resetFilters };
 }

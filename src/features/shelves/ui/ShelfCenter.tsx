@@ -24,6 +24,7 @@ export function ShelfCenter({
   disabled,
   refreshKey,
   openComposerRequest,
+  composerPreselect,
   afterCreateAction,
   onTaskSubmitted,
   onComposerClosed,
@@ -37,6 +38,8 @@ export function ShelfCenter({
   disabled: boolean;
   refreshKey: number;
   openComposerRequest: number;
+  /** Files the opening request already chose, such as one shelved from the file tree's right-click menu. */
+  composerPreselect?: { paths: string[]; scope: "workingTree" | "index" };
   afterCreateAction?: ShelfAfterCreateAction;
   onTaskSubmitted: (task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) => void;
   onComposerClosed?: () => void;
@@ -126,9 +129,29 @@ export function ShelfCenter({
     if (openComposerRequest > 0) {
       setComposerOpen(true);
       setLoadError("");
+      if (composerPreselect) void preselectFiles(composerPreselect.paths, composerPreselect.scope);
       onComposerRequestHandled?.();
     }
   }, [openComposerRequest]);
+
+  async function preselectFiles(paths: string[], nextScope: "workingTree" | "index") {
+    setScope(nextScope);
+    setSelected({});
+    setDiffs({});
+    // A single file names the shelf after itself, so shelving it takes one more click.
+    if (paths.length === 1) setName(paths[0].slice(paths[0].lastIndexOf("/") + 1));
+    const loaded = await Promise.all(paths.map(async (path) => {
+      try {
+        return [path, await api.getFileDiff(repoId, path, nextScope)] as const;
+      } catch (error) {
+        setLoadError(error instanceof Error ? error.message : t("sh.readFailed", { path }));
+        return undefined;
+      }
+    }));
+    const usable = loaded.filter((entry): entry is readonly [string, DiffDocumentResponse] => Boolean(entry && entry[1].status === "text" && entry[1].hunks.length > 0));
+    setDiffs(Object.fromEntries(usable));
+    setSelected(Object.fromEntries(usable.map(([path, diff]) => [path, { revision: diff.revision }])));
+  }
 
   async function readDiff(path: string): Promise<DiffDocumentResponse | undefined> {
     const cached = diffs[path];
