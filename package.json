@@ -5,7 +5,7 @@
   "type": "module",
   "main": "out/main/index.js",
   "scripts": {
-    "dev": "electron-vite dev",
+    "dev": "electron-vite dev --watch",
     "debug": "node scripts/debug.mjs",
     "debug:core": "node scripts/debug.mjs --core-only",
     "frontend:dev": "vite",
@@ -22,7 +22,7 @@
     "frontend:preview": "vite preview",
     "core:dev": "cargo run --manifest-path crates/gitcrest-core/Cargo.toml",
     "core:build": "cargo build --manifest-path crates/gitcrest-core/Cargo.toml --release",
-    "electron:dev": "electron-vite dev",
+    "electron:dev": "electron-vite dev --watch",
     "electron:build": "pnpm core:build && tsc --noEmit && electron-vite build",
     "electron:package": "pnpm electron:build && electron-builder",
     "electron:package:windows-release": "pnpm electron:build && electron-builder --config electron-builder.desktop-release.mjs --win nsis --x64 --publish never",

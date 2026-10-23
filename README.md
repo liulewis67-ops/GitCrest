@@ -6,7 +6,7 @@ GitCrest is a cross-platform Git desktop client built with Electron, React 18, T
 
 - Install dependencies with `pnpm install`.
 - Build the Rust core with `pnpm core:build`.
-- Start the Electron app with `pnpm dev`.
+- Start the Electron app with `pnpm dev`. Renderer changes reload in place; main-process and preload changes rebuild and restart the app.
 
 ## Local debugging
 
