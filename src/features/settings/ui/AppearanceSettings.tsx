@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from "react";
+import { useState } from "react";
 import { useI18n, type MessageKey, type TranslateParams } from "../../../shared/i18n";
 import {
   deleteCustomTheme,
@@ -8,7 +8,7 @@ import {
   setTypography,
   THEME_MODES,
 } from "../model/appearance-store";
-import { parseThemeFile, serializeThemeFile, themeFileName, THEME_FILE_SUFFIX } from "../model/theme-file";
+import { serializeThemeFile, themeFileName } from "../model/theme-file";
 import {
   CODE_FONT_SIZES,
   newCustomThemeId,
@@ -23,7 +23,7 @@ import { ThemeEditor } from "./ThemeEditor";
 
 type Editing = { theme: CustomTheme; isNew: boolean };
 // Kept as a key so the message follows a language change.
-type Message = { kind: "notice" | "error"; key: MessageKey; params?: TranslateParams } | { kind: "error"; text: string };
+type Message = { kind: "notice" | "error"; key: MessageKey; params?: TranslateParams };
 
 function range(min: number, max: number) {
   return Array.from({ length: max - min + 1 }, (_, index) => min + index);
@@ -36,7 +36,6 @@ export function AppearanceSettings() {
   const [editing, setEditing] = useState<Editing>();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string>();
   const [message, setMessage] = useState<Message>();
-  const importInputRef = useRef<HTMLInputElement>(null);
   const themeNames = themes.map((theme) => themeName(theme));
 
   function themeName(theme: ThemeDefinition) {
@@ -72,23 +71,10 @@ export function AppearanceSettings() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
-  async function importTheme(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-    try {
-      const theme = parseThemeFile(await file.text(), themeNames);
-      startEditing({ theme, isNew: true });
-      setMessage({ kind: "notice", key: "appearance.importReview", params: { name: theme.name } });
-    } catch (reason) {
-      setMessage(reason instanceof Error ? { kind: "error", text: reason.message } : { kind: "error", key: "appearance.importInvalid" });
-    }
-  }
-
   if (editing) {
     return (
       <div className="settingsCard">
-        {message && <p className={message.kind === "error" ? "formError" : "settingsHint"} role={message.kind === "error" ? "alert" : "status"}>{"text" in message ? message.text : t(message.key, message.params)}</p>}
+        {message && <p className={message.kind === "error" ? "formError" : "settingsHint"} role={message.kind === "error" ? "alert" : "status"}>{t(message.key, message.params)}</p>}
         <ThemeEditor
           key={editing.theme.id}
           initialTheme={editing.theme}
@@ -124,11 +110,9 @@ export function AppearanceSettings() {
           <div className="settingsRowText"><span id="appearance-themes-label">{t("appearance.themes")}</span><p>{t("appearance.themesHelp")}</p></div>
           <div className="settingsActions">
             <button type="button" className="secondaryButton" onClick={() => startEditing({ theme: editableCopy(activeTheme, t("appearance.newThemeName")), isNew: true })}>{t("appearance.newTheme")}</button>
-            <button type="button" className="quietButton" onClick={() => importInputRef.current?.click()}>{t("appearance.import")}</button>
-            <input ref={importInputRef} className="srOnly" type="file" accept={`${THEME_FILE_SUFFIX},.json,application/json`} tabIndex={-1} aria-hidden="true" onChange={(event) => void importTheme(event)} />
           </div>
         </div>
-        {message && <p className={message.kind === "error" ? "formError" : "settingsHint"} role={message.kind === "error" ? "alert" : "status"}>{"text" in message ? message.text : t(message.key, message.params)}</p>}
+        {message && <p className={message.kind === "error" ? "formError" : "settingsHint"} role={message.kind === "error" ? "alert" : "status"}>{t(message.key, message.params)}</p>}
         <ul className="themeGallery" aria-labelledby="appearance-themes-label">
           {themes.map((theme) => {
             const name = themeName(theme);

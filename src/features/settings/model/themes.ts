@@ -314,7 +314,7 @@ export function parseStyle(value: unknown): ThemeStyle {
   return { ...DEFAULT_STYLE, ...parseStyleOverride(value) };
 }
 
-/** Accepts stored or imported data; returns undefined unless it has a name, a base and all seven seed colors. */
+/** Accepts stored data; returns undefined unless it has a name, a base and all seven seed colors. */
 export function parseCustomTheme(value: unknown): CustomTheme | undefined {
   if (!value || typeof value !== "object") return undefined;
   const source = value as Record<string, unknown>;

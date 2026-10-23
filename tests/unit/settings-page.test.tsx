@@ -250,6 +250,8 @@ it("drops an unsaved theme draft when Settings closes", async () => {
   reloadAppearance();
   const { unmount } = render(<SettingsPage api={settingsApi()} onClose={() => {}} />);
   fireEvent.click(await screen.findByRole("radio", { name: "Dark" }));
+  // Themes are made here; there is no file import beside New theme.
+  expect(screen.queryByRole("button", { name: /^Import/ })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "New theme" }));
   fireEvent.click(screen.getByRole("button", { name: "Rose" }));
   expect(document.documentElement.dataset.themeId).toMatch(/^custom-/);

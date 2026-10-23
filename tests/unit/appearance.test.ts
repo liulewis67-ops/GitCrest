@@ -29,7 +29,7 @@ import {
   setThemeMode,
   setTypography,
 } from "../../src/features/settings/model/appearance-store";
-import { parseThemeFile, serializeThemeFile } from "../../src/features/settings/model/theme-file";
+import { serializeThemeFile, themeFileName } from "../../src/features/settings/model/theme-file";
 
 const darkSeeds = BUILT_IN_THEMES[0].seeds;
 
@@ -265,29 +265,14 @@ describe("appearance store", () => {
 });
 
 describe("theme files", () => {
-  it("round-trips a theme with a fresh id and a free name", () => {
-    const imported = parseThemeFile(serializeThemeFile(customTheme({ typography: { uiFontSize: 14 } })), ["Ocean"]);
-    expect(imported.id).not.toBe("custom-test-1");
-    expect(imported.name).toBe("Ocean 2");
-    expect(imported).toMatchObject({ base: "dark", seeds: { accent: "#a48bf0" }, typography: { uiFontSize: 14 } });
+  it("exports a theme's colors, text, style and syntax colors without its id", () => {
+    const file = JSON.parse(serializeThemeFile(customTheme({ typography: { uiFontSize: 14 }, style: { graphColors: "lanes" }, overrides: { syntaxKeyword: "#ff00aa" } })));
+    expect(file).toMatchObject({ format: "gitcrest-theme", version: 2, name: "Ocean", base: "dark", seeds: { accent: "#a48bf0" }, typography: { uiFontSize: 14 }, style: { graphColors: "lanes" }, overrides: { syntaxKeyword: "#ff00aa" } });
+    expect(file).not.toHaveProperty("id");
   });
 
-  it("carries a theme's style and syntax colors through a file", () => {
-    const imported = parseThemeFile(serializeThemeFile(customTheme({ style: { graphColors: "lanes" }, overrides: { syntaxKeyword: "#ff00aa" } })), []);
-    expect(imported).toMatchObject({ style: { graphColors: "lanes" }, overrides: { syntaxKeyword: "#ff00aa" } });
-  });
-
-  it("still imports version 1 files, which have no style", () => {
-    const { style, ...v1 } = customTheme({ style: { radius: "round" } });
-    expect(style).toBeDefined();
-    const imported = parseThemeFile(JSON.stringify({ format: "gitcrest-theme", version: 1, ...v1 }), []);
-    expect(imported).not.toHaveProperty("style");
-    expect(imported.seeds.accent).toBe("#a48bf0");
-  });
-
-  it("rejects files that aren't GitCrest themes", () => {
-    expect(() => parseThemeFile("{}", [])).toThrow();
-    expect(() => parseThemeFile("not json", [])).toThrow();
-    expect(() => parseThemeFile(JSON.stringify({ format: "gitcrest-theme", name: "x", base: "dark", seeds: {} }), [])).toThrow();
+  it("names the file after the theme", () => {
+    expect(themeFileName(customTheme())).toBe("ocean.gitcrest-theme.json");
+    expect(themeFileName({ ...customTheme(), name: "  !!  " })).toBe("theme.gitcrest-theme.json");
   });
 });
