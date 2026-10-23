@@ -5,6 +5,7 @@ import { splitInlineDiff } from "../model/inline-diff";
 import { monacoLanguageForPath } from "../model/monaco-language";
 import { exceedsMonacoViewLimits } from "../model/monaco-view-limits";
 import { DiffStatusNotice } from "./DiffStatusNotice";
+import { BlameAnnotation, type BlameLookup } from "./BlameAnnotation";
 
 const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({ default: module.MonacoDiffHunk })));
 
@@ -19,9 +20,11 @@ interface SplitDiffProps {
   onShowFullFile?: () => void;
   /** Hosts that already name the file and its side, like the Diff window header, drop the file row. */
   showFileMeta?: boolean;
+  /** Annotates the new side's lines with their date and author, in a column before its line numbers. */
+  blame?: BlameLookup;
 }
 
-export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true, blame }: SplitDiffProps) {
   const { t } = useI18n();
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
@@ -167,7 +170,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                 <code>{row.oldText !== null && row.oldText !== undefined && row.kind === "change" ? <InlineDiffText text={row.oldText} counterpart={row.newText ?? null} /> : row.oldText ?? ""}</code>
               </div>
               <div
-                className="splitDiffCell"
+                className={blame ? "splitDiffCell withBlame" : "splitDiffCell"}
                 role="group"
                 aria-label={row.newText === null
                   ? t("sd.noAdded")
@@ -175,6 +178,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                     ? t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })
                     : t("sd.contextLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}
               >
+                {blame && <BlameAnnotation line={blame(row.newLine, row.newText)} />}
                 <span className="splitDiffLineNumber">{row.newLine ?? ""}</span>
                 <code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code>
               </div>

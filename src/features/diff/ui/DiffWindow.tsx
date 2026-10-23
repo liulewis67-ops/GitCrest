@@ -1,4 +1,4 @@
-import { getLocale, useI18n } from "../../../shared/i18n";
+import { useI18n } from "../../../shared/i18n";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
@@ -6,8 +6,11 @@ import { useCoreRestartCount } from "../../../shared/hooks/use-core-restart-coun
 import { BrandMark } from "../../../shared/ui/BrandMark";
 import { WindowControls } from "../../../shared/ui/WindowControls";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../settings";
+import { BlameAnnotation, createBlameLookup, type BlameLookup } from "./BlameAnnotation";
 
-type View = "split" | "unified" | "blame";
+type View = "split" | "unified";
+/** One tab's blame: loading while neither is set. */
+type TabBlame = { document?: BlameDocumentResponse; error?: string };
 type DiffTab = {
   key: string;
   path: string;
@@ -28,9 +31,11 @@ export function DiffWindow() {
   const [tabs, setTabs] = useState<DiffTab[]>([]);
   const [activeTabKey, setActiveTabKey] = useState("");
   const [document, setDocument] = useState<DiffDocumentResponse>();
-  const [blame, setBlame] = useState<BlameDocumentResponse>();
+  // Blame annotates either layout; once on it stays on across tabs, and each tab's blame loads once.
+  const [blameOn, setBlameOn] = useState(false);
+  const [blames, setBlames] = useState<Record<string, TabBlame>>({});
+  const requestedBlames = useRef(new Set<string>());
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
   const [tabsTruncated, setTabsTruncated] = useState(false);
   const [view, setView] = useState<View>("split");
   const coreRestarts = useCoreRestartCount();
@@ -43,10 +48,10 @@ export function DiffWindow() {
     }
   });
   const isMac = navigator.platform.toLowerCase().includes("mac");
-  const activeTabKeyRef = useRef(activeTabKey);
-  activeTabKeyRef.current = activeTabKey;
   const activeTab = tabs.find((tab) => tab.key === activeTabKey);
   const blameDisabled = document?.status !== "text" || ["added", "untracked", "deleted", "ignored", "conflicted"].includes(document.changeKind);
+  const activeBlame = blameOn && activeTab && !blameDisabled ? blames[activeTab.key] : undefined;
+  const blameLookup = useMemo(() => activeBlame?.document ? createBlameLookup(activeBlame.document) : undefined, [activeBlame?.document]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -125,10 +130,7 @@ export function DiffWindow() {
     const controller = new AbortController();
     const requestClient = api.withSignal(controller.signal);
     setDocument(undefined);
-    setBlame(undefined);
     setError("");
-    setView("split");
-    setLoading(true);
     const request = activeTab.scope === "commit" && activeTab.commitOid
       ? requestClient.getRepositoryCommitDiff(repoId, activeTab.commitOid, activeTab.path)
       : activeTab.scope === "workingTree" || activeTab.scope === "index"
@@ -138,8 +140,6 @@ export function DiffWindow() {
       if (active) setDocument(result);
     }).catch((reason: unknown) => {
       if (active && !controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("dw.loadDiffFailed"));
-    }).finally(() => {
-      if (active) setLoading(false);
     });
     return () => {
       active = false;
@@ -147,22 +147,30 @@ export function DiffWindow() {
     };
   }, [activeTab?.key, api, repoId]);
 
-  async function openBlame() {
-    if (!api || !activeTab) return;
-    const requestedTabKey = activeTab.key;
-    setView("blame");
-    setBlame(undefined);
-    setError("");
-    setLoading(true);
-    try {
-      const result = await api.getRepositoryBlame(repoId, activeTab.path, activeTab.scope === "commit" ? activeTab.commitOid : undefined);
-      if (activeTabKeyRef.current === requestedTabKey) setBlame(result);
-    } catch (reason) {
-      if (activeTabKeyRef.current === requestedTabKey) setError(reason instanceof Error ? reason.message : t("dw.loadBlameFailed"));
-    } finally {
-      if (activeTabKeyRef.current === requestedTabKey) setLoading(false);
-    }
-  }
+  // A restarted core gets a new client; blames that failed against the old one are asked for again.
+  useEffect(() => {
+    requestedBlames.current.clear();
+    setBlames((current) => Object.fromEntries(Object.entries(current).filter(([, entry]) => entry.document)));
+  }, [api]);
+
+  const apiRef = useRef(api);
+  apiRef.current = api;
+  useEffect(() => {
+    if (!blameOn || !api || !activeTab || blameDisabled) return;
+    const tab = activeTab;
+    if (requestedBlames.current.has(tab.key)) return;
+    requestedBlames.current.add(tab.key);
+    setBlames((current) => ({ ...current, [tab.key]: {} }));
+    // Switching tabs keeps the request: its result is stored under its own tab for when that tab comes back.
+    void api.getRepositoryBlame(repoId, tab.path, tab.scope === "commit" ? tab.commitOid : undefined).then((document) => {
+      setBlames((current) => ({ ...current, [tab.key]: { document } }));
+    }).catch((reason: unknown) => {
+      // A failure from a client the window has since replaced is not this tab's answer.
+      if (apiRef.current !== api) return;
+      requestedBlames.current.delete(tab.key);
+      setBlames((current) => ({ ...current, [tab.key]: { error: reason instanceof Error ? reason.message : t("dw.loadBlameFailed") } }));
+    });
+  }, [blameOn, api, activeTab?.key, blameDisabled, repoId]);
 
   function closeTab(tab: DiffTab) {
     if (tabs.length <= 1) return;
@@ -195,7 +203,10 @@ export function DiffWindow() {
           <button type="button" className={view === "unified" ? "viewTab active" : "viewTab"} aria-pressed={view === "unified"} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMac)} title={toggleTitle} onClick={() => setView("unified")}>
             <svg className="viewTabIcon" viewBox="0 0 16 16" aria-hidden="true"><rect x="2" y="2.5" width="12" height="11" rx="1.5" /><path d="M2 8h12" /></svg>{t("dw.unified")}
           </button>
-          <button type="button" className={view === "blame" ? "viewTab active" : "viewTab"} aria-pressed={view === "blame"} disabled={blameDisabled} title={blameDisabled ? t("dw.blameDisabled") : t("dw.blameShow")} onClick={() => void openBlame()}>
+        </div>
+        {/* Blame is an annotation over either layout, so it toggles on its own rather than being a third layout. */}
+        <div className="viewSwitcher diffWindowBlameToggle">
+          <button type="button" className={blameOn ? "viewTab active" : "viewTab"} aria-pressed={blameOn} disabled={blameDisabled} title={blameDisabled ? t("dw.blameDisabled") : t("dw.blameShow")} onClick={() => setBlameOn((on) => !on)}>
             <svg className="viewTabIcon" viewBox="0 0 16 16" aria-hidden="true"><circle cx="5" cy="5" r="2" /><path d="M2 13c0-1.9 1.3-3.2 3-3.2s3 1.3 3 3.2M10 5h4M10 8h4M10 11h4" /></svg>{t("dw.blame")}
           </button>
         </div>
@@ -214,13 +225,13 @@ export function DiffWindow() {
         {tabsTruncated && <span className="diffWindowTabLimit" role="status">{t("dw.tabLimit", { count: MAX_DIFF_TABS })}</span>}
       </nav>}
       <section className="diffWindowContent" aria-label={t("dw.contentAria")}>
+        {/* The diff shows at once; its blame fills in when it arrives. */}
+        {document && activeBlame && !activeBlame.document && <div className="diffBlameNotice" role={activeBlame.error ? "alert" : "status"}>{activeBlame.error || t("dw.loadingBlame")}</div>}
         {error ? <div className="diffSpecialState" role="alert"><p>{error}</p></div>
-          : loading && !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
-            : view === "blame" ? loading ? <div className="diffSpecialState" role="status">{t("dw.loadingBlame")}</div> : blame ? <BlameView document={blame} /> : <div className="diffSpecialState" role="status">{t("dw.noBlame")}</div>
-              : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
-                : view === "split"
-                  ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} /></Suspense>
-                  : <UnifiedDiff document={document} />}
+          : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
+            : view === "split"
+              ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} blame={blameLookup} /></Suspense>
+              : <UnifiedDiff document={document} blame={blameLookup} />}
       </section>
     </main>
   );
@@ -253,55 +264,20 @@ function tabsFromStatus(snapshot: StatusSnapshotResponse): DiffTab[] {
   });
 }
 
-const blameDateFormatters = new Map<string, { day: Intl.DateTimeFormat; full: Intl.DateTimeFormat }>();
-
-function blameDateFormatter() {
-  const language = getLocale() === "zh" ? "zh-CN" : undefined;
-  const cacheKey = language ?? "default";
-  let formatter = blameDateFormatters.get(cacheKey);
-  if (!formatter) {
-    formatter = {
-      day: new Intl.DateTimeFormat(language, { dateStyle: "short" }),
-      full: new Intl.DateTimeFormat(language, { dateStyle: "medium", timeStyle: "short" }),
-    };
-    blameDateFormatters.set(cacheKey, formatter);
-  }
-  return formatter;
-}
-
-/**
- * Each line is annotated with only the day it was committed and its author, like an editor's blame
- * gutter; the commit, its subject and the exact time stay in the annotation's tooltip.
- */
-export function BlameView({ document }: { document: BlameDocumentResponse }) {
-  const { t } = useI18n();
-  const dates = blameDateFormatter();
-  return <div className="blameView" aria-label={t("dw.blameAria", { path: document.path })}>
-    <div className="splitDiffFileMeta"><span className="diffScopeBadge">{t("dw.blameBadge", { rev: document.revision ? document.revision.slice(0, 12) : "HEAD" })}</span><strong>{document.path}</strong></div>
-    {document.lines.map((line) => <div className="blameLine" key={line.lineNumber}>
-      <span className="blameAnnotation" title={`${line.commitOid.slice(0, 8)} ${line.summary}\n${line.authorName} <${line.authorEmail}>\n${dates.full.format(new Date(line.committedAtMs))}`}>
-        <span className="blameDate">{dates.day.format(new Date(line.committedAtMs))}</span>
-        <span className="blameAuthor">{line.authorName}</span>
-      </span>
-      <span className="blameLineNumber">{line.lineNumber}</span>
-      <code>{line.text}</code>
-    </div>)}
-  </div>;
-}
-
-function UnifiedDiff({ document }: { document: DiffDocumentResponse }) {
+/** With blame, every row leads with the annotation of its new-side line; deleted lines have none. */
+export function UnifiedDiff({ document, blame }: { document: DiffDocumentResponse; blame?: BlameLookup }) {
   const { t } = useI18n();
   if (document.status !== "text") {
     return <div className="diffSpecialState" role="status"><span className={`diffStateBadge diffState-${document.status}`}>{document.status}</span><p>{document.status === "binary" ? t("dw.binaryNote") : t("dw.noTextDiff")}</p></div>;
   }
-  return <div className="unifiedDiff" aria-label={t("dw.unifiedAria", { path: document.path })}>
+  return <div className={blame ? "unifiedDiff withBlame" : "unifiedDiff"} aria-label={t("dw.unifiedAria", { path: document.path })}>
     {document.hunks.map((hunk, hunkIndex) => <section className="unifiedDiffHunk" aria-label={t("sd.hunkAria", { n: hunkIndex + 1 })} key={`${hunk.oldStart}:${hunk.newStart}:${hunkIndex}`}>
       <header>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</header>
       {hunk.rows.map((row, rowIndex) => row.kind === "context"
-        ? <div className="unifiedDiffRow" role="group" aria-label={t("sd.contextLine", { line: row.oldLine ?? row.newLine ?? t("sd.unknown"), text: row.oldText ?? row.newText ?? "" })} key={rowIndex}><span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code> {row.oldText ?? row.newText ?? ""}</code></div>
+        ? <div className="unifiedDiffRow" role="group" aria-label={t("sd.contextLine", { line: row.oldLine ?? row.newLine ?? t("sd.unknown"), text: row.oldText ?? row.newText ?? "" })} key={rowIndex}>{blame && <BlameAnnotation line={blame(row.newLine, row.newText ?? row.oldText)} />}<span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code> {row.oldText ?? row.newText ?? ""}</code></div>
         : <Fragment key={rowIndex}>
-          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion" role="group" aria-label={t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })}><span>{row.oldLine ?? ""}</span><span /><code>-{row.oldText}</code></div>}
-          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition" role="group" aria-label={t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}><span /><span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
+          {row.oldText !== null && row.oldText !== undefined && <div className="unifiedDiffRow unifiedDiffDeletion" role="group" aria-label={t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })}>{blame && <BlameAnnotation />}<span>{row.oldLine ?? ""}</span><span /><code>-{row.oldText}</code></div>}
+          {row.newText !== null && row.newText !== undefined && <div className="unifiedDiffRow unifiedDiffAddition" role="group" aria-label={t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}>{blame && <BlameAnnotation line={blame(row.newLine, row.newText)} />}<span /><span>{row.newLine ?? ""}</span><code>+{row.newText}</code></div>}
         </Fragment>)}
     </section>)}
   </div>;

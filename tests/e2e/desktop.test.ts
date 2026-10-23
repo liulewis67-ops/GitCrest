@@ -247,10 +247,16 @@ describe("desktop startup E2E", () => {
       expect(await diffWindow.locator(".diffWindowTabSelect").count()).toBe(2);
       await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/other.ts" }).click();
       await diffWindow.getByText("changed", { exact: false }).waitFor({ state: "visible" });
-      await diffWindow.getByRole("button", { name: "Blame" }).click();
-      await diffWindow.locator(".blameView").waitFor({ state: "visible" });
-      expect(await diffWindow.locator(".blameView").innerText()).toContain("sibling = 'changed'");
-      expect(await diffWindow.locator(".blameView").innerText()).toContain("Not Committed Yet");
+      // Blame annotates the split view in place rather than replacing it. The changed line is not
+      // committed yet, so its annotation column is there but blank.
+      const blameToggle = diffWindow.getByRole("button", { name: "Blame" });
+      await blameToggle.click();
+      expect(await blameToggle.getAttribute("aria-pressed")).toBe("true");
+      const blamedCell = diffWindow.locator(".splitDiffCell.withBlame").first();
+      await blamedCell.waitFor({ state: "visible" });
+      expect(await blamedCell.innerText()).toContain("sibling = 'changed'");
+      expect(await blamedCell.locator(".blameAnnotation").innerText()).toBe("");
+      expect(await diffWindow.locator(".diffBlameNotice").count()).toBe(0);
       await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/example.ts" }).click();
       await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });
       await diffWindow.getByRole("button", { name: "Close src/other.ts tab" }).click();
@@ -259,6 +265,10 @@ describe("desktop startup E2E", () => {
       expect(await diffTitle.getAttribute("title")).toBe("src/example.ts");
       await diffWindow.getByRole("button", { name: "Unified" }).click();
       expect(await diffWindow.locator(".unifiedDiff").count()).toBe(1);
+      // Blame stays on across tabs and layouts until it is turned off.
+      await diffWindow.locator(".unifiedDiff.withBlame").waitFor({ state: "visible" });
+      await blameToggle.click();
+      await diffWindow.locator(".unifiedDiff.withBlame").waitFor({ state: "detached" });
       await diffWindow.keyboard.press("Control+\\");
       expect(await diffWindow.getByRole("button", { name: "Split", exact: true }).getAttribute("aria-pressed")).toBe("true");
       await diffWindow.keyboard.press("Control+\\");
