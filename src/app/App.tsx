@@ -20,7 +20,7 @@ import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
 import { isComposerVisible, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
-import { DEFAULT_WORKSPACE_MODE, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
+import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
@@ -273,7 +273,7 @@ function App() {
   const { theme, nextTheme } = useThemePreference();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const { sidebarWidth, setSidebarWidth, historyGraphHeight, setHistoryGraphHeight, detailsWidth, setDetailsWidth } = useWorkspaceLayout(selectedRepository?.repoId);
+  const { sidebarWidth, setSidebarWidth, historyGraphHeight, setHistoryGraphHeight, detailsWidth, setDetailsWidth, commitFilesWidth, setCommitFilesWidth } = useWorkspaceLayout(selectedRepository?.repoId);
   const connected = connectionState === "connected";
   useAdoptInProgressWorkflow({ getApi: () => apiRef.current, repoId: selectedRepository?.availability === "available" ? selectedRepository.repoId : undefined, connected, onAdopted: prependTask });
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
@@ -1210,6 +1210,7 @@ function App() {
                     openPath={historyFilePath}
                     openPathOid={historyFileOid}
                     filesHidden={focusMode}
+                    filesSize={{ width: commitFilesWidth, min: COMMIT_FILES_WIDTH.min, max: COMMIT_FILES_WIDTH.max, label: t("panel.resizeCommitFiles"), onResize: setCommitFilesWidth }}
                     onOpenFile={openCommitFileDiff}
                     onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
                     actions={!focusMode && renderCommitActions(selectedCommit)}

@@ -1,6 +1,7 @@
 import { useI18n } from "../../../shared/i18n";
-import { useEffect, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
+import { ResizeSeparator } from "../../../shared/ui/ResizeSeparator";
 import { useRepositoryCommitDetail } from "../model/use-repository-commit-detail";
 import { formatCommitDate } from "./format-commit-date";
 
@@ -16,7 +17,9 @@ function splitPath(path: string): { directory: string; name: string } {
  */
 export type CommitFileNavigation = { index: number; total: number; onPrevious: () => void; onNext: () => void };
 
-export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHidden, onOpenFile, onOpenDiffWindow, actions, renderDiff }: {
+export type CommitFilesSize = { width: number; min: number; max: number; label: string; onResize: (width: number) => void };
+
+export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHidden, filesSize, onOpenFile, onOpenDiffWindow, actions, renderDiff }: {
   api: GitCrestApiClient;
   repoId: string;
   oid: string;
@@ -26,6 +29,8 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
   openPathOid?: string;
   /** Focus mode keeps only the diff. */
   filesHidden?: boolean;
+  /** Width of the file list, which a rule between it and the diff resizes. */
+  filesSize?: CommitFilesSize;
   onOpenFile: (path: string, oid: string) => void;
   onOpenDiffWindow: (path: string, oid: string) => void;
   actions?: ReactNode;
@@ -77,7 +82,10 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
         </div>
         {actions && <div className="commitChangesActions">{actions}</div>}
       </header>
-      <div className={`commitChangesBody${filesHidden ? " filesHidden" : ""}`}>
+      <div
+        className={`commitChangesBody${filesHidden ? " filesHidden" : ""}${filesSize && !filesHidden ? " resizable" : ""}`}
+        style={filesSize ? { "--commit-files-width": `${filesSize.width}px` } as CSSProperties : undefined}
+      >
         {!filesHidden && <nav className="commitFileList" aria-label={t("hv.files")}>
           <div className="sidebarSectionTitle"><span>{t("hv.files")}</span>{detail && <span className="countBadge">{detail.files.length}</span>}</div>
           {state.error && state.oid === oid ? <p className="sidebarNotice" role="alert">{state.error}</p>
@@ -106,6 +114,7 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
                   </li>;
                 })}</ul>}
         </nav>}
+        {!filesHidden && filesSize && <ResizeSeparator orientation="vertical" edge="left" value={filesSize.width} min={filesSize.min} max={filesSize.max} label={filesSize.label} onResize={filesSize.onResize} />}
         <div className="commitChangesDiff">{selectedPath ? renderDiff(navigation) : detail && detail.files.length === 0 ? <div className="viewEmpty"><p>{t("hv.noFiles")}</p></div> : <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("hv.loadingCommit")}</div>}</div>
       </div>
     </section>

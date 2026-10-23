@@ -1,5 +1,5 @@
 export { useWorkspaceSessionState } from "./model/use-workspace-session-state";
-export { useWorkspaceLayout, SIDEBAR_WIDTH, HISTORY_GRAPH_HEIGHT, DETAILS_WIDTH } from "./model/use-workspace-layout";
+export { useWorkspaceLayout, SIDEBAR_WIDTH, HISTORY_GRAPH_HEIGHT, DETAILS_WIDTH, COMMIT_FILES_WIDTH } from "./model/use-workspace-layout";
 export { useWorkspaceGraphScroll } from "./model/use-workspace-graph-scroll";
 export { useWorkspaceCommitSelection } from "./model/use-workspace-commit-selection";
 export { useWorkspaceCommitAction } from "./model/use-workspace-commit-action";

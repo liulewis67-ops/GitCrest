@@ -20,6 +20,7 @@ export const layout = {
   "panel.exitFocus": ["Exit focus mode", "退出专注模式"],
   "panel.exitFocusTitle": ["Restore the panels (Esc or {shortcut})", "恢复面板（Esc 或 {shortcut}）"],
   "panel.resizeHistoryGraph": ["Resize commit graph", "调整提交图高度"],
+  "panel.resizeCommitFiles": ["Resize changed files", "调整变更文件列表宽度"],
 
   // Synchronization
   "sync.aria": ["Synchronize with remotes", "与远程同步"],

@@ -405,6 +405,9 @@ button:disabled { cursor: not-allowed; }
 .commitChangesActions { display: flex; flex: none; align-items: center; gap: var(--space-1); }
 .commitChangesBody { display: grid; flex: 1; grid-template-columns: minmax(180px, 240px) minmax(0, 1fr); min-height: 0; }
 .commitChangesBody.filesHidden { grid-template-columns: minmax(0, 1fr); }
+/* A dragged file list keeps its width, but never takes more than 45% from the diff in a narrow window. */
+.commitChangesBody.resizable { grid-template-columns: min(var(--commit-files-width), 45%) 6px minmax(0, 1fr); }
+.commitChangesBody > .resizeSeparator { margin-inline: -3px; }
 .commitFileList { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: auto; border-right: 1px solid var(--line); background: var(--surface); }
 .commitFileList ul { margin: 0; padding: 0 var(--space-1) var(--space-2); list-style: none; }
 .commitFileRow { display: flex; align-items: center; gap: 2px; border-radius: var(--radius-5); }

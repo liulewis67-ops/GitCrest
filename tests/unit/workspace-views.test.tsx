@@ -151,6 +151,22 @@ describe("CommitChanges", () => {
     expect(onOpenFile).toHaveBeenLastCalledWith("README.md", oid);
   });
 
+  it("resizes the file list from the rule between it and the diff", async () => {
+    const onResize = vi.fn();
+    const filesSize = { width: 240, min: 160, max: 560, label: "Resize changed files", onResize };
+    const { rerender } = render(<CommitChanges api={api} repoId="repo" oid={oid} openPath="src/parser.ts" openPathOid={oid} filesSize={filesSize} onOpenFile={vi.fn()} onOpenDiffWindow={vi.fn()} renderDiff={() => <p>diff</p>} />);
+    const rule = await screen.findByRole("separator", { name: "Resize changed files" });
+    expect(rule.previousElementSibling?.getAttribute("aria-label")).toBe("Changed files");
+    expect(rule.nextElementSibling?.textContent).toBe("diff");
+    expect((rule.parentElement as HTMLElement).style.getPropertyValue("--commit-files-width")).toBe("240px");
+    fireEvent.keyDown(rule, { key: "ArrowRight" });
+    expect(onResize).toHaveBeenLastCalledWith(256);
+
+    // Focus mode hides the list, and the rule with it.
+    rerender(<CommitChanges api={api} repoId="repo" oid={oid} openPath="src/parser.ts" openPathOid={oid} filesHidden filesSize={filesSize} onOpenFile={vi.fn()} onOpenDiffWindow={vi.fn()} renderDiff={() => <p>diff</p>} />);
+    expect(screen.queryByRole("separator")).toBeNull();
+  });
+
   it("keeps the open file when the next commit touches it too", async () => {
     const onOpenFile = vi.fn();
     render(<CommitChanges api={api} repoId="repo" oid={oid} openPath="README.md" openPathOid={"c".repeat(40)} onOpenFile={onOpenFile} onOpenDiffWindow={vi.fn()} renderDiff={() => null} />);
