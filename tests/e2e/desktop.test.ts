@@ -238,7 +238,11 @@ describe("desktop startup E2E", () => {
       await window.getByRole("button", { name: "Open in Diff window" }).click();
       const diffWindow = await diffWindowPromise;
       await diffWindow.locator(".diffWindow").waitFor({ state: "visible" });
-      await diffWindow.locator(".diffWindowHeader .sectionEyebrow").waitFor({ state: "visible" });
+      // The header names the file it opened for and which side of it the diff reads.
+      const diffTitle = diffWindow.locator(".diffWindowHeader h1");
+      await diffTitle.waitFor({ state: "visible" });
+      expect(await diffTitle.getAttribute("title")).toBe("src/example.ts");
+      await diffWindow.locator(".diffWindowHeader .diffWindowScope").waitFor({ state: "visible" });
       await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });
       expect(await diffWindow.locator(".diffWindowTabSelect").count()).toBe(2);
       await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/other.ts" }).click();
@@ -250,7 +254,9 @@ describe("desktop startup E2E", () => {
       await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/example.ts" }).click();
       await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });
       await diffWindow.getByRole("button", { name: "Close src/other.ts tab" }).click();
-      expect(await diffWindow.locator(".diffWindowTabSelect").count()).toBe(1);
+      // One file left needs no tab strip; the header still names it.
+      await diffWindow.locator(".diffWindowTabs").waitFor({ state: "detached" });
+      expect(await diffTitle.getAttribute("title")).toBe("src/example.ts");
       await diffWindow.getByRole("button", { name: "Unified" }).click();
       expect(await diffWindow.locator(".unifiedDiff").count()).toBe(1);
       await diffWindow.keyboard.press("Control+\\");
