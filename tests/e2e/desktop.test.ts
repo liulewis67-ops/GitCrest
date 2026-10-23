@@ -252,10 +252,10 @@ describe("desktop startup E2E", () => {
       const blameToggle = diffWindow.getByRole("button", { name: "Blame" });
       await blameToggle.click();
       expect(await blameToggle.getAttribute("aria-pressed")).toBe("true");
-      const blamedCell = diffWindow.locator(".splitDiffCell.withBlame").first();
-      await blamedCell.waitFor({ state: "visible" });
-      expect(await blamedCell.innerText()).toContain("sibling = 'changed'");
-      expect(await blamedCell.locator(".blameAnnotation").innerText()).toBe("");
+      const blamedRow = diffWindow.locator(".splitDiffRow.withBlame").first();
+      await blamedRow.waitFor({ state: "visible" });
+      expect(await blamedRow.innerText()).toContain("sibling = 'changed'");
+      expect(await blamedRow.locator(".blameAnnotation").innerText()).toBe("");
       expect(await diffWindow.locator(".diffBlameNotice").count()).toBe(0);
       await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/example.ts" }).click();
       await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });

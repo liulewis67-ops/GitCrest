@@ -66,19 +66,24 @@ describe("createBlameLookup", () => {
 });
 
 describe("Blame in the Diff window layouts", () => {
-  it("puts the date and author before the new side's line number in split view", () => {
+  it("puts the date and author in a middle column between the two sides in split view", () => {
     act(() => setLocale("zh"));
     render(<SplitDiff document={diff} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} blame={createBlameLookup(blame)} />);
-    // Each row is: selection gutter, old cell, new cell.
+    // With blame each row is: selection gutter, old cell, blame, new cell; the header keeps a slot over blame.
+    const header = document.querySelector(".splitDiffColumns")!;
+    expect(header.className).toContain("withBlame");
+    expect([...header.children].map((cell) => cell.textContent)).toEqual(["", "旧", "", "新"]);
     const rows = [...document.querySelectorAll(".splitDiffRow")];
-    const [oldCell, newCell] = [rows[0].children[1], rows[0].children[2]];
-    expect(newCell.className).toContain("withBlame");
-    expect([...newCell.children].map((cell) => cell.textContent)).toEqual(["2024/3/3canghe", "1", "export const job = true;"]);
-    expect(newCell.querySelector(".blameAnnotation")?.getAttribute("title")).toContain("0794f659 Initialize the project");
+    expect(rows.every((row) => row.className.includes("withBlame"))).toBe(true);
+    const [oldCell, annotation, newCell] = [rows[0].children[1], rows[0].children[2], rows[0].children[3]];
+    expect(annotation.className).toBe("blameAnnotation");
+    expect(annotation.textContent).toBe("2024/3/3canghe");
+    expect(annotation.getAttribute("title")).toContain("0794f659 Initialize the project");
+    expect([...newCell.children].map((cell) => cell.textContent)).toEqual(["1", "export const job = true;"]);
     expect(oldCell.querySelector(".blameAnnotation")).toBeNull();
     // The uncommitted line keeps its column, blank; the CRLF line is still annotated.
-    expect(rows[1].children[2].querySelector(".blameAnnotation")?.textContent).toBe("");
-    expect(rows[2].children[2].querySelector(".blameAnnotation")?.textContent).toBe("2024/3/3canghe");
+    expect(rows[1].children[2].textContent).toBe("");
+    expect(rows[2].children[2].textContent).toBe("2024/3/3canghe");
   });
 
   it("leads every unified row with the annotation, blank on deleted and uncommitted lines", () => {

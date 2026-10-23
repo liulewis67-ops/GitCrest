@@ -830,7 +830,11 @@ button:disabled { cursor: not-allowed; }
 .blameDate { flex: none; min-width: 10ch; font-variant-numeric: tabular-nums; }
 .blameAuthor { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .splitDiffRow:hover .blameAnnotation, .unifiedDiffRow:hover .blameAnnotation { background: var(--surface-soft); color: var(--text-secondary); }
-.splitDiffCell.withBlame { grid-template-columns: minmax(150px, 190px) 52px minmax(0, 1fr); }
+/* In split view blame is a middle column, after the gap between the sides and against the new side's line
+   numbers; the header keeps an empty slot over it so NEW stays over the new code, and both code sides stay
+   equally wide. The 12px gap is drawn as the column's left border, so the column is 12px wider. */
+.splitDiffRow.withBlame, .splitDiffColumns.withBlame { grid-template-columns: 22px minmax(0, 1fr) 192px minmax(0, 1fr); }
+.splitDiffRow.withBlame > .blameAnnotation { border-left: 12px solid var(--canvas); }
 .unifiedDiff.withBlame .unifiedDiffRow { grid-template-columns: minmax(150px, 190px) 56px 56px minmax(0, 1fr); }
 .unifiedDiffRow > .blameAnnotation { padding: 1px 10px; text-align: left; }
 .diffBlameNotice { padding: 5px 12px; border-bottom: 1px solid var(--line); background: var(--surface); color: var(--text-muted); font-size: var(--type-xs); }

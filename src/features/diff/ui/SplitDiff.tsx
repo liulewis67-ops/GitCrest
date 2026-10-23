@@ -20,7 +20,7 @@ interface SplitDiffProps {
   onShowFullFile?: () => void;
   /** Hosts that already name the file and its side, like the Diff window header, drop the file row. */
   showFileMeta?: boolean;
-  /** Annotates the new side's lines with their date and author, in a column before its line numbers. */
+  /** Annotates the new side's lines with their date and author, in a middle column between the two sides. */
   blame?: BlameLookup;
 }
 
@@ -94,7 +94,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
         <button type="button" onClick={() => navigateHunk(1)} disabled={navigableHunks.length === 0} title={t("sd.nextTitle")}>{t("sd.next")}</button>
       </div>
       {monacoDegraded && <div className="diffSyntaxFallback" role="status">{t("sd.monacoTooLarge")}</div>}
-      <div className="splitDiffColumns" aria-hidden="true"><div /><div>{t("sd.old")}</div><div>{t("sd.new")}</div></div>
+      <div className={blame ? "splitDiffColumns withBlame" : "splitDiffColumns"} aria-hidden="true"><div /><div>{t("sd.old")}</div>{blame && <div />}<div>{t("sd.new")}</div></div>
       {view === "monaco" && !language.supported && <div className="diffSyntaxFallback" role="status">{t("sd.noGrammar")}</div>}
       {document.hunks.map((hunk, hunkIndex) => {
         const changeRowIndexes = hunk.rows.flatMap((row, rowIndex) => row.kind === "change" ? [rowIndex] : []);
@@ -144,7 +144,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
             />
           </Suspense>}
           {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => (
-            <div className={`splitDiffRow splitDiffRow-${row.kind}`} role="group" aria-label={row.kind === "change" ? t("sd.changedLines") : t("sd.contextLines")} key={`${hunkIndex}:${rowIndex}`}>
+            <div className={`splitDiffRow splitDiffRow-${row.kind}${blame ? " withBlame" : ""}`} role="group" aria-label={row.kind === "change" ? t("sd.changedLines") : t("sd.contextLines")} key={`${hunkIndex}:${rowIndex}`}>
               {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"
                 aria-label={t("sd.selectRowAria", { hunk: hunkIndex + 1, row: rowIndex + 1 })}
@@ -174,8 +174,9 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                 <span className="splitDiffLineNumber">{row.oldLine ?? ""}</span>
                 <code>{row.oldText !== null && row.oldText !== undefined && row.kind === "change" ? <InlineDiffText text={row.oldText} counterpart={row.newText ?? null} /> : row.oldText ?? ""}</code>
               </div>
+              {blame && <BlameAnnotation line={blame(row.newLine, row.newText)} />}
               <div
-                className={blame ? "splitDiffCell withBlame" : "splitDiffCell"}
+                className="splitDiffCell"
                 role="group"
                 aria-label={row.newText === null
                   ? t("sd.noAdded")
@@ -183,7 +184,6 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                     ? t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })
                     : t("sd.contextLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}
               >
-                {blame && <BlameAnnotation line={blame(row.newLine, row.newText)} />}
                 <span className="splitDiffLineNumber">{row.newLine ?? ""}</span>
                 <code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code>
               </div>
