@@ -12,6 +12,7 @@ import { BranchesSidebar } from "../pages/workspace/BranchesSidebar";
 import { CommitInspector } from "../pages/workspace/CommitInspector";
 import { WorkspaceDiffPanel } from "../pages/workspace/WorkspaceDiffPanel";
 import { ViewLayout } from "../pages/workspace/ViewLayout";
+import { HistorySplit } from "../pages/workspace/HistorySplit";
 import { ariaShortcut, displayShortcut, loadSettingsPage, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus, type SettingsSectionId } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
@@ -19,7 +20,7 @@ import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
 import { isComposerVisible, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
-import { DEFAULT_WORKSPACE_MODE, DETAILS_WIDTH, HISTORY_LIST_WIDTH, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
+import { DEFAULT_WORKSPACE_MODE, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
@@ -272,7 +273,7 @@ function App() {
   const { theme, nextTheme } = useThemePreference();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const { sidebarWidth, setSidebarWidth, historyListWidth, setHistoryListWidth, detailsWidth, setDetailsWidth } = useWorkspaceLayout(selectedRepository?.repoId);
+  const { sidebarWidth, setSidebarWidth, historyGraphHeight, setHistoryGraphHeight, detailsWidth, setDetailsWidth } = useWorkspaceLayout(selectedRepository?.repoId);
   const connected = connectionState === "connected";
   useAdoptInProgressWorkflow({ getApi: () => apiRef.current, repoId: selectedRepository?.availability === "available" ? selectedRepository.repoId : undefined, connected, onAdopted: prependTask });
   const activeStatus = selectedRepository ? statusSnapshots[selectedRepository.repoId] : undefined;
@@ -569,10 +570,10 @@ function App() {
     setSidebarHidden(mode, !panelPreferences.sidebarHidden[mode]);
   }
 
-  function openInspector(view: "history" | "branches") {
+  function openInspector() {
     setFocusMode(false);
-    if (inspectorOverlay) setOverlayInspectorFor(view);
-    else setInspectorOpen(view, true);
+    if (inspectorOverlay) setOverlayInspectorFor("history");
+    else setInspectorOpen("history", true);
   }
 
   function closeInspector() {
@@ -584,11 +585,11 @@ function App() {
   function toggleInspector() {
     if (!selectedRepository || mode === "changes") return;
     if (inspectorVisible) closeInspector();
-    else openInspector(mode);
+    else openInspector();
   }
 
   function toggleFocusMode() {
-    if (!selectedRepository || mode === "branches") return;
+    if (!selectedRepository) return;
     setFocusMode((current) => !current);
   }
 
@@ -650,9 +651,8 @@ function App() {
 
   function openTagEditor(oid: string) {
     if (!selectedRepository || !isFullGitObjectId(oid)) return;
-    const view = mode === "branches" ? "branches" : "history";
     if (mode === "changes") changeWorkspaceMode("history");
-    openInspector(view);
+    openInspector();
     historyRequests.openTagEditor(selectedRepository.repoId, oid);
   }
 
@@ -754,10 +754,6 @@ function App() {
   }, [windowSizeClass]);
 
   useEffect(() => {
-    if (mode === "branches") setFocusMode(false);
-  }, [mode]);
-
-  useEffect(() => {
     if (!notice) return;
     const timer = window.setTimeout(() => setNotice(""), 2400);
     return () => window.clearTimeout(timer);
@@ -806,8 +802,7 @@ function App() {
     openDiff: () => changeWorkspaceMode("changes"),
     searchCommits: (repoId) => {
       if (mode === "changes") changeWorkspaceMode("history");
-      // History's search box sits in the commit list, so the list has to be on screen.
-      if (mode !== "branches") setSidebarHidden("history", false);
+      // The search box sits above the commit graph, which focus mode hides.
       setFocusMode(false);
       historyRequests.focusSearch(repoId);
     },
@@ -860,11 +855,10 @@ function App() {
     { id: "clone", label: t("cmd.clone"), detail: t("cmd.cloneDetail"), available: connected, run: () => cloneSubmission.openDialog() },
     { id: "view-changes", label: t("cmd.viewChanges"), detail: t("cmd.viewChangesDetail", { shortcut: displayShortcut(shortcuts.viewChanges, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("changes") },
     { id: "view-history", label: t("cmd.viewHistory"), detail: t("cmd.viewHistoryDetail", { shortcut: displayShortcut(shortcuts.viewHistory, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("history") },
-    { id: "view-branches", label: t("cmd.viewBranches"), detail: t("cmd.viewBranchesDetail", { shortcut: displayShortcut(shortcuts.viewBranches, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("branches") },
     { id: "toggle-sidebar", label: t("cmd.toggleSidebar"), detail: t("cmd.toggleSidebarDetail", { shortcut: displayShortcut(shortcuts.toggleSidebar, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace"), run: toggleSidebar },
     { id: "toggle-details", label: t("cmd.toggleDetails"), detail: t("cmd.toggleDetailsDetail", { shortcut: displayShortcut(shortcuts.toggleInspector, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace" && mode !== "changes"), run: toggleInspector },
     { id: "focus-mode", label: t("cmd.focus"), detail: t("cmd.focusDetail", { shortcut: displayShortcut(shortcuts.focusMode, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace" && diffTarget), run: toggleFocusMode },
-    { id: "manage-remotes", label: t("cmd.manageRemotes"), detail: t("cmd.manageRemotesDetail"), available: Boolean(selectedRepository), run: () => { changeWorkspaceMode("branches"); setSidebarHidden("branches", false); setFocusMode(false); } },
+    { id: "manage-remotes", label: t("cmd.manageRemotes"), detail: t("cmd.manageRemotesDetail"), available: Boolean(selectedRepository), run: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); } },
   ];
   const composerVisible = isComposerVisible({
     inChangesView: mode === "changes" && !focusMode,
@@ -931,9 +925,9 @@ function App() {
         focusSearchRequest={historyRequests.searchFocusRequest}
         searchShortcut={ariaShortcut(shortcuts.searchCommits, isMacPlatform)}
         onFocusSearchHandled={historyRequests.markSearchFocusHandled}
-        pathFilterRequest={mode === "history" ? historyRequests.pathFilterRequest : undefined}
+        pathFilterRequest={historyRequests.pathFilterRequest}
         onPathFilterHandled={historyRequests.markPathFilterHandled}
-        branchScope={mode === "branches" ? shownHistoryBranch?.name : undefined}
+        branchScope={shownHistoryBranch?.name}
         onClearBranchScope={() => setHistoryBranch(undefined)}
         onScrollPosition={rememberGraphScroll}
         onSelect={selectCommit}
@@ -952,19 +946,19 @@ function App() {
     />;
   }
 
-  function renderInspector(withActions: boolean) {
+  function renderInspector() {
     if (!selectedRepository) return null;
+    // The changes under the graph already list the commit's files and actions.
     return <CommitInspector
       repository={selectedRepository}
       selectedCommit={selectedCommit}
       api={apiRef.current}
       overlay={inspectorOverlay}
-      showFiles={mode !== "history"}
-      selectedFilePath={mode === "history" && historyFileOid === selectedCommit ? historyFilePath : undefined}
+      showFiles={false}
+      selectedFilePath={historyFileOid === selectedCommit ? historyFilePath : undefined}
       openTagRequest={historyRequests.tagEditorRequest}
       shortcuts={shortcuts}
       isMacPlatform={isMacPlatform}
-      actions={withActions && isFullGitObjectId(selectedCommit) ? renderCommitActions(selectedCommit) : undefined}
       onClose={closeInspector}
       onOpenFile={openCommitFileDiff}
       onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
@@ -1150,31 +1144,6 @@ function App() {
 
           {selectedRepository && mode === "history" && <ViewLayout
             className="historyLayout"
-            sidebar={sidebarVisible ? <aside className="sidePanel historyListPanel" aria-label={t("hv.aria")}>{renderCommitGraph()}</aside> : undefined}
-            sidebarSize={{ width: historyListWidth, min: HISTORY_LIST_WIDTH.min, max: HISTORY_LIST_WIDTH.max, label: t("panel.resizeHistoryList"), onResize: setHistoryListWidth }}
-            inspector={inspectorVisible ? renderInspector(false) : undefined}
-            inspectorSize={inspectorSize}
-            inspectorOverlay={inspectorOverlay}
-          >
-            {isFullGitObjectId(selectedCommit) && apiRef.current ? <Suspense fallback={<div className="viewEmpty" role="status"><p>{t("hv.loadingCommit")}</p></div>}>
-              <CommitChanges
-                api={apiRef.current}
-                repoId={selectedRepository.repoId}
-                oid={selectedCommit}
-                openPath={historyFilePath}
-                openPathOid={historyFileOid}
-                filesHidden={focusMode}
-                onOpenFile={openCommitFileDiff}
-                onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
-                actions={!focusMode && renderCommitActions(selectedCommit)}
-                renderDiff={(navigation) => diffTarget?.scope === "commit" ? renderDiffPanel(diffTarget, { fileNavigation: navigation }) : null}
-              />
-            </Suspense> : isFullGitObjectId(selectedRepository.head) ? <div className="viewEmpty"><h2>{t("hv.selectCommit")}</h2><p>{t("hv.selectCommitHint")}</p></div>
-              : <div className="viewEmpty"><h2>{t("hv.noCommits")}</h2><p>{t("hv.noCommitsHint")}</p></div>}
-          </ViewLayout>}
-
-          {selectedRepository && mode === "branches" && <ViewLayout
-            className="branchesLayout"
             sidebar={sidebarVisible ? <BranchesSidebar
               repository={selectedRepository}
               api={apiRef.current}
@@ -1220,11 +1189,35 @@ function App() {
               onSetBranchUpstream={remoteMutations.setRepositoryBranchUpstream}
             /> : undefined}
             sidebarSize={{ width: sidebarWidth, min: SIDEBAR_WIDTH.min, max: SIDEBAR_WIDTH.max, label: t("app.resizeNav"), onResize: setSidebarWidth }}
-            inspector={inspectorVisible ? renderInspector(true) : undefined}
+            inspector={inspectorVisible ? renderInspector() : undefined}
             inspectorSize={inspectorSize}
             inspectorOverlay={inspectorOverlay}
           >
-            <section className="graphPanel" aria-label={t("bs.graphAria")}>{renderCommitGraph()}</section>
+            {/* Without a resolved HEAD the graph's own empty state says why; there is no commit to show changes for. */}
+            {isFullGitObjectId(selectedRepository.head) ? <HistorySplit
+              graph={focusMode ? undefined : <section className="graphPanel historyGraphPane" aria-label={t("bs.graphAria")}>{renderCommitGraph()}</section>}
+              graphHeight={historyGraphHeight}
+              minGraphHeight={HISTORY_GRAPH_HEIGHT.min}
+              maxGraphHeight={HISTORY_GRAPH_HEIGHT.max}
+              label={t("panel.resizeHistoryGraph")}
+              onResizeGraph={setHistoryGraphHeight}
+              changes={<section className="historyChangesPane" aria-label={t("hv.changesAria")}>
+                {isFullGitObjectId(selectedCommit) && apiRef.current ? <Suspense fallback={<div className="viewEmpty" role="status"><p>{t("hv.loadingCommit")}</p></div>}>
+                  <CommitChanges
+                    api={apiRef.current}
+                    repoId={selectedRepository.repoId}
+                    oid={selectedCommit}
+                    openPath={historyFilePath}
+                    openPathOid={historyFileOid}
+                    filesHidden={focusMode}
+                    onOpenFile={openCommitFileDiff}
+                    onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
+                    actions={!focusMode && renderCommitActions(selectedCommit)}
+                    renderDiff={(navigation) => diffTarget?.scope === "commit" ? renderDiffPanel(diffTarget, { fileNavigation: navigation }) : null}
+                  />
+                </Suspense> : <div className="viewEmpty"><h2>{t("hv.selectCommit")}</h2><p>{t("hv.selectCommitHint")}</p></div>}
+              </section>}
+            /> : <section className="graphPanel" aria-label={t("bs.graphAria")}>{renderCommitGraph()}</section>}
           </ViewLayout>}
         </WorkspacePage>
       )}

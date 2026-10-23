@@ -52,14 +52,17 @@ describe("parseWorkspaceSession", () => {
 
   it("maps sessions saved with the Graph and Diff modes onto the task view showing the same content", () => {
     const session = parseWorkspaceSession(JSON.stringify({
-      openRepoIds: ["graph", "working", "commit"],
+      openRepoIds: ["graph", "working", "commit", "branches"],
       tabs: {
         graph: { mode: "graph", graphScrollTop: 10 },
+        branches: { mode: "branches", selectedCommit: "c0ffee", graphScrollTop: 4 },
         working: { mode: "diff", selectedFilePath: "a.txt", selectedFileScope: "workingTree", graphScrollTop: 0 },
         commit: { mode: "diff", selectedFilePath: "b.txt", selectedFileScope: "commit", selectedDiffCommitOid: "c0ffee", graphScrollTop: 0 },
       },
     }));
     expect(session.tabs.graph).toEqual({ mode: "history", graphScrollTop: 10 });
+    // Branches merged into History, which now shows the branch list beside the graph.
+    expect(session.tabs.branches).toEqual({ mode: "history", selectedCommit: "c0ffee", graphScrollTop: 4 });
     expect(session.tabs.working).toEqual({ mode: "changes", selectedFilePath: "a.txt", selectedFileScope: "workingTree", graphScrollTop: 0 });
     // A historical file never becomes a working-tree selection.
     expect(session.tabs.commit).toEqual({ mode: "history", selectedCommitFilePath: "b.txt", selectedDiffCommitOid: "c0ffee", graphScrollTop: 0 });

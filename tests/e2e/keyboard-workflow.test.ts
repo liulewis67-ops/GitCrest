@@ -102,11 +102,11 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
       return response.status;
     }, { repoId, name: "keyboard-target" });
     expect(branchCreation).toBe(202);
-    // Shortcuts are left to an open dialog, so close Tasks before Mod+3 shows Branches and the new row.
+    // Shortcuts are left to an open dialog, so close Tasks before Mod+2 shows History and the new branch row.
     const branchTasksDialog = window.getByRole("dialog", { name: "Tasks" });
     if (await branchTasksDialog.count()) await enterButtonByTab(window, "Close tasks");
     await branchTasksDialog.waitFor({ state: "detached" });
-    await window.keyboard.press("Control+3");
+    await window.keyboard.press("Control+2");
     await window.locator(".branchItemName").filter({ hasText: "keyboard-target" }).waitFor();
     await window.keyboard.press("Control+b");
     const switchDialog = window.getByRole("dialog", { name: "Switch branch" });

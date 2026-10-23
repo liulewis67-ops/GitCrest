@@ -51,7 +51,7 @@ type GlobalShortcutActions = {
   toggleCommandPalette: () => void;
   openCommitAssistant: () => void;
   closeCommandPalette: () => void;
-  showView: (view: "changes" | "history" | "branches") => void;
+  showView: (view: "changes" | "history") => void;
   toggleSidebar: () => void;
   toggleInspector: () => void;
   toggleFocusMode: () => void;
@@ -71,10 +71,10 @@ export function useGlobalShortcuts(context: GlobalShortcutContext, actions: Glob
       const { context: state, actions: run } = latest.current;
       if (target?.closest("input, textarea, select, [contenteditable='true']")) {
         // View switches mean nothing to a text field, so they work while typing; everything else is left to the field.
-        const view = (["viewChanges", "viewHistory", "viewBranches"] as const).find((action) => matchesShortcut(event, state.shortcuts[action], state.isMacPlatform));
+        const view = (["viewChanges", "viewHistory"] as const).find((action) => matchesShortcut(event, state.shortcuts[action], state.isMacPlatform));
         if (view && state.page === "workspace" && state.repository) {
           event.preventDefault();
-          run.showView(view === "viewChanges" ? "changes" : view === "viewHistory" ? "history" : "branches");
+          run.showView(view === "viewChanges" ? "changes" : "history");
         }
         return;
       }
@@ -150,9 +150,6 @@ export function useGlobalShortcuts(context: GlobalShortcutContext, actions: Glob
       } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.viewHistory, isMacPlatform)) {
         event.preventDefault();
         run.showView("history");
-      } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.viewBranches, isMacPlatform)) {
-        event.preventDefault();
-        run.showView("branches");
       } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.toggleSidebar, isMacPlatform)) {
         event.preventDefault();
         run.toggleSidebar();

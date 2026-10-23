@@ -1,9 +1,9 @@
 import type { CommitAction } from "../../commits";
 
-/** The task a repository tab is showing: local changes, commit history, or branch topology. */
-export type WorkspaceMode = "changes" | "history" | "branches";
+/** The task a repository tab is showing: local changes, or commit history with its branches. */
+export type WorkspaceMode = "changes" | "history";
 
-export const WORKSPACE_MODES: readonly WorkspaceMode[] = ["changes", "history", "branches"];
+export const WORKSPACE_MODES: readonly WorkspaceMode[] = ["changes", "history"];
 
 export type RepositoryTabState = {
   mode: WorkspaceMode;
@@ -34,10 +34,10 @@ function emptyWorkspaceSession(): WorkspaceSession {
 
 type StoredTabState = Partial<Omit<RepositoryTabState, "mode" | "selectedFileScope">> & { mode?: unknown; selectedFileScope?: unknown };
 
-/** Sessions saved before the task views used "graph" and "diff"; map them onto the view that shows the same content. */
+/** Sessions saved under older views ("graph", "diff", "branches"); map them onto the view that shows the same content. */
 function parseMode(candidate: StoredTabState): WorkspaceMode {
-  if (candidate.mode === "changes" || candidate.mode === "history" || candidate.mode === "branches") return candidate.mode;
-  if (candidate.mode === "graph") return "history";
+  if (candidate.mode === "changes" || candidate.mode === "history") return candidate.mode;
+  if (candidate.mode === "graph" || candidate.mode === "branches") return "history";
   if (candidate.mode === "diff") return candidate.selectedFileScope === "commit" ? "history" : "changes";
   return DEFAULT_WORKSPACE_MODE;
 }

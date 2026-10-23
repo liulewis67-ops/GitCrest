@@ -3,10 +3,8 @@ export const layout = {
   "view.navAria": ["Workspace views", "工作区视图"],
   "view.changes": ["Workspace", "工作区"],
   "view.history": ["History", "历史"],
-  "view.branches": ["Branches", "分支"],
   "view.changesTitle": ["Review, stage and commit local changes ({shortcut})", "查看、暂存并提交本地变更（{shortcut}）"],
-  "view.historyTitle": ["Browse commits and what they changed ({shortcut})", "浏览提交及其变更（{shortcut}）"],
-  "view.branchesTitle": ["Explore the commit graph and manage branches ({shortcut})", "查看提交图并管理分支（{shortcut}）"],
+  "view.historyTitle": ["Browse the commit graph and branches, and what each commit changed ({shortcut})", "浏览提交图与分支，以及每个提交的变更（{shortcut}）"],
   "view.changedFiles": ["{count} changed files", "{count} 个已变更文件"],
 
   // Optional panels
@@ -21,7 +19,7 @@ export const layout = {
   "panel.focusTitle": ["Hide side panels and read the diff full width ({shortcut})", "隐藏侧边面板，全宽阅读差异（{shortcut}）"],
   "panel.exitFocus": ["Exit focus mode", "退出专注模式"],
   "panel.exitFocusTitle": ["Restore the panels (Esc or {shortcut})", "恢复面板（Esc 或 {shortcut}）"],
-  "panel.resizeHistoryList": ["Resize commit list", "调整提交列表宽度"],
+  "panel.resizeHistoryGraph": ["Resize commit graph", "调整提交图高度"],
 
   // Synchronization
   "sync.aria": ["Synchronize with remotes", "与远程同步"],
@@ -110,8 +108,8 @@ export const layout = {
   "ctx.rollbackNoText": ["{path} has no text changes to roll back.", "{path} 没有可回滚的文本变更。"],
 
   // History view
-  "hv.aria": ["Commit history", "提交历史"],
   "hv.commitAria": ["Selected commit", "所选提交"],
+  "hv.changesAria": ["Changes in the selected commit", "所选提交的变更"],
   "hv.files": ["Changed files", "变更文件"],
   "hv.filesOne": ["{count} file", "{count} 个文件"],
   "hv.filesMany": ["{count} files", "{count} 个文件"],
@@ -174,9 +172,7 @@ export const layout = {
   "cmd.viewChanges": ["Show Workspace", "显示工作区"],
   "cmd.viewChangesDetail": ["Review, stage and commit local changes ({shortcut})", "查看、暂存并提交本地变更（{shortcut}）"],
   "cmd.viewHistory": ["Show History", "显示历史"],
-  "cmd.viewHistoryDetail": ["Browse commits and their diffs ({shortcut})", "浏览提交及其差异（{shortcut}）"],
-  "cmd.viewBranches": ["Show Branches", "显示分支"],
-  "cmd.viewBranchesDetail": ["Commit graph, branches, worktrees and remotes ({shortcut})", "提交图、分支、工作树与远程（{shortcut}）"],
+  "cmd.viewHistoryDetail": ["Commit graph and diffs, branches, worktrees and remotes ({shortcut})", "提交图与差异、分支、工作树与远程（{shortcut}）"],
   "cmd.toggleSidebar": ["Show or hide the sidebar", "显示或隐藏侧栏"],
   "cmd.toggleSidebarDetail": ["Give the current view more room ({shortcut})", "为当前视图腾出更多空间（{shortcut}）"],
   "cmd.toggleDetails": ["Show or hide commit details", "显示或隐藏提交详情"],
@@ -184,12 +180,11 @@ export const layout = {
   "cmd.focus": ["Focus mode", "专注模式"],
   "cmd.focusDetail": ["Read the diff full width; Esc restores the panels ({shortcut})", "全宽阅读差异；按 Esc 恢复面板（{shortcut}）"],
   "cmd.manageRemotes": ["Manage remotes", "管理远程仓库"],
-  "cmd.manageRemotesDetail": ["Add, edit, or remove remotes and upstreams in Branches", "在“分支”中添加、编辑或删除远程仓库与上游"],
+  "cmd.manageRemotesDetail": ["Add, edit, or remove remotes and upstreams in History", "在“历史”中添加、编辑或删除远程仓库与上游"],
 
   // Shortcut labels
   "sc.viewChanges": ["Show Workspace", "显示工作区"],
   "sc.viewHistory": ["Show History", "显示历史"],
-  "sc.viewBranches": ["Show Branches", "显示分支"],
   "sc.toggleSidebar": ["Show or hide the sidebar", "显示或隐藏侧栏"],
   "sc.toggleInspector": ["Show or hide commit details", "显示或隐藏提交详情"],
   "sc.focusMode": ["Focus mode", "专注模式"],

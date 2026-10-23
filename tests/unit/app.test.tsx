@@ -323,7 +323,7 @@ describe("App", () => {
     expect(await screen.findByText("Refresh failed. Showing the last snapshot.")).toBeDefined();
     expect(screen.getByText("new file.txt")).toBeDefined();
 
-    fireEvent.click(screen.getByRole("tab", { name: "Branches" }));
+    fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(await screen.findByText("main", { selector: ".branchItemName" })).toBeDefined();
     fireEvent.click(screen.getByRole("button", { name: "Add refs/heads/main to favorites" }));
     expect(await screen.findByRole("button", { name: "Remove refs/heads/main from favorites" })).toBeDefined();
@@ -450,7 +450,7 @@ describe("App", () => {
     await screen.findByText("Core connected");
     fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
     await screen.findByText("C:/rows", { selector: ".workspaceCrumb .mutedText" });
-    fireEvent.click(screen.getByRole("tab", { name: "Branches" }));
+    fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.queryByRole("button", { name: "Switch to main" })).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "Switch to feature/row" }));
     const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
@@ -467,6 +467,9 @@ describe("App", () => {
     expect(commitsRequests().every((url) => !url.searchParams.has("branch"))).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Show history of feature/row" }));
     await waitFor(() => expect(lastCommitsRequest()?.searchParams.get("branch")).toBe("feature/row"));
+    // The branch tip becomes the selected commit, whose changes show under the graph.
+    expect(screen.getByRole("region", { name: "Commit graph" })).toBeDefined();
+    expect(screen.getByRole("region", { name: "Changes in the selected commit" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Show history of feature/row" }).getAttribute("aria-pressed")).toBe("true");
     const requestsBefore = commitsRequests().length;
     fireEvent.click(screen.getByRole("button", { name: "Show all branches" }));
@@ -752,7 +755,8 @@ describe("App", () => {
     expect(await screen.findByText("C:/beta", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     // The old Graph mode reopens in History; each tab keeps its own view.
     expect(screen.getByRole("tab", { name: "History" }).getAttribute("aria-selected")).toBe("true");
-    expect(screen.getByRole("separator", { name: "Resize commit list" })).toBeDefined();
+    // History's branch list shares the repository navigation width with Changes.
+    expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310");
     fireEvent.click(screen.getByRole("tab", { name: /Workspace/ }));
     await waitFor(() => expect(screen.getByRole("separator", { name: "Resize repository navigation" }).getAttribute("aria-valuenow")).toBe("310"));
     const savedSession = JSON.parse(window.localStorage.getItem("gitcrest-workspace-session-v1") || "{}");

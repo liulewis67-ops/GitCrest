@@ -11,9 +11,9 @@ export type PanelPreferences = {
 };
 
 export const DEFAULT_PANEL_PREFERENCES: PanelPreferences = {
-  sidebarHidden: { changes: false, history: false, branches: false },
-  // History reads commits in the center; Branches needs the inspector to say what a graph node is.
-  inspectorOpen: { history: false, branches: true },
+  sidebarHidden: { changes: false, history: false },
+  // History shows the selected commit's header, files and diff under the graph, so the inspector starts closed.
+  inspectorOpen: { history: false },
 };
 
 export function readPanelPreferences(serialized: string | null): PanelPreferences {
@@ -27,11 +27,9 @@ export function readPanelPreferences(serialized: string | null): PanelPreference
       sidebarHidden: {
         changes: flag(stored.sidebarHidden, "changes", false),
         history: flag(stored.sidebarHidden, "history", false),
-        branches: flag(stored.sidebarHidden, "branches", false),
       },
       inspectorOpen: {
         history: flag(stored.inspectorOpen, "history", DEFAULT_PANEL_PREFERENCES.inspectorOpen.history),
-        branches: flag(stored.inspectorOpen, "branches", DEFAULT_PANEL_PREFERENCES.inspectorOpen.branches),
       },
     };
   } catch {

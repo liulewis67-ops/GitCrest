@@ -74,16 +74,16 @@ describe("change tree", () => {
 });
 
 describe("readPanelPreferences", () => {
-  it("defaults to a hidden History inspector and a visible Branches inspector", () => {
+  it("defaults to a hidden History inspector", () => {
     expect(readPanelPreferences(null)).toEqual(DEFAULT_PANEL_PREFERENCES);
-    expect(DEFAULT_PANEL_PREFERENCES.inspectorOpen).toEqual({ history: false, branches: true });
+    expect(DEFAULT_PANEL_PREFERENCES.inspectorOpen).toEqual({ history: false });
     expect(readPanelPreferences("not json")).toEqual(DEFAULT_PANEL_PREFERENCES);
   });
 
   it("restores saved flags and ignores anything malformed", () => {
     expect(readPanelPreferences(JSON.stringify({ sidebarHidden: { history: true, changes: "yes" }, inspectorOpen: { history: true, branches: 1 } }))).toEqual({
-      sidebarHidden: { changes: false, history: true, branches: false },
-      inspectorOpen: { history: true, branches: true },
+      sidebarHidden: { changes: false, history: true },
+      inspectorOpen: { history: true },
     });
   });
 });

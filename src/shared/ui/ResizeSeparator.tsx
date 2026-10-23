@@ -2,7 +2,8 @@ import { useRef, type KeyboardEvent, type PointerEvent } from "react";
 
 interface ResizeSeparatorProps {
   orientation: "vertical" | "horizontal";
-  edge: "left" | "right" | "bottom";
+  /** Which side of the rule the resized panel sits on; "top" grows as the rule moves down. */
+  edge: "left" | "right" | "top" | "bottom";
   value: number;
   min: number;
   max: number;
@@ -40,8 +41,8 @@ export function ResizeSeparator({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const increaseKeys = orientation === "vertical" ? ["ArrowRight", "ArrowUp"] : ["ArrowUp", "ArrowRight"];
-    const decreaseKeys = orientation === "vertical" ? ["ArrowLeft", "ArrowDown"] : ["ArrowDown", "ArrowLeft"];
+    const increaseKeys = orientation === "vertical" ? ["ArrowRight", "ArrowUp"] : edge === "top" ? ["ArrowDown", "ArrowRight"] : ["ArrowUp", "ArrowRight"];
+    const decreaseKeys = orientation === "vertical" ? ["ArrowLeft", "ArrowDown"] : edge === "top" ? ["ArrowUp", "ArrowLeft"] : ["ArrowDown", "ArrowLeft"];
     if (increaseKeys.includes(event.key)) {
       event.preventDefault();
       onResize(Math.min(max, value + 16));

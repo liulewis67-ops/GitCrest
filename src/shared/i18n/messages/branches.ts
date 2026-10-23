@@ -51,7 +51,7 @@ export const branches = {
   "wts.main": ["Main worktree", "主工作树"],
   "wts.linked": ["Linked worktrees", "关联工作树"],
   "wts.noMatch": ["No worktree matches “{query}”.", "没有匹配“{query}”的工作树。"],
-  "wts.missingTitle": ["{path} no longer exists. Clean it up from the Branches view.", "{path} 已不存在。可在“分支”视图中清理。"],
+  "wts.missingTitle": ["{path} no longer exists. Clean it up from the History view.", "{path} 已不存在。可在“历史”视图中清理。"],
 
   "lb.inspectFailed": ["Could not inspect this branch.", "无法检查此分支。"],
   "lb.renameFailed": ["Could not rename this branch.", "无法重命名此分支。"],

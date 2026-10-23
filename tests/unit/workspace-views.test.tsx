@@ -5,6 +5,7 @@ import type { GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } fr
 import { absoluteFilePath, CommitPanel } from "../../src/pages/workspace/CommitPanel";
 import { buildChangeTree } from "../../src/features/changes/model/repository-status-summary";
 import { WorkspacePage } from "../../src/pages/workspace/WorkspacePage";
+import { HistorySplit } from "../../src/pages/workspace/HistorySplit";
 import { CommitChanges } from "../../src/features/history/ui/CommitChanges";
 import { CommitActionsMenu } from "../../src/features/history/ui/CommitActionsMenu";
 import { defaultShortcutPreferences } from "../../src/features/settings/model/shortcut-preferences";
@@ -42,17 +43,40 @@ function renderPage(overrides: Partial<Parameters<typeof WorkspacePage>[0]> = {}
   return handlers;
 }
 
+describe("HistorySplit", () => {
+  it("puts the graph above the changes and resizes it from the rule between them", () => {
+    const onResizeGraph = vi.fn();
+    const { rerender } = render(<HistorySplit graph={<section aria-label="Commit graph" />} changes={<section aria-label="Changes" />} graphHeight={320} minGraphHeight={120} maxGraphHeight={1200} label="Resize commit graph" onResizeGraph={onResizeGraph} />);
+    const rule = screen.getByRole("separator", { name: "Resize commit graph" });
+    expect(rule.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(rule.previousElementSibling?.getAttribute("aria-label")).toBe("Commit graph");
+    expect(rule.nextElementSibling?.getAttribute("aria-label")).toBe("Changes");
+    // The graph sits above the rule, so moving the rule down makes the graph taller.
+    fireEvent.keyDown(rule, { key: "ArrowDown" });
+    expect(onResizeGraph).toHaveBeenLastCalledWith(336);
+    fireEvent.keyDown(rule, { key: "ArrowUp" });
+    expect(onResizeGraph).toHaveBeenLastCalledWith(304);
+
+    // Focus mode drops the graph; the changes take the whole column.
+    rerender(<HistorySplit changes={<section aria-label="Changes" />} graphHeight={320} minGraphHeight={120} maxGraphHeight={1200} label="Resize commit graph" onResizeGraph={onResizeGraph} />);
+    expect(screen.queryByRole("separator")).toBeNull();
+    expect(screen.getByRole("region", { name: "Changes" })).toBeDefined();
+  });
+});
+
 describe("WorkspacePage", () => {
   it("offers one tab list for the task views and moves between them with arrow keys", () => {
     const { onChangeMode } = renderPage();
     const tabs = within(screen.getByRole("tablist", { name: "Workspace views" })).getAllByRole("tab");
-    expect(tabs.map((tab) => tab.textContent)).toEqual(["Workspace3", "History", "Branches"]);
+    expect(tabs.map((tab) => tab.textContent)).toEqual(["Workspace3", "History"]);
     expect(tabs[0].getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("tabpanel").getAttribute("aria-labelledby")).toBe("workspace-tab-changes");
     fireEvent.keyDown(tabs[0], { key: "ArrowRight" });
     expect(onChangeMode).toHaveBeenCalledWith("history");
-    fireEvent.keyDown(tabs[0], { key: "ArrowLeft" });
-    expect(onChangeMode).toHaveBeenCalledWith("branches");
+    fireEvent.keyDown(tabs[0], { key: "End" });
+    expect(onChangeMode).toHaveBeenLastCalledWith("history");
+    fireEvent.keyDown(tabs[0], { key: "Home" });
+    expect(onChangeMode).toHaveBeenLastCalledWith("changes");
   });
 
   it("groups Fetch, Pull and Push and states incoming and outgoing commits without changing their names", () => {

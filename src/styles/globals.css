@@ -395,8 +395,6 @@ button:disabled { cursor: not-allowed; }
 
 
 /* History */
-.historyListPanel { container-type: inline-size; }
-.historyListPanel .historyWorkspace { display: flex; flex: 1; flex-direction: column; min-height: 0; }
 .commitChanges { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
 .commitChangesHeader { display: flex; flex: none; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--line); background: var(--surface); }
 .commitChangesTitle { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
@@ -424,6 +422,12 @@ button:disabled { cursor: not-allowed; }
 
 /* Branches */
 .graphPanel { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+/* History: the commit graph above the selected commit's changes, split by a draggable rule. */
+.historySplit { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.historyGraphPane { flex: 0 0 var(--history-graph-height); container-type: inline-size; }
+.historySplit > .resizeSeparator { flex: none; height: 6px; margin-block: -3px; }
+.historyChangesPane { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; border-top: 1px solid var(--line); }
+.historySplit > .historyChangesPane:first-child { border-top: 0; }
 /* Branches sidebar, three levels: panel sections (Branches, Worktrees, Remotes) divided by rules,
    sticky Local / Remote groups that fold, then branch rows whose actions appear on hover. */
 .branchGroupLabel { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 6px; min-height: calc(30px * var(--density)); margin-top: var(--space-1); padding: 0 var(--space-1) 0 0; background: var(--surface); }
@@ -502,8 +506,8 @@ button:disabled { cursor: not-allowed; }
 .historyBranchScope .commitRefBadge { min-width: 0; max-width: none; }
 .historyBranchScope .textButton { flex: none; margin-left: auto; padding: 0; font-size: var(--type-xs); }
 @container (max-width: 420px) {
-  .historyListPanel .commitGraphOid { display: none; }
-  .historyListPanel .commitRefBadge { max-width: 96px; }
+  .historyGraphPane .commitGraphOid { display: none; }
+  .historyGraphPane .commitRefBadge { max-width: 96px; }
 }
 
 .navGroup { padding: 0 11px 13px; }
@@ -1399,9 +1403,9 @@ button:disabled { cursor: not-allowed; }
 .commitRefMore { display: none; flex: none; align-self: center; color: var(--text-muted); font-size: var(--type-2xs); font-weight: 650; }
 /* A narrow commit list shows the first ref and a count; the row's name and tooltip list them all. */
 @container (max-width: 460px) {
-  .historyListPanel .commitGraphRefs { max-width: 42%; }
-  .historyListPanel .commitRefBadge:not(:first-child) { display: none; }
-  .historyListPanel .commitRefMore { display: inline; }
+  .historyGraphPane .commitGraphRefs { max-width: 42%; }
+  .historyGraphPane .commitRefBadge:not(:first-child) { display: none; }
+  .historyGraphPane .commitRefMore { display: inline; }
 }
 .composerFooter { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .composerFooter .composerStatus { flex: 1; min-width: 0; }

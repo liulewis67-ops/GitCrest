@@ -43,8 +43,8 @@ async function openRepository(window: Page, path: string) {
   await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
   await window.locator(".repositoryRowOpen").click();
   await window.locator(".workspaceCrumb").waitFor();
-  // Branch rows, worktrees and the graph live in the Branches view.
-  await window.getByRole("tab", { name: "Branches" }).click();
+  // Branch rows, worktrees and the graph live in the History view.
+  await window.getByRole("tab", { name: "History" }).click();
 }
 
 it("creates, switches, merges and adds worktrees for branches from the UI", async () => {
