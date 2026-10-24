@@ -8,6 +8,8 @@ export interface DiffViewPreferences {
   sideBySide: boolean;
   ignoreWhitespace: boolean;
   collapseUnchanged: boolean;
+  /** The list of changed functions, types and imports beside the diff, where the language is supported. */
+  structureOutline: boolean;
 }
 
 export const DEFAULT_DIFF_VIEW_PREFERENCES: DiffViewPreferences = {
@@ -15,6 +17,7 @@ export const DEFAULT_DIFF_VIEW_PREFERENCES: DiffViewPreferences = {
   sideBySide: true,
   ignoreWhitespace: false,
   collapseUnchanged: false,
+  structureOutline: true,
 };
 
 export function readDiffViewPreferences(value: string | null): DiffViewPreferences {
@@ -26,6 +29,7 @@ export function readDiffViewPreferences(value: string | null): DiffViewPreferenc
       sideBySide: typeof candidate.sideBySide === "boolean" ? candidate.sideBySide : DEFAULT_DIFF_VIEW_PREFERENCES.sideBySide,
       ignoreWhitespace: typeof candidate.ignoreWhitespace === "boolean" ? candidate.ignoreWhitespace : DEFAULT_DIFF_VIEW_PREFERENCES.ignoreWhitespace,
       collapseUnchanged: typeof candidate.collapseUnchanged === "boolean" ? candidate.collapseUnchanged : DEFAULT_DIFF_VIEW_PREFERENCES.collapseUnchanged,
+      structureOutline: typeof candidate.structureOutline === "boolean" ? candidate.structureOutline : DEFAULT_DIFF_VIEW_PREFERENCES.structureOutline,
     };
   } catch {
     return DEFAULT_DIFF_VIEW_PREFERENCES;

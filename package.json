@@ -40,6 +40,12 @@
     "monaco-editor": "^0.57.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "tree-sitter-c-sharp": "0.23.5",
+    "tree-sitter-css": "0.25.0",
+    "tree-sitter-go": "0.25.0",
+    "tree-sitter-java": "0.23.5",
+    "tree-sitter-json": "0.24.8",
+    "tree-sitter-python": "0.25.0",
     "ws": "^8.22.0"
   },
   "devDependencies": {
@@ -80,7 +86,10 @@
       ]
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": [
+        "dmg",
+        "zip"
+      ],
       "extraResources": [
         {
           "from": "crates/gitcrest-core/target/release/gitcrest-core",

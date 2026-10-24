@@ -18,13 +18,15 @@ type Options = {
   scope?: "workingTree" | "index" | "commit";
   commitOid?: string;
   context?: DiffContext;
+  /** Reads again whenever this changes, e.g. the revision of a related document. */
+  refreshKey?: string;
 };
 
-export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, commitOid, context = "hunks" }: Options) {
+export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, commitOid, context = "hunks", refreshKey = "" }: Options) {
   const [state, setState] = useState<RepositoryDiffQueryState>({ key: "", loading: false });
   const [retryVersion, setRetryVersion] = useState(0);
   const key = repository && path && scope
-    ? `${repository.repoId}:${scope}:${commitOid || ""}:${context}:${path}`
+    ? `${repository.repoId}:${scope}:${commitOid || ""}:${context}:${refreshKey}:${path}`
     : "";
 
   useEffect(() => {
@@ -35,8 +37,9 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
     if (!api) return;
 
     let active = true;
-    const requestKey = `${repository.repoId}:${scope}:${commitOid || ""}:${context}:${path}`;
-    setState({ key: requestKey, loading: true });
+    const requestKey = `${repository.repoId}:${scope}:${commitOid || ""}:${context}:${refreshKey}:${path}`;
+    // Reading the same diff again keeps the current one on screen until the new one arrives.
+    setState((current) => ({ key: requestKey, loading: true, document: current.key === requestKey ? current.document : undefined }));
     const request = scope === "commit" && commitOid
       ? api.getRepositoryCommitDiff(repository.repoId, commitOid, path, context)
       : scope === "workingTree" || scope === "index"
@@ -49,7 +52,7 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
         if (active) setState({ key: requestKey, loading: false, error: message || (error instanceof Error ? error.message : t("err.readDiff")) });
       });
     return () => { active = false; };
-  }, [enabled, repository?.repoId, path, scope, commitOid, context, retryVersion, api]);
+  }, [enabled, repository?.repoId, path, scope, commitOid, context, refreshKey, retryVersion, api]);
 
   function retry() {
     setRetryVersion((current) => current + 1);

@@ -5,3 +5,6 @@ export { useRepositoryDiffQuery } from "./model/use-repository-diff-query";
 export { splitInlineDiff } from "./model/inline-diff";
 export const loadFileDiffViewer = () => import("./ui/FileDiffViewer");
 export { useDiffViewPreferences, type DiffViewPreferences } from "./model/use-diff-view-preferences";
+export { hasCodeStructureSupport } from "./model/monaco-language";
+export type { CodeReviewSource } from "./ui/SplitDiff";
+export type { ReviewStructure } from "./model/code-review-analysis";

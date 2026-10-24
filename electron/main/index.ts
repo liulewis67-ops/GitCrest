@@ -1,9 +1,11 @@
 import { readFileSync } from "node:fs";
+import { mkdir } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type { CoreStatus } from "../../src/api/core-status";
 import { CoreRestartPolicy } from "./core-supervisor";
+import { listLanguagePlugins, readLanguagePluginGrammar } from "./language-plugins";
 import { onSidecarUnexpectedExit, startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
 import { UpdateController, type UpdateEventSource } from "./update-controller";
 import { getLinuxUpdateManifestPublicKey, isUpdateFeedConfigured } from "./update-config";
@@ -238,6 +240,29 @@ ipcMain.handle("gitcrest:show-item-in-folder", (event, value: unknown) => {
     throw new Error("Invalid file path to reveal.");
   }
   shell.showItemInFolder(value);
+});
+
+/** Language plugins live beside the app's other data; tests point this at a temporary folder. */
+function languagePluginDirectory(): string {
+  return process.env.GITCREST_LANGUAGE_PLUGINS_PATH || join(app.getPath("userData"), "language-plugins");
+}
+
+ipcMain.handle("gitcrest:list-language-plugins", async (event) => {
+  if (!windowAccessByContentsId.has(event.sender.id)) throw new Error("This window is not authorized to read language plugins.");
+  return await listLanguagePlugins(languagePluginDirectory());
+});
+
+ipcMain.handle("gitcrest:read-language-plugin-grammar", async (event, id: unknown) => {
+  if (!windowAccessByContentsId.has(event.sender.id)) throw new Error("This window is not authorized to read language plugins.");
+  return await readLanguagePluginGrammar(languagePluginDirectory(), id);
+});
+
+ipcMain.handle("gitcrest:open-language-plugin-folder", async (event) => {
+  if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") throw new Error("Only the main window can open the language plugin folder.");
+  const directory = languagePluginDirectory();
+  await mkdir(directory, { recursive: true });
+  const failure = await shell.openPath(directory);
+  if (failure) throw new Error(failure);
 });
 
 function senderWindow(event: IpcMainInvokeEvent): BrowserWindow {

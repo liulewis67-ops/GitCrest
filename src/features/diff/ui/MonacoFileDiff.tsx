@@ -6,6 +6,10 @@ import { ensureMonacoTheme, loadMonacoLanguage } from "./monaco-setup";
 
 export interface MonacoFileDiffHandle {
   goToDiff: (direction: "next" | "previous") => void;
+  /** Scrolls one side to a line, without taking focus from where the user is. */
+  revealLine: (side: "old" | "new", line: number) => void;
+  /** Marks lines of each side, e.g. the changed lines of a focused structure; empty lists clear the mark. */
+  highlightLines: (lines: { old: number[]; new: number[] }) => void;
 }
 
 export interface DiffPosition {
@@ -43,6 +47,9 @@ export const MonacoFileDiff = forwardRef<MonacoFileDiffHandle, MonacoFileDiffPro
   const [loadedLanguage, setLoadedLanguage] = useState<string | null>(language === "plaintext" ? language : null);
   const diffEditorRef = useRef<editor.IStandaloneDiffEditor | null>(null);
   const revealedFirstDiff = useRef(false);
+  const highlightRefs = useRef<{ old?: editor.IEditorDecorationsCollection; new?: editor.IEditorDecorationsCollection }>({});
+  const sideBySideRef = useRef(sideBySide);
+  sideBySideRef.current = sideBySide;
   const onPositionChangeRef = useRef(onPositionChange);
   onPositionChangeRef.current = onPositionChange;
 
@@ -63,12 +70,49 @@ export const MonacoFileDiff = forwardRef<MonacoFileDiffHandle, MonacoFileDiffPro
     revealedFirstDiff.current = false;
   }, [original, modified]);
 
+  // The wrapper disposes the text models before the diff editor, which Monaco reports as an error once
+  // decorations or a cursor are attached. This cleanup runs first, so detach the models, then dispose them.
+  useEffect(() => () => {
+    const diffEditor = diffEditorRef.current;
+    if (!diffEditor) return;
+    highlightRefs.current.old?.clear();
+    highlightRefs.current.new?.clear();
+    highlightRefs.current = {};
+    const model = diffEditor.getModel();
+    diffEditor.setModel(null);
+    model?.original.dispose();
+    model?.modified.dispose();
+  }, []);
+
   useImperativeHandle(ref, () => ({
     goToDiff: (direction) => {
       const diffEditor = diffEditorRef.current;
       if (!diffEditor) return;
       diffEditor.goToDiff(direction);
       diffEditor.getModifiedEditor().focus();
+    },
+    revealLine: (side, line) => {
+      const diffEditor = diffEditorRef.current;
+      if (!diffEditor) return;
+      // The unified layout hides the original editor; callers pass new-side lines there.
+      const target = side === "old" && sideBySideRef.current ? diffEditor.getOriginalEditor() : diffEditor.getModifiedEditor();
+      target.setPosition({ lineNumber: Math.max(1, line), column: 1 });
+      target.revealLineInCenter(Math.max(1, line));
+    },
+    highlightLines: (lines) => {
+      const diffEditor = diffEditorRef.current;
+      if (!diffEditor) return;
+      const decorate = (target: editor.ICodeEditor, numbers: number[], slot: "old" | "new") => {
+        const decorations = numbers.map((lineNumber) => ({
+          range: { startLineNumber: lineNumber, startColumn: 1, endLineNumber: lineNumber, endColumn: 1 },
+          options: { isWholeLine: true, linesDecorationsClassName: "structureFocusGutter" },
+        }));
+        const existing = highlightRefs.current[slot];
+        if (existing) existing.set(decorations);
+        else highlightRefs.current[slot] = target.createDecorationsCollection(decorations);
+      };
+      decorate(diffEditor.getOriginalEditor(), lines.old, "old");
+      decorate(diffEditor.getModifiedEditor(), lines.new, "new");
     },
   }), []);
 

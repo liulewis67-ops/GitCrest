@@ -1,64 +1,72 @@
-import { Language, Parser } from "@willbooster/web-tree-sitter";
-import javascriptGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-javascript/tree-sitter-javascript.wasm?url";
-import rustGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-rust/tree-sitter-rust.wasm?url";
-import tsxGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-typescript/tree-sitter-tsx.wasm?url";
-import typescriptGrammarUrl from "../../../../node_modules/@willbooster/tree-sitter-typescript/tree-sitter-typescript.wasm?url";
-import runtimeWasmUrl from "../../../../node_modules/@willbooster/web-tree-sitter/web-tree-sitter.wasm?url";
-
-export type TreeSitterGrammar = "javascript" | "rust" | "tsx" | "typescript";
+import type { Parser, Tree } from "@willbooster/web-tree-sitter";
+import { languageById, loadGrammarModule, type LanguageDefinition, type SourceDeclaration } from "../../languages";
 
 export type TreeSitterParseResult =
   | { status: "parsed"; recovered: boolean }
   | { status: "unsupported"; reason: "language" | "tooLarge" | "parserUnavailable" };
 const MAX_PARSE_CODE_UNITS = 250_000;
 
-const grammarUrls: Record<TreeSitterGrammar, string> = {
-  javascript: javascriptGrammarUrl,
-  rust: rustGrammarUrl,
-  tsx: tsxGrammarUrl,
-  typescript: typescriptGrammarUrl,
-};
-let runtimeInitialization: Promise<void> | null = null;
-const loadedLanguages = new Map<TreeSitterGrammar, Promise<Language>>();
+export type SourceStructureResult =
+  | { status: "parsed"; original: SourceDeclaration[]; modified: SourceDeclaration[]; recovered: boolean }
+  | { status: "unsupported"; reason: "language" | "tooLarge" | "parserUnavailable" };
 
-async function loadLanguage(grammar: TreeSitterGrammar): Promise<Language> {
-  if (!runtimeInitialization) {
-    runtimeInitialization = Parser.init({ locateFile: () => runtimeWasmUrl }).catch((error: unknown) => {
-      runtimeInitialization = null;
-      throw error;
-    });
-  }
-  await runtimeInitialization;
+/** Lists the declarations of both complete sides of a file; trees never leave this function. */
+export async function parseSourceStructure(
+  language: LanguageDefinition | undefined,
+  original: string,
+  modified: string,
+): Promise<SourceStructureResult> {
+  if (!language) return { status: "unsupported", reason: "language" };
+  if (original.length + modified.length > MAX_PARSE_CODE_UNITS) return { status: "unsupported", reason: "tooLarge" };
 
-  let loading = loadedLanguages.get(grammar);
-  if (!loading) {
-    loading = Language.load(grammarUrls[grammar]).catch((error: unknown) => {
-      loadedLanguages.delete(grammar);
-      throw error;
-    });
-    loadedLanguages.set(grammar, loading);
+  let loader: Awaited<ReturnType<typeof loadGrammarModule>> | undefined;
+  try {
+    loader = await loadGrammarModule();
+  } catch {
+    return { status: "unsupported", reason: "parserUnavailable" };
   }
-  return loading;
+  const fromText = [loader.declarationsFromText(language, original), loader.declarationsFromText(language, modified)];
+  if (fromText[0] && fromText[1]) return { status: "parsed", original: fromText[0], modified: fromText[1], recovered: false };
+
+  let parser: Parser | undefined;
+  let originalTree: Tree | null | undefined;
+  let modifiedTree: Tree | null | undefined;
+  try {
+    parser = await loader.createParser(language);
+    originalTree = parser.parse(original);
+    modifiedTree = parser.parse(modified);
+    if (!originalTree || !modifiedTree) return { status: "unsupported", reason: "parserUnavailable" };
+    return {
+      status: "parsed",
+      original: loader.declarationsFromTree(language, originalTree.rootNode),
+      modified: loader.declarationsFromTree(language, modifiedTree.rootNode),
+      recovered: originalTree.rootNode.hasError || modifiedTree.rootNode.hasError,
+    };
+  } catch {
+    return { status: "unsupported", reason: "parserUnavailable" };
+  } finally {
+    originalTree?.delete();
+    modifiedTree?.delete();
+    parser?.delete();
+  }
 }
 
-/** Parses a Git hunk excerpt with a bundled grammar; failures explicitly select plain-text fallback. */
+/** Parses a Git hunk excerpt with the language's grammar; failures explicitly select plain-text fallback. */
 export async function parseDiffHunkSyntax(
-  grammar: string | null,
+  languageId: string | null,
   original: string,
   modified: string,
 ): Promise<TreeSitterParseResult> {
-  if (grammar !== "javascript" && grammar !== "rust" && grammar !== "tsx" && grammar !== "typescript") {
-    return { status: "unsupported", reason: "language" };
-  }
+  const language = languageId ? languageById(languageId) : undefined;
+  if (!language?.grammar) return { status: "unsupported", reason: "language" };
   if (original.length + modified.length > MAX_PARSE_CODE_UNITS) return { status: "unsupported", reason: "tooLarge" };
 
   let parser: Parser | undefined;
-  let originalTree: ReturnType<Parser["parse"]> | undefined;
-  let modifiedTree: ReturnType<Parser["parse"]> | undefined;
+  let originalTree: Tree | null | undefined;
+  let modifiedTree: Tree | null | undefined;
   try {
-    const language = await loadLanguage(grammar);
-    parser = new Parser();
-    parser.setLanguage(language);
+    const loader = await loadGrammarModule();
+    parser = await loader.createParser(language);
     originalTree = parser.parse(original);
     modifiedTree = parser.parse(modified);
     if (!originalTree || !modifiedTree) return { status: "unsupported", reason: "parserUnavailable" };

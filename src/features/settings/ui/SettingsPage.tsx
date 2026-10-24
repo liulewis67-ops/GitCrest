@@ -17,6 +17,7 @@ import { SETTINGS_SECTIONS, type SettingsSectionId } from "./settings-sections";
 import type { UpdateStatus } from "../../../api/update-status";
 import { LOCALES, useI18n } from "../../../shared/i18n";
 import { AccountsSection } from "../../accounts";
+import { LanguagesSection } from "../../languages";
 
 export function SettingsPage({
   api,
@@ -209,6 +210,8 @@ export function SettingsPage({
               <h3 id="settings-appearance-title" tabIndex={-1}>{t("settings.section.appearance")}</h3>
               <AppearanceSettings />
             </section>
+
+            <LanguagesSection />
 
             <section className="settingsSection" id="settings-section-shortcuts" aria-labelledby="shortcut-preferences-title">
               <div className="settingsSectionHeading">

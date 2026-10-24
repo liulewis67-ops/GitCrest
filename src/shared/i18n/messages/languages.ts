@@ -1,0 +1,16 @@
+export const languages = {
+  "settings.section.languages": ["Languages", "语言"],
+  "lang.intro": ["Code-aware diffs group changes by function, type, rule or section for these languages. Other files keep the line diff.", "以下语言的代码感知差异会按函数、类型、规则或章节归组修改；其它文件仍使用按行差异。"],
+  "lang.builtinAria": ["Built-in languages", "内置语言"],
+  "lang.plugins": ["Language plugins", "语言插件"],
+  "lang.pluginsIntro": ["Add a language by putting a plugin folder in the plugin folder: a gitcrest-language.json manifest and a tree-sitter grammar compiled to .wasm. Plugins describe structure with rules only and cannot run code. Built-in languages take precedence for the same file types.", "将插件文件夹放入插件目录即可添加语言：其中包含 gitcrest-language.json 清单和编译为 .wasm 的 tree-sitter 语法。插件只能用规则描述结构，不能运行代码。同一文件类型以内置语言为准。"],
+  "lang.openFolder": ["Open plugin folder", "打开插件目录"],
+  "lang.reload": ["Reload plugins", "重新加载插件"],
+  "lang.reloading": ["Reloading…", "正在重新加载…"],
+  "lang.folder": ["Plugin folder:", "插件目录："],
+  "lang.none": ["No language plugins are installed.", "未安装语言插件。"],
+  "lang.desktopOnly": ["Language plugins are available in the GitCrest desktop app.", "语言插件仅在 GitCrest 桌面应用中可用。"],
+  "lang.ready": ["Ready", "可用"],
+  "lang.failed": ["Not loaded", "未加载"],
+  "lang.shadowed": ["Handled by a built-in language instead: {types}", "以下类型改由内置语言处理：{types}"],
+} as const;

@@ -2,5 +2,12 @@ allowBuilds:
   electron: true
   electron-winstaller: true
   esbuild: false
+  # Grammar packages ship a ready .wasm; their native Node bindings are never used.
+  tree-sitter-c-sharp: false
+  tree-sitter-css: false
+  tree-sitter-go: false
+  tree-sitter-java: false
+  tree-sitter-json: false
+  tree-sitter-python: false
 overrides:
   "@electron/get@^3.0.0": 3.1.0

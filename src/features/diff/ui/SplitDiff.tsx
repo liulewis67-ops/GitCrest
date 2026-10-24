@@ -1,13 +1,31 @@
 import { useI18n } from "../../../shared/i18n";
 import type { DiffDocumentResponse } from "../../../api/client";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { rowKey, structureSelection, type ReviewStructure, type SideLine } from "../model/code-review-analysis";
 import { splitInlineDiff } from "../model/inline-diff";
 import { monacoLanguageForPath } from "../model/monaco-language";
 import { exceedsMonacoViewLimits } from "../model/monaco-view-limits";
+import { rowSelectionsFor, selectedRowKeys } from "../model/row-selection";
+import { useCodeReviewAnalysis } from "../model/use-code-review-analysis";
 import { DiffStatusNotice } from "./DiffStatusNotice";
 import { BlameAnnotation, blameGutterLabel, type BlameLookup } from "./BlameAnnotation";
+import { StructureOutline, structureDisplayName, type StructureSelectionControls } from "./StructureOutline";
 
 const MonacoDiffHunk = lazy(() => import("./MonacoDiffHunk").then((module) => ({ default: module.MonacoDiffHunk })));
+
+/** The complete file behind a hunk document, so its changes can be grouped by code structure. */
+export interface CodeReviewSource {
+  /** The same file and scope read with `context=full`. */
+  fullDocument?: DiffDocumentResponse;
+  loading: boolean;
+  error?: string;
+  onRefresh: () => void;
+  open: boolean;
+  onToggle: () => void;
+  /** A structure picked in the full-file view, to focus and select once the analysis is ready. */
+  initialStructureId?: string;
+  onInitialStructureHandled?: () => void;
+}
 
 interface SplitDiffProps {
   document: DiffDocumentResponse;
@@ -22,18 +40,36 @@ interface SplitDiffProps {
   showFileMeta?: boolean;
   /** Annotates the new side's lines with their date and author, in a middle column between the two sides. */
   blame?: BlameLookup;
+  codeReview?: CodeReviewSource;
 }
 
-export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true, blame }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true, blame, codeReview }: SplitDiffProps) {
   const { t } = useI18n();
   const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
   const [activeHunk, setActiveHunk] = useState<number | null>(null);
   const [view, setView] = useState<"split" | "monaco">("split");
+  const [activeStructureId, setActiveStructureId] = useState<string | null>(null);
+  const [withheld, setWithheld] = useState(0);
   const hunkRefs = useRef<Array<HTMLElement | null>>([]);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const activeStructureIndex = useRef(0);
   const readOnly = readOnlyOverride || document.scope === "commit";
   const language = monacoLanguageForPath(document.path);
   const monacoDegraded = exceedsMonacoViewLimits(document.hunks);
+  const reviewState = useCodeReviewAnalysis({
+    path: document.path,
+    fullDocument: codeReview?.fullDocument,
+    fullLoading: codeReview?.loading,
+    fullError: codeReview?.error,
+    hunksDocument: document,
+  });
+  const showStructure = Boolean(codeReview) && reviewState.status !== "off" && document.status === "text";
+  const analysis = reviewState.status === "ready" && reviewState.analysis.revision === document.revision ? reviewState.analysis : undefined;
+  const structuresById = useMemo(() => new Map((analysis?.structures ?? []).map((structure) => [structure.id, structure])), [analysis]);
+  const activeStructure = activeStructureId ? structuresById.get(activeStructureId) : undefined;
+  const highlightedAtoms = useMemo(() => new Set(activeStructure ? [...activeStructure.atoms, ...activeStructure.memberAtoms] : []), [activeStructure]);
+  const selectedKeys = useMemo(() => selectedRowKeys(document, selection), [document, selection]);
   // Monaco view shows each hunk's new-side lines in order; blame labels follow the same order.
   const monacoGutters = useMemo(() => blame
     ? document.hunks.map((hunk) => hunk.rows.flatMap((row) => row.newText === null || row.newText === undefined ? [] : [blameGutterLabel(blame(row.newLine, row.newText))]))
@@ -46,8 +82,99 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
     setCollapsedHunks(new Set());
     setActiveHunk(null);
     setView("split");
+    setWithheld(0);
     hunkRefs.current = [];
   }, [document.revision]);
+  useEffect(() => {
+    setActiveStructureId(null);
+    activeStructureIndex.current = 0;
+  }, [document.path, document.scope]);
+  // After staging, keep the focused structure while it still has changes, or move to the one that took its place.
+  useEffect(() => {
+    if (!analysis || !activeStructureId || structuresById.has(activeStructureId)) return;
+    const fallback = analysis.structures[Math.min(activeStructureIndex.current, analysis.structures.length - 1)];
+    setActiveStructureId(fallback?.id ?? null);
+  }, [analysis, activeStructureId, structuresById]);
+
+  const revealRow = useCallback((hunkIndex: number, rowIndex: number | null) => {
+    setCollapsedHunks((current) => {
+      if (!current.has(hunkIndex)) return current;
+      const next = new Set(current);
+      next.delete(hunkIndex);
+      return next;
+    });
+    setActiveHunk(hunkIndex);
+    requestAnimationFrame(() => {
+      const row = rowIndex === null ? null : rootRef.current?.querySelector(`[data-row="${rowKey(hunkIndex, rowIndex)}"]`);
+      (row ?? hunkRefs.current[hunkIndex])?.scrollIntoView?.({ block: row ? "center" : "nearest" });
+    });
+  }, []);
+
+  /** The displayed row closest to a line of one side; facts may point at an unchanged line. */
+  const revealLine = useCallback((at: SideLine) => {
+    let best: { hunkIndex: number; rowIndex: number; distance: number } | null = null;
+    document.hunks.forEach((hunk, hunkIndex) => hunk.rows.forEach((row, rowIndex) => {
+      const line = at.side === "old" ? row.oldLine : row.newLine;
+      if (line === null) return;
+      const distance = Math.abs(line - at.line);
+      if (!best || distance < best.distance) best = { hunkIndex, rowIndex, distance };
+    }));
+    const found = best as { hunkIndex: number; rowIndex: number } | null;
+    if (found) revealRow(found.hunkIndex, found.rowIndex);
+  }, [document.hunks, revealRow]);
+
+  const activateStructure = useCallback((structure: ReviewStructure) => {
+    setActiveStructureId(structure.id);
+    setWithheld(0);
+    activeStructureIndex.current = Math.max(0, analysis?.structures.indexOf(structure) ?? 0);
+    const first = [...structure.atoms, ...structure.memberAtoms]
+      .map((index) => analysis?.atoms[index]?.selection)
+      .filter((item) => item !== undefined)
+      .sort((a, b) => a.hunkIndex - b.hunkIndex || a.rowIndex - b.rowIndex)[0];
+    if (first) revealRow(first.hunkIndex, first.rowIndex);
+  }, [analysis, revealRow]);
+
+  const structureControls = useMemo<StructureSelectionControls | undefined>(() => {
+    if (readOnly || !analysis) return undefined;
+    return {
+      disabled,
+      withheld,
+      stateOf: (structure) => {
+        const { rows } = structureSelection(analysis, structure.id, structure.memberAtoms.length > 0);
+        const chosen = rows.filter((row) => selectedKeys.has(rowKey(row.hunkIndex, row.rowIndex))).length;
+        return rows.length > 0 && chosen === rows.length ? "all" : chosen > 0 ? "some" : "none";
+      },
+      select: (structure, includeMembers) => {
+        const { rows, withheld: left } = structureSelection(analysis, structure.id, includeMembers);
+        const keys = new Set(selectedKeys);
+        for (const row of rows) keys.add(rowKey(row.hunkIndex, row.rowIndex));
+        setSelection(rowSelectionsFor(keys));
+        setWithheld(left);
+      },
+      deselect: (structure) => {
+        const { touched } = structureSelection(analysis, structure.id, true);
+        const keys = new Set(selectedKeys);
+        for (const row of touched) keys.delete(rowKey(row.hunkIndex, row.rowIndex));
+        setSelection(rowSelectionsFor(keys));
+        setWithheld(0);
+      },
+    };
+  }, [analysis, disabled, readOnly, selectedKeys, withheld]);
+
+  // A structure chosen in the full-file view is focused and selected here once its analysis is ready.
+  const initialStructureId = codeReview?.initialStructureId;
+  const onInitialStructureHandled = codeReview?.onInitialStructureHandled;
+  useEffect(() => {
+    if (!initialStructureId || reviewState.status === "analyzing") return;
+    const structure = structuresById.get(initialStructureId);
+    if (structure) {
+      activateStructure(structure);
+      if (structure.reliable) structureControls?.select(structure, structure.atoms.length === 0);
+    }
+    onInitialStructureHandled?.();
+    // Runs once per requested structure, when the analysis settles.
+  }, [initialStructureId, reviewState.status, structuresById]);
+
   const navigateHunk = useCallback((direction: -1 | 1) => {
     if (navigableHunks.length === 0) return;
     const activeIndex = activeHunk === null ? -1 : navigableHunks.indexOf(activeHunk);
@@ -77,8 +204,23 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
   }, [document.revision, navigateHunk, navigableHunks.length]);
   if (document.status !== "text") return <DiffStatusNotice status={document.status} />;
 
-  return (
+  const selectionSummary = analysis && selectedKeys.size > 0 ? summarizeSelection() : null;
+  function summarizeSelection() {
+    const names: string[] = [];
+    for (const key of selectedKeys) {
+      const atomIndex = analysis?.rowAtoms.get(key);
+      for (const owner of atomIndex === undefined ? [] : analysis?.atoms[atomIndex]?.owners ?? []) {
+        const structure = structuresById.get(owner);
+        const name = structure ? structureDisplayName(structure, t) : t("cr.other");
+        if (!names.includes(name)) names.push(name);
+      }
+    }
+    return t("cr.selectionIn", { count: selectedKeys.size, names: names.length > 3 ? `${names.slice(0, 3).join(", ")}…` : names.join(", ") });
+  }
+
+  const diff = (
     <div
+      ref={rootRef}
       className={showFileMeta ? "splitDiff" : "splitDiff noFileMeta"}
       aria-label={t("sd.diffAria", { scope: document.scope, path: document.path })}
       tabIndex={0}
@@ -86,6 +228,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
       {showFileMeta && <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>}
       <div className="splitDiffNavigation" aria-label={t("sd.navAria")}>
         <span>{navigableHunks.length ? t("sd.changes", { current: activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1, total: navigableHunks.length }) : t("sd.noChanges")}</span>
+        {showStructure && codeReview && <button type="button" aria-pressed={codeReview.open} title={t("cr.toggleTitle")} onClick={codeReview.onToggle}>{t("cr.toggle")}</button>}
         {onShowFullFile && <button type="button" title={t("fd.fullFileTitle")} onClick={onShowFullFile}>{t("fd.fullFile")}</button>}
         <button type="button" aria-pressed={view === "split"} onClick={() => setView("split")}>{t("sd.splitView")}</button>
         <button type="button" aria-pressed={view === "monaco"} disabled={monacoDegraded} title={monacoDegraded ? t("sd.monacoTooLargeTitle") : undefined} onClick={() => setView("monaco")}>{t("sd.monacoView")}</button>
@@ -143,8 +286,25 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
               modifiedGutter={monacoGutters?.[hunkIndex]}
             />
           </Suspense>}
-          {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => (
-            <div className={`splitDiffRow splitDiffRow-${row.kind}${blame ? " withBlame" : ""}`} role="group" aria-label={row.kind === "change" ? t("sd.changedLines") : t("sd.contextLines")} key={`${hunkIndex}:${rowIndex}`}>
+          {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => {
+            const atomIndex = row.kind === "change" ? analysis?.rowAtoms.get(rowKey(hunkIndex, rowIndex)) : undefined;
+            const atom = atomIndex === undefined ? undefined : analysis?.atoms[atomIndex];
+            const inStructure = atomIndex !== undefined && highlightedAtoms.has(atomIndex);
+            const sharedWith = atom && atom.owners.length > 1 && inStructure
+              ? atom.owners.filter((owner) => owner !== activeStructureId).map((owner) => {
+                const structure = structuresById.get(owner);
+                return structure ? structureDisplayName(structure, t) : t("cr.other");
+              }).join(", ")
+              : "";
+            return (
+            <div
+              className={`splitDiffRow splitDiffRow-${row.kind}${blame ? " withBlame" : ""}${inStructure ? " splitDiffRow-structure" : ""}${sharedWith ? " splitDiffRow-shared" : ""}`}
+              role="group"
+              aria-label={row.kind === "change" ? t("sd.changedLines") : t("sd.contextLines")}
+              title={sharedWith ? t("cr.sharedRowTitle", { names: sharedWith }) : undefined}
+              data-row={rowKey(hunkIndex, rowIndex)}
+              key={`${hunkIndex}:${rowIndex}`}
+            >
               {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"
                 aria-label={t("sd.selectRowAria", { hunk: hunkIndex + 1, row: rowIndex + 1 })}
@@ -188,18 +348,36 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                 <code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code>
               </div>
             </div>
-          ))}
+            );
+          })}
         </section>
         );
       })}
       {!readOnly && <div className="diffSelectionActions">
-        <span>{t(selection.length === 1 ? "sd.selectionOne" : "sd.selectionMany", { count: selection.length })}</span>
+        <span>{t(selection.length === 1 ? "sd.selectionOne" : "sd.selectionMany", { count: selection.length })}{selectionSummary && <small className="diffSelectionStructures"> · {selectionSummary}</small>}</span>
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
           {document.scope === "index" ? t("sd.unstageSel") : t("sd.stageSel")}
         </button>
         {document.scope === "workingTree" && onDiscardSelection && <button className="dangerTextButton" type="button" disabled={disabled || selection.length === 0} onClick={() => onDiscardSelection(selection)}>{t("sd.discardSel")}</button>}
         {document.scope === "index" && onCommitSelection && <button type="button" disabled={disabled || selection.length === 0} onClick={() => onCommitSelection(selection)}>{t("sd.addToCommit")}</button>}
       </div>}
+    </div>
+  );
+
+  if (!showStructure || !codeReview) return diff;
+  return (
+    <div className={`codeReviewFrame${codeReview.open ? " outlineOpen" : ""}`}>
+      {codeReview.open && <StructureOutline
+        state={reviewState}
+        activeId={activeStructureId}
+        onActivate={activateStructure}
+        onJump={revealLine}
+        reviewKey={document.scope === "commit" ? undefined : `${document.repoId}\u0000${document.scope}\u0000${document.path}`}
+        selection={structureControls}
+        onRefresh={codeReview.onRefresh}
+        onClose={codeReview.onToggle}
+      />}
+      <div className="codeReviewMain">{diff}</div>
     </div>
   );
 }

@@ -23,7 +23,8 @@ import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
 import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
-import { loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
+import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
+import { useLanguageRegistry } from "../features/languages";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, useOpenCreatedWorktree, WorktreeSwitcher, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
 import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
@@ -333,6 +334,20 @@ function App() {
     context: diffViewPreferences.layout === "full" ? "full" : "hunks",
   });
   const { state: diffState, activeKey: activeDiffKey } = diffQuery;
+  // The line view groups changes by code structure, which needs the complete file read after the same hunks.
+  // Language plugins arrive after startup, so the registry is read here to re-render when they do.
+  useLanguageRegistry();
+  const hunksDocument = diffState.key === activeDiffKey && !diffState.loading ? diffState.document : undefined;
+  const structureQuery = useRepositoryDiffQuery({
+    api: apiRef.current,
+    enabled: Boolean(diffTarget && hunksDocument?.status === "text" && diffViewPreferences.layout === "hunks" && hasCodeStructureSupport(diffTarget.path)),
+    repository: selectedRepository,
+    path: diffTarget?.path,
+    scope: diffTarget?.scope,
+    commitOid: diffTarget?.commitOid,
+    context: "full",
+    refreshKey: hunksDocument?.revision,
+  });
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
@@ -721,6 +736,8 @@ function App() {
     onTerminalPlan: (task, plan) => {
       // Staging runs without opening the task center; a failure still has to be seen.
       if (plan.kind === "staging" && task.status === "failed") setTasksOpen(true);
+      // Staged or discarded lines leave the open diff outdated; read it again in place.
+      if (plan.kind === "staging" && task.status === "succeeded" && task.repoId === selectedRepository?.repoId) diffQuery.retry();
       if (plan.kind !== "commit") return;
       const commitContext = commitSubmission.takeTaskContext(task.taskId);
       // The commit may finish after the user switched tabs, so it clears its own repository's draft.
@@ -902,6 +919,7 @@ function App() {
       onChangeDiffViewPreferences={updateDiffViewPreferences}
       onToggleFocusMode={toggleFocusMode}
       onRetryDiff={diffQuery.retry}
+      structureSource={{ state: structureQuery.state, activeKey: structureQuery.activeKey, retry: structureQuery.retry }}
       onStageSelection={stageSelectedChanges}
       onDiscardSelection={requestDiscard}
       onCommitSelection={addDiffSelectionToCommit}

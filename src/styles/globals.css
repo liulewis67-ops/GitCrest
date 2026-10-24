@@ -1440,3 +1440,74 @@ button:disabled { cursor: not-allowed; }
 }
 .composerFooter { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
 .composerFooter .composerStatus { flex: 1; min-width: 0; }
+/* Code-aware diff: a rail listing the file's changed structures beside either diff view. The rail and the
+   diff scroll separately, so the list stays in view while the code moves. */
+.codeReviewFrame, .fileDiffBody { position: relative; display: flex; flex: 1; min-width: 0; min-height: 0; container-type: inline-size; }
+.codeReviewMain { flex: 1; min-width: 0; overflow: auto; overscroll-behavior: contain; }
+.fileDiffMain { display: flex; flex: 1; flex-direction: column; min-width: 0; min-height: 0; }
+.structureOutline { display: flex; flex: 0 0 264px; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--line); background: var(--surface-raised); color: var(--text-secondary); font-size: var(--type-xs); }
+.structureOutlineHeader { display: flex; align-items: baseline; gap: 8px; min-height: 34px; padding: 8px 6px 6px 12px; border-bottom: 1px solid var(--line); }
+.structureOutlineHeader strong { color: var(--text); font-size: var(--type-xs); font-weight: 650; white-space: nowrap; }
+.structureOutlineHeader span { min-width: 0; overflow: hidden; color: var(--text-muted); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
+.structureOutlineClose { margin-left: auto; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text-muted); font-size: var(--type-sm); cursor: pointer; }
+.structureOutlineClose:hover { background: var(--surface-soft); color: var(--text); }
+.structureOutlineFilter { margin: 8px 10px 4px; padding: 4px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface); color: var(--text); font-size: var(--type-xs); }
+.structureOutlineNote { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 12px; color: var(--text-muted); line-height: 1.5; }
+.structureOutlineNote p { margin: 0; }
+.structureOutlineNote .loadingSpinner { width: 12px; height: 12px; }
+p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: center; }
+.structureOutlineNote.warning { color: var(--amber); }
+.structureTree { flex: 1; min-height: 80px; overflow: auto; padding: 2px 4px 8px; }
+.structureItem { display: grid; grid-template-columns: 10px auto minmax(0, 1fr) auto auto; align-items: center; gap: 6px; min-height: 26px; padding-right: 8px; border-radius: var(--radius-4); cursor: pointer; }
+.structureItem:hover { background: var(--surface-soft); }
+.structureItem:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+.structureItem.active { background: var(--accent-soft); color: var(--text); }
+.structureStatus { font-size: var(--type-2xs); text-align: center; }
+.status-added .structureStatus { color: var(--git-added); }
+.status-removed .structureStatus { color: var(--git-deleted); }
+.status-modified .structureStatus { color: var(--amber); }
+.structureKind { color: var(--text-muted); font-size: var(--type-2xs); }
+.structureName { min-width: 0; overflow: hidden; color: var(--text); font-family: var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.status-removed .structureName { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--git-deleted) 60%, transparent); }
+.structureItem.reviewed .structureName { color: var(--text-muted); }
+.structureReviewed { color: var(--green); }
+.structureCount { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.structureDetail { display: flex; flex: none; flex-direction: column; gap: 7px; max-height: 55%; padding: 10px 12px 12px; overflow: auto; border-top: 1px solid var(--line); background: var(--surface); }
+.structureDetail p { margin: 0; line-height: 1.45; }
+.structurePath { overflow: hidden; color: var(--text); font: var(--type-xs) var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.structureFacts { display: flex; flex-wrap: wrap; gap: 4px; }
+.structureFact { padding: 1px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-9); background: var(--surface-raised); color: var(--text-secondary); font-size: var(--type-2xs); cursor: pointer; }
+.structureFact:hover { border-color: var(--accent); color: var(--text); }
+.structureFact.fact-added { border-color: color-mix(in srgb, var(--git-added) 55%, transparent); color: var(--git-added); }
+.structureFact.fact-removed { border-color: color-mix(in srgb, var(--git-deleted) 55%, transparent); color: var(--git-deleted); }
+.structureCounts { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.structureShared { color: var(--amber); }
+.structureActions { display: flex; flex-wrap: wrap; gap: 6px; }
+.structureActions button { padding: 4px 9px; border: 1px solid var(--line-strong); border-radius: var(--radius-5); background: var(--surface-raised); color: var(--text); font-size: var(--type-xs); cursor: pointer; }
+.structureActions button:hover:not(:disabled) { border-color: var(--accent); }
+.structureActions button.primary { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.structureActions button[aria-pressed="true"] { border-color: color-mix(in srgb, var(--green) 55%, transparent); color: var(--green); }
+.structureActions button:disabled { opacity: .45; }
+.splitDiffRow-structure { box-shadow: inset 3px 0 var(--accent); }
+.splitDiffRow-shared { box-shadow: inset 3px 0 var(--amber); }
+.splitDiffRow-shared .diffRowSelect { background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.diffSelectionStructures { color: var(--text-muted); font-size: var(--type-xs); }
+.monacoFileDiff .structureFocusGutter { margin-left: 2px; border-left: 3px solid var(--accent); }
+/* In a narrow diff the rail floats over the code instead of squeezing it. */
+@container (max-width: 680px) {
+  .structureOutline { position: absolute; z-index: 3; top: 0; bottom: 0; left: 0; width: min(280px, 86%); box-shadow: var(--shadow); }
+}
+/* Settings: languages with code-aware diffs and installed language plugins. */
+.languageList { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.languageList li { display: grid; grid-template-columns: minmax(110px, auto) minmax(0, 1fr); align-items: baseline; gap: 2px 12px; }
+.languageList.plugins li { grid-template-columns: minmax(110px, auto) auto minmax(0, 1fr); padding: 6px 0; border-top: 1px solid var(--line); }
+.languageList.plugins li:first-child { border-top: 0; }
+.languageList li > p { grid-column: 1 / -1; margin: 0; }
+.languageName { color: var(--text); font-size: var(--type-sm); font-weight: 560; }
+.languageName small { color: var(--text-muted); font-weight: 400; }
+.languageFiles { min-width: 0; overflow-wrap: anywhere; color: var(--text-muted); font: var(--type-xs) var(--font-mono); }
+.languageState { padding: 1px 7px; border-radius: var(--radius-9); font-size: var(--type-2xs); font-weight: 650; }
+.languageState.ready { background: color-mix(in srgb, var(--green) 16%, transparent); color: var(--green); }
+.languageState.error { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
+.languageError { color: var(--danger); font-size: var(--type-xs); line-height: 1.5; overflow-wrap: anywhere; }
+.languagePluginFolder { font: var(--type-xs) var(--font-mono); overflow-wrap: anywhere; }

@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { components } from "../../src/api/schema";
 import type { CoreStatus } from "../../src/api/core-status";
 import type { UpdateStatus } from "../../src/api/update-status";
+import type { LanguagePluginListing } from "../main/language-plugins";
 
 type EventEnvelope = components["schemas"]["EventEnvelope"];
 
@@ -50,6 +51,9 @@ const api = {
   openDiffWindow: (request: DiffWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-diff-window", request),
   openConflictWindow: (request: ConflictWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-conflict-window", request),
   showItemInFolder: (path: string): Promise<void> => ipcRenderer.invoke("gitcrest:show-item-in-folder", path),
+  listLanguagePlugins: (): Promise<LanguagePluginListing> => ipcRenderer.invoke("gitcrest:list-language-plugins"),
+  readLanguagePluginGrammar: (id: string): Promise<Uint8Array> => ipcRenderer.invoke("gitcrest:read-language-plugin-grammar", id),
+  openLanguagePluginFolder: (): Promise<void> => ipcRenderer.invoke("gitcrest:open-language-plugin-folder"),
   getCoreStatus: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:get-core-status"),
   restartCore: (): Promise<CoreStatus> => ipcRenderer.invoke("gitcrest:restart-core"),
   subscribeToCoreStatus: (listener: (status: CoreStatus) => void): (() => void) => {

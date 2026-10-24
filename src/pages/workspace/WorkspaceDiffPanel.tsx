@@ -1,8 +1,8 @@
 import { useI18n } from "../../shared/i18n";
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useState } from "react";
 import type { DiffDocumentResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
-import { loadFileDiffViewer, loadSplitDiff, type DiffViewPreferences } from "../../features/diff";
+import { loadFileDiffViewer, loadSplitDiff, type CodeReviewSource, type DiffViewPreferences } from "../../features/diff";
 
 const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));
 const FileDiffViewer = lazy(() => loadFileDiffViewer().then(({ FileDiffViewer }) => ({ default: FileDiffViewer })));
@@ -19,6 +19,8 @@ interface WorkspaceDiffPanelProps {
   status?: { code: string; kind: string };
   activeDiffKey: string;
   diffState: { key: string; loading: boolean; document?: DiffDocumentResponse; error?: string };
+  /** The same file read in full, so the line view can group its changes by code structure. */
+  structureSource?: { state: { key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }; activeKey: string; retry: () => void };
   /** The file left the latest status snapshot. */
   fileMissing?: boolean;
   /** Staging, discarding and committing selected lines are blocked. */
@@ -46,6 +48,7 @@ export function WorkspaceDiffPanel({
   status,
   activeDiffKey,
   diffState,
+  structureSource,
   fileMissing,
   selectionDisabled,
   fileNavigation,
@@ -68,6 +71,25 @@ export function WorkspaceDiffPanel({
   const scopeLabel = scope === "commit" ? undefined : scope === "index" ? t("grp.staged") : status?.kind === "untracked" ? t("grp.untracked") : t("grp.unstaged");
   const focusShortcut = displayShortcut(shortcuts.focusMode, isMacPlatform);
   const openWindow = () => onOpenDiffWindow(path, scope, commitOid);
+  // A structure picked for staging in the full-file view, handed to the line view that opens next.
+  const [pendingStructure, setPendingStructure] = useState<{ path: string; id: string } | null>(null);
+  const structureState = structureSource && structureSource.state.key === structureSource.activeKey ? structureSource.state : undefined;
+  const codeReview: CodeReviewSource | undefined = structureSource ? {
+    fullDocument: structureState?.document,
+    loading: !structureState || structureState.loading,
+    error: structureState?.error,
+    onRefresh: structureSource.retry,
+    open: diffViewPreferences.structureOutline,
+    onToggle: () => onChangeDiffViewPreferences({ structureOutline: !diffViewPreferences.structureOutline }),
+    initialStructureId: pendingStructure?.path === path ? pendingStructure.id : undefined,
+    onInitialStructureHandled: () => setPendingStructure(null),
+  } : undefined;
+  const structure = {
+    onSelectForStaging: (selected: { id: string }) => {
+      setPendingStructure({ path, id: selected.id });
+      onChangeDiffViewPreferences({ layout: "hunks" });
+    },
+  };
 
   return (
     <section className="diffPanel" aria-label={t("main.fileDiff")}>
@@ -85,10 +107,10 @@ export function WorkspaceDiffPanel({
         </span>}
         <button className={`quietButton compact focusToggle${focusMode ? " active" : ""}`} type="button" aria-pressed={focusMode} aria-keyshortcuts={ariaShortcut(shortcuts.focusMode, isMacPlatform)} title={focusMode ? t("panel.exitFocusTitle", { shortcut: focusShortcut }) : t("panel.focusTitle", { shortcut: focusShortcut })} onClick={onToggleFocusMode}><span aria-hidden="true">{focusMode ? "⤡" : "⤢"}</span><span>{focusMode ? t("panel.exitFocus") : t("panel.focus")}</span></button>
       </div>
-      {diffState.key !== activeDiffKey || diffState.loading ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
+      {diffState.key !== activeDiffKey || (diffState.loading && !diffState.document) ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
         : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button>{diffViewPreferences.layout === "full" && <button className="secondaryButton" type="button" onClick={() => onChangeDiffViewPreferences({ layout: "hunks" })}>{t("fd.hunks")}</button>}</div>
-          : diffState.document && diffViewPreferences.layout === "full" ? <div className="fileDiffViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><FileDiffViewer document={diffState.document} commitOid={commitOid} preferences={diffViewPreferences} onChangePreferences={onChangeDiffViewPreferences} onShowHunks={() => onChangeDiffViewPreferences({ layout: "hunks" })} onOpenWindow={openWindow} /></Suspense></div>
-            : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={openWindow} onShowFullFile={() => onChangeDiffViewPreferences({ layout: "full" })} disabled={diffState.document.scope === "commit" || selectionDisabled} /></Suspense></div>
+          : diffState.document && diffViewPreferences.layout === "full" ? <div className="fileDiffViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><FileDiffViewer document={diffState.document} commitOid={commitOid} preferences={diffViewPreferences} onChangePreferences={onChangeDiffViewPreferences} onShowHunks={() => onChangeDiffViewPreferences({ layout: "hunks" })} onOpenWindow={openWindow} structure={structure} /></Suspense></div>
+            : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={openWindow} onShowFullFile={() => onChangeDiffViewPreferences({ layout: "full" })} disabled={diffState.document.scope === "commit" || selectionDisabled || diffState.loading} codeReview={codeReview} /></Suspense></div>
               : <div className="diffSpecialState" role="status"><p>{fileMissing ? t("main.fileGone") : t("main.preparingDiff")}</p></div>}
     </section>
   );

@@ -17,5 +17,6 @@ import { workspace } from "./workspace";
 import { settings } from "./settings";
 import { accounts } from "./accounts";
 import { layout } from "./layout";
+import { languages } from "./languages";
 
-export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout } as const;
+export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout, ...languages } as const;
