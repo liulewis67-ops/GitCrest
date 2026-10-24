@@ -108,6 +108,12 @@ pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u
         .iter()
         .flat_map(|line| line.iter().copied())
         .collect::<Vec<_>>();
+    // Each row becomes a zero-context hunk. `git apply` places a hunk from the new start when applying
+    // forward (stage, commit) and from the old start in reverse (unstage, discard); a hunk with no
+    // preimage lines, an insertion, lands exactly there. So the new start counts lines of the old side
+    // as already changed by the selected rows before it, and the old start counts lines of the new side
+    // with those rows already reverted. Unselected rows never shift either one.
+    let mut forward_shift = 0_i64;
     for (hunk_index, row_index) in selected {
         let row = read
             .document
@@ -116,16 +122,36 @@ pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u
             .and_then(|hunk| hunk.rows.get(row_index))
             .filter(|row| row.kind == DiffRowKind::Change && !row.patch_change_lines.is_empty())
             .ok_or(DiffError::InvalidPath)?;
-        let old_count = u32::from(row.old_text.is_some());
-        let new_count = u32::from(row.new_text.is_some());
-        let old_start = row
-            .old_line
-            .or(row.old_position)
-            .ok_or(DiffError::InvalidPath)?;
-        let new_start = row
-            .new_line
-            .or(row.new_position)
-            .ok_or(DiffError::InvalidPath)?;
+        let old_count = i64::from(row.old_text.is_some());
+        let new_count = i64::from(row.new_text.is_some());
+        let old_before = i64::from(
+            row.old_line
+                .or(row.old_position)
+                .ok_or(DiffError::InvalidPath)?,
+        ) - 1;
+        let new_before = i64::from(
+            row.new_line
+                .or(row.new_position)
+                .ok_or(DiffError::InvalidPath)?,
+        ) - 1;
+        let forward = old_before + forward_shift;
+        let reverse = new_before - forward_shift;
+        // A zero count names the line before the change; zero itself would pin the hunk to the start of the file.
+        let old_start = if old_count > 0 {
+            reverse + 1
+        } else if forward > 0 {
+            reverse.max(1)
+        } else {
+            reverse
+        };
+        let new_start = if new_count > 0 {
+            forward + 1
+        } else if reverse > 0 {
+            forward.max(1)
+        } else {
+            forward
+        };
+        forward_shift += new_count - old_count;
         patch.extend_from_slice(
             format!("@@ -{old_start},{old_count} +{new_start},{new_count} @@\n").as_bytes(),
         );
@@ -487,7 +513,10 @@ mod tests {
             .unwrap();
         git(&root, &["commit", "--quiet", "-am", "twenty lines"]);
         let mut changed = lines.clone();
+        // Separate change regions, after an insertion that shifts every later new line.
         changed[9] = "line 10 changed".into();
+        changed[19] = "line 20 changed".into();
+        changed.insert(1, "inserted".into());
         tokio::fs::write(root.join("readme.txt"), format!("{}\n", changed.join("\n")))
             .await
             .unwrap();
@@ -510,7 +539,7 @@ mod tests {
         )
         .await
         .unwrap();
-        assert_eq!(hunks.hunks[0].rows.len(), 7);
+        assert_eq!(hunks.hunks.len(), 3);
 
         let full = read_with_context(
             &git_service,
@@ -536,6 +565,15 @@ mod tests {
             .collect();
         assert_eq!(old, lines);
         assert_eq!(new, changed);
+        // Every row keeps the line numbers that the hunk document gives the same change.
+        for row in &full.hunks[0].rows {
+            if let (Some(line), Some(text)) = (row.old_line, row.old_text.as_deref()) {
+                assert_eq!(lines[line as usize - 1], text);
+            }
+            if let (Some(line), Some(text)) = (row.new_line, row.new_text.as_deref()) {
+                assert_eq!(changed[line as usize - 1], text);
+            }
+        }
         assert_ne!(full.revision, hunks.revision);
     }
 }

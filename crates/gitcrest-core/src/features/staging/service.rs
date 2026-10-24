@@ -880,4 +880,107 @@ mod tests {
             "first line\nsecond line\n"
         );
     }
+
+    /// Insertions have no lines for `git apply` to search for, so each one lands exactly where its
+    /// row header points. Unselected rows above it must not shift that position, in either direction.
+    #[tokio::test]
+    async fn row_selections_land_in_place_around_unselected_rows() {
+        let (_directory, root) = fixture().await;
+        let base = (0..30)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>();
+        let write = |lines: &[String]| {
+            std::fs::write(root.join("tracked.txt"), format!("{}\n", lines.join("\n"))).unwrap()
+        };
+        write(&base);
+        git(&root, &["commit", "--quiet", "-am", "thirty lines"]);
+        let mut worktree = base.clone();
+        worktree.insert(27, "end".into());
+        worktree.remove(20);
+        worktree.insert(14, "middle".into());
+        worktree.remove(8);
+        worktree.insert(1, "top".into());
+        write(&worktree);
+
+        let read = |scope: DiffScope| {
+            let root = root.clone();
+            async move {
+                let snapshot = crate::features::status::read("repo".into(), &root)
+                    .await
+                    .unwrap();
+                let file = snapshot
+                    .files
+                    .iter()
+                    .find(|file| file.path == "tracked.txt")
+                    .unwrap()
+                    .clone();
+                crate::features::diff::read_with_patch(
+                    &crate::git::command::GitCommandService::default(),
+                    &crate::storage::diff::DiffWorktreeAdapter,
+                    "repo".into(),
+                    &root,
+                    &file,
+                    scope,
+                )
+                .await
+                .unwrap()
+            }
+        };
+        let rows_for = |read: &crate::features::diff::DiffRead, texts: &[&str]| {
+            let mut rows = Vec::new();
+            for (hunk_index, hunk) in read.document.hunks.iter().enumerate() {
+                for (row_index, row) in hunk.rows.iter().enumerate() {
+                    let text = row.new_text.as_deref().or(row.old_text.as_deref());
+                    if row.kind == crate::domain::diff::DiffRowKind::Change
+                        && texts.iter().any(|wanted| Some(*wanted) == text)
+                    {
+                        rows.push((hunk_index, row_index));
+                    }
+                }
+            }
+            assert_eq!(rows.len(), texts.len());
+            rows
+        };
+        let index_lines = || git_output(&root, &["show", ":tracked.txt"]);
+        let expected = |lines: Vec<String>| format!("{}\n", lines.join("\n"));
+
+        // Stage: insert "middle", delete line 20, insert "end"; leave "top" and the deleted line 8.
+        let working = read(DiffScope::WorkingTree).await;
+        let patch = crate::features::diff::select_rows(
+            &working,
+            &rows_for(&working, &["middle", "line 20", "end"]),
+        )
+        .unwrap();
+        run(&root, patch_command(StagingPatchAction::Stage, patch));
+        let mut staged = base.clone();
+        staged.insert(27, "end".into());
+        staged.remove(20);
+        staged.insert(14, "middle".into());
+        assert_eq!(index_lines(), expected(staged.clone()));
+
+        // Unstage the deletion of line 20 while "middle" above it stays staged.
+        let index = read(DiffScope::Index).await;
+        let patch =
+            crate::features::diff::select_rows(&index, &rows_for(&index, &["line 20"])).unwrap();
+        run(&root, patch_command(StagingPatchAction::Unstage, patch));
+        let mut unstaged = base.clone();
+        unstaged.insert(27, "end".into());
+        unstaged.insert(14, "middle".into());
+        assert_eq!(index_lines(), expected(unstaged));
+
+        // Discard the deletion of line 8 below the kept, unselected "top" insertion.
+        let working = read(DiffScope::WorkingTree).await;
+        let patch =
+            crate::features::diff::select_rows(&working, &rows_for(&working, &["line 8"])).unwrap();
+        run(&root, discard_patch_command(patch));
+        let mut restored = worktree.clone();
+        restored.insert(9, "line 8".into());
+        // `core.autocrlf` may check the file out with CRLF; only the line order is under test.
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            expected(restored)
+        );
+    }
 }

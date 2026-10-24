@@ -19,12 +19,16 @@ const MAX_DIFF_BYTES: usize = 10 * 1024 * 1024;
 const MAX_ERROR_BYTES: usize = 16 * 1024;
 const DIFF_DEADLINE: Duration = Duration::from_secs(10);
 
+/// Context wide enough for every file whose patch fits [`MAX_DIFF_BYTES`]. `i32::MAX` itself overflows
+/// in some Git versions (2.37 emits several overlapping, garbled hunks), so it stays far below that.
+const FULL_FILE_CONTEXT_LINES: u32 = 100_000_000;
+
 fn unified_argument(context: DiffContext) -> OsString {
-    OsString::from(match context {
-        DiffContext::Hunks => "--unified=3",
+    match context {
+        DiffContext::Hunks => OsString::from("--unified=3"),
         // Git clamps context to the file, so the patch is one hunk spanning every line.
-        DiffContext::FullFile => "--unified=2147483647",
-    })
+        DiffContext::FullFile => OsString::from(format!("--unified={FULL_FILE_CONTEXT_LINES}")),
+    }
 }
 
 pub(crate) async fn read_file_patch(
