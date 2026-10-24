@@ -10,7 +10,7 @@ GitCrest MVP 是一款跨平台桌面 Git 客户端，面向专业开发者，�
 |---|---|
 | 产品负责人 | 范围、优先级、验收标准 |
 | UX/UI 设计 | 信息架构、界面、交互和设计系统 |
-| 前端负责人 | React、窗口 UI、状态管理、Canvas、Monaco |
+| 前端负责人 | React、窗口 UI、状态管理、提交图、Monaco |
 | Rust 负责人 | axum HTTP 服务、Git 引擎、Diff、数据模型、安全 |
 | 测试负责人 | E2E、性能、跨平台验证 |
 
@@ -24,7 +24,7 @@ GitCrest MVP 是一款跨平台桌面 Git 客户端，面向专业开发者，�
 - AI 功能常作为附加能力，未真正嵌入 Git 工作流。
 - 跨平台体验不一致，Linux 支持不足。
 
-GitCrest 通过 Electron + Rust sidecar（axum HTTP 服务）+ React + Canvas + tree-sitter 组合，提供一致的跨平台界面、高性能本地 Git 能力、代码感知 Diff 和本地优先的安全体验。
+GitCrest 采用 Electron + Rust sidecar（axum HTTP 服务）+ React 的桌面架构。提交图使用虚拟化列表和 SVG 连线，代码 Diff 使用 Monaco，并在 JavaScript、TypeScript、TSX 和 Rust 代码块上进行 tree-sitter 语法解析。当前 tree-sitter 解析用于识别语法状态和降级处理，尚未提供函数或类级别的语义变更分析。
 
 ## 4. 目标
 
@@ -132,7 +132,7 @@ GitCrest 用“代码感知”和“安全可控”替代单纯的 Git 命令包
 
 需求：
 
-- Canvas 2D 提交图。
+- 可虚拟化的提交图，提交节点以列表呈现，分支和 merge 关系以 SVG 连线呈现。
 - 虚拟滚动。
 - 提交详情面板。
 - 搜索 SHA、作者、日期、message。
@@ -160,6 +160,8 @@ GitCrest 用“代码感知”和“安全可控”替代单纯的 Git 命令包
 - 1,000 行文件 Diff 计算低于 200ms。
 - Diff 窗口只拥有只读权限和 diff 相关 HTTP API 权限。
 - 用户能从文件树、提交详情和工作区打开 Diff。
+
+当前实现备注：主窗口显示 Split Diff，独立 Diff 窗口提供 Split/Unified；现有折叠能力覆盖 Diff hunk 和未变化区域。tree-sitter 当前负责语法解析状态，不会把变更归类到函数、类或其他语义节点。
 
 ### 7.7 合并、冲突和 Rebase
 
