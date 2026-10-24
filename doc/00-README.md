@@ -27,6 +27,8 @@
 | `13-implementation-plan.md` | MVP 分阶段实施台账：小阶段交付、验收标准、状态与逐阶段提交规则 |
 | `14-backend-development-guidelines.md` | Rust 后端目录与依赖、API 分组、并发控制、任务恢复、可用性目标及验收规范 |
 | [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) | pnpm、React、Tailwind 前端规范，目录分层、状态与通信、现代化设计及交付验收 |
+| [PRD-code-aware-diff.md](PRD-code-aware-diff.md) | 代码感知 Diff：结构导航、变更事实与按结构精确暂存的优化设计、实现位置与验证记录；第一版已实现 |
+| [language-plugins.md](language-plugins.md) | 代码感知 Diff 的内置语言、语言插件的安装、清单与结构规则格式、安全限制与排查 |
 
 ## 产品一句话
 

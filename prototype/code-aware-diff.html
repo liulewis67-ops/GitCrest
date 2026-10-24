@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GitCrest · 代码感知 Diff 交互设计</title>
+<style>
+:root{color-scheme:dark;--bg:#171b21;--surface:#1d232b;--raised:#232a33;--line:#333b46;--text:#e6eaf0;--muted:#a4afbd;--dim:#8693a2;--accent:#6db6d8;--green:#8fcba0;--red:#d98787;--amber:#d4b477;--mono:Consolas,"SFMono-Regular",monospace}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:13px/1.5 "Segoe UI","Microsoft YaHei",sans-serif}button,input,select{font:inherit}button{color:inherit;cursor:pointer;border:1px solid transparent;border-radius:4px;background:transparent;padding:5px 9px}button:hover{background:var(--raised)}button:disabled{opacity:.42;cursor:default}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}button[aria-pressed=true]{color:var(--accent);background:#6db6d815}input[type=checkbox]{accent-color:var(--accent);width:14px;height:14px;cursor:pointer}.primary{background:var(--accent);color:#10232c;font-weight:600}.primary:hover{background:#81c8e8}.secondary{border-color:var(--line)}.muted{color:var(--muted)}.mono,code{font-family:var(--mono)}.count{font:11px var(--mono);color:var(--dim)}.eyebrow{font-size:11px;letter-spacing:.06em;color:var(--dim)}
+.topbar{height:48px;display:flex;align-items:center;gap:24px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--surface)}.brand{display:flex;align-items:center;gap:9px;font-weight:650}.brand svg{width:22px;height:22px;color:var(--accent)}.branch{font-family:var(--mono);color:var(--muted);font-size:12px}.prototype-label{margin-left:auto;color:var(--amber);font-size:11px}.reset{font-size:12px;color:var(--muted)}
+.shell{display:grid;grid-template-columns:208px minmax(0,1fr);height:calc(100dvh - 48px);min-height:580px}.files{padding:22px 12px;border-right:1px solid var(--line);background:#1a1f26}.files-heading{padding:0 8px;display:flex;align-items:center;justify-content:space-between}.files h1{margin:0;font-size:14px;font-weight:600}.file{width:100%;text-align:left;padding:12px 9px;margin-top:17px;background:#6db6d812;border-left:2px solid var(--accent);border-radius:0}.file strong{display:block;font-size:12px;font-weight:500}.file small{display:block;margin:4px 0 0 18px;color:var(--dim);font:11px var(--mono)}.m{color:var(--accent);margin-right:8px}.file-state{padding:14px 8px;color:var(--muted);font-size:12px}.file-state div{display:flex;justify-content:space-between;padding:5px 0}.file-state b{font:12px var(--mono);color:var(--text)}.scenario{margin:24px 8px 0;border-top:1px solid var(--line);padding-top:16px}.scenario p{font-size:12px;color:var(--dim);margin:8px 0 12px}.scenario button{width:100%;text-align:left;margin:4px 0;font-size:12px}.scenario .hint{margin-top:18px;font-size:11px}
+.workspace{display:flex;flex-direction:column;min-width:0;min-height:0}.filebar{min-height:61px;padding:12px 20px;display:flex;gap:18px;align-items:center;border-bottom:1px solid var(--line)}.filebar strong{font-size:14px;font-weight:600}.path{font:11px var(--mono);color:var(--dim);margin-top:2px}.spacer{flex:1}.scope{display:flex;padding:2px;border:1px solid var(--line);border-radius:5px;white-space:nowrap}.scope button{font-size:12px}.scope b{font:11px var(--mono);margin-left:5px;color:var(--muted)}.toolbar{min-height:43px;display:flex;align-items:center;padding:5px 20px;gap:8px;border-bottom:1px solid var(--line);font-size:12px}.toolbar select{background:var(--surface);border:1px solid var(--line);padding:4px 6px;color:var(--text);border-radius:4px}.analysis{display:flex;align-items:center;gap:6px;color:var(--green)}.dot{width:5px;height:5px;background:currentColor;border-radius:50%}.notice{padding:9px 20px;border-bottom:1px solid #d4b47755;background:#d4b4770c;color:var(--amber);font-size:12px}.notice[hidden]{display:none}.notice button{color:var(--text);margin-left:8px;text-decoration:underline}
+.review{display:grid;grid-template-columns:222px minmax(0,1fr);flex:1;min-height:0;position:relative}.review.hide-outline{grid-template-columns:1fr}.review.hide-outline .outline{display:none}.outline{border-right:1px solid var(--line);overflow:auto;padding:16px 10px;background:#1a1f26}.outline-title{display:flex;justify-content:space-between;padding:0 7px;margin-bottom:12px;font-size:12px;font-weight:600}.search{width:100%;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:4px;padding:6px 9px;margin-bottom:16px;font-size:12px}.group-label{color:var(--dim);font-size:11px;padding:8px 8px 4px}.symbol{width:100%;text-align:left;display:flex;align-items:center;gap:7px;padding:8px 7px;margin:2px 0}.symbol.active{background:#6db6d813;color:var(--accent)}.symbol-name{min-width:0;overflow:hidden;text-overflow:ellipsis;font:12px var(--mono)}.symbol .count{margin-left:auto}.symbol-icon{font:12px var(--mono);color:var(--amber);width:13px;text-align:center}.symbol-icon.added{color:var(--green)}.reviewed-tick{font-size:11px;color:var(--green)}.shared-icon{color:var(--amber);font-size:11px}.outline-footer{border-top:1px solid var(--line);margin-top:20px;padding:12px 7px;color:var(--dim);font-size:11px}.empty-outline{padding:12px 7px;color:var(--dim);font-size:12px}
+.code-pane{display:flex;flex-direction:column;min-width:0;min-height:0}.structure-header{padding:14px 18px 12px;border-bottom:1px solid var(--line);background:var(--surface)}.structure-title-row{display:flex;align-items:center;gap:10px}.breadcrumb{font:12px var(--mono);color:var(--dim)}.structure-title{font:600 14px var(--mono);margin:5px 0 0}.structure-actions{display:flex;gap:8px;margin-left:auto;flex-shrink:0}.structure-actions button{font-size:12px}.facts{display:flex;align-items:center;gap:6px;margin-top:10px;min-height:25px;flex-wrap:wrap}.fact{font-size:11px;border:1px solid var(--line);padding:2px 7px;border-radius:3px;color:var(--muted)}.fact:hover{color:var(--accent);border-color:#6db6d855}.selection-help{font-size:11px;color:var(--amber);margin:8px 0 0}.column-head{display:grid;grid-template-columns:32px minmax(0,1fr) minmax(0,1fr);border-bottom:1px solid var(--line);background:#1a1f26;font:11px var(--mono);color:var(--muted);min-height:31px;align-items:center}.column-head>span{padding:6px 12px}.column-head>span:last-child{border-left:1px solid var(--line)}.code-scroll{overflow:auto;flex:1;min-height:0;scroll-behavior:smooth}.code-block{min-width:690px;padding:10px 0 20px}.row{display:grid;grid-template-columns:32px minmax(0,1fr) minmax(0,1fr);min-height:25px}.row:hover{background:#ffffff04}.row.selected{background:#6db6d81b;box-shadow:inset 3px 0 var(--accent)}.row.selected .cell{background:#6db6d80c}.gutter{display:flex;justify-content:center;align-items:center}.cell{display:flex;min-width:0;line-height:25px;min-height:25px}.cell:last-child{border-left:1px solid #333b4670}.number{width:44px;flex-shrink:0;text-align:right;padding-right:12px;color:var(--dim);font:11px/25px var(--mono);user-select:none}.cell code{font:12px/25px var(--mono);white-space:pre;flex:1;padding-right:14px}.cell.deleted{background:#d9878710}.cell.added{background:#8fcba010}.cell.empty{background:#ffffff02}.mark{display:inline-block;width:12px;font:11px var(--mono);color:var(--dim);flex-shrink:0;line-height:25px}.deleted .mark{color:var(--red)}.added .mark{color:var(--green)}.kw{color:#bd8bd1}.str{color:var(--green)}.num{color:var(--amber)}.comment{color:var(--dim)}.type{color:#80c7c4}.fold{display:block;width:100%;text-align:left;padding:8px 77px;color:var(--dim);font:11px var(--mono);border-top:1px solid #333b4640;border-bottom:1px solid #333b4640;margin:5px 0 12px;border-radius:0}.flash{animation:flash 1.3s ease-out}@keyframes flash{0%{outline:1px solid var(--accent);background:#6db6d833}100%{outline:1px solid transparent}}
+.empty-state{padding:70px 30px;text-align:center;color:var(--muted)}.empty-state strong{display:block;color:var(--text);font-size:16px;font-weight:500;margin-bottom:10px}.bottom{min-height:66px;padding:12px 20px;border-top:1px solid var(--line);background:var(--surface);display:flex;align-items:center;gap:10px}.selection-summary strong{font-size:12px;font-weight:500}.selection-summary small{display:block;color:var(--dim);font-size:11px;margin-top:2px}.bottom button{font-size:12px}.statusbar{min-height:27px;padding:4px 20px;border-top:1px solid var(--line);font-size:11px;color:var(--dim);display:flex;gap:18px}.statusbar span:last-child{margin-left:auto}.toast{position:fixed;bottom:110px;right:24px;padding:12px 16px;border:1px solid var(--line);background:var(--raised);border-radius:5px;max-width:450px;font-size:12px;z-index:5}.toast:empty{display:none}dialog{background:var(--surface);border:1px solid var(--line);border-radius:8px;color:var(--text);width:min(680px,calc(100vw - 32px));padding:0}dialog::backdrop{background:#0008}.dialog-head{display:flex;align-items:center;padding:18px 22px;border-bottom:1px solid var(--line)}.dialog-head h2{font-size:16px;margin:0;font-weight:600}.dialog-body{padding:18px 22px;max-height:62dvh;overflow:auto}.dialog-body p{color:var(--muted);font-size:12px}.dialog-meta{display:flex;justify-content:space-between;font:12px var(--mono);padding-bottom:12px}.preview-row{padding:10px 0;border-top:1px solid var(--line)}.preview-row .mono{font-size:11px;white-space:pre-wrap;overflow-wrap:anywhere}.preview-row .old{color:var(--red)}.preview-row .new{color:var(--green)}.dialog-foot{display:flex;gap:8px;justify-content:flex-end;padding:14px 22px;border-top:1px solid var(--line)}.scope-note{font-size:11px;color:var(--amber)}.compact-label{display:none}
+@media(max-width:1180px){.shell{grid-template-columns:170px minmax(0,1fr)}.review{grid-template-columns:185px minmax(0,1fr)}.structure-actions{flex-direction:column;gap:3px}.structure-header{padding:12px}.filebar{padding:10px 14px}.toolbar{padding:5px 14px}.analysis{font-size:11px}.branch{display:none}}
+@media(max-width:900px){.shell{grid-template-columns:minmax(0,1fr)}.files{display:none}.review{grid-template-columns:1fr}.outline{position:absolute;z-index:4;inset:0 auto 0 0;width:245px;background:var(--surface);box-shadow:12px 0 24px #0003}.structure-title-row{align-items:flex-start}.topbar{gap:10px;padding:0 14px}.structure-actions{flex-direction:row}.scope button{padding:4px 7px}.statusbar .status-extra{display:none}.prototype-label{font-size:10px}.toolbar .wide-label{display:none}}
+@media(prefers-reduced-motion:reduce){.code-scroll{scroll-behavior:auto}.flash{animation:none}}
+</style>
+</head>
+<body>
+<header class="topbar"><div class="brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 18 9 5l4 9 3-6 5 10M6 18h12"/></svg>GitCrest</div><span class="branch">gitcrest / feature/user-cache</span><span class="prototype-label">交互设计 · 示例数据 · 操作不写入仓库</span><button class="reset" id="reset">重置演示</button></header>
+<div class="shell">
+<aside class="files" aria-label="文件列表"><div class="files-heading"><h1>工作区</h1><span class="count">1 个文件</span></div><div class="file"><strong><span class="m">M</span>user-client.ts</strong><small>src/api</small></div><div class="file-state"><div>未暂存修改 <b id="working-count"></b></div><div>已暂存修改 <b id="index-count"></b></div></div><div class="scenario"><div class="eyebrow">试用场景</div><p>先审阅一个函数，再选择它的修改。导入声明已经部分暂存。</p><button class="secondary" id="shared-demo">同一行涉及两个声明</button><button class="secondary" id="stale-demo">模拟外部编辑</button><p class="hint">所有暂存动作均在当前页面内模拟。刷新页面恢复初始数据。</p></div></aside>
+<main class="workspace">
+<div class="filebar"><div><strong>user-client.ts</strong><div class="path">src/api</div></div><span class="spacer"></span><div class="scope" role="group" aria-label="比较范围"><button id="working-scope" aria-pressed="true">未暂存 <b id="working-badge"></b></button><button id="index-scope" aria-pressed="false">已暂存 <b id="index-badge"></b></button></div></div>
+<div class="toolbar"><button id="outline-toggle" class="secondary" aria-expanded="true">本文件变更</button><span class="analysis"><i class="dot"></i><span id="analysis-label">结构分析就绪</span></span><span class="spacer"></span><label class="muted"><span class="wide-label">上下文 </span><select id="context" aria-label="代码上下文"><option value="focused">当前结构</option><option value="all">完整文件</option></select></label><button id="previous" title="上一个变更结构">↑</button><button id="next" title="下一个变更结构">↓</button></div>
+<div class="notice" id="stale-notice" role="status" hidden>文件在外部发生变化，当前选择已清空。<button id="refresh">刷新并重新审阅</button></div>
+<div class="review" id="review">
+<nav class="outline" aria-label="本文件变更结构"><div class="outline-title"><span>本文件变更</span><span class="count" id="structure-count"></span></div><input id="search" class="search" placeholder="搜索结构名称…" aria-label="搜索结构名称"><div id="symbols"></div><div class="outline-footer">导航定位、选择修改、标为已审阅分别操作。标为已审阅不会暂存。</div></nav>
+<section class="code-pane" aria-label="结构代码审阅"><div class="structure-header"><div class="structure-title-row"><div><div class="breadcrumb" id="breadcrumb"></div><h2 class="structure-title" id="structure-title"></h2></div><div class="structure-actions"><button id="reviewed" class="secondary" aria-pressed="false">标为已审阅</button><button id="select-structure" class="secondary">选择此函数的修改</button></div></div><div class="facts" id="facts"></div><p class="selection-help" id="selection-help" hidden></p></div><div class="column-head"><span></span><span id="old-label">index · 旧版本</span><span id="new-label">工作区 · 新版本</span></div><div class="code-scroll" id="code-scroll"><div id="code" class="code-block"></div></div></section>
+</div>
+<footer class="bottom"><div class="selection-summary"><strong id="selection-title">选择一个结构的修改，或直接勾选变更行</strong><small id="selection-detail">只选择已经修改的内容，保留函数中的其它代码。</small></div><span class="spacer"></span><button id="clear">清空</button><button class="secondary" id="preview" disabled>查看范围</button><button class="primary" id="apply" disabled>暂存所选</button></footer>
+<div class="statusbar"><span id="comparison">index → 工作区</span><span>TypeScript</span><span class="status-extra">CRLF · UTF-8</span><span>示例为原子变更行，非独立新增/删除行计数</span></div>
+</main></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<dialog id="preview-dialog" aria-labelledby="preview-title"><div class="dialog-head"><h2 id="preview-title">暂存范围预览</h2><span class="spacer"></span><button id="close-dialog" aria-label="关闭范围预览">×</button></div><div class="dialog-body"><div class="dialog-meta"><span>src/api/user-client.ts</span><span id="preview-scope"></span></div><p>以下是本次操作的全部范围。其它修改保持原状态。</p><div id="preview-rows"></div><p class="scope-note">函数体与 import 由你分别选择。所选范围不保证能够独立编译。</p></div><div class="dialog-foot"><button id="cancel-dialog" class="secondary">返回审阅</button><button id="confirm-dialog" class="primary">确认暂存所选</button></div></dialog>
+<script>
+// Hand-authored review atoms model a fixture only. Production analysis and patch mapping are described in the PRD.
+const line=(text,group=null)=>({old:text,new:text,group});
+const change=(id,group,oldText,newText,owners)=>({id,group,old:oldText,new:newText,owners:owners||[group]});
+const rows=[
+  line('import { request } from "./transport";','imports'),
+  change('import-type','imports',null,'import type { User } from "./types";'),
+  line(''),
+  change('shared','timeout','const TIMEOUT = 5000; const RETRIES = 2;','const TIMEOUT = 8000; const RETRIES = 3;',['timeout','retries']),
+  line(''),
+  line('export class UserClient {'),
+  line('  private cache = new Map<string, User>();'),
+  line(''),
+  change('parameters','load','  async loadUser(id: string): Promise<User> {','  async loadUser(id: string, useCache = true): Promise<User> {'),
+  change('cache-read','load',null,'    const cached = useCache ? this.cache.get(id) : undefined;'),
+  change('cache-return','load',null,'    if (cached) return cached;'),
+  line('','load'),
+  change('fetch','load','    const user = await request<User>(`/users/${id}`);','    const user = await request<User>(`/users/${id}`, { timeout: TIMEOUT });'),
+  change('cache-write','load',null,'    this.cache.set(id, user);'),
+  line('    return user;','load'),
+  line('  }','load'),
+  line(''),
+  change('clear-signature','clear',null,'  clearCache(id: string): void {'),
+  change('clear-body','clear',null,'    this.cache.delete(id);'),
+  change('clear-close','clear',null,'  }'),
+  line(''),
+  line('  hasCachedUser(id: string): boolean {','has'),
+  line('    return this.cache.has(id);','has'),
+  line('  }','has'),
+  line('}')
+];
+const groups=[
+  {id:'load',name:'loadUser()',container:'UserClient',kind:'method',facts:[['参数声明变化','parameters'],['函数体变化','cache-read']]},
+  {id:'clear',name:'clearCache()',container:'UserClient',kind:'added',facts:[['新增方法','clear-signature']]},
+  {id:'imports',name:'导入声明',container:'模块级声明',kind:'import',facts:[['新增类型导入','import-type']]},
+  {id:'timeout',name:'TIMEOUT',container:'模块级声明',kind:'shared',facts:[['初始化表达式变化','shared']]},
+  {id:'retries',name:'RETRIES',container:'模块级声明',kind:'shared',facts:[['初始化表达式变化','shared']]}
+];
+const allIds=rows.filter(r=>r.id).map(r=>r.id);
+let staged=new Set(['import-type']);
+let selected=new Set();
+let reviewed=new Set();
+let scope='workingTree',active='load',stale=false,outline=true,toastTimer;
+const $=id=>document.getElementById(id);
+const esc=value=>String(value).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+const isActive=r=>Boolean(r.id)&&(scope==='index'?staged.has(r.id):!staged.has(r.id));
+const groupRows=id=>rows.filter(r=>isActive(r)&&r.owners.includes(id));
+const visibleGroups=()=>groups.filter(g=>groupRows(g.id).length);
+const reviewKey=g=>scope+':'+g.id+':'+groupRows(g.id).map(r=>r.id).join(',');
+function toast(message){$('toast').textContent=message;clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('toast').textContent='',4800)}
+function highlight(text){
+  const tokens=/"(?:\\.|[^"\\])*"|`(?:\\.|[^`\\])*`|\b(?:import|from|type|export|class|private|async|const|if|return|void|User|Map|Promise|boolean|string|5000|8000|2|3|true|undefined)\b/g;
+  let result='',offset=0;
+  for(const match of text.matchAll(tokens)){
+    result+=esc(text.slice(offset,match.index));
+    const token=match[0];
+    const kind=/^["`]/.test(token)?'str':/^(User|Map|Promise|boolean|string)$/.test(token)?'type':/^(5000|8000|2|3|true|undefined)$/.test(token)?'num':'kw';
+    result+=`<span class="${kind}">${esc(token)}</span>`;
+    offset=match.index+token.length;
+  }
+  return result+esc(text.slice(offset));
+}
+function snapshotRows(){let oldNumber=0,newNumber=0;return rows.map(r=>{const oldText=r.id&&scope==='workingTree'&&staged.has(r.id)?r.new:r.old;const newText=r.id&&(scope==='workingTree'||staged.has(r.id))?r.new:r.old;return {...r,oldText,newText,oldLine:oldText===null?null:++oldNumber,newLine:newText===null?null:++newNumber,changed:isActive(r)}})}
+function updateSelection(){
+  const chosen=rows.filter(r=>selected.has(r.id));
+  $('selection-title').textContent=chosen.length?`已选 ${chosen.length} 个变更行`:'选择一个结构的修改，或直接勾选变更行';
+  const names=[...new Set(chosen.flatMap(r=>r.owners))].map(id=>groups.find(g=>g.id===id).name);
+  $('selection-detail').textContent=chosen.length?names.join(' · ')+(chosen.some(r=>r.owners.length>1)?' · 包含同一行的两个声明':' · 不包含其它未选择的修改'):'只选择已经修改的内容，保留函数中的其它代码。';
+  for(const id of ['preview','apply','clear'])$(id).disabled=!chosen.length||stale;
+  document.querySelectorAll('.row[data-atom]').forEach(el=>{const checked=selected.has(el.dataset.atom);el.classList.toggle('selected',checked);el.querySelector('input').checked=checked});
+}
+function render(){
+  $('working-count').textContent=allIds.length-staged.size;
+  $('index-count').textContent=staged.size;
+  $('working-badge').textContent=allIds.length-staged.size;
+  $('index-badge').textContent=staged.size;
+  $('working-scope').setAttribute('aria-pressed',scope==='workingTree');
+  $('index-scope').setAttribute('aria-pressed',scope==='index');
+  $('apply').textContent=scope==='index'?'取消暂存所选':'暂存所选';
+  $('comparison').textContent=scope==='index'?'HEAD → index':'index → 工作区';
+  $('old-label').textContent=scope==='index'?'HEAD · 提交版本':'index · 已暂存版本';
+  $('new-label').textContent=scope==='index'?'index · 已暂存版本':'工作区 · 当前版本';
+  $('stale-notice').hidden=!stale;
+  $('analysis-label').textContent=stale?'结构分析已过期':'结构分析就绪';
+  $('review').classList.toggle('hide-outline',!outline);
+  $('outline-toggle').setAttribute('aria-expanded',outline);
+  const available=visibleGroups();
+  if(!available.some(g=>g.id===active))active=available[0]?.id||'';
+  const query=$('search').value.toLowerCase();
+  const matches=available.filter(g=>(g.name+' '+g.container).toLowerCase().includes(query));
+  $('structure-count').textContent=`${available.length} 项`;
+  $('symbols').innerHTML=matches.length?matches.map((g,i)=>`${i===0||matches[i-1].container!==g.container?`<div class="group-label">${esc(g.container)}</div>`:''}<button class="symbol${g.id===active?' active':''}" data-group="${g.id}" ${g.id===active?'aria-current="location"':''}><span class="symbol-icon${g.kind==='added'?' added':''}" aria-hidden="true">${g.kind==='added'?'+':g.kind==='import'?'↳':'ƒ'}</span><span class="symbol-name">${esc(g.name)}</span>${reviewed.has(reviewKey(g))?'<span class="reviewed-tick" aria-label="已审阅">✓</span>':''}<span class="count">${groupRows(g.id).length}</span>${g.kind==='shared'?'<span class="shared-icon" title="与另一个声明共享变更行">⋈</span>':''}</button>`).join(''):'<p class="empty-outline">没有匹配的结构</p>';
+  const group=groups.find(g=>g.id===active);
+  $('structure-title').textContent=group?.name||'当前范围没有修改';
+  $('breadcrumb').textContent=group?.container||'src/api/user-client.ts';
+  $('reviewed').disabled=!group||stale;
+  $('reviewed').setAttribute('aria-pressed',group?reviewed.has(reviewKey(group)):false);
+  $('reviewed').textContent=group&&reviewed.has(reviewKey(group))?'已审阅 ✓':'标为已审阅';
+  const shared=group?.kind==='shared';
+  $('select-structure').disabled=!group||shared||stale;
+  $('select-structure').textContent=shared?'按行选择此修改':group?.kind==='method'||group?.kind==='added'?'选择此函数的修改':'选择此声明的修改';
+  $('selection-help').hidden=!shared;
+  $('selection-help').textContent='这一变更行同时涉及 TIMEOUT 和 RETRIES。请按行审阅并选择完整范围。';
+  $('facts').innerHTML=group?group.facts.map(([name,id])=>`<button class="fact" data-evidence="${id}">${esc(name)} ↗</button>`).join('')+`<span class="count">${groupRows(group.id).length} 个变更行</span>`:'';
+  const full=$('context').value==='all';
+  const display=snapshotRows();
+  let rendered='';let hiddenCount=0;
+  for(const r of display){
+    const inGroup=r.group===active||r.owners?.includes(active);
+    if(r.oldText===null&&r.newText===null)continue;
+    if(!full&&!inGroup){hiddenCount++;continue}
+    if(hiddenCount){rendered+=`<button class="fold" data-expand>展开 ${hiddenCount} 行其它结构上下文</button>`;hiddenCount=0}
+    rendered+=`<div class="row${r.changed?' changed':''}${selected.has(r.id)?' selected':''}" ${r.changed?`data-atom="${r.id}"`:''} ${r.id?`id="line-${r.id}"`:''}><div class="gutter">${r.changed?`<input type="checkbox" data-select="${r.id}" aria-label="选择${r.newLine?'新侧第 '+r.newLine:'旧侧第 '+r.oldLine} 行修改" ${selected.has(r.id)?'checked':''} ${stale?'disabled':''}>`:''}</div>${cell(r.oldText,r.oldLine,r.changed,'old')}${cell(r.newText,r.newLine,r.changed,'new')}</div>`;
+  }
+  if(hiddenCount)rendered+=`<button class="fold" data-expand>展开 ${hiddenCount} 行其它结构上下文</button>`;
+  $('code').innerHTML=available.length?rendered:'<div class="empty-state"><strong>当前范围已没有修改</strong>可以切换到另一比较范围，继续审阅。</div>';
+  $('previous').disabled=$('next').disabled=available.length<2;
+  updateSelection();
+}
+function cell(text,number,changed,side){const style=text===null?' empty':changed?(side==='old'?' deleted':' added'):'';return `<div class="cell${style}"><span class="number">${number||''}</span><span class="mark">${changed&&text!==null?(side==='old'?'−':'+'):''}</span><code>${text===null?'':highlight(text)}</code></div>`}
+function navigate(id){active=id;render();$('code-scroll').scrollTop=0;if(matchMedia('(max-width:900px)').matches){outline=false;$('review').classList.add('hide-outline');$('outline-toggle').setAttribute('aria-expanded','false')}$('select-structure').focus()}
+function changeScope(next){if(next===scope)return;const hadSelection=selected.size;scope=next;selected.clear();render();if(hadSelection)toast('比较范围已切换，旧范围的选择已清空。')}
+function move(direction){const available=visibleGroups();if(available.length){const i=available.findIndex(g=>g.id===active);navigate(available[(i+direction+available.length)%available.length].id)}}
+function showPreview(){if(!selected.size||stale)return;const display=snapshotRows().filter(r=>selected.has(r.id));$('preview-title').textContent=scope==='index'?'取消暂存范围预览':'暂存范围预览';$('confirm-dialog').textContent=scope==='index'?'确认取消暂存所选':'确认暂存所选';$('preview-scope').textContent=$('comparison').textContent;$('preview-rows').innerHTML=display.map(r=>`<div class="preview-row"><div class="muted" style="font-size:11px">${esc(r.owners.map(id=>groups.find(g=>g.id===id).name).join(' + '))} · ${r.newLine?'新侧 L'+r.newLine:'旧侧 L'+r.oldLine}</div>${r.oldText!==null?`<div class="mono old">− ${esc(r.oldText)}</div>`:''}${r.newText!==null?`<div class="mono new">+ ${esc(r.newText)}</div>`:''}</div>`).join('');$('preview-dialog').showModal()}
+function applySelection(){if(stale||!selected.size)return;const count=selected.size;const chosen=[...selected];for(const id of chosen){if(scope==='index')staged.delete(id);else staged.add(id)}const touched=new Set(rows.filter(r=>chosen.includes(r.id)).flatMap(r=>r.owners));reviewed=new Set([...reviewed].filter(k=>![...touched].some(id=>k.includes(':'+id+':'))));selected.clear();$('preview-dialog').close();render();toast(`演示：已${scope==='index'?'取消暂存':'暂存'} ${count} 个变更行，其它修改保留。`)}
+$('symbols').addEventListener('click',e=>{const button=e.target.closest('[data-group]');if(button)navigate(button.dataset.group)});
+$('symbols').addEventListener('keydown',e=>{const buttons=[...$('symbols').querySelectorAll('button')];const i=buttons.indexOf(document.activeElement);let next=e.key==='ArrowDown'?i+1:e.key==='ArrowUp'?i-1:e.key==='Home'?0:e.key==='End'?buttons.length-1:-1;if(next>=0&&next<buttons.length){e.preventDefault();buttons[next].focus()}});
+$('code').addEventListener('change',e=>{if(e.target.matches('[data-select]')){if(e.target.checked)selected.add(e.target.dataset.select);else selected.delete(e.target.dataset.select);updateSelection()}});
+$('code').addEventListener('click',e=>{if(e.target.closest('[data-expand]')){$('context').value='all';render()}});
+$('facts').addEventListener('click',e=>{const button=e.target.closest('[data-evidence]');if(button){const row=$('line-'+button.dataset.evidence);row?.scrollIntoView({block:'center'});row?.classList.remove('flash');requestAnimationFrame(()=>row?.classList.add('flash'))}});
+$('select-structure').onclick=()=>{if(stale)return;const candidates=groupRows(active);if(candidates.some(r=>r.owners.length>1))return;for(const r of candidates)selected.add(r.id);updateSelection();toast(`已选择 ${groups.find(g=>g.id===active).name} 的 ${candidates.length} 个变更行，确认范围后再暂存。`)};
+$('reviewed').onclick=()=>{const g=groups.find(g=>g.id===active);if(!g||stale)return;const key=reviewKey(g);if(reviewed.has(key))reviewed.delete(key);else reviewed.add(key);render()};
+$('search').oninput=render;
+$('context').onchange=render;
+$('working-scope').onclick=()=>changeScope('workingTree');$('index-scope').onclick=()=>changeScope('index');
+$('previous').onclick=()=>move(-1);$('next').onclick=()=>move(1);
+$('outline-toggle').onclick=()=>{outline=!outline;render();if(outline)$('search').focus()};
+$('clear').onclick=()=>{selected.clear();updateSelection()};$('preview').onclick=showPreview;$('apply').onclick=showPreview;
+$('close-dialog').onclick=$('cancel-dialog').onclick=()=>$('preview-dialog').close();$('confirm-dialog').onclick=applySelection;
+$('shared-demo').onclick=()=>{if(scope==='index'&&!staged.has('shared')||scope==='workingTree'&&staged.has('shared'))changeScope(scope==='index'?'workingTree':'index');navigate('timeout')};
+$('stale-demo').onclick=()=>{stale=true;selected.clear();reviewed.clear();$('preview-dialog').close();render();toast('模拟外部编辑：快照失效，结构选择与执行已暂停。')};
+$('refresh').onclick=()=>{stale=false;render();toast('演示：已重新捕获文件并分析。请重新选择修改。')};
+$('reset').onclick=()=>{staged=new Set(['import-type']);selected.clear();reviewed.clear();scope='workingTree';active='load';stale=false;outline=!matchMedia('(max-width:900px)').matches;$('context').value='focused';$('search').value='';$('preview-dialog').close();render();toast('演示已恢复，类型导入仍为初始已暂存修改。')};
+window.addEventListener('keydown',e=>{if(e.key==='Escape'&&matchMedia('(max-width:900px)').matches&&outline){outline=false;render();$('outline-toggle').focus()}});
+outline=!matchMedia('(max-width:900px)').matches;render();
+</script>
+</body>
+</html>

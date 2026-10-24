@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "starlark",
+  "name": "Starlark",
+  "version": "0.1.0",
+  "extensions": ["bzl", "star"],
+  "fileNames": ["BUILD", "BUILD.bazel", "WORKSPACE"],
+  "grammar": "tree-sitter-starlark.wasm",
+  "monacoLanguage": "python",
+  "structure": {
+    "imports": ["import_statement"],
+    "leading": ["comment"],
+    "declarations": [
+      {
+        "node": "function_definition",
+        "kind": "function",
+        "parameters": [{ "field": "parameters" }],
+        "body": [{ "field": "body" }]
+      },
+      {
+        "node": "expression_statement",
+        "kind": "rule",
+        "name": { "path": [{ "child": "call" }], "pattern": "\\bname\\s*=\\s*\"([^\"]+)\"" }
+      }
+    ]
+  }
+}
