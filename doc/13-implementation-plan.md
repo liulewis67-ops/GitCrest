@@ -5938,3 +5938,35 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`package.json`、`pnpm-lock.yaml`、`doc/15-frontend-development-guidelines.md`、`scripts/packaged-smoke.mjs`、`doc/evidence/S7.2/package-contents-stage549-20261025.json`。
 - 限制/后续：macOS 与 Linux 包未重新打包核对；smoke 清理步骤的 `EBUSY` 可另行加长等待或排查占用者（同日 electron-builder 在新解压的 `default_app.asar` 上也出现过同样的 `EBUSY`，无进程持有，疑为实时扫描）。
 - 实施 commit：实现、证据与台账同一 commit。
+
+### S7.2 P1 同日发行包 A/B 对照 — 小阶段 550
+- 状态：已完成（对照记录；未改阈值或口径，S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：同一主机、同一 100k fixture、同一（工作区中的）基准脚本，依次对三个发行包各跑 `desktop-benchmark-batches.mjs` 4×5=20 轮冷启动与 `GITCREST_BENCH_MODE=memory` 20 轮（无追踪），均设置 `GITCREST_BENCH_CRASH_DUMPS_DIR`，全部 20/20 成功、无崩溃转储：
+  - 基线 `e22c37c`（P1 之前；在临时 worktree 中 `electron-vite build` + `electron-builder --dir -c.npmRebuild=false`，sidecar 二进制与工作区相同，因 `crates/` 无差异）；
+  - A：小阶段 547 的发行包（P1.1–P1.4 与 P4.1）；
+  - B：小阶段 548–549 的发行包（再加 P1.5 沙箱与 P1.6 依赖调整）。
+- 结果（P50 / P95）：
+  - 冷启动：基线 1,275 / 1,394ms，A 1,242 / 1,381ms，B 1,249 / 1,469ms（最大 1,457 / 1,601 / 1,568ms）。三者差异在样本波动内；A、B 分段 P50 相同（`appReady` 约 315–322、`windowCreated` 约 404–411、`domContentLoaded` 约 846–864ms）。
+  - 首个历史帧（点击仓库 → 点击 History → 提交图）：基线 511 / 587ms，A 628 / 814ms，B 723 / 904ms。均 <1s，但 P1 之后变慢。追踪显示原因：打开仓库时 Changes 视图显示 Monaco Diff，自小阶段 545 起使用打包的 3MB `monaco-setup` chunk，在 renderer 主线程同步编译与执行约 180–290ms（`file://` 无流式编译与代码缓存）；基线从 CDN 异步加载 Monaco，这部分工作落在提交图显示之后。B 比 A 再慢约 95ms：保持其余不变、仅关闭沙箱另打一包，与 B 交替各 6 次复现该流程，差约 60ms（中位约 664 vs 723ms）；而先等 Changes 的 Diff 显示完再点 History 时，B 不慢于 A（各 5 次，Diff 显示约 1,040 vs 1,150ms、History 约 175 vs 280ms）。即沙箱带来的额外开销集中在 Monaco 首次加载期间。
+  - 内存 memory 模式 P95（MiB，基线 / A / B）：空闲 Working Set 391.9 / 392.2 / 375.9，Private WS 116.3 / 114.6 / 100.6，Private Bytes 295.8 / 294.1 / 247.8；加载后 Working Set 493.3 / 495.9 / 461.7，Private WS 188.1 / 186.5 / 166.9，Private Bytes 403.1 / 397.0 / 341.0。B 的下降来自沙箱（两包 renderer 产物相同）。
+- 判定（方案第 6 节 P1 通过规则）：
+  - P1.1：冷启动 P50 与空闲 WS 不劣于基线，通过。
+  - P1.2：冷启动 P50/P95 已记录；本机 sidecar 早于 DOMContentLoaded 就绪，节省量被 GPU 等待吸收（小阶段 548），无可测收益也无退化。
+  - P1.3：见小阶段 551，通过。
+  - P1.4：首屏请求已于小阶段 545 核对；但改用打包 Monaco 使首个历史帧 P95 由 587 增至 814ms（仍 <1s），记为已知代价，后续见方案 P4.4/P4.5。
+  - P1.5：空闲与加载后内存全部下降、冷启动 P50 不变，通过；首个历史帧在 Monaco 加载期间多约 60–95ms，记为已知代价。
+  - 目标层面：冷启动 P95 三包均 <1.5s；首个历史帧 P95 <1s；内存仍按 Working Set 口径不达标（待 D1），按 Private WS 则 B 空闲 100.6、加载后 166.9MiB。
+- 证据：`doc/evidence/S7.2/desktop-win32-ab-{e22c37c,a,b}-startup-stage550-20261025.json`（及 `.batches/`）、`doc/evidence/S7.2/desktop-win32-ab-{e22c37c,a,b}-memory-notrace-stage550-20261025.json`。
+- 限制/后续：各报告的 `installer` 字段读的是工作区 `dist/` 中的安装包，不代表对应构建（安装包大小以小阶段 549 为准）；基线的 Diff 需联网加载 CDN Monaco，其加载后内存包含该副本；三包依次运行而非逐轮交替，跨包差异 <5% 时不作结论；未跑滚动帧率。
+- 实施 commit：证据与台账同一 commit。
+
+### S7.2 P1.3 打开 3 个 Diff 后的内存 — 小阶段 551
+- 状态：已完成（测量；S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：新增 `doc/evidence/S7.2/diff-window-memory-probe-stage551.mjs`：发行包、隔离 profile，在主窗口对一个含 3 个修改文件（各 200 行）的仓库依次点击 “Open in Diff window”，最后一个显示后静置 5s，对主进程树求和 Working Set 与 Private Working Set，各 5 次。
+- 结果（P50，MiB）：基线 `e22c37c` 4 个窗口（3 个 Diff 窗口、4 个 renderer）Working Set 1,148.3 / Private WS 590.4；小阶段 547 包 2 个窗口 749.4 / 365.9；小阶段 549 包 2 个窗口 721.0 / 337.1。即 P1.3（复用窗口）与 P1.4（不再加载第二份 CDN Monaco）合计 −399 / −225MiB，沙箱再 −28 / −29MiB。
+- 判定：P1.3 通过规则（打开 3 个 Diff 后 WS 前后对比、Diff 窗口 E2E 通过、只读 token 不变）满足。
+- 证据：`doc/evidence/S7.2/diff-window-memory-probe-stage551.mjs`、`doc/evidence/S7.2/diff-windows-memory-{e22c37c,stage547build,stage549build}-stage551-20261025.json`。
+- 限制/后续：每包 5 次而非 20 次（差异远大于波动）；基线的 Diff 窗口各自从 CDN 加载 Monaco，需联网。
+- 实施 commit：证据与台账同一 commit。

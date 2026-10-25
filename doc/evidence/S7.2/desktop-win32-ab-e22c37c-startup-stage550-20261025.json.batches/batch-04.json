@@ -1,0 +1,358 @@
+{
+  "mode": "full",
+  "generatedAt": "2026-10-25T13:31:34.965Z",
+  "host": {
+    "os": "Windows_NT 10.0.26300",
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "AMD Ryzen 7 5800H with Radeon Graphics         ",
+    "logicalCpus": 16,
+    "totalMemoryBytes": 17024741376,
+    "storage": [
+      {
+        "model": "KINGSTON SA2000M81000G",
+        "mediaType": "SSD",
+        "bus": "NVMe",
+        "bytes": 1000204886016
+      }
+    ]
+  },
+  "software": {
+    "electron": "37.0.0",
+    "node": "v22.19.0",
+    "rendererBuild": "production electron-vite build",
+    "rustProfile": "release",
+    "launchMode": "packaged application",
+    "applicationExecutable": "E:\\personal_projects\\GitCrest-baseline-e22c37c\\dist-base\\win-unpacked\\GitCrest.exe",
+    "launchFlags": [],
+    "electronUserDataProfileIsolatedPerRun": true,
+    "memoryMeasurementRoot": "Electron main process and descendants; Playwright launcher excluded"
+  },
+  "fixture": {
+    "commits": 100000,
+    "diffFileLines": 1000,
+    "path": "C:\\Users\\lewis\\AppData\\Local\\Temp\\gitcrest-s7.2-100k-fixture"
+  },
+  "iterations": 5,
+  "startedAt": "2026-10-25T13:27:14.534Z",
+  "startup": {
+    "samples": 5,
+    "p50Ms": 1292.77,
+    "p95Ms": 1326.647,
+    "maxMs": 1326.647,
+    "samplesMs": [
+      1318.794,
+      1292.77,
+      1256.252,
+      1275.175,
+      1326.647
+    ]
+  },
+  "startupPhases": {
+    "method": "Milliseconds from the benchmark's launch call to each main-process mark (epoch clock shared by both processes); coreConnected is when the renderer first shows \"Core connected\". A phase without samples was not marked by this build.",
+    "phases": {
+      "mainProcessStart": {
+        "samples": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "maxMs": null,
+        "samplesMs": []
+      },
+      "mainModuleLoaded": {
+        "samples": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "maxMs": null,
+        "samplesMs": []
+      },
+      "appReady": {
+        "samples": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "maxMs": null,
+        "samplesMs": []
+      },
+      "windowCreated": {
+        "samples": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "maxMs": null,
+        "samplesMs": []
+      },
+      "sidecarReady": {
+        "samples": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "maxMs": null,
+        "samplesMs": []
+      },
+      "domContentLoaded": {
+        "samples": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "maxMs": null,
+        "samplesMs": []
+      },
+      "readyToShow": {
+        "samples": 0,
+        "p50Ms": null,
+        "p95Ms": null,
+        "maxMs": null,
+        "samplesMs": []
+      },
+      "coreConnected": {
+        "samples": 5,
+        "p50Ms": 1292.771,
+        "p95Ms": 1326.646,
+        "maxMs": 1326.646,
+        "samplesMs": [
+          1318.794,
+          1292.771,
+          1256.252,
+          1275.175,
+          1326.646
+        ]
+      }
+    }
+  },
+  "firstHistoryFrame": {
+    "samples": 5,
+    "p50Ms": 566.293,
+    "p95Ms": 575.55,
+    "maxMs": 575.55,
+    "samplesMs": [
+      566.293,
+      575.55,
+      550.767,
+      567.54,
+      513.045
+    ]
+  },
+  "idleProcessTreeMemory": {
+    "sampleCount": 12,
+    "peakBytes": 410263552,
+    "samplesBytes": [
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552,
+      410263552
+    ]
+  },
+  "loadedRepositoryIdleProcessTreeMemory": {
+    "sampleCount": 12,
+    "peakBytes": 512139264,
+    "samplesBytes": [
+      512139264,
+      512139264,
+      512139264,
+      512040960,
+      512040960,
+      512040960,
+      512040960,
+      512040960,
+      512040960,
+      512040960,
+      511967232,
+      500666368
+    ]
+  },
+  "processMemoryBreakdown": null,
+  "repositoryCacheLifecycle": null,
+  "work": {
+    "iterations": [
+      {
+        "iteration": 1,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 298,
+          "p95FrameMs": 16.800000000000182,
+          "p5Fps": 59.52380952380888
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1801,
+          "p95FrameMs": 16.73,
+          "p5Fps": 59.772863120143455,
+          "requestAnimationFrameP5Fps": 59.523809523812105,
+          "presentationTrace": {
+            "event": "benchmark,viz:Display::FrameDisplayed",
+            "frameCount": 1801,
+            "intervalSamples": 1800,
+            "traceEventCount": 142348
+          }
+        },
+        "workMemorySampleCount": 56,
+        "workMemoryPeakBytes": 548229120
+      },
+      {
+        "iteration": 2,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 300,
+          "p95FrameMs": 16.800000000000182,
+          "p5Fps": 59.52380952380888
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1801,
+          "p95FrameMs": 16.727,
+          "p5Fps": 59.78358342799067,
+          "requestAnimationFrameP5Fps": 59.523809523812105,
+          "presentationTrace": {
+            "event": "benchmark,viz:Display::FrameDisplayed",
+            "frameCount": 1801,
+            "intervalSamples": 1800,
+            "traceEventCount": 142363
+          }
+        },
+        "workMemorySampleCount": 56,
+        "workMemoryPeakBytes": 539127808
+      },
+      {
+        "iteration": 3,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 297,
+          "p95FrameMs": 16.800000000000182,
+          "p5Fps": 59.52380952380888
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1801,
+          "p95FrameMs": 16.73,
+          "p5Fps": 59.772863120143455,
+          "requestAnimationFrameP5Fps": 59.523809523812105,
+          "presentationTrace": {
+            "event": "benchmark,viz:Display::FrameDisplayed",
+            "frameCount": 1801,
+            "intervalSamples": 1800,
+            "traceEventCount": 142433
+          }
+        },
+        "workMemorySampleCount": 56,
+        "workMemoryPeakBytes": 546570240
+      },
+      {
+        "iteration": 4,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 299,
+          "p95FrameMs": 16.800000000000182,
+          "p5Fps": 59.52380952380888
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1801,
+          "p95FrameMs": 16.732,
+          "p5Fps": 59.765718383934974,
+          "requestAnimationFrameP5Fps": 59.523809523812105,
+          "presentationTrace": {
+            "event": "benchmark,viz:Display::FrameDisplayed",
+            "frameCount": 1801,
+            "intervalSamples": 1800,
+            "traceEventCount": 142348
+          }
+        },
+        "workMemorySampleCount": 56,
+        "workMemoryPeakBytes": 549789696
+      },
+      {
+        "iteration": 5,
+        "idleAnimationFrame": {
+          "durationMs": 5000,
+          "frameSamples": 300,
+          "p95FrameMs": 16.799999999999955,
+          "p5Fps": 59.52380952380968
+        },
+        "scroll": {
+          "durationMs": 30000,
+          "frameSamples": 1801,
+          "p95FrameMs": 16.727,
+          "p5Fps": 59.78358342799067,
+          "requestAnimationFrameP5Fps": 59.523809523812105,
+          "presentationTrace": {
+            "event": "benchmark,viz:Display::FrameDisplayed",
+            "frameCount": 1801,
+            "intervalSamples": 1800,
+            "traceEventCount": 142357
+          }
+        },
+        "workMemorySampleCount": 56,
+        "workMemoryPeakBytes": 536567808
+      }
+    ],
+    "idleAnimationFrameP5Fps": {
+      "samples": 5,
+      "p5": 59.52380952380888,
+      "p50": 59.52380952380888,
+      "p95": 59.52380952380968,
+      "max": 59.52380952380968,
+      "samplesValues": [
+        59.52380952380888,
+        59.52380952380888,
+        59.52380952380888,
+        59.52380952380888,
+        59.52380952380968
+      ]
+    },
+    "scrollP5Fps": {
+      "samples": 5,
+      "p5": 59.765718383934974,
+      "p50": 59.772863120143455,
+      "p95": 59.78358342799067,
+      "max": 59.78358342799067,
+      "samplesValues": [
+        59.772863120143455,
+        59.78358342799067,
+        59.772863120143455,
+        59.765718383934974,
+        59.78358342799067
+      ]
+    },
+    "scrollRequestAnimationFrameP5Fps": {
+      "samples": 5,
+      "p5": 59.523809523812105,
+      "p50": 59.523809523812105,
+      "p95": 59.523809523812105,
+      "max": 59.523809523812105,
+      "samplesValues": [
+        59.523809523812105,
+        59.523809523812105,
+        59.523809523812105,
+        59.523809523812105,
+        59.523809523812105
+      ]
+    },
+    "workMemoryPeakBytes": {
+      "samples": 5,
+      "p5": 536567808,
+      "p50": 546570240,
+      "p95": 549789696,
+      "max": 549789696,
+      "samplesValues": [
+        548229120,
+        539127808,
+        546570240,
+        549789696,
+        536567808
+      ]
+    }
+  },
+  "measurementNotes": [
+    "Scroll P5 uses Chromium compositor Display::FrameDisplayed timestamps via CDP tracing. Trace collection is active during work-memory sampling, so workMemoryPeakBytes from this report is diagnostic only; use a run without tracing for memory acceptance."
+  ],
+  "installer": {
+    "path": "E:\\personal_projects\\GitCrest\\dist\\GitCrest Setup 0.1.0.exe",
+    "bytes": 113443342,
+    "mebibytes": 108.19
+  },
+  "limitations": []
+}

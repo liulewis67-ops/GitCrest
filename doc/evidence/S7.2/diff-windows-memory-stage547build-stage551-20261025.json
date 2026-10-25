@@ -1,0 +1,52 @@
+{
+  "stage": 551,
+  "generatedAt": "2026-10-25T13:13:42.920Z",
+  "executablePath": "E:\\personal_projects\\GitCrest\\dist\\win-unpacked\\GitCrest.exe",
+  "method": "Main window opens Diffs for three modified files of one repository (200-line files) with \"Open in Diff window\"; after the last one shows and a 5 s settle, Working Set and Private Working Set are summed over the main process tree.",
+  "runs": 5,
+  "workingSet": {
+    "p50MiB": 749.4,
+    "maxMiB": 755.1
+  },
+  "privateWorkingSet": {
+    "p50MiB": 365.9,
+    "maxMiB": 373.8
+  },
+  "samples": [
+    {
+      "windows": 2,
+      "workingSetBytes": 783310848,
+      "processes": 8,
+      "renderers": 2,
+      "privateWorkingSetBytes": 382939136
+    },
+    {
+      "windows": 2,
+      "workingSetBytes": 791801856,
+      "processes": 8,
+      "renderers": 2,
+      "privateWorkingSetBytes": 391942144
+    },
+    {
+      "windows": 2,
+      "workingSetBytes": 765231104,
+      "processes": 8,
+      "renderers": 2,
+      "privateWorkingSetBytes": 360873984
+    },
+    {
+      "windows": 2,
+      "workingSetBytes": 785772544,
+      "processes": 8,
+      "renderers": 2,
+      "privateWorkingSetBytes": 383639552
+    },
+    {
+      "windows": 2,
+      "workingSetBytes": 787648512,
+      "processes": 8,
+      "renderers": 2,
+      "privateWorkingSetBytes": 386588672
+    }
+  ]
+}
