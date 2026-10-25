@@ -5934,9 +5934,9 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
   - `15-frontend-development-guidelines.md` §2.2 第 4 条改为按“主进程运行时 / renderer 构建期”区分 `dependencies` 与 `devDependencies`。
   - `scripts/packaged-smoke.mjs` 以 `--lang=en-US` 启动（与 E2E、桌面基准相同）：此前在中文系统下等待 “Core connected” 必然超时。
 - 结果：`app.asar` 147,853,442 → 23,905,631 B（文件 2,490 → 393，头部 JSON 669,922 → 102,839 B），`app.asar.unpacked` 88,044,075 B → 无；安装目录 562.5 → 350.5 MB；NSIS 安装包 113,443,342 → 93,311,523 B（108.19 → 88.99 MiB）。`out/renderer` 21.5 MB 不变。
-- 验证：默认配置 `electron-builder --win nsis --x64 --publish never` 成功（“completed installing native dependencies”）；`pnpm test:packaged` 对新包通过 1 次，另 1 次与旧包的 3 次一样在检查通过后的清理步骤报 `EBUSY`（删除临时安装目录时被占用，进程均已退出），属既有的清理不稳定，与本改动无关，未修改。其余见小阶段 548。
+- 验证：默认配置 `electron-builder --win nsis --x64 --publish never` 成功（“completed installing native dependencies”）；`pnpm test:packaged` 对新包通过 1 次，另 1 次与旧包的 3 次一样在检查通过后的清理步骤报 `EBUSY`（删除临时安装目录时被占用，GitCrest 进程均已退出），与本改动无关，未修改；占用者见“限制/后续”。其余见小阶段 548。
 - 证据：`package.json`、`pnpm-lock.yaml`、`doc/15-frontend-development-guidelines.md`、`scripts/packaged-smoke.mjs`、`doc/evidence/S7.2/package-contents-stage549-20261025.json`。
-- 限制/后续：macOS 与 Linux 包未重新打包核对；smoke 清理步骤的 `EBUSY` 可另行加长等待或排查占用者（同日 electron-builder 在新解压的 `default_app.asar` 上也出现过同样的 `EBUSY`，无进程持有，疑为实时扫描）。
+- 限制/后续：macOS 与 Linux 包未重新打包核对；smoke 清理步骤的 `EBUSY` 与同日 electron-builder 在新解压的 `default_app.asar` 上出现的 `EBUSY` 同源：Windows Restart Manager 显示这些 `.asar` 由 Claude 桌面应用（`Claude.exe`，同为 Electron 应用）持有打开，非实时扫描；关闭该应用后可删除。在工作区内打包或运行 smoke 时，如 Claude 桌面应用或其他 Electron 编辑器正打开本项目，会复现该问题。
 - 实施 commit：实现、证据与台账同一 commit。
 
 ### S7.2 P1 同日发行包 A/B 对照 — 小阶段 550
