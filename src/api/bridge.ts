@@ -24,6 +24,7 @@ export interface GitCrestLanguagePluginEntry {
     grammar: string;
     monacoLanguage?: string;
     structure: unknown;
+    syntax?: unknown;
   };
   error?: string;
 }

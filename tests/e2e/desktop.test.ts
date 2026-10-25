@@ -229,7 +229,8 @@ describe("desktop startup E2E", () => {
       await window.getByRole("button", { name: "Monaco view" }).click();
       const monacoLines = window.locator(".monacoDiffHunk .view-lines");
       await monacoLines.first().waitFor({ state: "visible", timeout: 15_000 });
-      expect(await monacoLines.last().innerText()).toContain("welcome");
+      // Monaco lays its lines out after it becomes visible, so the text is polled rather than read once.
+      await expect.poll(() => monacoLines.last().innerText(), { timeout: 10_000 }).toContain("welcome");
       const parsedHunk = window.locator(".monacoDiffHunk").first();
       await parsedHunk.waitFor({ state: "visible" });
       expect(["parsed", "recovered"], rendererErrors.join("\n")).toContain(await parsedHunk.getAttribute("data-tree-sitter-state"));

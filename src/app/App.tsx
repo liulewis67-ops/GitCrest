@@ -324,6 +324,10 @@ function App() {
     : mode === "history" && historyFilePath && isFullGitObjectId(historyFileOid) && historyFileOid === selectedCommit
       ? { path: historyFilePath, scope: "commit" as const, commitOid: historyFileOid }
       : undefined;
+  // The open file's status entry: when it changes (say from untracked to modified), its diff is read again.
+  const diffStatusKey = diffTarget?.scope !== "commit" && selectedDiffFile
+    ? [selectedDiffFile.kind, selectedDiffFile.indexStatus, selectedDiffFile.worktreeStatus, selectedDiffFile.categories.join(","), selectedDiffFile.originalPath ?? ""].join("|")
+    : "";
   const diffQuery = useRepositoryDiffQuery({
     api: apiRef.current,
     enabled: Boolean(diffTarget),
@@ -332,6 +336,7 @@ function App() {
     scope: diffTarget?.scope,
     commitOid: diffTarget?.commitOid,
     context: diffViewPreferences.layout === "full" ? "full" : "hunks",
+    refreshKey: diffStatusKey,
   });
   const { state: diffState, activeKey: activeDiffKey } = diffQuery;
   // The line view groups changes by code structure, which needs the complete file read after the same hunks.
@@ -540,7 +545,7 @@ function App() {
     void commitSubmission.submit(action, canCommit, target);
   }
 
-  function addDiffSelectionToCommit(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
+  function addDiffSelectionToCommit(selections: Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>) {
     const document = diffState.document;
     if (!selectedRepository || !document || document.scope !== "index") return;
     addCommitDiffSelection(document.path, document.revision, selections);

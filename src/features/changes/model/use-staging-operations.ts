@@ -15,7 +15,7 @@ interface DiscardSelection {
   repositoryPath: string;
   path: string;
   revision: string;
-  selections: Array<{ hunkIndex: number; rowIndex?: number }>;
+  selections: Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>;
 }
 
 interface StagingOperationsOptions {
@@ -92,7 +92,7 @@ export function useStagingOperations({
     }
   }
 
-  async function stageSelectedChanges(selections: Array<{ hunkIndex: number; rowIndex?: number }>) {
+  async function stageSelectedChanges(selections: Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>) {
     const api = getApi();
     if (!api || !repository || !document || document.scope === "commit" || busy || hasActiveStagingTask) return;
     setBusy(true);

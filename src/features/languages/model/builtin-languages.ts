@@ -35,7 +35,34 @@ export interface LanguageDefinition {
   source: "builtin" | "plugin";
   /** Changes when the definition changes, so cached parse results are not reused across versions. */
   version: string;
+  syntax?: LanguageSyntax;
 }
+
+/** Plain-text traits of a language that change descriptions use: comment markers and debug-output calls. */
+export interface LanguageSyntax {
+  lineComments?: string[];
+  blockComments?: Array<[string, string]>;
+  /** Regular expressions matched against added lines, such as `\bconsole\.log\s*\(`. */
+  debugPatterns?: string[];
+}
+
+const C_COMMENTS = { lineComments: ["//"], blockComments: [["/*", "*/"]] as Array<[string, string]> };
+const SCRIPT_DEBUG = ["\\bconsole\\.(?:log|debug|info|trace|dir|table)\\s*\\(", "\\bdebugger\\b"];
+
+const BUILTIN_SYNTAX: Record<string, LanguageSyntax> = {
+  javascript: { ...C_COMMENTS, debugPatterns: SCRIPT_DEBUG },
+  jsx: { ...C_COMMENTS, debugPatterns: SCRIPT_DEBUG },
+  typescript: { ...C_COMMENTS, debugPatterns: SCRIPT_DEBUG },
+  tsx: { ...C_COMMENTS, debugPatterns: SCRIPT_DEBUG },
+  rust: { ...C_COMMENTS, debugPatterns: ["\\bdbg!\\s*\\(", "\\be?println!\\s*\\("] },
+  python: { lineComments: ["#"], debugPatterns: ["^\\s*print\\s*\\(", "\\bbreakpoint\\s*\\(", "\\bpdb\\.set_trace\\s*\\("] },
+  go: { ...C_COMMENTS, debugPatterns: ["\\bfmt\\.Print(?:ln|f)?\\s*\\(", "^\\s*println\\s*\\("] },
+  java: { ...C_COMMENTS, debugPatterns: ["\\bSystem\\.(?:out|err)\\.print(?:ln|f)?\\s*\\(", "\\.printStackTrace\\s*\\(\\s*\\)"] },
+  csharp: { ...C_COMMENTS, debugPatterns: ["\\bConsole\\.Write(?:Line)?\\s*\\(", "\\bDebug\\.Write(?:Line)?\\s*\\(", "\\bDebugger\\.Break\\s*\\("] },
+  css: { blockComments: [["/*", "*/"]] },
+  json: {},
+  markdown: { blockComments: [["<!--", "-->"]] },
+};
 
 const COMMENTS = ["comment"];
 
@@ -171,7 +198,7 @@ const JSON_RULES: StructureRules = {
 
 const BUILTIN = "builtin-1";
 
-export const BUILTIN_LANGUAGES: readonly LanguageDefinition[] = [
+const BUILTIN_DEFINITIONS: readonly LanguageDefinition[] = [
   { id: "javascript", name: "JavaScript", extensions: ["js", "mjs", "cjs"], monacoLanguage: "javascript", grammar: { url: javascriptGrammarUrl }, structure: { type: "script" }, source: "builtin", version: BUILTIN },
   { id: "jsx", name: "JSX", extensions: ["jsx"], monacoLanguage: "javascript", grammar: { url: tsxGrammarUrl }, structure: { type: "script" }, source: "builtin", version: BUILTIN },
   { id: "typescript", name: "TypeScript", extensions: ["ts", "mts", "cts"], monacoLanguage: "typescript", grammar: { url: typescriptGrammarUrl }, structure: { type: "script" }, source: "builtin", version: BUILTIN },
@@ -185,6 +212,8 @@ export const BUILTIN_LANGUAGES: readonly LanguageDefinition[] = [
   { id: "json", name: "JSON", extensions: ["json", "jsonc", "json5", "webmanifest"], fileNames: [".babelrc", ".eslintrc", ".prettierrc"], monacoLanguage: "json", grammar: { url: jsonGrammarUrl }, structure: { type: "rules", rules: JSON_RULES }, source: "builtin", version: BUILTIN },
   { id: "markdown", name: "Markdown", extensions: ["md", "markdown", "mdown", "mkd"], monacoLanguage: "markdown", structure: { type: "markdown" }, source: "builtin", version: BUILTIN },
 ];
+
+export const BUILTIN_LANGUAGES: readonly LanguageDefinition[] = BUILTIN_DEFINITIONS.map((language) => ({ ...language, syntax: BUILTIN_SYNTAX[language.id] }));
 
 /** Exposed for tests and tooling that read the rules without a registry. */
 export const BUILTIN_RULES = { python: PYTHON, go: GO, java: JAVA, csharp: CSHARP, css: CSS, json: JSON_RULES } as const;

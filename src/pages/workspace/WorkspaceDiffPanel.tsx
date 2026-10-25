@@ -7,7 +7,7 @@ import { loadFileDiffViewer, loadSplitDiff, type CodeReviewSource, type DiffView
 const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));
 const FileDiffViewer = lazy(() => loadFileDiffViewer().then(({ FileDiffViewer }) => ({ default: FileDiffViewer })));
 
-type Selection = Array<{ hunkIndex: number; rowIndex?: number }>;
+type Selection = Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>;
 
 interface WorkspaceDiffPanelProps {
   path: string;

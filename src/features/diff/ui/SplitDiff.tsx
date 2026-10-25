@@ -1,11 +1,12 @@
 import { useI18n } from "../../../shared/i18n";
 import type { DiffDocumentResponse } from "../../../api/client";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { rowKey, structureSelection, type ReviewStructure, type SideLine } from "../model/code-review-analysis";
+import { OTHER_STRUCTURE_ID, rowKey, structureSelection, type ReviewStructure, type SideLine } from "../model/code-review-analysis";
 import { splitInlineDiff } from "../model/inline-diff";
 import { monacoLanguageForPath } from "../model/monaco-language";
 import { exceedsMonacoViewLimits } from "../model/monaco-view-limits";
-import { rowSelectionsFor, selectedRowKeys } from "../model/row-selection";
+import { rowState, selectedRowCount, selectedRowKeys, selectionFromKeys, withRows, withRowState, withoutRows, type DiffSelectionItem, type RowSelectionState } from "../model/row-selection";
+import { dependencyHints, selectedDebugRows } from "../model/selection-hints";
 import { useCodeReviewAnalysis } from "../model/use-code-review-analysis";
 import { DiffStatusNotice } from "./DiffStatusNotice";
 import { BlameAnnotation, blameGutterLabel, type BlameLookup } from "./BlameAnnotation";
@@ -29,9 +30,9 @@ export interface CodeReviewSource {
 
 interface SplitDiffProps {
   document: DiffDocumentResponse;
-  onStageSelection: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
-  onDiscardSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
-  onCommitSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number }>) => void;
+  onStageSelection: (selections: Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>) => void;
+  onDiscardSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>) => void;
+  onCommitSelection?: (selections: Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>) => void;
   disabled: boolean;
   readOnly?: boolean;
   onOpenWindow?: () => void;
@@ -45,12 +46,13 @@ interface SplitDiffProps {
 
 export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true, blame, codeReview }: SplitDiffProps) {
   const { t } = useI18n();
-  const [selection, setSelection] = useState<Array<{ hunkIndex: number; rowIndex?: number }>>([]);
+  const [selection, setSelection] = useState<DiffSelectionItem[]>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
   const [activeHunk, setActiveHunk] = useState<number | null>(null);
   const [view, setView] = useState<"split" | "monaco">("split");
   const [activeStructureId, setActiveStructureId] = useState<string | null>(null);
-  const [withheld, setWithheld] = useState(0);
+  // What the last structure selection left out or split, shown under its buttons.
+  const [selectionNote, setSelectionNote] = useState({ withheld: 0, halves: 0 });
   const hunkRefs = useRef<Array<HTMLElement | null>>([]);
   const rootRef = useRef<HTMLDivElement>(null);
   const activeStructureIndex = useRef(0);
@@ -82,7 +84,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
     setCollapsedHunks(new Set());
     setActiveHunk(null);
     setView("split");
-    setWithheld(0);
+    setSelectionNote({ withheld: 0, halves: 0 });
     hunkRefs.current = [];
   }, [document.revision]);
   useEffect(() => {
@@ -125,7 +127,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
 
   const activateStructure = useCallback((structure: ReviewStructure) => {
     setActiveStructureId(structure.id);
-    setWithheld(0);
+    setSelectionNote({ withheld: 0, halves: 0 });
     activeStructureIndex.current = Math.max(0, analysis?.structures.indexOf(structure) ?? 0);
     const first = [...structure.atoms, ...structure.memberAtoms]
       .map((index) => analysis?.atoms[index]?.selection)
@@ -138,28 +140,33 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
     if (readOnly || !analysis) return undefined;
     return {
       disabled,
-      withheld,
+      withheld: selectionNote.withheld,
+      halves: selectionNote.halves,
       stateOf: (structure) => {
         const { rows } = structureSelection(analysis, structure.id, structure.memberAtoms.length > 0);
-        const chosen = rows.filter((row) => selectedKeys.has(rowKey(row.hunkIndex, row.rowIndex))).length;
+        const chosen = rows.filter((row) => {
+          const state = rowState(selectedKeys, row.hunkIndex, row.rowIndex);
+          return state === "all" || state === row.side;
+        }).length;
         return rows.length > 0 && chosen === rows.length ? "all" : chosen > 0 ? "some" : "none";
       },
       select: (structure, includeMembers) => {
-        const { rows, withheld: left } = structureSelection(analysis, structure.id, includeMembers);
-        const keys = new Set(selectedKeys);
-        for (const row of rows) keys.add(rowKey(row.hunkIndex, row.rowIndex));
-        setSelection(rowSelectionsFor(keys));
-        setWithheld(left);
+        const { rows, withheld, halves } = structureSelection(analysis, structure.id, includeMembers);
+        setSelection(selectionFromKeys(document, withRows(selectedKeys, rows)));
+        setSelectionNote({ withheld, halves });
       },
       deselect: (structure) => {
         const { touched } = structureSelection(analysis, structure.id, true);
-        const keys = new Set(selectedKeys);
-        for (const row of touched) keys.delete(rowKey(row.hunkIndex, row.rowIndex));
-        setSelection(rowSelectionsFor(keys));
-        setWithheld(0);
+        setSelection(selectionFromKeys(document, withoutRows(selectedKeys, touched)));
+        setSelectionNote({ withheld: 0, halves: 0 });
       },
     };
-  }, [analysis, disabled, readOnly, selectedKeys, withheld]);
+  }, [analysis, disabled, document, readOnly, selectedKeys, selectionNote]);
+
+  /** Sets one change row, or one side of it, and keeps the selection in diff order. */
+  const setRowSelection = useCallback((hunkIndex: number, rowIndex: number, state: RowSelectionState) => {
+    setSelection(selectionFromKeys(document, withRowState(selectedKeys, hunkIndex, rowIndex, state)));
+  }, [document, selectedKeys]);
 
   // A structure chosen in the full-file view is focused and selected here once its analysis is ready.
   const initialStructureId = codeReview?.initialStructureId;
@@ -205,17 +212,50 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
   if (document.status !== "text") return <DiffStatusNotice status={document.status} />;
 
   const selectionSummary = analysis && selectedKeys.size > 0 ? summarizeSelection() : null;
+  const dependencies = analysis && !readOnly ? dependencyHints(analysis, selectedKeys) : [];
+  const debugRows = analysis && !readOnly ? selectedDebugRows(analysis, selectedKeys) : [];
   function summarizeSelection() {
     const names: string[] = [];
     for (const key of selectedKeys) {
-      const atomIndex = analysis?.rowAtoms.get(key);
-      for (const owner of atomIndex === undefined ? [] : analysis?.atoms[atomIndex]?.owners ?? []) {
+      const [hunkIndex, rowIndex, side] = key.split(":");
+      const atomIndex = analysis?.rowAtoms.get(`${hunkIndex}:${rowIndex}`);
+      const atom = atomIndex === undefined ? undefined : analysis?.atoms[atomIndex];
+      const owners = !atom ? [] : side === "old" ? atom.oldOwners : side === "new" ? atom.newOwners : atom.owners;
+      for (const owner of owners) {
         const structure = structuresById.get(owner);
         const name = structure ? structureDisplayName(structure, t) : t("cr.other");
         if (!names.includes(name)) names.push(name);
       }
     }
-    return t("cr.selectionIn", { count: selectedKeys.size, names: names.length > 3 ? `${names.slice(0, 3).join(", ")}…` : names.join(", ") });
+    return t("cr.selectionIn", { count: selectedRowCount(selectedKeys), names: names.length > 3 ? `${names.slice(0, 3).join(", ")}…` : names.join(", ") });
+  }
+
+  function toggleSide(hunkIndex: number, rowIndex: number, state: RowSelectionState, side: "old" | "new") {
+    const old = state === "all" || state === "old";
+    const added = state === "all" || state === "new";
+    const nextOld = side === "old" ? !old : old;
+    const nextNew = side === "new" ? !added : added;
+    setRowSelection(hunkIndex, rowIndex, nextOld && nextNew ? "all" : nextOld ? "old" : nextNew ? "new" : "none");
+  }
+
+  /** The structures a hunk changes, in order, so its header names them instead of Git's guessed context. */
+  function hunkStructureNames(hunkIndex: number): string {
+    if (!analysis) return "";
+    const names: string[] = [];
+    document.hunks[hunkIndex]?.rows.forEach((row, rowIndex) => {
+      if (row.kind !== "change") return;
+      const atomIndex = analysis.rowAtoms.get(rowKey(hunkIndex, rowIndex));
+      for (const owner of atomIndex === undefined ? [] : analysis.atoms[atomIndex]?.owners ?? []) {
+        if (owner === OTHER_STRUCTURE_ID) continue;
+        const path: string[] = [];
+        for (let current = structuresById.get(owner); current; current = current.parentId ? structuresById.get(current.parentId) : undefined) {
+          path.unshift(structureDisplayName(current, t));
+        }
+        const name = path.join(" › ");
+        if (name && !names.includes(name)) names.push(name);
+      }
+    });
+    return names.length > 3 ? `${names.slice(0, 3).join(" · ")} …` : names.join(" · ");
   }
 
   const diff = (
@@ -241,8 +281,10 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
       {view === "monaco" && !language.supported && <div className="diffSyntaxFallback" role="status">{t("sd.noGrammar")}</div>}
       {document.hunks.map((hunk, hunkIndex) => {
         const changeRowIndexes = hunk.rows.flatMap((row, rowIndex) => row.kind === "change" ? [rowIndex] : []);
-        const hunkSelected = selection.some((item) => item.hunkIndex === hunkIndex && item.rowIndex === undefined);
-        const allRowsSelected = changeRowIndexes.length > 0 && changeRowIndexes.every((rowIndex) => selection.some((item) => item.hunkIndex === hunkIndex && (item.rowIndex === undefined || item.rowIndex === rowIndex)));
+        const rowStates = changeRowIndexes.map((rowIndex) => rowState(selectedKeys, hunkIndex, rowIndex));
+        const allRowsSelected = rowStates.length > 0 && rowStates.every((state) => state === "all");
+        const someRowsSelected = !allRowsSelected && rowStates.some((state) => state !== "none");
+        const hunkStructures = hunkStructureNames(hunkIndex);
         return (
         <section
           className={`splitDiffHunk${activeHunk === hunkIndex ? " splitDiffHunk-active" : ""}`}
@@ -254,14 +296,17 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
             {!readOnly ? <label className="hunkSelection"><input
               type="checkbox"
               aria-label={t("sd.selectHunkAria", { n: hunkIndex + 1 })}
-              checked={hunkSelected || allRowsSelected}
+              checked={allRowsSelected}
+              ref={(element) => { if (element) element.indeterminate = someRowsSelected; }}
               disabled={disabled || changeRowIndexes.length === 0}
-              onChange={(event) => setSelection((current) => {
-                const rest = current.filter((item) => item.hunkIndex !== hunkIndex);
-                return event.target.checked ? [...rest, { hunkIndex }] : rest;
-              })}
+              onChange={(event) => {
+                let keys: Set<string> = new Set(selectedKeys);
+                for (const rowIndex of changeRowIndexes) keys = withRowState(keys, hunkIndex, rowIndex, event.target.checked ? "all" : "none");
+                setSelection(selectionFromKeys(document, keys));
+              }}
             />{t("sd.selectHunk")}</label> : <span className="hunkSelection">{t("sd.hunkLabel", { n: hunkIndex + 1 })}</span>}
             <code>@@ -{hunk.oldStart},{hunk.oldLines} +{hunk.newStart},{hunk.newLines} @@</code>
+            {hunkStructures && <span className="hunkStructures" title={hunkStructures}>{hunkStructures}</span>}
             <button
               type="button"
               className="diffHunkToggle"
@@ -287,6 +332,9 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
             />
           </Suspense>}
           {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => {
+            const state = row.kind === "change" ? rowState(selectedKeys, hunkIndex, rowIndex) : "none";
+            // Only a row with both a deleted and an added line can be selected one side at a time.
+            const paired = row.kind === "change" && !readOnly && row.oldText !== null && row.newText !== null;
             const atomIndex = row.kind === "change" ? analysis?.rowAtoms.get(rowKey(hunkIndex, rowIndex)) : undefined;
             const atom = atomIndex === undefined ? undefined : analysis?.atoms[atomIndex];
             const inStructure = atomIndex !== undefined && highlightedAtoms.has(atomIndex);
@@ -298,29 +346,20 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
               : "";
             return (
             <div
-              className={`splitDiffRow splitDiffRow-${row.kind}${blame ? " withBlame" : ""}${inStructure ? " splitDiffRow-structure" : ""}${sharedWith ? " splitDiffRow-shared" : ""}`}
+              className={`splitDiffRow splitDiffRow-${row.kind}${blame ? " withBlame" : ""}${inStructure ? " splitDiffRow-structure" : ""}${sharedWith ? " splitDiffRow-shared" : ""}${atom?.debug ? " splitDiffRow-debug" : ""}`}
               role="group"
               aria-label={row.kind === "change" ? t("sd.changedLines") : t("sd.contextLines")}
-              title={sharedWith ? t("cr.sharedRowTitle", { names: sharedWith }) : undefined}
+              title={sharedWith ? t("cr.sharedRowTitle", { names: sharedWith }) : atom?.debug ? t("cr.debugRowTitle") : undefined}
               data-row={rowKey(hunkIndex, rowIndex)}
               key={`${hunkIndex}:${rowIndex}`}
             >
               {row.kind === "change" && !readOnly ? <label className="diffRowSelect"><input
                 type="checkbox"
                 aria-label={t("sd.selectRowAria", { hunk: hunkIndex + 1, row: rowIndex + 1 })}
-                checked={selection.some((item) => item.hunkIndex === hunkIndex && (item.rowIndex === undefined || item.rowIndex === rowIndex))}
+                checked={state === "all"}
+                ref={(element) => { if (element) element.indeterminate = state === "old" || state === "new"; }}
                 disabled={disabled}
-                onChange={(event) => setSelection((current) => {
-                  const isHunkSelected = current.some((item) => item.hunkIndex === hunkIndex && item.rowIndex === undefined);
-                  const rows = isHunkSelected
-                    ? changeRowIndexes.map((rowIndex) => ({ hunkIndex, rowIndex }))
-                    : current.filter((item) => item.hunkIndex !== hunkIndex || item.rowIndex !== undefined);
-                  const exists = rows.some((item) => item.hunkIndex === hunkIndex && item.rowIndex === rowIndex);
-                  const next = event.target.checked
-                    ? (exists ? rows : [...rows, { hunkIndex, rowIndex }])
-                    : rows.filter((item) => !(item.hunkIndex === hunkIndex && item.rowIndex === rowIndex));
-                  return [...next.filter((item) => item.hunkIndex !== hunkIndex), ...next.filter((item) => item.hunkIndex === hunkIndex)];
-                })}
+                onChange={(event) => setRowSelection(hunkIndex, rowIndex, event.target.checked ? "all" : "none")}
               /></label> : <span className="diffRowSelect" aria-hidden="true" />}
               <div
                 className="splitDiffCell"
@@ -331,7 +370,15 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                     ? t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })
                     : t("sd.contextLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })}
               >
-                <span className="splitDiffLineNumber">{row.oldLine ?? ""}</span>
+                <span className="splitDiffLineNumber">{paired && <input
+                  className="diffSideSelect"
+                  type="checkbox"
+                  aria-label={t("sd.selectOldSideAria", { line: row.oldLine ?? "" })}
+                  title={t("sd.selectSideTitle")}
+                  checked={state === "all" || state === "old"}
+                  disabled={disabled}
+                  onChange={() => toggleSide(hunkIndex, rowIndex, state, "old")}
+                />}{row.oldLine ?? ""}</span>
                 <code>{row.oldText !== null && row.oldText !== undefined && row.kind === "change" ? <InlineDiffText text={row.oldText} counterpart={row.newText ?? null} /> : row.oldText ?? ""}</code>
               </div>
               {blame && <BlameAnnotation line={blame(row.newLine, row.newText)} />}
@@ -344,8 +391,17 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
                     ? t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })
                     : t("sd.contextLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })}
               >
-                <span className="splitDiffLineNumber">{row.newLine ?? ""}</span>
+                <span className="splitDiffLineNumber">{paired && <input
+                  className="diffSideSelect"
+                  type="checkbox"
+                  aria-label={t("sd.selectNewSideAria", { line: row.newLine ?? "" })}
+                  title={t("sd.selectSideTitle")}
+                  checked={state === "all" || state === "new"}
+                  disabled={disabled}
+                  onChange={() => toggleSide(hunkIndex, rowIndex, state, "new")}
+                />}{row.newLine ?? ""}</span>
                 <code>{row.newText !== null && row.newText !== undefined && row.kind === "change" ? <InlineDiffText text={row.newText} counterpart={row.oldText ?? null} /> : row.newText ?? ""}</code>
+                {atom?.debug && <span className="debugBadge" aria-label={t("cr.debugRowTitle")}>{t("cr.debugBadge")}</span>}
               </div>
             </div>
             );
@@ -354,6 +410,16 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
         );
       })}
       {!readOnly && <div className="diffSelectionActions">
+        {(dependencies.length > 0 || debugRows.length > 0) && <div className="diffSelectionHints" role="status">
+          {dependencies.map((hint) => <p key={hint.name}>
+            <span>{t("cr.dependency", { name: hint.name })}</span>
+            <button type="button" disabled={disabled} onClick={() => setSelection(selectionFromKeys(document, withRows(selectedKeys, hint.rows)))}>{t("cr.includeDependency")}</button>
+          </p>)}
+          {debugRows.length > 0 && <p>
+            <span>{t("cr.debugSelected", { count: debugRows.length })}</span>
+            <button type="button" disabled={disabled} onClick={() => setSelection(selectionFromKeys(document, withoutRows(selectedKeys, debugRows)))}>{t("cr.deselectDebug")}</button>
+          </p>}
+        </div>}
         <span>{t(selection.length === 1 ? "sd.selectionOne" : "sd.selectionMany", { count: selection.length })}{selectionSummary && <small className="diffSelectionStructures"> · {selectionSummary}</small>}</span>
         <button type="button" disabled={disabled || selection.length === 0} onClick={() => onStageSelection(selection)}>
           {document.scope === "index" ? t("sd.unstageSel") : t("sd.stageSel")}

@@ -71,7 +71,7 @@ describe("code-aware diff analysis", () => {
     expect(selectedNewTexts(analysis, hunks, "function:second")).toEqual(["  return 2; →   return 22;"]);
   });
 
-  it("holds back a row whose old and new lines belong to different structures", () => {
+  it("takes only a structure's own side of a row shared with another structure", () => {
     // Two declarations on one line and a replaced line are one row of the diff each.
     const before = "export const TIMEOUT = 1, RETRIES = 2;\n";
     const after = "export const TIMEOUT = 5, RETRIES = 3;\n";
@@ -83,7 +83,13 @@ describe("code-aware diff analysis", () => {
     expect(added.status).toBe("added");
     expect(added.sharedAtoms).toHaveLength(1);
     expect(structure(replaced, "function:a").status).toBe("removed");
-    expect(structureSelection(replaced, "function:b", false)).toMatchObject({ rows: [], withheld: 1 });
+    // Replacing a by b pairs a's deleted line with b's added line; each structure takes its own half.
+    expect(structureSelection(replaced, "function:b", false)).toMatchObject({ rows: [{ hunkIndex: 0, rowIndex: 0, side: "new" }], withheld: 0, halves: 1 });
+    expect(structureSelection(replaced, "function:a", false)).toMatchObject({ rows: [{ hunkIndex: 0, rowIndex: 0, side: "old" }], halves: 1 });
+
+    // Two declarations on one line share both sides, so neither can take the row alone.
+    const sameLine = analyze("javascript", "function a() {} function b() {}\n", "function a() { 1 } function b() {}\n", "src/file.js");
+    expect(structureSelection(sameLine, "function:a", false)).toMatchObject({ rows: [], withheld: 1 });
   });
 
   it("keeps a class's own declaration change apart from its methods", () => {

@@ -78,4 +78,56 @@ describe("SplitDiff structure outline", () => {
     expect(onRefresh).toHaveBeenCalled();
     expect(screen.queryByRole("tree")).toBeNull();
   });
+
+  it("stages one side of a paired row and names each hunk's structures", async () => {
+    const onStageSelection = vi.fn();
+    render(<SplitDiff document={hunksDocument} onStageSelection={onStageSelection} disabled={false} codeReview={{ fullDocument, loading: false, onRefresh: vi.fn(), open: true, onToggle: vi.fn() }} />);
+
+    expect((await screen.findByText("first() · second()")).className).toBe("hunkStructures");
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select only added line 2" }));
+    const row = screen.getByRole("checkbox", { name: "Select hunk 1 change row 2" }) as HTMLInputElement;
+    expect(row.checked).toBe(false);
+    expect(row.indeterminate).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Stage selected changes" }));
+    expect(onStageSelection).toHaveBeenLastCalledWith([{ hunkIndex: 0, rowIndex: 1, side: "new" }]);
+
+    // Selecting the other side too makes the whole row, and both rows make the whole hunk.
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select only deleted line 2" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1 change row 5" }));
+    fireEvent.click(screen.getByRole("button", { name: "Stage selected changes" }));
+    expect(onStageSelection).toHaveBeenLastCalledWith([{ hunkIndex: 0 }]);
+  });
+
+  it("flags selected debug output and deselects it on request", async () => {
+    const debugRows: DiffDocumentResponse["hunks"][number]["rows"] = [
+      { kind: "context", oldLine: 1, newLine: 1, oldText: "function first() {", newText: "function first() {" },
+      { kind: "change", oldLine: null, newLine: 2, oldText: null, newText: "  console.log(\"here\");" },
+      { kind: "change", oldLine: 2, newLine: 3, oldText: "  return 1;", newText: "  return 11;" },
+      { kind: "context", oldLine: 3, newLine: 4, oldText: "}", newText: "}" },
+    ];
+    const hunks = { ...hunksDocument, revision: "sha256:debug-hunks", hunks: [{ oldStart: 1, oldLines: 3, newStart: 1, newLines: 4, rows: debugRows }] };
+    const full = { ...fullDocument, revision: "sha256:debug-full", hunks: hunks.hunks };
+    const onStageSelection = vi.fn();
+    render(<SplitDiff document={hunks} onStageSelection={onStageSelection} disabled={false} codeReview={{ fullDocument: full, loading: false, onRefresh: vi.fn(), open: true, onToggle: vi.fn() }} />);
+
+    await screen.findByRole("tree");
+    expect(screen.getByText("debug")).toBeDefined();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deselect them" }));
+    expect(screen.queryByText("Selected debug lines: 1")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Stage selected changes" }));
+    expect(onStageSelection).toHaveBeenLastCalledWith([{ hunkIndex: 0, rowIndex: 2 }]);
+  });
+
+  it("counts review progress and moves to the next unreviewed structure", async () => {
+    render(<SplitDiff document={hunksDocument} onStageSelection={vi.fn()} disabled={false} codeReview={{ fullDocument: { ...fullDocument, path: "src/progress.ts" }, loading: false, onRefresh: vi.fn(), open: true, onToggle: vi.fn() }} />);
+
+    expect(await screen.findByText("Reviewed 0 / 2")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Next unreviewed" }));
+    expect(screen.getByRole("treeitem", { name: /first\(\)/ }).getAttribute("aria-selected")).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+    expect(screen.getByText("Reviewed 1 / 2")).toBeDefined();
+    fireEvent.click(screen.getByRole("button", { name: "Next unreviewed" }));
+    expect(screen.getByRole("treeitem", { name: /second\(\)/ }).getAttribute("aria-selected")).toBe("true");
+  });
 });

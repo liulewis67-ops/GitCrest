@@ -68,6 +68,7 @@ export function useCodeReviewAnalysis({ path, fullDocument, fullLoading = false,
         oldDeclarations: parsed.original,
         newDeclarations: parsed.modified,
         recovered: parsed.recovered,
+        syntax: language.syntax,
       });
       setState({ key, value: result.status === "ready" ? { status: "ready", analysis: result.analysis } : { status: "stale" } });
     });

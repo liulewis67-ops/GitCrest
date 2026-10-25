@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { Language, Parser } from "@willbooster/web-tree-sitter";
 import type { DiffDocumentResponse } from "../../src/api/client";
 import { analyzeCodeReview, structureSelection, type CodeReviewAnalysis } from "../../src/features/diff/model/code-review-analysis";
+import type { LanguageSyntax } from "../../src/features/languages/model/builtin-languages";
 import type { SourceDeclaration, SyntaxNodeLike } from "../../src/features/languages/model/structure-common";
 
 type Row = DiffDocumentResponse["hunks"][number]["rows"][number];
@@ -103,11 +104,12 @@ export async function analyzeSources(
   before: string,
   after: string,
   read: (source: string) => Promise<{ declarations: SourceDeclaration[]; hasError: boolean }>,
+  syntax?: LanguageSyntax,
 ): Promise<{ analysis: CodeReviewAnalysis; hunks: DiffDocumentResponse }> {
   const { full, hunks } = diffDocuments(path, before, after);
   const old = await read(before);
   const modified = await read(after);
-  const result = analyzeCodeReview({ fullDocument: full, hunksDocument: hunks, oldDeclarations: old.declarations, newDeclarations: modified.declarations, recovered: old.hasError || modified.hasError });
+  const result = analyzeCodeReview({ fullDocument: full, hunksDocument: hunks, oldDeclarations: old.declarations, newDeclarations: modified.declarations, recovered: old.hasError || modified.hasError, syntax });
   if (result.status !== "ready") throw new Error("analysis is stale");
   return { analysis: result.analysis, hunks };
 }

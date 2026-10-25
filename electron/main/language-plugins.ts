@@ -27,6 +27,8 @@ export interface LanguagePluginManifest {
   monacoLanguage?: string;
   /** Checked by the renderer against the structure-rule format. */
   structure: unknown;
+  /** Optional comment markers and debug patterns, also checked by the renderer. */
+  syntax?: unknown;
 }
 
 export interface LanguagePluginEntry {
@@ -78,7 +80,9 @@ export function parseLanguagePluginManifest(value: unknown): LanguagePluginManif
     invalid('"monacoLanguage" must be a Monaco language id such as "kotlin".');
   }
   if (typeof raw.structure !== "object" || raw.structure === null) invalid('"structure" must be an object of structure rules.');
+  if (raw.syntax !== undefined && (typeof raw.syntax !== "object" || raw.syntax === null || Array.isArray(raw.syntax))) invalid('"syntax" must be an object.');
   return {
+    ...(raw.syntax !== undefined ? { syntax: raw.syntax } : {}),
     schemaVersion: 1,
     id: raw.id,
     name: readLabel(raw.name, "name", 60),

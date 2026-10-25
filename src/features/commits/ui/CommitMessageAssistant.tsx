@@ -14,7 +14,8 @@ function statusFingerprint(snapshot: StatusSnapshotResponse): string {
 }
 
 function selectedRows(document: DiffDocumentResponse, selections: NonNullable<CommitSelection["selections"]>): string {
-  const picked = new Map<number, Set<number>>();
+  // Each picked row with the side that was selected; `undefined` is the whole row.
+  const picked = new Map<number, Map<number, "old" | "new" | undefined>>();
   for (const selection of selections) {
     const hunk = document.hunks[selection.hunkIndex];
     if (!hunk) throw new Error(t("ai.selectionGone"));
@@ -24,8 +25,9 @@ function selectedRows(document: DiffDocumentResponse, selections: NonNullable<Co
     for (const rowIndex of rows) {
       const row = hunk.rows[rowIndex];
       if (!row || row.kind !== "change") throw new Error(t("ai.selectionGone"));
-      const indices = picked.get(selection.hunkIndex) || new Set<number>();
-      indices.add(rowIndex);
+      const indices = picked.get(selection.hunkIndex) || new Map<number, "old" | "new" | undefined>();
+      const side = selection.side;
+      indices.set(rowIndex, indices.has(rowIndex) && indices.get(rowIndex) !== side ? undefined : side);
       picked.set(selection.hunkIndex, indices);
     }
   }
@@ -33,10 +35,11 @@ function selectedRows(document: DiffDocumentResponse, selections: NonNullable<Co
   for (const [hunkIndex, indices] of picked) {
     const hunk = document.hunks[hunkIndex];
     output.push(`@@ -${hunk.oldStart},${hunk.oldLines} +${hunk.newStart},${hunk.newLines} @@`);
-    for (const rowIndex of [...indices].sort((left, right) => left - right)) {
+    for (const rowIndex of [...indices.keys()].sort((left, right) => left - right)) {
       const row = hunk.rows[rowIndex];
-      if (row.oldText !== null) output.push(`-${row.oldText}`);
-      if (row.newText !== null) output.push(`+${row.newText}`);
+      const side = indices.get(rowIndex);
+      if (row.oldText !== null && side !== "new") output.push(`-${row.oldText}`);
+      if (row.newText !== null && side !== "old") output.push(`+${row.newText}`);
     }
   }
   return output.join("\n");

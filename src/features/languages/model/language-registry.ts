@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { getGitCrestBridge, type GitCrestBridge, type GitCrestLanguagePluginEntry } from "../../../api/bridge";
 import { BUILTIN_LANGUAGES, type LanguageDefinition } from "./builtin-languages";
-import { validateStructureRules } from "./structure-rules";
+import { validateLanguageSyntax, validateStructureRules } from "./structure-rules";
 
 export interface LanguagePluginStatus {
   folder: string;
@@ -135,6 +135,11 @@ export function definePlugins(
       statuses.push({ ...base, ...identity, state: "error", error: rules.error });
       continue;
     }
+    const syntax = manifest.syntax === undefined ? undefined : validateLanguageSyntax(manifest.syntax);
+    if (syntax && !syntax.ok) {
+      statuses.push({ ...base, ...identity, state: "error", error: syntax.error });
+      continue;
+    }
     const shadowed = [
       ...manifest.extensions.filter((extension) => BUILTIN_LANGUAGES.some((language) => language.extensions.includes(extension))).map((extension) => `.${extension}`),
       ...manifest.fileNames.filter((fileName) => BUILTIN_LANGUAGES.some((language) => language.fileNames?.includes(fileName))),
@@ -149,6 +154,7 @@ export function definePlugins(
       structure: { type: "rules", rules: rules.rules },
       source: "plugin",
       version: `${manifest.version}#${generation}`,
+      ...(syntax?.ok ? { syntax: syntax.syntax } : {}),
     });
     statuses.push({ ...base, ...identity, state: "ready", shadowed });
   }

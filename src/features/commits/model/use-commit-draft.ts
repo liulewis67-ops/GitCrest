@@ -40,7 +40,7 @@ export function useCommitDraft(repoId?: string) {
     });
   }
 
-  function addDiffSelection(path: string, revision: string, selectedHunks: Array<{ hunkIndex: number; rowIndex?: number }>) {
+  function addDiffSelection(path: string, revision: string, selectedHunks: Array<{ hunkIndex: number; rowIndex?: number; side?: "old" | "new" }>) {
     updateDraft(repoId, (current) => ({
       selections: [
         ...current.selections.filter((item) => item.path !== path),

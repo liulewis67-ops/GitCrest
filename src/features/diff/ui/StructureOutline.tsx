@@ -13,6 +13,8 @@ export interface StructureSelectionControls {
   disabled: boolean;
   /** Shared rows the last structure selection left out. */
   withheld?: number;
+  /** Shared rows of which the last structure selection took only the structure's own side. */
+  halves?: number;
 }
 
 interface StructureOutlineProps {
@@ -37,6 +39,11 @@ const FACT_LABELS: Record<ChangeFactKind, MessageKey> = {
   returnType: "cr.factReturnType",
   body: "cr.factBody",
   declaration: "cr.factDeclaration",
+  modifiers: "cr.factModifiers",
+  annotations: "cr.factAnnotations",
+  comments: "cr.factComments",
+  formatting: "cr.factFormatting",
+  debug: "cr.factDebug",
   content: "cr.factContent",
   value: "cr.factValue",
   members: "cr.factMembers",
@@ -47,25 +54,29 @@ const STATUS_GLYPHS: Record<ReviewStructure["status"], string> = { added: "+", r
 export function structureDisplayName(structure: ReviewStructure, t: (key: MessageKey) => string): string {
   if (structure.kind === "imports") return t("cr.imports");
   if (structure.id === OTHER_STRUCTURE_ID) return t("cr.other");
-  return structure.kind === "function" || structure.kind === "method" ? `${structure.name}()` : structure.name;
+  if (structure.kind === "function" || structure.kind === "method") return `${structure.name}${structure.detail ?? "()"}`;
+  return structure.name;
 }
 
 /** The list of changed structures in one file diff, with what changed in the focused one. */
 export function StructureOutline({ state, activeId, onActivate, onJump, reviewKey, selection, onSelectForStaging, onRefresh, onClose }: StructureOutlineProps) {
   const { t } = useI18n();
   const [filter, setFilter] = useState("");
+  const [hideNoise, setHideNoise] = useState(false);
   const treeRef = useRef<HTMLDivElement>(null);
   const { isReviewed, toggleReviewed } = useReviewedStructures(reviewKey ?? "");
   const analysis = state.status === "ready" ? state.analysis : undefined;
   const byId = useMemo(() => new Map((analysis?.structures ?? []).map((structure) => [structure.id, structure])), [analysis]);
+  const noiseCount = analysis?.structures.filter((structure) => structure.noise).length ?? 0;
   const visible = useMemo(() => {
     if (!analysis) return [];
     const query = filter.trim().toLowerCase();
-    if (!query) return analysis.structures;
+    if (!query && !hideNoise) return analysis.structures;
     // A match keeps its ancestors, so it is still shown inside its class or impl.
     const keep = new Set<string>();
     for (const structure of analysis.structures) {
-      if (!structureDisplayName(structure, t).toLowerCase().includes(query)) continue;
+      if (query && !structureDisplayName(structure, t).toLowerCase().includes(query)) continue;
+      if (hideNoise && (structure.noise || (structure.atoms.length === 0 && structure.memberAtoms.length > 0))) continue;
       let current: ReviewStructure | undefined = structure;
       while (current && !keep.has(current.id)) {
         keep.add(current.id);
@@ -73,11 +84,36 @@ export function StructureOutline({ state, activeId, onActivate, onJump, reviewKe
       }
     }
     return analysis.structures.filter((structure) => keep.has(structure.id));
-  }, [analysis, byId, filter, t]);
+  }, [analysis, byId, filter, hideNoise, t]);
   const active = activeId ? byId.get(activeId) : undefined;
   const listedCount = analysis?.structures.filter((structure) => structure.atoms.length > 0).length ?? 0;
+  // Review progress counts structures with changes of their own; containers are covered by their members.
+  const reviewable = reviewKey === undefined ? [] : visible.filter((structure) => structure.atoms.length > 0);
+  const reviewedCount = reviewable.filter((structure) => isReviewed(structure)).length;
+
+  function focusItem(id: string) {
+    requestAnimationFrame(() => treeRef.current?.querySelector<HTMLElement>(`[data-structure-id="${CSS.escape(id)}"]`)?.focus());
+  }
+
+  /** Moves to the next structure, after the focused one, that is not marked reviewed. */
+  function nextUnreviewed() {
+    const start = active ? reviewable.indexOf(active) : -1;
+    for (let step = 1; step <= reviewable.length; step += 1) {
+      const candidate = reviewable[(start + step + reviewable.length) % reviewable.length];
+      if (candidate && !isReviewed(candidate)) {
+        onActivate(candidate);
+        focusItem(candidate.id);
+        return;
+      }
+    }
+  }
 
   function onTreeKeyDown(event: KeyboardEvent<HTMLDivElement>) {
+    if ((event.key === "n" || event.key === "N") && !event.ctrlKey && !event.metaKey && !event.altKey && reviewable.length > 0) {
+      event.preventDefault();
+      nextUnreviewed();
+      return;
+    }
     const items = [...(treeRef.current?.querySelectorAll<HTMLElement>("[role=treeitem]") ?? [])];
     const current = items.indexOf(document.activeElement as HTMLElement);
     let next = -1;
@@ -102,6 +138,15 @@ export function StructureOutline({ state, activeId, onActivate, onJump, reviewKe
       {state.status === "stale" && <div className="structureOutlineNote" role="status"><p>{t("cr.stale")}</p>{onRefresh && <button className="secondaryButton" type="button" onClick={onRefresh}>{t("cr.refresh")}</button>}</div>}
       {analysis && <>
         <input className="structureOutlineFilter" type="search" value={filter} placeholder={t("cr.filter")} aria-label={t("cr.filter")} onChange={(event) => setFilter(event.target.value)} />
+        {(reviewable.length > 0 || noiseCount > 0) && <div className="structureOutlineTools">
+          {reviewable.length > 0 && <span className="structureProgress" role="status">{t("cr.reviewProgress", { done: reviewedCount, total: reviewable.length })}</span>}
+          {reviewable.length > 0 && <button type="button" title={t("cr.nextUnreviewedTitle")} disabled={reviewedCount === reviewable.length} onClick={nextUnreviewed}>
+            {reviewedCount === reviewable.length ? t("cr.allReviewed") : t("cr.nextUnreviewed")}
+          </button>}
+          {noiseCount > 0 && <button type="button" aria-pressed={hideNoise} onClick={() => setHideNoise((current) => !current)}>
+            {t(hideNoise ? "cr.showNoise" : "cr.hideNoise", { count: noiseCount })}
+          </button>}
+        </div>}
         {analysis.partial && <p className="structureOutlineNote warning" role="note">{t("cr.partial")}</p>}
         <div className="structureTree" role="tree" aria-label={t("cr.treeAria")} ref={treeRef} onKeyDown={onTreeKeyDown}>
           {visible.length === 0 && <p className="structureOutlineNote">{t("cr.noMatch")}</p>}
@@ -114,6 +159,7 @@ export function StructureOutline({ state, activeId, onActivate, onJump, reviewKe
                 key={structure.id}
                 className={`structureItem status-${structure.status}${selected ? " active" : ""}${reviewed ? " reviewed" : ""}`}
                 role="treeitem"
+                data-structure-id={structure.id}
                 aria-level={structure.depth + 1}
                 aria-selected={selected}
                 tabIndex={selected || (!active && index === 0) ? 0 : -1}
@@ -205,6 +251,7 @@ function StructureDetail({ analysis, structure, byId, reviewed, onToggleReviewed
         {onSelectForStaging && structure.reliable && (hasOwn || hasMembers) && <button type="button" className="primary" title={t("cr.selectForStagingTitle")} onClick={() => onSelectForStaging(structure)}>{t("cr.selectForStaging")}</button>}
         {reviewed !== undefined && hasOwn && <button type="button" aria-pressed={reviewed} title={t("cr.reviewedHint")} onClick={onToggleReviewed}>{reviewed ? t("cr.unmarkReviewed") : t("cr.markReviewed")}</button>}
       </div>
+      {selection?.halves ? <p className="structureShared" role="status">{t("cr.halves", { count: selection.halves })}</p> : null}
       {selection?.withheld ? <p className="structureShared" role="status">{t("cr.withheld", { count: selection.withheld })}</p> : null}
     </section>
   );

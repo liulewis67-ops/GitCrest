@@ -1,5 +1,6 @@
 import type { DiffDocumentResponse } from "../../../api/client";
-import type { LineRange, SourceDeclaration, StructureKind } from "../../languages";
+import type { LanguageSyntax, LineRange, SourceDeclaration, StructureKind } from "../../languages";
+import { compilePatterns, isAnnotationLine, MODIFIER_WORDS, sameTokens, splitComments, stripComments, tokens, words } from "./code-text";
 
 /**
  * Groups the changed rows of one file diff by the code structure that owns them.
@@ -13,7 +14,21 @@ export interface SideLine {
   line: number;
 }
 
-export type ChangeFactKind = "added" | "removed" | "parameters" | "returnType" | "body" | "declaration" | "content" | "value" | "members";
+export type ChangeFactKind =
+  | "added"
+  | "removed"
+  | "parameters"
+  | "returnType"
+  | "body"
+  | "declaration"
+  | "modifiers"
+  | "annotations"
+  | "comments"
+  | "formatting"
+  | "content"
+  | "value"
+  | "debug"
+  | "members";
 export interface ChangeFact {
   kind: ChangeFactKind;
   /** Where the evidence for this fact is, so the label can jump to it. */
@@ -23,6 +38,8 @@ export interface ChangeFact {
 export interface RowSelection {
   hunkIndex: number;
   rowIndex: number;
+  /** Only the deleted (old) or added (new) line of a row that has both. */
+  side?: "old" | "new";
 }
 
 /** One changed row of the diff: a deleted line, an added line, or a deleted and an added line paired. */
@@ -31,6 +48,15 @@ export interface ReviewAtom {
   newLine: number | null;
   /** Structures owning the row's lines; two or more make it a shared row. */
   owners: string[];
+  /** Owners of the deleted line and of the added line, so a shared row can be split between them. */
+  oldOwners: string[];
+  newOwners: string[];
+  oldText: string | null;
+  newText: string | null;
+  /** The added line matches one of the language's debug-output patterns. */
+  debug: boolean;
+  /** Names on the added line that appear nowhere in the old file. */
+  introduces: string[];
   /** The row of the hunk document that stages or unstages this change, when one was given. */
   selection?: RowSelection;
 }
@@ -55,6 +81,10 @@ export interface ReviewStructure {
   /** False when a parse error covers the structure, so it is shown but not described or selected as a unit. */
   reliable: boolean;
   anchor: SideLine;
+  /** The parameter list shown after the name of an overload. */
+  detail?: string;
+  /** Its own changes only reformat code or only touch comments, so it can be set aside while reviewing. */
+  noise?: "formatting" | "comments";
   /** Changes when any of the structure's own changed lines change; review marks only survive while it is equal. */
   fingerprint: string;
 }
@@ -69,6 +99,10 @@ export interface CodeReviewAnalysis {
   rowAtoms: Map<string, number>;
   /** True when parse errors left some changes without a reliable structure. */
   partial: boolean;
+  /** Atoms whose added line is debug output. */
+  debugAtoms: number[];
+  /** A name new to the file → the changed rows that bring it in: import lines, or the declaration of an added structure. */
+  definers: Map<string, number[]>;
 }
 
 export type CodeReviewResult =
@@ -85,6 +119,8 @@ export interface CodeReviewInput {
   newDeclarations: SourceDeclaration[];
   /** Either side's parse tree contains errors. */
   recovered: boolean;
+  /** Comment markers and debug patterns of the file's language. */
+  syntax?: LanguageSyntax;
 }
 
 export function rowKey(hunkIndex: number, rowIndex: number): string {
@@ -111,7 +147,7 @@ export function analyzeCodeReview(input: CodeReviewInput): CodeReviewResult {
       }
       if (!previousWasChange) block += 1;
       previousWasChange = true;
-      atoms.push({ oldLine: row.oldLine, newLine: row.newLine, owners: [] });
+      atoms.push({ oldLine: row.oldLine, newLine: row.newLine, owners: [], oldOwners: [], newOwners: [], oldText: row.oldText, newText: row.newText, debug: false, introduces: [] });
       atomTexts.push(`${row.oldText ?? ""}\u0000${row.newText ?? ""}`);
       blockOfAtom.push(block);
     }
@@ -138,18 +174,30 @@ export function analyzeCodeReview(input: CodeReviewInput): CodeReviewResult {
     if (matched !== atoms.length) return { status: "stale" };
   }
 
-  const oldOwners = paintOwners(input.oldDeclarations);
+  const oldDeclarations = reconcileOverloads(input.oldDeclarations, input.newDeclarations);
+  const oldOwners = paintOwners(oldDeclarations);
   const newOwners = paintOwners(input.newDeclarations);
   let partial = input.recovered;
   for (const atom of atoms) {
-    const owners = new Set<string>();
-    if (atom.oldLine !== null) for (const key of oldOwners.get(atom.oldLine) ?? [OTHER_STRUCTURE_ID]) owners.add(key);
-    if (atom.newLine !== null) for (const key of newOwners.get(atom.newLine) ?? [OTHER_STRUCTURE_ID]) owners.add(key);
-    atom.owners = [...owners];
+    atom.oldOwners = atom.oldLine === null ? [] : oldOwners.get(atom.oldLine) ?? [OTHER_STRUCTURE_ID];
+    atom.newOwners = atom.newLine === null ? [] : newOwners.get(atom.newLine) ?? [OTHER_STRUCTURE_ID];
+    atom.owners = [...new Set([...atom.oldOwners, ...atom.newOwners])];
   }
   adoptBlankLines(atoms, atomTexts, blockOfAtom);
 
-  const merged = mergeDeclarations(input.oldDeclarations, input.newDeclarations);
+  const syntax = input.syntax;
+  const debugPatterns = compilePatterns(syntax?.debugPatterns);
+  const oldWords = new Set<string>();
+  for (const text of oldTextByLine) if (text !== undefined) for (const word of words(text, syntax)) oldWords.add(word);
+  const debugAtoms: number[] = [];
+  for (const [index, atom] of atoms.entries()) {
+    if (atom.newText === null) continue;
+    atom.debug = debugPatterns.some((pattern) => pattern.test(stripComments(atom.newText ?? "", syntax)));
+    if (atom.debug) debugAtoms.push(index);
+    atom.introduces = [...new Set(words(atom.newText, syntax).filter((word) => !oldWords.has(word)))];
+  }
+
+  const merged = mergeDeclarations(oldDeclarations, input.newDeclarations);
   const ownAtoms = new Map<string, number[]>();
   for (const [index, atom] of atoms.entries()) {
     for (const owner of atom.owners) {
@@ -188,6 +236,9 @@ export function analyzeCodeReview(input: CodeReviewInput): CodeReviewResult {
     const members = [...(memberAtoms.get(entry.key) ?? [])].filter((index) => !ownSet.has(index)).sort((a, b) => a - b);
     const reliable = (entry.old?.reliable ?? true) && (entry.new?.reliable ?? true);
     if (!reliable && own.length) partial = true;
+    const noise = reliable && entry.old && entry.new && !entry.ambiguous ? noiseOf(own, atoms, syntax) : undefined;
+    const facts = reliable ? describe(entry, own, members, atoms, syntax) : [];
+    const debugAtom = own.map((index) => atoms[index]).find((atom) => atom?.debug);
     structures.push({
       id: entry.key,
       kind: entry.kind,
@@ -195,13 +246,20 @@ export function analyzeCodeReview(input: CodeReviewInput): CodeReviewResult {
       parentId: entry.parentKey,
       depth: entry.depth,
       status: entry.old && entry.new ? "modified" : entry.new ? (entry.ambiguous ? "modified" : "added") : (entry.ambiguous ? "modified" : "removed"),
-      facts: reliable ? describe(entry, own, members, atoms) : [],
+      // Formatting or comment changes replace the structure's own descriptions; member changes stay listed.
+      facts: [
+        ...(noise && own.length ? [{ kind: noise, at: atomLine(atoms[own[0]!]!) }] : facts.filter((fact) => fact.kind !== "members")),
+        ...(debugAtom ? [{ kind: "debug" as const, at: atomLine(debugAtom) }] : []),
+        ...facts.filter((fact) => fact.kind === "members"),
+      ],
+      ...(noise ? { noise } : {}),
       atoms: own,
       sharedAtoms: own.filter((index) => (atoms[index]?.owners.length ?? 0) > 1),
       memberAtoms: members,
       reliable,
       anchor: anchorOf(entry, own.length ? own : members, atoms),
       fingerprint: fingerprint(own.map((index) => atomTexts[index] ?? "")),
+      ...(entry.new?.detail ?? entry.old?.detail ? { detail: entry.new?.detail ?? entry.old?.detail } : {}),
     });
   }
 
@@ -224,10 +282,42 @@ export function analyzeCodeReview(input: CodeReviewInput): CodeReviewResult {
     });
   }
 
+  // Where a name new to the file comes from: an added import line, or the declaration line of an added structure.
+  const definers = new Map<string, number[]>();
+  const define = (name: string, index: number) => {
+    const list = definers.get(name) ?? [];
+    if (!list.includes(index)) list.push(index);
+    definers.set(name, list);
+  };
+  for (const [index, atom] of atoms.entries()) {
+    if (atom.newOwners.includes(IMPORTS_ID)) for (const name of atom.introduces) define(name, index);
+  }
+  for (const entry of merged.values()) {
+    if (entry.old || !entry.new || entry.ambiguous) continue;
+    const header = { start: entry.new.range.start, end: entry.new.bodyStart ?? entry.new.range.end };
+    for (const index of ownAtoms.get(entry.key) ?? []) {
+      const atom = atoms[index];
+      if (atom?.newLine !== null && atom && within(atom.newLine, header) && atom.introduces.includes(entry.name)) define(entry.name, index);
+    }
+  }
+
   return {
     status: "ready",
-    analysis: { revision: hunksDocument?.revision ?? fullDocument.revision, structures, atoms, rowAtoms, partial },
+    analysis: { revision: hunksDocument?.revision ?? fullDocument.revision, structures, atoms, rowAtoms, partial, debugAtoms, definers },
   };
+}
+
+const IMPORTS_ID = "imports:";
+
+/** Whether a structure's own changes only reformat its code, or only touch its comments. */
+function noiseOf(own: number[], atoms: ReviewAtom[], syntax: LanguageSyntax | undefined): "formatting" | "comments" | undefined {
+  if (own.length === 0) return undefined;
+  const before = own.map((index) => atoms[index]?.oldText).filter((text): text is string => text !== null && text !== undefined).join("\n");
+  const after = own.map((index) => atoms[index]?.newText).filter((text): text is string => text !== null && text !== undefined).join("\n");
+  if (before === after) return undefined;
+  if (sameTokens(before, after)) return "formatting";
+  if (syntax && sameTokens(stripComments(before, syntax), stripComments(after, syntax))) return "comments";
+  return undefined;
 }
 
 /** Maps each line to the innermost declarations covering it; two of equal size on one line both own it. */
@@ -269,7 +359,11 @@ function adoptBlankLines(atoms: ReviewAtom[], texts: string[], blocks: number[])
     if (!isBlank(texts[index] ?? "") || atom.owners.length !== 1 || atom.owners[0] !== OTHER_STRUCTURE_ID) continue;
     const owners = blockOwners.get(blocks[index] ?? -1);
     const only = owners?.size === 1 ? [...owners][0] : undefined;
-    if (only && only !== OTHER_STRUCTURE_ID) atom.owners = [only];
+    if (only && only !== OTHER_STRUCTURE_ID) {
+      atom.owners = [only];
+      if (atom.oldLine !== null) atom.oldOwners = [only];
+      if (atom.newLine !== null) atom.newOwners = [only];
+    }
   }
 }
 
@@ -291,6 +385,36 @@ interface MergedDeclaration {
 }
 
 /** Pairs declarations with equal keys; source order follows the new side, with removed ones after their old neighbours. */
+/**
+ * A method that gains or loses an overload is keyed by name on one side and by name and parameters on
+ * the other. Old declarations are re-keyed to the new key when exactly one new namesake has the same
+ * parameter list, so the unchanged overload is not reported as removed and added.
+ */
+function reconcileOverloads(oldDeclarations: SourceDeclaration[], newDeclarations: SourceDeclaration[]): SourceDeclaration[] {
+  const oldKeys = new Set(oldDeclarations.map((declaration) => declaration.key));
+  const newKeys = new Set(newDeclarations.map((declaration) => declaration.key));
+  const baseOf = (declaration: SourceDeclaration) => declaration.detail ? declaration.key.slice(0, -declaration.detail.length) : declaration.key;
+  const renames = new Map<string, string>();
+  for (const declaration of oldDeclarations) {
+    if (newKeys.has(declaration.key) || declaration.parameters === undefined) continue;
+    const candidates = newDeclarations.filter((candidate) => !oldKeys.has(candidate.key)
+      && (candidate.detail !== undefined || declaration.detail !== undefined)
+      && baseOf(candidate) === baseOf(declaration)
+      && candidate.parameters === declaration.parameters);
+    if (candidates.length === 1 && candidates[0]) renames.set(declaration.key, candidates[0].key);
+  }
+  if (renames.size === 0) return oldDeclarations;
+  const rekey = (key: string | null) => {
+    if (key === null) return null;
+    for (const [from, to] of renames) {
+      if (key === from) return to;
+      if (key.startsWith(`${from}/`)) return `${to}/${key.slice(from.length + 1)}`;
+    }
+    return key;
+  };
+  return oldDeclarations.map((declaration) => ({ ...declaration, key: rekey(declaration.key) ?? declaration.key, parentKey: rekey(declaration.parentKey) }));
+}
+
 function mergeDeclarations(oldDeclarations: SourceDeclaration[], newDeclarations: SourceDeclaration[]): Map<string, MergedDeclaration> {
   const oldByKey = new Map(oldDeclarations.map((declaration) => [declaration.key, declaration]));
   const newByKey = new Map(newDeclarations.map((declaration) => [declaration.key, declaration]));
@@ -329,7 +453,7 @@ function mergeDeclarations(oldDeclarations: SourceDeclaration[], newDeclarations
       name: declaration.name,
       parentKey: declaration.parentKey,
       depth: 0,
-      ambiguous: declaration.key.includes("#"),
+      ambiguous: declaration.key.includes("#") || Boolean(oldByKey.get(declaration.key)?.ambiguous || newByKey.get(declaration.key)?.ambiguous),
       old: oldByKey.get(declaration.key),
       new: newByKey.get(declaration.key),
     });
@@ -361,7 +485,7 @@ const CONTAINERS = new Set<StructureKind>(["class", "impl", "trait", "module", "
 /** What a change outside any signature or body is called, where "declaration" would mislead: a Markdown section's text, a JSON key's value. */
 const OWN_CHANGE_FACT: Partial<Record<StructureKind, ChangeFactKind>> = { section: "content", key: "value" };
 
-function describe(entry: MergedDeclaration, own: number[], members: number[], atoms: ReviewAtom[]): ChangeFact[] {
+function describe(entry: MergedDeclaration, own: number[], members: number[], atoms: ReviewAtom[], syntax?: LanguageSyntax): ChangeFact[] {
   const facts: ChangeFact[] = [];
   const firstMember = members[0] === undefined ? undefined : atoms[members[0]];
   const memberFact = firstMember ? [{ kind: "members" as const, at: atomLine(firstMember) }] : [];
@@ -387,18 +511,62 @@ function describe(entry: MergedDeclaration, own: number[], members: number[], at
     || (atom.newLine !== null && (within(atom.newLine, after.parametersRange) || within(atom.newLine, after.returnTypeRange)));
 
   const ownAtoms = own.map((index) => atoms[index]).filter((atom): atom is ReviewAtom => atom !== undefined);
-  // A line holding both the signature and the body's opening brace counts as signature.
-  const bodyAtom = hasBody ? ownAtoms.find((atom) => inBody(atom) && !inSignature(atom)) : undefined;
-  // Header lines outside the parameter list and return type: modifiers, decorators, comments, or the whole declaration.
-  const declarationAtom = ownAtoms.find((atom) => !(hasBody && inBody(atom)) && !inSignature(atom));
+  // A whole function on one line cannot be split by lines; its changes count as body changes.
+  const oneLine = hasBody && after.bodyStart !== undefined && after.range.end === after.bodyStart && after.parametersRange?.start === after.bodyStart;
+  // A line holding both the signature and the body's opening brace belongs to the header.
+  const isBody = (atom: ReviewAtom) => hasBody && inBody(atom) && (oneLine || !inSignature(atom));
+  const bodyAtom = ownAtoms.find(isBody);
+  const header = ownAtoms.filter((atom) => !isBody(atom));
   const ownChange = OWN_CHANGE_FACT[entry.kind] ?? "declaration";
-  if (declarationAtom) facts.push({ kind: ownChange, at: atomLine(declarationAtom) });
+  if (header[0]) {
+    // Parameter and return-type changes are already named; what else changed in the header?
+    const explained = tokenDifference(`${before.parameters ?? ""} ${before.returnType ?? ""}`, `${after.parameters ?? ""} ${after.returnType ?? ""}`, undefined);
+    const kinds = ownChange === "declaration" ? headerChanges(header, syntax, explained) : [ownChange];
+    for (const kind of kinds) facts.push({ kind, at: atomLine(header[0]) });
+  }
   if (bodyAtom) facts.push({ kind: "body", at: atomLine(bodyAtom) });
-  // A one-line function whose signature text is unchanged: the change is in its body.
   const first = ownAtoms[0];
-  if (facts.length === 0 && first) facts.push({ kind: hasBody && ownAtoms.some(inBody) ? "body" : ownChange, at: atomLine(first) });
+  if (facts.length === 0 && first) facts.push({ kind: bodyAtom ? "body" : ownChange, at: atomLine(first) });
   facts.push(...memberFact);
   return facts;
+}
+
+/** Tokens added or removed between two texts, as signed counts. */
+function tokenDifference(before: string, after: string, syntax: LanguageSyntax | undefined): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const token of tokens(stripComments(before, syntax))) counts.set(token, (counts.get(token) ?? 0) - 1);
+  for (const token of tokens(stripComments(after, syntax))) counts.set(token, (counts.get(token) ?? 0) + 1);
+  for (const [token, count] of counts) if (count === 0) counts.delete(token);
+  return counts;
+}
+
+/**
+ * Names a change to a declaration's header more precisely when it is only one thing: comments, modifier
+ * keywords (`public`, `async`, `export`…), or annotation lines (`@Override`, `#[test]`).
+ */
+function headerChanges(header: ReviewAtom[], syntax: LanguageSyntax | undefined, explained: Map<string, number>): ChangeFactKind[] {
+  const before = header.map((atom) => atom.oldText).filter((text): text is string => text !== null).join("\n");
+  const after = header.map((atom) => atom.newText).filter((text): text is string => text !== null).join("\n");
+  if (before === after) return [];
+  const kinds: ChangeFactKind[] = [];
+  const hasComments = Boolean(syntax?.lineComments?.length || syntax?.blockComments?.length);
+  const code = tokenDifference(before, after, hasComments ? syntax : undefined);
+  for (const [token, count] of explained) {
+    const left = (code.get(token) ?? 0) - count;
+    if (left === 0) code.delete(token);
+    else code.set(token, left);
+  }
+  const changedLines = header
+    .filter((atom) => atom.oldText !== atom.newText)
+    .flatMap((atom) => [atom.oldText, atom.newText])
+    .filter((text): text is string => text !== null && text.trim() !== "");
+  if (code.size > 0) {
+    if ([...code.keys()].every((token) => MODIFIER_WORDS.has(token))) kinds.push("modifiers");
+    else if (changedLines.every(isAnnotationLine)) kinds.push("annotations");
+    else kinds.push("declaration");
+  }
+  if (hasComments && !sameTokens(splitComments(before, syntax).comments, splitComments(after, syntax).comments)) kinds.push("comments");
+  return kinds;
 }
 
 function within(line: number, range: LineRange | undefined): boolean {
@@ -436,10 +604,15 @@ function fingerprint(texts: string[]): string {
 }
 
 /**
- * The row selections that stage a structure's changes. Shared rows are `withheld`; `touched` also
- * lists them, for clearing everything the structure changes.
+ * The row selections that stage a structure's changes. In a row shared with another structure only the
+ * side this structure owns is taken (`halves` counts those); a row neither of whose sides it owns alone
+ * is `withheld`. `touched` lists every part the structure has a share in, for clearing it again.
  */
-export function structureSelection(analysis: CodeReviewAnalysis, id: string, includeMembers: boolean): { rows: RowSelection[]; touched: RowSelection[]; withheld: number } {
+export function structureSelection(
+  analysis: CodeReviewAnalysis,
+  id: string,
+  includeMembers: boolean,
+): { rows: RowSelection[]; touched: RowSelection[]; withheld: number; halves: number } {
   const ids = new Set([id]);
   if (includeMembers) {
     // Structures are listed parents first, so one pass collects every descendant.
@@ -447,18 +620,32 @@ export function structureSelection(analysis: CodeReviewAnalysis, id: string, inc
       if (structure.parentId && ids.has(structure.parentId)) ids.add(structure.id);
     }
   }
+  const owned = (owners: string[]) => owners.length > 0 && owners.every((owner) => ids.has(owner));
+  const shares = (owners: string[]) => owners.some((owner) => ids.has(owner));
   const rows: RowSelection[] = [];
   const touched: RowSelection[] = [];
   let withheld = 0;
+  let halves = 0;
   for (const atom of analysis.atoms) {
-    if (!atom.owners.some((owner) => ids.has(owner))) continue;
-    if (atom.selection) touched.push(atom.selection);
-    // A shared row also changes another structure; it is only taken when every owner is being selected.
-    if (!atom.owners.every((owner) => ids.has(owner))) {
+    if (!shares(atom.owners)) continue;
+    const takesOld = atom.oldLine !== null && owned(atom.oldOwners);
+    const takesNew = atom.newLine !== null && owned(atom.newOwners);
+    const wholeRow = (atom.oldLine === null || takesOld) && (atom.newLine === null || takesNew);
+    const side = wholeRow ? undefined : takesOld ? "old" as const : takesNew ? "new" as const : undefined;
+    if (atom.selection) {
+      const sharesOld = atom.oldLine !== null && shares(atom.oldOwners);
+      const sharesNew = atom.newLine !== null && shares(atom.newOwners);
+      const touchedSide = (atom.oldLine === null || sharesOld) && (atom.newLine === null || sharesNew)
+        ? undefined
+        : sharesOld ? "old" as const : "new" as const;
+      touched.push(touchedSide ? { ...atom.selection, side: touchedSide } : atom.selection);
+    }
+    if (!wholeRow && !side) {
       withheld += 1;
       continue;
     }
-    if (atom.selection) rows.push(atom.selection);
+    if (side) halves += 1;
+    if (atom.selection) rows.push(side ? { ...atom.selection, side } : atom.selection);
   }
-  return { rows, touched, withheld };
+  return { rows, touched, withheld, halves };
 }

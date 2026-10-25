@@ -69,6 +69,10 @@ export interface SourceDeclaration {
   segments?: LineRange[];
   /** False when a parse error lies inside, so no facts or selections are derived from it. */
   reliable: boolean;
+  /** The parameter list shown after the name, when it is what tells overloads apart. */
+  detail?: string;
+  /** The key could only be told apart from a namesake by its position, so the two sides may not pair up truly. */
+  ambiguous?: boolean;
 }
 
 const IMPORTS_KEY = "imports:";
@@ -76,6 +80,7 @@ const IMPORTS_KEY = "imports:";
 export class DeclarationCollector {
   private readonly declarations: SourceDeclaration[] = [];
   private readonly keyCounts = new Map<string, number>();
+  private readonly baseKeys = new Map<SourceDeclaration, string>();
   private imports: SourceDeclaration | null = null;
 
   add(declaration: Omit<SourceDeclaration, "key"> & { baseKey: string }): SourceDeclaration {
@@ -85,6 +90,7 @@ export class DeclarationCollector {
     const { baseKey, ...rest } = declaration;
     const entry: SourceDeclaration = { ...rest, key: count === 1 ? baseKey : `${baseKey}#${count}` };
     this.declarations.push(entry);
+    this.baseKeys.set(entry, baseKey);
     return entry;
   }
 
@@ -100,7 +106,36 @@ export class DeclarationCollector {
   }
 
   finish(): SourceDeclaration[] {
+    const groups = new Map<string, SourceDeclaration[]>();
+    for (const declaration of this.declarations) {
+      const baseKey = this.baseKeys.get(declaration);
+      if (baseKey === undefined || (this.keyCounts.get(baseKey) ?? 0) < 2) continue;
+      groups.set(baseKey, [...(groups.get(baseKey) ?? []), declaration]);
+    }
+    for (const [baseKey, namesakes] of groups) {
+      const parameters = namesakes.map((declaration) => declaration.parameters);
+      // Overloads keep their identity by parameter list when every namesake has a different one.
+      if (parameters.every((text) => text !== undefined) && new Set(parameters).size === namesakes.length) {
+        for (const declaration of namesakes) {
+          declaration.detail = declaration.parameters;
+          this.rename(declaration.key, `${baseKey}${declaration.parameters}`);
+        }
+      } else {
+        for (const declaration of namesakes) declaration.ambiguous = true;
+      }
+    }
     return this.declarations;
+  }
+
+  /** Changes a key, along with the keys of everything nested inside it. */
+  private rename(from: string, to: string) {
+    const nested = `${from}/`;
+    for (const declaration of this.declarations) {
+      if (declaration.key === from) declaration.key = to;
+      else if (declaration.key.startsWith(nested)) declaration.key = `${to}/${declaration.key.slice(nested.length)}`;
+      if (declaration.parentKey === from) declaration.parentKey = to;
+      else if (declaration.parentKey?.startsWith(nested)) declaration.parentKey = `${to}/${declaration.parentKey.slice(nested.length)}`;
+    }
   }
 }
 

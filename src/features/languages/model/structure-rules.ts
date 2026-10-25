@@ -1,3 +1,4 @@
+import type { LanguageSyntax } from "./builtin-languages";
 import {
   childKey,
   children,
@@ -185,6 +186,45 @@ function readText(node: SyntaxNodeLike, source: TextSource, rules: CompiledRules
   if (!text) return undefined;
   const named = `${source.prefix ?? ""}${text}`;
   return named.length > MAX_NAME_UNITS ? `${named.slice(0, MAX_NAME_UNITS - 1)}…` : named;
+}
+
+/** Checks a plugin's optional comment markers and debug patterns, returning a clean copy. */
+export function validateLanguageSyntax(value: unknown): { ok: true; syntax: LanguageSyntax } | { ok: false; error: string } {
+  try {
+    if (!isRecord(value)) fail("syntax", "expected an object");
+    onlyKeys(value, ["lineComments", "blockComments", "debugPatterns"], "syntax");
+    const marker = (item: unknown, path: string) => {
+      if (typeof item !== "string" || item.length === 0 || item.length > 5 || /\s/.test(item)) fail(path, "expected 1 to 5 characters without spaces");
+      return item;
+    };
+    const syntax: LanguageSyntax = {};
+    if (value.lineComments !== undefined) {
+      if (!Array.isArray(value.lineComments) || value.lineComments.length > 5) fail("syntax.lineComments", "expected a list of at most 5 markers");
+      syntax.lineComments = value.lineComments.map((item, index) => marker(item, `syntax.lineComments[${index}]`));
+    }
+    if (value.blockComments !== undefined) {
+      if (!Array.isArray(value.blockComments) || value.blockComments.length > 5) fail("syntax.blockComments", "expected a list of at most 5 pairs");
+      syntax.blockComments = value.blockComments.map((pair, index) => {
+        if (!Array.isArray(pair) || pair.length !== 2) fail(`syntax.blockComments[${index}]`, "expected [open, close]");
+        return [marker(pair[0], `syntax.blockComments[${index}][0]`), marker(pair[1], `syntax.blockComments[${index}][1]`)] as [string, string];
+      });
+    }
+    if (value.debugPatterns !== undefined) {
+      if (!Array.isArray(value.debugPatterns) || value.debugPatterns.length > 20) fail("syntax.debugPatterns", "expected a list of at most 20 regular expressions");
+      syntax.debugPatterns = value.debugPatterns.map((pattern, index) => {
+        if (typeof pattern !== "string" || pattern.length > LIMITS.pattern) fail(`syntax.debugPatterns[${index}]`, `expected a regular expression of at most ${LIMITS.pattern} characters`);
+        try {
+          new RegExp(pattern, "u");
+        } catch {
+          fail(`syntax.debugPatterns[${index}]`, "is not a valid regular expression");
+        }
+        return pattern;
+      });
+    }
+    return { ok: true, syntax };
+  } catch (error) {
+    return { ok: false, error: error instanceof RuleError ? error.message : "Syntax could not be read." };
+  }
 }
 
 // Validation of rules that come from outside GitCrest, such as a language plugin's manifest.
