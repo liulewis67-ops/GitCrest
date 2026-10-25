@@ -6043,7 +6043,7 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
     for (start_point, expected) in [
         ("not-hex!", StatusCode::BAD_REQUEST),
         ("deadbeefdeadbeef", StatusCode::NOT_FOUND),
-        (&*oid, StatusCode::ACCEPTED),
+        (oid, StatusCode::ACCEPTED),
     ] {
         let response = app
             .clone()

@@ -460,7 +460,9 @@ mod tests {
     }
 
     async fn wait_for_terminal(tasks: &TaskService, task_id: &str) -> TaskSnapshot {
-        for _ in 0..200 {
+        // A clone spawns Git processes, which can take well over 5 s while the full suite runs in parallel.
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(60);
+        while tokio::time::Instant::now() < deadline {
             let task = tasks.get(task_id).await.unwrap();
             if matches!(
                 task.status,
