@@ -108,6 +108,8 @@ Electron 带来更一致的 UI 环境，但会提高包体和内存基线，验�
 | 1,000 行 Diff | < 200ms |
 | 工作区状态刷新 | < 100ms |
 
+Windows 实测（S7.2）表明：空白 Electron 37 窗口的进程树 Working Set 已约 292 MiB，高于空闲 <250MB；滚动约 55fps 的节奏来自 Chromium 在 Windows 上的 VSync 等待，而非应用绘制。内存计数口径与帧率判定方式待决，优化与测量工作见 [electron-performance-optimization-plan.md](electron-performance-optimization-plan.md)；在口径确定前，上表阈值不变。
+
 ## 8. 迁移策略
 
 第一步建立 Electron + Rust sidecar 可运行骨架。第二步把文档和开发脚本全部迁移到 Electron。第三步在 Rust sidecar 中实现 Git 仓库打开、状态读取和任务系统。

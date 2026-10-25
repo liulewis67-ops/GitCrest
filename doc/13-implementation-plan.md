@@ -157,7 +157,7 @@
 
 ## 12. 统一性能与安全验收口径
 
-S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率取持续 30 秒的 compositor presented-frame P5（不能只用 requestAnimationFrame 回调率），内存取不启用 trace 的稳定窗口峰值。Windows 报告须分别列出 process-tree Working Set、Private Working Set 与 private bytes；三者不可互相替代，当前内存验收继续按正式发行版基准记录的 process-tree Working Set 判定。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。
+S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率取持续 30 秒的 compositor presented-frame P5（不能只用 requestAnimationFrame 回调率），内存取不启用 trace 的稳定窗口峰值。Windows 报告须分别列出 process-tree Working Set、Private Working Set 与 private bytes；三者不可互相替代，当前内存验收继续按正式发行版基准记录的 process-tree Working Set 判定。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。S7.2 中 Electron 侧未达标项（冷启动 P95、空闲内存、滚动帧率）的待决口径（D1–D3）与后续优化小阶段（P1–P4）见 `electron-performance-optimization-plan.md`；口径决定后须同时更新本节与 `10` §7。
 
 从第一个写操作开始适用的安全门槛：renderer 不得有 Node/shell 权限；只允许通过受控 API 操作已注册 repoId；同仓写操作串行；高风险操作由后端做预检与确认票据校验；凭据存 Keychain，token 仅在当前会话内存；日志脱敏；Diff 窗口只读，冲突窗口只可写冲突文件。相关阶段未满足这些门槛时不能标已完成。
 
@@ -5834,3 +5834,9 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 交付：新增 `src/shared/lib/feature-flags.ts`（`AI_FEATURES_ENABLED = false`），隐藏设置页 AI 助手分区、提交面板 AI 建议按钮与提交消息助手、`Cmd/Ctrl+G` 及其快捷键设置项、命令面板 AI 命令和冲突窗口 AI 建议；设置页不再请求 AI 设置；隐藏的快捷键不再占用 `Mod+G`。Reset、Rebase、远程分支删除的确定性说明去掉 AI 表述。AI 组件、API client 方法与 Rust core 路由保留未改。同步第 2、3、10 节，以及 `00`、`02`、`07`、`08`、设置页设计和 Alpha 发布说明。
 - 验证：`pnpm frontend:boundaries`、`pnpm build` 通过；`pnpm test` 436/436 通过（含新增 `tests/unit/ai-settings-section.test.tsx` 以 mock 打开开关的 4 个用例）；Electron E2E `tests/e2e/desktop.test.ts`、`tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/shortcut-settings.test.ts` 通过。Rust core 未改动，未重跑 `cargo test`；其余 E2E 未重跑。
 - 限制/后续：恢复 AI 按第 10.4 节执行。
+
+### S7.2 Electron 性能优化方案整合 — 文档更新（2026-10-25）
+- 状态：完成（方案文档；未改代码，S7.2 保持待验收，S7.4/S7.5 状态不变）
+- 交付：新增 `doc/electron-performance-optimization-plan.md`，汇总 S7.2 桌面侧研究结论（空白 Electron 窗口 Working Set 下界约 292 MiB、应用增量约 90 MiB；约 55fps 节奏与 Chromium GPU VSync worker 同步而 DWM 为 60Hz；冷启动 P95 由两个相邻离群样本决定）与已否决的启动参数（`--disable-gpu`、`--in-process-gpu`、`--disable-frame-rate-limit`、`--disable-gpu-vsync`）；列出待产品/架构决定的内存计数口径、帧率判定方式和冷启动离群处理（D1–D3）；按小阶段规划 P1（渲染产物压缩、窗口与 sidecar 并行启动、复用 Diff 窗口、首屏不加载 Monaco/tree-sitter）、P2（VSync 根因与第二台机器/新版 Electron 对照）、P3（结构性内存候选，依赖 D1）、P4（启动分段计时与杀毒排除对照）。代码核对新发现：Electron 构建的 renderer 产物未压缩（入口约 900 KB、gzip 210 KB；小阶段 97 的 272.65 KB 为 `pnpm frontend:build` 产物，不代表发行包）；首次启动时主窗口在 sidecar 就绪后才创建；每次打开 Diff 窗口都会新建 `BrowserWindow`。同步 `00-README.md` 文档清单、`10-electron-rust-architecture.md` §7 与本文件第 12 节的指向。
+- 验证：文档与代码、构建产物核对；未运行构建、测试或基准。
+- 限制/后续：方案中的预期收益均未测量；各项按第 2 节规则作为独立小阶段实施并以 20 轮发行包基准判定。阈值与判定口径未修改，待 D1–D3 决定。
