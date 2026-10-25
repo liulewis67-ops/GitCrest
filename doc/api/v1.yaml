@@ -4772,6 +4772,7 @@ components:
                   properties:
                     hunkIndex: { type: integer, minimum: 0 }
                     rowIndex: { type: integer, minimum: 0 }
+                    side: { type: string, enum: [old, new], description: "With rowIndex, selects only the deleted (old) or added (new) line of a row that has both." }
     StagingPatchRequest:
       type: object
       additionalProperties: false
@@ -4803,6 +4804,10 @@ components:
               rowIndex:
                 type: integer
                 minimum: 0
+              side:
+                type: string
+                enum: [old, new]
+                description: With rowIndex, selects only the deleted (old) or added (new) line of a row that has both.
     DiscardPatchRequest:
       type: object
       additionalProperties: false
@@ -4875,6 +4880,10 @@ components:
         rowIndex:
           type: integer
           minimum: 0
+        side:
+          type: string
+          enum: [old, new]
+          description: With rowIndex, selects only the deleted (old) or added (new) line of a row that has both.
     Shelf:
       type: object
       additionalProperties: false

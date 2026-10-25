@@ -21,6 +21,16 @@ pub(crate) enum DiffContext {
 pub(crate) struct DiffSelection {
     pub(crate) hunk_index: usize,
     pub(crate) row_index: Option<usize>,
+    /// One half of a row that pairs a deleted line with an added line; `None` selects the whole row.
+    pub(crate) side: Option<DiffRowSide>,
+}
+
+/// The deleted (old) or added (new) line of a change row.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum DiffRowSide {
+    Old,
+    New,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

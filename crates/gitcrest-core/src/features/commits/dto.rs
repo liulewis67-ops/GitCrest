@@ -28,6 +28,8 @@ pub struct CommitDiffSelection {
     pub hunk_index: usize,
     #[serde(default)]
     pub row_index: Option<usize>,
+    #[serde(default)]
+    pub side: Option<crate::domain::diff::DiffRowSide>,
 }
 
 impl From<CommitDiffSelection> for crate::domain::diff::DiffSelection {
@@ -35,6 +37,7 @@ impl From<CommitDiffSelection> for crate::domain::diff::DiffSelection {
         Self {
             hunk_index: selection.hunk_index,
             row_index: selection.row_index,
+            side: selection.side,
         }
     }
 }

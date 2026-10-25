@@ -74,6 +74,8 @@ pub(super) struct ShelfDiffSelection {
     pub(super) hunk_index: usize,
     #[serde(default)]
     pub(super) row_index: Option<usize>,
+    #[serde(default)]
+    pub(super) side: Option<crate::domain::diff::DiffRowSide>,
 }
 
 impl From<ShelfDiffSelection> for crate::domain::diff::DiffSelection {
@@ -81,6 +83,7 @@ impl From<ShelfDiffSelection> for crate::domain::diff::DiffSelection {
         Self {
             hunk_index: selection.hunk_index,
             row_index: selection.row_index,
+            side: selection.side,
         }
     }
 }

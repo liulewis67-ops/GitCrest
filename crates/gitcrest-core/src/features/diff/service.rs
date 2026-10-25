@@ -7,7 +7,8 @@ pub use read::{read_commit_file, read_with_context, read_with_patch};
 use std::path::Path;
 
 use crate::domain::diff::{
-    DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffScope, DiffSelection,
+    DiffContentStatus, DiffDocument, DiffHunk, DiffRow, DiffRowKind, DiffRowSide, DiffScope,
+    DiffSelection,
 };
 pub(crate) use crate::domain::error::DiffError;
 use crate::domain::status::StatusFile;
@@ -84,17 +85,37 @@ pub fn select_hunks(read: &DiffRead, selected: &[usize]) -> Result<Vec<u8>, Diff
     Ok(patch)
 }
 
+#[cfg(test)]
 pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u8>, DiffError> {
+    let whole_rows = selected
+        .iter()
+        .map(|&(hunk_index, row_index)| (hunk_index, row_index, None))
+        .collect::<Vec<_>>();
+    select_row_parts(read, &whole_rows)
+}
+
+/// Builds a patch from change rows, or from one side of rows that pair a deleted line with an added one.
+pub fn select_row_parts(
+    read: &DiffRead,
+    selected: &[(usize, usize, Option<DiffRowSide>)],
+) -> Result<Vec<u8>, DiffError> {
     if selected.is_empty() || read.document.status != DiffContentStatus::Text {
         return Err(DiffError::InvalidPath);
     }
-    let requested_count = selected.len();
-    let selected = selected
-        .iter()
-        .copied()
-        .collect::<std::collections::BTreeSet<_>>();
-    if selected.len() != requested_count {
-        return Err(DiffError::InvalidPath);
+    // Both halves of a row make the whole row; anything else selected twice is a malformed request.
+    let mut parts = std::collections::BTreeMap::<(usize, usize), Option<DiffRowSide>>::new();
+    for &(hunk_index, row_index, side) in selected {
+        match parts.entry((hunk_index, row_index)) {
+            std::collections::btree_map::Entry::Vacant(entry) => {
+                entry.insert(side);
+            }
+            std::collections::btree_map::Entry::Occupied(mut entry) => match (*entry.get(), side) {
+                (Some(first), Some(second)) if first != second => {
+                    entry.insert(None);
+                }
+                _ => return Err(DiffError::InvalidPath),
+            },
+        }
     }
     let patch_lines = read
         .patch
@@ -114,7 +135,7 @@ pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u
     // as already changed by the selected rows before it, and the old start counts lines of the new side
     // with those rows already reverted. Unselected rows never shift either one.
     let mut forward_shift = 0_i64;
-    for (hunk_index, row_index) in selected {
+    for ((hunk_index, row_index), side) in parts {
         let row = read
             .document
             .hunks
@@ -122,18 +143,26 @@ pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u
             .and_then(|hunk| hunk.rows.get(row_index))
             .filter(|row| row.kind == DiffRowKind::Change && !row.patch_change_lines.is_empty())
             .ok_or(DiffError::InvalidPath)?;
-        let old_count = i64::from(row.old_text.is_some());
-        let new_count = i64::from(row.new_text.is_some());
-        let old_before = i64::from(
-            row.old_line
-                .or(row.old_position)
-                .ok_or(DiffError::InvalidPath)?,
-        ) - 1;
-        let new_before = i64::from(
-            row.new_line
-                .or(row.new_position)
-                .ok_or(DiffError::InvalidPath)?,
-        ) - 1;
+        let paired = row.old_text.is_some() && row.new_text.is_some();
+        let takes_old = row.old_text.is_some() && side != Some(DiffRowSide::New);
+        let takes_new = row.new_text.is_some() && side != Some(DiffRowSide::Old);
+        if !takes_old && !takes_new {
+            return Err(DiffError::InvalidPath);
+        }
+        let old_count = i64::from(takes_old);
+        let new_count = i64::from(takes_new);
+        let old_line = row
+            .old_line
+            .or(row.old_position)
+            .ok_or(DiffError::InvalidPath)?;
+        let new_line = row
+            .new_line
+            .or(row.new_position)
+            .ok_or(DiffError::InvalidPath)?;
+        // In a paired row the deleted line comes first: an added line staged alone lands after the
+        // deleted line it was paired with, which stays.
+        let old_before = i64::from(old_line) - if paired && !takes_old { 0 } else { 1 };
+        let new_before = i64::from(new_line) - 1;
         let forward = old_before + forward_shift;
         let reverse = new_before - forward_shift;
         // A zero count names the line before the change; zero itself would pin the hunk to the start of the file.
@@ -159,6 +188,14 @@ pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u
         change_lines.sort_unstable();
         for patch_line in change_lines {
             let line = patch_lines.get(patch_line).ok_or(DiffError::GitFailed)?;
+            let wanted = match line.first() {
+                Some(b'-') => takes_old,
+                Some(b'+') => takes_new,
+                _ => return Err(DiffError::GitFailed),
+            };
+            if !wanted {
+                continue;
+            }
             patch.extend_from_slice(line);
             if let Some(marker) = patch_lines.get(patch_line + 1) {
                 if marker.starts_with(b"\\ No newline at end of file") {
@@ -172,6 +209,12 @@ pub fn select_rows(read: &DiffRead, selected: &[(usize, usize)]) -> Result<Vec<u
 
 pub fn select_changes(read: &DiffRead, selection: &[DiffSelection]) -> Result<Vec<u8>, DiffError> {
     if selection.is_empty() {
+        return Err(DiffError::InvalidPath);
+    }
+    if selection
+        .iter()
+        .any(|item| item.side.is_some() && item.row_index.is_none())
+    {
         return Err(DiffError::InvalidPath);
     }
     if selection.iter().all(|item| item.row_index.is_none()) {
@@ -191,18 +234,18 @@ pub fn select_changes(read: &DiffRead, selection: &[DiffSelection]) -> Result<Ve
             .get(item.hunk_index)
             .ok_or(DiffError::InvalidPath)?;
         if let Some(row_index) = item.row_index {
-            rows.push((item.hunk_index, row_index));
+            rows.push((item.hunk_index, row_index, item.side));
         } else {
             rows.extend(
                 hunk.rows
                     .iter()
                     .enumerate()
                     .filter(|(_, row)| row.kind == DiffRowKind::Change)
-                    .map(|(row_index, _)| (item.hunk_index, row_index)),
+                    .map(|(row_index, _)| (item.hunk_index, row_index, None)),
             );
         }
     }
-    select_rows(read, &rows)
+    select_row_parts(read, &rows)
 }
 
 #[cfg(test)]

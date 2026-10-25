@@ -2,7 +2,7 @@ use axum::http::Uri;
 use std::{collections::HashSet, net::IpAddr, time::Duration};
 
 use super::dto::{AiProvider, AiRequest, AiSettingsRequest};
-use crate::domain::diff::{DiffDocument, DiffRowKind, DiffScope, DiffSelection};
+use crate::domain::diff::{DiffDocument, DiffRowKind, DiffRowSide, DiffScope, DiffSelection};
 
 pub const MAX_REQUEST_FILES: usize = 20;
 pub const MAX_REQUEST_DIFF_BYTES: usize = 1024 * 1024;
@@ -100,12 +100,16 @@ pub fn format_selected_changes(
     if selections.is_empty() || selections.len() > 500 {
         return Err(AiRequestError::Invalid);
     }
-    let mut selected = HashSet::new();
+    // Rows in diff order, each with the half that was selected (`None`: the whole row).
+    let mut selected = std::collections::BTreeMap::<(usize, usize), Option<DiffRowSide>>::new();
     for selection in selections {
         let hunk = document
             .hunks
             .get(selection.hunk_index)
             .ok_or(AiRequestError::Invalid)?;
+        if selection.side.is_some() && selection.row_index.is_none() {
+            return Err(AiRequestError::Invalid);
+        }
         let rows = match selection.row_index {
             Some(row_index) => {
                 let row = hunk.rows.get(row_index).ok_or(AiRequestError::Invalid)?;
@@ -123,8 +127,18 @@ pub fn format_selected_changes(
                 .collect(),
         };
         for row_index in rows {
-            if !selected.insert((selection.hunk_index, row_index)) {
-                return Err(AiRequestError::Invalid);
+            match selected.entry((selection.hunk_index, row_index)) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(selection.side);
+                }
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    match (*entry.get(), selection.side) {
+                        (Some(first), Some(second)) if first != second => {
+                            entry.insert(None);
+                        }
+                        _ => return Err(AiRequestError::Invalid),
+                    }
+                }
             }
         }
     }
@@ -133,8 +147,8 @@ pub fn format_selected_changes(
         let hunk = &document.hunks[hunk_index];
         let selected_rows = selected
             .iter()
-            .filter(|(index, _)| *index == hunk_index)
-            .map(|(_, row)| *row)
+            .filter(|((index, _), _)| *index == hunk_index)
+            .map(|((_, row), side)| (*row, *side))
             .collect::<Vec<_>>();
         if selected_rows.is_empty() {
             continue;
@@ -143,14 +157,22 @@ pub fn format_selected_changes(
             "@@ -{},{} +{},{} @@\n",
             hunk.old_start, hunk.old_lines, hunk.new_start, hunk.new_lines
         ));
-        for row_index in selected_rows {
+        for (row_index, side) in selected_rows {
             let row = &hunk.rows[row_index];
-            if let Some(text) = &row.old_text {
+            if let Some(text) = row
+                .old_text
+                .as_ref()
+                .filter(|_| side != Some(DiffRowSide::New))
+            {
                 output.push('-');
                 output.push_str(text);
                 output.push('\n');
             }
-            if let Some(text) = &row.new_text {
+            if let Some(text) = row
+                .new_text
+                .as_ref()
+                .filter(|_| side != Some(DiffRowSide::Old))
+            {
                 output.push('+');
                 output.push_str(text);
                 output.push('\n');

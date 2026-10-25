@@ -2398,6 +2398,11 @@ export interface components {
                 selections: {
                     hunkIndex: number;
                     rowIndex?: number;
+                    /**
+                     * @description With rowIndex, selects only the deleted (old) or added (new) line of a row that has both.
+                     * @enum {string}
+                     */
+                    side?: "old" | "new";
                 }[];
             }[];
         };
@@ -2411,6 +2416,11 @@ export interface components {
             selections: {
                 hunkIndex: number;
                 rowIndex?: number;
+                /**
+                 * @description With rowIndex, selects only the deleted (old) or added (new) line of a row that has both.
+                 * @enum {string}
+                 */
+                side?: "old" | "new";
             }[];
         };
         DiscardPatchRequest: {
@@ -2436,6 +2446,11 @@ export interface components {
         DiffSelection: {
             hunkIndex: number;
             rowIndex?: number;
+            /**
+             * @description With rowIndex, selects only the deleted (old) or added (new) line of a row that has both.
+             * @enum {string}
+             */
+            side?: "old" | "new";
         };
         Shelf: {
             shelfId: string;

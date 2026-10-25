@@ -983,4 +983,128 @@ mod tests {
             expected(restored)
         );
     }
+
+    /// A row pairing a deleted line with an added one can be staged, unstaged or discarded one half at a time.
+    #[tokio::test]
+    async fn half_rows_stage_and_discard_one_side_in_place() {
+        use crate::domain::diff::{DiffRowKind, DiffRowSide};
+        let (_directory, root) = fixture().await;
+        let base = (0..12)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>();
+        let expected = |lines: &[String]| format!("{}\n", lines.join("\n"));
+        std::fs::write(root.join("tracked.txt"), expected(&base)).unwrap();
+        git(&root, &["commit", "--quiet", "-am", "twelve lines"]);
+        let mut worktree = base.clone();
+        worktree[6] = "six".into();
+        worktree[3] = "three".into();
+        worktree.insert(1, "top".into());
+        std::fs::write(root.join("tracked.txt"), expected(&worktree)).unwrap();
+
+        let read = |scope: DiffScope| {
+            let root = root.clone();
+            async move {
+                let snapshot = crate::features::status::read("repo".into(), &root)
+                    .await
+                    .unwrap();
+                let file = snapshot
+                    .files
+                    .iter()
+                    .find(|file| file.path == "tracked.txt")
+                    .unwrap()
+                    .clone();
+                crate::features::diff::read_with_patch(
+                    &crate::git::command::GitCommandService::default(),
+                    &crate::storage::diff::DiffWorktreeAdapter,
+                    "repo".into(),
+                    &root,
+                    &file,
+                    scope,
+                )
+                .await
+                .unwrap()
+            }
+        };
+        let row_with =
+            |read: &crate::features::diff::DiffRead, old: Option<&str>, new: Option<&str>| {
+                read.document
+                    .hunks
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(hunk_index, hunk)| {
+                        hunk.rows
+                            .iter()
+                            .enumerate()
+                            .map(move |(row_index, row)| (hunk_index, row_index, row))
+                    })
+                    .find(|(_, _, row)| {
+                        row.kind == DiffRowKind::Change
+                            && row.old_text.as_deref() == old
+                            && row.new_text.as_deref() == new
+                    })
+                    .map(|(hunk_index, row_index, _)| (hunk_index, row_index))
+                    .unwrap()
+            };
+        let index_text = || git_output(&root, &["show", ":tracked.txt"]);
+
+        // Stage only "three" (keeping "line 3") and only the removal of "line 6" (leaving "six" out).
+        let working = read(DiffScope::WorkingTree).await;
+        let three = row_with(&working, Some("line 3"), Some("three"));
+        let six = row_with(&working, Some("line 6"), Some("six"));
+        let patch = crate::features::diff::select_row_parts(
+            &working,
+            &[
+                (three.0, three.1, Some(DiffRowSide::New)),
+                (six.0, six.1, Some(DiffRowSide::Old)),
+            ],
+        )
+        .unwrap();
+        run(&root, patch_command(StagingPatchAction::Stage, patch));
+        let mut staged = base.clone();
+        staged.remove(6);
+        staged.insert(4, "three".into());
+        assert_eq!(index_text(), expected(&staged));
+
+        // Unstage the removal of "line 6" while "three" above it stays staged.
+        let index = read(DiffScope::Index).await;
+        let six = row_with(&index, Some("line 6"), None);
+        let patch =
+            crate::features::diff::select_row_parts(&index, &[(six.0, six.1, None)]).unwrap();
+        run(&root, patch_command(StagingPatchAction::Unstage, patch));
+        let mut unstaged = base.clone();
+        unstaged.insert(4, "three".into());
+        assert_eq!(index_text(), expected(&unstaged));
+
+        // Discard only the removal of "line 6" from the working tree; "six" and "top" stay.
+        let working = read(DiffScope::WorkingTree).await;
+        let six = row_with(&working, Some("line 6"), Some("six"));
+        let patch = crate::features::diff::select_row_parts(
+            &working,
+            &[(six.0, six.1, Some(DiffRowSide::Old))],
+        )
+        .unwrap();
+        run(&root, discard_patch_command(patch));
+        let mut restored = worktree.clone();
+        restored.insert(7, "line 6".into());
+        assert_eq!(
+            std::fs::read_to_string(root.join("tracked.txt"))
+                .unwrap()
+                .replace("\r\n", "\n"),
+            expected(&restored)
+        );
+
+        // Selecting a half twice, or a half of a one-sided row that it does not have, is refused.
+        let working = read(DiffScope::WorkingTree).await;
+        let top = row_with(&working, None, Some("top"));
+        assert!(crate::features::diff::select_row_parts(
+            &working,
+            &[(top.0, top.1, Some(DiffRowSide::Old))]
+        )
+        .is_err());
+        assert!(crate::features::diff::select_row_parts(
+            &working,
+            &[(top.0, top.1, None), (top.0, top.1, Some(DiffRowSide::New))]
+        )
+        .is_err());
+    }
 }
