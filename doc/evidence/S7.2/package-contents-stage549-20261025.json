@@ -1,0 +1,145 @@
+{
+  "stage": 549,
+  "date": "2026-10-25",
+  "method": "electron-builder --win nsis --x64 --publish never on the same host. Before: the stage 547 packaging (working tree after stages 542–547, packed with -c.npmRebuild=false). After: stages 548–549, packed without -c.npmRebuild=false. app.asar figures come from its header; installed size is the win-unpacked folder.",
+  "before": {
+    "installerBytes": 113443342,
+    "installedFolderBytes": 562469410,
+    "appAsarUnpackedBytes": 88044075,
+    "nativeRebuild": "fails without Python at tree-sitter-c-sharp node-gyp; packed with -c.npmRebuild=false",
+    "appAsar": {
+      "asarBytes": 147853442,
+      "headerJsonBytes": 669922,
+      "files": 2490,
+      "unpackedFiles": 127,
+      "topEntries": [
+        {
+          "path": "node_modules/monaco-editor",
+          "bytes": 100893398
+        },
+        {
+          "path": "node_modules/tree-sitter-c-sharp",
+          "bytes": 68017370
+        },
+        {
+          "path": "out/renderer",
+          "bytes": 21507831
+        },
+        {
+          "path": "node_modules/tree-sitter-python",
+          "bytes": 7510245
+        },
+        {
+          "path": "node_modules/tree-sitter-java",
+          "bytes": 6220014
+        },
+        {
+          "path": "node_modules/@willbooster/tree-sitter-typescript",
+          "bytes": 6133991
+        },
+        {
+          "path": "node_modules/@willbooster/web-tree-sitter",
+          "bytes": 5246774
+        },
+        {
+          "path": "node_modules/react-dom",
+          "bytes": 4512343
+        },
+        {
+          "path": "node_modules/tree-sitter-go",
+          "bytes": 3839024
+        },
+        {
+          "path": "node_modules/@willbooster/tree-sitter-rust",
+          "bytes": 2013597
+        },
+        {
+          "path": "node_modules/tree-sitter-css",
+          "bytes": 1967769
+        },
+        {
+          "path": "node_modules/dompurify",
+          "bytes": 1760018
+        },
+        {
+          "path": "node_modules/js-yaml",
+          "bytes": 951248
+        },
+        {
+          "path": "node_modules/marked",
+          "bytes": 918563
+        }
+      ]
+    }
+  },
+  "after": {
+    "installerBytes": 93311523,
+    "installedFolderBytes": 350477524,
+    "appAsarUnpackedBytes": 0,
+    "nativeRebuild": "no native dependencies left; packed with default settings",
+    "appAsar": {
+      "asarBytes": 23905631,
+      "headerJsonBytes": 102839,
+      "files": 393,
+      "unpackedFiles": 0,
+      "topEntries": [
+        {
+          "path": "out/renderer",
+          "bytes": 21507831
+        },
+        {
+          "path": "node_modules/js-yaml",
+          "bytes": 951248
+        },
+        {
+          "path": "node_modules/electron-updater",
+          "bytes": 535159
+        },
+        {
+          "path": "node_modules/builder-util-runtime",
+          "bytes": 166111
+        },
+        {
+          "path": "node_modules/argparse",
+          "bytes": 162580
+        },
+        {
+          "path": "node_modules/ws",
+          "bytes": 135660
+        },
+        {
+          "path": "node_modules/semver",
+          "bytes": 72675
+        },
+        {
+          "path": "node_modules/fs-extra",
+          "bytes": 53136
+        },
+        {
+          "path": "node_modules/sax",
+          "bytes": 52263
+        },
+        {
+          "path": "node_modules/lodash.isequal",
+          "bytes": 51894
+        },
+        {
+          "path": "out/main",
+          "bytes": 40880
+        },
+        {
+          "path": "node_modules/graceful-fs",
+          "bytes": 27363
+        },
+        {
+          "path": "node_modules/debug",
+          "bytes": 20109
+        },
+        {
+          "path": "node_modules/lodash.escaperegexp",
+          "bytes": 6705
+        }
+      ]
+    }
+  }
+}

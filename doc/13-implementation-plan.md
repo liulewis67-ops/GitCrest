@@ -5925,3 +5925,16 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`electron/main/index.ts`、`electron.vite.config.ts`、`doc/evidence/S7.2/startup-trace-probe-stage548.mjs`、`doc/evidence/S7.2/startup-trace-stage548-20261025.json`。
 - 限制/后续：冷启动与内存的 20 轮对照在小阶段 550（内存全部下降、冷启动不变；首个 Monaco 加载期间多约 60–95ms）。GPU 进程初始化不受应用代码控制，已否决的 GPU 参数（第 3 节）不重试；首次布局中的文本整形（单次 17.8ms）未继续分析。
 - 实施 commit：实现、证据与台账同一 commit。
+
+### S7.2 P1.6 renderer 专用依赖移出 `app.asar` — 小阶段 549
+- 状态：已完成（实现与打包测量；S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：
+  - `@monaco-editor/react`、`monaco-editor`、`react`、`react-dom`、`@willbooster/*` 与 `tree-sitter-*` 只在构建时被 Vite 打进 `out/renderer`，从 `dependencies` 移到 `devDependencies`（`pnpm-lock.yaml` 同步，版本不变）；`dependencies` 只保留主进程运行时 `import` 的 `ws` 与 `electron-updater`。electron-builder 因此不再把这些包的完整源码与 tree-sitter 原生预编译文件打进安装包，也不再尝试在本机 node-gyp 重编 tree-sitter 原生模块，打包不再需要 `-c.npmRebuild=false`。
+  - `15-frontend-development-guidelines.md` §2.2 第 4 条改为按“主进程运行时 / renderer 构建期”区分 `dependencies` 与 `devDependencies`。
+  - `scripts/packaged-smoke.mjs` 以 `--lang=en-US` 启动（与 E2E、桌面基准相同）：此前在中文系统下等待 “Core connected” 必然超时。
+- 结果：`app.asar` 147,853,442 → 23,905,631 B（文件 2,490 → 393，头部 JSON 669,922 → 102,839 B），`app.asar.unpacked` 88,044,075 B → 无；安装目录 562.5 → 350.5 MB；NSIS 安装包 113,443,342 → 93,311,523 B（108.19 → 88.99 MiB）。`out/renderer` 21.5 MB 不变。
+- 验证：默认配置 `electron-builder --win nsis --x64 --publish never` 成功（“completed installing native dependencies”）；`pnpm test:packaged` 对新包通过 1 次，另 1 次与旧包的 3 次一样在检查通过后的清理步骤报 `EBUSY`（删除临时安装目录时被占用，进程均已退出），属既有的清理不稳定，与本改动无关，未修改。其余见小阶段 548。
+- 证据：`package.json`、`pnpm-lock.yaml`、`doc/15-frontend-development-guidelines.md`、`scripts/packaged-smoke.mjs`、`doc/evidence/S7.2/package-contents-stage549-20261025.json`。
+- 限制/后续：macOS 与 Linux 包未重新打包核对；smoke 清理步骤的 `EBUSY` 可另行加长等待或排查占用者（同日 electron-builder 在新解压的 `default_app.asar` 上也出现过同样的 `EBUSY`，无进程持有，疑为实时扫描）。
+- 实施 commit：实现、证据与台账同一 commit。

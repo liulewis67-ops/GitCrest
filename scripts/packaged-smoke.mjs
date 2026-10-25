@@ -43,7 +43,8 @@ try {
   }
   app = await electron.launch({
     executablePath: executable,
-    args: [],
+    // The UI follows the system language, and the waits below match English text.
+    args: ["--lang=en-US"],
     env: {
       ...process.env,
       ...(process.platform === "linux" ? { APPIMAGE_EXTRACT_AND_RUN: "1" } : {}),

@@ -53,7 +53,7 @@ React 18 renderer 是客户端应用，不引入 Next.js、Server Components 或
 1. 安装、增加依赖、运行脚本统一使用 `pnpm`；禁止提交 `package-lock.json`、`yarn.lock` 等第二套锁文件。
 2. 新增或升级依赖必须同时提交 `package.json` 与 `pnpm-lock.yaml`。CI 使用 `pnpm install --frozen-lockfile`，不在 CI 中自动修复锁文件。[pnpm CI 文档](https://pnpm.io/continuous-integration)
 3. 后续工具链整理时，应在 `packageManager` 写入团队验证通过的 pnpm 精确版本，并对齐 CI；本文不虚构一个已锁定版本。
-4. 运行时包放入 `dependencies`，构建、类型、测试工具放入 `devDependencies`。引入前检查项目是否已有同类能力。
+4. Electron 主进程在运行时 `import` 的包（electron-vite 将其外置，例如 `ws`、`electron-updater`）放入 `dependencies`；renderer 使用的包（React、Monaco、tree-sitter 等）在构建时打进 `out/renderer`，与构建、类型、测试工具一起放入 `devDependencies`，否则 electron-builder 会把它们的完整源码再打进 `app.asar`。引入前检查项目是否已有同类能力。
 5. 一次性生成命令使用 `pnpm dlx`；长期开发流程应使用本地依赖和 `pnpm exec`。组件生成器版本应固定并记录，不以每次运行 `latest` 作为可复现流程。
 6. 依赖安装脚本权限按 `pnpm-workspace.yaml` 中的已有策略逐项评估，禁止为解决安装失败而整体开放。
 
