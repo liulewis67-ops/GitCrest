@@ -13,7 +13,7 @@ GitCrest 是一款面向专业开发者的本地优先 Git 桌面客户端。当
 - 解决冲突，使用 Shelve 暂存和恢复选定修改，并预览 Reset、Rebase 等危险操作。
 - 配置本地或云端 AI provider，在发送前检查文件和 Diff 范围；AI 建议需要用户审阅，不会自动提交或修改业务文件。
 - 自定义键盘快捷键；窗口级会话权限限制 Diff 与冲突窗口可调用的操作。
-- GitHub/GitLab 托管账号支持粘贴 Token 登录、验证、切换与退出；浏览器 OAuth/Device Flow、OAuth 刷新和工作区内的账号快捷切换尚未实现。
+- GitHub/GitLab 托管账号支持粘贴 Token 登录、验证、切换与退出；github.com 与 gitlab.com 另支持浏览器登录（Device Flow），Git 网络命令前自动刷新即将过期的 GitLab OAuth Token，Git 认证失败后重新检查账号。浏览器登录需在构建或启动环境中配置 `GITCREST_GITHUB_OAUTH_CLIENT_ID` / `GITCREST_GITLAB_OAUTH_CLIENT_ID` 后才会显示，尚未对线上 provider 完成验证；Enterprise/自托管实例仍只支持 Token，工作区内的账号快捷切换尚未实现。
 - 提交图使用虚拟化列表和 SVG 连线；tree-sitter 对 JavaScript、TypeScript、TSX 和 Rust 代码块报告语法解析状态，不提供函数/类级语义变更分析。
 
 ## 尚未纳入产品范围
