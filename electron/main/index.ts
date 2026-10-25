@@ -495,10 +495,12 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
         ? {}
         : { titleBarStyle: "hidden" as const, trafficLightPosition: { x: 14, y: 15 } }),
     webPreferences: {
-      preload: join(__dirname, "../preload/index.mjs"),
+      // The preload only needs contextBridge and ipcRenderer, so the renderer runs sandboxed and skips
+      // starting a Node.js environment of its own.
+      preload: join(__dirname, "../preload/index.cjs"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false,
+      sandbox: true,
     },
   });
 

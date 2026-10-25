@@ -1,0 +1,41 @@
+{
+  "stage": 548,
+  "date": "2026-10-25",
+  "host": "Windows 11 10.0.26300 x64, Ryzen 7 5800H, 16 GiB, NVMe, RTX 3050 Laptop, 60 Hz internal panel",
+  "method": "doc/evidence/S7.2/startup-trace-probe-stage548.mjs: one packaged cold start per build with --trace-startup (JSON), fresh profile, --lang=en-US. Times are milliseconds from the first trace event; the trace inflates them, so they show what blocks the renderer main thread, not startup acceptance values.",
+  "builds": {
+    "sandboxOff": "stage 547 packaging (working tree after stages 542–547): sandbox false, ESM preload, renderer-only packages in app.asar",
+    "sandboxOn": "stage 548–549 packaging: sandbox true, CommonJS preload, renderer-only packages out of app.asar"
+  },
+  "rendererMainThreadLongTasks": {
+    "sandboxOff": [
+      { "atMs": 507.5, "durationMs": 101.4, "task": "LocalWindowProxy::Initialize (initial context; preload with a Node.js environment)" },
+      { "atMs": 610.8, "durationMs": 28.4, "task": "RenderFrameImpl::CommitNavigation (includes LocalWindowProxy::Initialize 26.2)" },
+      { "atMs": 639.3, "durationMs": 149.1, "task": "ScheduledActionBeginLayerTreeFrameSinkCreation (waits for the GPU process)" },
+      { "atMs": 840.4, "durationMs": 13.5, "task": "v8.compileModule index-*.js" },
+      { "atMs": 854.7, "durationMs": 24.9, "task": "v8.evaluateModule" },
+      { "atMs": 881.4, "durationMs": 26.5, "task": "FunctionCall (first React render)" },
+      { "atMs": 907.9, "durationMs": 65.5, "task": "Document::UpdateStyleAndLayout (first layout, preFCP; text shaping 17.8 in one call)" }
+    ],
+    "sandboxOn": [
+      { "atMs": 463.6, "durationMs": 37.5, "task": "LocalWindowProxy::Initialize (initial context; sandboxed preload)" },
+      { "atMs": 503.0, "durationMs": 8.7, "task": "RenderFrameImpl::CommitNavigation" },
+      { "atMs": 512.3, "durationMs": 229.9, "task": "ScheduledActionBeginLayerTreeFrameSinkCreation (waits for the GPU process)" },
+      { "atMs": 792.4, "durationMs": 12.2, "task": "v8.compileModule index-*.js" },
+      { "atMs": 806.3, "durationMs": 22.9, "task": "v8.evaluateModule" },
+      { "atMs": 831.5, "durationMs": 21.2, "task": "FunctionCall (first React render)" },
+      { "atMs": 852.9, "durationMs": 61.7, "task": "Document::UpdateStyleAndLayout (first layout, preFCP)" }
+    ]
+  },
+  "findings": [
+    "Without the sandbox the renderer spends about 127 ms (101.4 + 26.2) creating script contexts with a Node.js environment for the preload; sandboxed, about 38 ms, and the navigation commit drops from 28.4 to 8.7 ms.",
+    "In both builds the renderer main thread then blocks in LayerTreeFrameSink creation until the GPU process is ready: 149 ms without the sandbox, 230 ms with it. The GPU process's first traced task is at about 773 ms (sandbox off) and 736 ms (sandbox on), so the saved renderer time turns into GPU wait and cold start barely changes on this host.",
+    "After the GPU wait the renderer's critical path is app work: entry fetch about 30 ms, compile 12–14 ms, evaluate 23–25 ms, first React render 21–27 ms, first layout 62–66 ms."
+  ],
+  "quickColdStartProbe": {
+    "method": "scratch probe, 6 alternating cold starts per build, no trace; ms from launch to the renderer showing \"Core connected\"",
+    "sandboxOffMs": [1023, 1051, 1147, 1005, 1321, 973],
+    "sandboxOnMs": [1396, 1036, 1016, 1078, 968, 953],
+    "note": "The first sandbox-on run followed packaging (window created at 856 ms against about 430 ms otherwise). The difference is within run-to-run noise; stage 550 has the 20-run comparison."
+  }
+}

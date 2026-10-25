@@ -5913,3 +5913,15 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/desktop-win32-p1-remeasure-stage547-20261025.json`（及 `.batches/`）、`doc/evidence/S7.2/desktop-win32-p1-memory-notrace-stage547-20261025.json`、`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-frame-diagnostic.mjs`。
 - 限制/后续：做 `e22c37c` 的同日 A/B 基线后再判定 P1.1–P1.4 的通过规则；P1.3 的“打开 3 个 Diff 后 WS”仍未测；帧率需在已知电源状态下复测以确认宿主因素（P2.1/D2）；`dependencies` 中仅 renderer 使用的包可移出打包以缩小安装包（新候选，未立项）。
 - 实施 commit：脚本修复、证据与台账同一 commit。
+
+### S7.2 P1.5 renderer 启用沙箱，preload 改为 CommonJS — 小阶段 548
+- 状态：已完成（实现与追踪核对；20 轮对照见小阶段 550，S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：
+  - 发行包冷启动追踪（`--trace-startup`，JSON）显示 renderer 主线程在加载入口前有两段与应用代码无关的阻塞：为非沙箱 preload 建立带 Node.js 环境的脚本上下文约 127ms（101.4 + 26.2），以及 `ScheduledActionBeginLayerTreeFrameSinkCreation` 等待 GPU 进程就绪 149ms。
+  - preload 只用到 `contextBridge`、`ipcRenderer` 与 `process.platform`，因此所有窗口改为 `sandbox: true`；沙箱 preload 不能是 ESM，`electron.vite.config.ts` 的 preload 输出改为 CommonJS `out/preload/index.cjs`，主进程指向该文件。`contextIsolation`、`nodeIntegration: false`、IPC 通道与权限检查不变。
+- 结果（各 1 次追踪，时间含追踪开销）：沙箱后脚本上下文建立约 38ms，导航提交 28.4 → 8.7ms；但 renderer 随后等待 GPU 的时间由 149ms 变为 230ms，GPU 进程首个任务出现时刻约 773ms 与 736ms 接近。即本机冷启动关键路径是 GPU 进程初始化，renderer 省下的时间转为等待，冷启动几乎不变。GPU 就绪后的关键路径为应用工作：入口 JS 读取约 30ms、编译 12–14ms、执行 23–25ms、首次 React 渲染 21–27ms、首次布局 62–66ms。无追踪的 6 次交替冷启动对照差异在噪声内（见证据）。
+- 验证：`pnpm frontend:boundaries`、`tsc --noEmit -p tsconfig.test.json`、`pnpm electron:build` 通过；Vitest 78 个文件 439/439 通过；Electron E2E 8 个文件 38/38 通过（开发入口，同样启用沙箱）；发行包 smoke（`pnpm test:packaged`，见小阶段 549）。
+- 证据：`electron/main/index.ts`、`electron.vite.config.ts`、`doc/evidence/S7.2/startup-trace-probe-stage548.mjs`、`doc/evidence/S7.2/startup-trace-stage548-20261025.json`。
+- 限制/后续：冷启动与内存的 20 轮对照在小阶段 550（内存全部下降、冷启动不变；首个 Monaco 加载期间多约 60–95ms）。GPU 进程初始化不受应用代码控制，已否决的 GPU 参数（第 3 节）不重试；首次布局中的文本整形（单次 17.8ms）未继续分析。
+- 实施 commit：实现、证据与台账同一 commit。

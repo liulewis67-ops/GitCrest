@@ -16,10 +16,15 @@ export default defineConfig({
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
+    // Renderers are sandboxed, and a sandboxed preload must be a single CommonJS script.
     build: {
       rollupOptions: {
         input: {
           index: resolve(__dirname, "electron/preload/index.ts"),
+        },
+        output: {
+          format: "cjs",
+          entryFileNames: "[name].cjs",
         },
       },
     },
