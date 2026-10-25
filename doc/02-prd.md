@@ -26,7 +26,7 @@ GitCrest MVP 是一款跨平台桌面 Git 客户端，面向专业开发者，�
 - AI 功能常作为附加能力，未真正嵌入 Git 工作流。
 - 跨平台体验不一致，Linux 支持不足。
 
-GitCrest 采用 Electron + Rust sidecar（axum HTTP 服务）+ React 的桌面架构。提交图使用虚拟化列表和 SVG 连线，代码 Diff 使用 Monaco，并在 JavaScript、TypeScript、TSX 和 Rust 代码块上进行 tree-sitter 语法解析。当前 tree-sitter 解析用于识别语法状态和降级处理，尚未提供函数或类级别的语义变更分析。
+GitCrest 采用 Electron + Rust sidecar（axum HTTP 服务）+ React 的桌面架构。提交图使用虚拟化列表和 SVG 连线，代码 Diff 使用 Monaco，并以 tree-sitter 做代码感知分析：按函数、类型等结构归组修改并支持按结构暂存，内置 10 种语言，可通过语言插件扩展（见 `PRD-code-aware-diff.md`、`language-plugins.md`）。
 
 ## 4. 目标
 
@@ -162,7 +162,7 @@ GitCrest 用“代码感知”和“安全可控”替代单纯的 Git 命令包
 - Diff 窗口只拥有只读权限和 diff 相关 HTTP API 权限。
 - 用户能从文件树、提交详情和工作区打开 Diff。
 
-当前实现备注：主窗口显示 Split Diff，独立 Diff 窗口提供 Split/Unified；现有折叠能力覆盖 Diff hunk 和未变化区域。tree-sitter 当前负责语法解析状态，不会把变更归类到函数、类或其他语义节点。
+当前实现备注：主窗口显示 Split Diff，独立 Diff 窗口提供 Split/Unified；现有折叠能力覆盖 Diff hunk 和未变化区域。代码感知 Diff 第一版已实现：结构栏按函数、方法、类型、导入等结构归组修改并标出变化类型，可按结构选择并精确暂存；内置 10 种语言并支持语言插件，不支持或解析失败时降级为按行审阅。设计与验证见 `PRD-code-aware-diff.md`。
 
 ### 7.7 合并、冲突和 Rebase
 
