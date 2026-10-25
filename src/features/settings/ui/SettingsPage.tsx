@@ -3,17 +3,18 @@ import type { AiSettingsResponse, GitCrestApiClient } from "../../../api/client"
 import {
   defaultShortcutPreferences,
   displayShortcut,
-  shortcutActions,
   shortcutConflict,
   shortcutFromEvent,
   type ShortcutAction,
   type ShortcutPreferences,
+  visibleShortcutActions,
 } from "../model/shortcut-preferences";
 import { previewTheme } from "../model/appearance-store";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 import { AppearanceSettings } from "./AppearanceSettings";
-import { SETTINGS_SECTIONS, type SettingsSectionId } from "./settings-sections";
+import { visibleSettingsSections, type SettingsSectionId } from "./settings-sections";
+import { AI_FEATURES_ENABLED } from "../../../shared/lib/feature-flags";
 import type { UpdateStatus } from "../../../api/update-status";
 import { LOCALES, useI18n } from "../../../shared/i18n";
 import { AccountsSection } from "../../accounts";
@@ -57,7 +58,7 @@ export function SettingsPage({
   const contentRef = useRef<HTMLDivElement>(null);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const isMac = navigator.platform.toLowerCase().includes("mac");
-  const sections = SETTINGS_SECTIONS.filter((id) => id !== "updates" || updateStatus);
+  const sections = visibleSettingsSections.filter((id) => id !== "updates" || updateStatus);
 
   // A theme left half-edited is never saved by closing Settings.
   useEffect(() => () => previewTheme(undefined), []);
@@ -119,6 +120,7 @@ export function SettingsPage({
   }
 
   useEffect(() => {
+    if (!AI_FEATURES_ENABLED) return;
     const controller = new AbortController();
     void api.withSignal(controller.signal).getAiSettings().then((value) => {
       if (controller.signal.aborted) return;
@@ -221,7 +223,7 @@ export function SettingsPage({
               <div className="settingsCard">
                 <p className="settingsHint">{t("settings.shortcutsHelp")}</p>
                 <div className="shortcutPreferenceList">
-                  {shortcutActions.map(({ id }) => <div className="shortcutPreferenceRow" key={id}>
+                  {visibleShortcutActions.map(({ id }) => <div className="shortcutPreferenceRow" key={id}>
                     <span>{t(`sc.${id}`)}</span>
                     <button
                       type="button"
@@ -238,7 +240,7 @@ export function SettingsPage({
               </div>
             </section>
 
-            <section className="settingsSection" id="settings-section-ai" aria-labelledby="settings-ai-title">
+            {AI_FEATURES_ENABLED && <section className="settingsSection" id="settings-section-ai" aria-labelledby="settings-ai-title">
               <h3 id="settings-ai-title" tabIndex={-1}>{t("settings.section.ai")}</h3>
               <p className="settingsNotice">{t("settings.providerNotice")}</p>
               <form className="settingsForm" onSubmit={saveSettings}>
@@ -258,7 +260,7 @@ export function SettingsPage({
               </form>}
               <PrivacyScopePreview api={api} repoId={repoId} settings={settings} />
               {error && <p className="formError" role="alert">{error}</p>}{notice && <p className="settingsNotice" role="status">{notice}</p>}
-            </section>
+            </section>}
 
             {updateStatus && <section className="settingsSection" id="settings-section-updates" aria-labelledby="application-updates-title">
               <h3 id="application-updates-title" tabIndex={-1}>{t("settings.updates")}</h3>

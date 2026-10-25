@@ -11,6 +11,7 @@ import { applySmartMerge, smartMergeBlock, type SmartMergeOutcome } from "../mod
 import { useDraftHistory } from "../model/use-draft-history";
 import { ConflictBlockRow, type IgnoredSides } from "./ConflictBlockRow";
 import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
+import { AI_FEATURES_ENABLED } from "../../../shared/lib/feature-flags";
 
 type RequestState<T> = { key: string; loading: boolean; data?: T; error?: string };
 type ActionState = { busy?: "save" | "resolve"; message?: string; error?: string };
@@ -458,8 +459,8 @@ export function ConflictWindow() {
         </>}
         {action.message && <p className="conflictActionStatus" role="status">{action.message}</p>}
         {action.error && <p className="taskCenterError" role="alert">{action.error}</p>}
-        {currentFile.data?.isText && <button type="button" className="secondaryButton" disabled={Boolean(action.busy) || hasUnsavedChanges} title={hasUnsavedChanges ? t("cf.aiSaveFirst") : t("cf.aiPreview")} onClick={() => setSuggestionOpen((open) => !open)}>{t("cf.aiButton")}</button>}
-        {suggestionOpen && api && currentFile.data?.isText && <ConflictSuggestionPanel key={`${currentFile.data.path}:${currentFile.data.resultRevision}`} api={api} file={currentFile.data} hasUnsavedChanges={hasUnsavedChanges} onClose={() => setSuggestionOpen(false)} />}
+        {AI_FEATURES_ENABLED && currentFile.data?.isText && <button type="button" className="secondaryButton" disabled={Boolean(action.busy) || hasUnsavedChanges} title={hasUnsavedChanges ? t("cf.aiSaveFirst") : t("cf.aiPreview")} onClick={() => setSuggestionOpen((open) => !open)}>{t("cf.aiButton")}</button>}
+        {AI_FEATURES_ENABLED && suggestionOpen && api && currentFile.data?.isText && <ConflictSuggestionPanel key={`${currentFile.data.path}:${currentFile.data.resultRevision}`} api={api} file={currentFile.data} hasUnsavedChanges={hasUnsavedChanges} onClose={() => setSuggestionOpen(false)} />}
       </section>
     </div>}
   </main>;

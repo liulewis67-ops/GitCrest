@@ -1,4 +1,5 @@
 import { t } from "../../../shared/i18n";
+import { AI_FEATURES_ENABLED } from "../../../shared/lib/feature-flags";
 export const SHORTCUT_PREFERENCES_KEY = "gitcrest-shortcuts-v1";
 
 export const shortcutActions = [
@@ -31,6 +32,9 @@ export const shortcutActions = [
   { id: "focusMode", label: "Focus mode", defaultBinding: "Mod+Shift+M" },
 ] as const;
 
+/** The actions Settings lists and that claim a key; a hidden feature's action keeps its binding but blocks nothing. */
+export const visibleShortcutActions = shortcutActions.filter(({ id }) => AI_FEATURES_ENABLED || id !== "aiCommitMessage");
+
 export type ShortcutAction = (typeof shortcutActions)[number]["id"];
 export type ShortcutPreferences = Record<ShortcutAction, string>;
 
@@ -50,7 +54,7 @@ export function readShortcutPreferences(value: string | null): ShortcutPreferenc
       const binding = (saved as Record<string, unknown>)[id];
       if (typeof binding === "string" && isValidBinding(binding) && !reservedBindings.has(binding)) result[id] = binding;
     }
-    return new Set(Object.values(result)).size === shortcutActions.length ? result : { ...defaultShortcutPreferences };
+    return new Set(visibleShortcutActions.map(({ id }) => result[id])).size === visibleShortcutActions.length ? result : { ...defaultShortcutPreferences };
   } catch {
     return { ...defaultShortcutPreferences };
   }
@@ -84,7 +88,7 @@ export function shortcutConflict(
 ): string | undefined {
   if (!isValidBinding(binding)) return t("sc.invalid");
   if (reservedBindings.has(binding)) return t("sc.reserved");
-  const otherAction = shortcutActions.find(({ id }) => id !== action && preferences[id] === binding);
+  const otherAction = visibleShortcutActions.find(({ id }) => id !== action && preferences[id] === binding);
   return otherAction ? t("sc.assigned", { label: t(`sc.${otherAction.id}`) }) : undefined;
 }
 

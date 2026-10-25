@@ -16,6 +16,9 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 - Diff 视图。
 - 合并、冲突解决、Rebase。
 - 远程操作。
+
+延后（原属 MVP，自 2026-10-25 起移出，客户端入口隐藏，见 `13-implementation-plan.md` 第 10 节）：
+
 - AI Commit Message、变更摘要、冲突建议。
 
 不进入 MVP：
@@ -48,7 +51,6 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 - 暂存和取消暂存。
 - Commit 表单。
 - 基础 Diff。
-- AI message 入口使用本地 mock 服务返回可编辑建议，后续替换为真实 provider。
 - 提交成功后刷新状态。
 
 验收：
@@ -105,7 +107,9 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 
 - 可完成冲突解决和 rebase 回滚。
 
-### 阶段 7：AI 集成
+### 阶段 7：AI 集成（延后）
+
+延后，当前不实施；以下内容保留为恢复时的范围。
 
 - AI provider 配置。
 - Commit message。
@@ -141,11 +145,11 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 | 基础提交 | `02-prd.md`、`04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
 | 查看历史 | `03-information-architecture.md`、`05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
 | Diff 浏览 | `05-uiux-spec.md` | 是 | `tests/e2e/desktop.test.ts` |
-| 冲突解决 | `04-user-flows.md`、`07-interaction-accessibility.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`（键盘解决 cherry-pick 冲突；AI 建议需先明确同意，并验证建议不会自动应用或暂存）、`tests/e2e/remote-sync.test.ts`（Pull merge/rebase 冲突恢复）、`tests/e2e/desktop.test.ts` |
+| 冲突解决 | `04-user-flows.md`、`07-interaction-accessibility.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`（键盘解决 cherry-pick 冲突，并确认冲突窗口不提供 AI 建议入口）、`tests/e2e/remote-sync.test.ts`（Pull merge/rebase 冲突恢复）、`tests/e2e/desktop.test.ts` |
 | 分支切换 | `04-user-flows.md` | 是 | `tests/e2e/keyboard-workflow.test.ts`、`tests/e2e/desktop.test.ts` |
 | 远程同步 | `04-user-flows.md` | 是 | `tests/e2e/remote-sync.test.ts`（Push、Fetch 成功/失败恢复/HTTPS 401 后保存凭据并认证重试成功/活动取消、Pull fast-forward/脏工作区拒绝/活动 merge 取消与安全回滚/merge-rebase 冲突恢复/排队取消/Pull rebase pre-replay 取消/两种 backend 的 replay 中断恢复、Push 失败后审阅重试） |
 | Shelve | `04-user-flows.md` | 是 | `tests/e2e/shelf-workflow.test.ts`（创建、预览和应用） |
-| AI message | `02-prd.md`、`07-interaction-accessibility.md` | 是 | `tests/e2e/desktop.test.ts` |
+| AI message（延后） | `02-prd.md`、`07-interaction-accessibility.md` | 否 | 延后期间 `tests/e2e/desktop.test.ts` 只断言设置页、提交面板和 `Ctrl+G` 均无 AI 入口 |
 | 设置快捷键 | `07-interaction-accessibility.md` | 是 | `tests/e2e/shortcut-settings.test.ts` |
 
 ## 6. 设计验收清单
@@ -166,8 +170,8 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 - [ ] 凭证只进入系统 Keychain。
 - [ ] Diff 窗口无写权限。
 - [ ] 冲突窗口只写冲突相关文件。
-- [ ] AI 云端模式只发送必要 diff。
-- [ ] 本地 AI 模式明确不离开本机。
+- [ ] （延后）AI 云端模式只发送必要 diff。
+- [ ] （延后）本地 AI 模式明确不离开本机。
 - [ ] force push、reset hard、drop commit 需要强确认。
 - [ ] rebase 前创建备份引用。
 - [ ] 更新包验证签名。
@@ -180,7 +184,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 | Electron + Rust sidecar（axum HTTP 服务）能满足启动和内存目标 | 原型 benchmark | 工程 |
 | Canvas 提交图能稳定 60fps | 100,000 和 1,000,000 提交测试 | 前端/Rust |
 | tree-sitter 语义 Diff 对用户有明显价值 | 可用性测试 | 产品/设计 |
-| AI message 用户会采纳 | Beta 采纳率统计 | 产品 |
+| AI message 用户会采纳（延后） | 恢复 AI 后的采纳率统计 | 产品 |
 | 免费版 + Pro 定价合理 | Alpha/Beta 用户访谈 | 产品 |
 | 多窗口权限模型可实现 | Electron preload bridge 和 sidecar 鉴权原型 | 工程 |
 

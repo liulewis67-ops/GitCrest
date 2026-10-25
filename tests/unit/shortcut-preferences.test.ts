@@ -8,6 +8,7 @@ import {
   readShortcutPreferences,
   shortcutConflict,
   shortcutFromEvent,
+  visibleShortcutActions,
 } from "../../src/features/settings/model/shortcut-preferences";
 
 function keyEvent(key: string, init: Partial<KeyboardEvent> = {}): KeyboardEvent {
@@ -33,6 +34,13 @@ describe("keyboard shortcut preferences", () => {
     const preferences = readShortcutPreferences(JSON.stringify({ commandPalette: "Mod+O", openRepository: "Mod+K" }));
     expect(preferences.commandPalette).toBe("Mod+O");
     expect(preferences.openRepository).toBe("Mod+K");
+  });
+
+  it("lets visible actions take the hidden AI shortcut's key while AI assistance is deferred", () => {
+    expect(visibleShortcutActions.some(({ id }) => id === "aiCommitMessage")).toBe(false);
+    expect(shortcutConflict("pull", defaultShortcutPreferences.aiCommitMessage, defaultShortcutPreferences)).toBeUndefined();
+    const preferences = readShortcutPreferences(JSON.stringify({ pull: defaultShortcutPreferences.aiCommitMessage }));
+    expect(preferences.pull).toBe(defaultShortcutPreferences.aiCommitMessage);
   });
 
   it("captures a normalized cross-platform binding and ignores IME composition", () => {

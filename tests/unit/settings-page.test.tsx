@@ -51,23 +51,15 @@ it("moves focus into settings, traps Tab, and restores the opener on close", asy
   await waitFor(() => expect(document.activeElement).toBe(opener));
 });
 
-it("aborts AI settings and account loading when the settings dialog closes", async () => {
-  const pending = deferred<Awaited<ReturnType<GitCrestApiClient["getAiSettings"]>>>();
-  const signals: AbortSignal[] = [];
-  const api = cancellableApi({ getAiSettings: vi.fn(() => pending.promise) }, signals);
-  function Harness() {
-    const [open, setOpen] = useState(false);
-    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsPage api={api} onClose={() => setOpen(false)} />}</>;
-  }
-  render(<Harness />);
+it("hides the deferred AI section and its shortcut without loading AI settings", async () => {
+  const api = cancellableApi({ getAiSettings: vi.fn() });
+  render(<SettingsPage api={api} onClose={vi.fn()} />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
-  const dialog = await screen.findByRole("dialog", { name: "Settings" });
-  await waitFor(() => expect(signals).toHaveLength(2));
-  fireEvent.click(within(dialog).getByRole("button", { name: "Close settings" }));
-  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
-  expect(signals.every((signal) => signal.aborted)).toBe(true);
-  await act(async () => pending.resolve({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }));
+  const nav = await screen.findByRole("navigation", { name: "Settings sections" });
+  expect(within(nav).queryByRole("button", { name: "AI assistant" })).toBeNull();
+  expect(screen.queryByRole("combobox", { name: "AI provider" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Record shortcut for Generate commit message" })).toBeNull();
+  expect(api.getAiSettings).not.toHaveBeenCalled();
 });
 
 it("records a replacement shortcut and rejects an existing assignment", async () => {
@@ -85,39 +77,6 @@ it("records a replacement shortcut and rejects an existing assignment", async ()
 
   fireEvent.keyDown(commandPalette, { key: "m", ctrlKey: true });
   expect(onShortcutsChange).toHaveBeenCalledWith({ ...defaultShortcutPreferences, commandPalette: "Mod+M" });
-});
-
-it("saves provider configuration without sending a model request", async () => {
-  const api = cancellableApi({
-    getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
-    setAiSettings: vi.fn().mockResolvedValue({ provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false }),
-    setAiCredential: vi.fn(), deleteAiCredential: vi.fn(),
-  });
-  render(<SettingsPage api={api} onClose={vi.fn()} />);
-  await screen.findByRole("combobox", { name: "AI provider" });
-  fireEvent.change(screen.getByRole("combobox", { name: "AI provider" }), { target: { value: "ollama" } });
-  fireEvent.change(screen.getByLabelText("Model"), { target: { value: "qwen" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save provider settings" }));
-  await waitFor(() => expect(api.setAiSettings).toHaveBeenCalledWith("ollama", "http://127.0.0.1:11434", "qwen"));
-  expect(api.setAiCredential).not.toHaveBeenCalled();
-  expect(await screen.findByText("Provider settings saved. No model request was made.")).toBeTruthy();
-});
-
-it("submits cloud keys through the credential API and clears the field", async () => {
-  const api = cancellableApi({
-    getAiSettings: vi.fn().mockResolvedValue({ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: false }),
-    setAiSettings: vi.fn(),
-    setAiCredential: vi.fn().mockResolvedValue({ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true }),
-    deleteAiCredential: vi.fn(),
-  });
-  render(<SettingsPage api={api} onClose={vi.fn()} />);
-  const keyInput = await screen.findByLabelText("Cloud API key");
-  fireEvent.change(keyInput, { target: { value: "private-test-key" } });
-  fireEvent.click(screen.getByRole("button", { name: "Save API key" }));
-  await waitFor(() => expect(api.setAiCredential).toHaveBeenCalledWith("private-test-key"));
-  expect(keyInput).toHaveProperty("value", "");
-  expect(screen.queryByText("private-test-key")).toBeNull();
-  expect(await screen.findByText("API key saved to the system credential store.")).toBeTruthy();
 });
 
 it("shows reviewable staged and worktree scopes and previews selected local diff text", async () => {

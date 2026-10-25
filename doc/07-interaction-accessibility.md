@@ -16,7 +16,7 @@
 | 刷新状态 | `Cmd+R` | `Ctrl+R` |
 | 打开 Diff | `Cmd+D` | `Ctrl+D` |
 | 搜索提交 | `Cmd+F` | `Ctrl+F` |
-| AI 生成 Message | `Cmd+G` | `Ctrl+G` |
+| AI 生成 Message（延后，当前不响应、不占用按键） | `Cmd+G` | `Ctrl+G` |
 | Shelve | `Cmd+Shift+S` | `Ctrl+Shift+S` |
 | 撤销最近操作 | `Cmd+Z` | `Ctrl+Z` |
 | 交互式 Rebase | `Cmd+I` | `Ctrl+I` |
@@ -189,7 +189,9 @@
 - 保留“查看原始日志”入口。
 - 不责备用户。
 
-## 8. AI 交互
+## 8. AI 交互（延后）
+
+AI 辅助已延后，当前客户端不提供 AI 入口（见 `13-implementation-plan.md` 第 10 节）。以下要求保留为恢复时的交互约束。
 
 AI 必须是辅助，不是自动驾驶。
 

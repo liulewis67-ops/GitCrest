@@ -7,11 +7,10 @@ GitCrest 是一款面向专业开发者的本地优先 Git 桌面客户端。当
 ## 当前可评估的工作流
 
 - 打开、初始化和克隆仓库；查看工作区状态、分支和提交历史。
-- 按文件、hunk 或行审阅 Diff 并暂存；创建提交，编辑 AI 提交消息和变更摘要建议。
+- 按文件、hunk 或行审阅 Diff 并暂存；创建提交。
 - 使用提交图搜索和浏览历史，查看 Split Diff、独立 Diff 窗口及 Blame。
 - 管理分支和多个 remote；审阅 Fetch、Pull、Push 目标及影响后再执行同步。
 - 解决冲突，使用 Shelve 暂存和恢复选定修改，并预览 Reset、Rebase 等危险操作。
-- 配置本地或云端 AI provider，在发送前检查文件和 Diff 范围；AI 建议需要用户审阅，不会自动提交或修改业务文件。
 - 自定义键盘快捷键；窗口级会话权限限制 Diff 与冲突窗口可调用的操作。
 - GitHub/GitLab 托管账号支持粘贴 Token 登录、验证、切换与退出；github.com 与 gitlab.com 另支持浏览器登录（Device Flow），Git 网络命令前自动刷新即将过期的 GitLab OAuth Token，Git 认证失败后重新检查账号。浏览器登录需在构建或启动环境中配置 `GITCREST_GITHUB_OAUTH_CLIENT_ID` / `GITCREST_GITLAB_OAUTH_CLIENT_ID` 后才会显示，尚未对线上 provider 完成验证；Enterprise/自托管实例仍只支持 Token，工作区内的账号快捷切换尚未实现。
 - 提交图使用虚拟化列表和 SVG 连线；tree-sitter 对 JavaScript、TypeScript、TSX 和 Rust 代码块报告语法解析状态，不提供函数/类级语义变更分析。
@@ -20,6 +19,7 @@ GitCrest 是一款面向专业开发者的本地优先 Git 桌面客户端。当
 
 以下能力不属于 MVP P0，也不应被视为当前可用功能：
 
+- AI 辅助（提交消息、变更摘要、冲突建议）：已延后，客户端不提供入口。
 - PR/MR 工作流和 CI/CD 状态。
 - Git LFS 和 Submodule 管理工作流。
 - 团队协作、插件系统、自动代码审查、团队模型训练及自动修改业务代码。

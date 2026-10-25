@@ -40,6 +40,6 @@ it("explains the remote ref, lease OID and actual preview impact before confirma
   expect(explanation.textContent).toContain(preview.expectedRemoteOid.slice(0, 12));
   expect(explanation.textContent).toContain("3 commit(s) reachable only from that remote branch");
   expect(explanation.textContent).toContain("2 path(s) that differ from the current HEAD; 1 additional path(s) are omitted");
-  expect(explanation.textContent).toContain("without an AI provider");
+  expect(explanation.textContent).toContain("based on the reviewed remote preview");
   expect(api.deleteRepositoryRemoteBranch).not.toHaveBeenCalled();
 });

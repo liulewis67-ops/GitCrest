@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { matchesShortcut, type ShortcutPreferences } from "../features/settings";
 import { isFullGitObjectId } from "../features/history";
+import { AI_FEATURES_ENABLED } from "../shared/lib/feature-flags";
 
 type ShortcutRepository = {
   repoId: string;
@@ -141,7 +142,7 @@ export function useGlobalShortcuts(context: GlobalShortcutContext, actions: Glob
       } else if (matchesShortcut(event, shortcuts.commandPalette, isMacPlatform)) {
         event.preventDefault();
         run.toggleCommandPalette();
-      } else if (page === "workspace" && matchesShortcut(event, shortcuts.aiCommitMessage, isMacPlatform) && repository && state.stagedCount > 0 && !state.hasConflicts && !state.commitBusy) {
+      } else if (AI_FEATURES_ENABLED && page === "workspace" && matchesShortcut(event, shortcuts.aiCommitMessage, isMacPlatform) && repository && state.stagedCount > 0 && !state.hasConflicts && !state.commitBusy) {
         event.preventDefault();
         run.openCommitAssistant();
       } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.viewChanges, isMacPlatform)) {

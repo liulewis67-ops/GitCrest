@@ -41,7 +41,7 @@ export const branches2 = {
   "rbd.impactOmitted": ["; {count} additional path(s) are omitted from this list", "；另有 {count} 个路径未在此列表中列出"],
   "rbd.impactDetail": ["The preview finds {commits} commit(s) reachable only from that remote branch and {paths} path(s) that differ from the current HEAD{omitted}. Deleting the ref can make those commits harder to reach; it does not rewrite the current local branch.", "预览发现有 {commits} 个提交只能从该远程分支到达，并有 {paths} 个路径与当前 HEAD 不同{omitted}。删除该引用后这些提交会更难找回，但不会改写当前本地分支。"],
   "rbd.opInProgress": ["A {op} operation is active, so deletion is blocked until it finishes.", "当前正在进行 {op} 操作，完成之前无法删除。"],
-  "rbd.safetyNote": ["This safety summary is based on the reviewed remote preview and remains available without an AI provider.", "此安全摘要基于已检查的远程预览，无需 AI 服务商即可使用。"],
+  "rbd.safetyNote": ["This safety summary is based on the reviewed remote preview.", "此安全摘要基于已检查的远程预览。"],
   "rbd.finishOp": ["Finish the active Git operation before deleting a remote branch.", "请先完成正在进行的 Git 操作，再删除远程分支。"],
   "rbd.leaseNote": ["Deletion uses a force-with-lease check against this reviewed OID. If the remote branch moved since your last fetch, Git will refuse and the branch will remain.", "删除时会针对该已检查的 OID 使用 force-with-lease 校验。如果自上次获取以来远程分支已移动，Git 会拒绝删除，分支将保留。"],
   "rbd.confirm": ["I understand this deletes {ref} from the remote. This cannot be undone through GitCrest.", "我明白这将从远程删除 {ref}，且无法通过 GitCrest 撤销。"],
