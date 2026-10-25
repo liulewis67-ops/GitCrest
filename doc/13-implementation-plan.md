@@ -44,7 +44,7 @@
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 已完成 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 已完成 |
 | 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 延后（客户端入口隐藏，不计入门槛） |
-| 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–5 | 进行中（S7.2 待验收；S7.4/S7.5 阻塞于外部环境） |
+| 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–5 | 进行中（S7.2 已完成；S7.4/S7.5 阻塞于外部环境） |
 
 阶段 2 完成加上阶段 3 的 3.1、3.2 是 Alpha 功能门槛；阶段 0–5 完成是 Beta 功能门槛；阶段 7 完成是 GA 门槛。延后的阶段 6 不属于任何门槛。阶段间可并行做准备工作，但不得跳过依赖验收或提前标完成。
 
@@ -150,14 +150,21 @@
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
 | S7.1 | RepositoryWatcher、dirty scope 合并与增量 StatusSnapshot。 | 工作树、HEAD、index、refs、config、忽略规则变化触发正确刷新；刷新期间新 dirty path 不丢失；rename/规则变更可升级全量刷新；外部 Git 操作和 WS 重连后与 `git status` 一致。 | 已完成 |
-| S7.2 | 性能基准与瓶颈修复。 | 记录硬件、OS、仓库 fixture、测量脚本及 20 次运行分布；冷启动 <1.5s、空闲内存 <250MB、工作中 <500MB、安装包 <150MB；100k 提交首屏 <1s、滚动目标 ≥60fps、1k 行 Diff <200ms、状态刷新 <100ms、搜索 <200ms。任何未达标项保留待验收并附复测数据。 | 待验收 |
+| S7.2 | 性能基准与瓶颈修复。 | 记录硬件、OS、仓库 fixture、测量脚本及 20 次运行分布；冷启动 <1.5s、空闲内存 <250MB、工作中 <500MB、安装包 <150MB；100k 提交首屏 <1s、滚动目标 ≥60fps、1k 行 Diff <200ms、状态刷新 <100ms、搜索 <200ms。任何未达标项保留待验收并附复测数据。判定口径见第 12 节（2026-10-25 决定），判定记录见小阶段 552。 | 已完成 |
 | S7.3 | 键盘、可访问性与安全回归。 | `07` 的 P0 快捷键可用且可自定义/检测冲突；全程键盘能完成打开仓库、暂存、提交、分支和冲突流程；焦点/屏幕阅读、减少动效和状态非仅颜色表达通过检查；窗口越权、无 token、确认绕过、日志泄密用自动化负例验证。 | 已完成 |
 | S7.4 | Windows/macOS/Linux 构建、签名与自动更新。 | 三平台均能安装、启动、找到对应 sidecar、关闭时退出子进程；更新包签名验证失败时拒绝安装；真实签名凭证仅来自 CI 密钥环境；安装包和升级流程留有构建/测试证据。 | 阻塞 |
 | S7.5 | 全量 P0 E2E、故障恢复、发布验收与文档收口。 | `08` 的 E2E 场景逐项通过；临时仓库覆盖失败/重试/回滚；无 P0 阻塞缺陷；Alpha/Beta/GA 范围与实际功能一致；所有小阶段状态、证据、限制和最终 commit 可追溯，发布说明写明尚未支持的 P1/P2 功能。 | 阻塞 |
 
 ## 12. 统一性能与安全验收口径
 
-S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率取持续 30 秒的 compositor presented-frame P5（不能只用 requestAnimationFrame 回调率），内存取不启用 trace 的稳定窗口峰值。Windows 报告须分别列出 process-tree Working Set、Private Working Set 与 private bytes；三者不可互相替代，当前内存验收继续按正式发行版基准记录的 process-tree Working Set 判定。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。S7.2 中 Electron 侧未达标项（冷启动 P95、空闲内存、滚动帧率）的待决口径（D1–D3）与后续优化小阶段（P1–P4）见 `electron-performance-optimization-plan.md`；口径决定后须同时更新本节与 `10` §7。
+S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。性能脚本须固定 fixture（至少含 100,000 个 commit 的历史库和 1,000 行 Diff 文件），记录 CPU、内存、存储、OS、Electron/Rust 构建模式及运行次数；耗时按 20 次运行的 P95 判断，滚动帧率取持续 30 秒的 compositor presented-frame P5（不能只用 requestAnimationFrame 回调率），内存取不启用 trace 的稳定窗口峰值。Windows 报告须分别列出 process-tree Working Set、Private Working Set 与 private bytes；三者不可互相替代。跨平台值分别报告，不以开发模式结果替代发行包结果。性能目标来自 `10-electron-rust-architecture.md` 和 `08-development-readiness.md` 的非冲突项。
+
+2026-10-25 产品决定的判定口径（`electron-performance-optimization-plan.md` §5 D1–D4，小阶段 552）：
+- D1 内存：Windows 上空闲 <250MB、工作中 <500MB 按 process-tree Private Working Set 判定；Working Set 与 private bytes 继续一并报告，不作判定依据。原因：Working Set 对每个进程重复计入共享的 Chromium 页面，空白 Electron 37 窗口自身已约 292 MiB。
+- D2 帧率：“≥60fps” 判定为 30 秒滚动 presented-frame P5 ≥ 该显示器 DWM 刷新率的 95%（60Hz 面板为 57fps）；报告须写明所依据的刷新率。
+- D3 冷启动：按 20 次独立运行的 P95 直接判定，不剔除离群，不要求杀毒排除对照。
+- D4 测试环境：验收只在一台 Windows 主机上进行（Windows 11 10.0.26300 / Ryzen 7 5800H / RTX 3050 Laptop / 60Hz 内置面板）；不做第二台机器或外接显示器对照，macOS/Linux 数值不在 S7.2 范围内。
+- 搜索：“搜索提交 <200ms” 按首批结果返回时间与已建索引的搜索判定；完整结果就绪时间（首次建索引或 refs 变化后）继续报告，作为已知限制写入发布说明。
 
 从第一个写操作开始适用的安全门槛：renderer 不得有 Node/shell 权限；只允许通过受控 API 操作已注册 repoId；同仓写操作串行；高风险操作由后端做预检与确认票据校验；凭据存 Keychain，token 仅在当前会话内存；日志脱敏；Diff 窗口只读，冲突窗口只可写冲突文件。相关阶段未满足这些门槛时不能标已完成。
 
@@ -518,7 +525,7 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 限制/后续：Windows 实际 watcher 集成已验证；macOS/Linux 文件系统通知实现和 S7.4 平台包验证待跨平台阶段。高事件量、轮询 fallback 及 100k 历史性能按 S7.2 测量。
 
 ### S7.2 — Windows 性能基准与首轮优化
-- 状态：待验收；已建立可复现基准并完成首轮优化，多个正式指标尚未达标。
+- 状态：已完成（2026-10-25 按第 12 节决定的口径判定，见小阶段 552）；本条下方为 2026-10-08 起的过程记录，其中“待验收”“未达标”等表述反映当时状态。
 - 日期：2026-10-08
 - 环境：Windows 11 10.0.26300 x64；AMD Ryzen 7 5800H，16 logical CPUs，16 GiB RAM；KINGSTON SA2000M81000G NVMe SSD；Node 22.19.0、Git for Windows 2.37.3、Electron 37.0.0、Rust release。基准 100k Git commits/1k 行工作树 Diff fixture 由脚本生成到系统 TEMP，不纳入提交。
 - 交付：新增 `scripts/performance/benchmark.mjs`（fixture、20 轮 sidecar/API P50/P95/max 与样本）和 `scripts/performance/desktop-benchmark.mjs`（20 轮 Electron 启动/历史首帧、空闲/仓库/工作进程树内存和 30 秒滚动 P5）。100k 默认历史使用 Git 反向日期顺序，避免昂贵的 `--topo-order`；提交图连线兼容时间戳异常导致的父提交反向排列。滚动状态在滚动结束后合并保存，历史虚拟窗口只在跨越行边界时更新，可见行日期格式器复用实例。为修复已安装 electron-builder 依赖的运行时缺失枚举，`pnpm-workspace.yaml` 将符合 `^3.0.0` 的 `@electron/get` 固定到 3.1.0；`pnpm electron:package` 成功生成 Windows NSIS 包。
@@ -5970,3 +5977,25 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/diff-window-memory-probe-stage551.mjs`、`doc/evidence/S7.2/diff-windows-memory-{e22c37c,stage547build,stage549build}-stage551-20261025.json`。
 - 限制/后续：每包 5 次而非 20 次（差异远大于波动）；基线的 Diff 窗口各自从 CDN 加载 Monaco，需联网。
 - 实施 commit：证据与台账同一 commit。
+
+### S7.2 判定口径决定与验收 — 小阶段 552
+- 状态：已完成（S7.2 由待验收改为已完成）
+- 日期：2026-10-25
+- 交付：
+  - 产品决定 `electron-performance-optimization-plan.md` §5 的 D1–D4 与搜索判定方式，记入本文件第 12 节与 `10-electron-rust-architecture.md` §7：内存按 Private Working Set；帧率按 presented-frame P5 ≥ DWM 刷新率的 95%；冷启动按 20 次 P95 直接判定；只用一台 Windows 主机，P2.2 与 macOS/Linux 测量不在范围内；搜索按首批结果与已建索引的搜索，完整结果就绪时间作为已知限制。阈值本身不变。
+  - 在小阶段 549 的代码上（`297af0e` 起无应用代码变更）用 Release sidecar 重跑 `benchmark.mjs run` 20 轮，补齐 API 侧当日数据。
+  - 同步 `08-development-readiness.md` §4、`release-notes-alpha-draft.md`、`00-README.md` 与优化方案的状态。
+- 判定（Windows 11 10.0.26300 / Ryzen 7 5800H / RTX 3050 Laptop / 60Hz 面板 / 100k fixture；发行包数据为小阶段 550 的 B 包，API 为本阶段）：
+  - 冷启动 <1.5s：P95 1,469ms，达标（最大 1,568ms，按 D3 不剔除）。
+  - 100k 提交首屏 <1s：首个历史帧 P95 904ms，达标。
+  - 提交图滚动 ≥60fps：30 秒 presented-frame P5 59.72fps（20 轮 59.72–59.81），DWM 刷新率 60Hz（小阶段 375 证据）的 95% 为 57fps，达标。
+  - 空闲内存 <250MB：Private Working Set P95 100.6MiB，达标（Working Set 375.9MiB、private bytes 247.8MiB 仅报告）。
+  - 工作中内存 <500MB：加载仓库后 Private Working Set P95 166.9MiB，达标（Working Set 461.7MiB）；滚动期间峰值仅有追踪开启时的数据（Working Set P95 约 500MiB），按第 12 节不用于判定。
+  - 安装包 <150MB：88.99MiB，达标。
+  - 1,000 行 Diff <200ms：API P95 56.821ms，达标。
+  - 工作区状态刷新 <100ms：强制全量 P95 10.724ms、文件变化后 dirty-scope P95 15.216ms、缓存命中 0.682ms，达标。
+  - 搜索提交 <200ms：首批结果 P95 19.466ms、已建索引搜索 P95 20.816ms，达标；首次建索引的完整结果 P50/P95 1,286.976/1,531.191ms、refs 变化后约 0.7s（小阶段 525/531），记为已知限制。
+  - 另：sidecar 就绪 P95 39.232ms，100k 历史首页 API P95 53.948ms。
+- 证据：`doc/evidence/S7.2/api-win32-stage552-20261025.json`、`doc/evidence/S7.2/desktop-win32-ab-b-startup-stage550-20261025.json`、`doc/evidence/S7.2/desktop-win32-ab-b-memory-notrace-stage550-20261025.json`、`doc/evidence/S7.2/package-contents-stage549-20261025.json`。
+- 限制/后续：结论只对上述单台 Windows 主机成立。冷启动 P95 与首个历史帧 P95 距阈值分别约 30ms 与 95ms，后续改动需复测；优化方案 P4.4/P4.5 可收回首个历史帧的余量。完整搜索结果的就绪时间仍是用户可感知的等待。
+- 实施 commit：口径决定、证据与台账同一 commit。

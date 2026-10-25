@@ -35,7 +35,8 @@ GitCrest 是一款面向专业开发者的本地优先 Git 桌面客户端。当
 - Linux AppImage 更新器已实现 Ed25519 更新清单签名校验，并在签名缺失、无效或清单内容被修改时拒绝继续；发布构建可向更新配置注入公钥。当前没有配置正式更新源和发布密钥，Linux 更新仍保持未配置，因此这不代表已经提供可用的公开更新服务。
 - HTTPS 认证失败后保存凭据并重试 Fetch/Clone，以及运行中取消 Clone 后清理临时目录，已在 Windows Electron E2E 验证；macOS/Linux 的系统凭据库和 Git 进程取消行为仍需对应 runner 验收。
 - macOS/Linux 原生 runner 尚未提供本机验收结果；需由对应 CI runner 完成构建与 packaged smoke 后再确认平台就绪。
-- Windows S7.2 目标仍未全部达标（Windows 11 / Ryzen 7 5800H / Electron 37 / 100k 提交 fixture，20 轮独立 Release profile，2026-10-14 复测）：冷启动 P50/P95 为 1.11/1.77 s（目标 <1.5 s，P95 受相邻两个离群样本影响）；30 秒滚动 compositor presented-frame P5 约 55.3 fps（目标 ≥60 fps）；进程树 Working Set P95 idle 384 MiB、加载仓库后 453 MiB，高于 idle <250MB 门槛（空白 Electron 窗口自身约 292 MiB），Private Working Set P95 分别为 109/166 MiB。验收计数口径尚待产品确认，数据不替代既定门槛；100k 提交历史搜索完整结果约 0.7 s（目标 <200 ms）；安装包 103.8 MiB 达标。数据来自当前开发主机。
+- Windows S7.2 性能目标按 2026-10-25 决定的口径达标（Windows 11 / Ryzen 7 5800H / RTX 3050 Laptop / 60Hz 面板 / Electron 37 / 100k 提交 fixture，20 轮独立 Release profile，2026-10-25 复测）：冷启动 P50/P95 1.25/1.47 s（<1.5 s）；100k 提交首个历史帧 P95 904 ms（<1 s）；30 秒滚动 presented-frame P5 59.72 fps（DWM 60Hz 的 95% 为 57 fps）；Private Working Set P95 空闲 100.6 MiB、加载仓库后 166.9 MiB（进程树 Working Set 分别为 375.9/461.7 MiB，空白 Electron 窗口自身约 292 MiB）；1,000 行 Diff API P95 56.8 ms（<200 ms）；工作区状态刷新 API P95 10.7 ms（全量）/ 15.2 ms（文件变化后）（<100 ms）；安装包 88.99 MiB。
+- 已知限制：100k 提交仓库的提交搜索首批结果 P95 19.5 ms、已建索引的搜索 P95 20.8 ms；但首次建索引时完整结果 P50/P95 1.29/1.53 s 才就绪，提交、fetch 等 refs 变化后约 0.7 s（2026-10-13 实测；新提交可增量更新，强推或删除分支时全量重建）。性能数据只来自一台 Windows 开发主机，macOS/Linux 未测。
 - 发布前仍需在真实屏幕阅读器和高对比度环境进行人工体验检查。
 - 本机完整质量检查记录（2026-10-24）：`pnpm check` 的分层检查、构建、前端测试（387/387）和 Rust 测试（176/176）通过；Electron E2E 为 37/38。`tests/e2e/desktop.test.ts` 在综合场景中出现两次失败，首次断言 Monaco 内容，单独复跑时断言 Unified 视图元素；失败位置不同，仍需修复或确认测试等待条件后再将全量 E2E 判为通过。
 

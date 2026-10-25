@@ -108,7 +108,7 @@ Electron 带来更一致的 UI 环境，但会提高包体和内存基线，验�
 | 1,000 行 Diff | < 200ms |
 | 工作区状态刷新 | < 100ms |
 
-Windows 实测（S7.2）表明：空白 Electron 37 窗口的进程树 Working Set 已约 292 MiB，高于空闲 <250MB；滚动约 55fps 的节奏来自 Chromium 在 Windows 上的 VSync 等待，而非应用绘制。内存计数口径与帧率判定方式待决，优化与测量工作见 [electron-performance-optimization-plan.md](electron-performance-optimization-plan.md)；在口径确定前，上表阈值不变。
+Windows 实测（S7.2）表明：空白 Electron 37 窗口的进程树 Working Set 已约 292 MiB，高于空闲 <250MB；滚动约 55fps 的节奏来自 Chromium 在 Windows 上的 VSync 等待，而非应用绘制。阈值不变；2026-10-25 决定的判定口径为：Windows 内存按 process-tree Private Working Set 判定（Working Set 仍报告）；“≥60fps” 按 30 秒滚动 presented-frame P5 ≥ DWM 刷新率的 95% 判定；冷启动按 20 次运行 P95 直接判定；验收只在一台 Windows 主机上进行；提交搜索按首批结果与已建索引的搜索判定。完整口径见 [13-implementation-plan.md](13-implementation-plan.md) 第 12 节，优化与测量工作见 [electron-performance-optimization-plan.md](electron-performance-optimization-plan.md)。
 
 ## 8. 迁移策略
 

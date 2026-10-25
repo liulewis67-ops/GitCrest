@@ -29,7 +29,7 @@
 | [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) | pnpm、React、Tailwind 前端规范，目录分层、状态与通信、现代化设计及交付验收 |
 | [PRD-code-aware-diff.md](PRD-code-aware-diff.md) | 代码感知 Diff：结构导航、变更事实与按结构精确暂存的优化设计、实现位置与验证记录；第一版已实现 |
 | [language-plugins.md](language-plugins.md) | 代码感知 Diff 的内置语言、语言插件的安装、清单与结构规则格式、安全限制与排查 |
-| [electron-performance-optimization-plan.md](electron-performance-optimization-plan.md) | Electron 性能优化方案：汇总 S7.2 实测结论与已否决方案，列出待决的内存/帧率/冷启动判定口径，以及按小阶段执行的优化与测量工作；方案阶段，未实施 |
+| [electron-performance-optimization-plan.md](electron-performance-optimization-plan.md) | Electron 性能优化方案：汇总 S7.2 实测结论与已否决方案，记录已决定的内存/帧率/冷启动判定口径，以及按小阶段执行的优化与测量工作；P1 与 P4.1 已实施，S7.2 已于 2026-10-25 判定完成 |
 
 ## 产品一句话
 

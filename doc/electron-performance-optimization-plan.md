@@ -1,6 +1,6 @@
 # Electron Performance Optimization Plan
 
-Status: P1.1–P1.6 and P4.1 implemented on 2026-10-25 (stages 542–549 in `13`). The 20-run packaged re-measure after P1 (stage 547) and a same-day A/B against `e22c37c` (stages 550–551) are recorded under §1. The P1 pass rules are judged, with two known costs to the first History frame. The targets still wait on D1–D3. Date: 2026-10-25.
+Status: P1.1–P1.6 and P4.1 implemented on 2026-10-25 (stages 542–549 in `13`), measured against a same-day `e22c37c` baseline (stages 550–551). D1–D4 decided on 2026-10-25, and S7.2 judged complete on the one Windows host (stage 552; verdicts in §1). P2, P3, P4.2–P4.5 remain optional follow-ups. Date: 2026-10-25.
 Scope: the Electron shell (`electron/main/`, `electron/preload/`), the renderer build (`electron.vite.config.ts`, `src/`), and the desktop benchmarks (`scripts/performance/`). The Rust sidecar API targets are already met and are out of scope, except where startup waits on the sidecar.
 Related: [10-electron-rust-architecture.md §7](10-electron-rust-architecture.md) (targets), [13-implementation-plan.md §11–12 and the S7.2 entries](13-implementation-plan.md) (ledger, measurement rules, evidence), [08-development-readiness.md](08-development-readiness.md), [release-notes-alpha-draft.md](release-notes-alpha-draft.md).
 
@@ -15,6 +15,8 @@ All numbers below come from one host: Windows 11 10.0.26300 x64, Ryzen 7 5800H, 
 ---
 
 ## 1. Where the Electron targets stand
+
+**Verdict (stage 552, 2026-10-25, decided counters from §5).** Every target is met on this host: cold start P95 1.47 s; first History frame P95 904 ms; scroll presented-frame P5 59.72 fps against 57 fps (95% of 60 Hz); idle / loaded Private Working Set P95 100.6 / 166.9 MiB; installer 88.99 MiB. Complete search results after a first index build (P95 1.53 s) remain a known limitation. The table below is the starting point from 10-14, kept for history.
 
 | Target (`10` §7, `08` §4) | Latest result | Source | State |
 |---|---|---|---|
@@ -96,7 +98,7 @@ A code read on 2026-10-25 found four app-side items that no S7.2 stage has cover
 
 The P1.4 request check (stage 545) found a fifth item: **the Diff editors ran a second Monaco fetched from a CDN.** `@monaco-editor/react` was never pointed at the bundled `monaco-editor`, so its loader fetched Monaco 0.55.1 from `cdn.jsdelivr.net` (15 requests, including the TypeScript language service and its worker) the first time a Diff showed. The bundled copy was loaded too, but only to register languages. Diffs therefore needed network access, and the renderer held two Monaco copies. Stage 545 configures the loader with the bundled core.
 
-## 5. Decisions needed before memory and fps can be judged
+## 5. Decisions for judging memory, fps and cold start (decided 2026-10-25)
 
 These are product and architecture calls. This plan does not change any target or counter by itself.
 
@@ -107,7 +109,7 @@ These are product and architecture calls. This plan does not change any target o
 | D3 | Cold-start P95 outliers | (a) as now: P95 of 20; (b) P95 of 20 on a host with the benchmark folders excluded from antivirus, recording the exclusion | **(b)**, plus a phase breakdown (P4.1), so a real slow path can still be seen |
 | D4 | Second test machine | Needed to tell a host or driver limit from a Chromium limit | One more Windows machine with a different GPU vendor, or an external 60/144 Hz display |
 
-When D1–D3 are decided, record them in `13` §12 and in `10` §7, in the same commit. Then re-judge the existing evidence. Stages 536 and 537 already hold the data each option needs.
+Decided on 2026-10-25 and recorded in `13` §12 and `10` §7 (stage 552): D1 (b); D2 (b), judged by the P5 alone with no separate dropped-frame limit; D3 (a), plain P95 of 20 with no antivirus-exclusion run, so P4.2 is not needed; D4: no second machine is available, acceptance uses the one Windows host, and P2.2 is dropped. Commit search is judged by time to first results and indexed search; complete-result time is reported as a known limitation.
 
 ## 6. Workstreams
 
@@ -179,9 +181,9 @@ P1 and P4.1 can start now. P2.2 needs the D4 hardware. P3 waits on D1.
 
 ## 9. Verification checklist for closing the Electron part of S7.2
 
-- [ ] D1–D3 recorded in `13` §12 and `10` §7.
+- [x] D1–D3 recorded in `13` §12 and `10` §7 (with D4 and the search rule, stage 552).
 - [x] P1.1–P1.4 each have a ledger stage with before/after numbers (stages 542–545, judged in 550–551).
-- [x] One 20-run packaged re-measure after P1, covering startup, memory mode and scroll, with crash dumps on (stage 547; stage 550 repeats startup and memory for P1.5–P1.6, without scroll).
-- [ ] P2.1 result recorded, and P2.2 or P2.3 run.
-- [ ] Every target in §1 re-judged under the decided counters; any target still unmet stays 待验收 with its re-test data, per S7.2's own rule.
-- [ ] `release-notes-alpha-draft.md` S7.2 limits updated to the final numbers.
+- [x] One 20-run packaged re-measure after P1, covering startup, memory mode and scroll, with crash dumps on (stage 547; stage 550 repeats startup, scroll and memory for P1.5–P1.6).
+- [ ] P2.1 result recorded, and P2.2 or P2.3 run. Not needed for acceptance after D2; P2.2 dropped with D4, P2.1 and P2.3 stay optional.
+- [x] Every target in §1 re-judged under the decided counters (stage 552); all met on this host.
+- [x] `release-notes-alpha-draft.md` S7.2 limits updated to the final numbers.

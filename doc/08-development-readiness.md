@@ -123,7 +123,7 @@ GitCrest MVP 的产品、信息架构、核心流程、UI/UX、设计语言、�
 
 ## 4. 关键验收指标
 
-目标采用 Electron + Rust sidecar 方案的基线（`10-electron-rust-architecture.md`），测量口径（20 次运行 P95、30 秒滚动 presented-frame P5、Windows 内存分项）见 `13-implementation-plan.md` 第 12 节，实测结果见 S7.2 进度记录。
+目标采用 Electron + Rust sidecar 方案的基线（`10-electron-rust-architecture.md`），测量与判定口径（20 次运行 P95；滚动 presented-frame P5 ≥ DWM 刷新率的 95%；Windows 内存按 Private Working Set；提交搜索按首批结果；单台 Windows 主机）见 `13-implementation-plan.md` 第 12 节，实测与判定见 S7.2 进度记录（小阶段 552）。
 
 | 指标 | 目标 |
 |---|---|
