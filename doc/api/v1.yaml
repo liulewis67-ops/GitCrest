@@ -899,6 +899,58 @@ paths:
         "422": { description: The provider rejected the token., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "502": { description: The provider could not be reached or answered unexpectedly., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "503": { description: Account storage or the system credential store is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/accounts/device-flows:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    post:
+      operationId: startDeviceFlow
+      summary: Start a browser sign-in (OAuth device flow)
+      description: >-
+        Returns a code the user enters on the provider's verification page. The core polls the provider in the
+        background and stores the account when the user approves; read the outcome from the flow. Starting again for
+        the same provider and host replaces a flow that is still pending. Only hosts listed in AccountList.browserSignIn
+        support this.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DeviceFlowRequest" }
+      responses:
+        "200":
+          description: The pending flow.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/DeviceFlow" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409": { description: Browser sign-in is not available for this provider and host (ACCOUNT_PROVIDER_NOT_CONFIGURED)., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "502": { description: The provider could not be reached or refused the request (ACCOUNT_SIGN_IN_REJECTED)., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/accounts/device-flows/{flowId}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - $ref: "#/components/parameters/FlowId"
+    get:
+      operationId: getDeviceFlow
+      summary: Read a browser sign-in's status
+      description: Finished flows stay readable for ten minutes.
+      responses:
+        "200":
+          description: The flow; the token is never returned.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/DeviceFlow" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { description: The flow ended or never existed (ACCOUNT_FLOW_NOT_FOUND)., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+    delete:
+      operationId: cancelDeviceFlow
+      summary: Cancel a browser sign-in and stop polling the provider
+      responses:
+        "204": { description: Cancelled., headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The flow ended or never existed (ACCOUNT_FLOW_NOT_FOUND)., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/accounts/{accountId}:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -938,7 +990,9 @@ paths:
     post:
       operationId: validateAccount
       summary: Check the stored token with the provider and refresh the profile
-      description: A rejected or missing token sets the account state to needsReauth instead of failing.
+      description: >-
+        A rejected or missing token sets the account state to needsReauth instead of failing. A browser sign-in's
+        token that is about to expire or is rejected is renewed with its refresh token first.
       responses:
         "200":
           description: The account after validation.
@@ -3812,6 +3866,11 @@ components:
       in: path
       required: true
       schema: { type: string, pattern: "^acct_[0-9a-f]{32}$" }
+    FlowId:
+      name: flowId
+      in: path
+      required: true
+      schema: { type: string, pattern: "^flow_[0-9a-f]{32}$" }
   schemas:
     RepoId:
       type: string
@@ -4552,6 +4611,43 @@ components:
         provider: { $ref: "#/components/schemas/HostingProvider" }
         host: { type: string, minLength: 1, maxLength: 260, description: "Host name such as github.com, gitlab.com or a self-managed instance, optionally with a non-default port." }
         token: { type: string, minLength: 1, maxLength: 65536, writeOnly: true, description: Personal access token. Surrounding whitespace is ignored. }
+    DeviceFlowRequest:
+      type: object
+      additionalProperties: false
+      required: [provider, host]
+      properties:
+        provider: { $ref: "#/components/schemas/HostingProvider" }
+        host: { type: string, minLength: 1, maxLength: 260 }
+    DeviceFlow:
+      type: object
+      additionalProperties: false
+      required: [flowId, provider, host, userCode, verificationUri, verificationUriComplete, expiresAtMs, status, account, error]
+      properties:
+        flowId: { type: string, pattern: "^flow_[0-9a-f]{32}$" }
+        provider: { $ref: "#/components/schemas/HostingProvider" }
+        host: { type: string }
+        userCode: { type: string, description: The code the user enters on the verification page. }
+        verificationUri: { type: string, description: "HTTPS page on the provider's host where the user enters the code." }
+        verificationUriComplete: { type: [string, "null"], description: The verification page with the code filled in, when the provider offers one. }
+        expiresAtMs: { type: integer }
+        status: { type: string, enum: [pending, completed, denied, expired, failed] }
+        account:
+          description: The signed-in account once status is completed.
+          oneOf:
+            - $ref: "#/components/schemas/Account"
+            - type: "null"
+        error:
+          description: Why the flow failed, when status is failed.
+          oneOf:
+            - $ref: "#/components/schemas/ApiError"
+            - type: "null"
+    BrowserSignInHost:
+      type: object
+      additionalProperties: false
+      required: [provider, host]
+      properties:
+        provider: { $ref: "#/components/schemas/HostingProvider" }
+        host: { type: string }
     Account:
       type: object
       additionalProperties: false
@@ -4563,9 +4659,9 @@ components:
         login: { type: string }
         displayName: { type: [string, "null"] }
         avatarUrl: { type: [string, "null"], description: HTTPS avatar URL reported by the provider. }
-        authKind: { type: string, enum: [token] }
+        authKind: { type: string, enum: [token, oauth], description: "token: a pasted access token; oauth: browser sign-in." }
         scopes: { type: array, items: { type: string }, description: Token scopes when the provider reports them; empty when unknown. }
-        tokenExpiresAtMs: { type: [integer, "null"] }
+        tokenExpiresAtMs: { type: [integer, "null"], description: "For oauth accounts this is the short-lived access token's expiry, renewed automatically." }
         state: { type: string, enum: [active, needsReauth] }
         selected: { type: boolean, description: Whether Git uses this account for its host. }
         createdAtMs: { type: integer }
@@ -4573,9 +4669,13 @@ components:
     AccountList:
       type: object
       additionalProperties: false
-      required: [accounts]
+      required: [accounts, browserSignIn]
       properties:
         accounts: { type: array, items: { $ref: "#/components/schemas/Account" } }
+        browserSignIn:
+          type: array
+          description: Provider hosts where browser sign-in is available; other hosts sign in with an access token.
+          items: { $ref: "#/components/schemas/BrowserSignInHost" }
     AiSettings:
       type: object
       additionalProperties: false
@@ -5091,6 +5191,9 @@ components:
         - ACCOUNT_NOT_FOUND
         - ACCOUNT_TOKEN_REJECTED
         - ACCOUNT_PROVIDER_UNREACHABLE
+        - ACCOUNT_PROVIDER_NOT_CONFIGURED
+        - ACCOUNT_FLOW_NOT_FOUND
+        - ACCOUNT_SIGN_IN_REJECTED
         - PULL_PREFLIGHT_UNAVAILABLE
         - PULL_TARGET_UNAVAILABLE
         - PULL_PREFLIGHT_STALE

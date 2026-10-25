@@ -73,6 +73,9 @@ pub(crate) enum ApiErrorCode {
     AccountNotFound,
     AccountTokenRejected,
     AccountProviderUnreachable,
+    AccountProviderNotConfigured,
+    AccountFlowNotFound,
+    AccountSignInRejected,
     AiProviderUnavailable,
     PullPreflightUnavailable,
     PullTargetUnavailable,
@@ -99,7 +102,7 @@ struct ApiErrorBody {
 }
 
 #[derive(Serialize)]
-struct ApiErrorDetails {
+pub(crate) struct ApiErrorDetails {
     code: ApiErrorCode,
     message: String,
 }
@@ -116,6 +119,14 @@ impl ApiError {
             status,
             code,
             message: message.into(),
+        }
+    }
+
+    /// The code and message without the HTTP status, for embedding an error in a response body.
+    pub(crate) fn into_details(self) -> ApiErrorDetails {
+        ApiErrorDetails {
+            code: self.code,
+            message: self.message,
         }
     }
 
@@ -668,6 +679,21 @@ impl ApiError {
                 StatusCode::BAD_GATEWAY,
                 ApiErrorCode::AccountProviderUnreachable,
                 "The provider could not be reached or did not answer as expected. Check the host and your connection, then retry.",
+            ),
+            accounts::AccountError::ProviderNotConfigured => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::AccountProviderNotConfigured,
+                "Browser sign-in is not available for this host. Sign in with an access token instead.",
+            ),
+            accounts::AccountError::FlowNotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::AccountFlowNotFound,
+                "This browser sign-in has ended. Start it again.",
+            ),
+            accounts::AccountError::SignInRejected => Self::new(
+                StatusCode::BAD_GATEWAY,
+                ApiErrorCode::AccountSignInRejected,
+                "The provider refused the browser sign-in request. Sign in with an access token instead.",
             ),
             accounts::AccountError::StorageUnavailable => {
                 Self::from_repository_error(RepositoryError::StorageUnavailable)

@@ -41,6 +41,8 @@ export type CredentialStatusResponse = components["schemas"]["CredentialStatus"]
 export type HostingProvider = components["schemas"]["HostingProvider"];
 export type AccountResponse = components["schemas"]["Account"];
 export type AccountListResponse = components["schemas"]["AccountList"];
+export type BrowserSignInHost = components["schemas"]["BrowserSignInHost"];
+export type DeviceFlowResponse = components["schemas"]["DeviceFlow"];
 export type AiSettingsResponse = components["schemas"]["AiSettings"];
 export type AiReplyResponse = components["schemas"]["AiReply"];
 export type AiFileSelection = components["schemas"]["AiFileSelection"];
@@ -341,6 +343,22 @@ export class GitCrestApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ provider, host, token } satisfies components["schemas"]["TokenSignInRequest"]),
     });
+  }
+
+  startDeviceFlow(provider: HostingProvider, host: string): Promise<DeviceFlowResponse> {
+    return this.request<DeviceFlowResponse>("/api/v1/accounts/device-flows", true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ provider, host } satisfies components["schemas"]["DeviceFlowRequest"]),
+    });
+  }
+
+  getDeviceFlow(flowId: string): Promise<DeviceFlowResponse> {
+    return this.request<DeviceFlowResponse>(`/api/v1/accounts/device-flows/${encodeURIComponent(flowId)}`);
+  }
+
+  cancelDeviceFlow(flowId: string): Promise<void> {
+    return this.request<void>(`/api/v1/accounts/device-flows/${encodeURIComponent(flowId)}`, true, { method: "DELETE" });
   }
 
   selectAccount(accountId: string): Promise<AccountResponse> {

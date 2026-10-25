@@ -1,12 +1,28 @@
 use std::{future::Future, pin::Pin, time::Duration};
 
 use reqwest::{header, StatusCode};
+use zeroize::Zeroizing;
 
 use crate::domain::account::HostingProvider;
 
 const MAX_PROFILE_RESPONSE_BYTES: usize = 256 * 1024;
 const MAX_PROFILE_FIELD_CHARS: usize = 255;
 const MAX_AVATAR_URL_BYTES: usize = 2048;
+const MAX_OAUTH_TOKEN_BYTES: usize = 64 * 1024;
+const DEVICE_CODE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
+/// RFC 8628 defaults when the provider leaves them out.
+const DEFAULT_DEVICE_CODE_LIFETIME: Duration = Duration::from_secs(900);
+const DEFAULT_DEVICE_POLL_INTERVAL: Duration = Duration::from_secs(5);
+const MAX_DEVICE_CODE_LIFETIME: Duration = Duration::from_secs(30 * 60);
+const MAX_DEVICE_POLL_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Public client IDs of the OAuth applications GitCrest signs in with. A release build sets them
+/// at compile time; the same variables at run time override them for development. No client
+/// secret is ever embedded.
+const GITHUB_CLIENT_ID_ENV: &str = "GITCREST_GITHUB_OAUTH_CLIENT_ID";
+const GITLAB_CLIENT_ID_ENV: &str = "GITCREST_GITLAB_OAUTH_CLIENT_ID";
+const BUILT_IN_GITHUB_CLIENT_ID: Option<&str> = option_env!("GITCREST_GITHUB_OAUTH_CLIENT_ID");
+const BUILT_IN_GITLAB_CLIENT_ID: Option<&str> = option_env!("GITCREST_GITLAB_OAUTH_CLIENT_ID");
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct HostingProfile {
@@ -25,16 +41,174 @@ pub(crate) enum ProfileError {
     ProviderUnreachable,
 }
 
-pub(crate) type ProfileFuture<'a> =
-    Pin<Box<dyn Future<Output = Result<HostingProfile, ProfileError>> + Send + 'a>>;
+/// What the user needs to approve a device sign-in in the browser.
+pub(crate) struct DeviceAuthorization {
+    pub(crate) device_code: Zeroizing<String>,
+    pub(crate) user_code: String,
+    pub(crate) verification_uri: String,
+    /// The verification page with the user code already filled in, when the provider offers one.
+    pub(crate) verification_uri_complete: Option<String>,
+    pub(crate) expires_in: Duration,
+    pub(crate) interval: Duration,
+}
 
-pub(crate) trait HostingProfileClient: Send + Sync {
+pub(crate) struct OAuthTokens {
+    pub(crate) access_token: Zeroizing<String>,
+    pub(crate) refresh_token: Option<Zeroizing<String>>,
+    /// `None` for tokens that do not expire, such as GitHub OAuth App tokens.
+    pub(crate) expires_in: Option<Duration>,
+    pub(crate) scopes: Option<Vec<String>>,
+}
+
+pub(crate) enum DevicePoll {
+    Pending,
+    SlowDown,
+    Granted(OAuthTokens),
+    Denied,
+    Expired,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum OAuthError {
+    /// The provider refused the request: an unknown or disabled client, or a revoked or expired
+    /// refresh token.
+    Rejected,
+    ProviderUnreachable,
+}
+
+pub(crate) type ProviderFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub(crate) type ProfileFuture<'a> = ProviderFuture<'a, Result<HostingProfile, ProfileError>>;
+
+pub(crate) trait HostingProviderClient: Send + Sync {
     fn fetch_profile<'a>(
         &'a self,
         provider: HostingProvider,
         api_base_url: &'a str,
         token: &'a str,
     ) -> ProfileFuture<'a>;
+
+    fn start_device_flow<'a>(
+        &'a self,
+        _provider: HostingProvider,
+        _oauth_base_url: &'a str,
+        _client_id: &'a str,
+    ) -> ProviderFuture<'a, Result<DeviceAuthorization, OAuthError>> {
+        Box::pin(async { Err(OAuthError::Rejected) })
+    }
+
+    fn poll_device_flow<'a>(
+        &'a self,
+        _provider: HostingProvider,
+        _oauth_base_url: &'a str,
+        _client_id: &'a str,
+        _device_code: &'a str,
+    ) -> ProviderFuture<'a, Result<DevicePoll, OAuthError>> {
+        Box::pin(async { Err(OAuthError::Rejected) })
+    }
+
+    fn refresh_token<'a>(
+        &'a self,
+        _provider: HostingProvider,
+        _oauth_base_url: &'a str,
+        _client_id: &'a str,
+        _refresh_token: &'a str,
+    ) -> ProviderFuture<'a, Result<OAuthTokens, OAuthError>> {
+        Box::pin(async { Err(OAuthError::Rejected) })
+    }
+
+    /// Best effort: revokes an OAuth token where the provider allows it without a client secret.
+    fn revoke_token<'a>(
+        &'a self,
+        _provider: HostingProvider,
+        _oauth_base_url: &'a str,
+        _client_id: &'a str,
+        _token: &'a str,
+    ) -> ProviderFuture<'a, ()> {
+        Box::pin(async {})
+    }
+}
+
+/// The OAuth applications browser sign-in can use, by provider. Only GitHub.com and GitLab.com
+/// have one; Enterprise and self-managed hosts sign in with an access token.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct OAuthApps {
+    github: Option<String>,
+    gitlab: Option<String>,
+}
+
+impl OAuthApps {
+    pub(crate) fn from_environment() -> Self {
+        let pick = |variable: &str, built_in: Option<&str>| {
+            std::env::var(variable)
+                .ok()
+                .filter(|value| !value.trim().is_empty())
+                .or_else(|| built_in.map(str::to_owned))
+                .map(|value| value.trim().to_owned())
+                .filter(|value| is_valid_client_id(value))
+        };
+        Self {
+            github: pick(GITHUB_CLIENT_ID_ENV, BUILT_IN_GITHUB_CLIENT_ID),
+            gitlab: pick(GITLAB_CLIENT_ID_ENV, BUILT_IN_GITLAB_CLIENT_ID),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new(github: Option<&str>, gitlab: Option<&str>) -> Self {
+        Self {
+            github: github.map(str::to_owned),
+            gitlab: gitlab.map(str::to_owned),
+        }
+    }
+
+    pub(crate) fn client_id(&self, provider: HostingProvider, host: &str) -> Option<&str> {
+        match provider {
+            HostingProvider::Github if host == "github.com" => self.github.as_deref(),
+            HostingProvider::Gitlab if host == "gitlab.com" => self.gitlab.as_deref(),
+            _ => None,
+        }
+    }
+
+    /// `(provider, host)` pairs where browser sign-in is available.
+    pub(crate) fn browser_sign_in_hosts(&self) -> Vec<(HostingProvider, &'static str)> {
+        let mut hosts = Vec::new();
+        if self.github.is_some() {
+            hosts.push((HostingProvider::Github, "github.com"));
+        }
+        if self.gitlab.is_some() {
+            hosts.push((HostingProvider::Gitlab, "gitlab.com"));
+        }
+        hosts
+    }
+}
+
+fn is_valid_client_id(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 128
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-' | b'.'))
+}
+
+/// Scopes requested at browser sign-in. GitHub needs `workflow` to push changes under
+/// `.github/workflows`.
+pub(crate) fn oauth_scopes(provider: HostingProvider) -> &'static str {
+    match provider {
+        HostingProvider::Github => "repo read:user workflow",
+        HostingProvider::Gitlab => "read_user read_repository write_repository",
+    }
+}
+
+/// The web origin that serves a provider's OAuth endpoints on a normalized host.
+pub(crate) fn oauth_base_url(host: &str) -> String {
+    format!("https://{host}")
+}
+
+/// The HTTPS username Git sends with an OAuth access token.
+pub(crate) fn oauth_git_username(provider: HostingProvider, login: &str) -> String {
+    match provider {
+        HostingProvider::Github => login.to_owned(),
+        HostingProvider::Gitlab => "oauth2".to_owned(),
+    }
 }
 
 /// The REST API root for a provider on a normalized host. GitHub.com serves its API from a separate
@@ -47,9 +221,9 @@ pub(crate) fn api_base_url(provider: HostingProvider, host: &str) -> String {
     }
 }
 
-pub(crate) struct HttpHostingProfileClient;
+pub(crate) struct HttpHostingProviderClient;
 
-impl HostingProfileClient for HttpHostingProfileClient {
+impl HostingProviderClient for HttpHostingProviderClient {
     fn fetch_profile<'a>(
         &'a self,
         provider: HostingProvider,
@@ -58,6 +232,269 @@ impl HostingProfileClient for HttpHostingProfileClient {
     ) -> ProfileFuture<'a> {
         Box::pin(fetch_profile(provider, api_base_url, token))
     }
+
+    fn start_device_flow<'a>(
+        &'a self,
+        provider: HostingProvider,
+        oauth_base_url: &'a str,
+        client_id: &'a str,
+    ) -> ProviderFuture<'a, Result<DeviceAuthorization, OAuthError>> {
+        Box::pin(start_device_flow(provider, oauth_base_url, client_id))
+    }
+
+    fn poll_device_flow<'a>(
+        &'a self,
+        provider: HostingProvider,
+        oauth_base_url: &'a str,
+        client_id: &'a str,
+        device_code: &'a str,
+    ) -> ProviderFuture<'a, Result<DevicePoll, OAuthError>> {
+        Box::pin(poll_device_flow(
+            provider,
+            oauth_base_url,
+            client_id,
+            device_code,
+        ))
+    }
+
+    fn refresh_token<'a>(
+        &'a self,
+        provider: HostingProvider,
+        oauth_base_url: &'a str,
+        client_id: &'a str,
+        refresh_token: &'a str,
+    ) -> ProviderFuture<'a, Result<OAuthTokens, OAuthError>> {
+        Box::pin(self::refresh_token(
+            provider,
+            oauth_base_url,
+            client_id,
+            refresh_token,
+        ))
+    }
+
+    fn revoke_token<'a>(
+        &'a self,
+        provider: HostingProvider,
+        oauth_base_url: &'a str,
+        client_id: &'a str,
+        token: &'a str,
+    ) -> ProviderFuture<'a, ()> {
+        Box::pin(revoke_token(provider, oauth_base_url, client_id, token))
+    }
+}
+
+fn http_client() -> Option<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(20))
+        .connect_timeout(Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::none())
+        .user_agent(concat!("GitCrest/", env!("CARGO_PKG_VERSION")))
+        .build()
+        .ok()
+}
+
+fn device_code_path(provider: HostingProvider) -> &'static str {
+    match provider {
+        HostingProvider::Github => "/login/device/code",
+        HostingProvider::Gitlab => "/oauth/authorize_device",
+    }
+}
+
+fn token_path(provider: HostingProvider) -> &'static str {
+    match provider {
+        HostingProvider::Github => "/login/oauth/access_token",
+        HostingProvider::Gitlab => "/oauth/token",
+    }
+}
+
+pub(crate) async fn start_device_flow(
+    provider: HostingProvider,
+    oauth_base_url: &str,
+    client_id: &str,
+) -> Result<DeviceAuthorization, OAuthError> {
+    let (status, body) = post_form(
+        oauth_base_url,
+        device_code_path(provider),
+        &[("client_id", client_id), ("scope", oauth_scopes(provider))],
+    )
+    .await?;
+    if !status.is_success() || body.get("error").is_some() {
+        return Err(rejection_for(status));
+    }
+    let text = |field: &str| {
+        body.get(field)
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| is_safe_text(value) && !value.contains(' '))
+            .map(str::to_owned)
+    };
+    let seconds = |field: &str, default: Duration, max: Duration| {
+        body.get(field)
+            .and_then(serde_json::Value::as_u64)
+            .map_or(default, Duration::from_secs)
+            .min(max)
+    };
+    Ok(DeviceAuthorization {
+        device_code: Zeroizing::new(
+            body.get("device_code")
+                .and_then(serde_json::Value::as_str)
+                .filter(|code| is_safe_token(code))
+                .ok_or(OAuthError::ProviderUnreachable)?
+                .to_owned(),
+        ),
+        user_code: text("user_code").ok_or(OAuthError::ProviderUnreachable)?,
+        verification_uri: text("verification_uri").ok_or(OAuthError::ProviderUnreachable)?,
+        verification_uri_complete: text("verification_uri_complete"),
+        expires_in: seconds(
+            "expires_in",
+            DEFAULT_DEVICE_CODE_LIFETIME,
+            MAX_DEVICE_CODE_LIFETIME,
+        ),
+        interval: seconds(
+            "interval",
+            DEFAULT_DEVICE_POLL_INTERVAL,
+            MAX_DEVICE_POLL_INTERVAL,
+        ),
+    })
+}
+
+pub(crate) async fn poll_device_flow(
+    provider: HostingProvider,
+    oauth_base_url: &str,
+    client_id: &str,
+    device_code: &str,
+) -> Result<DevicePoll, OAuthError> {
+    let (status, body) = post_form(
+        oauth_base_url,
+        token_path(provider),
+        &[
+            ("client_id", client_id),
+            ("device_code", device_code),
+            ("grant_type", DEVICE_CODE_GRANT),
+        ],
+    )
+    .await?;
+    // GitHub answers pending polls with 200 and an `error` field; GitLab uses 400.
+    if let Some(error) = body.get("error").and_then(serde_json::Value::as_str) {
+        return match error {
+            "authorization_pending" => Ok(DevicePoll::Pending),
+            "slow_down" => Ok(DevicePoll::SlowDown),
+            "access_denied" => Ok(DevicePoll::Denied),
+            "expired_token" => Ok(DevicePoll::Expired),
+            _ if status.is_server_error() => Err(OAuthError::ProviderUnreachable),
+            _ => Err(OAuthError::Rejected),
+        };
+    }
+    if !status.is_success() {
+        return Err(rejection_for(status));
+    }
+    parse_tokens(&body).map(DevicePoll::Granted)
+}
+
+pub(crate) async fn refresh_token(
+    provider: HostingProvider,
+    oauth_base_url: &str,
+    client_id: &str,
+    refresh_token: &str,
+) -> Result<OAuthTokens, OAuthError> {
+    let (status, body) = post_form(
+        oauth_base_url,
+        token_path(provider),
+        &[
+            ("client_id", client_id),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+        ],
+    )
+    .await?;
+    if !status.is_success() || body.get("error").is_some() {
+        return Err(rejection_for(status));
+    }
+    parse_tokens(&body)
+}
+
+/// GitLab revokes a public client's token with its client ID alone. GitHub needs the client
+/// secret, so its tokens are revoked from the user's application settings instead.
+pub(crate) async fn revoke_token(
+    provider: HostingProvider,
+    oauth_base_url: &str,
+    client_id: &str,
+    token: &str,
+) {
+    if provider == HostingProvider::Gitlab {
+        let _ = post_form(
+            oauth_base_url,
+            "/oauth/revoke",
+            &[("client_id", client_id), ("token", token)],
+        )
+        .await;
+    }
+}
+
+fn rejection_for(status: StatusCode) -> OAuthError {
+    if status.is_client_error() {
+        OAuthError::Rejected
+    } else {
+        OAuthError::ProviderUnreachable
+    }
+}
+
+async fn post_form(
+    oauth_base_url: &str,
+    path: &str,
+    form: &[(&str, &str)],
+) -> Result<(StatusCode, serde_json::Value), OAuthError> {
+    let client = http_client().ok_or(OAuthError::ProviderUnreachable)?;
+    let response = client
+        .post(format!("{}{path}", oauth_base_url.trim_end_matches('/')))
+        .header(header::ACCEPT, "application/json")
+        .form(form)
+        .send()
+        .await
+        .map_err(|_| OAuthError::ProviderUnreachable)?;
+    let status = response.status();
+    let body = match read_json(response).await {
+        Ok(body) => body,
+        // An error page without a JSON body still tells the caller which side failed.
+        Err(()) if !status.is_success() => serde_json::Value::Null,
+        Err(()) => return Err(OAuthError::ProviderUnreachable),
+    };
+    Ok((status, body))
+}
+
+fn parse_tokens(body: &serde_json::Value) -> Result<OAuthTokens, OAuthError> {
+    let token = |field: &str| {
+        body.get(field)
+            .and_then(serde_json::Value::as_str)
+            .filter(|token| is_safe_token(token))
+            .map(|token| Zeroizing::new(token.to_owned()))
+    };
+    Ok(OAuthTokens {
+        access_token: token("access_token").ok_or(OAuthError::ProviderUnreachable)?,
+        refresh_token: token("refresh_token"),
+        expires_in: body
+            .get("expires_in")
+            .and_then(serde_json::Value::as_u64)
+            .map(Duration::from_secs),
+        // GitHub joins scopes with commas, GitLab with spaces.
+        scopes: body
+            .get("scope")
+            .and_then(serde_json::Value::as_str)
+            .map(|scopes| {
+                scopes
+                    .split([',', ' '])
+                    .filter(|scope| is_safe_scope(scope))
+                    .map(str::to_owned)
+                    .collect()
+            }),
+    })
+}
+
+fn is_safe_token(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= MAX_OAUTH_TOKEN_BYTES
+        && !value
+            .chars()
+            .any(|character| character.is_control() || character == ' ')
 }
 
 pub(crate) async fn fetch_profile(
@@ -65,13 +502,7 @@ pub(crate) async fn fetch_profile(
     api_base_url: &str,
     token: &str,
 ) -> Result<HostingProfile, ProfileError> {
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(20))
-        .connect_timeout(Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::none())
-        .user_agent(concat!("GitCrest/", env!("CARGO_PKG_VERSION")))
-        .build()
-        .map_err(|_| ProfileError::ProviderUnreachable)?;
+    let client = http_client().ok_or(ProfileError::ProviderUnreachable)?;
     let base = api_base_url.trim_end_matches('/');
     match provider {
         HostingProvider::Github => {
@@ -130,7 +561,7 @@ pub(crate) async fn fetch_profile(
 async fn get_json(
     request: reqwest::RequestBuilder,
 ) -> Result<(header::HeaderMap, serde_json::Value), ProfileError> {
-    let mut response = request
+    let response = request
         .send()
         .await
         .map_err(|_| ProfileError::ProviderUnreachable)?;
@@ -142,19 +573,23 @@ async fn get_json(
         _ => {}
     }
     let headers = response.headers().clone();
-    let mut body = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
+    let body = read_json(response)
         .await
-        .map_err(|_| ProfileError::ProviderUnreachable)?
-    {
+        .map_err(|_| ProfileError::ProviderUnreachable)?;
+    Ok((headers, body))
+}
+
+/// Reads a JSON body of at most `MAX_PROFILE_RESPONSE_BYTES`. Token responses pass through here,
+/// so the raw bytes are cleared after parsing.
+async fn read_json(mut response: reqwest::Response) -> Result<serde_json::Value, ()> {
+    let mut body = Zeroizing::new(Vec::new());
+    while let Some(chunk) = response.chunk().await.map_err(|_| ())? {
         if body.len().saturating_add(chunk.len()) > MAX_PROFILE_RESPONSE_BYTES {
-            return Err(ProfileError::ProviderUnreachable);
+            return Err(());
         }
         body.extend_from_slice(&chunk);
     }
-    let body = serde_json::from_slice(&body).map_err(|_| ProfileError::ProviderUnreachable)?;
-    Ok((headers, body))
+    serde_json::from_slice(&body).map_err(|_| ())
 }
 
 fn parse_profile(
@@ -454,5 +889,197 @@ mod tests {
             fetch_profile(HostingProvider::Github, &base, "token").await,
             Err(ProfileError::ProviderUnreachable)
         );
+    }
+
+    #[test]
+    fn offers_browser_sign_in_only_on_the_hosted_instances_with_a_client_id() {
+        let apps = OAuthApps::new(Some("Iv1.abc"), None);
+        assert_eq!(
+            apps.client_id(HostingProvider::Github, "github.com"),
+            Some("Iv1.abc")
+        );
+        assert_eq!(
+            apps.client_id(HostingProvider::Github, "github.example.com"),
+            None
+        );
+        assert_eq!(apps.client_id(HostingProvider::Gitlab, "gitlab.com"), None);
+        assert_eq!(
+            apps.browser_sign_in_hosts(),
+            vec![(HostingProvider::Github, "github.com")]
+        );
+        assert!(!is_valid_client_id("has space"));
+        assert_eq!(
+            oauth_git_username(HostingProvider::Gitlab, "tanuki"),
+            "oauth2"
+        );
+    }
+
+    /// A GitHub-style device flow: pending, then slow_down, then a token. GitHub answers every
+    /// poll with 200.
+    #[tokio::test]
+    async fn runs_a_github_device_flow() {
+        use axum::{routing::post, Form};
+        use std::collections::HashMap;
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+
+        let polls = Arc::new(AtomicUsize::new(0));
+        let poll_counter = polls.clone();
+        let base = serve(
+            Router::new()
+                .route(
+                    "/login/device/code",
+                    post(|Form(form): Form<HashMap<String, String>>| async move {
+                        assert_eq!(form["client_id"], "client");
+                        assert_eq!(form["scope"], "repo read:user workflow");
+                        Json(serde_json::json!({
+                            "device_code": "device-123",
+                            "user_code": "WDJB-MJHT",
+                            "verification_uri": "https://github.com/login/device",
+                            "expires_in": 899,
+                            "interval": 5
+                        }))
+                    }),
+                )
+                .route(
+                    "/login/oauth/access_token",
+                    post(move |Form(form): Form<HashMap<String, String>>| {
+                        let polls = poll_counter.clone();
+                        async move {
+                            assert_eq!(form["device_code"], "device-123");
+                            assert_eq!(form["grant_type"], DEVICE_CODE_GRANT);
+                            Json(match polls.fetch_add(1, Ordering::SeqCst) {
+                                0 => serde_json::json!({ "error": "authorization_pending" }),
+                                1 => serde_json::json!({ "error": "slow_down", "interval": 10 }),
+                                _ => serde_json::json!({
+                                    "access_token": "gho_token",
+                                    "token_type": "bearer",
+                                    "scope": "repo,read:user,workflow"
+                                }),
+                            })
+                        }
+                    }),
+                ),
+        )
+        .await;
+
+        let authorization = start_device_flow(HostingProvider::Github, &base, "client")
+            .await
+            .unwrap();
+        assert_eq!(authorization.device_code.as_str(), "device-123");
+        assert_eq!(authorization.user_code, "WDJB-MJHT");
+        assert_eq!(
+            authorization.verification_uri,
+            "https://github.com/login/device"
+        );
+        assert_eq!(authorization.expires_in, Duration::from_secs(899));
+        assert_eq!(authorization.interval, Duration::from_secs(5));
+
+        let poll = || poll_device_flow(HostingProvider::Github, &base, "client", "device-123");
+        assert!(matches!(poll().await, Ok(DevicePoll::Pending)));
+        assert!(matches!(poll().await, Ok(DevicePoll::SlowDown)));
+        let Ok(DevicePoll::Granted(tokens)) = poll().await else {
+            panic!("expected a token");
+        };
+        assert_eq!(tokens.access_token.as_str(), "gho_token");
+        assert!(tokens.refresh_token.is_none());
+        assert_eq!(tokens.expires_in, None);
+        assert_eq!(
+            tokens.scopes,
+            Some(vec!["repo".into(), "read:user".into(), "workflow".into()])
+        );
+    }
+
+    /// GitLab answers pending and failed polls with 400, issues expiring tokens with a refresh
+    /// token, and rotates the refresh token on every refresh.
+    #[tokio::test]
+    async fn runs_a_gitlab_device_flow_and_refreshes_its_token() {
+        use axum::{routing::post, Form};
+        use std::collections::HashMap;
+
+        let base = serve(
+            Router::new()
+                .route(
+                    "/oauth/authorize_device",
+                    post(|| async {
+                        Json(serde_json::json!({
+                            "device_code": "lab-device",
+                            "user_code": "0A44L90H",
+                            "verification_uri": "https://gitlab.com/oauth/device",
+                            "verification_uri_complete": "https://gitlab.com/oauth/device?user_code=0A44L90H"
+                        }))
+                    }),
+                )
+                .route(
+                    "/oauth/token",
+                    post(|Form(form): Form<HashMap<String, String>>| async move {
+                        let error = |code: &str| {
+                            (AxumStatus::BAD_REQUEST, Json(serde_json::json!({ "error": code })))
+                                .into_response()
+                        };
+                        match (form["grant_type"].as_str(), form.get("device_code"), form.get("refresh_token")) {
+                            (DEVICE_CODE_GRANT, Some(code), _) if code == "lab-device" => {
+                                error("authorization_pending")
+                            }
+                            (DEVICE_CODE_GRANT, Some(code), _) if code == "denied" => {
+                                error("access_denied")
+                            }
+                            (DEVICE_CODE_GRANT, Some(code), _) if code == "old" => {
+                                error("expired_token")
+                            }
+                            ("refresh_token", _, Some(token)) if token == "refresh-1" => Json(serde_json::json!({
+                                "access_token": "access-2",
+                                "refresh_token": "refresh-2",
+                                "expires_in": 7200,
+                                "scope": "read_user read_repository write_repository"
+                            }))
+                            .into_response(),
+                            ("refresh_token", _, _) => error("invalid_grant"),
+                            _ => error("invalid_client"),
+                        }
+                    }),
+                ),
+        )
+        .await;
+
+        let authorization = start_device_flow(HostingProvider::Gitlab, &base, "lab-client")
+            .await
+            .unwrap();
+        assert_eq!(
+            authorization.verification_uri_complete.as_deref(),
+            Some("https://gitlab.com/oauth/device?user_code=0A44L90H")
+        );
+        assert_eq!(authorization.expires_in, DEFAULT_DEVICE_CODE_LIFETIME);
+        assert_eq!(authorization.interval, DEFAULT_DEVICE_POLL_INTERVAL);
+
+        let poll = |code: &'static str| {
+            let base = base.clone();
+            async move { poll_device_flow(HostingProvider::Gitlab, &base, "lab-client", code).await }
+        };
+        assert!(matches!(poll("lab-device").await, Ok(DevicePoll::Pending)));
+        assert!(matches!(poll("denied").await, Ok(DevicePoll::Denied)));
+        assert!(matches!(poll("old").await, Ok(DevicePoll::Expired)));
+        assert!(matches!(poll("unknown").await, Err(OAuthError::Rejected)));
+
+        let tokens = refresh_token(HostingProvider::Gitlab, &base, "lab-client", "refresh-1")
+            .await
+            .unwrap();
+        assert_eq!(tokens.access_token.as_str(), "access-2");
+        assert_eq!(
+            tokens.refresh_token.as_ref().map(|token| token.as_str()),
+            Some("refresh-2")
+        );
+        assert_eq!(tokens.expires_in, Some(Duration::from_secs(7200)));
+        assert_eq!(tokens.scopes.map(|scopes| scopes.len()), Some(3));
+        assert!(matches!(
+            refresh_token(HostingProvider::Gitlab, &base, "lab-client", "revoked").await,
+            Err(OAuthError::Rejected)
+        ));
+        assert!(matches!(
+            start_device_flow(HostingProvider::Github, &base, "lab-client").await,
+            Err(OAuthError::Rejected)
+        ));
     }
 }

@@ -120,9 +120,16 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let accounts = crate::features::accounts::AccountService::new(
         Arc::new(store.clone()),
         credentials::system_account_secret_store(),
-        Arc::new(crate::features::accounts::providers::HttpHostingProfileClient),
-        account_selections,
-    );
+        Arc::new(crate::features::accounts::providers::HttpHostingProviderClient),
+        account_selections.clone(),
+    )
+    .with_oauth_apps(crate::features::accounts::providers::OAuthApps::from_environment())
+    .with_events(events.clone());
+    account_selections.set_token_refresher(Arc::new(accounts.clone()));
+    tasks.observe_authentication_failures({
+        let accounts = accounts.clone();
+        move |output| accounts.authentication_failed(output)
+    });
     let state = AppState {
         read_write_token: Arc::new(config.write_token),
         read_only_token: config.read_only_token.map(Arc::new),

@@ -1244,6 +1244,10 @@ button:disabled { cursor: not-allowed; }
 .accountActions .secondaryButton { min-height: 28px; font-size: var(--type-xs); }
 .accountSignInForm .settingsFieldStack { justify-items: start; }
 .accountSignInForm .settingsHint a { color: var(--accent-strong); }
+.deviceFlowPanel { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-8); background: var(--canvas); }
+.deviceFlowPanel p { margin: 0; }
+.deviceFlowPanel a.primaryButton { text-decoration: none; }
+.deviceFlowCode { justify-self: start; padding: 6px 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius-6); color: var(--text); font: 650 var(--type-xl) var(--font-mono); letter-spacing: 0.12em; user-select: all; }
 .hostCredentials { display: grid; gap: 8px; margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--line); }
 .hostCredentials h4 { margin: 0; color: var(--text); font-size: var(--type-sm); }
 .hostCredentialsLookup { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }

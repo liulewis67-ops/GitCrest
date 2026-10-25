@@ -68,7 +68,7 @@ fn test_credentials() -> features::credentials::CredentialManager {
 /// Accepts `valid-token` as the GitHub/GitLab user `octocat`; every other token is rejected.
 struct TestProfiles;
 
-impl features::accounts::providers::HostingProfileClient for TestProfiles {
+impl features::accounts::providers::HostingProviderClient for TestProfiles {
     fn fetch_profile<'a>(
         &'a self,
         _provider: crate::domain::account::HostingProvider,
@@ -638,6 +638,88 @@ async fn account_api_signs_in_switches_and_signs_out_without_returning_tokens() 
         .await
         .unwrap();
     assert_eq!(malformed.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn device_flow_api_refuses_unconfigured_hosts_unknown_flows_and_read_only_callers() {
+    let app = test_app(None);
+    let listed = app
+        .clone()
+        .oneshot(request("/api/v1/accounts", Some(WRITE_TOKEN)))
+        .await
+        .unwrap();
+    let body = to_bytes(listed.into_body(), usize::MAX).await.unwrap();
+    let listed: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(listed["browserSignIn"], serde_json::json!([]));
+
+    let unconfigured = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/accounts/device-flows",
+            r#"{"provider":"github","host":"github.com"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(unconfigured).await,
+        (
+            StatusCode::CONFLICT,
+            "ACCOUNT_PROVIDER_NOT_CONFIGURED".into()
+        )
+    );
+    let extra_field = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/accounts/device-flows",
+            r#"{"provider":"github","host":"github.com","clientId":"x"}"#,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(extra_field).await,
+        (StatusCode::BAD_REQUEST, "ACCOUNT_INPUT_INVALID".into())
+    );
+    let read_only = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            "/api/v1/accounts/device-flows",
+            r#"{"provider":"github","host":"github.com"}"#,
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(read_only.status(), StatusCode::FORBIDDEN);
+
+    let unknown = format!("/api/v1/accounts/device-flows/flow_{}", "0".repeat(32));
+    let missing = app
+        .clone()
+        .oneshot(request(&unknown, Some(WRITE_TOKEN)))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(missing).await,
+        (StatusCode::NOT_FOUND, "ACCOUNT_FLOW_NOT_FOUND".into())
+    );
+    let cancel_missing = app
+        .clone()
+        .oneshot(json_request(Method::DELETE, &unknown, ""))
+        .await
+        .unwrap();
+    assert_eq!(cancel_missing.status(), StatusCode::NOT_FOUND);
+    let malformed = app
+        .oneshot(request(
+            "/api/v1/accounts/device-flows/not-a-flow",
+            Some(WRITE_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(malformed).await,
+        (StatusCode::NOT_FOUND, "ACCOUNT_FLOW_NOT_FOUND".into())
+    );
 }
 
 #[tokio::test]

@@ -73,6 +73,8 @@ export function getRepositoryEventRefreshPlan(
   }
 
   if (["task.started", "task.progress", "task.completed", "task.failed"].includes(event.type)) return undefined;
+  // Account changes are read by the Accounts settings; they say nothing about repository state.
+  if (event.type.startsWith("accounts.")) return undefined;
   const repoId = event.repoId || selectedRepoId;
   return {
     refreshRepositories: true,

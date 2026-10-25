@@ -1,6 +1,17 @@
-import type { AccountResponse, HostingProvider } from "../../../api/client";
+import type { AccountResponse, BrowserSignInHost, HostingProvider } from "../../../api/client";
 
 export const DEFAULT_HOSTS: Record<HostingProvider, string> = { github: "github.com", gitlab: "gitlab.com" };
+
+/** How often the sign-in form asks the core whether a browser sign-in finished. */
+export const DEVICE_FLOW_POLL_MS = 2000;
+
+export type SignInMethod = "browser" | "token";
+
+/** Whether the core can sign in to this provider host through the browser. */
+export function browserSignInAvailable(hosts: readonly BrowserSignInHost[], provider: HostingProvider, host: string): boolean {
+  const normalized = host.trim().toLowerCase();
+  return hosts.some((item) => item.provider === provider && item.host === normalized);
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EXPIRY_WARNING_DAYS = 7;

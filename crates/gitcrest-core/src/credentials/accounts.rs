@@ -1,4 +1,9 @@
-use std::sync::{Arc, RwLock};
+use std::{
+    fmt,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, RwLock},
+};
 
 #[cfg(test)]
 use std::{collections::HashMap, sync::Mutex};
@@ -17,6 +22,9 @@ pub const ASKPASS_ACCOUNTS_ENV: &str = "GITCREST_ASKPASS_ACCOUNTS";
 pub struct AccountSecret {
     pub git_username: String,
     pub token: Zeroizing<String>,
+    /// Present for browser sign-ins whose access token expires (GitLab).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub refresh_token: Option<Zeroizing<String>>,
 }
 
 pub trait AccountSecretStore: Send + Sync {
@@ -29,27 +37,73 @@ pub fn system_account_secret_store() -> Arc<dyn AccountSecretStore> {
     Arc::new(super::keyring::SystemAccountSecretStore)
 }
 
+pub type RefreshFuture<'a> = Pin<Box<dyn Future<Output = ()> + Send + 'a>>;
+
+/// Renews the selected accounts' expiring OAuth tokens before Git starts a network command.
+pub trait AccountTokenRefresher: Send + Sync {
+    /// Never fails: a token that could not be renewed is left for Git to report.
+    fn refresh_expiring_tokens(&self) -> RefreshFuture<'_>;
+}
+
 /// The account currently selected for each host, shared between the accounts feature (which
-/// writes it) and Git command execution (which hands it to askpass).
-#[derive(Clone, Debug, Default)]
-pub struct AccountSelections(Arc<RwLock<Vec<(String, String)>>>);
+/// writes it) and Git command execution (which hands it to askpass and asks the refresher to
+/// renew expiring tokens first).
+#[derive(Clone, Default)]
+pub struct AccountSelections {
+    selections: Arc<RwLock<Vec<(String, String)>>>,
+    refresher: Arc<RwLock<Option<Arc<dyn AccountTokenRefresher>>>>,
+}
+
+impl fmt::Debug for AccountSelections {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("AccountSelections")
+            .field("selections", &self.selections)
+            .finish_non_exhaustive()
+    }
+}
 
 impl AccountSelections {
     pub fn replace(&self, selections: Vec<(String, String)>) {
-        if let Ok(mut current) = self.0.write() {
+        if let Ok(mut current) = self.selections.write() {
             *current = selections;
         }
     }
 
+    pub fn set_token_refresher(&self, refresher: Arc<dyn AccountTokenRefresher>) {
+        if let Ok(mut current) = self.refresher.write() {
+            *current = Some(refresher);
+        }
+    }
+
+    pub async fn refresh_expiring_tokens(&self) {
+        let refresher = self
+            .refresher
+            .read()
+            .ok()
+            .and_then(|current| current.clone());
+        if let Some(refresher) = refresher {
+            refresher.refresh_expiring_tokens().await;
+        }
+    }
+
     pub fn hosts(&self) -> Vec<String> {
-        self.0
+        self.selections
             .read()
             .map(|current| current.iter().map(|(host, _)| host.clone()).collect())
             .unwrap_or_default()
     }
 
+    pub fn account_for_host(&self, host: &str) -> Option<String> {
+        self.selections
+            .read()
+            .ok()?
+            .iter()
+            .find_map(|(selected, account_id)| (selected == host).then(|| account_id.clone()))
+    }
+
     pub fn env_value(&self) -> Option<String> {
-        let current = self.0.read().ok()?;
+        let current = self.selections.read().ok()?;
         if current.is_empty() {
             return None;
         }

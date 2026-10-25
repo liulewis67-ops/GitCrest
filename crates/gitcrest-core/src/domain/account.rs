@@ -27,19 +27,24 @@ impl HostingProvider {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) enum AccountAuthKind {
+    /// A personal access token the user pasted.
     Token,
+    /// A token from browser sign-in (OAuth device flow), possibly with a refresh token.
+    Oauth,
 }
 
 impl AccountAuthKind {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Token => "token",
+            Self::Oauth => "oauth",
         }
     }
 
     pub(crate) fn parse(value: &str) -> Option<Self> {
         match value {
             "token" => Some(Self::Token),
+            "oauth" => Some(Self::Oauth),
             _ => None,
         }
     }

@@ -26,6 +26,7 @@ const MAX_LOG_LINES: usize = 200;
 pub(super) const MAX_LOG_LINE_CHARS: usize = 2_000;
 static NEXT_TASK_ID: AtomicU64 = AtomicU64::new(1);
 type StatusInvalidator = dyn Fn(&str) + Send + Sync;
+type AuthenticationFailureObserver = dyn Fn(&str) + Send + Sync;
 
 #[derive(Clone, Default)]
 pub struct TaskService {
@@ -39,6 +40,9 @@ pub(super) struct TaskServiceInner {
     pub(super) worker_tasks: Mutex<JoinSet<()>>,
     pub(super) store: Option<Arc<dyn TaskStorePort>>,
     pub(super) status_invalidator: Option<Arc<StatusInvalidator>>,
+    /// Called with a failed task's message and log when Git reported an authentication failure.
+    pub(super) authentication_failures:
+        std::sync::RwLock<Option<Arc<AuthenticationFailureObserver>>>,
 }
 
 impl Default for TaskServiceInner {
@@ -50,6 +54,7 @@ impl Default for TaskServiceInner {
             worker_tasks: Mutex::new(JoinSet::new()),
             store: None,
             status_invalidator: None,
+            authentication_failures: std::sync::RwLock::new(None),
         }
     }
 }
@@ -179,8 +184,20 @@ impl TaskService {
                 worker_tasks: Mutex::new(JoinSet::new()),
                 store: Some(store),
                 status_invalidator,
+                authentication_failures: std::sync::RwLock::new(None),
             }),
         })
+    }
+
+    /// Registers the code that reacts when a task fails because a remote refused Git's
+    /// credentials. It receives the task's message and log.
+    pub(crate) fn observe_authentication_failures(
+        &self,
+        observer: impl Fn(&str) + Send + Sync + 'static,
+    ) {
+        if let Ok(mut current) = self.inner.authentication_failures.write() {
+            *current = Some(Arc::new(observer));
+        }
     }
 
     pub async fn list(&self) -> Vec<TaskSnapshot> {
@@ -450,6 +467,37 @@ pub(super) async fn finish_task(
         task.updated_at_ms = now_ms();
     })
     .await;
+    if status == TaskStatus::Failed {
+        notify_authentication_failure(inner, task_id).await;
+    }
+}
+
+async fn notify_authentication_failure(inner: &TaskServiceInner, task_id: &str) {
+    let Some(observer) = inner
+        .authentication_failures
+        .read()
+        .ok()
+        .and_then(|current| current.clone())
+    else {
+        return;
+    };
+    let output = {
+        let data = inner.data.lock().await;
+        data.tasks
+            .get(task_id)
+            .filter(|task| task.error_category == Some(TaskErrorCategory::Authentication))
+            .map(|task| {
+                let mut output = task.message.clone().unwrap_or_default();
+                for line in &task.logs {
+                    output.push('\n');
+                    output.push_str(line);
+                }
+                output
+            })
+    };
+    if let Some(output) = output {
+        observer(&output);
+    }
 }
 
 pub(super) async fn cleanup_task(inner: &TaskServiceInner, task_id: &str) {

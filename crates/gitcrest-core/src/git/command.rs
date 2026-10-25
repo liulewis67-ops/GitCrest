@@ -282,6 +282,13 @@ impl GitCommandService {
         self
     }
 
+    /// The askpass environment for a Git command that talks to a remote, after renewing any
+    /// selected account's OAuth token that is about to expire.
+    async fn network_environment(&self) -> Result<Vec<(OsString, OsString)>, TaskFailure> {
+        self.account_selections.refresh_expiring_tokens().await;
+        askpass_environment(&self.account_selections)
+    }
+
     pub async fn list_worktrees(
         &self,
         repository_path: &Path,
@@ -437,7 +444,7 @@ impl GitCommandService {
         operation: GitOperation,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let environment = askpass_environment(&self.account_selections)?;
+        let environment = self.network_environment().await?;
         run_command(
             &self.git_program,
             operation.arguments().iter().map(OsString::from).collect(),
@@ -472,7 +479,7 @@ impl GitCommandService {
             None,
             None,
             Vec::new(),
-            askpass_environment(&self.account_selections)?,
+            self.network_environment().await?,
             Some(repository_path),
             "Fetch remote branch",
             task,
@@ -512,7 +519,7 @@ impl GitCommandService {
             }),
             None,
             Vec::new(),
-            askpass_environment(&self.account_selections)?,
+            self.network_environment().await?,
             Some(repository_path),
             match strategy {
                 RemotePullStrategy::Merge => "Pull with merge",
@@ -1162,7 +1169,7 @@ impl GitCommandService {
             }),
             None,
             Vec::new(),
-            askpass_environment(&self.account_selections)?,
+            self.network_environment().await?,
             Some(repository_path),
             if force_with_lease {
                 "Push with lease"
@@ -1204,7 +1211,7 @@ impl GitCommandService {
             )),
             None,
             Vec::new(),
-            askpass_environment(&self.account_selections)?,
+            self.network_environment().await?,
             Some(repository_path),
             "Delete remote branch",
             task.clone(),
@@ -1241,7 +1248,7 @@ impl GitCommandService {
         parent: &Path,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
-        let environment = askpass_environment(&self.account_selections)?;
+        let environment = self.network_environment().await?;
         run_command(
             &self.git_program,
             [
@@ -2394,6 +2401,32 @@ mod tests {
                 ("GIT_CONFIG_VALUE_1".into(), String::new()),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn renews_account_tokens_before_building_the_network_environment() {
+        use std::{
+            ffi::OsStr,
+            sync::{atomic::AtomicUsize, Arc},
+        };
+
+        struct CountingRefresher(AtomicUsize);
+        impl crate::credentials::AccountTokenRefresher for CountingRefresher {
+            fn refresh_expiring_tokens(&self) -> crate::credentials::RefreshFuture<'_> {
+                self.0.fetch_add(1, Ordering::SeqCst);
+                Box::pin(async {})
+            }
+        }
+
+        let selections = AccountSelections::default();
+        let refresher = Arc::new(CountingRefresher(AtomicUsize::new(0)));
+        selections.set_token_refresher(refresher.clone());
+        let service = GitCommandService::default().with_account_selections(selections);
+        let environment = service.network_environment().await.unwrap();
+        assert_eq!(refresher.0.load(Ordering::SeqCst), 1);
+        assert!(environment
+            .iter()
+            .any(|(key, _)| key == OsStr::new("GIT_ASKPASS")));
     }
 
     fn git(path: &Path, args: &[&str]) {

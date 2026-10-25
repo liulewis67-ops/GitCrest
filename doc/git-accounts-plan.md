@@ -1,6 +1,6 @@
 # Git hosting accounts: GitHub and GitLab sign-in plan
 
-Status: phase 1 (token sign-in, switching, sign-out) is implemented. Phases 2 and 3 are proposals. Where phase 1 differs from the original proposal, the sections below describe what was built.
+Status: phase 1 (token sign-in, switching, sign-out) and phase 2 (browser sign-in, token refresh, re-checking accounts after Git authentication failures) are implemented. Browser sign-in stays hidden until the OAuth applications are registered and their client IDs are set (see "Client IDs"). Phase 3 is a proposal. Where the build differs from the original proposal, the sections below describe what was built.
 
 ## Goal
 
@@ -34,7 +34,13 @@ Scopes:
 - GitLab OAuth: `read_user`, `read_repository`, `write_repository` (or `api` if PR/MR features land later).
 - GitLab PAT link: `https://<host>/-/user_settings/personal_access_tokens?name=GitCrest&scopes=read_user,read_repository,write_repository`.
 
-Prerequisite (owner action): register a GitHub OAuth App with device flow enabled and a non-confidential GitLab.com application with the device grant enabled. Only the public client IDs ship in the app, in a `providers.rs` constant, overridable by env for development. No client secret is embedded.
+Prerequisite (owner action): register a GitHub OAuth App with device flow enabled and a non-confidential GitLab.com application with the device grant enabled. Only the public client IDs ship in the app. No client secret is embedded.
+
+### Client IDs
+
+`OAuthApps::from_environment()` (in `features/accounts/providers.rs`) reads `GITCREST_GITHUB_OAUTH_CLIENT_ID` and `GITCREST_GITLAB_OAUTH_CLIENT_ID` at run time, falling back to the same variables captured at compile time with `option_env!`, so a release build sets them in the build environment and a developer sets them when starting the core. Values must be ASCII letters, digits, `_`, `-` or `.`. Without a client ID the provider has no browser sign-in: `GET /v1/accounts` lists it nowhere in `browserSignIn`, the Settings form shows only the token method, and `POST /v1/accounts/device-flows` answers `ACCOUNT_PROVIDER_NOT_CONFIGURED`. Browser sign-in covers only github.com and gitlab.com; Enterprise and self-managed hosts keep token sign-in until a user-supplied client ID is supported.
+
+The browser scopes are `repo read:user workflow` for GitHub (`workflow` so pushes that touch `.github/workflows` work) and `read_user read_repository write_repository` for GitLab.
 
 ## Token lifetimes
 
@@ -50,7 +56,7 @@ Metadata in SQLite, secrets in the keyring.
 
 `migrations/0017_hosting_accounts.sql` creates `hosting_accounts` (account id `acct_` + 32 hex characters, provider, normalized host, API root, provider user id, login, display name, avatar URL, `auth_kind` = `token`, comma-separated scopes, token expiry, `active` / `needsReauth` state, timestamps; unique per provider + host + provider user id) and `hosting_account_selections` (one selected account per host, deleted with its account). Phase 2 widens `auth_kind` to `oauth`.
 
-Keyring: service `com.gitcrest.hosting-accounts`, entry key = account id, value = JSON `{ gitUsername, token }` wrapped in `Zeroizing`. Phase 2 adds `refreshToken`.
+Keyring: service `com.gitcrest.hosting-accounts`, entry key = account id, value = JSON `{ gitUsername, token, refreshToken? }` wrapped in `Zeroizing`. Browser sign-ins store `auth_kind = 'oauth'` (the migration already allowed it); GitLab OAuth accounts use the Git username `oauth2`, GitHub ones the login. For OAuth accounts `token_expires_at_ms` is the access token's expiry from the token response, and validation leaves it alone.
 
 "Switch account" = upsert `hosting_account_selections(host)`. Signing in to the first account on a host selects it. Signing in again as the same `remote_user_id` replaces that account's token instead of adding a duplicate.
 
@@ -83,9 +89,11 @@ Routes (all mutations require the main window's full token; the read-only and co
 | POST | `/v1/accounts/{id}/validate` | Re-check token, refresh profile, clear or set `needsReauth` |
 | DELETE | `/v1/accounts/{id}` | Sign out: revoke where possible, delete keyring entry and row, reselect another account on that host if one exists |
 
-Events: publish `accounts.changed` through the existing publisher so open windows refresh the account list after sign-in, switch or sign-out, and `accounts.deviceFlow.updated { flowId, status }` so the dialog doesn't have to poll the GET route.
+Events: `accounts.changed` (after sign-in, switch, sign-out, a validation that changed the state, or a failed background refresh) and `accounts.deviceFlow.updated { flowId, status }` when a browser sign-in finishes; both are documented in `doc/api/events-v1.md`. The renderer has a single event connection in `App`, so the sign-in form polls `GET /v1/accounts/device-flows/{flowId}` every 2 seconds instead (the core does the provider polling); the repository refresh planner ignores `accounts.*` events so they do not trigger a repository resync.
 
-Error codes added to `ApiErrorCode`: `AccountInputInvalid`, `AccountNotFound`, `AccountTokenRejected` (401 from provider), `AccountProviderUnreachable`, `AccountFlowExpired`, `AccountFlowDenied`, `AccountProviderNotConfigured` (no client ID for that host).
+Device flows live in memory in `AccountService`: at most 8, a new flow for the same provider and host replaces a pending one, finished flows stay readable for 10 minutes, the poller honours `slow_down` (+5 s), gives up after 3 consecutive network failures, and only accepts a verification URI on the provider's own host. Signing out of a GitLab browser account also revokes its access and refresh tokens (best effort, after the local delete); GitHub OAuth App tokens need the client secret to revoke, so the notice points to the user's GitHub application settings.
+
+Error codes added to `ApiErrorCode`: `AccountInputInvalid`, `AccountNotFound`, `AccountTokenRejected` (401 from provider), `AccountProviderUnreachable`, `AccountProviderNotConfigured` (no client ID for that host, 409), `AccountFlowNotFound` (404) and `AccountSignInRejected` (the provider refused the device request, for example a disabled OAuth app, 502). Denied and expired sign-ins are flow statuses, not errors.
 
 Spec: add the routes and schemas to `doc/api/v1.yaml`, regenerate `src/api/schema.ts` with `pnpm api:types`, and document the events in `doc/api/events-v1.md`.
 
@@ -96,8 +104,8 @@ As built in phase 1, the core does not resolve each remote's host before spawnin
 1. `AccountService` keeps an in-memory copy of the per-host selections (`credentials::AccountSelections`), shared with `GitCommandService` and refreshed after every sign-in, switch and sign-out.
 2. Every Git network command (fetch, pull, push, remote branch delete, clone) gets `GITCREST_ASKPASS_ACCOUNTS=host=acct_…;host=acct_…` plus, through `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`, an empty `credential.https://<host>.helper` for each selected host. Git consults credential helpers before askpass, so without this a configured helper such as Git Credential Manager would answer for those hosts with whatever it has stored. Hosts without a selected account keep their helpers.
 3. In the askpass process, `answer_askpass_prompt` takes the host from Git's prompt, answers from the selected account's keyring entry, and otherwise falls back to the per-host credential. The askpass process stays keyring-only and never opens SQLite.
-4. (Phase 2) Before spawning, refresh expiring OAuth tokens of the selected accounts.
-5. (Phase 2) When Git exits with an authentication failure (the existing recovery code in `features/remotes/recovery.rs` already classifies these for the "configure credentials" task action) and an account was used, mark it `needsReauth` and include `accountId` in the task failure so the UI can offer "Sign in again".
+4. Before spawning, `GitCommandService::network_environment()` asks `AccountSelections::refresh_expiring_tokens()` to renew the selected OAuth accounts whose token expires within 5 minutes. `AccountService` registers itself as the `AccountTokenRefresher` at startup. Refreshes are serialized (refresh tokens rotate), the new access + refresh pair replaces the old one in a single keyring write, and a refresh token the provider rejects marks the account `needsReauth`. A provider that cannot be reached leaves the old token for Git to try.
+5. When a task fails with the `authentication` error category, `TaskService` hands its message and log to `AccountService::authentication_failed`, which takes the `https://` hosts Git named (`fatal: Authentication failed for 'https://github.com/…'`) and re-validates the account selected for each. Validation renews a rejected OAuth token first and marks the account `needsReauth` only when the provider really refuses it, so a token that merely lacks access to one repository is not flagged. Instead of an `accountId` on the task, the existing "configure credentials" action opens Settings → Accounts for the repository's hosts, where the account shows **Needs sign-in** with **Sign in again**.
 
 SSH remotes are unaffected; accounts only cover HTTPS.
 
@@ -126,7 +134,7 @@ New feature slice `src/features/accounts/` (keep `pnpm frontend:boundaries` pass
 ## Phases
 
 1. **Accounts with tokens (done).** Migration, keyring store, GitHub + GitLab providers (`fetch_profile` only), `/v1/accounts` list / tokens / selection / delete / validate, askpass integration, Settings → Accounts with token sign-in, switch and sign-out. Already delivers sign in, switch and sign out for both providers, including Enterprise and self-managed.
-2. **Browser sign-in.** Device flow routes and events, GitLab refresh before Git commands, Sign-in dialog browser tab, `needsReauth` handling from failed Git tasks.
+2. **Browser sign-in (done, pending client IDs).** Device flow routes and events, refresh before Git commands, a Browser / Access token choice in the Settings sign-in form (one-time code, **Copy code and open GitHub/GitLab**, waiting, declined, expired and **Get a new code** states), and re-checking the account after failed Git tasks. Not yet verified against the live providers: GitLab's refresh grant for a public client is sent with `client_id` only, without `redirect_uri`.
 3. **Everywhere else.** Header account chip, `CredentialEditor` integration, optional one-time import of existing per-host credentials into accounts (validate each with `fetch_profile`, keep the legacy entry if validation fails), and later per-repository account override (`repository_account` table keyed by RepoId) for users with work and personal accounts on the same host.
 
 ## Tests

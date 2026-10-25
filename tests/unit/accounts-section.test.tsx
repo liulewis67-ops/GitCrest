@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { AccountResponse, GitCrestApiClient } from "../../src/api/client";
+import type { AccountResponse, DeviceFlowResponse, GitCrestApiClient } from "../../src/api/client";
 import { GitCrestApiError } from "../../src/api/client";
 import { AccountsSection } from "../../src/features/accounts";
 import { groupAccountsByHost, tokenCreationUrl, tokenExpiry } from "../../src/features/accounts/model/accounts";
@@ -139,4 +139,111 @@ it("shows HTTPS credential cards for the hosts the settings were opened with", a
   render(<AccountsSection api={api} credentialHosts={["gitea.example.test"]} />);
   const card = await screen.findByRole("article", { name: "HTTPS credential for gitea.example.test" });
   expect(await within(card).findByText("Saved")).toBeTruthy();
+});
+
+const browserHosts = [{ provider: "github" as const, host: "github.com" }];
+
+function deviceFlow(overrides: Partial<DeviceFlowResponse> = {}): DeviceFlowResponse {
+  return {
+    flowId: `flow_${"f".repeat(32)}`,
+    provider: "github",
+    host: "github.com",
+    userCode: "WDJB-MJHT",
+    verificationUri: "https://github.com/login/device",
+    verificationUriComplete: null,
+    expiresAtMs: Date.now() + 900_000,
+    status: "pending",
+    account: null,
+    error: null,
+    ...overrides,
+  };
+}
+
+it("signs in through the browser with a one-time code", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const signedIn = account({ authKind: "oauth", tokenExpiresAtMs: Date.now() + 60_000 });
+    const api = apiWith({
+      listAccounts: vi.fn()
+        .mockResolvedValueOnce({ accounts: [], browserSignIn: browserHosts })
+        .mockResolvedValue({ accounts: [signedIn], browserSignIn: browserHosts }),
+      startDeviceFlow: vi.fn().mockResolvedValue(deviceFlow()),
+      getDeviceFlow: vi.fn()
+        .mockResolvedValueOnce(deviceFlow())
+        .mockResolvedValue(deviceFlow({ status: "completed", account: signedIn })),
+    });
+    render(<AccountsSection api={api} />);
+    await screen.findByText(/No accounts yet/);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    expect(screen.getByRole("heading", { name: "Add an account" })).toBeTruthy();
+    expect(screen.getByRole("radio", { name: "Browser" })).toHaveProperty("checked", true);
+    expect(screen.queryByLabelText("Personal access token")).toBeNull();
+    fireEvent.click(screen.getByRole("radio", { name: "Access token" }));
+    expect(screen.getByLabelText("Personal access token")).toBeTruthy();
+    fireEvent.click(screen.getByRole("radio", { name: "Browser" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue in browser" }));
+    await waitFor(() => expect(api.startDeviceFlow).toHaveBeenCalledWith("github", "github.com"));
+    expect(await screen.findByText("WDJB-MJHT")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Copy code and open GitHub" }).getAttribute("href")).toBe("https://github.com/login/device");
+    expect(screen.getByText("Waiting for you to approve on github.com…")).toBeTruthy();
+
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(api.getDeviceFlow).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("WDJB-MJHT")).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(await screen.findByText("Signed in as octocat on github.com.")).toBeTruthy();
+    expect(screen.queryByText("WDJB-MJHT")).toBeNull();
+    const row = screen.getByRole("listitem", { name: "octocat" });
+    expect(within(row).getByText(/Browser sign-in/)).toBeTruthy();
+    // The short-lived OAuth token renews itself, so its expiry is not a warning.
+    expect(within(row).queryByText(/Token expires/)).toBeNull();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("offers a new code after a declined browser sign-in and cancels a pending one", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const api = apiWith({
+      listAccounts: vi.fn().mockResolvedValue({ accounts: [], browserSignIn: browserHosts }),
+      startDeviceFlow: vi.fn().mockResolvedValue(deviceFlow()),
+      getDeviceFlow: vi.fn().mockResolvedValue(deviceFlow({ status: "denied" })),
+      cancelDeviceFlow: vi.fn().mockResolvedValue(undefined),
+    });
+    render(<AccountsSection api={api} />);
+    await screen.findByText(/No accounts yet/);
+    fireEvent.click(screen.getByRole("button", { name: "Add account" }));
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "github.example.com" } });
+    expect(screen.queryByRole("radio", { name: "Browser" })).toBeNull();
+    expect(screen.getByLabelText("Personal access token")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Host"), { target: { value: "github.com" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue in browser" }));
+    await screen.findByText("WDJB-MJHT");
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect((await screen.findByRole("alert")).textContent).toBe("The sign-in was declined on GitHub.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Get a new code" }));
+    await waitFor(() => expect(api.startDeviceFlow).toHaveBeenCalledTimes(2));
+    await screen.findByText("WDJB-MJHT");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(api.cancelDeviceFlow).toHaveBeenCalledWith(deviceFlow().flowId);
+    expect(screen.queryByText("WDJB-MJHT")).toBeNull();
+    expect(screen.getByRole("button", { name: "Add account" })).toBeTruthy();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("asks a browser account that needs sign-in to sign in again through the browser", async () => {
+  const stale = account({ authKind: "oauth", state: "needsReauth" });
+  const api = apiWith({ listAccounts: vi.fn().mockResolvedValue({ accounts: [stale], browserSignIn: browserHosts }) });
+  render(<AccountsSection api={api} />);
+  const row = await screen.findByRole("listitem", { name: "octocat" });
+  fireEvent.click(within(row).getByRole("button", { name: "Sign in again" }));
+  expect(screen.getByRole("radio", { name: "Browser" })).toHaveProperty("checked", true);
+  expect(screen.getByRole("button", { name: "Continue in browser" })).toBeTruthy();
 });

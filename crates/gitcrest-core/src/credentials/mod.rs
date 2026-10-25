@@ -12,7 +12,7 @@ mod keyring;
 
 pub use accounts::{
     is_valid_account_id, system_account_secret_store, AccountSecret, AccountSecretStore,
-    AccountSelections, ASKPASS_ACCOUNTS_ENV,
+    AccountSelections, AccountTokenRefresher, RefreshFuture, ASKPASS_ACCOUNTS_ENV,
 };
 pub use askpass::answer_askpass_prompt;
 
@@ -446,6 +446,7 @@ mod tests {
                 &AccountSecret {
                     git_username: "octocat".into(),
                     token: Zeroizing::new("account-token".into()),
+                    refresh_token: None,
                 },
             )
             .unwrap();

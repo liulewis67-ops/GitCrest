@@ -448,6 +448,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/accounts/device-flows": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Start a browser sign-in (OAuth device flow)
+         * @description Returns a code the user enters on the provider's verification page. The core polls the provider in the background and stores the account when the user approves; read the outcome from the flow. Starting again for the same provider and host replaces a flow that is still pending. Only hosts listed in AccountList.browserSignIn support this.
+         */
+        post: operations["startDeviceFlow"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/accounts/device-flows/{flowId}": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                flowId: components["parameters"]["FlowId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read a browser sign-in's status
+         * @description Finished flows stay readable for ten minutes.
+         */
+        get: operations["getDeviceFlow"];
+        put?: never;
+        post?: never;
+        /** Cancel a browser sign-in and stop polling the provider */
+        delete: operations["cancelDeviceFlow"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/accounts/{accountId}": {
         parameters: {
             query?: never;
@@ -508,7 +555,7 @@ export interface paths {
         put?: never;
         /**
          * Check the stored token with the provider and refresh the profile
-         * @description A rejected or missing token sets the account state to needsReauth instead of failing.
+         * @description A rejected or missing token sets the account state to needsReauth instead of failing. A browser sign-in's token that is about to expire or is rejected is renewed with its refresh token first.
          */
         post: operations["validateAccount"];
         delete?: never;
@@ -2247,6 +2294,32 @@ export interface components {
             /** @description Personal access token. Surrounding whitespace is ignored. */
             token: string;
         };
+        DeviceFlowRequest: {
+            provider: components["schemas"]["HostingProvider"];
+            host: string;
+        };
+        DeviceFlow: {
+            flowId: string;
+            provider: components["schemas"]["HostingProvider"];
+            host: string;
+            /** @description The code the user enters on the verification page. */
+            userCode: string;
+            /** @description HTTPS page on the provider's host where the user enters the code. */
+            verificationUri: string;
+            /** @description The verification page with the code filled in */
+            verificationUriComplete: string | null;
+            expiresAtMs: number;
+            /** @enum {string} */
+            status: "pending" | "completed" | "denied" | "expired" | "failed";
+            /** @description The signed-in account once status is completed. */
+            account: components["schemas"]["Account"] | null;
+            /** @description Why the flow failed, when status is failed. */
+            error: components["schemas"]["ApiError"] | null;
+        };
+        BrowserSignInHost: {
+            provider: components["schemas"]["HostingProvider"];
+            host: string;
+        };
         Account: {
             accountId: string;
             provider: components["schemas"]["HostingProvider"];
@@ -2255,10 +2328,14 @@ export interface components {
             displayName: string | null;
             /** @description HTTPS avatar URL reported by the provider. */
             avatarUrl: string | null;
-            /** @enum {string} */
-            authKind: "token";
+            /**
+             * @description token: a pasted access token; oauth: browser sign-in.
+             * @enum {string}
+             */
+            authKind: "token" | "oauth";
             /** @description Token scopes when the provider reports them; empty when unknown. */
             scopes: string[];
+            /** @description For oauth accounts this is the short-lived access token's expiry, renewed automatically. */
             tokenExpiresAtMs: number | null;
             /** @enum {string} */
             state: "active" | "needsReauth";
@@ -2269,6 +2346,8 @@ export interface components {
         };
         AccountList: {
             accounts: components["schemas"]["Account"][];
+            /** @description Provider hosts where browser sign-in is available; other hosts sign in with an access token. */
+            browserSignIn: components["schemas"]["BrowserSignInHost"][];
         };
         AiSettings: {
             /** @enum {string} */
@@ -2525,7 +2604,7 @@ export interface components {
             };
         };
         /** @enum {string} */
-        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "ACCOUNT_INPUT_INVALID" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_TOKEN_REJECTED" | "ACCOUNT_PROVIDER_UNREACHABLE" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
+        ApiErrorCode: "AUTH_UNAUTHORIZED" | "AUTH_FORBIDDEN" | "API_VERSION_UNSUPPORTED" | "API_ROUTE_NOT_FOUND" | "REPOSITORY_NOT_FOUND" | "REPOSITORY_PATH_NOT_FOUND" | "REPOSITORY_ACCESS_DENIED" | "NOT_A_REPOSITORY" | "REPOSITORY_ALREADY_INITIALIZED" | "REPOSITORY_INITIALIZATION_FAILED" | "DATABASE_UNAVAILABLE" | "REPOSITORY_STATUS_FAILED" | "TASK_NOT_FOUND" | "SHELF_NOT_FOUND" | "TASK_QUEUE_FULL" | "TASK_SERVICE_STOPPING" | "GIT_UNAVAILABLE" | "REPOSITORY_STATE_CONFLICT" | "RESOURCE_VERSION_STALE" | "REQUEST_INVALID" | "COMMIT_CONFLICT" | "COMMIT_MESSAGE_TOO_LARGE" | "HISTORY_COMMIT_NOT_FOUND" | "HISTORY_UNAVAILABLE" | "HISTORY_TOO_LARGE" | "BRANCHES_UNAVAILABLE" | "BRANCHES_TOO_LARGE" | "BRANCH_NAME_INVALID" | "BRANCH_ALREADY_EXISTS" | "BRANCH_REQUIRES_COMMIT" | "BRANCH_NOT_FOUND" | "BRANCH_CURRENT" | "BRANCH_UNMERGED" | "BRANCH_WORKTREE_DIRTY" | "REMOTES_UNAVAILABLE" | "REMOTES_TOO_LARGE" | "REMOTE_NAME_INVALID" | "REMOTE_URL_INVALID" | "REMOTE_ALREADY_EXISTS" | "REMOTE_NOT_FOUND" | "CREDENTIAL_INPUT_INVALID" | "CREDENTIALS_UNAVAILABLE" | "ACCOUNT_INPUT_INVALID" | "ACCOUNT_NOT_FOUND" | "ACCOUNT_TOKEN_REJECTED" | "ACCOUNT_PROVIDER_UNREACHABLE" | "ACCOUNT_PROVIDER_NOT_CONFIGURED" | "ACCOUNT_FLOW_NOT_FOUND" | "ACCOUNT_SIGN_IN_REJECTED" | "PULL_PREFLIGHT_UNAVAILABLE" | "PULL_TARGET_UNAVAILABLE" | "PULL_PREFLIGHT_STALE" | "PULL_REQUIRES_CLEAN" | "PUSH_PREFLIGHT_UNAVAILABLE" | "PUSH_TARGET_UNAVAILABLE" | "PUSH_PREFLIGHT_STALE" | "PUSH_REQUIRES_FETCH" | "NOTHING_TO_PUSH" | "WORKFLOW_PREFLIGHT_UNAVAILABLE" | "WORKFLOW_PREFLIGHT_STALE" | "WORKFLOW_REQUIRES_CLEAN" | "WORKFLOW_RECOVERY_STALE" | "WORKFLOW_RECOVERY_NOT_ALLOWED" | "WORKFLOW_NO_ACTIVE_OPERATION" | "TAG_ALREADY_EXISTS" | "INTERNAL_ERROR";
         ApiError: {
             code: components["schemas"]["ApiErrorCode"];
             message: string;
@@ -2638,6 +2717,7 @@ export interface components {
         /** @description `hunks` (default) returns changes with three lines of context; staging selections address these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides in full; its revision and indexes are not accepted by staging, discard, or commit selections. */
         DiffContext: "hunks" | "full";
         AccountId: string;
+        FlowId: string;
     };
     requestBodies: never;
     headers: {
@@ -3950,6 +4030,126 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    startDeviceFlow: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeviceFlowRequest"];
+            };
+        };
+        responses: {
+            /** @description The pending flow. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFlow"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Browser sign-in is not available for this provider and host (ACCOUNT_PROVIDER_NOT_CONFIGURED). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The provider could not be reached or refused the request (ACCOUNT_SIGN_IN_REJECTED). */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getDeviceFlow: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                flowId: components["parameters"]["FlowId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The flow; the token is never returned. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeviceFlow"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            /** @description The flow ended or never existed (ACCOUNT_FLOW_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    cancelDeviceFlow: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                flowId: components["parameters"]["FlowId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled. */
+            204: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The flow ended or never existed (ACCOUNT_FLOW_NOT_FOUND). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     signOutAccount: {

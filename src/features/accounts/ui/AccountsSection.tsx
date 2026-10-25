@@ -1,13 +1,14 @@
 import { useEffect, useState, type FormEvent } from "react";
-import type { AccountResponse, GitCrestApiClient, HostingProvider } from "../../../api/client";
+import type { AccountResponse, BrowserSignInHost, DeviceFlowResponse, GitCrestApiClient, HostingProvider } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
 import { HostCredentials } from "../../credentials";
-import { DEFAULT_HOSTS, groupAccountsByHost, tokenCreationUrl, tokenExpiry } from "../model/accounts";
+import { browserSignInAvailable, DEFAULT_HOSTS, DEVICE_FLOW_POLL_MS, groupAccountsByHost, tokenCreationUrl, tokenExpiry, type SignInMethod } from "../model/accounts";
 
 interface SignInDraft {
   provider: HostingProvider;
   host: string;
   token: string;
+  method: SignInMethod;
 }
 
 interface AccountsSectionProps {
@@ -19,7 +20,10 @@ interface AccountsSectionProps {
 export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) {
   const { t } = useI18n();
   const [accounts, setAccounts] = useState<AccountResponse[]>();
+  const [browserHosts, setBrowserHosts] = useState<BrowserSignInHost[]>([]);
   const [draft, setDraft] = useState<SignInDraft>();
+  const [flow, setFlow] = useState<DeviceFlowResponse>();
+  const [codeCopied, setCodeCopied] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [confirmSignOut, setConfirmSignOut] = useState("");
   const [error, setError] = useState("");
@@ -27,7 +31,9 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
 
   async function reload(signal?: AbortSignal) {
     const list = await (signal ? api.withSignal(signal) : api).listAccounts();
-    if (!signal?.aborted) setAccounts(list.accounts);
+    if (signal?.aborted) return;
+    setAccounts(list.accounts);
+    setBrowserHosts(list.browserSignIn ?? []);
   }
 
   useEffect(() => {
@@ -37,6 +43,34 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
     });
     return () => controller.abort();
   }, [api]);
+
+  // The core polls the provider; the form only asks the core how the browser sign-in is going.
+  useEffect(() => {
+    if (flow?.status !== "pending") return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void api.getDeviceFlow(flow.flowId).then(async (next) => {
+        if (cancelled) return;
+        if (next.status !== "completed" || !next.account) {
+          setFlow(next);
+          return;
+        }
+        const account = next.account;
+        setFlow(undefined);
+        setDraft(undefined);
+        await reload().catch(() => undefined);
+        setNotice(t("accounts.signedIn", { login: account.login, host: account.host }));
+      }, (reason: unknown) => {
+        if (cancelled) return;
+        setFlow(undefined);
+        setError(reason instanceof Error ? reason.message : t("accounts.browser.failed"));
+      });
+    }, DEVICE_FLOW_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [api, flow]);
 
   async function run(action: string, work: () => Promise<string>, fallback: string) {
     setBusyAction(action);
@@ -53,8 +87,8 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
     }
   }
 
-  function startSignIn(provider: HostingProvider = "github", host = DEFAULT_HOSTS[provider]) {
-    setDraft({ provider, host, token: "" });
+  function startSignIn(provider: HostingProvider = "github", host = DEFAULT_HOSTS[provider], method: SignInMethod = "browser") {
+    setDraft({ provider, host, token: "", method });
     setError("");
     setNotice("");
   }
@@ -68,9 +102,49 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
     });
   }
 
+  function stopFlow() {
+    if (flow?.status === "pending") void api.cancelDeviceFlow(flow.flowId).catch(() => undefined);
+    setFlow(undefined);
+  }
+
+  function closeForm() {
+    stopFlow();
+    setDraft(undefined);
+  }
+
+  async function startBrowserSignIn() {
+    if (!draft) return;
+    setBusyAction("browser");
+    setError("");
+    setNotice("");
+    setCodeCopied(false);
+    try {
+      setFlow(await api.startDeviceFlow(draft.provider, draft.host.trim()));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : t("accounts.browser.failed"));
+    } finally {
+      setBusyAction("");
+    }
+  }
+
+  async function copyCode(code: string) {
+    try {
+      if (!navigator.clipboard?.writeText) return;
+      await navigator.clipboard.writeText(code);
+      setCodeCopied(true);
+    } catch {
+      // The code stays on screen to type by hand.
+    }
+  }
+
   function signIn(event: FormEvent) {
     event.preventDefault();
-    if (!draft || busyAction || !draft.host.trim() || !draft.token.trim()) return;
+    if (!draft || busyAction || flow || !draft.host.trim()) return;
+    if (method === "browser") {
+      void startBrowserSignIn();
+      return;
+    }
+    if (!draft.token.trim()) return;
     const { provider, host, token } = draft;
     void run("sign-in", async () => {
       const account = await api.signInWithToken(provider, host.trim(), token);
@@ -79,9 +153,20 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
     }, t("accounts.form.failed"));
   }
 
+  function signedOutMessage(account: AccountResponse, provider: string) {
+    if (account.authKind !== "oauth") return t("accounts.signedOut", { login: account.login, provider });
+    return account.provider === "github"
+      ? t("accounts.signedOutGithubApp", { login: account.login })
+      : t("accounts.signedOutRevoked", { login: account.login, provider });
+  }
+
   const busy = Boolean(busyAction);
   const groups = groupAccountsByHost(accounts ?? []);
+  const browserAvailable = draft ? browserSignInAvailable(browserHosts, draft.provider, draft.host) : false;
+  const method: SignInMethod = browserAvailable && draft?.method === "browser" ? "browser" : "token";
   const tokenUrl = draft ? tokenCreationUrl(draft.provider, draft.host.trim()) : undefined;
+  const draftProvider = draft ? t(`accounts.provider.${draft.provider}`) : "";
+  const formLocked = busy || Boolean(flow);
 
   return (
     <section className="settingsSection" id="settings-section-accounts" aria-labelledby="settings-accounts-title">
@@ -92,33 +177,78 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
       <p className="settingsHint">{t("accounts.intro")}</p>
 
       {draft && <form className="settingsForm accountSignInForm" onSubmit={signIn} aria-labelledby="account-sign-in-title">
-        <h4 id="account-sign-in-title">{t("accounts.form.title")}</h4>
+        <h4 id="account-sign-in-title">{t(browserAvailable ? "accounts.form.titleAny" : "accounts.form.title")}</h4>
         <div className="settingsFieldStack">
           <span id="account-provider-label">{t("accounts.form.provider")}</span>
           <div className="segmentedControl" role="radiogroup" aria-labelledby="account-provider-label">
             {(["github", "gitlab"] as const).map((provider) => (
               <label key={provider} className={draft.provider === provider ? "selected" : undefined}>
-                <input type="radio" name="account-provider" value={provider} checked={draft.provider === provider} disabled={busy} onChange={() => changeProvider(provider)} />
+                <input type="radio" name="account-provider" value={provider} checked={draft.provider === provider} disabled={formLocked} onChange={() => changeProvider(provider)} />
                 <span>{t(`accounts.provider.${provider}`)}</span>
               </label>
             ))}
           </div>
         </div>
         <label>{t("accounts.form.host")}
-          <input value={draft.host} onChange={(event) => setDraft({ ...draft, host: event.target.value })} disabled={busy} maxLength={260} autoComplete="off" spellCheck={false} aria-describedby="account-host-help" />
+          <input value={draft.host} onChange={(event) => setDraft({ ...draft, host: event.target.value })} disabled={formLocked} maxLength={260} autoComplete="off" spellCheck={false} aria-describedby="account-host-help" />
         </label>
         <p id="account-host-help" className="settingsHint">{t("accounts.form.hostHelp")}</p>
-        <label>{t("accounts.form.token")}
-          <input type="password" value={draft.token} onChange={(event) => setDraft({ ...draft, token: event.target.value })} disabled={busy} maxLength={65536} autoComplete="new-password" spellCheck={false} aria-describedby="account-token-help" />
-        </label>
-        <p id="account-token-help" className="settingsHint">
-          {t(draft.provider === "github" ? "accounts.form.githubScopes" : "accounts.form.gitlabScopes")}
-          {tokenUrl && <> <a href={tokenUrl} target="_blank" rel="noreferrer">{t("accounts.form.createToken", { host: draft.host.trim() })}</a></>}
-        </p>
-        <div className="settingsActions">
-          <button className="primaryButton" type="submit" disabled={busy || !draft.host.trim() || !draft.token.trim()}>{busyAction === "sign-in" ? t("accounts.form.signingIn") : t("accounts.form.signIn")}</button>
-          <button className="textButton" type="button" disabled={busy} onClick={() => setDraft(undefined)}>{t("accounts.form.cancel")}</button>
-        </div>
+        {browserAvailable && <div className="settingsFieldStack">
+          <span id="account-method-label">{t("accounts.form.method")}</span>
+          <div className="segmentedControl" role="radiogroup" aria-labelledby="account-method-label">
+            {(["browser", "token"] as const).map((option) => (
+              <label key={option} className={method === option ? "selected" : undefined}>
+                <input type="radio" name="account-method" value={option} checked={method === option} disabled={formLocked} onChange={() => setDraft({ ...draft, method: option })} />
+                <span>{t(option === "browser" ? "accounts.form.methodBrowser" : "accounts.form.methodToken")}</span>
+              </label>
+            ))}
+          </div>
+        </div>}
+
+        {method === "token" && <>
+          <label>{t("accounts.form.token")}
+            <input type="password" value={draft.token} onChange={(event) => setDraft({ ...draft, token: event.target.value })} disabled={busy} maxLength={65536} autoComplete="new-password" spellCheck={false} aria-describedby="account-token-help" />
+          </label>
+          <p id="account-token-help" className="settingsHint">
+            {t(draft.provider === "github" ? "accounts.form.githubScopes" : "accounts.form.gitlabScopes")}
+            {tokenUrl && <> <a href={tokenUrl} target="_blank" rel="noreferrer">{t("accounts.form.createToken", { host: draft.host.trim() })}</a></>}
+          </p>
+          <div className="settingsActions">
+            <button className="primaryButton" type="submit" disabled={busy || !draft.host.trim() || !draft.token.trim()}>{busyAction === "sign-in" ? t("accounts.form.signingIn") : t("accounts.form.signIn")}</button>
+            <button className="textButton" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</button>
+          </div>
+        </>}
+
+        {method === "browser" && !flow && <>
+          <p className="settingsHint">{t("accounts.browser.hint", { host: draft.host.trim() })}</p>
+          <div className="settingsActions">
+            <button className="primaryButton" type="submit" disabled={busy}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.start")}</button>
+            <button className="textButton" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</button>
+          </div>
+        </>}
+
+        {method === "browser" && flow && <div className="deviceFlowPanel" role="group" aria-labelledby="device-flow-title">
+          {flow.status === "pending" ? <>
+            <p id="device-flow-title">{t("accounts.browser.enterCode", { provider: draftProvider })}</p>
+            <output className="deviceFlowCode" aria-label={t("accounts.browser.codeAria")}>{flow.userCode}</output>
+            <div className="settingsActions">
+              <a className="primaryButton" href={flow.verificationUriComplete ?? flow.verificationUri} target="_blank" rel="noreferrer" onClick={() => void copyCode(flow.userCode)}>{t("accounts.browser.copyAndOpen", { provider: draftProvider })}</a>
+              <button className="secondaryButton" type="button" onClick={() => void copyCode(flow.userCode)}>{codeCopied ? t("accounts.browser.copied") : t("accounts.browser.copy")}</button>
+              <button className="textButton" type="button" onClick={closeForm}>{t("accounts.form.cancel")}</button>
+            </div>
+            <p className="settingsHint" role="status">{t("accounts.browser.waiting", { host: flow.host })}</p>
+          </> : <>
+            <p id="device-flow-title" className="formError" role="alert">
+              {flow.status === "denied" && t("accounts.browser.denied", { provider: draftProvider })}
+              {flow.status === "expired" && t("accounts.browser.expired")}
+              {flow.status === "failed" && (flow.error?.message ?? t("accounts.browser.failed"))}
+            </p>
+            <div className="settingsActions">
+              <button className="primaryButton" type="button" disabled={busy} onClick={() => void startBrowserSignIn()}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.retry")}</button>
+              <button className="textButton" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</button>
+            </div>
+          </>}
+        </div>}
       </form>}
 
       {!accounts && !error && <p className="settingsHint" role="status">{t("accounts.loading")}</p>}
@@ -128,8 +258,10 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
           <span className="accountHostName">{host}</span>
           <ul className="accountList">
             {hostAccounts.map((account) => {
-              const expiry = tokenExpiry(account.tokenExpiresAtMs, Date.now());
+              // A browser sign-in's short-lived token renews itself, so only pasted tokens warn.
+              const expiry = account.authKind === "token" ? tokenExpiry(account.tokenExpiresAtMs, Date.now()) : undefined;
               const provider = t(`accounts.provider.${account.provider}`);
+              const browserRenewal = account.authKind === "oauth" || browserSignInAvailable(browserHosts, account.provider, account.host);
               return (
                 <li className="accountRow" key={account.accountId} aria-label={account.login}>
                   <AccountAvatar account={account} />
@@ -153,7 +285,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
                       <button className="dangerTextButton" type="button" disabled={busy} onClick={() => void run(`sign-out:${account.accountId}`, async () => {
                         await api.signOutAccount(account.accountId);
                         setConfirmSignOut("");
-                        return t("accounts.signedOut", { login: account.login, provider });
+                        return signedOutMessage(account, provider);
                       }, t("accounts.actionFailed"))}>{t("accounts.confirmSignOut")}</button>
                       <button className="textButton" type="button" disabled={busy} onClick={() => setConfirmSignOut("")}>{t("accounts.cancel")}</button>
                     </> : <>
@@ -162,7 +294,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
                         return t("accounts.switched", { login: selected.login, host: selected.host });
                       }, t("accounts.actionFailed"))}>{t("accounts.use", { host: account.host })}</button>}
                       {account.state === "needsReauth"
-                        ? <button className="textButton" type="button" disabled={busy} onClick={() => startSignIn(account.provider, account.host)}>{t("accounts.replaceToken")}</button>
+                        ? <button className="textButton" type="button" disabled={busy || Boolean(flow)} onClick={() => startSignIn(account.provider, account.host, browserRenewal ? "browser" : "token")}>{t(account.authKind === "oauth" ? "accounts.signInAgain" : "accounts.replaceToken")}</button>
                         : <button className="textButton" type="button" disabled={busy} onClick={() => void run(`validate:${account.accountId}`, async () => {
                           const checked = await api.validateAccount(account.accountId);
                           return checked.state === "active"
