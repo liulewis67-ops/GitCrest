@@ -110,8 +110,9 @@ export function DiffWindow() {
       const uniqueTabs = [initial, ...siblingTabs.filter((tab) => tab.key !== initial.key)];
       if (active) {
         setTabsTruncated(uniqueTabs.length > MAX_DIFF_TABS);
-        setTabs(uniqueTabs.slice(0, MAX_DIFF_TABS));
-        setActiveTabKey(initial.key);
+        // Diffs the main window sent while these tabs loaded are already open, and the latest of them stays active.
+        setTabs((requested) => addTabs(uniqueTabs.slice(0, MAX_DIFF_TABS), requested));
+        setActiveTabKey((current) => current || initial.key);
         setApi(client);
         tabsLoadedRef.current = true;
       }
@@ -123,6 +124,19 @@ export function DiffWindow() {
       controller.abort();
     };
   }, [initialCommitOid, initialPath, initialScope, repoId, coreRestarts]);
+
+  // The main window reuses this window for its repository: each further Diff opens as a tab, and the last one shows.
+  useEffect(() => getGitCrestBridge()?.subscribeToDiffWindowRequests?.((requests) => {
+    const requested = requests.filter((request) => request.repoId === repoId).map((request): DiffTab => ({
+      key: tabKey(request.path, request.scope, request.commitOid),
+      path: request.path,
+      scope: request.scope,
+      ...(request.commitOid ? { commitOid: request.commitOid } : {}),
+    }));
+    if (requested.length === 0) return;
+    setTabs((current) => addTabs(current, requested));
+    setActiveTabKey(requested[requested.length - 1].key);
+  }), [repoId]);
 
   useEffect(() => {
     if (!api || !activeTab) return;
@@ -252,6 +266,24 @@ function scopeLabel(scope: DiffTab["scope"], t: ReturnType<typeof useI18n>["t"])
 
 function tabKey(path: string, scope: DiffTab["scope"], commitOid?: string) {
   return `${scope}:${commitOid || ""}:${path}`;
+}
+
+/** Appends the tabs that are not open yet. Past the tab limit the oldest other tabs make room for the added ones. */
+function addTabs(current: DiffTab[], added: DiffTab[]): DiffTab[] {
+  const openKeys = new Set(current.map((tab) => tab.key));
+  const tabs = [...current];
+  for (const tab of added) {
+    if (openKeys.has(tab.key)) continue;
+    openKeys.add(tab.key);
+    tabs.push(tab);
+  }
+  const addedKeys = new Set(added.map((tab) => tab.key));
+  let excess = tabs.length - MAX_DIFF_TABS;
+  return excess <= 0 ? tabs : tabs.filter((tab) => {
+    if (excess <= 0 || addedKeys.has(tab.key)) return true;
+    excess -= 1;
+    return false;
+  });
 }
 
 function tabsFromStatus(snapshot: StatusSnapshotResponse): DiffTab[] {

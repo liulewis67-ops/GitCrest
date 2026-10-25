@@ -7,7 +7,7 @@ import { bootstrapApp } from "./bootstrap";
 export type CoreConnectionState = "connecting" | "connected" | "failed";
 
 interface CoreConnectionOptions {
-  /** `reconnected` is true when the main process restarted a core that had stopped. */
+  /** `reconnected` is true when this window was connected before, to a core that has since been restarted. */
   onConnected: (api: GitCrestApiClient, reconnected: boolean) => Promise<void>;
   onEvent: (api: GitCrestApiClient, event: GitCrestEventEnvelope, sequenceGap: boolean, isActive: () => boolean) => void;
 }
@@ -33,15 +33,19 @@ export function useCoreConnection({ onConnected, onEvent }: CoreConnectionOption
     let connectGeneration = 0;
     let unsubscribeFromEvents: (() => void) | undefined;
     let subscribingToEvents = false;
+    // The first core can report ready after this window loaded, so only a connection after a successful one is a reconnect.
+    let connectedBefore = false;
     const isSequenceGap = createEventSequenceTracker();
 
-    async function connect(reconnected: boolean) {
+    async function connect() {
       const generation = ++connectGeneration;
       const isStale = () => cancelled || generation !== connectGeneration;
       try {
         const bootstrap = await bootstrapApp();
         if (isStale()) return;
         const api = bootstrap.api;
+        const reconnected = connectedBefore;
+        connectedBefore = true;
         apiRef.current = api;
         setVersion(`${bootstrap.version.name} ${bootstrap.version.version} (API v${bootstrap.version.apiVersion})`);
         showStatus("connected", CONNECTED_STATUS);
@@ -72,7 +76,7 @@ export function useCoreConnection({ onConnected, onEvent }: CoreConnectionOption
     const unsubscribeFromCoreStatus = getGitCrestBridge()?.subscribeToCoreStatus?.((coreStatus) => {
       if (cancelled) return;
       if (coreStatus.state === "ready") {
-        void connect(true);
+        void connect();
         return;
       }
       // Requests to a stopped core cannot succeed; hold them until a restarted core is connected.
@@ -81,8 +85,8 @@ export function useCoreConnection({ onConnected, onEvent }: CoreConnectionOption
       showStatus(coreStatus.state === "restarting" ? "connecting" : "failed", coreStatus.message);
     });
 
-    reconnectRef.current = () => void connect(true);
-    void connect(false);
+    reconnectRef.current = () => void connect();
+    void connect();
     return () => {
       cancelled = true;
       reconnectRef.current = undefined;

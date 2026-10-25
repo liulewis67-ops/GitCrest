@@ -71,6 +71,12 @@ for (let batch = 1; completedIterations < totalIterations; batch += 1) {
 
 const startupMs = batchReports.flatMap(({ startup }) => startup.samplesMs);
 const firstHistoryFrameMs = batchReports.flatMap(({ firstHistoryFrame }) => firstHistoryFrame.samplesMs);
+// Batches saved before startup phases existed have none; a phase is summarized over the batches that marked it.
+const startupPhaseNames = [...new Set(batchReports.flatMap(({ startupPhases }) => Object.keys(startupPhases?.phases ?? {})))];
+const startupPhases = {
+  method: batchReports.find(({ startupPhases }) => startupPhases)?.startupPhases.method ?? null,
+  phases: Object.fromEntries(startupPhaseNames.map((phase) => [phase, batchReports.flatMap(({ startupPhases }) => startupPhases?.phases?.[phase]?.samplesMs ?? [])]).filter(([, values]) => values.length > 0).map(([phase, values]) => [phase, summarize(values)])),
+};
 const idleMemorySamplesBytes = batchReports.flatMap(({ idleProcessTreeMemory }) => idleProcessTreeMemory.samplesBytes);
 const repositoryMemorySamplesBytes = batchReports.flatMap(({ loadedRepositoryIdleProcessTreeMemory }) => loadedRepositoryIdleProcessTreeMemory.samplesBytes);
 const scrollSamples = batchReports.flatMap(({ work }) => work.iterations)
@@ -85,6 +91,7 @@ const report = {
   batchSize,
   batchReports: batchReports.map(({ _batchReportPath }) => _batchReportPath),
   startup: summarize(startupMs),
+  startupPhases,
   firstHistoryFrame: summarize(firstHistoryFrameMs),
   idleProcessTreeMemory: { sampleCount: idleMemorySamplesBytes.length, peakBytes: peakBytes(idleMemorySamplesBytes), samplesBytes: idleMemorySamplesBytes },
   loadedRepositoryIdleProcessTreeMemory: { sampleCount: repositoryMemorySamplesBytes.length, peakBytes: peakBytes(repositoryMemorySamplesBytes), samplesBytes: repositoryMemorySamplesBytes },

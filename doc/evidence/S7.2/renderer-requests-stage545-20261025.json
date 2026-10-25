@@ -1,0 +1,315 @@
+{
+  "stage": 545,
+  "generatedAt": "2026-10-25",
+  "host": "Windows 11 10.0.26300 x64",
+  "script": "doc/evidence/S7.2/renderer-request-probe-stage545.mjs",
+  "launchMode": "development entry (electron .) with the debug sidecar",
+  "note": "usedJsHeapMiB is the renderer main-thread JS heap (performance.memory with --enable-precise-memory-info), 5 s after each screen settles; worker heaps are not included. Development-entry numbers are indicative, not acceptance data.",
+  "before": {
+    "change": "HEAD e22c37c: @monaco-editor/react loads Monaco from cdn.jsdelivr.net",
+    "generatedAt": "2026-10-25T08:03:12.855Z",
+    "launchMode": "development entry (electron .) with the debug sidecar",
+    "runs": 3,
+    "samples": [
+      {
+        "startScreen": {
+          "assets": [
+            "index.html",
+            "index-Dz0fY7b0.js",
+            "index-BxxgrBPi.css"
+          ],
+          "lazyAssets": [],
+          "remoteRequests": [],
+          "usedJsHeapMiB": 19.9
+        },
+        "repositoryScreenWithDiff": {
+          "assets": [
+            "CommitWorkbench-Bo4tTRE3.js",
+            "FileDiffViewer-DpkhAutT.js",
+            "StructureOutline-Kic1hF8o.js",
+            "MonacoFileDiff-RzutS_ry.js",
+            "monaco-setup-BGB6eF97.js",
+            "register-DPlytYGJ.js",
+            "_.contribution-DWPqxfFs.js",
+            "editor.api-qHA9xKe9.js",
+            "editor-CVRqtHXc.css",
+            "grammar-loader-CYc2NhFu.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "lazyAssets": [
+            "MonacoFileDiff-RzutS_ry.js",
+            "monaco-setup-BGB6eF97.js",
+            "editor.api-qHA9xKe9.js",
+            "grammar-loader-CYc2NhFu.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "remoteRequests": [
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor/editor.main.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/nls.messages-loader.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-DO3azKX8.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-qLAYrEOP.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-EcChJV6a.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-D2OdxNBt.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/basic-languages/monaco.contribution.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor.api-CalNCsUg.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/workers-DcJshg-q.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor/editor.main.css",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/typescript-DfOrAzoV.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/tsMode-CZz1Umrk.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/editor.worker-Be8ye1pW.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/ts.worker-CMbG-7ft.js"
+          ],
+          "diffShowsBothSides": true,
+          "usedJsHeapMiB": 72.3
+        }
+      },
+      {
+        "startScreen": {
+          "assets": [
+            "index.html",
+            "index-Dz0fY7b0.js",
+            "index-BxxgrBPi.css"
+          ],
+          "lazyAssets": [],
+          "remoteRequests": [],
+          "usedJsHeapMiB": 20
+        },
+        "repositoryScreenWithDiff": {
+          "assets": [
+            "CommitWorkbench-Bo4tTRE3.js",
+            "FileDiffViewer-DpkhAutT.js",
+            "StructureOutline-Kic1hF8o.js",
+            "MonacoFileDiff-RzutS_ry.js",
+            "monaco-setup-BGB6eF97.js",
+            "register-DPlytYGJ.js",
+            "_.contribution-DWPqxfFs.js",
+            "editor.api-qHA9xKe9.js",
+            "editor-CVRqtHXc.css",
+            "grammar-loader-CYc2NhFu.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "lazyAssets": [
+            "MonacoFileDiff-RzutS_ry.js",
+            "monaco-setup-BGB6eF97.js",
+            "editor.api-qHA9xKe9.js",
+            "grammar-loader-CYc2NhFu.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "remoteRequests": [
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor/editor.main.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/nls.messages-loader.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-DO3azKX8.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-qLAYrEOP.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-EcChJV6a.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-D2OdxNBt.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/basic-languages/monaco.contribution.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor.api-CalNCsUg.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/workers-DcJshg-q.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor/editor.main.css",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/typescript-DfOrAzoV.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/tsMode-CZz1Umrk.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/editor.worker-Be8ye1pW.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/ts.worker-CMbG-7ft.js"
+          ],
+          "diffShowsBothSides": true,
+          "usedJsHeapMiB": 75.7
+        }
+      },
+      {
+        "startScreen": {
+          "assets": [
+            "index.html",
+            "index-Dz0fY7b0.js",
+            "index-BxxgrBPi.css"
+          ],
+          "lazyAssets": [],
+          "remoteRequests": [],
+          "usedJsHeapMiB": 20
+        },
+        "repositoryScreenWithDiff": {
+          "assets": [
+            "CommitWorkbench-Bo4tTRE3.js",
+            "FileDiffViewer-DpkhAutT.js",
+            "StructureOutline-Kic1hF8o.js",
+            "MonacoFileDiff-RzutS_ry.js",
+            "monaco-setup-BGB6eF97.js",
+            "register-DPlytYGJ.js",
+            "_.contribution-DWPqxfFs.js",
+            "editor.api-qHA9xKe9.js",
+            "editor-CVRqtHXc.css",
+            "grammar-loader-CYc2NhFu.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "lazyAssets": [
+            "MonacoFileDiff-RzutS_ry.js",
+            "monaco-setup-BGB6eF97.js",
+            "editor.api-qHA9xKe9.js",
+            "grammar-loader-CYc2NhFu.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "remoteRequests": [
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor/editor.main.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/nls.messages-loader.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-DO3azKX8.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-qLAYrEOP.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-EcChJV6a.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/monaco.contribution-D2OdxNBt.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/basic-languages/monaco.contribution.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor.api-CalNCsUg.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/workers-DcJshg-q.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/editor/editor.main.css",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/typescript-DfOrAzoV.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/tsMode-CZz1Umrk.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/editor.worker-Be8ye1pW.js",
+            "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/assets/ts.worker-CMbG-7ft.js"
+          ],
+          "diffShowsBothSides": true,
+          "usedJsHeapMiB": 71.9
+        }
+      }
+    ]
+  },
+  "after": {
+    "change": "stage 545: loader.config({ monaco }) with the bundled core and read-only features",
+    "generatedAt": "2026-10-25T08:04:14.549Z",
+    "launchMode": "development entry (electron .) with the debug sidecar",
+    "runs": 3,
+    "samples": [
+      {
+        "startScreen": {
+          "assets": [
+            "index.html",
+            "index-Dpa7UkXo.js",
+            "index-BxxgrBPi.css"
+          ],
+          "lazyAssets": [],
+          "remoteRequests": [],
+          "usedJsHeapMiB": 19.2
+        },
+        "repositoryScreenWithDiff": {
+          "assets": [
+            "CommitWorkbench-DHZt-pZt.js",
+            "FileDiffViewer-D6y7a6sM.js",
+            "StructureOutline-BS4zbPJa.js",
+            "MonacoFileDiff-DnCTvs9w.js",
+            "monaco-setup-b5FdkRHj.js",
+            "monaco-setup-CxRbBOrQ.css",
+            "register-Az3MiVZR.js",
+            "_.contribution-nUjAapWx.js",
+            "grammar-loader-J2EzHDrA.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "editor.worker-q1rhPORV.js",
+            "typescript-EZcusLRW.js",
+            "tree-sitter-typescript-CPalt9yc.wasm",
+            "codicon-DF1abBS2.ttf"
+          ],
+          "lazyAssets": [
+            "MonacoFileDiff-DnCTvs9w.js",
+            "monaco-setup-b5FdkRHj.js",
+            "monaco-setup-CxRbBOrQ.css",
+            "grammar-loader-J2EzHDrA.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "editor.worker-q1rhPORV.js",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "remoteRequests": [],
+          "diffShowsBothSides": true,
+          "usedJsHeapMiB": 64.3
+        }
+      },
+      {
+        "startScreen": {
+          "assets": [
+            "index.html",
+            "index-Dpa7UkXo.js",
+            "index-BxxgrBPi.css"
+          ],
+          "lazyAssets": [],
+          "remoteRequests": [],
+          "usedJsHeapMiB": 19.9
+        },
+        "repositoryScreenWithDiff": {
+          "assets": [
+            "CommitWorkbench-DHZt-pZt.js",
+            "FileDiffViewer-D6y7a6sM.js",
+            "StructureOutline-BS4zbPJa.js",
+            "MonacoFileDiff-DnCTvs9w.js",
+            "monaco-setup-b5FdkRHj.js",
+            "monaco-setup-CxRbBOrQ.css",
+            "register-Az3MiVZR.js",
+            "_.contribution-nUjAapWx.js",
+            "grammar-loader-J2EzHDrA.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "editor.worker-q1rhPORV.js",
+            "typescript-EZcusLRW.js",
+            "tree-sitter-typescript-CPalt9yc.wasm",
+            "codicon-DF1abBS2.ttf"
+          ],
+          "lazyAssets": [
+            "MonacoFileDiff-DnCTvs9w.js",
+            "monaco-setup-b5FdkRHj.js",
+            "monaco-setup-CxRbBOrQ.css",
+            "grammar-loader-J2EzHDrA.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "editor.worker-q1rhPORV.js",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "remoteRequests": [],
+          "diffShowsBothSides": true,
+          "usedJsHeapMiB": 65.7
+        }
+      },
+      {
+        "startScreen": {
+          "assets": [
+            "index.html",
+            "index-Dpa7UkXo.js",
+            "index-BxxgrBPi.css"
+          ],
+          "lazyAssets": [],
+          "remoteRequests": [],
+          "usedJsHeapMiB": 20
+        },
+        "repositoryScreenWithDiff": {
+          "assets": [
+            "CommitWorkbench-DHZt-pZt.js",
+            "FileDiffViewer-D6y7a6sM.js",
+            "StructureOutline-BS4zbPJa.js",
+            "MonacoFileDiff-DnCTvs9w.js",
+            "monaco-setup-b5FdkRHj.js",
+            "monaco-setup-CxRbBOrQ.css",
+            "register-Az3MiVZR.js",
+            "_.contribution-nUjAapWx.js",
+            "grammar-loader-J2EzHDrA.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "editor.worker-q1rhPORV.js",
+            "typescript-EZcusLRW.js",
+            "tree-sitter-typescript-CPalt9yc.wasm",
+            "codicon-DF1abBS2.ttf"
+          ],
+          "lazyAssets": [
+            "MonacoFileDiff-DnCTvs9w.js",
+            "monaco-setup-b5FdkRHj.js",
+            "monaco-setup-CxRbBOrQ.css",
+            "grammar-loader-J2EzHDrA.js",
+            "web-tree-sitter-BJMn93yM.wasm",
+            "editor.worker-q1rhPORV.js",
+            "tree-sitter-typescript-CPalt9yc.wasm"
+          ],
+          "remoteRequests": [],
+          "diffShowsBothSides": true,
+          "usedJsHeapMiB": 65.9
+        }
+      }
+    ]
+  }
+}

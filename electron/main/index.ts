@@ -12,6 +12,16 @@ import { getLinuxUpdateManifestPublicKey, isUpdateFeedConfigured } from "./updat
 import { requireLinuxUpdateInfoSignature } from "./update-manifest-signature";
 import WebSocket from "ws";
 
+// Startup phase marks for the desktop benchmark, in epoch milliseconds; kept only when the benchmark asks for them.
+const startupPhases: Record<string, number> | undefined = process.env.GITCREST_BENCH_STARTUP_PHASES === "1"
+  ? { mainProcessStart: performance.timeOrigin }
+  : undefined;
+if (startupPhases) Object.assign(globalThis, { gitcrestStartupPhases: startupPhases });
+
+function markStartupPhase(name: string): void {
+  if (startupPhases && startupPhases[name] === undefined) startupPhases[name] = performance.timeOrigin + performance.now();
+}
+
 let mainWindow: BrowserWindow | undefined;
 let sidecarConnection: SidecarConnection | undefined;
 let finishingQuit = false;
@@ -29,6 +39,11 @@ interface DiffWindowRequest {
 }
 interface ConflictWindowRequest { repoId: string; taskId: string }
 const windowAccessByContentsId = new Map<number, WindowAccess>();
+// One Diff window per repository: a further Diff opens as a tab there rather than as another renderer process.
+// Its requests wait here until the window takes them, so none are lost while it is still loading.
+const diffWindowsByRepoId = new Map<string, BrowserWindow>();
+const pendingDiffRequestsByContentsId = new Map<number, DiffWindowRequest[]>();
+const MAX_PENDING_DIFF_REQUESTS = 100;
 
 interface EventStream {
   webContents: WebContents;
@@ -384,7 +399,30 @@ ipcMain.handle("gitcrest:open-diff-window", async (event, value: unknown) => {
     throw new Error("Only the main window can open a Diff window.");
   }
   const request = parseDiffWindowRequest(value);
+  const diffWindow = diffWindowsByRepoId.get(request.repoId);
+  if (diffWindow && !diffWindow.isDestroyed()) {
+    const contentsId = diffWindow.webContents.id;
+    const pending = pendingDiffRequestsByContentsId.get(contentsId) ?? [];
+    pending.push(request);
+    pendingDiffRequestsByContentsId.set(contentsId, pending.slice(-MAX_PENDING_DIFF_REQUESTS));
+    diffWindow.webContents.send("gitcrest:diff-window-requests-pending");
+    // A window that is still loading shows itself when ready.
+    if (diffWindow.isVisible()) {
+      if (diffWindow.isMinimized()) diffWindow.restore();
+      diffWindow.focus();
+    }
+    return;
+  }
   await createWindow("readOnly", request);
+});
+
+ipcMain.handle("gitcrest:take-diff-window-requests", (event) => {
+  if (windowAccessByContentsId.get(event.sender.id) !== "readOnly") {
+    throw new Error("Only a Diff window can take Diff requests.");
+  }
+  const pending = pendingDiffRequestsByContentsId.get(event.sender.id) ?? [];
+  pendingDiffRequestsByContentsId.delete(event.sender.id);
+  return pending;
 });
 
 ipcMain.handle("gitcrest:open-conflict-window", async (event, value: unknown) => {
@@ -423,16 +461,21 @@ function parseDiffWindowRequest(value: unknown): DiffWindowRequest {
   return request as DiffWindowRequest;
 }
 
+/**
+ * Starts the first core. It runs beside the first window's renderer load rather than before it; the window
+ * shows the starting status and connects when the core reports ready, as it does after a restart.
+ */
+async function startInitialCore(): Promise<void> {
+  sidecarConnection = await startSidecar();
+  markStartupPhase("sidecarReady");
+  if (finishingQuit) return;
+  coreGeneration = 1;
+  publishCoreStatus({ state: "ready", generation: coreGeneration });
+}
+
 async function createWindow(windowAccess: WindowAccess = "readWrite", diffRequest?: DiffWindowRequest, conflictRequest?: ConflictWindowRequest): Promise<void> {
-  if (!sidecarConnection) {
-    if (coreStatus.state === "failed") throw new Error(coreStatus.message);
-    // During a restart the window opens at once and connects when the core reports ready.
-    if (coreGeneration === 0) {
-      sidecarConnection = await startSidecar();
-      coreGeneration = 1;
-      coreStatus = { state: "ready", generation: coreGeneration };
-    }
-  }
+  // While the core starts or restarts, the window opens at once and connects when the core reports ready.
+  if (!sidecarConnection && coreStatus.state === "failed") throw new Error(coreStatus.message);
   const secondaryWindow = Boolean(diffRequest || conflictRequest);
 
   const window = new BrowserWindow({
@@ -459,7 +502,12 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     },
   });
 
+  if (windowAccess === "readWrite") {
+    markStartupPhase("windowCreated");
+    window.webContents.once("dom-ready", () => markStartupPhase("domContentLoaded"));
+  }
   window.once("ready-to-show", () => {
+    if (windowAccess === "readWrite") markStartupPhase("readyToShow");
     window.show();
   });
   // The drawn maximize button swaps to a restore icon, however the window got maximized.
@@ -484,9 +532,14 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
 
   const contentsId = window.webContents.id;
   windowAccessByContentsId.set(contentsId, windowAccess);
+  if (diffRequest) diffWindowsByRepoId.set(diffRequest.repoId, window);
   window.webContents.once("destroyed", () => {
     stopEventStream(contentsId);
     windowAccessByContentsId.delete(contentsId);
+    pendingDiffRequestsByContentsId.delete(contentsId);
+    if (diffRequest && diffWindowsByRepoId.get(diffRequest.repoId) === window) {
+      diffWindowsByRepoId.delete(diffRequest.repoId);
+    }
     if (mainWindow === window) {
       mainWindow = undefined;
     }
@@ -512,7 +565,12 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
   }
 }
 
-app.whenReady().then(() => createWindow()).catch((error: unknown) => {
+markStartupPhase("mainModuleLoaded");
+// A first core that cannot start still ends the app with its error, which carries the core's last output.
+app.whenReady().then(() => {
+  markStartupPhase("appReady");
+  return Promise.all([startInitialCore(), createWindow()]);
+}).catch((error: unknown) => {
   if (finishingQuit) return;
   const message = error instanceof Error ? error.message : String(error);
   dialog.showErrorBox("GitCrest could not start", message);

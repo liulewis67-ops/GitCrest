@@ -11,6 +11,13 @@ export interface GitCrestSidecarConnection {
 
 export type GitCrestEventEnvelope = components["schemas"]["EventEnvelope"];
 
+export interface GitCrestDiffWindowRequest {
+  repoId: string;
+  path: string;
+  scope: "workingTree" | "index" | "commit";
+  commitOid?: string;
+}
+
 /** A language plugin folder as the main process read it: a checked manifest, or why it was rejected. */
 export interface GitCrestLanguagePluginEntry {
   folder: string;
@@ -40,12 +47,10 @@ export interface GitCrestBridge {
   getSidecarConnection: () => Promise<GitCrestSidecarConnection>;
   chooseRepository: () => Promise<string | undefined>;
   chooseCloneParent: () => Promise<string | undefined>;
-  openDiffWindow: (request: {
-    repoId: string;
-    path: string;
-    scope: "workingTree" | "index" | "commit";
-    commitOid?: string;
-  }) => Promise<void>;
+  /** Opens the repository's Diff window, or adds the file as a tab when one is already open. */
+  openDiffWindow: (request: GitCrestDiffWindowRequest) => Promise<void>;
+  /** Diff windows only: further Diffs opened for this window's repository. */
+  subscribeToDiffWindowRequests?: (listener: (requests: GitCrestDiffWindowRequest[]) => void) => () => void;
   openConflictWindow: (request: { repoId: string; taskId: string }) => Promise<void>;
   /** Opens the system file manager with the file selected. */
   showItemInFolder?: (path: string) => Promise<void>;

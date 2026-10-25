@@ -1,5 +1,20 @@
-import type { Monaco } from "@monaco-editor/react";
+import { loader, type Monaco } from "@monaco-editor/react";
+import * as monaco from "../../../../node_modules/monaco-editor/esm/vs/editor/editor.api.js";
+// The Diff views are read-only, so only the editor features a reader uses are registered on the bundled core.
+import "../../../../node_modules/monaco-editor/esm/vs/features/codicon/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/diffEditor/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/find/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/clipboard/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/contextmenu/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/folding/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/bracketMatching/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/wordHighlighter/register.js";
+import "../../../../node_modules/monaco-editor/esm/vs/features/readOnlyMessage/register.js";
 import { hexWithAlpha, type AppearanceSnapshot, type ThemePalette } from "../../settings";
+
+// Left alone, @monaco-editor/react fetches a second, complete Monaco from a CDN, which also fails offline.
+// Every Diff uses the bundled one instead: the instance the language loaders below register with.
+loader.config({ monaco });
 
 const LANGUAGE_LOADERS: Record<string, () => Promise<unknown>> = {
   bat: () => import("../../../../node_modules/monaco-editor/esm/vs/languages/definitions/bat/register.js"),

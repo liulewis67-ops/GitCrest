@@ -27,7 +27,11 @@ export default defineConfig({
   renderer: {
     root: ".",
     plugins: [react(), tailwindcss()],
+    // electron-vite leaves the renderer unminified by default; the packaged app parses and compiles every byte of it.
+    // Source maps stay off so they never ship in the package.
     build: {
+      minify: "esbuild",
+      sourcemap: false,
       rollupOptions: {
         input: {
           index: resolve(__dirname, "index.html"),

@@ -5840,3 +5840,76 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 交付：新增 `doc/electron-performance-optimization-plan.md`，汇总 S7.2 桌面侧研究结论（空白 Electron 窗口 Working Set 下界约 292 MiB、应用增量约 90 MiB；约 55fps 节奏与 Chromium GPU VSync worker 同步而 DWM 为 60Hz；冷启动 P95 由两个相邻离群样本决定）与已否决的启动参数（`--disable-gpu`、`--in-process-gpu`、`--disable-frame-rate-limit`、`--disable-gpu-vsync`）；列出待产品/架构决定的内存计数口径、帧率判定方式和冷启动离群处理（D1–D3）；按小阶段规划 P1（渲染产物压缩、窗口与 sidecar 并行启动、复用 Diff 窗口、首屏不加载 Monaco/tree-sitter）、P2（VSync 根因与第二台机器/新版 Electron 对照）、P3（结构性内存候选，依赖 D1）、P4（启动分段计时与杀毒排除对照）。代码核对新发现：Electron 构建的 renderer 产物未压缩（入口约 900 KB、gzip 210 KB；小阶段 97 的 272.65 KB 为 `pnpm frontend:build` 产物，不代表发行包）；首次启动时主窗口在 sidecar 就绪后才创建；每次打开 Diff 窗口都会新建 `BrowserWindow`。同步 `00-README.md` 文档清单、`10-electron-rust-architecture.md` §7 与本文件第 12 节的指向。
 - 验证：文档与代码、构建产物核对；未运行构建、测试或基准。
 - 限制/后续：方案中的预期收益均未测量；各项按第 2 节规则作为独立小阶段实施并以 20 轮发行包基准判定。阈值与判定口径未修改，待 D1–D3 决定。
+
+### S7.2 P1.1 压缩 Electron renderer 产物 — 小阶段 542
+- 状态：已完成（实现；未做 20 轮发行包复测，S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：`electron.vite.config.ts` 的 renderer 构建显式设置 `minify: "esbuild"`、`sourcemap: false`（electron-vite 默认不压缩 renderer）。main/preload 未改。
+- 结果（`electron-vite build` 产物）：入口 chunk 900,503 → 570,104 B（gzip 205,838 → 173,260 B）；Monaco `editor.api` 5,379,237 → 2,773,523 B；`editor.worker` 589,404 → 275,493 B；renderer 全部 JS 11.05 → 5.74 MB；产物中无 `.map` 文件与 `sourceMappingURL`。
+- 验证：见小阶段 546 的 `pnpm check` 记录。
+- 证据：`doc/evidence/S7.2/renderer-bundle-size-stage542-20261025.json`。
+- 限制/后续：方案的通过规则还要求冷启动 P50 与空闲 WS 不变差，需 P1 全部完成后的 20 轮发行包复测；安装包未重新打包测量。
+- 实施 commit：实现与台账同一 commit。
+
+### S7.2 P1.2 主窗口与 sidecar 并行启动 — 小阶段 543
+- 状态：已完成（实现；未做 20 轮发行包复测，S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：`app.whenReady` 后同时调用 `startInitialCore()` 与 `createWindow()`；`createWindow` 不再等待 sidecar，核心未就绪时窗口显示“Starting local GitCrest core...”，就绪后经 `gitcrest:core-status` 的 ready 通知连接（与重启路径相同）。首个 core 启动失败仍弹出“GitCrest could not start”并退出，错误信息照旧包含 core 最后的 stderr 输出。`useCoreConnection` 改为“本窗口此前已成功连接过”才算重连，使首个 ready 通知到达的窗口仍恢复保存的工作区。
+- 验证：新增单元测试覆盖“窗口先于首个 core 就绪加载 → 显示启动中 → ready 后连接并以非重连方式恢复工作区”；开发入口 3 次启动的分段计时（小阶段 546）显示 sidecar 在窗口创建后约 80–170ms 就绪、早于 DOMContentLoaded，已完全与 renderer 加载重叠。其余见小阶段 546 的 `pnpm check` 记录。
+- 证据：`electron/main/index.ts`、`src/app/use-core-connection.ts`、`tests/unit/core-connection.test.tsx`。
+- 限制/后续：开发入口使用 debug sidecar，计时不作验收；节省量需 20 轮发行包冷启动复测确认。sidecar 启动失败路径未用失败 sidecar 重新截图核对（错误处理分支未改）。
+- 实施 commit：实现与台账同一 commit。
+
+### S7.2 P1.3 同一仓库复用 Diff 窗口 — 小阶段 544
+- 状态：已完成（实现；未测量多 Diff 窗口 WS，S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：主进程按 `repoId` 记录已开的 Diff 窗口；再次打开同一仓库的 Diff 时，把请求放入该窗口的待取队列（上限 100），发送 `gitcrest:diff-window-requests-pending` 并聚焦窗口，不再新建 `BrowserWindow`。Diff 窗口通过 `gitcrest:take-diff-window-requests`（仅只读窗口可调用）取走请求，新增或切换到对应 Tab；窗口仍在加载时到达的请求不会丢失，与初始兄弟 Tab 合并且保持最后请求的 Tab 为当前 Tab；超过 100 个 Tab 时先移除最早的其他 Tab。只读 token 与权限范围不变。UI 规范 `05-uiux-spec.md` §3.4 补充该行为。
+- 验证：新增单元测试 `tests/unit/diff-window-reuse.test.tsx`（加载期间到达的请求被保留并激活；已开 Tab 只切换不重复；其他仓库请求被忽略）；`tests/e2e/desktop.test.ts` 增加“再次打开同仓库 Diff 只新增 Tab、窗口总数仍为 2”。其余见小阶段 546 的 `pnpm check` 记录。
+- 证据：`electron/main/index.ts`、`electron/preload/index.ts`、`src/api/bridge.ts`、`src/features/diff/ui/DiffWindow.tsx`、`tests/unit/diff-window-reuse.test.tsx`、`tests/e2e/desktop.test.ts`。
+- 限制/后续：方案的通过规则要求“打开 3 个 Diff 后的 WS 前后对比”，尚未测量。不同仓库仍各开一个窗口。
+- 实施 commit：实现与台账同一 commit。
+
+### S7.2 P1.4 首屏懒加载核对，Diff 改用内置 Monaco — 小阶段 545
+- 状态：已完成（核对与修复；S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：用请求探针核对开发入口：启动页只加载入口 JS/CSS 与 `version`、`repositories` 两个 API 请求，无 Monaco、tree-sitter 或 `.wasm`（P1.4 成立）。同时发现 Diff 编辑器实际渲染的是 `@monaco-editor/react` 运行时从 `cdn.jsdelivr.net` 拉取的第二份 Monaco 0.55.1（15 个请求，含 TypeScript 语言服务与 `ts.worker`），打包的 Monaco 0.57 只用于注册语言；断网时 Diff 无法显示，renderer 同时持有两份 Monaco。`monaco-setup.ts` 改为 `loader.config({ monaco })` 使用打包的 `editor.api`，并只注册只读查看所需的编辑器功能（codicon、diffEditor、find、clipboard、contextmenu、folding、bracketMatching、wordHighlighter、readOnlyMessage）。
+- 结果（开发入口，探针各 3 次，`--enable-precise-memory-info`）：启动页修复前后均只有 `index.html`、入口 JS、入口 CSS 三个本地资源，renderer 主线程 JS heap 19.2–20.0 MiB。打开含 1 个修改文件的仓库并显示其 Diff 后：修复前外网请求 15 个、heap 71.9–75.7 MiB；修复后外网请求 0、heap 64.3–65.9 MiB，两侧内容均正常显示（heap 不含 worker，修复前另有 TypeScript worker）。Monaco 核心与功能合并在 `monaco-setup` chunk（3,057,999 B，gzip 791,117 B），仅在首个 Diff 时加载。
+- 验证：见小阶段 546 的 `pnpm check` 记录。
+- 证据：`src/features/diff/ui/monaco-setup.ts`、`doc/evidence/S7.2/renderer-request-probe-stage545.mjs`、`doc/evidence/S7.2/renderer-requests-stage545-20261025.json`。
+- 限制/后续：开发入口数据不作验收；发行包空闲与首个 Diff 后的 renderer 内存需在 20 轮复测中记录。移除的 Monaco 功能（如补全、悬停、代码操作）对只读 Diff 无用，若需某项可在 `monaco-setup.ts` 增加对应 `features/*/register.js`。
+- 实施 commit：实现与台账同一 commit。
+
+### S7.2 P4.1 启动分段计时 — 小阶段 546
+- 状态：已完成（测量基础设施；未做 20 轮发行包复测，S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：主进程在 `GITCREST_BENCH_STARTUP_PHASES=1` 时记录 `mainProcessStart`、`mainModuleLoaded`、`appReady`、`windowCreated`、`sidecarReady`、`domContentLoaded`、`readyToShow`（epoch 毫秒，挂在主进程 `globalThis.gitcrestStartupPhases`），未设置时不记录。`desktop-benchmark.mjs` 默认模式的冷启动为应用设置该变量，读取后与 renderer 显示“Core connected”的时刻一起换算为“距本轮 launch 的毫秒数”，报告新增 `startupPhases`；`desktop-benchmark-batches.mjs` 合并各批的分段（旧批次无分段时跳过）。
+- 结果（开发入口、debug sidecar，3 次，仅作参考）：`appReady` 354–432ms，`windowCreated` 443–546ms，`sidecarReady` 519–718ms，`domContentLoaded` 918–1,128ms，“Core connected” 1,448–1,516ms。即窗口创建到 DOMContentLoaded 约 480–580ms、DOMContentLoaded 到连接约 390–530ms，是中位数的主要部分。
+- 验证：`node --check` 两个基准脚本通过；其余见下方 `pnpm check` 记录。
+- 证据：`electron/main/index.ts`、`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-benchmark-batches.mjs`。
+- 限制/后续：发行包 20 轮分段尚未采集；P4.3（V8 code cache）仍取决于发行包分段是否显示编译在关键路径上。
+- 本轮 `pnpm check`（小阶段 542–546 合并改动）：前端边界检查、`pnpm build`、`cargo fmt --check`、`cargo clippy -D warnings`、`cargo build` 通过；Vitest 78 个文件 439/439 通过；`cargo test` 190/190 通过；Electron E2E 首轮 37/38，失败的 `tests/e2e/desktop.test.ts` 是本次新增步骤在主窗口切换了文件，使其后对 Monaco hunk 视图的既有断言落空（新增的 Diff 窗口复用断言本身通过）；补上切回 `src/example.ts` 的 Monaco 视图后，该用例单独连续 2 次通过。其余 7 个 E2E 文件未在修正后重跑（修正只改该测试文件）。
+- 实施 commit：实现与台账同一 commit。
+
+### S7.2 P1 后发行包 20 轮复测 — 小阶段 547
+- 状态：已完成（复测记录；未改阈值或口径，S7.2 保持待验收）
+- 日期：2026-10-25
+- 交付：
+  - 打包：`pnpm electron:build`，再 `electron-builder --win nsis --x64 --publish never -c.npmRebuild=false`。本机没有 Python，electron-builder 的 native rebuild 在 `tree-sitter-c-sharp` 的 node-gyp 处失败；应用只使用 tree-sitter 的 `.wasm`，主进程外置依赖（`ws`、`electron-updater`）为纯 JS，故本次以命令行关闭 rebuild，仓库配置未改。
+  - fixture：原 `%TEMP%\gitcrest-s7.2-100k-fixture` 已不存在，用 `node scripts/performance/benchmark.mjs prepare` 重新生成（100,000 提交、1,000 行工作区 diff）。
+  - 基准脚本修复：自 2026-10-18（`fd59a12`）起 UI 语言跟随系统，中文系统下等待 “Core connected” 必然超时；自 2026-10-22（`00f3b19`）起仓库打开后默认显示 Workspace（Changes）视图，提交图在 History 视图，等待 `.commitGraphEntry` 也会超时。即 10-18 之后桌面基准在本机已无法运行。`desktop-benchmark.mjs` 与 `desktop-frame-diagnostic.mjs` 改为以 `--lang=en-US` 启动（与 E2E 相同），打开仓库后点击 “History” 视图标签再等待提交图（cold、memory、scroll 三处共用 `openFirstRepositoryHistory`）。`cache-lifecycle` 模式未改也未运行。
+  - 运行：设置 `GITCREST_BENCH_CRASH_DUMPS_DIR`，`desktop-benchmark-batches.mjs` 4×5=20 轮（冷启动含分段、首个历史帧、滚动），随后 `GITCREST_BENCH_MODE=memory` 20 轮（无追踪）。两者 20/20 成功，无崩溃转储。
+- 结果（括号内为小阶段 536/537）：
+  - 冷启动 P50 1,268ms（1,114）/ P95 1,439ms（1,772）/ 最大 1,499ms（2,606）；20 个样本均在 1.19–1.50s，本轮无离群。分段 P50（距 launch）：`appReady` 316、`windowCreated` 403、`sidecarReady` 480、`domContentLoaded` 870、“Core connected” 1,268ms，即窗口创建到 DOMContentLoaded 约 470ms、DOMContentLoaded 到连接约 400ms，sidecar 在 DOMContentLoaded 前约 390ms 就绪。
+  - 首个历史帧 P50 607ms / P95 769ms（301/479）；现含打开仓库后点击 History 标签，并在此前先渲染 Workspace 视图，口径与 536 不同。
+  - 滚动 compositor 呈现帧 P5：20 轮 59.77–59.80fps，汇总 P5 59.77（55.33）；空闲 RAF P5 59.52（55.25）。
+  - 内存（memory 模式，P95）：空闲 Working Set 393.8MiB（384.2）、Private Working Set 115.1MiB（108.8）、Private Bytes 295.5MiB（281.5）；加载后 Working Set 492.7MiB（452.9）、Private Working Set 183.1MiB（165.9）、Private Bytes 396.8MiB（354.2）。加载后增量主要在 renderer（均值 Private Bytes 96.1 → 115.3MiB）与 GPU（115.2 → 128.9MiB），对应现在打开仓库时先渲染 1,000 行文件的 Monaco Diff。
+  - 工作中内存 P95 525.8MiB（515.9，追踪开启，仅诊断）；安装包 108.19MiB（103.8）。
+- 判定：
+  - 冷启动 P95 1.44s <1.5s，本轮达标；P50 比 536 慢约 150ms。首个历史帧 P95 <1s 达标。安装包 <150MB 达标。
+  - 帧率 P5 59.77fps，按固定 60fps 仍差 0.23fps；按 D2 建议口径（DWM 刷新率 60Hz 的 95%）则达标。小阶段 536 的逐轮数据显示第 1–8 轮约 59.3–59.7fps、第 9–20 轮降到约 55.4fps，说明约 55fps 是该次运行中途出现的宿主状态，而非固定特征；本轮 GPU 驱动与 10-10 证据相同（32.0.16.1088），交流电供电、电源计划 “Legion Quiet Mode”，10-14 时的电源状态无记录，原因未确认。
+  - 内存仍按 Working Set 口径未达标（空闲 >250MB）；口径待 D1。
+  - P1 各项“不变差”的通过规则无法用本轮与 536/537 对比判定：10-14 之后应用有大量改动（多语言、工作区视图重组、仓库标签页等），且仓库打开流程已变。需同日、同脚本对 P1 之前的提交（`e22c37c`）打包做 A/B 基线。
+- 发现：安装包内 `app.asar` 148MB，其中 `node_modules/monaco-editor` 96MB、tree-sitter 各包约 95MB（`tree-sitter-c-sharp` 65MB），而 renderer 已打包所需内容；因这些包列在 `dependencies` 而被 electron-builder 一并打入。未在本阶段修改。
+- 证据：`doc/evidence/S7.2/desktop-win32-p1-remeasure-stage547-20261025.json`（及 `.batches/`）、`doc/evidence/S7.2/desktop-win32-p1-memory-notrace-stage547-20261025.json`、`scripts/performance/desktop-benchmark.mjs`、`scripts/performance/desktop-frame-diagnostic.mjs`。
+- 限制/后续：做 `e22c37c` 的同日 A/B 基线后再判定 P1.1–P1.4 的通过规则；P1.3 的“打开 3 个 Diff 后 WS”仍未测；帧率需在已知电源状态下复测以确认宿主因素（P2.1/D2）；`dependencies` 中仅 renderer 使用的包可移出打包以缩小安装包（新候选，未立项）。
+- 实施 commit：脚本修复、证据与台账同一 commit。

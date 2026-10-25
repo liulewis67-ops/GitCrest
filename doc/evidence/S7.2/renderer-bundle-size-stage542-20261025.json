@@ -1,0 +1,40 @@
+{
+  "stage": 542,
+  "generatedAt": "2026-10-25",
+  "method": "`npx electron-vite build`, then file sizes of out/renderer/assets; gzip is Node zlib gzipSync at its default level. Source maps: none emitted (no .map files, no sourceMappingURL).",
+  "host": "Windows 11 10.0.26300 x64",
+  "builds": {
+    "before": {
+      "commit": "e22c37c (HEAD, renderer not minified)",
+      "entryChunk": { "file": "index-CfO5iYVR.js", "bytes": 900503, "gzipBytes": 205838, "lines": 18712 },
+      "monacoEditorApi": { "file": "editor.api-DD9rcqCg.js", "bytes": 5379237, "gzipBytes": 1012303 },
+      "monacoEditorWorker": { "file": "editor.worker-DD3EztIk.js", "bytes": 589404, "gzipBytes": 117293 },
+      "grammarLoader": { "file": "grammar-loader-CYMm-9Xd.js", "bytes": 160738, "gzipBytes": 33887 },
+      "entryCss": { "file": "index-Beg1lZ8p.css", "bytes": 205923, "gzipBytes": 29519 },
+      "allAssetsBytes": 26914299,
+      "allJsBytes": 11050305
+    },
+    "afterMinify": {
+      "change": "stage 542: renderer.build.minify = \"esbuild\", sourcemap = false",
+      "entryChunk": { "file": "index-DCYIILEh.js", "bytes": 570104, "gzipBytes": 173260, "lines": 27 },
+      "monacoEditorApi": { "file": "editor.api-BnUimk2U.js", "bytes": 2773523, "gzipBytes": 720390 },
+      "monacoEditorWorker": { "file": "editor.worker-q1rhPORV.js", "bytes": 275493, "gzipBytes": 82881 },
+      "grammarLoader": { "file": "grammar-loader-Bkj232el.js", "bytes": 83482, "gzipBytes": 21802 },
+      "entryCss": { "file": "index-BxxgrBPi.css", "bytes": 170269, "gzipBytes": 27842 },
+      "allAssetsBytes": 21500368,
+      "allJsBytes": 5744231
+    },
+    "afterLocalMonaco": {
+      "change": "stage 545: @monaco-editor/react uses the bundled Monaco core plus read-only editor features (editor.api now lives in the monaco-setup chunk)",
+      "entryChunk": { "file": "index-Dpa7UkXo.js", "bytes": 570631, "gzipBytes": 173442 },
+      "monacoCoreAndFeatures": { "file": "monaco-setup-b5FdkRHj.js", "bytes": 3057999, "gzipBytes": 791117 },
+      "monacoEditorWorker": { "file": "editor.worker-q1rhPORV.js", "bytes": 275493, "gzipBytes": 82881 },
+      "allAssetsBytes": 21502165,
+      "allJsBytes": 5746028
+    }
+  },
+  "notes": [
+    "Before stage 545 the Diff editors rendered a second Monaco (0.55.1) that @monaco-editor/react fetched from cdn.jsdelivr.net at run time; those bytes are not in the package and are not counted above.",
+    "The installer size was not rebuilt for this stage."
+  ]
+}

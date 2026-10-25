@@ -172,6 +172,20 @@ describe("desktop startup E2E", () => {
       // One file left needs no tab strip; the header still names it.
       await diffWindow.locator(".diffWindowTabs").waitFor({ state: "detached" });
       expect(await diffTitle.getAttribute("title")).toBe("src/example.ts");
+      // A further Diff for the same repository opens as a tab in this window, not as another window.
+      await window.getByRole("button", { name: "modified src/other.ts" }).click();
+      await window.getByRole("button", { name: "Open in Diff window" }).click();
+      await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/other.ts" }).waitFor({ state: "visible" });
+      await expect.poll(() => diffTitle.getAttribute("title")).toBe("src/other.ts");
+      expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(2);
+      await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/example.ts" }).click();
+      await diffWindow.getByRole("button", { name: "Close src/other.ts tab" }).click();
+      await diffWindow.locator(".diffWindowTabs").waitFor({ state: "detached" });
+      // Back in the main window, return to src/example.ts in the Monaco hunk view that the checks below expect.
+      // The line-selection mode stays on; the hunk view starts in Split for each file.
+      await window.getByRole("button", { name: "modified src/example.ts" }).click();
+      await window.getByRole("button", { name: "Monaco view" }).click();
+      await window.locator(".monacoDiffHunk .view-lines").first().waitFor({ state: "visible", timeout: 15_000 });
       await diffWindow.getByRole("button", { name: "Unified" }).click();
       expect(await diffWindow.locator(".unifiedDiff").count()).toBe(1);
       // Blame stays on across tabs and layouts until it is turned off.

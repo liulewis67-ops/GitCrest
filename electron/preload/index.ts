@@ -50,6 +50,17 @@ const api = {
   },
   openDiffWindow: (request: DiffWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-diff-window", request),
   openConflictWindow: (request: ConflictWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-conflict-window", request),
+  /** Diff windows only: further Diffs the main window opened for this repository, including any sent before this subscribed. */
+  subscribeToDiffWindowRequests: (listener: (requests: DiffWindowRequest[]) => void): (() => void) => {
+    const takeRequests = (): void => {
+      void ipcRenderer.invoke("gitcrest:take-diff-window-requests").then((requests: DiffWindowRequest[]) => {
+        if (requests.length > 0) listener(requests);
+      }, () => undefined);
+    };
+    ipcRenderer.on("gitcrest:diff-window-requests-pending", takeRequests);
+    takeRequests();
+    return () => ipcRenderer.removeListener("gitcrest:diff-window-requests-pending", takeRequests);
+  },
   showItemInFolder: (path: string): Promise<void> => ipcRenderer.invoke("gitcrest:show-item-in-folder", path),
   listLanguagePlugins: (): Promise<LanguagePluginListing> => ipcRenderer.invoke("gitcrest:list-language-plugins"),
   readLanguagePluginGrammar: (id: string): Promise<Uint8Array> => ipcRenderer.invoke("gitcrest:read-language-plugin-grammar", id),

@@ -63,6 +63,25 @@ it("holds requests while the core restarts and connects to the restarted core wi
   expect(bridge.subscribeToEvents).toHaveBeenCalledTimes(1);
 });
 
+it("connects a window that loaded before the first core was ready and restores the workspace", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => versionResponse()));
+  const { bridge, publish } = installBridge();
+  vi.mocked(bridge.getSidecarConnection).mockRejectedValueOnce(new Error("Starting local GitCrest core..."));
+  vi.mocked(bridge.getCoreStatus!).mockResolvedValueOnce({ state: "restarting", message: "Starting local GitCrest core..." });
+  const onConnected = vi.fn(async () => undefined);
+  const { result } = renderHook(() => useCoreConnection({ onConnected, onEvent: vi.fn() }));
+
+  await waitFor(() => expect(bridge.getCoreStatus).toHaveBeenCalled());
+  expect(result.current.connectionState).toBe("connecting");
+  expect(result.current.status).toBe("Starting local GitCrest core...");
+  expect(onConnected).not.toHaveBeenCalled();
+
+  act(() => publish({ state: "ready", generation: 1 }));
+  await waitFor(() => expect(result.current.connectionState).toBe("connected"));
+  expect(onConnected).toHaveBeenCalledTimes(1);
+  expect(onConnected).toHaveBeenLastCalledWith(expect.anything(), false);
+});
+
 it("shows a core that could not be restarted as failed", async () => {
   vi.stubGlobal("fetch", vi.fn(async () => versionResponse()));
   const { publish } = installBridge();

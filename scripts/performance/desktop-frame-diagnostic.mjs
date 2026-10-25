@@ -271,7 +271,8 @@ let app;
 try {
   app = await electron.launch({
     executablePath,
-    args: [...launchFlags, `--user-data-dir=${join(dataDir, "user-data")}`],
+    // The UI follows the system language, and the waits below match English text.
+    args: [...launchFlags, "--lang=en-US", `--user-data-dir=${join(dataDir, "user-data")}`],
     cwd: root,
     env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: join(dataDir, "gitcrest.sqlite") },
   });
@@ -309,6 +310,8 @@ try {
   await page.reload();
   await page.getByRole("heading", { name: "Recent repositories" }).waitFor({ timeout: 15_000 });
   await page.locator(".repositoryRowOpen").first().click();
+  // A repository opens on its Workspace (Changes) view; the commit graph is in the History view.
+  await page.getByRole("tablist", { name: "Workspace views" }).getByRole("tab", { name: "History" }).click({ timeout: 20_000 });
   await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
   await page.bringToFront();
   const historyIdle = await sampleAnimationFrames(page, "loaded-history-idle", 5_000, false);

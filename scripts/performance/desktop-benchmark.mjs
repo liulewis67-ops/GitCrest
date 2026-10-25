@@ -27,6 +27,10 @@ function summarize(values) {
     : { samples: values.length, p50Ms: nearestRank(values, 0.5), p95Ms: nearestRank(values, 0.95), maxMs: Math.max(...values), samplesMs: values };
 }
 
+// Startup phases the main process marks when GITCREST_BENCH_STARTUP_PHASES=1, in the order they normally happen.
+// The sidecar starts beside the window, so sidecarReady can fall anywhere after appReady.
+const STARTUP_PHASES = ["mainProcessStart", "mainModuleLoaded", "appReady", "windowCreated", "sidecarReady", "domContentLoaded", "readyToShow", "coreConnected"];
+
 function makeAppEnv(databasePath) {
   const env = { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: databasePath };
   for (const key of Object.keys(env)) if (/^GITCREST_/i.test(key) && key !== "GITCREST_DATABASE_PATH") delete env[key];
@@ -45,7 +49,8 @@ function benchmarkGpuFlags() {
 }
 
 function benchmarkElectronArgs(dataDir) {
-  const args = [...benchmarkGpuFlags(), `--user-data-dir=${join(dataDir, "user-data")}`];
+  // The UI follows the system language, and the waits below match English text.
+  const args = [...benchmarkGpuFlags(), "--lang=en-US", `--user-data-dir=${join(dataDir, "user-data")}`];
   // Keep Crashpad dumps outside the per-round profile (which is deleted) so a
   // renderer crash during a long run can be investigated afterwards.
   if (process.env.GITCREST_BENCH_CRASH_DUMPS_DIR) args.push(`--crash-dumps-dir=${resolve(process.env.GITCREST_BENCH_CRASH_DUMPS_DIR)}`);
@@ -66,7 +71,7 @@ function packagedAppExecutablePath() {
   throw new Error(`Unsupported desktop benchmark platform: ${process.platform}`);
 }
 
-async function launchDesktopApp(dataDir) {
+async function launchDesktopApp(dataDir, appEnv = {}) {
   const executablePath = packagedAppExecutablePath();
   try {
     await stat(executablePath);
@@ -77,7 +82,7 @@ async function launchDesktopApp(dataDir) {
     executablePath,
     args: benchmarkElectronArgs(dataDir),
     cwd: root,
-    env: makeAppEnv(join(dataDir, "gitcrest.sqlite")),
+    env: { ...makeAppEnv(join(dataDir, "gitcrest.sqlite")), ...appEnv },
   });
 }
 
@@ -197,9 +202,17 @@ async function openFixtureFromWindow(page) {
   if (result.status !== 200) throw new Error(`Could not register benchmark fixture: ${JSON.stringify(result.body)}`);
 }
 
+// A repository opens on its Workspace (Changes) view; the commit graph is in the History view.
+async function openFirstRepositoryHistory(page) {
+  await page.locator(".repositoryRowOpen").first().click();
+  await page.getByRole("tablist", { name: "Workspace views" }).getByRole("tab", { name: "History" }).click({ timeout: 20_000 });
+  await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
+}
+
 async function runColdLaunch() {
   const startupMs = [];
   const firstHistoryFrameMs = [];
+  const startupPhaseMs = Object.fromEntries(STARTUP_PHASES.map((phase) => [phase, []]));
   let idleMemorySamplesBytes = [];
   let repositoryMemorySamplesBytes = [];
   let app;
@@ -209,11 +222,18 @@ async function runColdLaunch() {
     dataDir = await mkdtemp(join(os.tmpdir(), "gitcrest-s7.2-desktop-"));
     const start = performance.now();
     try {
-      app = await launchDesktopApp(dataDir);
+      app = await launchDesktopApp(dataDir, { GITCREST_BENCH_STARTUP_PHASES: "1" });
       page = await app.firstWindow();
       await page.waitForLoadState("domcontentloaded", { timeout: 15_000 });
       await page.waitForFunction(() => document.body.innerText.includes("Core connected"), undefined, { timeout: 20_000 });
-      startupMs.push(Number((performance.now() - start).toFixed(3)));
+      const connectedAt = performance.now();
+      startupMs.push(Number((connectedAt - start).toFixed(3)));
+      // The main process marks epoch times; each phase is reported as milliseconds since this launch began.
+      const launchStartedAtEpochMs = performance.timeOrigin + start;
+      const phases = { ...(await app.evaluate(() => globalThis.gitcrestStartupPhases ?? {})), coreConnected: performance.timeOrigin + connectedAt };
+      for (const phase of STARTUP_PHASES) {
+        if (Number.isFinite(phases[phase])) startupPhaseMs[phase].push(Number((phases[phase] - launchStartedAtEpochMs).toFixed(3)));
+      }
 
       if (index === iterations - 1) {
         const memoryRootPid = await electronProcessRootPid(app.process().pid);
@@ -227,8 +247,7 @@ async function runColdLaunch() {
       await page.reload();
       await page.getByRole("heading", { name: "Recent repositories" }).waitFor({ timeout: 15_000 });
       const firstHistoryStart = performance.now();
-      await page.locator(".repositoryRowOpen").first().click();
-      await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
+      await openFirstRepositoryHistory(page);
       firstHistoryFrameMs.push(Number((performance.now() - firstHistoryStart).toFixed(3)));
 
       if (index === iterations - 1) {
@@ -246,7 +265,7 @@ async function runColdLaunch() {
       await rm(dataDir, { recursive: true, force: true });
     }
   }
-  return { startupMs, firstHistoryFrameMs, idleMemorySamplesBytes, repositoryMemorySamplesBytes };
+  return { startupMs, firstHistoryFrameMs, startupPhaseMs, idleMemorySamplesBytes, repositoryMemorySamplesBytes };
 }
 
 async function runMemorySnapshotIteration(iteration) {
@@ -264,8 +283,7 @@ async function runMemorySnapshotIteration(iteration) {
     await openFixtureFromWindow(page);
     await page.reload();
     await page.getByRole("heading", { name: "Recent repositories" }).waitFor({ timeout: 15_000 });
-    await page.locator(".repositoryRowOpen").first().click();
-    await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
+    await openFirstRepositoryHistory(page);
     await new Promise((resolveSleep) => setTimeout(resolveSleep, 5000));
     const loaded = await processTreeMemoryBreakdown(memoryRootPid);
     const loadedPrivateWorkingSetSamplesBytes = await privateWorkingSetWindowSamples(memoryRootPid);
@@ -519,8 +537,7 @@ async function runScrollIteration(iteration) {
     await openFixtureFromWindow(page);
     await page.reload();
     await page.getByRole("heading", { name: "Recent repositories" }).waitFor();
-    await page.locator(".repositoryRowOpen").first().click();
-    await page.locator(".commitGraphEntry").first().waitFor({ timeout: 20_000 });
+    await openFirstRepositoryHistory(page);
 
     const idleAnimationFrame = await page.evaluate(async () => {
       const deltas = [];
@@ -581,6 +598,13 @@ async function runScroll() {
   };
 }
 
+function summarizeStartupPhases(startupPhaseMs) {
+  return {
+    method: "Milliseconds from the benchmark's launch call to each main-process mark (epoch clock shared by both processes); coreConnected is when the renderer first shows \"Core connected\". A phase without samples was not marked by this build.",
+    phases: Object.fromEntries(Object.entries(startupPhaseMs).map(([phase, values]) => [phase, summarize(values)])),
+  };
+}
+
 const startedAt = new Date().toISOString();
 const scrollOnly = process.env.GITCREST_BENCH_MODE === "scroll";
 const memoryOnly = process.env.GITCREST_BENCH_MODE === "memory";
@@ -593,7 +617,7 @@ const repositoryCacheLifecycle = cacheLifecycleOnly ? await runCacheLifecycle() 
 const cold = scrollOnly
   || memoryOnly
   || cacheLifecycleOnly
-  ? { startupMs: [], firstHistoryFrameMs: [], idleMemorySamplesBytes: [], repositoryMemorySamplesBytes: [] }
+  ? { startupMs: [], firstHistoryFrameMs: [], startupPhaseMs: {}, idleMemorySamplesBytes: [], repositoryMemorySamplesBytes: [] }
   : await runColdLaunch();
 const scroll = memoryOnly || cacheLifecycleOnly ? null : await runScroll();
 const installerPath = join(root, "dist", "GitCrest Setup 0.1.0.exe");
@@ -608,6 +632,7 @@ const report = {
   iterations,
   startedAt,
   startup: summarize(cold.startupMs),
+  startupPhases: summarizeStartupPhases(cold.startupPhaseMs),
   firstHistoryFrame: summarize(cold.firstHistoryFrameMs),
   idleProcessTreeMemory: { sampleCount: cold.idleMemorySamplesBytes.length, peakBytes: cold.idleMemorySamplesBytes.length ? Math.max(...cold.idleMemorySamplesBytes) : null, samplesBytes: cold.idleMemorySamplesBytes },
   loadedRepositoryIdleProcessTreeMemory: { sampleCount: cold.repositoryMemorySamplesBytes.length, peakBytes: cold.repositoryMemorySamplesBytes.length ? Math.max(...cold.repositoryMemorySamplesBytes) : null, samplesBytes: cold.repositoryMemorySamplesBytes },
