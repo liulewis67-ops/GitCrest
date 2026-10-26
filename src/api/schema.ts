@@ -1649,7 +1649,7 @@ export interface paths {
         };
         /**
          * Read sanitized AI provider settings in the conflict window
-         * @description Requires the conflict-scoped window capability and returns provider metadata and credential presence only; never returns a key.
+         * @description Requires the conflict-scoped window capability and returns provider metadata and credential presence only; never returns a key. Also returns the exact instructions that open every AI merge prompt, so the window can show them before sending.
          */
         get: operations["readConflictWindowAiSettings"];
         put?: never;
@@ -2374,6 +2374,15 @@ export interface components {
             providers: components["schemas"]["AiProvider"][];
             /** @description Absolute path of ai-providers.json. */
             configPath: string | null;
+        };
+        ConflictWindowAiSettings: {
+            /** @description No active provider means AI assistance is off. */
+            activeProviderId: string | null;
+            providers: components["schemas"]["AiProvider"][];
+            /** @description Absolute path of ai-providers.json. */
+            configPath: string | null;
+            /** @description The exact instructions that open every AI merge prompt; the operation, path and the BASE, OURS, THEIRS and CURRENT RESULT stages follow them. */
+            promptInstructions: string;
         };
         AiProviderInput: {
             id: string;
@@ -7507,14 +7516,14 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Provider metadata without credentials. */
+            /** @description Provider metadata without credentials, and the AI merge prompt instructions. */
             200: {
                 headers: {
                     "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AiSettings"];
+                    "application/json": components["schemas"]["ConflictWindowAiSettings"];
                 };
             };
             401: components["responses"]["Unauthorized"];

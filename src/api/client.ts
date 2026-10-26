@@ -44,6 +44,7 @@ export type AccountListResponse = components["schemas"]["AccountList"];
 export type BrowserSignInHost = components["schemas"]["BrowserSignInHost"];
 export type DeviceFlowResponse = components["schemas"]["DeviceFlow"];
 export type AiSettingsResponse = components["schemas"]["AiSettings"];
+export type ConflictWindowAiSettingsResponse = components["schemas"]["ConflictWindowAiSettings"];
 export type AiProviderResponse = components["schemas"]["AiProvider"];
 export type AiProviderInput = components["schemas"]["AiProviderInput"];
 export type AiSettingsRequest = components["schemas"]["AiSettingsRequest"];
@@ -382,8 +383,8 @@ export class GitCrestApiClient {
     return this.request<AiSettingsResponse>("/api/v1/ai/settings");
   }
 
-  getRepositoryWorkflowConflictAiSettings(repoId: RepoId): Promise<AiSettingsResponse> {
-    return this.request<AiSettingsResponse>(
+  getRepositoryWorkflowConflictAiSettings(repoId: RepoId): Promise<ConflictWindowAiSettingsResponse> {
+    return this.request<ConflictWindowAiSettingsResponse>(
       `/api/v1/repositories/${encodeURIComponent(repoId)}/workflows/conflicts/ai-settings`,
     );
   }

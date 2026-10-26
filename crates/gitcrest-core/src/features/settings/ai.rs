@@ -3,7 +3,8 @@ use std::{collections::HashSet, net::IpAddr, time::Duration};
 use super::dto::{AiProviderView, AiRequest};
 use crate::domain::{
     ai::{AiApiFormat, AiProviderConfig, AiProviderRecord},
-    diff::{DiffDocument, DiffRowKind, DiffRowSide, DiffScope, DiffSelection},
+    diff::{DiffContentStatus, DiffDocument, DiffRowKind, DiffRowSide, DiffScope, DiffSelection},
+    status::ChangeKind,
 };
 
 pub const MAX_REQUEST_FILES: usize = 20;
@@ -268,6 +269,58 @@ fn reply_text(format: AiApiFormat, response: &serde_json::Value) -> Option<Strin
     (!text.trim().is_empty()).then_some(text)
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CutOff {
+    OutputLimit,
+    Filtered,
+}
+
+/// Why a provider stopped before finishing its reply, or `None` when it finished normally.
+fn cut_off(format: AiApiFormat, response: &serde_json::Value) -> Option<CutOff> {
+    match format {
+        AiApiFormat::OpenAiChatCompletions => {
+            match response.pointer("/choices/0/finish_reason")?.as_str()? {
+                "length" => Some(CutOff::OutputLimit),
+                "content_filter" => Some(CutOff::Filtered),
+                _ => None,
+            }
+        }
+        AiApiFormat::OpenAiResponses => {
+            if response["status"] != "incomplete" {
+                return None;
+            }
+            match response.pointer("/incomplete_details/reason")?.as_str() {
+                Some("content_filter") => Some(CutOff::Filtered),
+                _ => Some(CutOff::OutputLimit),
+            }
+        }
+        AiApiFormat::AnthropicMessages => match response["stop_reason"].as_str()? {
+            "max_tokens" | "model_context_window_exceeded" => Some(CutOff::OutputLimit),
+            "refusal" => Some(CutOff::Filtered),
+            _ => None,
+        },
+    }
+}
+
+fn cut_off_detail(provider: &AiProviderRecord, reason: CutOff) -> String {
+    match reason {
+        CutOff::Filtered => {
+            "The provider stopped the reply early (content filter or refusal), so it is incomplete and was not used.".into()
+        }
+        CutOff::OutputLimit => {
+            let limit = provider.max_output_tokens.or(
+                (provider.api_format == AiApiFormat::AnthropicMessages)
+                    .then_some(DEFAULT_ANTHROPIC_MAX_TOKENS),
+            );
+            let limit = limit.map_or_else(
+                || "the model's output limit".to_owned(),
+                |limit| format!("the output limit of {limit} tokens"),
+            );
+            format!("The reply was cut off at {limit}, so it is incomplete and was not used. Raise the maximum output for this provider in Settings, or send less.")
+        }
+    }
+}
+
 /// A short, single-line description of a failed provider answer that never repeats the key.
 fn provider_error_detail(status: u16, body: &[u8], api_key: Option<&str>) -> String {
     let message = serde_json::from_slice::<serde_json::Value>(body)
@@ -380,6 +433,11 @@ pub async fn request_provider(
             "The provider response was not JSON. Check the endpoint and API format.".into(),
         )
     })?;
+    if let Some(reason) = cut_off(provider.api_format, &response) {
+        return Err(AiRequestError::ProviderUnavailable(cut_off_detail(
+            provider, reason,
+        )));
+    }
     reply_text(provider.api_format, &response).ok_or_else(|| {
         AiRequestError::ProviderUnavailable(
             "The provider response had no text. Check the API format and model.".into(),
@@ -532,9 +590,65 @@ pub fn strip_code_fence(text: &str) -> &str {
     body
 }
 
+/// Gives a whole-file answer the line endings and final newline of `reference`, the file it
+/// replaces: models answer with `\n` and often drop or add the last line break, which would
+/// otherwise show every line of a CRLF file, or its last line, as changed.
+pub fn match_file_layout(reply: &str, reference: &str) -> String {
+    if reference.is_empty() {
+        return reply.to_owned();
+    }
+    let crlf = reference.matches("\r\n").count();
+    let eol = if crlf * 2 > reference.matches('\n').count() {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    let mut text = reply.replace("\r\n", "\n");
+    if eol == "\r\n" {
+        text = text.replace('\n', "\r\n");
+    }
+    if reference.ends_with('\n') {
+        if !text.ends_with('\n') {
+            text.push_str(eol);
+        }
+    } else if let Some(trimmed) = text.strip_suffix(eol) {
+        text.truncate(trimmed.len());
+    }
+    text
+}
+
+/// A short note on what kind of change a file is, for changes a diff alone does not show:
+/// added, deleted, renamed or copied files, and content that is not sent (binary, symlink,
+/// submodule) or that does not change (a mode change or a pure rename).
+pub fn change_note(document: &DiffDocument) -> Option<String> {
+    let original = document.original_path.as_deref().unwrap_or("?");
+    let kind = match document.change_kind {
+        ChangeKind::Added | ChangeKind::Untracked => Some("new file".to_owned()),
+        ChangeKind::Deleted => Some("deleted file".to_owned()),
+        ChangeKind::Renamed => Some(format!("renamed from {original}")),
+        ChangeKind::Copied => Some(format!("copied from {original}")),
+        ChangeKind::TypeChanged => Some("file type changed".to_owned()),
+        ChangeKind::Modified | ChangeKind::Ignored | ChangeKind::Conflicted => None,
+    };
+    let content = match document.status {
+        DiffContentStatus::Binary => Some("binary content, not sent"),
+        DiffContentStatus::Symlink => Some("symbolic link, target not sent"),
+        DiffContentStatus::Submodule => Some("submodule commit changed"),
+        DiffContentStatus::Empty => Some("no content changes"),
+        DiffContentStatus::Text if document.hunks.is_empty() => Some("no content changes"),
+        _ => None,
+    };
+    let parts = kind
+        .into_iter()
+        .chain(content.map(str::to_owned))
+        .collect::<Vec<_>>();
+    (!parts.is_empty()).then(|| format!("({})", parts.join("; ")))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::diff::DiffHunk;
     use tokio::{
         io::{AsyncReadExt, AsyncWriteExt},
         net::TcpListener,
@@ -645,6 +759,74 @@ mod tests {
     }
 
     #[test]
+    fn whole_file_answers_take_the_line_endings_and_final_newline_of_the_file() {
+        assert_eq!(match_file_layout("a\nb\n", "x\r\ny\r\n"), "a\r\nb\r\n");
+        assert_eq!(match_file_layout("a\nb", "x\r\ny\r\n"), "a\r\nb\r\n");
+        assert_eq!(match_file_layout("a\r\nb\r\n", "x\ny\n"), "a\nb\n");
+        assert_eq!(match_file_layout("a\nb\n", "x\ny"), "a\nb");
+        assert_eq!(match_file_layout("a\nb", "x\ny"), "a\nb");
+        // A mostly-LF file with one stray CRLF stays LF.
+        assert_eq!(match_file_layout("a\nb\n", "x\r\ny\nz\n"), "a\nb\n");
+        assert_eq!(match_file_layout("a\n", ""), "a\n");
+    }
+
+    #[test]
+    fn change_notes_describe_what_a_diff_does_not_show() {
+        let document = |change_kind, status, hunks: Vec<DiffHunk>| DiffDocument {
+            repo_id: "repo".into(),
+            path: "new.png".into(),
+            revision: "rev".into(),
+            original_path: Some("old.png".into()),
+            scope: DiffScope::Index,
+            change_kind,
+            status,
+            hunks,
+        };
+        let hunk = DiffHunk {
+            old_start: 1,
+            old_lines: 1,
+            new_start: 1,
+            new_lines: 1,
+            rows: Vec::new(),
+        };
+        assert_eq!(
+            change_note(&document(
+                ChangeKind::Renamed,
+                DiffContentStatus::Empty,
+                Vec::new()
+            ))
+            .as_deref(),
+            Some("(renamed from old.png; no content changes)")
+        );
+        assert_eq!(
+            change_note(&document(
+                ChangeKind::Modified,
+                DiffContentStatus::Binary,
+                Vec::new()
+            ))
+            .as_deref(),
+            Some("(binary content, not sent)")
+        );
+        assert_eq!(
+            change_note(&document(
+                ChangeKind::Added,
+                DiffContentStatus::Text,
+                vec![hunk.clone()]
+            ))
+            .as_deref(),
+            Some("(new file)")
+        );
+        assert_eq!(
+            change_note(&document(
+                ChangeKind::Modified,
+                DiffContentStatus::Text,
+                vec![hunk]
+            )),
+            None
+        );
+    }
+
+    #[test]
     fn config_rejects_duplicate_ids_and_a_missing_active_provider() {
         let first = provider(AiApiFormat::OpenAiResponses, "https://api.example.test/v1");
         let config = AiProviderConfig {
@@ -748,6 +930,52 @@ mod tests {
         assert_eq!(request_provider(&local, "hi").await.unwrap(), "local");
         let (headers, _) = capture.await.unwrap();
         assert!(!headers.to_ascii_lowercase().contains("authorization:"));
+    }
+
+    #[tokio::test]
+    async fn replies_cut_off_at_the_output_limit_are_rejected_in_every_format() {
+        for (format, response, expected) in [
+            (
+                AiApiFormat::OpenAiChatCompletions,
+                r#"{"choices":[{"message":{"content":"half a fi"},"finish_reason":"length"}]}"#,
+                "the model's output limit",
+            ),
+            (
+                AiApiFormat::OpenAiResponses,
+                r#"{"status":"incomplete","incomplete_details":{"reason":"max_output_tokens"},"output_text":"half a fi"}"#,
+                "the model's output limit",
+            ),
+            (
+                AiApiFormat::AnthropicMessages,
+                r#"{"content":[{"type":"text","text":"half a fi"}],"stop_reason":"max_tokens"}"#,
+                "the output limit of 4096 tokens",
+            ),
+            (
+                AiApiFormat::OpenAiChatCompletions,
+                r#"{"choices":[{"message":{"content":"half"},"finish_reason":"content_filter"}]}"#,
+                "content filter",
+            ),
+        ] {
+            let (base_url, capture) = serve_once("200 OK", response).await;
+            let error = request_provider(&provider(format, &base_url), "merge this")
+                .await
+                .unwrap_err();
+            capture.await.unwrap();
+            let AiRequestError::ProviderUnavailable(detail) = error else {
+                panic!("expected a provider error");
+            };
+            assert!(detail.contains(expected), "{format:?}: {detail}");
+            assert!(detail.contains("incomplete"), "{format:?}: {detail}");
+        }
+        let (base_url, capture) = serve_once(
+            "200 OK",
+            r#"{"choices":[{"message":{"content":"whole"},"finish_reason":"stop"}]}"#,
+        )
+        .await;
+        let mut limited = provider(AiApiFormat::OpenAiChatCompletions, &base_url);
+        limited.max_output_tokens = Some(900);
+        assert_eq!(request_provider(&limited, "hi").await.unwrap(), "whole");
+        capture.await.unwrap();
     }
 
     #[tokio::test]

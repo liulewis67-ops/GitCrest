@@ -3564,17 +3564,17 @@ paths:
     get:
       operationId: readConflictWindowAiSettings
       summary: Read sanitized AI provider settings in the conflict window
-      description: Requires the conflict-scoped window capability and returns provider metadata and credential presence only; never returns a key.
+      description: Requires the conflict-scoped window capability and returns provider metadata and credential presence only; never returns a key. Also returns the exact instructions that open every AI merge prompt, so the window can show them before sending.
       responses:
         "200":
-          description: Provider metadata without credentials.
+          description: Provider metadata without credentials, and the AI merge prompt instructions.
           headers:
             X-GitCrest-API-Version:
               $ref: "#/components/headers/ApiVersion"
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AiSettings"
+                $ref: "#/components/schemas/ConflictWindowAiSettings"
         "401":
           $ref: "#/components/responses/Unauthorized"
         "403":
@@ -4697,6 +4697,15 @@ components:
         activeProviderId: { type: [string, "null"], description: No active provider means AI assistance is off. }
         providers: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/AiProvider" } }
         configPath: { type: [string, "null"], description: Absolute path of ai-providers.json. }
+    ConflictWindowAiSettings:
+      type: object
+      additionalProperties: false
+      required: [activeProviderId, providers, configPath, promptInstructions]
+      properties:
+        activeProviderId: { type: [string, "null"], description: No active provider means AI assistance is off. }
+        providers: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/AiProvider" } }
+        configPath: { type: [string, "null"], description: Absolute path of ai-providers.json. }
+        promptInstructions: { type: string, description: "The exact instructions that open every AI merge prompt; the operation, path and the BASE, OURS, THEIRS and CURRENT RESULT stages follow them." }
     AiProviderInput:
       type: object
       additionalProperties: false

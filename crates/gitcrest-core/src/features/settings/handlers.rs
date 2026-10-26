@@ -214,13 +214,25 @@ pub(super) async fn request_ai(
         )
         .await
         .map_err(ApiError::from_diff_error)?;
+        let is_text = read.document.status == DiffContentStatus::Text;
+        // Binary, symlink, submodule and content-free changes (a pure rename or mode change) go
+        // as a one-line note, so one such file does not block the request for the others.
+        let describable = matches!(
+            read.document.status,
+            DiffContentStatus::Text
+                | DiffContentStatus::Binary
+                | DiffContentStatus::Empty
+                | DiffContentStatus::Symlink
+                | DiffContentStatus::Submodule
+        );
         if read.document.revision != selection.revision
-            || read.document.status != DiffContentStatus::Text
+            || !describable
+            || (!is_text && selection.selections.is_some())
         {
             return Err(ApiError::new(
                 StatusCode::CONFLICT,
                 ApiErrorCode::ResourceVersionStale,
-                "A reviewed diff has changed or is no longer plain text. Review the files again.",
+                "A reviewed diff has changed or can no longer be sent. Review the files again.",
             ));
         }
         let label = format!(
@@ -247,7 +259,12 @@ pub(super) async fn request_ai(
                     )
                 })?
             }
-            None => ai::format_diff(&read.document),
+            None if is_text => ai::format_diff(&read.document),
+            None => String::new(),
+        };
+        let text = match ai::change_note(&read.document) {
+            Some(note) => format!("{note}\n{text}"),
+            None => text,
         };
         if text.is_empty() || text.len() > ai::MAX_REQUEST_DIFF_BYTES {
             return Err(ApiError::new(

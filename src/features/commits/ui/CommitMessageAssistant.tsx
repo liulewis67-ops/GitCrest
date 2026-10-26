@@ -56,6 +56,37 @@ function diffText(document: DiffDocumentResponse, selections?: NonNullable<Commi
   ]).join("\n");
 }
 
+/** Mirrors the core's change note: what a diff alone does not show, or content that is not sent. */
+function changeNote(document: DiffDocumentResponse): string | undefined {
+  const original = document.originalPath ?? "?";
+  const kind = ({
+    added: "new file",
+    untracked: "new file",
+    deleted: "deleted file",
+    renamed: `renamed from ${original}`,
+    copied: `copied from ${original}`,
+    typeChanged: "file type changed",
+  } as Partial<Record<DiffDocumentResponse["changeKind"], string>>)[document.changeKind];
+  const content = ({
+    binary: "binary content, not sent",
+    symlink: "symbolic link, target not sent",
+    submodule: "submodule commit changed",
+    empty: "no content changes",
+  } as Partial<Record<DiffDocumentResponse["status"], string>>)[document.status]
+    ?? (document.status === "text" && document.hunks.length === 0 ? "no content changes" : undefined);
+  const parts = [kind, content].filter(Boolean);
+  return parts.length > 0 ? `(${parts.join("; ")})` : undefined;
+}
+
+/** The text the core sends for one file: its change note, then its (selected) diff. */
+function sentText(document: DiffDocumentResponse, selections?: NonNullable<CommitSelection["selections"]>): string {
+  const diff = document.status === "text" ? diffText(document, selections) : "";
+  const note = changeNote(document);
+  return note === undefined ? diff : `${note}\n${diff}`;
+}
+
+const SENDABLE_STATUSES = new Set<DiffDocumentResponse["status"]>(["text", "binary", "empty", "symlink", "submodule"]);
+
 function stagedPaths(snapshot: StatusSnapshotResponse): string[] {
   return snapshot.files
     .filter((file) => file.categories.includes("staged") && !file.categories.includes("conflicted") && !file.categories.includes("ignored"))
@@ -147,12 +178,13 @@ export function CommitMessageAssistant({
       for (const path of paths) {
         if (!currentStaged.has(path)) throw new Error(t("ai.noLongerStaged", { path }));
         const document = await api.getFileDiff(repoId, path, "index");
-        if (document.status !== "text") throw new Error(t("ai.cannotSend", { path, status: document.status }));
+        if (!SENDABLE_STATUSES.has(document.status)) throw new Error(t("ai.cannotSend", { path, status: document.status }));
         const selected = commitSelections.length > 0 ? commitSelections.find((item) => item.path === path) : undefined;
         if (commitSelections.length > 0 && !selected) throw new Error(t("ai.scopeChanged"));
         if (selected && selected.revision !== document.revision) throw new Error(t("ai.selChanged", { path }));
+        if (selected?.selections && document.status !== "text") throw new Error(t("ai.cannotSend", { path, status: document.status }));
         const file: ReviewedFile = { path, document, ...(selected ? { selections: selected.selections } : {}) };
-        bytes += new TextEncoder().encode(diffText(document, file.selections)).length;
+        bytes += new TextEncoder().encode(sentText(document, file.selections)).length;
         if (bytes > 1024 * 1024) throw new Error(t("ai.tooBig"));
         documents.push(file);
       }
@@ -168,7 +200,7 @@ export function CommitMessageAssistant({
     if (statusFingerprint(snapshot) !== fingerprint) return false;
     for (const file of files) {
       const current = await api.getFileDiff(repoId, file.path, "index");
-      if (current.revision !== file.document.revision || current.status !== "text") return false;
+      if (current.revision !== file.document.revision || current.status !== file.document.status) return false;
     }
     return true;
   }
@@ -223,7 +255,7 @@ export function CommitMessageAssistant({
         </div>
         {reviewed.map((file) => <details className="privacyDiffPreview" key={file.path} open>
           <summary>{file.path} · staged/index · {file.selections ? t(file.selections.length === 1 ? "ai.rangesOne" : "ai.rangesMany", { count: file.selections.length }) : t("ai.allStaged")}</summary>
-          <pre>{diffText(file.document, file.selections) || t("ai.diffEmpty")}</pre>
+          <pre>{sentText(file.document, file.selections) || t("ai.diffEmpty")}</pre>
         </details>)}
         {workspaceStale && <p role="alert" className="taskCenterError">{t("ai.stale")}</p>}
         {suggestion && workspaceStale && <p role="status">{t("ai.staleSuggestion")}</p>}

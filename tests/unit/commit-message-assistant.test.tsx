@@ -147,3 +147,37 @@ it("asks for an active provider and never sends without one", async () => {
   expect((screen.getByRole("button", { name: "Send reviewed staged diff" }) as HTMLButtonElement).disabled).toBe(true);
   expect(request).not.toHaveBeenCalled();
 });
+
+it("sends a staged binary file and a pure rename as change notes instead of blocking the request", async () => {
+  const request = vi.fn().mockResolvedValue({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "chore: rename assets", files: [] });
+  const snapshot: StatusSnapshotResponse = { ...stagedSnapshot, files: [
+    stagedSnapshot.files[0],
+    { path: "assets/logo.png", indexStatus: "M", worktreeStatus: " ", kind: "modified", categories: ["staged"], modeChanged: false },
+    { path: "docs/new-name.md", indexStatus: "R", worktreeStatus: " ", kind: "renamed", categories: ["staged"], modeChanged: false },
+  ] };
+  const diffs: Record<string, unknown> = {
+    "src/only.ts": stagedDiff,
+    "assets/logo.png": { ...stagedDiff, path: "assets/logo.png", revision: "sha256:logo", status: "binary", hunks: [] },
+    "docs/new-name.md": { ...stagedDiff, path: "docs/new-name.md", revision: "sha256:rename", originalPath: "docs/old-name.md", changeKind: "renamed", status: "empty", hunks: [] },
+  };
+  const api = {
+    ...makeApi(request),
+    getRepositoryStatus: vi.fn().mockResolvedValue(snapshot),
+    getFileDiff: vi.fn((_repo: string, path: string) => Promise.resolve(diffs[path])),
+  } as unknown as GitCrestApiClient;
+  render(<Harness api={api} />);
+
+  const preview = (path: string) => screen.getByText(new RegExp(`^${path} · staged/index`)).closest("details")?.querySelector("pre")?.textContent;
+  await screen.findByText(/^assets\/logo.png · staged\/index/);
+  expect(preview("assets/logo.png")).toBe("(binary content, not sent)\n");
+  expect(preview("docs/new-name.md")).toBe("(renamed from docs/old-name.md; no content changes)\n");
+  expect(preview("src/only.ts")).toContain("+new selected");
+
+  fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Send reviewed staged diff" }));
+  await waitFor(() => expect(request).toHaveBeenCalledWith("repo_fixture", expect.any(String), [
+    { path: "assets/logo.png", scope: "index", revision: "sha256:logo" },
+    { path: "docs/new-name.md", scope: "index", revision: "sha256:rename" },
+    { path: "src/only.ts", scope: "index", revision: "sha256:staged" },
+  ]));
+});

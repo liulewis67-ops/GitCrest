@@ -2743,7 +2743,16 @@ async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_un
     assert_eq!(suggestion.status(), StatusCode::OK);
     let bytes = to_bytes(suggestion.into_body(), usize::MAX).await.unwrap();
     let suggestion: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(suggestion["response"], "suggested merged result\n");
+    // The proposal takes the working file's line endings (CRLF where Git checks files out so).
+    let working_eol = if conflict["resultContent"].as_str().unwrap().contains("\r\n") {
+        "\r\n"
+    } else {
+        "\n"
+    };
+    assert_eq!(
+        suggestion["response"],
+        format!("suggested merged result{working_eol}")
+    );
     assert_eq!(suggestion["provider"], "Local Anthropic");
     assert_eq!(
         suggestion["files"],
@@ -2754,6 +2763,25 @@ async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_un
     assert!(provider_prompt.contains("OURS ("));
     assert!(provider_prompt.contains("THEIRS ("));
     assert!(provider_prompt.contains("CURRENT RESULT ("));
+    // The conflict window previews exactly the instructions the provider receives.
+    let ai_settings = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/workflows/conflicts/ai-settings"),
+            Some(CONFLICT_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(ai_settings.status(), StatusCode::OK);
+    let bytes = to_bytes(ai_settings.into_body(), usize::MAX).await.unwrap();
+    let ai_settings: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(ai_settings["activeProviderId"], "local");
+    let instructions = ai_settings["promptInstructions"].as_str().unwrap();
+    let sent: serde_json::Value = serde_json::from_str(&provider_prompt).unwrap();
+    assert!(sent["messages"][0]["content"]
+        .as_str()
+        .unwrap()
+        .starts_with(&format!("{instructions}\n\nOperation: ")));
     assert!(std::fs::read_to_string(root.join("notes.txt"))
         .unwrap()
         .contains("<<<<<<<"));
