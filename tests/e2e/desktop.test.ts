@@ -1,5 +1,6 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import { basename, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -11,8 +12,11 @@ const execFileAsync = promisify(execFile);
 
 describe("desktop startup E2E", () => {
   let app: ElectronApplication | undefined;
+  let mockOllama: Server | undefined;
 
   afterEach(async () => {
+    await new Promise<void>((resolve) => mockOllama ? mockOllama.close(() => resolve()) : resolve());
+    mockOllama = undefined;
     await app?.close();
     app = undefined;
   });
@@ -39,13 +43,43 @@ describe("desktop startup E2E", () => {
       expect(body).toContain("gitcrest-core 0.1.0 (API v1)");
       expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length)).toBe(1);
 
-      // AI assistance is deferred, so Settings has no AI section.
+      const providerBodies: Array<Record<string, unknown>> = [];
+      mockOllama = createServer((request, response) => {
+        const chunks: Buffer[] = [];
+        request.on("data", (chunk: Buffer) => chunks.push(chunk));
+        request.on("end", () => {
+          const requestBody = JSON.parse(Buffer.concat(chunks).toString("utf8")) as Record<string, unknown>;
+          providerBodies.push(requestBody);
+          const prompt = String(requestBody.messages && (requestBody.messages as Array<{ content?: string }>)[0]?.content);
+          const content = providerBodies.length === 1
+            ? "Mock local review response"
+            : prompt.includes("Summarize the reviewed staged changes")
+              ? "- Adds the reviewed staged export.\n- Leaves worktree edits out of this summary."
+              : "feat: describe reviewed staged change";
+          const body = JSON.stringify({ choices: [{ message: { content } }] });
+          setTimeout(() => {
+            response.writeHead(200, { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(body) });
+            response.end(body);
+          }, 250);
+        });
+      });
+      await new Promise<void>((resolve) => mockOllama?.listen(0, "127.0.0.1", resolve));
+      const mockAddress = mockOllama.address();
+      if (!mockAddress || typeof mockAddress === "string") throw new Error("Could not bind the loopback AI test server.");
+
       await window.getByRole("button", { name: "Settings" }).click();
       await window.getByRole("menuitem", { name: /All settings/ }).click();
       const settingsDialog = window.getByRole("dialog", { name: "Settings" });
       await settingsDialog.waitFor();
-      expect(await settingsDialog.getByRole("navigation", { name: "Settings sections" }).getByRole("button", { name: "AI assistant" }).count()).toBe(0);
-      expect(await settingsDialog.getByRole("combobox", { name: "AI provider" }).count()).toBe(0);
+      const addProvider = settingsDialog.getByRole("button", { name: "Add provider" });
+      await expect.poll(() => addProvider.isEnabled(), { timeout: 5_000 }).toBe(true);
+      await addProvider.click();
+      const providerCard = settingsDialog.getByRole("group", { name: "Provider Provider 1" });
+      await providerCard.getByRole("textbox", { name: /^Base URL/ }).fill(`http://127.0.0.1:${mockAddress.port}/v1`);
+      await providerCard.getByRole("textbox", { name: "Model", exact: true }).fill("qwen2.5-coder:7b");
+      await settingsDialog.getByRole("button", { name: "Save providers" }).click();
+      await settingsDialog.getByText("Providers saved. No model request was made.").waitFor();
+      expect(providerBodies).toHaveLength(0);
       await settingsDialog.getByRole("button", { name: "Close settings" }).click();
 
       const opened = await window.evaluate(async (repositoryPath) => {
@@ -96,6 +130,26 @@ describe("desktop startup E2E", () => {
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'welcome';\n");
       await writeFile(resolve(fixture.path, "src/other.ts"), "export const sibling = 'changed';\n");
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
+      await window.getByRole("button", { name: "Settings" }).click();
+      await window.getByRole("menuitem", { name: /All settings/ }).click();
+      const privacyDialog = window.getByRole("dialog", { name: "Settings" });
+      await privacyDialog.locator(".privacyScopeList").waitFor();
+      await privacyDialog.locator(".privacyScopeList input").first().check();
+      await privacyDialog.getByRole("button", { name: "Preview diff" }).first().click();
+      await privacyDialog.locator(".privacyDiffPreview pre").waitFor();
+      expect(await privacyDialog.locator(".privacyDiffPreview pre").innerText()).toContain("+export const greeting = 'welcome';");
+      expect(await privacyDialog.innerText()).toContain("Inspect each diff before confirming.");
+      await privacyDialog.getByRole("button", { name: "Review all selected diffs before sending" }).click();
+      await privacyDialog.getByRole("heading", { name: "Confirm provider request" }).waitFor();
+      expect(await privacyDialog.locator(".aiRequestReview pre").innerText()).toContain("+export const greeting = 'welcome';");
+      await privacyDialog.getByRole("checkbox", { name: /I reviewed the files and diffs above/ }).check();
+      await privacyDialog.getByRole("button", { name: "Send these exact diffs" }).click();
+      await privacyDialog.getByText("Mock local review response").waitFor();
+      const providerPrompt = String(providerBodies[0]?.messages && (providerBodies[0].messages as Array<{ content?: string }>)[0]?.content);
+      expect(providerBodies[0]?.model).toBe("qwen2.5-coder:7b");
+      expect(providerPrompt).toContain("export const greeting = 'welcome';");
+      expect(providerPrompt).not.toContain("sibling = 'changed'");
+      await privacyDialog.getByRole("button", { name: "Close settings" }).click();
 
       await writeFile(resolve(fixture.path, "src/commit-ai.ts"), "export const reviewedTitle = 'staged';\n");
       await execFileAsync("git", ["-C", fixture.path, "add", "src/commit-ai.ts"]);
@@ -103,10 +157,47 @@ describe("desktop startup E2E", () => {
       await window.getByRole("button", { name: "Refresh working tree status" }).click();
       // Staged, then edited again: the Commit panel shows the file as partly staged.
       await expect.poll(() => window.getByRole("checkbox", { name: "Stage src/commit-ai.ts", exact: true }).evaluate((box) => (box as HTMLInputElement).indeterminate), { timeout: 15_000 }).toBe(true);
-      // With staged changes the Commit panel still offers no AI suggestion, and Ctrl+G opens nothing.
-      expect(await window.getByRole("button", { name: /AI suggestion/ }).count()).toBe(0);
       await window.keyboard.press("Control+g");
-      expect(await window.getByRole("region", { name: "AI commit message suggestion" }).count()).toBe(0);
+      const commitAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
+      await commitAssistant.locator(".privacyDiffPreview summary").waitFor({ timeout: 5000 }).catch(async () => { throw new Error(`Commit assistant did not prepare staged diffs: ${await commitAssistant.innerText()}`); });
+      await commitAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).toContain("+export const reviewedTitle = 'staged';");
+      expect(await commitAssistant.locator(".privacyDiffPreview pre").innerText()).not.toContain("unstaged");
+      await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
+      await commitAssistant.getByRole("button", { name: "Send reviewed staged diff" }).click();
+      await commitAssistant.getByText("Waiting for provider…").waitFor();
+      await window.getByRole("textbox", { name: "Commit message", exact: true }).fill("my manual commit text");
+      expect(await window.getByRole("button", { name: "Commit", exact: true }).isEnabled()).toBe(true);
+      await commitAssistant.getByText("The commit draft changed while the provider was responding.").waitFor();
+      expect(await window.getByRole("textbox", { name: "Commit message", exact: true }).inputValue()).toBe("my manual commit text");
+      expect(await commitAssistant.getByRole("button", { name: "Use suggestion" }).isDisabled()).toBe(true);
+      expect(await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).toMatchObject({ stdout: "add source fixture\n" });
+
+      await commitAssistant.getByRole("button", { name: "Review current staged changes again" }).click();
+      await commitAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      await commitAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
+      await commitAssistant.getByRole("button", { name: "Send reviewed staged diff" }).click();
+      await commitAssistant.getByRole("textbox", { name: "Commit message suggestion" }).waitFor();
+      expect(await commitAssistant.getByRole("textbox", { name: "Commit message suggestion" }).inputValue()).toBe("feat: describe reviewed staged change");
+      await commitAssistant.getByRole("button", { name: "Use suggestion" }).click();
+      expect(await window.getByRole("textbox", { name: "Commit message", exact: true }).inputValue()).toBe("feat: describe reviewed staged change");
+      const commitPrompt = String(providerBodies[1]?.messages && (providerBodies[1].messages as Array<{ content?: string }>)[0]?.content);
+      expect(commitPrompt).toContain("reviewedTitle = 'staged'");
+      expect(commitPrompt).not.toContain("reviewedTitle = 'unstaged'");
+      expect(await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).toMatchObject({ stdout: "add source fixture\n" });
+
+      await window.keyboard.press("Control+g");
+      const summaryAssistant = window.getByRole("region", { name: "AI commit message suggestion" });
+      await summaryAssistant.getByText("src/commit-ai.ts · staged/index · all staged changes").waitFor();
+      await summaryAssistant.getByRole("combobox", { name: "AI output" }).selectOption("changeSummary");
+      expect(await summaryAssistant.locator(".commitAiRequestDetails").innerText()).toContain("Summarize the reviewed staged changes");
+      await summaryAssistant.getByRole("checkbox", { name: /I reviewed the staged diff/ }).check();
+      await summaryAssistant.getByRole("button", { name: "Summarize reviewed staged diff" }).click();
+      await summaryAssistant.locator(".commitAiSummary").waitFor();
+      expect(await summaryAssistant.locator(".commitAiSummary").innerText()).toContain("Adds the reviewed staged export");
+      expect(await window.getByRole("textbox", { name: "Commit message", exact: true }).inputValue()).toBe("feat: describe reviewed staged change");
+      expect(await summaryAssistant.getByRole("button", { name: "Use suggestion" }).count()).toBe(0);
+      await summaryAssistant.getByRole("button", { name: "Close" }).click();
 
       await execFileAsync("git", ["-C", fixture.path, "reset", "--quiet", "HEAD", "--", "src/commit-ai.ts"]);
       await rm(resolve(fixture.path, "src/commit-ai.ts"));

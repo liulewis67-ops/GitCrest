@@ -1,34 +1,65 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub enum AiProvider {
-    None,
-    OpenAiCompatible,
-    Ollama,
-}
+pub use crate::domain::ai::AiApiFormat;
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq, Serialize)]
+/// A configured provider as the client sees it: the API key itself never leaves the core.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct AiSettings {
-    pub provider: AiProvider,
+pub struct AiProviderView {
+    pub id: String,
+    pub name: String,
+    pub api_format: AiApiFormat,
     pub base_url: String,
     pub model: String,
-    pub has_cloud_credential: bool,
+    pub max_output_tokens: Option<u32>,
+    pub has_api_key: bool,
+    /// The endpoint is a loopback address, so requests stay on this machine.
+    pub is_local: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiSettings {
+    pub active_provider_id: Option<String>,
+    pub providers: Vec<AiProviderView>,
+    pub config_path: Option<String>,
+}
+
+/// A provider as Settings saves it. `apiKey` absent or `null` keeps the key already saved for
+/// this `id`; an empty string removes it.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AiProviderInput {
+    pub id: String,
+    pub name: String,
+    pub api_format: AiApiFormat,
+    pub base_url: String,
+    pub model: String,
+    #[serde(default)]
+    pub max_output_tokens: Option<u32>,
+    #[serde(default)]
+    pub api_key: Option<zeroize::Zeroizing<String>>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AiSettingsRequest {
-    pub provider: AiProvider,
-    pub base_url: String,
-    pub model: String,
+    #[serde(default)]
+    pub active_provider_id: Option<String>,
+    pub providers: Vec<AiProviderInput>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AiCredentialRequest {
-    pub api_key: zeroize::Zeroizing<String>,
+pub struct AiProviderTestRequest {
+    pub provider: AiProviderInput,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AiProviderTestReply {
+    pub model: String,
+    pub response: String,
 }
 
 #[derive(Clone, Debug, Deserialize)]
@@ -89,7 +120,9 @@ pub struct AiRequest {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AiReply {
-    pub provider: AiProvider,
+    /// The display name of the provider that answered.
+    pub provider: String,
+    pub api_format: AiApiFormat,
     pub model: String,
     pub response: String,
     pub files: Vec<String>,

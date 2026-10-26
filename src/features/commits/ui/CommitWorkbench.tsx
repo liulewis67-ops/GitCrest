@@ -3,7 +3,6 @@ import { lazy, Suspense, useRef, type KeyboardEvent } from "react";
 import type { CommitRequest, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../../api/client";
 import { ariaShortcut, displayShortcut, matchesShortcut, type ShortcutPreferences } from "../../settings";
 import type { CommitAction } from "../model/commit-action";
-import { AI_FEATURES_ENABLED } from "../../../shared/lib/feature-flags";
 
 const CommitMessageAssistant = lazy(() => import("./CommitMessageAssistant").then(({ CommitMessageAssistant }) => ({ default: CommitMessageAssistant })));
 
@@ -106,7 +105,7 @@ export function CommitWorkbench({
         <label className="disabledCheck"><input type="checkbox" checked={commit.signOff} disabled={!repository || commit.busy} onChange={(event) => onSelectSignOff(event.target.checked)} /> {t("cw.signOff")}</label>
         <label className="disabledCheck"><input type="checkbox" checked={commit.sign} disabled={!repository || commit.busy} onChange={(event) => onSelectSign(event.target.checked)} /> {t("cw.sign")}</label>
         <span className="composerHeaderSpacer" />
-        {AI_FEATURES_ENABLED && <button type="button" className="textButton commitAiTrigger" disabled={!repository || status.stagedCount === 0 || status.hasConflicts || commit.busy} title={status.hasConflicts ? t("cw.aiResolve") : status.stagedCount === 0 ? t("cw.aiStage") : t("cw.aiReview", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) })} onClick={() => onAssistantOpenChange(!commit.assistantOpen)}>{t("cw.aiSuggestion", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) })}</button>}
+        <button type="button" className="textButton commitAiTrigger" disabled={!repository || status.stagedCount === 0 || status.hasConflicts || commit.busy} title={status.hasConflicts ? t("cw.aiResolve") : status.stagedCount === 0 ? t("cw.aiStage") : t("cw.aiReview", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) })} onClick={() => onAssistantOpenChange(!commit.assistantOpen)}>{t("cw.aiSuggestion", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) })}</button>
       </div>
       <div className="commitSummaryField">
         <input
@@ -143,7 +142,7 @@ export function CommitWorkbench({
         onKeyDown={handleSubmitShortcut}
       />
       {commit.selections.length > 0 && <div className="commitSelectionNotice" role="status">{t(commit.selections.length === 1 ? "cw.selectionOne" : "cw.selectionMany", { count: commit.selections.length })} <button type="button" onClick={onClearSelections}>{t("cw.clearSelection")}</button></div>}
-      {AI_FEATURES_ENABLED && commit.assistantOpen && repository && api && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("cw.loadingTools")}</div>}><CommitMessageAssistant api={api} repoId={repository.repoId} draftMessage={commit.message} commitSelections={commit.selections} commitSelectionRepoId={commit.selectionRepoId} statusSnapshot={status.snapshot} onUseSuggestion={(message) => { onChangeTemplate("plain"); onChangeMessage(message); onAssistantOpenChange(false); }} onClose={() => onAssistantOpenChange(false)} /></Suspense>}
+      {commit.assistantOpen && repository && api && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("cw.loadingTools")}</div>}><CommitMessageAssistant api={api} repoId={repository.repoId} draftMessage={commit.message} commitSelections={commit.selections} commitSelectionRepoId={commit.selectionRepoId} statusSnapshot={status.snapshot} onUseSuggestion={(message) => { onChangeTemplate("plain"); onChangeMessage(message); onAssistantOpenChange(false); }} onClose={() => onAssistantOpenChange(false)} /></Suspense>}
       {commit.amend && <p className="amendAdvisory" role="status">{t("cw.amendNote")}</p>}
       {status.sensitiveStagedPaths.length > 0 && <p className="commitAdvisory" role="status">{t("cw.sensitive", { paths: status.sensitiveStagedPaths.join(", ") })}</p>}
       <div className="composerActions">

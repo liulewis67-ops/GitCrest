@@ -33,12 +33,6 @@ use crate::git::command::GitCommandService;
 
 use super::*;
 
-fn test_ai_credentials() -> features::credentials::AiCredentialManager {
-    features::credentials::AiCredentialManager::with_store(Arc::new(
-        features::credentials::MemoryAiCredentialStore::default(),
-    ))
-}
-
 const WRITE_TOKEN: &str = "test-write-token";
 const READ_ONLY_TOKEN: &str = "test-read-only-token";
 const CONFLICT_TOKEN: &str = "test-conflict-token";
@@ -113,7 +107,6 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
         conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
         credentials: test_credentials(),
-        ai_credentials: test_ai_credentials(),
         accounts: test_accounts(),
         events: EventBus::default(),
         shelf_store: Arc::new(repositories.store()),
@@ -122,7 +115,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
         undo_store: Arc::new(repositories.store()),
         branch_favorites: Arc::new(repositories.store()),
-        ai_provider_settings: Arc::new(repositories.store()),
+        ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
         history_search_index: Arc::new(repositories.store()),
         clones: CloneService::new(
             tasks.clone(),
@@ -278,7 +271,6 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             conflict_token: None,
             credentials: test_credentials(),
-            ai_credentials: test_ai_credentials(),
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
@@ -287,7 +279,7 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
-            ai_provider_settings: Arc::new(repositories.store()),
+            ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
             repository_targets: repositories.target_reader(),
@@ -723,53 +715,119 @@ async fn device_flow_api_refuses_unconfigured_hosts_unknown_flows_and_read_only_
 }
 
 #[tokio::test]
-async fn ai_settings_and_credentials_never_return_the_api_key() {
+async fn ai_settings_keep_api_keys_in_the_core_and_never_return_them() {
     let app = test_app(None);
-    let configured = app.clone().oneshot(json_request(
-            Method::PUT,
-            "/api/v1/ai/settings",
-            r#"{"provider":"openAiCompatible","baseUrl":"https://api.example.test/v1","model":"model-a"}"#,
-        )).await.unwrap();
-    assert_eq!(configured.status(), StatusCode::OK);
+    let read_settings = |app: Router| async move {
+        let response = app
+            .oneshot(request("/api/v1/ai/settings", Some(WRITE_TOKEN)))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        String::from_utf8(body.to_vec()).unwrap()
+    };
+    let empty: serde_json::Value = serde_json::from_str(&read_settings(app.clone()).await).unwrap();
+    assert_eq!(empty["activeProviderId"], serde_json::Value::Null);
+    assert_eq!(empty["providers"].as_array().unwrap().len(), 0);
 
     let saved = app
         .clone()
         .oneshot(json_request(
             Method::PUT,
-            "/api/v1/ai/credential",
-            r#"{"apiKey":"secret-ai-token"}"#,
+            "/api/v1/ai/settings",
+            &serde_json::json!({
+                "activeProviderId": "claude",
+                "providers": [
+                    { "id": "claude", "name": "Claude", "apiFormat": "anthropicMessages", "baseUrl": "https://api.anthropic.com/v1", "model": "claude-model", "apiKey": "secret-ai-token", "maxOutputTokens": 8000 },
+                    { "id": "local", "name": "Local", "apiFormat": "openAiChatCompletions", "baseUrl": "http://127.0.0.1:11434/v1", "model": "qwen" }
+                ]
+            })
+            .to_string(),
         ))
         .await
         .unwrap();
     assert_eq!(saved.status(), StatusCode::OK);
     let body = to_bytes(saved.into_body(), usize::MAX).await.unwrap();
     let text = String::from_utf8(body.to_vec()).unwrap();
-    assert!(text.contains("hasCloudCredential\":true"));
     assert!(!text.contains("secret-ai-token"));
+    let saved: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(saved["activeProviderId"], "claude");
+    assert_eq!(saved["providers"][0]["hasApiKey"], true);
+    assert_eq!(saved["providers"][0]["isLocal"], false);
+    assert_eq!(saved["providers"][0]["maxOutputTokens"], 8000);
+    assert_eq!(saved["providers"][1]["hasApiKey"], false);
+    assert_eq!(saved["providers"][1]["isLocal"], true);
 
-    let status = app
+    // Saving again without `apiKey` keeps the stored key; an empty string removes it.
+    let kept = app
         .clone()
-        .oneshot(request("/api/v1/ai/settings", Some(WRITE_TOKEN)))
+        .oneshot(json_request(
+            Method::PUT,
+            "/api/v1/ai/settings",
+            &serde_json::json!({
+                "activeProviderId": "claude",
+                "providers": [{ "id": "claude", "name": "Claude renamed", "apiFormat": "anthropicMessages", "baseUrl": "https://api.anthropic.com/v1", "model": "claude-model" }]
+            })
+            .to_string(),
+        ))
         .await
         .unwrap();
-    let body = to_bytes(status.into_body(), usize::MAX).await.unwrap();
-    let text = String::from_utf8(body.to_vec()).unwrap();
-    assert!(text.contains("hasCloudCredential\":true"));
+    assert_eq!(kept.status(), StatusCode::OK);
+    let text = read_settings(app.clone()).await;
     assert!(!text.contains("secret-ai-token"));
+    let kept: serde_json::Value = serde_json::from_str(&text).unwrap();
+    assert_eq!(kept["providers"].as_array().unwrap().len(), 1);
+    assert_eq!(kept["providers"][0]["name"], "Claude renamed");
+    assert_eq!(kept["providers"][0]["hasApiKey"], true);
 
-    let removed = app
+    let cleared = app
         .clone()
-        .oneshot(json_request(Method::DELETE, "/api/v1/ai/credential", "{}"))
+        .oneshot(json_request(
+            Method::PUT,
+            "/api/v1/ai/settings",
+            &serde_json::json!({
+                "activeProviderId": null,
+                "providers": [{ "id": "claude", "name": "Claude", "apiFormat": "anthropicMessages", "baseUrl": "https://api.anthropic.com/v1", "model": "claude-model", "apiKey": "" }]
+            })
+            .to_string(),
+        ))
         .await
         .unwrap();
-    assert_eq!(removed.status(), StatusCode::NO_CONTENT);
-    let status = app
-        .oneshot(request("/api/v1/ai/settings", Some(WRITE_TOKEN)))
+    assert_eq!(cleared.status(), StatusCode::OK);
+    let cleared: serde_json::Value =
+        serde_json::from_str(&read_settings(app.clone()).await).unwrap();
+    assert_eq!(cleared["activeProviderId"], serde_json::Value::Null);
+    assert_eq!(cleared["providers"][0]["hasApiKey"], false);
+
+    for invalid in [
+        serde_json::json!({ "activeProviderId": "missing", "providers": [] }),
+        serde_json::json!({ "providers": [{ "id": "p", "name": "Cleartext", "apiFormat": "openAiResponses", "baseUrl": "http://api.example.test/v1", "model": "m" }] }),
+        serde_json::json!({ "providers": [{ "id": "p", "name": "Unknown", "apiFormat": "gemini", "baseUrl": "https://api.example.test/v1", "model": "m" }] }),
+    ] {
+        let rejected = app
+            .clone()
+            .oneshot(json_request(
+                Method::PUT,
+                "/api/v1/ai/settings",
+                &invalid.to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            error_code(rejected).await,
+            (StatusCode::BAD_REQUEST, "REQUEST_INVALID".into())
+        );
+    }
+
+    let no_provider = app
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories/repo_missing/ai/request",
+            r#"{"prompt":"hi","files":[{"path":"a.txt","scope":"index","revision":"r"}]}"#,
+        ))
         .await
         .unwrap();
-    let body = to_bytes(status.into_body(), usize::MAX).await.unwrap();
-    let status: serde_json::Value = serde_json::from_slice(&body).unwrap();
-    assert_eq!(status["hasCloudCredential"], false);
+    assert_ne!(no_provider.status(), StatusCode::OK);
 }
 
 #[tokio::test]
@@ -850,10 +908,24 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
         .await
         .unwrap();
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
-    repositories
-        .store()
-        .set_ai_provider_settings("ollama", &endpoint, "mock-local-model")
-        .unwrap();
+    let ai_providers = Arc::new(crate::storage::settings::MemoryAiProviderStore::default());
+    crate::ports::settings::AiProviderConfigPort::save_ai_provider_config(
+        ai_providers.as_ref(),
+        &crate::domain::ai::AiProviderConfig {
+            version: crate::domain::ai::AiProviderConfig::VERSION,
+            active_provider_id: Some("local".into()),
+            providers: vec![crate::domain::ai::AiProviderRecord {
+                id: "local".into(),
+                name: "Local model".into(),
+                api_format: crate::domain::ai::AiApiFormat::OpenAiChatCompletions,
+                base_url: format!("{endpoint}/v1"),
+                model: "mock-local-model".into(),
+                api_key: None,
+                max_output_tokens: None,
+            }],
+        },
+    )
+    .unwrap();
     let captured_request = tokio::spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
         let mut bytes = Vec::new();
@@ -881,7 +953,8 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
         let body_start = header_end + 4;
         let body =
             String::from_utf8(bytes[body_start..body_start + content_length].to_vec()).unwrap();
-        let response = r#"{"message":{"content":"Only the chosen diff was reviewed."}}"#;
+        let response =
+            r#"{"choices":[{"message":{"content":"Only the chosen diff was reviewed."}}]}"#;
         stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
         (
             String::from_utf8_lossy(&bytes[..header_end]).to_string(),
@@ -903,7 +976,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
-            ai_provider_settings: Arc::new(repositories.store()),
+            ai_providers,
             history_search_index: Arc::new(repositories.store()),
             repository_targets: repositories.target_reader(),
             status: features::status::StatusService::new(repositories.clone()),
@@ -922,7 +995,6 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
                 Arc::new(crate::storage::cloning::CloneFilesystemAdapter),
             ),
             credentials: test_credentials(),
-            ai_credentials: test_ai_credentials(),
             accounts: test_accounts(),
             events: EventBus::default(),
         },
@@ -945,10 +1017,12 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
     let response_body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
     let result: serde_json::Value = serde_json::from_slice(&response_body).unwrap();
     assert_eq!(result["response"], "Only the chosen diff was reviewed.");
+    assert_eq!(result["provider"], "Local model");
+    assert_eq!(result["apiFormat"], "openAiChatCompletions");
     assert_eq!(result["files"].as_array().unwrap().len(), 1);
 
     let (headers, body) = captured_request.await.unwrap();
-    assert!(headers.starts_with("POST /api/chat HTTP/1.1"));
+    assert!(headers.starts_with("POST /v1/chat/completions HTTP/1.1"));
     assert!(!headers.to_ascii_lowercase().contains("authorization:"));
     assert!(body.contains("selected review content"));
     assert!(!body.contains("UNSELECTED_LINE_SECRET"));
@@ -1873,7 +1947,6 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             conflict_token: Some(Arc::new(CONFLICT_TOKEN.to_string())),
             credentials: test_credentials(),
-            ai_credentials: test_ai_credentials(),
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
@@ -1882,7 +1955,7 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
-            ai_provider_settings: Arc::new(repositories.store()),
+            ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             clones: CloneService::new(
                 tasks.clone(),
@@ -2613,7 +2686,7 @@ async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_un
             .oneshot(json_request(
                 Method::PUT,
                 "/api/v1/ai/settings",
-                &serde_json::json!({ "provider": "ollama", "baseUrl": endpoint, "model": "mock-conflict-model" }).to_string(),
+                &serde_json::json!({ "activeProviderId": "local", "providers": [{ "id": "local", "name": "Local Anthropic", "apiFormat": "anthropicMessages", "baseUrl": format!("{endpoint}/v1"), "model": "mock-conflict-model" }] }).to_string(),
             ))
             .await
             .unwrap();
@@ -2645,7 +2718,8 @@ async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_un
         let body =
             String::from_utf8(bytes[header_end + 4..header_end + 4 + content_length].to_vec())
                 .unwrap();
-        let response = r#"{"message":{"content":"suggested merged result"}}"#;
+        let response =
+            r#"{"content":[{"type":"text","text":"```text\nsuggested merged result\n```"}]}"#;
         stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
         body
     });
@@ -2669,7 +2743,8 @@ async fn shelf_apply_conflicts_route_through_resolver_and_keep_worktree_scope_un
     assert_eq!(suggestion.status(), StatusCode::OK);
     let bytes = to_bytes(suggestion.into_body(), usize::MAX).await.unwrap();
     let suggestion: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(suggestion["response"], "suggested merged result");
+    assert_eq!(suggestion["response"], "suggested merged result\n");
+    assert_eq!(suggestion["provider"], "Local Anthropic");
     assert_eq!(
         suggestion["files"],
         serde_json::json!(["notes.txt [base/ours/theirs/result]"])
@@ -2866,7 +2941,6 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             conflict_token: None,
             credentials: test_credentials(),
-            ai_credentials: test_ai_credentials(),
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
@@ -2875,7 +2949,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
-            ai_provider_settings: Arc::new(repositories.store()),
+            ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
             repository_targets: repositories.target_reader(),
@@ -3010,7 +3084,6 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             read_only_token: Some(Arc::new(READ_ONLY_TOKEN.to_string())),
             conflict_token: None,
             credentials: test_credentials(),
-            ai_credentials: test_ai_credentials(),
             accounts: test_accounts(),
             events: EventBus::default(),
             shelf_store: Arc::new(repositories.store()),
@@ -3019,7 +3092,7 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
-            ai_provider_settings: Arc::new(repositories.store()),
+            ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
             repository_targets: repositories.target_reader(),

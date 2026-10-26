@@ -50,7 +50,7 @@ Settings becomes a full-height view that covers the content area under the title
 | General | Language (segmented English / 中文) | existing `shared/i18n` store |
 | Appearance | Color mode, theme gallery, theme editor, text sizes and fonts, live preview | new appearance store |
 | Shortcuts | Shortcut recorder, Restore defaults | unchanged |
-| AI assistant | Provider, endpoint, model, API key, privacy scope preview | hidden since 2026-10-25 while AI assistance is deferred (`AI_FEATURES_ENABLED`, see `13-implementation-plan.md` section 10) |
+| AI assistant | Active provider, provider list (name, API format, base URL, model, API key, max output tokens, connection test), privacy scope preview | rebuilt for multiple providers (2026-10-26) |
 | Updates | Status, Check for updates, Restart to install | unchanged, shown only when the updater reports a status |
 
 ## 3. Appearance model

@@ -2,6 +2,7 @@ import { t } from "../../../shared/i18n";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import type { AiFileSelection, AiReplyResponse, AiSettingsResponse, CommitRequest, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../../api/client";
+import { activeProvider } from "../../settings";
 
 type CommitSelection = NonNullable<CommitRequest["selections"]>[number];
 type ReviewedFile = { path: string; document: DiffDocumentResponse; selections?: CommitSelection["selections"] };
@@ -83,6 +84,7 @@ export function CommitMessageAssistant({
 }) {
   const { t } = useI18n();
   const [settings, setSettings] = useState<AiSettingsResponse>();
+  const provider = activeProvider(settings);
   const [reviewed, setReviewed] = useState<ReviewedFile[]>([]);
   const [reviewFingerprint, setReviewFingerprint] = useState("");
   const [reviewDiffBytes, setReviewDiffBytes] = useState(0);
@@ -172,7 +174,7 @@ export function CommitMessageAssistant({
   }
 
   async function sendReviewed() {
-    if (!settings || settings.provider === "none" || !confirmed || reviewed.length === 0 || busy) return;
+    if (!provider || !confirmed || reviewed.length === 0 || busy) return;
     const requestMode = outputMode;
     const prompt = requestMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT;
     const baselineDraft = draftRef.current;
@@ -212,11 +214,10 @@ export function CommitMessageAssistant({
       <p className="settingsNotice">{t("ai.notice")}</p>
       <label className="commitAiOutputMode">{t("ai.output")}<select aria-label={t("ai.output")} value={outputMode} disabled={busy} onChange={(event) => { setOutputMode(event.target.value as typeof outputMode); setSuggestion(undefined); setSummaryResult(undefined); setSuggestionText(""); setConfirmed(false); setDraftChanged(false); }}><option value="commitMessage">{t("ai.modeCommit")}</option><option value="changeSummary">{t("ai.modeSummary")}</option></select></label>
       {busy && reviewed.length === 0 && <p role="status">{t("ai.loadingStaged")}</p>}
-      {settings?.provider === "none" && <p className="settingsNotice">{t("ai.chooseProvider")}</p>}
-      {settings?.provider === "openAiCompatible" && !settings.hasCloudCredential && <p className="settingsNotice">{t("ai.saveKey")}</p>}
+      {settings && !provider && <p className="settingsNotice">{t("ai.chooseProvider")}</p>}
       {reviewed.length > 0 && <>
         <div className="commitAiRequestDetails">
-          <p><strong>{t("ai.endpoint")}</strong> {settings?.baseUrl || (settings?.provider === "ollama" ? t("ai.loopback") : t("ai.loadingProvider"))}</p>
+          <p><strong>{t("ai.endpoint")}</strong> {provider ? t(provider.isLocal ? "ai.providerLocal" : "ai.providerRemote", { name: provider.name, format: t(`aip.format.${provider.apiFormat}`), model: provider.model, url: provider.baseUrl }) : t("ai.loadingProvider")}</p>
           <p><strong>{t("ai.prompt")}</strong> {outputMode === "changeSummary" ? SUMMARY_PROMPT : PROMPT}</p>
           <p><strong>{t("ai.scope")}</strong> {t(reviewed.length === 1 ? "ai.scopeOne" : "ai.scopeMany", { count: reviewed.length, kib: (reviewDiffBytes / 1024).toFixed(1) })}</p>
         </div>
@@ -236,7 +237,7 @@ export function CommitMessageAssistant({
           </div>
         </>}
         {summaryResult && <section className="commitAiSummary" aria-label={t("ai.summaryAria")}><h5>{t("ai.summaryHeading", { model: summaryResult.model })}</h5><pre>{summaryResult.response}</pre><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewAgain")}</button></section>}
-        {!suggestion && !summaryResult && <button type="button" className="primaryButton" disabled={!confirmed || busy || settings?.provider === "none" || !settings || (settings.provider === "openAiCompatible" && !settings.hasCloudCredential)} onClick={() => void sendReviewed()}>{busy ? t("ai.waiting") : outputMode === "changeSummary" ? t("ai.summarize") : t("ai.send")}</button>}
+        {!suggestion && !summaryResult && <button type="button" className="primaryButton" disabled={!confirmed || busy || !provider} onClick={() => void sendReviewed()}>{busy ? t("ai.waiting") : outputMode === "changeSummary" ? t("ai.summarize") : t("ai.send")}</button>}
       </>}
       {error && <div className="commitAiError" role="alert"><span>{error}</span><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewRetry")}</button></div>}
     </section>

@@ -707,6 +707,7 @@ button:disabled { cursor: not-allowed; }
 .conflictSuggestionSources details { min-width: 0; border: 1px solid var(--line); border-radius: var(--radius-4); }
 .conflictSuggestionSources summary { padding: 6px; color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
 .conflictSuggestionSources pre, .conflictSuggestionReply pre { max-height: 160px; margin: 0; padding: 7px; overflow: auto; color: var(--text); background: var(--surface-soft); font: var(--code-size)/var(--code-leading) var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.conflictSuggestionActions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .conflictSuggestionReply { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-4); }
 .conflictSuggestionReply pre { max-height: 240px; }
 .conflictResultActions { display: flex; gap: 7px; }
@@ -1343,6 +1344,14 @@ button:disabled { cursor: not-allowed; }
 .settingsForm p, .settingsNotice { color: var(--text-muted); font-size: var(--type-sm); line-height: 1.5; }
 .settingsActions { display: flex; align-items: center; gap: 12px; }
 .settingsKeyForm { margin-top: 2px; }
+.aiProviderForm { display: grid; gap: 10px; }
+.aiProviderCard { min-width: 0; margin: 0; }
+.aiProviderCard:disabled { opacity: 0.7; }
+.aiProviderCardHeader { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--text); font-size: var(--type-sm); }
+.aiProviderWide { grid-column: 1 / -1; }
+.aiProviderCard .settingsHint, .aiProviderCard .fieldError { overflow-wrap: anywhere; }
+.aiProviderCard .settingsActions { flex-wrap: wrap; }
+.aiActiveProvider { min-width: 180px; height: 32px; padding: 0 8px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--canvas); color: var(--text); font: var(--type-sm) var(--font-ui); }
 .privacyScope { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-5); background: var(--surface); }
 .privacyScopeHeader { display: flex; align-items: start; gap: 12px; }
 .privacyScopeHeader > div { flex: 1; }

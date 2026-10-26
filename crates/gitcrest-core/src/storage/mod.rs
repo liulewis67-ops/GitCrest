@@ -18,7 +18,7 @@ mod history_index;
 mod migrations;
 mod repositories;
 pub(crate) mod repository_paths;
-mod settings;
+pub(crate) mod settings;
 mod shelves;
 mod tasks;
 mod undo;
@@ -114,7 +114,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 18).unwrap();
+        connection.pragma_update(None, "user_version", 19).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());
@@ -157,7 +157,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 17);
+        assert_eq!(version, 18);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }
@@ -561,28 +561,19 @@ mod tests {
     }
 
     #[test]
-    fn ai_provider_settings_survive_database_reopen() {
+    fn ai_provider_settings_table_is_dropped_by_the_json_file_migration() {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let store = RepositoryStore::open(&database).unwrap();
-        assert_eq!(
-            store.ai_provider_settings().unwrap(),
-            ("none".into(), "".into(), "".into())
-        );
-        store
-            .set_ai_provider_settings("ollama", "http://127.0.0.1:11434", "qwen2.5-coder:7b")
-            .unwrap();
-        drop(store);
-
-        let reopened = RepositoryStore::open(&database).unwrap();
-        assert_eq!(
-            reopened.ai_provider_settings().unwrap(),
-            (
-                "ollama".into(),
-                "http://127.0.0.1:11434".into(),
-                "qwen2.5-coder:7b".into()
+        let connection = store.connection.lock().unwrap();
+        let ai_table: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='ai_provider_settings'",
+                [],
+                |row| row.get(0),
             )
-        );
+            .unwrap();
+        assert_eq!(ai_table, 0);
     }
 
     #[test]

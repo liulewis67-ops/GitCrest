@@ -1009,18 +1009,20 @@ paths:
       - $ref: "#/components/parameters/ApiVersion"
     get:
       operationId: getAiSettings
-      summary: Read AI provider configuration and whether a cloud key is stored
+      summary: Read the configured AI providers and which one is active
+      description: The configuration lives in ai-providers.json beside the core database. API keys stay in that file and are never returned; each provider reports only whether it has one.
       responses:
         "200":
-          description: Provider metadata only; the key is never returned.
+          description: Providers without their API keys.
           headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
           content: { application/json: { schema: { $ref: "#/components/schemas/AiSettings" } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: ai-providers.json could not be read or is not valid JSON., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
     put:
       operationId: setAiSettings
-      summary: Save AI provider metadata without making a provider request
+      summary: Replace the provider list and active provider without making a provider request
       requestBody:
         required: true
         content:
@@ -1028,41 +1030,35 @@ paths:
             schema: { $ref: "#/components/schemas/AiSettingsRequest" }
       responses:
         "200":
-          description: Saved configuration and secret presence metadata.
+          description: The saved providers without their API keys.
           headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
           content: { application/json: { schema: { $ref: "#/components/schemas/AiSettings" } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
-  /api/v1/ai/credential:
+        "503": { description: ai-providers.json could not be read or written., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/ai/providers/test:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
-    put:
-      operationId: setAiCredential
-      summary: Store an OpenAI-compatible API key in the system credential store
+    post:
+      operationId: testAiProvider
+      summary: Send a fixed one-line prompt, and no repository content, to check a provider's settings
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/AiCredentialRequest" }
+            schema: { $ref: "#/components/schemas/AiProviderTestRequest" }
       responses:
         "200":
-          description: Provider metadata only; the key is never returned.
+          description: The provider answered.
           headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
-          content: { application/json: { schema: { $ref: "#/components/schemas/AiSettings" } } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/AiProviderTestReply" } } }
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
-    delete:
-      operationId: deleteAiCredential
-      summary: Remove the saved OpenAI-compatible API key
-      responses:
-        "204": { description: Credential removed or already absent., headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } } }
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "502": { description: The provider could not be reached or rejected the request; the message names the HTTP status and the provider's error text without the API key., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/ai/request:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4676,29 +4672,63 @@ components:
           type: array
           description: Provider hosts where browser sign-in is available; other hosts sign in with an access token.
           items: { $ref: "#/components/schemas/BrowserSignInHost" }
+    AiApiFormat:
+      type: string
+      enum: [openAiChatCompletions, openAiResponses, anthropicMessages]
+      description: "Wire format: openAiChatCompletions posts to {baseUrl}/chat/completions, openAiResponses to {baseUrl}/responses, anthropicMessages to {baseUrl}/messages."
+    AiProvider:
+      type: object
+      additionalProperties: false
+      required: [id, name, apiFormat, baseUrl, model, maxOutputTokens, hasApiKey, isLocal]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64, pattern: "^[A-Za-z0-9_-]+$" }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        apiFormat: { $ref: "#/components/schemas/AiApiFormat" }
+        baseUrl: { type: string, maxLength: 2048 }
+        model: { type: string, maxLength: 255 }
+        maxOutputTokens: { type: [integer, "null"], minimum: 1, maximum: 1000000 }
+        hasApiKey: { type: boolean, description: Presence only; the key is never returned. }
+        isLocal: { type: boolean, description: The endpoint is a loopback address, so requests stay on this machine. }
     AiSettings:
       type: object
       additionalProperties: false
-      required: [provider, baseUrl, model, hasCloudCredential]
+      required: [activeProviderId, providers, configPath]
       properties:
-        provider: { type: string, enum: [none, openAiCompatible, ollama] }
-        baseUrl: { type: string, maxLength: 2048 }
-        model: { type: string, maxLength: 255 }
-        hasCloudCredential: { type: boolean, description: Presence only; the credential value is never returned. }
+        activeProviderId: { type: [string, "null"], description: No active provider means AI assistance is off. }
+        providers: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/AiProvider" } }
+        configPath: { type: [string, "null"], description: Absolute path of ai-providers.json. }
+    AiProviderInput:
+      type: object
+      additionalProperties: false
+      required: [id, name, apiFormat, baseUrl, model]
+      properties:
+        id: { type: string, minLength: 1, maxLength: 64, pattern: "^[A-Za-z0-9_-]+$" }
+        name: { type: string, minLength: 1, maxLength: 100 }
+        apiFormat: { $ref: "#/components/schemas/AiApiFormat" }
+        baseUrl: { type: string, maxLength: 2048, description: HTTPS anywhere, or HTTP only to localhost/loopback; no credentials, query or fragment. }
+        model: { type: string, minLength: 1, maxLength: 255 }
+        maxOutputTokens: { type: [integer, "null"], minimum: 1, maximum: 1000000, description: "Sent as max_tokens (chat completions), max_output_tokens (responses) or max_tokens (Anthropic, default 4096)." }
+        apiKey: { type: [string, "null"], maxLength: 4096, writeOnly: true, description: Absent or null keeps the key saved for this id; an empty string removes it. }
     AiSettingsRequest:
       type: object
       additionalProperties: false
-      required: [provider, baseUrl, model]
+      required: [providers]
       properties:
-        provider: { type: string, enum: [none, openAiCompatible, ollama] }
-        baseUrl: { type: string, maxLength: 2048, description: OpenAI-compatible endpoints require HTTPS; Ollama requires a loopback HTTP endpoint. }
-        model: { type: string, maxLength: 255 }
-    AiCredentialRequest:
+        activeProviderId: { type: [string, "null"] }
+        providers: { type: array, maxItems: 20, items: { $ref: "#/components/schemas/AiProviderInput" } }
+    AiProviderTestRequest:
       type: object
       additionalProperties: false
-      required: [apiKey]
+      required: [provider]
       properties:
-        apiKey: { type: string, minLength: 1, maxLength: 65536, writeOnly: true }
+        provider: { $ref: "#/components/schemas/AiProviderInput" }
+    AiProviderTestReply:
+      type: object
+      additionalProperties: false
+      required: [model, response]
+      properties:
+        model: { type: string }
+        response: { type: string, maxLength: 500 }
     AiRequest:
       type: object
       additionalProperties: false
@@ -4725,9 +4755,10 @@ components:
     AiReply:
       type: object
       additionalProperties: false
-      required: [provider, model, response, files]
+      required: [provider, apiFormat, model, response, files]
       properties:
-        provider: { type: string, enum: [openAiCompatible, ollama] }
+        provider: { type: string, description: Display name of the provider that answered. }
+        apiFormat: { $ref: "#/components/schemas/AiApiFormat" }
         model: { type: string }
         response: { type: string, maxLength: 1048576 }
         files: { type: array, items: { type: string } }

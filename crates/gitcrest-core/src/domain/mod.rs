@@ -1,4 +1,5 @@
 pub(crate) mod account;
+pub(crate) mod ai;
 pub(crate) mod branch;
 pub(crate) mod commit;
 pub(crate) mod diff;

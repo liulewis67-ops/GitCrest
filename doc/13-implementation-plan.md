@@ -21,7 +21,7 @@
 
 状态只能是 **未开始、进行中、待验收、已完成、阻塞、延后**。`延后` 表示经产品决定移出当前发布范围，暂停实施与验收，不计入 Alpha/Beta/GA 门槛；已有代码可以保留，但客户端入口隐藏。`已完成` 表示本阶段所有验收项通过，证据已填入进度记录，且包含状态更新的完成 commit 已生成；该 commit 的 SHA 可以在后续文档更新时补记。`待验收` 表示实现已有，但尚缺完整验证。大阶段状态由其小阶段决定：全部完成才是已完成；任一进行中/待验收则为进行中；任一阻塞且无法继续则为阻塞；其余为未开始。
 
-当前仓库已实现阶段 0–5 的 MVP 主流程，包括仓库与工作区管理、提交图、Diff、分支和 Worktree、远程同步、冲突与恢复流程。阶段 6（AI 辅助）自 2026-10-25 起延后：已有代码保留，客户端入口隐藏，见第 10 节。阶段 7 仍在进行：S7.2 待验收，S7.4 与 S7.5 因平台和发布环境验收未完成而阻塞。各小阶段以本计划中的状态和证据为准。
+当前仓库已实现阶段 0–5 的 MVP 主流程，包括仓库与工作区管理、提交图、Diff、分支和 Worktree、远程同步、冲突与恢复流程。阶段 6（AI 辅助）2026-10-25 曾延后，2026-10-26 恢复开发并重新纳入 MVP 发布范围：入口重新开放，provider 改为 JSON 文件配置并支持三种 API 格式，见第 10 节。阶段 7 仍在进行：S7.2 待验收，S7.4 与 S7.5 因平台和发布环境验收未完成而阻塞。各小阶段以本计划中的状态和证据为准。
 
 每个小阶段按下面的顺序执行，**一个小阶段对应至少一个独立完成 commit**：
 
@@ -43,10 +43,10 @@
 | 3. 历史、提交图与高级 Diff | 大仓库历史可浏览和搜索，Diff 满足产品规格 | 2 | 已完成 |
 | 4. 分支与远程 | 分支切换安全、远程操作可追踪、凭证受保护 | 2、3 | 已完成 |
 | 5. 冲突、Shelve 与历史改写 | merge/rebase 等复杂操作可预览、恢复 | 4 | 已完成 |
-| 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 延后（客户端入口隐藏，不计入门槛） |
-| 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–5 | 进行中（S7.2 已完成；S7.4/S7.5 阻塞于外部环境） |
+| 6. AI 辅助 | 可配置、可编辑、明确数据范围的 AI 工作流 | 2、5 | 进行中（2026-10-26 恢复并重新纳入 MVP 与 Beta 门槛） |
+| 7. 性能、安全、跨平台发布（GA） | P0 全量 E2E、指标、签名和更新验收 | 0–6 | 进行中（S7.2 已完成；S7.4/S7.5 阻塞于外部环境） |
 
-阶段 2 完成加上阶段 3 的 3.1、3.2 是 Alpha 功能门槛；阶段 0–5 完成是 Beta 功能门槛；阶段 7 完成是 GA 门槛。延后的阶段 6 不属于任何门槛。阶段间可并行做准备工作，但不得跳过依赖验收或提前标完成。
+阶段 2 完成加上阶段 3 的 3.1、3.2 是 Alpha 功能门槛；阶段 0–6 完成是 Beta 功能门槛；阶段 7 完成是 GA 门槛。阶段间可并行做准备工作，但不得跳过依赖验收或提前标完成。
 
 ## 4. 大阶段 0：工程与契约基座
 
@@ -108,42 +108,39 @@
 | S5.4 | Rebase 与交互式 Rebase：todo 编辑、预览、备份、continue/abort/回滚。 | pick/reword/edit/squash/fixup/drop 均有测试；执行前创建并展示备份 ref；drop 和已发布分支改写明确确认；冲突可进入解决器并继续；abort 后恢复至操作前，备份 ref 可用于回滚。 | 已完成 |
 | S5.5 | Reset、丢弃工作区变更、删除远程分支等危险操作安全网。 | 后端返回影响文件/提交/目标 ref；UI 展示后果和恢复方式，破坏性操作要求强确认；取消不改变仓库；可恢复操作先创建备份；日志记录动作与结果但不记录凭证；无确认票据的直接 API 调用被拒绝。 | 已完成 |
 
-## 10. 大阶段 6：AI 辅助（延后）
+## 10. 大阶段 6：AI 辅助（2026-10-26 恢复开发）
 
 | ID | 小阶段与交付内容 | 验收标准 | 状态 |
 |---|---|---|---|
-| S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；密钥存系统 Keychain；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 延后（原验收已完成） |
-| S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 延后（原验收已完成） |
-| S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 延后（原验收已完成；危险操作的确定性说明不受影响） |
+| S6.1 | AI provider 配置、隐私范围预览、本地/云端模式与安全边界。 | 请求前明确展示将发送的文件与 diff 范围；云端仅发送必要 diff，本地模式验证请求不离开本机；~~密钥存系统 Keychain~~ 密钥只存在 core 的 `ai-providers.json` 中、任何 API 响应都不返回密钥（2026-10-26 产品决定，见 10.2）；日志不含 key/原始敏感 diff；无 provider 时手工流程正常。 | 待验收（随 S6.4 复验；原验收已完成） |
+| S6.2 | Commit message 与变更摘要。 | `Cmd/Ctrl+G` 生成可编辑 conventional commit 建议；用户修改后的文本不会被迟到响应覆盖；工作区变化使旧建议标记 stale；请求失败可重试且不阻塞提交；不得自动提交或 push。 | 待验收（自动化复验通过，见第 13 节；原验收已完成） |
+| S6.3 | 冲突建议与危险操作解释文案。 | 建议附来源与待审阅状态，不自动写结果区或执行操作；不可用时手工冲突解决照常完成；危险操作提示引用实际影响范围，AI 失败时仍使用确定性安全文案。 | 待验收（自动化复验通过；原验收已完成） |
+| S6.4 | 多服务商 JSON 配置与三种 API 格式。 | 设置页可自由增删改多个 provider 并选择当前 provider，或关闭；每个 provider 可选 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages；配置保存为 core 数据库旁的 `ai-providers.json`，不使用 SQLite 表；GET/PUT 不返回密钥，只返回 `hasApiKey`；保存不触发模型请求；“测试连接”只发送一行固定文本；端点只允许 https，或仅本机回环地址的 http；provider 错误给出 HTTP 状态与原因且不含密钥。 | 待验收（自动化通过；尚未对真实 OpenAI/Anthropic 服务验证） |
+| S6.5 | AI 合并结果载入冲突编辑器。 | 只有用户点击“AI 合并”并确认后才发送；建议保持待审阅，用户点击“用作结果”后才以未保存、可撤销草稿载入编辑器，保存与标记已解决仍由用户手动完成；编辑器有未保存更改时不能覆盖；建议仍含冲突标记时提示；模型用 Markdown 围栏包裹整个文件时自动去除。 | 待验收（自动化通过；尚未对真实服务验证） |
 
-### 10.1 延后决定
+### 10.1 恢复决定
 
-2026-10-25 起，AI 辅助移出当前 MVP 与 GA 发布范围，延后处理：客户端暂时隐藏全部 AI 入口，不再继续实现、扩展或验收 AI 功能。S6.1–S6.3 的代码和第 13 节中的原验收记录保留，作为日后恢复的起点；恢复前这些记录不代表当前版本提供 AI 功能。
+2026-10-25 起 AI 辅助曾延后、客户端入口隐藏（隐藏方式见该日 commit `b3c631c` 与 Git 历史）。2026-10-26 恢复开发：撤销 `AI_FEATURES_ENABLED` 开关及全部隐藏处理，恢复设置页 AI 分区、提交面板“AI 建议”、`Cmd/Ctrl+G`、命令面板命令和冲突窗口入口，并按 10.2 重做 provider 配置。同日产品决定把 AI 辅助重新纳入 MVP 发布范围：阶段 6 回到 Beta 功能门槛，阶段 7 的前置恢复为 0–6，S7.3/S7.5 的 P0 验收重新包含 AI 场景；`00-README.md`、`02-prd.md`、`07-interaction-accessibility.md`、`08-development-readiness.md`、设置页设计与 Alpha 发布说明撤销“延后”标注，并按 10.2 的设计更新。
 
-### 10.2 延后期间的处理方式
+**AI 不会自动触发**是本阶段的硬性约束：打开仓库、暂存、打开提交面板或冲突窗口、保存设置都不得发起模型请求。每次请求都必须由用户点击 AI 按钮发起，并在发送前展示 provider、端点、提示词和将要发送的内容，经确认后才发送。
 
-| 范围 | 处理 |
+### 10.2 方案
+
+| 范围 | 设计 |
 |---|---|
-| 客户端入口 | 由 `src/shared/lib/feature-flags.ts` 的 `AI_FEATURES_ENABLED = false` 统一关闭：设置页的 AI 助手分区（provider、云端密钥、隐私范围预览）、提交面板的“AI 建议”按钮与提交消息助手、`Cmd/Ctrl+G` 及其快捷键设置项、命令面板的“生成提交说明建议”、冲突窗口的“AI 建议”按钮与建议面板。设置页不再请求 `/api/v1/ai/settings`。 |
-| 快捷键 | `aiCommitMessage` 仍保存在快捷键偏好中，但不显示、不响应，也不占用按键；其他操作可以绑定 `Mod+G`，读取已保存偏好时不再因它判定冲突。 |
-| 危险操作说明 | Reset、交互式 Rebase、远程分支删除的影响说明本就由后端预览确定性生成，与 AI 无关，继续保留；文案去掉“无需 AI 服务商”的表述。 |
-| 前端代码 | `CommitMessageAssistant`、`ConflictSuggestionPanel`、`PrivacyScopePreview` 和 API client 中的 AI 方法保留，不删除；延后期间只做保持编译和测试通过的必要维护，不新增 AI 能力。 |
-| Rust core | `/api/v1/ai/*`、`/api/v1/repositories/{repoId}/ai/request`、冲突建议路由和 Keychain 中的 AI 密钥存储保持原样，客户端不再调用，不做新开发。用户此前保存的 provider 设置和密钥不迁移、不清除。 |
-| 测试 | 默认构建下由单元测试与桌面 E2E 断言 AI 入口不存在；`tests/unit/ai-settings-section.test.tsx` 以 mock 打开开关，继续覆盖隐藏的设置分区；AI 组件自身的单元测试保留。 |
+| 配置存储 | `crates/gitcrest-core/src/storage/settings.rs` 的 `JsonAiProviderStore` 读写 `GITCREST_DATABASE_PATH` 同目录的 `ai-providers.json`：`{ version: 1, activeProviderId, providers: [{ id, name, apiFormat, baseUrl, model, apiKey?, maxOutputTokens? }] }`。写入先写临时文件再原子替换（Unix 下权限为仅属主）。文件不存在视为空配置；文件损坏或版本更新时报错且不覆盖，用户可手工修复。迁移 `0018` 删除旧的 `ai_provider_settings` 表；旧 Keychain 中的 AI 密钥不迁移（该功能此前从未发布）。 |
+| 密钥 | 按用户要求明文保存在 `ai-providers.json`，设置页显示文件路径并说明明文保存。`GET/PUT /api/v1/ai/settings` 只返回 `hasApiKey`；PUT 时省略 `apiKey` 保留原密钥，空字符串删除。provider 错误信息中出现的密钥替换为 `***`。 |
+| API | `GET/PUT /api/v1/ai/settings` 读写整份配置；`POST /api/v1/ai/providers/test` 用草稿（未填密钥时沿用已保存密钥）发送固定测试句；原有 `POST /repositories/{repoId}/ai/request` 与冲突 `suggestion`/`ai-settings` 路由改用当前 provider；`/api/v1/ai/credential` 删除。契约见 `doc/api/v1.yaml`。 |
+| 三种格式 | `openAiChatCompletions`：`POST {baseUrl}/chat/completions`，Bearer，读 `choices[0].message.content`；`openAiResponses`：`POST {baseUrl}/responses`，`store: false`，Bearer，读 `output_text` 或 `output[].content[]` 中的 `output_text`；`anthropicMessages`：`POST {baseUrl}/messages`，`x-api-key` + `anthropic-version: 2023-06-01`，`max_tokens` 默认 4096，拼接 `content[]` 中的 `text`。`maxOutputTokens` 可选，分别映射为 `max_tokens` / `max_output_tokens` / `max_tokens`。本机回环端点不走代理、密钥可不填。超时 180 秒，响应上限 4 MiB，不跟随重定向。 |
+| 端点规则 | 允许任意主机的 https；http 只允许 `localhost`/回环 IP；拒绝 URL 中的用户名密码、query 与 fragment。 |
+| 设置页 | `AiProvidersSection`：当前 provider 下拉（含“关闭”）、provider 卡片（名称、API 格式、Base URL 及实际请求地址提示、模型、最大输出 token、API 密钥、删除已保存密钥、测试连接、移除）、保存/放弃更改。第一个添加的 provider 自动设为当前 provider。隐私范围预览保留在该分区。 |
+| 提交说明 | 沿用 `CommitMessageAssistant`：按钮或 `Cmd/Ctrl+G` 打开面板，只在本地读取暂存 diff；显示 provider、格式、模型与端点；勾选确认并点击发送后才请求；建议可编辑，需点击“使用建议”才写入提交说明。 |
+| 冲突合并 | 冲突窗口按钮改名“AI 合并”。core 提示词要求保留 OURS 与 THEIRS 的意图、输出完整文件且不含冲突标记，并去除包裹整个回答的 Markdown 围栏；面板新增“用作结果”和“重新请求”，结果经撤销历史载入编辑器。 |
 
-### 10.3 对范围、门槛和其他文档的影响
+### 10.3 后续
 
-- 阶段 6 不计入 Alpha/Beta/GA 门槛：Beta 门槛为阶段 0–5 完成，阶段 7 的前置为 0–5，S7.3/S7.5 的验收不包含 AI 场景。
-- `02-prd.md` 的 AI 需求、`07-interaction-accessibility.md` 的 `Cmd/Ctrl+G`、`08-development-readiness.md` 的 AI 测试映射同步标为延后；`03`、`04`、`05`、`09` 等设计文档中的 AI 描述保留为恢复时的设计参考，当前版本不提供。
-- 发布说明不宣称 AI 功能。
-
-### 10.4 恢复条件与步骤
-
-只有产品重新决定把 AI 纳入发布范围后才恢复：
-
-1. 将 `AI_FEATURES_ENABLED` 改为 `true`，在默认测试和桌面 E2E 中恢复 AI 场景（可参考本次隐藏前的 Git 历史）。
-2. 以当时的代码重新执行 S6.1–S6.3 的验收：隐私范围预览、本地模式不出本机、迟到响应不覆盖用户文本、冲突建议不自动写入结果、密钥与原始 diff 不进日志，并在第 13 节追加复验记录。
-3. 同步 PRD、交互与就绪文档、发布说明和本节、第 3 节的阶段状态。
+- 用真实 OpenAI（Chat Completions 与 Responses）和 Anthropic Messages 服务各验证一次提交说明与 AI 合并，记录模型与结果后把 S6.1–S6.5 改为已完成。
+- S6.1–S6.5 完成后，阶段 6 才满足 Beta 门槛；S7.3/S7.5 的 P0 回归需包含 AI 提交说明与 AI 合并场景。
 
 ## 11. 大阶段 7：性能、安全、跨平台发布
 
@@ -5999,3 +5996,10 @@ S7.2 之前可以记录探索性测量，但不能宣称性能目标已通过。
 - 证据：`doc/evidence/S7.2/api-win32-stage552-20261025.json`、`doc/evidence/S7.2/desktop-win32-ab-b-startup-stage550-20261025.json`、`doc/evidence/S7.2/desktop-win32-ab-b-memory-notrace-stage550-20261025.json`、`doc/evidence/S7.2/package-contents-stage549-20261025.json`。
 - 限制/后续：结论只对上述单台 Windows 主机成立。冷启动 P95 与首个历史帧 P95 距阈值分别约 30ms 与 95ms，后续改动需复测；优化方案 P4.4/P4.5 可收回首个历史帧的余量。完整搜索结果的就绪时间仍是用户可感知的等待。
 - 实施 commit：口径决定、证据与台账同一 commit。
+
+### AI 辅助恢复 — 多服务商 JSON 配置、三种 API 格式与 AI 合并（2026-10-26）
+- 状态：S6.4、S6.5 待验收；S6.1–S6.3 自动化复验通过，待真实服务验证后改为已完成。阶段 6 改为进行中。
+- 交付：撤销 `AI_FEATURES_ENABLED` 及全部入口隐藏；core 新增 `domain/ai.rs`、`JsonAiProviderStore`（`ai-providers.json`）、迁移 `0018` 删除 `ai_provider_settings` 表，移除 AI Keychain 存储与 `/api/v1/ai/credential`；`request_provider` 支持 OpenAI Chat Completions、OpenAI Responses、Anthropic Messages，错误信息带 HTTP 状态与 provider 原因并屏蔽密钥；新增 `POST /api/v1/ai/providers/test`；冲突建议提示词改为完整文件合并并去除外层 Markdown 围栏。设置页新增 `AiProvidersSection`；提交说明助手与隐私预览改用当前 provider；冲突窗口“AI 合并”新增“用作结果”，以可撤销的未保存草稿载入编辑器。同步 `doc/api/v1.yaml` 与 `src/api/schema.ts`。
+- 验证：`cargo fmt --check`、`cargo clippy --all-targets -- -D warnings` 通过，`cargo test` 198/198 通过（含三种格式的请求/解析、密钥屏蔽、端点规则、JSON 文件读写与损坏文件不覆盖、设置 API 不返回密钥、Anthropic 格式的冲突建议端到端）；`check-frontend-import-boundaries`、`pnpm build` 通过，`pnpm test` 442/442 通过；Electron E2E `tests/e2e/desktop.test.ts`（设置添加 provider、隐私预览发送、`Ctrl+G` 提交说明与迟到响应保护）、`tests/e2e/keyboard-workflow.test.ts`（AI 合并需确认且不自动写入）、`tests/e2e/shortcut-settings.test.ts` 通过；其余 E2E 未重跑。
+- 限制/后续：尚未连接真实 OpenAI/Anthropic 服务；完成后按第 10.3 节更新状态与其他文档。
+- 范围更新（同日）：AI 辅助重新纳入 MVP 发布范围。第 2、3、10 节恢复阶段 6 为 Beta 门槛、阶段 7 前置为 0–6；`00-README.md`、`02-prd.md`、`07-interaction-accessibility.md`、`08-development-readiness.md`、`settings-page-design-plan.md`、`release-notes-alpha-draft.md` 撤销 2026-10-25 的延后标注，并改写为“AI 只在点击并确认后请求”、多 provider JSON 配置与三种 API 格式。仅文档变更，未重跑测试。

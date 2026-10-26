@@ -1,6 +1,7 @@
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AiReplyResponse, AiSettingsResponse, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../../api/client";
+import { activeProvider } from "../model/ai-providers";
 
 type Candidate = { id: string; path: string; scope: "workingTree" | "index" };
 
@@ -26,6 +27,7 @@ function diffText(document: DiffDocumentResponse): string {
 
 export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestApiClient; repoId?: string; settings?: AiSettingsResponse }) {
   const { t } = useI18n();
+  const provider = activeProvider(settings);
   const [status, setStatus] = useState<StatusSnapshotResponse>();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedDiff, setSelectedDiff] = useState<Candidate>();
@@ -66,7 +68,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
   useEffect(() => {
     setConfirmed(false);
     setReply(undefined);
-  }, [settings?.provider, settings?.baseUrl, settings?.model]);
+  }, [provider?.id, provider?.apiFormat, provider?.baseUrl, provider?.model]);
 
   const candidates = useMemo(() => status ? candidatesFromStatus(status) : [], [status]);
   const visibleCandidates = candidates.slice(0, 200);
@@ -136,7 +138,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
   }
 
   async function sendReviewedDiffs() {
-    if (!repoId || !settings || settings.provider === "none" || !confirmed || reviewed.length !== selected.length) return;
+    if (!repoId || !provider || !confirmed || reviewed.length !== selected.length) return;
     setRequestBusy(true); setError(""); setReply(undefined);
     try {
       const result = await api.requestAiReview(repoId, prompt, reviewed.map(({ candidate, document }) => ({
@@ -167,9 +169,8 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
       </ul>}
       {omittedCandidateCount > 0 && <p className="settingsNotice">{t("pv.omitted", { count: omittedCandidateCount })}</p>}
       {selected.length > 0 && <p className="privacyScopeSummary">{t(selected.length === 1 ? "pv.limitedOne" : "pv.limitedMany", { count: selected.length })}</p>}
-      {selected.length > 0 && settings?.provider === "none" && <p className="settingsNotice">{t("pv.chooseProvider")}</p>}
-      {selected.length > 0 && settings?.provider === "openAiCompatible" && !settings.hasCloudCredential && <p className="settingsNotice">{t("pv.saveKey")}</p>}
-      {selected.length > 0 && <button type="button" className="secondaryButton" disabled={reviewBusy || selected.length > 20 || !settings || settings.provider === "none" || (settings.provider === "openAiCompatible" && !settings.hasCloudCredential)} onClick={() => void reviewSelected()}>{reviewBusy ? t("pv.loadingDiffs") : t("pv.reviewAll")}</button>}
+      {selected.length > 0 && settings && !provider && <p className="settingsNotice">{t("pv.chooseProvider")}</p>}
+      {selected.length > 0 && <button type="button" className="secondaryButton" disabled={reviewBusy || selected.length > 20 || !provider} onClick={() => void reviewSelected()}>{reviewBusy ? t("pv.loadingDiffs") : t("pv.reviewAll")}</button>}
       {selected.length > 20 && <p className="taskCenterError" role="alert">{t("pv.atMost20")}</p>}
       {selectedDiff && <section className="privacyDiffPreview" aria-label={t("pv.diffPreviewAria", { path: selectedDiff.path })}>
         <header><strong>{selectedDiff.path}</strong><span>{selectedDiff.scope === "index" ? t("pv.scopeIndex") : t("pv.scopeWorking")}</span></header>
@@ -177,14 +178,14 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
       </section>}
       {confirmSend && reviewed.length > 0 && <section className="aiRequestReview" aria-labelledby="ai-request-review-title">
         <h4 id="ai-request-review-title">{t("pv.confirmHeading")}</h4>
-        <p>{settings?.provider === "openAiCompatible" ? t("pv.sentCloud", { url: settings.baseUrl }) : t("pv.sentLocal")}</p>
+        {provider && <p>{t(provider.isLocal ? "pv.sentLocal" : "pv.sentCloud", { name: provider.name, url: provider.baseUrl })}</p>}
         <label>{t("pv.prompt")}<textarea aria-label={t("pv.promptAria")} disabled={requestBusy} maxLength={2048} value={prompt} onChange={(event) => { setPrompt(event.target.value); setConfirmed(false); }} /></label>
         {reviewed.map(({ candidate, document }) => <details className="privacyDiffPreview" key={candidate.id} open>
           <summary>{t("pv.rows", { path: candidate.path, scope: candidate.scope === "index" ? t("pv.scopeIndex") : t("pv.scopeWorking"), count: document.hunks.reduce((count, hunk) => count + hunk.rows.length, 0) })}</summary>
           <pre>{diffText(document)}</pre>
         </details>)}
         <label className="aiRequestConsent"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("pv.consent")}</label>
-        <button type="button" className="primaryButton" disabled={!confirmed || !prompt.trim() || requestBusy || settings?.provider === "none" || (settings?.provider === "openAiCompatible" && !settings.hasCloudCredential)} onClick={() => void sendReviewedDiffs()}>{requestBusy ? t("pv.waiting") : t("pv.send")}</button>
+        <button type="button" className="primaryButton" disabled={!confirmed || !prompt.trim() || requestBusy || !provider} onClick={() => void sendReviewedDiffs()}>{requestBusy ? t("pv.waiting") : t("pv.send")}</button>
       </section>}
       {reply && <section className="aiReply" aria-labelledby="ai-reply-title"><h4 id="ai-reply-title">{t("pv.response", { model: reply.model })}</h4><p>{t("pv.sentScopes", { files: reply.files.join(", ") })}</p><pre>{reply.response}</pre></section>}
       {error && <p className="taskCenterError" role="alert">{error}</p>}

@@ -1,18 +1,26 @@
-use axum::http::Uri;
 use std::{collections::HashSet, net::IpAddr, time::Duration};
 
-use super::dto::{AiProvider, AiRequest, AiSettingsRequest};
-use crate::domain::diff::{DiffDocument, DiffRowKind, DiffRowSide, DiffScope, DiffSelection};
+use super::dto::{AiProviderView, AiRequest};
+use crate::domain::{
+    ai::{AiApiFormat, AiProviderConfig, AiProviderRecord},
+    diff::{DiffDocument, DiffRowKind, DiffRowSide, DiffScope, DiffSelection},
+};
 
 pub const MAX_REQUEST_FILES: usize = 20;
 pub const MAX_REQUEST_DIFF_BYTES: usize = 1024 * 1024;
 pub const MAX_REQUEST_PROMPT_BYTES: usize = 2048;
-const MAX_PROVIDER_RESPONSE_BYTES: usize = 1024 * 1024;
+pub const MAX_PROVIDERS: usize = 20;
+const MAX_PROVIDER_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
+const MAX_PROVIDER_ERROR_CHARS: usize = 300;
+/// Anthropic Messages requires `max_tokens`; this is used when the provider sets none.
+pub const DEFAULT_ANTHROPIC_MAX_TOKENS: u32 = 4096;
+const ANTHROPIC_VERSION: &str = "2023-06-01";
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AiRequestError {
     Invalid,
-    ProviderUnavailable,
+    /// The provider could not be reached or did not answer usably; the detail is safe to show.
+    ProviderUnavailable(String),
 }
 
 pub fn validate_request(request: &AiRequest) -> Result<(), AiRequestError> {
@@ -188,174 +196,340 @@ pub fn format_selected_changes(
     Ok(output)
 }
 
+fn endpoint(provider: &AiProviderRecord) -> String {
+    let base = provider.base_url.trim_end_matches('/');
+    match provider.api_format {
+        AiApiFormat::OpenAiChatCompletions => format!("{base}/chat/completions"),
+        AiApiFormat::OpenAiResponses => format!("{base}/responses"),
+        AiApiFormat::AnthropicMessages => format!("{base}/messages"),
+    }
+}
+
+fn payload(provider: &AiProviderRecord, prompt: &str) -> serde_json::Value {
+    let mut payload = match provider.api_format {
+        AiApiFormat::OpenAiChatCompletions => serde_json::json!({
+            "model": provider.model,
+            "messages": [{ "role": "user", "content": prompt }],
+            "stream": false
+        }),
+        AiApiFormat::OpenAiResponses => serde_json::json!({
+            "model": provider.model,
+            "input": prompt,
+            "store": false
+        }),
+        AiApiFormat::AnthropicMessages => serde_json::json!({
+            "model": provider.model,
+            "max_tokens": provider.max_output_tokens.unwrap_or(DEFAULT_ANTHROPIC_MAX_TOKENS),
+            "messages": [{ "role": "user", "content": prompt }]
+        }),
+    };
+    if let Some(limit) = provider.max_output_tokens {
+        match provider.api_format {
+            AiApiFormat::OpenAiChatCompletions => payload["max_tokens"] = limit.into(),
+            AiApiFormat::OpenAiResponses => payload["max_output_tokens"] = limit.into(),
+            AiApiFormat::AnthropicMessages => {}
+        }
+    }
+    payload
+}
+
+/// Joins the text parts of a provider reply, or `None` when it carries no text.
+fn reply_text(format: AiApiFormat, response: &serde_json::Value) -> Option<String> {
+    fn joined<'a>(parts: impl Iterator<Item = &'a serde_json::Value>, kind: &str) -> String {
+        parts
+            .filter(|part| part["type"] == kind)
+            .filter_map(|part| part["text"].as_str())
+            .collect::<Vec<_>>()
+            .join("")
+    }
+    let text = match format {
+        AiApiFormat::OpenAiChatCompletions => {
+            let content = response.pointer("/choices/0/message/content")?;
+            match content {
+                serde_json::Value::String(text) => text.clone(),
+                serde_json::Value::Array(parts) => joined(parts.iter(), "text"),
+                _ => return None,
+            }
+        }
+        AiApiFormat::OpenAiResponses => match response["output_text"].as_str() {
+            Some(text) => text.to_owned(),
+            None => joined(
+                response["output"]
+                    .as_array()?
+                    .iter()
+                    .filter(|item| item["type"] == "message")
+                    .filter_map(|item| item["content"].as_array())
+                    .flatten(),
+                "output_text",
+            ),
+        },
+        AiApiFormat::AnthropicMessages => joined(response["content"].as_array()?.iter(), "text"),
+    };
+    (!text.trim().is_empty()).then_some(text)
+}
+
+/// A short, single-line description of a failed provider answer that never repeats the key.
+fn provider_error_detail(status: u16, body: &[u8], api_key: Option<&str>) -> String {
+    let message = serde_json::from_slice::<serde_json::Value>(body)
+        .ok()
+        .and_then(|value| {
+            value
+                .pointer("/error/message")
+                .or_else(|| value.get("error").filter(|error| error.is_string()))
+                .or_else(|| value.get("message"))
+                .and_then(serde_json::Value::as_str)
+                .map(str::to_owned)
+        })
+        .unwrap_or_else(|| String::from_utf8_lossy(body).into_owned());
+    let mut message = message
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    if let Some(key) = api_key.filter(|key| key.len() >= 4) {
+        message = message.replace(key, "***");
+    }
+    let message = message.split_whitespace().collect::<Vec<_>>().join(" ");
+    let message = if message.chars().count() > MAX_PROVIDER_ERROR_CHARS {
+        format!(
+            "{}…",
+            message
+                .chars()
+                .take(MAX_PROVIDER_ERROR_CHARS)
+                .collect::<String>()
+        )
+    } else {
+        message
+    };
+    if message.is_empty() {
+        format!("The provider answered HTTP {status}.")
+    } else {
+        format!("The provider answered HTTP {status}: {message}")
+    }
+}
+
 pub async fn request_provider(
-    provider: AiProvider,
-    base_url: &str,
-    model: &str,
-    api_key: Option<&str>,
+    provider: &AiProviderRecord,
     prompt: &str,
 ) -> Result<String, AiRequestError> {
-    if provider == AiProvider::None {
-        return Err(AiRequestError::Invalid);
-    }
-    if provider == AiProvider::OpenAiCompatible && api_key.is_none() {
-        return Err(AiRequestError::Invalid);
-    }
-    let settings = AiSettingsRequest {
-        provider,
-        base_url: base_url.to_owned(),
-        model: model.to_owned(),
-    };
-    validate_settings(&settings).map_err(|_| AiRequestError::Invalid)?;
-    let endpoint = match provider {
-        AiProvider::OpenAiCompatible => {
-            format!("{}/chat/completions", base_url.trim_end_matches('/'))
-        }
-        AiProvider::Ollama => format!("{}/api/chat", base_url.trim_end_matches('/')),
-        AiProvider::None => return Err(AiRequestError::Invalid),
-    };
+    validate_provider(provider).map_err(|_| AiRequestError::Invalid)?;
+    let api_key = provider
+        .api_key
+        .as_deref()
+        .map(String::as_str)
+        .filter(|key| !key.is_empty());
     let mut builder = reqwest::Client::builder()
-        .timeout(Duration::from_secs(45))
-        .connect_timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(180))
+        .connect_timeout(Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::none());
-    if provider == AiProvider::Ollama {
+    if is_local_endpoint(&provider.base_url) {
         builder = builder.no_proxy();
     }
-    let client = builder
-        .build()
-        .map_err(|_| AiRequestError::ProviderUnavailable)?;
-    let payload = match provider {
-        AiProvider::OpenAiCompatible => serde_json::json!({
-            "model": model,
-            "messages": [{ "role": "user", "content": prompt }],
-            "stream": false
-        }),
-        AiProvider::Ollama => serde_json::json!({
-            "model": model,
-            "messages": [{ "role": "user", "content": prompt }],
-            "stream": false
-        }),
-        AiProvider::None => return Err(AiRequestError::Invalid),
+    let client = builder.build().map_err(|_| {
+        AiRequestError::ProviderUnavailable("The HTTP client could not start.".into())
+    })?;
+    let mut request = client
+        .post(endpoint(provider))
+        .json(&payload(provider, prompt));
+    request = match (provider.api_format, api_key) {
+        (AiApiFormat::AnthropicMessages, key) => {
+            let request = request.header("anthropic-version", ANTHROPIC_VERSION);
+            match key {
+                Some(key) => request.header("x-api-key", key),
+                None => request,
+            }
+        }
+        (_, Some(key)) => request.bearer_auth(key),
+        (_, None) => request,
     };
-    let mut request = client.post(endpoint).json(&payload);
-    if let Some(api_key) = api_key {
-        request = request.bearer_auth(api_key);
-    }
-    let mut response = request
-        .send()
-        .await
-        .map_err(|_| AiRequestError::ProviderUnavailable)?;
-    if !response.status().is_success() {
-        return Err(AiRequestError::ProviderUnavailable);
-    }
+    let mut response = request.send().await.map_err(|error| {
+        AiRequestError::ProviderUnavailable(if error.is_timeout() {
+            "The provider did not answer in time.".into()
+        } else if error.is_connect() {
+            "The provider endpoint could not be reached.".into()
+        } else {
+            "The request to the provider failed.".into()
+        })
+    })?;
+    let status = response.status();
     let mut body = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(|_| AiRequestError::ProviderUnavailable)?
-    {
+    while let Some(chunk) = response.chunk().await.map_err(|_| {
+        AiRequestError::ProviderUnavailable("The provider response was interrupted.".into())
+    })? {
         if body.len().saturating_add(chunk.len()) > MAX_PROVIDER_RESPONSE_BYTES {
-            return Err(AiRequestError::ProviderUnavailable);
+            return Err(AiRequestError::ProviderUnavailable(
+                "The provider response exceeded 4 MiB.".into(),
+            ));
         }
         body.extend_from_slice(&chunk);
     }
-    let response: serde_json::Value =
-        serde_json::from_slice(&body).map_err(|_| AiRequestError::ProviderUnavailable)?;
-    let text = match provider {
-        AiProvider::OpenAiCompatible => response
-            .pointer("/choices/0/message/content")
-            .and_then(serde_json::Value::as_str),
-        AiProvider::Ollama => response
-            .pointer("/message/content")
-            .and_then(serde_json::Value::as_str),
-        AiProvider::None => None,
+    if !status.is_success() {
+        return Err(AiRequestError::ProviderUnavailable(provider_error_detail(
+            status.as_u16(),
+            &body,
+            api_key,
+        )));
     }
-    .filter(|text| !text.trim().is_empty())
-    .ok_or(AiRequestError::ProviderUnavailable)?;
-    Ok(text.to_owned())
+    let response: serde_json::Value = serde_json::from_slice(&body).map_err(|_| {
+        AiRequestError::ProviderUnavailable(
+            "The provider response was not JSON. Check the endpoint and API format.".into(),
+        )
+    })?;
+    reply_text(provider.api_format, &response).ok_or_else(|| {
+        AiRequestError::ProviderUnavailable(
+            "The provider response had no text. Check the API format and model.".into(),
+        )
+    })
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum AiSettingsError {
-    Invalid,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AiSettingsError(pub String);
+
+fn has_control(value: &str) -> bool {
+    value.chars().any(char::is_control)
 }
 
-pub fn validate_settings(request: &AiSettingsRequest) -> Result<(), AiSettingsError> {
-    if request.base_url.len() > 2048
-        || request.model.len() > 255
-        || request
-            .base_url
+pub fn validate_provider(provider: &AiProviderRecord) -> Result<(), AiSettingsError> {
+    let label = if provider.name.trim().is_empty() {
+        "A provider".to_owned()
+    } else {
+        format!("Provider \"{}\"", provider.name.trim())
+    };
+    let invalid = |reason: &str| Err(AiSettingsError(format!("{label} {reason}")));
+    if provider.id.is_empty()
+        || provider.id.len() > 64
+        || !provider
+            .id
             .chars()
-            .chain(request.model.chars())
-            .any(char::is_control)
-        || request.base_url.trim() != request.base_url
-        || request.model.trim() != request.model
+            .all(|character| character.is_ascii_alphanumeric() || matches!(character, '-' | '_'))
     {
-        return Err(AiSettingsError::Invalid);
+        return invalid("has an invalid id.");
     }
-    match request.provider {
-        AiProvider::None => {
-            if !request.base_url.is_empty() || !request.model.is_empty() {
-                return Err(AiSettingsError::Invalid);
-            }
+    if provider.name.trim().is_empty()
+        || provider.name.chars().count() > 100
+        || has_control(&provider.name)
+    {
+        return invalid("needs a name of up to 100 characters.");
+    }
+    if provider.model.trim().is_empty()
+        || provider.model.len() > 255
+        || provider.model.trim() != provider.model
+        || has_control(&provider.model)
+    {
+        return invalid("needs a model name.");
+    }
+    if provider
+        .api_key
+        .as_deref()
+        .is_some_and(|key| key.len() > 4096 || has_control(key) || key.trim() != key.as_str())
+    {
+        return invalid("has an API key with spaces or control characters.");
+    }
+    if provider
+        .max_output_tokens
+        .is_some_and(|limit| limit == 0 || limit > 1_000_000)
+    {
+        return invalid("needs a maximum output between 1 and 1000000 tokens.");
+    }
+    validate_endpoint(&provider.base_url).or_else(invalid)
+}
+
+/// `https` anywhere, or plain `http` only to this machine, with no credentials, query or fragment.
+fn validate_endpoint(value: &str) -> Result<(), &'static str> {
+    if value.is_empty() || value.len() > 2048 || value.trim() != value || has_control(value) {
+        return Err("needs a base URL.");
+    }
+    let url = url::Url::parse(value).map_err(|_| "has a base URL that is not a valid URL.")?;
+    if !url.username().is_empty() || url.password().is_some() {
+        return Err("must not put credentials in the base URL.");
+    }
+    if url.query().is_some() || url.fragment().is_some() || value.contains(['?', '#']) {
+        return Err("must not have a query or fragment in the base URL.");
+    }
+    match url.scheme() {
+        "https" if url.host().is_some() => Ok(()),
+        "http" if is_local_endpoint(value) => Ok(()),
+        "http" => Err("must use https unless the endpoint is on this machine (localhost)."),
+        _ => Err("must use an http(s) base URL."),
+    }
+}
+
+pub fn is_local_endpoint(value: &str) -> bool {
+    let Ok(url) = url::Url::parse(value) else {
+        return false;
+    };
+    match url.host() {
+        Some(url::Host::Domain(host)) => host.eq_ignore_ascii_case("localhost"),
+        Some(url::Host::Ipv4(address)) => IpAddr::V4(address).is_loopback(),
+        Some(url::Host::Ipv6(address)) => IpAddr::V6(address).is_loopback(),
+        None => false,
+    }
+}
+
+pub fn validate_config(config: &AiProviderConfig) -> Result<(), AiSettingsError> {
+    if config.providers.len() > MAX_PROVIDERS {
+        return Err(AiSettingsError(format!(
+            "Save at most {MAX_PROVIDERS} providers."
+        )));
+    }
+    let mut ids = HashSet::new();
+    for provider in &config.providers {
+        validate_provider(provider)?;
+        if !ids.insert(provider.id.as_str()) {
+            return Err(AiSettingsError("Two providers share one id.".into()));
         }
-        AiProvider::OpenAiCompatible => validate_cloud_url(&request.base_url)?,
-        AiProvider::Ollama => validate_local_url(&request.base_url)?,
     }
-    if request.provider != AiProvider::None && request.model.is_empty() {
-        return Err(AiSettingsError::Invalid);
+    if config
+        .active_provider_id
+        .as_deref()
+        .is_some_and(|id| !ids.contains(id))
+    {
+        return Err(AiSettingsError(
+            "The active provider is not in the provider list.".into(),
+        ));
     }
     Ok(())
 }
 
-fn parse_endpoint(value: &str) -> Result<Uri, AiSettingsError> {
-    if value.is_empty() || value.contains('#') {
-        return Err(AiSettingsError::Invalid);
+pub fn provider_view(provider: &AiProviderRecord) -> AiProviderView {
+    AiProviderView {
+        id: provider.id.clone(),
+        name: provider.name.clone(),
+        api_format: provider.api_format,
+        base_url: provider.base_url.clone(),
+        model: provider.model.clone(),
+        max_output_tokens: provider.max_output_tokens,
+        has_api_key: provider
+            .api_key
+            .as_deref()
+            .is_some_and(|key| !key.is_empty()),
+        is_local: is_local_endpoint(&provider.base_url),
     }
-    let uri = value.parse::<Uri>().map_err(|_| AiSettingsError::Invalid)?;
-    let authority = uri.authority().ok_or(AiSettingsError::Invalid)?;
-    if authority.as_str().contains('@')
-        || uri
-            .path_and_query()
-            .is_some_and(|path| path.query().is_some())
-    {
-        return Err(AiSettingsError::Invalid);
-    }
-    Ok(uri)
 }
 
-fn validate_cloud_url(value: &str) -> Result<(), AiSettingsError> {
-    let uri = parse_endpoint(value)?;
-    if uri.scheme_str() != Some("https") {
-        return Err(AiSettingsError::Invalid);
+/// Models often wrap a whole-file answer in one Markdown fence despite being asked not to; this
+/// returns the fenced body, or the text unchanged when it is not exactly one fenced block.
+pub fn strip_code_fence(text: &str) -> &str {
+    let trimmed = text.trim();
+    let Some(rest) = trimmed.strip_prefix("```") else {
+        return text;
+    };
+    let Some(body) = rest.strip_suffix("```") else {
+        return text;
+    };
+    let Some(newline) = body.find('\n') else {
+        return text;
+    };
+    let body = &body[newline + 1..];
+    if body.contains("\n```") {
+        return text;
     }
-    let host = uri.host().ok_or(AiSettingsError::Invalid)?;
-    if host.eq_ignore_ascii_case("localhost")
-        || host
-            .trim_matches(['[', ']'])
-            .parse::<IpAddr>()
-            .is_ok_and(|address| address.is_loopback())
-    {
-        return Err(AiSettingsError::Invalid);
-    }
-    Ok(())
-}
-
-fn validate_local_url(value: &str) -> Result<(), AiSettingsError> {
-    let uri = parse_endpoint(value)?;
-    if uri.scheme_str() != Some("http") {
-        return Err(AiSettingsError::Invalid);
-    }
-    let host = uri.host().ok_or(AiSettingsError::Invalid)?;
-    if !host.eq_ignore_ascii_case("localhost")
-        && !host
-            .trim_matches(['[', ']'])
-            .parse::<IpAddr>()
-            .is_ok_and(|address| address.is_loopback())
-    {
-        return Err(AiSettingsError::Invalid);
-    }
-    Ok(())
+    body
 }
 
 #[cfg(test)]
@@ -366,57 +540,23 @@ mod tests {
         net::TcpListener,
     };
 
-    #[test]
-    fn settings_keep_cloud_and_local_endpoint_boundaries_distinct() {
-        let cloud = AiSettingsRequest {
-            provider: AiProvider::OpenAiCompatible,
-            base_url: "https://api.example.test/v1".into(),
+    fn provider(api_format: AiApiFormat, base_url: &str) -> AiProviderRecord {
+        AiProviderRecord {
+            id: "provider-1".into(),
+            name: "Test".into(),
+            api_format,
+            base_url: base_url.into(),
             model: "model-a".into(),
-        };
-        assert_eq!(validate_settings(&cloud), Ok(()));
-
-        for base_url in [
-            "http://api.example.test/v1",
-            "https://localhost/v1",
-            "https://127.0.0.1/v1",
-            "https://user:secret@example.test/v1",
-            "https://api.example.test/v1?token=secret",
-        ] {
-            let request = AiSettingsRequest {
-                base_url: base_url.into(),
-                ..cloud.clone()
-            };
-            assert_eq!(validate_settings(&request), Err(AiSettingsError::Invalid));
-        }
-
-        for base_url in [
-            "http://localhost:11434",
-            "http://127.0.0.1:11434",
-            "http://[::1]:11434",
-        ] {
-            assert_eq!(
-                validate_settings(&AiSettingsRequest {
-                    provider: AiProvider::Ollama,
-                    base_url: base_url.into(),
-                    model: "qwen".into(),
-                }),
-                Ok(())
-            );
-        }
-        for base_url in ["https://localhost:11434", "http://192.168.1.3:11434"] {
-            assert_eq!(
-                validate_settings(&AiSettingsRequest {
-                    provider: AiProvider::Ollama,
-                    base_url: base_url.into(),
-                    model: "qwen".into(),
-                }),
-                Err(AiSettingsError::Invalid)
-            );
+            api_key: Some("secret-key".to_string().into()),
+            max_output_tokens: None,
         }
     }
 
-    #[tokio::test]
-    async fn ollama_requests_use_only_the_configured_loopback_endpoint() {
+    /// Answers one HTTP request with `status` and `response`, returning the request's headers and body.
+    async fn serve_once(
+        status: &'static str,
+        response: &'static str,
+    ) -> (String, tokio::task::JoinHandle<(String, String)>) {
         let listener = TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
         let address = listener.local_addr().unwrap();
         let capture = tokio::spawn(async move {
@@ -448,30 +588,187 @@ mod tests {
             let body_start = header_end + 4;
             let body = String::from_utf8(request[body_start..body_start + content_length].to_vec())
                 .unwrap();
-            let response = r#"{"message":{"content":"local response"}}"#;
-            stream.write_all(format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
+            stream.write_all(format!("HTTP/1.1 {status}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await.unwrap();
             (
                 String::from_utf8_lossy(&request[..header_end]).to_string(),
                 body,
             )
         });
+        (format!("http://{address}/v1"), capture)
+    }
 
-        let response = request_provider(
-            AiProvider::Ollama,
-            &format!("http://{address}"),
-            "qwen-local",
-            None,
+    #[test]
+    fn endpoints_allow_https_anywhere_and_http_only_on_this_machine() {
+        for base_url in [
+            "https://api.openai.com/v1",
+            "https://api.anthropic.com/v1",
+            "https://localhost:8443/v1",
+            "http://localhost:11434/v1",
+            "http://127.0.0.1:1234/v1",
+            "http://[::1]:8080",
+        ] {
+            assert_eq!(
+                validate_provider(&provider(AiApiFormat::OpenAiChatCompletions, base_url)),
+                Ok(()),
+                "{base_url}"
+            );
+        }
+        for base_url in [
+            "",
+            "http://api.example.test/v1",
+            "http://192.168.1.3:11434",
+            "ftp://api.example.test",
+            "https://user:secret@example.test/v1",
+            "https://api.example.test/v1?token=secret",
+            "https://api.example.test/v1#part",
+            " https://api.example.test/v1",
+        ] {
+            assert!(
+                validate_provider(&provider(AiApiFormat::OpenAiChatCompletions, base_url)).is_err(),
+                "{base_url}"
+            );
+        }
+        assert!(is_local_endpoint("http://127.0.0.1:11434/v1"));
+        assert!(!is_local_endpoint("https://api.openai.com/v1"));
+    }
+
+    #[test]
+    fn a_single_fence_around_the_whole_answer_is_removed() {
+        assert_eq!(
+            strip_code_fence("```rust\nfn main() {}\n```\n"),
+            "fn main() {}\n"
+        );
+        assert_eq!(strip_code_fence("```\na\nb\n```"), "a\nb\n");
+        assert_eq!(strip_code_fence("plain\ntext\n"), "plain\ntext\n");
+        let two_blocks = "```\na\n```\nmiddle\n```\nb\n```";
+        assert_eq!(strip_code_fence(two_blocks), two_blocks);
+    }
+
+    #[test]
+    fn config_rejects_duplicate_ids_and_a_missing_active_provider() {
+        let first = provider(AiApiFormat::OpenAiResponses, "https://api.example.test/v1");
+        let config = AiProviderConfig {
+            version: AiProviderConfig::VERSION,
+            active_provider_id: Some("provider-1".into()),
+            providers: vec![first.clone()],
+        };
+        assert_eq!(validate_config(&config), Ok(()));
+        assert!(validate_config(&AiProviderConfig {
+            providers: vec![first.clone(), first.clone()],
+            ..config.clone()
+        })
+        .is_err());
+        assert!(validate_config(&AiProviderConfig {
+            active_provider_id: Some("missing".into()),
+            ..config
+        })
+        .is_err());
+    }
+
+    #[tokio::test]
+    async fn chat_completions_post_to_chat_completions_with_a_bearer_key() {
+        let (base_url, capture) = serve_once(
+            "200 OK",
+            r#"{"choices":[{"message":{"content":"chat reply"}}]}"#,
+        )
+        .await;
+        let reply = request_provider(
+            &provider(AiApiFormat::OpenAiChatCompletions, &base_url),
             "only this reviewed diff",
         )
         .await
         .unwrap();
-        assert_eq!(response, "local response");
+        assert_eq!(reply, "chat reply");
         let (headers, body) = capture.await.unwrap();
-        assert!(headers.starts_with("POST /api/chat HTTP/1.1"));
+        assert!(headers.starts_with("POST /v1/chat/completions HTTP/1.1"));
+        assert!(headers
+            .to_ascii_lowercase()
+            .contains("authorization: bearer secret-key"));
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["model"], "model-a");
+        assert_eq!(body["messages"][0]["content"], "only this reviewed diff");
+        assert_eq!(body["stream"], false);
+        assert!(body.get("max_tokens").is_none());
+    }
+
+    #[tokio::test]
+    async fn responses_post_to_responses_and_join_output_text_parts() {
+        let (base_url, capture) = serve_once(
+            "200 OK",
+            r#"{"output":[{"type":"reasoning","summary":[]},{"type":"message","content":[{"type":"output_text","text":"first "},{"type":"output_text","text":"second"}]}]}"#,
+        )
+        .await;
+        let mut configured = provider(AiApiFormat::OpenAiResponses, &base_url);
+        configured.max_output_tokens = Some(900);
+        let reply = request_provider(&configured, "summarize").await.unwrap();
+        assert_eq!(reply, "first second");
+        let (headers, body) = capture.await.unwrap();
+        assert!(headers.starts_with("POST /v1/responses HTTP/1.1"));
+        assert!(headers
+            .to_ascii_lowercase()
+            .contains("authorization: bearer secret-key"));
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["input"], "summarize");
+        assert_eq!(body["store"], false);
+        assert_eq!(body["max_output_tokens"], 900);
+    }
+
+    #[tokio::test]
+    async fn anthropic_messages_send_the_key_header_version_and_max_tokens() {
+        let (base_url, capture) = serve_once(
+            "200 OK",
+            r#"{"content":[{"type":"thinking","thinking":"hidden"},{"type":"text","text":"anthropic reply"}]}"#,
+        )
+        .await;
+        let reply = request_provider(
+            &provider(AiApiFormat::AnthropicMessages, &base_url),
+            "merge this",
+        )
+        .await
+        .unwrap();
+        assert_eq!(reply, "anthropic reply");
+        let (headers, body) = capture.await.unwrap();
+        let headers = headers.to_ascii_lowercase();
+        assert!(headers.starts_with("post /v1/messages http/1.1"));
+        assert!(headers.contains("x-api-key: secret-key"));
+        assert!(headers.contains("anthropic-version: 2023-06-01"));
+        assert!(!headers.contains("authorization:"));
+        let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["max_tokens"], DEFAULT_ANTHROPIC_MAX_TOKENS);
+        assert_eq!(body["messages"][0]["role"], "user");
+        assert_eq!(body["messages"][0]["content"], "merge this");
+    }
+
+    #[tokio::test]
+    async fn local_providers_need_no_key_and_send_no_authorization() {
+        let (base_url, capture) =
+            serve_once("200 OK", r#"{"choices":[{"message":{"content":"local"}}]}"#).await;
+        let mut local = provider(AiApiFormat::OpenAiChatCompletions, &base_url);
+        local.api_key = None;
+        assert_eq!(request_provider(&local, "hi").await.unwrap(), "local");
+        let (headers, _) = capture.await.unwrap();
         assert!(!headers.to_ascii_lowercase().contains("authorization:"));
-        let request: serde_json::Value = serde_json::from_str(&body).unwrap();
-        assert_eq!(request["model"], "qwen-local");
-        assert_eq!(request["messages"][0]["content"], "only this reviewed diff");
-        assert_eq!(request["stream"], false);
+    }
+
+    #[tokio::test]
+    async fn provider_errors_name_the_status_and_message_without_the_key() {
+        let (base_url, capture) = serve_once(
+            "401 Unauthorized",
+            r#"{"error":{"message":"Incorrect API key provided: secret-key."}}"#,
+        )
+        .await;
+        let error = request_provider(
+            &provider(AiApiFormat::OpenAiChatCompletions, &base_url),
+            "hi",
+        )
+        .await
+        .unwrap_err();
+        capture.await.unwrap();
+        let AiRequestError::ProviderUnavailable(detail) = error else {
+            panic!("expected a provider error");
+        };
+        assert!(detail.contains("HTTP 401"));
+        assert!(detail.contains("Incorrect API key provided"));
+        assert!(!detail.contains("secret-key"));
     }
 }

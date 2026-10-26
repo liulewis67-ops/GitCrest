@@ -49,27 +49,26 @@ describe("GitCrestApiClient", () => {
       .rejects.toThrow("The local GitCrest core did not respond");
   });
 
-  it("stores AI provider settings and cloud credentials through separate versioned APIs", async () => {
-    const settings = { provider: "openAiCompatible" as const, baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true };
+  it("saves the provider list and tests a provider through versioned APIs", async () => {
+    const provider = { id: "claude", name: "Claude", apiFormat: "anthropicMessages" as const, baseUrl: "https://api.anthropic.com/v1", model: "claude-model", maxOutputTokens: null, apiKey: "private-test-key" };
+    const settings = { activeProviderId: "claude", providers: [{ ...provider, apiKey: undefined, hasApiKey: true, isLocal: false }], configPath: "/data/ai-providers.json" };
     const fetcher = vi.fn<typeof fetch>()
       .mockResolvedValueOnce(new Response(JSON.stringify(settings), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(JSON.stringify(settings), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }))
-      .mockResolvedValueOnce(new Response(null, { status: 204, headers: { "X-GitCrest-API-Version": "1" } }));
+      .mockResolvedValueOnce(new Response(JSON.stringify({ model: "claude-model", response: "OK" }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } }));
     const client = new GitCrestApiClient(baseUrl, token, fetcher);
 
-    await client.setAiSettings(settings.provider, settings.baseUrl, settings.model);
-    await client.setAiCredential("private-test-key");
-    await client.deleteAiCredential();
+    await client.setAiSettings({ activeProviderId: "claude", providers: [provider] });
+    await expect(client.testAiProvider(provider)).resolves.toEqual({ model: "claude-model", response: "OK" });
     expect(new URL(String(fetcher.mock.calls[0][0])).pathname).toBe("/api/v1/ai/settings");
-    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ provider: settings.provider, baseUrl: settings.baseUrl, model: settings.model }));
-    expect(new URL(String(fetcher.mock.calls[1][0])).pathname).toBe("/api/v1/ai/credential");
-    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ apiKey: "private-test-key" }));
+    expect(fetcher.mock.calls[0][1]?.method).toBe("PUT");
+    expect(fetcher.mock.calls[0][1]?.body).toBe(JSON.stringify({ activeProviderId: "claude", providers: [provider] }));
+    expect(new URL(String(fetcher.mock.calls[1][0])).pathname).toBe("/api/v1/ai/providers/test");
+    expect(fetcher.mock.calls[1][1]?.body).toBe(JSON.stringify({ provider }));
     expect(new Headers(fetcher.mock.calls[1][1]?.headers).get("X-GitCrest-API-Version")).toBe("1");
-    expect(fetcher.mock.calls[2][1]?.method).toBe("DELETE");
   });
 
   it("sends only the selected reviewed file scopes and revisions to the AI endpoint", async () => {
-    const response = { provider: "ollama", model: "qwen-local", response: "summary", files: ["src/only.ts [worktree]"] };
+    const response = { provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen-local", response: "summary", files: ["src/only.ts [worktree]"] };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(response), {
       status: 200,
       headers: { "X-GitCrest-API-Version": "1" },
@@ -96,7 +95,7 @@ describe("GitCrestApiClient", () => {
   });
 
   it("loads AI settings through the conflict-scoped capability route", async () => {
-    const settings = { provider: "ollama" as const, baseUrl: "http://127.0.0.1:11434", model: "qwen-local", hasCloudCredential: false };
+    const settings = { activeProviderId: "local", providers: [{ id: "local", name: "Local", apiFormat: "openAiChatCompletions" as const, baseUrl: "http://127.0.0.1:11434/v1", model: "qwen-local", maxOutputTokens: null, hasApiKey: false, isLocal: true }], configPath: null };
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify(settings), {
       status: 200,
       headers: { "X-GitCrest-API-Version": "1" },

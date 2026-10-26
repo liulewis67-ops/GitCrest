@@ -20,7 +20,6 @@ import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
 import { isComposerVisible, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
-import { AI_FEATURES_ENABLED } from "../shared/lib/feature-flags";
 import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
@@ -877,7 +876,7 @@ function App() {
     { id: "rebase", label: t("cmd.rebase"), detail: t("cmd.rebaseDetail", { shortcut: displayShortcut(shortcuts.rebase, isMacPlatform) }), available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openRebase },
     { id: "reset", label: t("cmd.reset"), detail: t("cmd.resetDetail"), available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openReset },
     { id: "push", label: t("cmd.push"), detail: t("cmd.pushDetail"), available: Boolean(selectedRepository), run: () => openPushDialog() },
-    ...(AI_FEATURES_ENABLED ? [{ id: "ai-commit-message", label: t("cmd.ai"), detail: t("cmd.aiDetail", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) }), available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) }] : []),
+    { id: "ai-commit-message", label: t("cmd.ai"), detail: t("cmd.aiDetail", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) }), available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
     { id: "clone", label: t("cmd.clone"), detail: t("cmd.cloneDetail"), available: connected, run: () => cloneSubmission.openDialog() },
     { id: "view-changes", label: t("cmd.viewChanges"), detail: t("cmd.viewChangesDetail", { shortcut: displayShortcut(shortcuts.viewChanges, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("changes") },
     { id: "view-history", label: t("cmd.viewHistory"), detail: t("cmd.viewHistoryDetail", { shortcut: displayShortcut(shortcuts.viewHistory, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("history") },

@@ -47,53 +47,6 @@ pub enum CredentialError {
     Unavailable,
 }
 
-pub trait AiCredentialStore: Send + Sync {
-    fn is_configured(&self) -> Result<bool, CredentialError>;
-    fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError>;
-    fn set(&self, api_key: &str) -> Result<(), CredentialError>;
-    fn delete(&self) -> Result<(), CredentialError>;
-}
-
-#[derive(Clone)]
-pub struct AiCredentialManager {
-    store: Arc<dyn AiCredentialStore>,
-}
-
-impl AiCredentialManager {
-    pub fn system() -> Self {
-        Self {
-            store: Arc::new(keyring::SystemAiCredentialStore),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn with_store(store: Arc<dyn AiCredentialStore>) -> Self {
-        Self { store }
-    }
-
-    pub fn is_configured(&self) -> Result<bool, CredentialError> {
-        self.store.is_configured()
-    }
-
-    pub fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError> {
-        self.store.get()
-    }
-
-    pub fn set(&self, api_key: &str) -> Result<(), CredentialError> {
-        if api_key.is_empty()
-            || api_key.len() > MAX_CREDENTIAL_BYTES
-            || api_key.chars().any(char::is_control)
-        {
-            return Err(CredentialError::InvalidInput);
-        }
-        self.store.set(api_key)
-    }
-
-    pub fn delete(&self) -> Result<(), CredentialError> {
-        self.store.delete()
-    }
-}
-
 pub trait CredentialStore: Send + Sync {
     fn get(&self, host: &str) -> Result<Option<GitCredential>, CredentialError>;
     fn set(&self, host: &str, credential: &GitCredential) -> Result<(), CredentialError>;
@@ -236,48 +189,6 @@ pub fn normalize_host(host: &str) -> Result<String, CredentialError> {
 #[derive(Default)]
 pub struct MemoryCredentialStore {
     values: Mutex<HashMap<String, GitCredential>>,
-}
-
-#[cfg(test)]
-#[derive(Default)]
-pub struct MemoryAiCredentialStore {
-    value: Mutex<Option<Zeroizing<String>>>,
-}
-
-#[cfg(test)]
-impl AiCredentialStore for MemoryAiCredentialStore {
-    fn is_configured(&self) -> Result<bool, CredentialError> {
-        Ok(self
-            .value
-            .lock()
-            .map_err(|_| CredentialError::Unavailable)?
-            .is_some())
-    }
-
-    fn get(&self) -> Result<Option<Zeroizing<String>>, CredentialError> {
-        Ok(self
-            .value
-            .lock()
-            .map_err(|_| CredentialError::Unavailable)?
-            .as_ref()
-            .map(|secret| Zeroizing::new(secret.to_string())))
-    }
-
-    fn set(&self, api_key: &str) -> Result<(), CredentialError> {
-        *self
-            .value
-            .lock()
-            .map_err(|_| CredentialError::Unavailable)? = Some(Zeroizing::new(api_key.to_owned()));
-        Ok(())
-    }
-
-    fn delete(&self) -> Result<(), CredentialError> {
-        *self
-            .value
-            .lock()
-            .map_err(|_| CredentialError::Unavailable)? = None;
-        Ok(())
-    }
 }
 
 #[cfg(test)]

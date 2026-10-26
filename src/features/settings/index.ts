@@ -17,3 +17,4 @@ export {
 export type { ShortcutPreferences } from "./model/shortcut-preferences";
 export type { SettingsSectionId } from "./ui/settings-sections";
 export const loadSettingsPage = () => import("./ui/SettingsPage");
+export { activeProvider } from "./model/ai-providers";

@@ -22,7 +22,7 @@ const stagedDiff = {
   ] }],
 };
 
-const settings: AiSettingsResponse = { provider: "ollama", baseUrl: "http://127.0.0.1:11434", model: "qwen", hasCloudCredential: false };
+const settings: AiSettingsResponse = { activeProviderId: "local", providers: [{ id: "local", name: "Local", apiFormat: "openAiChatCompletions", baseUrl: "http://127.0.0.1:11434/v1", model: "qwen", maxOutputTokens: null, hasApiKey: false, isLocal: true }], configPath: null };
 
 function makeApi(requestAiReview = vi.fn()) {
   return {
@@ -46,12 +46,12 @@ function Harness({ api, selections = [], onUse = vi.fn() }: {
 }
 
 it("sends only selected staged rows and requires explicit consent before showing an editable suggestion", async () => {
-  const request = vi.fn().mockResolvedValue({ provider: "ollama", model: "qwen", response: "feat: update selected value", files: ["src/only.ts [index]"] });
+  const request = vi.fn().mockResolvedValue({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "feat: update selected value", files: ["src/only.ts [index]"] });
   const api = makeApi(request);
   render(<Harness api={api} selections={[{ path: "src/only.ts", revision: "sha256:staged", selections: [{ hunkIndex: 0, rowIndex: 0 }] }]} />);
 
   await screen.findByText("src/only.ts · staged/index · 1 selected hunk/row range");
-  expect(screen.getByText("http://127.0.0.1:11434")).toBeTruthy();
+  expect(screen.getByText("Local · OpenAI Chat Completions · qwen · http://127.0.0.1:11434/v1 (this machine)")).toBeTruthy();
   expect(screen.getByText(/Write a concise Conventional Commit message/)).toBeTruthy();
   const preview = screen.getByText("src/only.ts · staged/index · 1 selected hunk/row range").closest("details")?.querySelector("pre")?.textContent || "";
   expect(preview).toContain("+new selected");
@@ -66,7 +66,7 @@ it("sends only selected staged rows and requires explicit consent before showing
 });
 
 it("keeps a user-edited draft when a delayed provider response arrives and disables applying that suggestion", async () => {
-  let resolveRequest!: (value: { provider: "ollama"; model: string; response: string; files: string[] }) => void;
+  let resolveRequest!: (value: { provider: string; apiFormat: "openAiChatCompletions"; model: string; response: string; files: string[] }) => void;
   const request = vi.fn(() => new Promise((resolve) => { resolveRequest = resolve; }));
   render(<Harness api={makeApi(request)} />);
   await screen.findByText("src/only.ts · staged/index · all staged changes");
@@ -74,7 +74,7 @@ it("keeps a user-edited draft when a delayed provider response arrives and disab
   fireEvent.click(screen.getByRole("button", { name: "Send reviewed staged diff" }));
   await waitFor(() => expect(request).toHaveBeenCalled());
   fireEvent.change(screen.getByRole("textbox", { name: "Commit message" }), { target: { value: "my manual message" } });
-  resolveRequest({ provider: "ollama", model: "qwen", response: "feat: late suggestion", files: ["src/only.ts [index]"] });
+  resolveRequest({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "feat: late suggestion", files: ["src/only.ts [index]"] });
   expect(await screen.findByText("The commit draft changed while the provider was responding. Your text was kept; start a new request to use a suggestion.")).toBeTruthy();
   expect(screen.getByRole("textbox", { name: "Commit message" })).toHaveProperty("value", "my manual message");
   expect(screen.getByRole("button", { name: "Use suggestion" })).toHaveProperty("disabled", true);
@@ -84,7 +84,7 @@ it("allows a fresh suggestion to be applied explicitly and keeps provider failur
   const onUse = vi.fn();
   const request = vi.fn()
     .mockRejectedValueOnce(new Error("provider unavailable"))
-    .mockResolvedValueOnce({ provider: "ollama", model: "qwen", response: "fix: handle staged case", files: ["src/only.ts [index]"] });
+    .mockResolvedValueOnce({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "fix: handle staged case", files: ["src/only.ts [index]"] });
   render(<Harness api={makeApi(request)} onUse={onUse} />);
   await screen.findByText("src/only.ts · staged/index · all staged changes");
   fireEvent.click(screen.getByRole("checkbox", { name: /I reviewed the staged diff/ }));
@@ -111,7 +111,7 @@ it("marks a suggestion stale when a refresh shows that staged status changed dur
     .mockResolvedValueOnce(stagedSnapshot)
     .mockResolvedValueOnce(changedSnapshot);
   const api = {
-    ...makeApi(vi.fn().mockResolvedValue({ provider: "ollama", model: "qwen", response: "feat: stale change", files: ["src/only.ts [index]"] })),
+    ...makeApi(vi.fn().mockResolvedValue({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "feat: stale change", files: ["src/only.ts [index]"] })),
     getRepositoryStatus,
   } as unknown as GitCrestApiClient;
   render(<Harness api={api} />);
@@ -123,7 +123,7 @@ it("marks a suggestion stale when a refresh shows that staged status changed dur
 });
 
 it("summarizes only reviewed staged changes without writing the summary into the commit message", async () => {
-  const request = vi.fn().mockResolvedValue({ provider: "ollama", model: "qwen", response: "- Updates the staged value.\n- Leaves unstaged edits untouched.", files: ["src/only.ts [index]"] });
+  const request = vi.fn().mockResolvedValue({ provider: "Local", apiFormat: "openAiChatCompletions", model: "qwen", response: "- Updates the staged value.\n- Leaves unstaged edits untouched.", files: ["src/only.ts [index]"] });
   render(<Harness api={makeApi(request)} />);
   await screen.findByText("src/only.ts · staged/index · all staged changes");
   fireEvent.change(screen.getByRole("combobox", { name: "AI output" }), { target: { value: "changeSummary" } });
@@ -134,4 +134,16 @@ it("summarizes only reviewed staged changes without writing the summary into the
   expect(await screen.findByLabelText("AI change summary")).toBeTruthy();
   expect(screen.getByLabelText("Commit message")).toHaveProperty("value", "original draft");
   expect(screen.queryByRole("button", { name: "Use suggestion" })).toBeNull();
+});
+
+it("asks for an active provider and never sends without one", async () => {
+  const request = vi.fn();
+  const api = { ...makeApi(request), getAiSettings: vi.fn().mockResolvedValue({ ...settings, activeProviderId: null }) } as unknown as GitCrestApiClient;
+  render(<Harness api={api} />);
+
+  await screen.findByText("Add an AI provider and make it active in Settings before sending a request. Manual commit remains available.");
+  await screen.findByText(/src\/only.ts · staged\/index/);
+  fireEvent.click(screen.getByLabelText(/I reviewed the staged diff/));
+  expect((screen.getByRole("button", { name: "Send reviewed staged diff" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(request).not.toHaveBeenCalled();
 });

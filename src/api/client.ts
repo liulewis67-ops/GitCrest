@@ -44,6 +44,11 @@ export type AccountListResponse = components["schemas"]["AccountList"];
 export type BrowserSignInHost = components["schemas"]["BrowserSignInHost"];
 export type DeviceFlowResponse = components["schemas"]["DeviceFlow"];
 export type AiSettingsResponse = components["schemas"]["AiSettings"];
+export type AiProviderResponse = components["schemas"]["AiProvider"];
+export type AiProviderInput = components["schemas"]["AiProviderInput"];
+export type AiSettingsRequest = components["schemas"]["AiSettingsRequest"];
+export type AiApiFormat = components["schemas"]["AiApiFormat"];
+export type AiProviderTestReply = components["schemas"]["AiProviderTestReply"];
 export type AiReplyResponse = components["schemas"]["AiReply"];
 export type AiFileSelection = components["schemas"]["AiFileSelection"];
 export type CreatedTagResponse = components["schemas"]["CreatedTag"];
@@ -383,24 +388,20 @@ export class GitCrestApiClient {
     );
   }
 
-  setAiSettings(provider: AiSettingsResponse["provider"], baseUrl: string, model: string): Promise<AiSettingsResponse> {
+  setAiSettings(settings: AiSettingsRequest): Promise<AiSettingsResponse> {
     return this.request<AiSettingsResponse>("/api/v1/ai/settings", true, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ provider, baseUrl, model } satisfies components["schemas"]["AiSettingsRequest"]),
+      body: JSON.stringify(settings satisfies AiSettingsRequest),
     });
   }
 
-  setAiCredential(apiKey: string): Promise<AiSettingsResponse> {
-    return this.request<AiSettingsResponse>("/api/v1/ai/credential", true, {
-      method: "PUT",
+  testAiProvider(provider: AiProviderInput): Promise<AiProviderTestReply> {
+    return this.request<AiProviderTestReply>("/api/v1/ai/providers/test", true, {
+      method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ apiKey } satisfies components["schemas"]["AiCredentialRequest"]),
+      body: JSON.stringify({ provider } satisfies components["schemas"]["AiProviderTestRequest"]),
     });
-  }
-
-  deleteAiCredential(): Promise<void> {
-    return this.request<void>("/api/v1/ai/credential", true, { method: "DELETE" });
   }
 
   requestAiReview(repoId: RepoId, prompt: string, files: AiFileSelection[]): Promise<AiReplyResponse> {

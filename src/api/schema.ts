@@ -573,9 +573,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Read AI provider configuration and whether a cloud key is stored */
+        /**
+         * Read the configured AI providers and which one is active
+         * @description The configuration lives in ai-providers.json beside the core database. API keys stay in that file and are never returned; each provider reports only whether it has one.
+         */
         get: operations["getAiSettings"];
-        /** Save AI provider metadata without making a provider request */
+        /** Replace the provider list and active provider without making a provider request */
         put: operations["setAiSettings"];
         post?: never;
         delete?: never;
@@ -584,7 +587,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/ai/credential": {
+    "/api/v1/ai/providers/test": {
         parameters: {
             query?: never;
             header: {
@@ -594,11 +597,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Store an OpenAI-compatible API key in the system credential store */
-        put: operations["setAiCredential"];
-        post?: never;
-        /** Remove the saved OpenAI-compatible API key */
-        delete: operations["deleteAiCredential"];
+        put?: never;
+        /** Send a fixed one-line prompt, and no repository content, to check a provider's settings */
+        post: operations["testAiProvider"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2349,23 +2351,52 @@ export interface components {
             /** @description Provider hosts where browser sign-in is available; other hosts sign in with an access token. */
             browserSignIn: components["schemas"]["BrowserSignInHost"][];
         };
-        AiSettings: {
-            /** @enum {string} */
-            provider: "none" | "openAiCompatible" | "ollama";
+        /**
+         * @description Wire format: openAiChatCompletions posts to {baseUrl}/chat/completions, openAiResponses to {baseUrl}/responses, anthropicMessages to {baseUrl}/messages.
+         * @enum {string}
+         */
+        AiApiFormat: "openAiChatCompletions" | "openAiResponses" | "anthropicMessages";
+        AiProvider: {
+            id: string;
+            name: string;
+            apiFormat: components["schemas"]["AiApiFormat"];
             baseUrl: string;
             model: string;
-            /** @description Presence only; the credential value is never returned. */
-            hasCloudCredential: boolean;
+            maxOutputTokens: number | null;
+            /** @description Presence only; the key is never returned. */
+            hasApiKey: boolean;
+            /** @description The endpoint is a loopback address */
+            isLocal: boolean;
+        };
+        AiSettings: {
+            /** @description No active provider means AI assistance is off. */
+            activeProviderId: string | null;
+            providers: components["schemas"]["AiProvider"][];
+            /** @description Absolute path of ai-providers.json. */
+            configPath: string | null;
+        };
+        AiProviderInput: {
+            id: string;
+            name: string;
+            apiFormat: components["schemas"]["AiApiFormat"];
+            /** @description HTTPS anywhere */
+            baseUrl: string;
+            model: string;
+            /** @description Sent as max_tokens (chat completions), max_output_tokens (responses) or max_tokens (Anthropic, default 4096). */
+            maxOutputTokens?: number | null;
+            /** @description Absent or null keeps the key saved for this id; an empty string removes it. */
+            apiKey?: string | null;
         };
         AiSettingsRequest: {
-            /** @enum {string} */
-            provider: "none" | "openAiCompatible" | "ollama";
-            /** @description OpenAI-compatible endpoints require HTTPS; Ollama requires a loopback HTTP endpoint. */
-            baseUrl: string;
-            model: string;
+            activeProviderId?: string | null;
+            providers: components["schemas"]["AiProviderInput"][];
         };
-        AiCredentialRequest: {
-            apiKey: string;
+        AiProviderTestRequest: {
+            provider: components["schemas"]["AiProviderInput"];
+        };
+        AiProviderTestReply: {
+            model: string;
+            response: string;
         };
         AiRequest: {
             prompt: string;
@@ -2381,8 +2412,9 @@ export interface components {
             selections?: components["schemas"]["DiffSelection"][];
         };
         AiReply: {
-            /** @enum {string} */
-            provider: "openAiCompatible" | "ollama";
+            /** @description Display name of the provider that answered. */
+            provider: string;
+            apiFormat: components["schemas"]["AiApiFormat"];
             model: string;
             response: string;
             files: string[];
@@ -4318,7 +4350,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Provider metadata only; the key is never returned. */
+            /** @description Providers without their API keys. */
             200: {
                 headers: {
                     "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
@@ -4331,6 +4363,15 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             406: components["responses"]["UnsupportedVersion"];
+            /** @description ai-providers.json could not be read or is not valid JSON. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     setAiSettings: {
@@ -4348,7 +4389,7 @@ export interface operations {
             };
         };
         responses: {
-            /** @description Saved configuration and secret presence metadata. */
+            /** @description The saved providers without their API keys. */
             200: {
                 headers: {
                     "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
@@ -4362,9 +4403,18 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             406: components["responses"]["UnsupportedVersion"];
+            /** @description ai-providers.json could not be read or written. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
-    setAiCredential: {
+    testAiProvider: {
         parameters: {
             query?: never;
             header: {
@@ -4375,48 +4425,33 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["AiCredentialRequest"];
+                "application/json": components["schemas"]["AiProviderTestRequest"];
             };
         };
         responses: {
-            /** @description Provider metadata only; the key is never returned. */
+            /** @description The provider answered. */
             200: {
                 headers: {
                     "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AiSettings"];
+                    "application/json": components["schemas"]["AiProviderTestReply"];
                 };
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             406: components["responses"]["UnsupportedVersion"];
-        };
-    };
-    deleteAiCredential: {
-        parameters: {
-            query?: never;
-            header: {
-                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
-            };
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Credential removed or already absent. */
-            204: {
+            /** @description The provider could not be reached or rejected the request; the message names the HTTP status and the provider's error text without the API key. */
+            502: {
                 headers: {
-                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
                     [name: string]: unknown;
                 };
-                content?: never;
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
             };
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            406: components["responses"]["UnsupportedVersion"];
         };
     };
     requestAiReview: {

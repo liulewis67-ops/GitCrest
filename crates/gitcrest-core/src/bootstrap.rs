@@ -66,6 +66,8 @@ fn run_git_askpass() -> Result<(), credentials::CredentialError> {
 async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
     let config = AppConfig::from_env()?;
     let database_path = config.database_path;
+    let ai_providers =
+        crate::storage::settings::JsonAiProviderStore::beside_database(&database_path);
     let display_path = database_path.display().to_string();
     // The cause and path reach the startup error the desktop app shows, so a locked, unwritable or
     // damaged database can be told apart.
@@ -140,7 +142,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         diff_worktree,
         undo_store: Arc::new(store.clone()),
         branch_favorites: Arc::new(store.clone()),
-        ai_provider_settings: Arc::new(store.clone()),
+        ai_providers: Arc::new(ai_providers),
         history_search_index: Arc::new(store),
         repositories: repositories.clone(),
         repository_targets,
@@ -155,7 +157,6 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         remote_pull_recovery,
         clones,
         credentials: credentials::CredentialManager::system(),
-        ai_credentials: credentials::AiCredentialManager::system(),
         accounts,
         events: events.clone(),
     };

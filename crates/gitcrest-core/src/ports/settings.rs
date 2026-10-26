@@ -1,12 +1,12 @@
-use crate::domain::error::RepositoryError;
+use std::path::Path;
 
-pub(crate) trait AiProviderSettingsPort: Send + Sync {
-    fn read_ai_provider_settings(&self) -> Result<(String, String, String), RepositoryError>;
+use crate::domain::{ai::AiProviderConfig, error::RepositoryError};
 
-    fn save_ai_provider_settings(
-        &self,
-        provider: &str,
-        base_url: &str,
-        model: &str,
-    ) -> Result<(), RepositoryError>;
+pub(crate) trait AiProviderConfigPort: Send + Sync {
+    fn read_ai_provider_config(&self) -> Result<AiProviderConfig, RepositoryError>;
+
+    fn save_ai_provider_config(&self, config: &AiProviderConfig) -> Result<(), RepositoryError>;
+
+    /// Where the configuration lives, shown in Settings so it can be edited or backed up by hand.
+    fn ai_provider_config_location(&self) -> Option<&Path>;
 }

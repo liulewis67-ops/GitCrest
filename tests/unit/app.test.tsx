@@ -134,8 +134,6 @@ describe("App", () => {
     const openCommand = within(dialog).getByRole("button", { name: /Open local repository/ }) as HTMLButtonElement;
     expect(openCommand.disabled).toBe(false);
     expect(within(dialog).getByRole("button", { name: /Clone repository/ })).toBeDefined();
-    // AI assistance is deferred, so the palette offers no AI command.
-    expect(within(dialog).queryByRole("button", { name: /Generate commit message suggestion/ })).toBeNull();
     fireEvent.keyDown(openCommand, { key: "o", ctrlKey: true });
     expect(chooseRepository).not.toHaveBeenCalled();
 

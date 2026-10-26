@@ -10,6 +10,9 @@ import { PrivacyScopePreview } from "../../src/features/settings/ui/PrivacyScope
 
 afterEach(cleanup);
 
+const NO_PROVIDERS = { activeProviderId: null, providers: [], configPath: null };
+const ONE_PROVIDER = { activeProviderId: "openai", providers: [{ id: "openai", name: "OpenAI", apiFormat: "openAiResponses" as const, baseUrl: "https://api.openai.com/v1", model: "gpt-model", maxOutputTokens: null, hasApiKey: true, isLocal: false }], configPath: null };
+
 function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
   let api: Record<string, unknown>;
   api = { listAccounts: vi.fn().mockResolvedValue({ accounts: [] }), ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
@@ -24,7 +27,7 @@ function deferred<T>() {
 
 it("moves focus into settings, traps Tab, and restores the opener on close", async () => {
   const api = cancellableApi({
-    getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
+    getAiSettings: vi.fn().mockResolvedValue(NO_PROVIDERS),
   });
   function Harness() {
     const [open, setOpen] = useState(false);
@@ -51,20 +54,28 @@ it("moves focus into settings, traps Tab, and restores the opener on close", asy
   await waitFor(() => expect(document.activeElement).toBe(opener));
 });
 
-it("hides the deferred AI section and its shortcut without loading AI settings", async () => {
-  const api = cancellableApi({ getAiSettings: vi.fn() });
-  render(<SettingsPage api={api} onClose={vi.fn()} />);
+it("aborts AI settings and account loading when the settings dialog closes", async () => {
+  const pending = deferred<Awaited<ReturnType<GitCrestApiClient["getAiSettings"]>>>();
+  const signals: AbortSignal[] = [];
+  const api = cancellableApi({ getAiSettings: vi.fn(() => pending.promise) }, signals);
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return <><button type="button" onClick={() => setOpen(true)}>Open settings</button>{open && <SettingsPage api={api} onClose={() => setOpen(false)} />}</>;
+  }
+  render(<Harness />);
 
-  const nav = await screen.findByRole("navigation", { name: "Settings sections" });
-  expect(within(nav).queryByRole("button", { name: "AI assistant" })).toBeNull();
-  expect(screen.queryByRole("combobox", { name: "AI provider" })).toBeNull();
-  expect(screen.queryByRole("button", { name: "Record shortcut for Generate commit message" })).toBeNull();
-  expect(api.getAiSettings).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+  const dialog = await screen.findByRole("dialog", { name: "Settings" });
+  await waitFor(() => expect(signals).toHaveLength(2));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Close settings" }));
+  await waitFor(() => expect(screen.queryByRole("dialog", { name: "Settings" })).toBeNull());
+  expect(signals.every((signal) => signal.aborted)).toBe(true);
+  await act(async () => pending.resolve(NO_PROVIDERS));
 });
 
 it("records a replacement shortcut and rejects an existing assignment", async () => {
   const api = cancellableApi({
-    getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
+    getAiSettings: vi.fn().mockResolvedValue(NO_PROVIDERS),
   });
   const onShortcutsChange = vi.fn();
   render(<SettingsPage api={api} onClose={vi.fn()} onShortcutsChange={onShortcutsChange} />);
@@ -77,6 +88,57 @@ it("records a replacement shortcut and rejects an existing assignment", async ()
 
   fireEvent.keyDown(commandPalette, { key: "m", ctrlKey: true });
   expect(onShortcutsChange).toHaveBeenCalledWith({ ...defaultShortcutPreferences, commandPalette: "Mod+M" });
+});
+
+it("adds a provider and saves it to the core without sending a model request", async () => {
+  const api = cancellableApi({
+    getAiSettings: vi.fn().mockResolvedValue(NO_PROVIDERS),
+    setAiSettings: vi.fn((request: { activeProviderId: string; providers: Array<{ id: string; name: string }> }) => Promise.resolve({
+      activeProviderId: request.activeProviderId,
+      providers: request.providers.map((provider) => ({ ...provider, apiFormat: "anthropicMessages", baseUrl: "https://api.anthropic.com/v1", model: "claude-model", maxOutputTokens: null, hasApiKey: true, isLocal: false })),
+      configPath: "/data/ai-providers.json",
+    })),
+    testAiProvider: vi.fn(),
+  });
+  render(<SettingsPage api={api} onClose={vi.fn()} />);
+  expect(await screen.findByText(/AI never runs on its own/)).toBeTruthy();
+  fireEvent.click(await screen.findByRole("button", { name: "Add provider" }));
+  const card = screen.getByRole("group", { name: "Provider Provider 1" });
+  fireEvent.change(within(card).getByLabelText("API format"), { target: { value: "anthropicMessages" } });
+  expect(within(card).getByLabelText(/Base URL/)).toHaveProperty("value", "https://api.anthropic.com/v1");
+  expect(within(card).getByText(/Requests go to https:\/\/api.anthropic.com\/v1\/messages/)).toBeTruthy();
+  fireEvent.change(within(card).getByLabelText("Model"), { target: { value: "claude-model" } });
+  fireEvent.change(within(card).getByLabelText("API key"), { target: { value: "private-test-key" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save providers" }));
+
+  await waitFor(() => expect(api.setAiSettings).toHaveBeenCalledTimes(1));
+  const request = vi.mocked(api.setAiSettings).mock.calls[0][0];
+  expect(request.activeProviderId).toBe(request.providers[0].id);
+  expect(request.providers[0]).toMatchObject({ name: "Provider 1", apiFormat: "anthropicMessages", baseUrl: "https://api.anthropic.com/v1", model: "claude-model", maxOutputTokens: null, apiKey: "private-test-key" });
+  expect(await screen.findByText("Providers saved. No model request was made.")).toBeTruthy();
+  expect(screen.getByLabelText("API key")).toHaveProperty("value", "");
+  expect(screen.getByLabelText("API key").getAttribute("placeholder")).toBe("Saved — type to replace");
+  expect(screen.getByText("Saved to /data/ai-providers.json. API keys are stored in this file as plain text and are never shown here again.")).toBeTruthy();
+  expect(api.testAiProvider).not.toHaveBeenCalled();
+});
+
+it("keeps a saved key unless it is replaced or removed and tests a provider only on demand", async () => {
+  const api = cancellableApi({
+    getAiSettings: vi.fn().mockResolvedValue(ONE_PROVIDER),
+    setAiSettings: vi.fn().mockResolvedValue({ ...ONE_PROVIDER, activeProviderId: null, providers: [{ ...ONE_PROVIDER.providers[0], hasApiKey: false }] }),
+    testAiProvider: vi.fn().mockResolvedValue({ model: "gpt-model", response: "OK" }),
+  });
+  render(<SettingsPage api={api} onClose={vi.fn()} />);
+  const card = await screen.findByRole("group", { name: "Provider OpenAI" });
+  expect(api.testAiProvider).not.toHaveBeenCalled();
+  fireEvent.click(within(card).getByRole("button", { name: "Test connection" }));
+  await waitFor(() => expect(api.testAiProvider).toHaveBeenCalledWith({ id: "openai", name: "OpenAI", apiFormat: "openAiResponses", baseUrl: "https://api.openai.com/v1", model: "gpt-model", maxOutputTokens: null }));
+  expect(await within(card).findByText("gpt-model answered: OK")).toBeTruthy();
+
+  fireEvent.click(within(card).getByRole("checkbox", { name: "Remove the saved key" }));
+  fireEvent.change(screen.getByRole("combobox", { name: "Active provider" }), { target: { value: "" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save providers" }));
+  await waitFor(() => expect(api.setAiSettings).toHaveBeenCalledWith({ activeProviderId: null, providers: [{ id: "openai", name: "OpenAI", apiFormat: "openAiResponses", baseUrl: "https://api.openai.com/v1", model: "gpt-model", maxOutputTokens: null, apiKey: "" }] }));
 });
 
 it("shows reviewable staged and worktree scopes and previews selected local diff text", async () => {
@@ -123,7 +185,7 @@ it("aborts deselected diff previews and batch review reads on unmount", async ()
     getRepositoryStatus: vi.fn().mockResolvedValue(status),
     getFileDiff: vi.fn().mockReturnValueOnce(previewDiff.promise).mockReturnValueOnce(reviewDiff.promise),
   }, signals);
-  const settings = { provider: "openAiCompatible" as const, baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true };
+  const settings = ONE_PROVIDER;
   const view = render(<PrivacyScopePreview api={api} repoId="repo_fixture" settings={settings} />);
   await screen.findByText("src/file.ts");
   fireEvent.click(screen.getByRole("checkbox"));
@@ -146,9 +208,9 @@ it("requires reviewed diff display and an explicit confirmation before provider 
   const api = cancellableApi({
     getRepositoryStatus: vi.fn().mockResolvedValue({ repoId: "repo_fixture", refreshedAtMs: 1, files: [{ path: "src/only.ts", indexStatus: " ", worktreeStatus: "M", kind: "modified", categories: ["unstaged"], modeChanged: false }] }),
     getFileDiff: vi.fn().mockResolvedValue(document),
-    requestAiReview: vi.fn().mockResolvedValue({ provider: "openAiCompatible", model: "model-a", response: "Reviewed response", files: ["src/only.ts [worktree]"] }),
+    requestAiReview: vi.fn().mockResolvedValue({ provider: "OpenAI", apiFormat: "openAiResponses", model: "gpt-model", response: "Reviewed response", files: ["src/only.ts [worktree]"] }),
   });
-  render(<PrivacyScopePreview api={api} repoId="repo_fixture" settings={{ provider: "openAiCompatible", baseUrl: "https://api.example.test/v1", model: "model-a", hasCloudCredential: true }} />);
+  render(<PrivacyScopePreview api={api} repoId="repo_fixture" settings={ONE_PROVIDER} />);
   await screen.findByText("src/only.ts");
   fireEvent.click(screen.getByRole("checkbox"));
   fireEvent.click(screen.getByRole("button", { name: "Review all selected diffs before sending" }));
@@ -163,7 +225,7 @@ it("requires reviewed diff display and an explicit confirmation before provider 
 
 function settingsApi() {
   return cancellableApi({
-    getAiSettings: vi.fn().mockResolvedValue({ provider: "none", baseUrl: "", model: "", hasCloudCredential: false }),
+    getAiSettings: vi.fn().mockResolvedValue(NO_PROVIDERS),
   });
 }
 
