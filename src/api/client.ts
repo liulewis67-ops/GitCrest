@@ -228,11 +228,11 @@ export class GitCrestApiClient {
     });
   }
 
-  removeRepositoryWorktree(repoId: RepoId, path: string, force = false): Promise<TaskSnapshotResponse> {
+  removeRepositoryWorktree(repoId: RepoId, path: string, force = false, branch: { deleteBranch?: boolean; allowUnmerged?: boolean } = {}): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/worktrees/remove`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path, force } satisfies components["schemas"]["RemoveWorktreeRequest"]),
+      body: JSON.stringify({ path, force, deleteBranch: Boolean(branch.deleteBranch), allowUnmerged: Boolean(branch.deleteBranch && branch.allowUnmerged) } satisfies components["schemas"]["RemoveWorktreeRequest"]),
     });
   }
 

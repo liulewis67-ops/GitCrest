@@ -68,7 +68,12 @@ interface BranchesSidebarProps {
   onCopyBranchName: (name: string) => void;
   onOpenWorktree: (path: string) => void;
   onNewWorktreeForBranch: (name: string, fromRemote: boolean) => void;
-  onWorktreeRemoveStarted: (task: TaskSnapshotResponse) => void;
+  /** Starts a new branch at `oid` checked out in a new worktree, for a branch that is already checked out somewhere. */
+  onNewWorktreeFrom: (oid: string, label: string) => void;
+  /** Asks to remove a linked worktree; the caller confirms first. */
+  onRemoveWorktree: (path: string) => void;
+  onRevealPath?: (path: string) => void;
+  onWorktreePruneStarted: (task: TaskSnapshotResponse) => void;
   onManageBranch: (name: string, mode: "rename" | "delete") => void;
   onToggleBranchFavorite: (fullName: string, favorite: boolean) => void;
   onRefreshRemotes: (repoId: string) => void;
@@ -87,7 +92,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
     remoteActionBusy, remoteDisabledReason, connected, hasActiveRepositoryTask, historyRefreshKey, shortcuts, isMacPlatform,
     selectedBranch, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
     onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onOpenWorktree,
-    onNewWorktreeForBranch, onWorktreeRemoveStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
+    onNewWorktreeForBranch, onNewWorktreeFrom, onRemoveWorktree, onRevealPath, onWorktreePruneStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
     onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream,
   } = props;
   const [query, setQuery] = useState("");
@@ -158,8 +163,10 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
       items.push({ id: "checkout", label: local ? t("bs.menuCheckout") : t("bs.menuCheckoutRemote"), icon: <MenuIcon name="checkout" />, disabled: blocked, onSelect: () => local ? onSwitchBranch(branch.name) : onCheckoutRemoteBranch(branch.name) });
     }
     items.push({ id: "new-branch", label: t("bs.menuNewBranch"), icon: <MenuIcon name="branch" />, separatorBefore: items.length > 0, disabled: blocked, onSelect: () => onCreateBranchFrom(branch.oid) });
-    // A branch can be checked out in one worktree at a time.
-    if (!branch.isCurrent && !(local && branch.worktreePath)) {
+    // A branch can be checked out in one worktree at a time, so one that already is gets a new branch from its tip.
+    if (local && (branch.isCurrent || branch.worktreePath)) {
+      items.push({ id: "new-worktree-from", label: t("bs.menuNewWorktreeFrom", { name: branch.name }), icon: <MenuIcon name="worktree" />, disabled: blocked, onSelect: () => onNewWorktreeFrom(branch.oid, branch.name) });
+    } else if (!branch.isCurrent) {
       items.push({ id: "new-worktree", label: t("br.openNewWorktree"), icon: <MenuIcon name="worktree" />, disabled: blocked, onSelect: () => onNewWorktreeForBranch(branch.name, !local) });
     }
     if (!branch.isCurrent) {
@@ -168,6 +175,10 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
     }
     if (local) {
       items.push({ id: "rename", label: t("br.rename"), icon: <MenuIcon name="rename" />, separatorBefore: true, disabled: blocked, onSelect: () => onManageBranch(branch.name, "rename") });
+      if (!branch.isCurrent && branch.worktreePath) {
+        const worktreePath = branch.worktreePath;
+        items.push({ id: "remove-worktree", label: t("bs.menuRemoveWorktree"), title: worktreePath, icon: <MenuIcon name="delete" />, danger: true, disabled: blocked, onSelect: () => onRemoveWorktree(worktreePath) });
+      }
       if (!branch.isCurrent) {
         items.push({ id: "delete", label: t("br.delete"), icon: <MenuIcon name="delete" />, danger: true, disabled: blocked || Boolean(branch.worktreePath), title: branch.worktreePath ? t("br.removeWorktreeFirst") : undefined, onSelect: () => onManageBranch(branch.name, "delete") });
       }
@@ -226,7 +237,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
           {remoteBranches.length > 0 && groupLabel(t("bs.remote"), remoteBranches.length, showRemote, showRemote ? t("bs.hideRemote") : t("bs.showRemote"), () => setRemoteGroupOpen((open) => !open))}
           {showRemote && remoteBranches.map(branchRow)}
         </ul>}
-        {api && <WorktreeList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} disabled={!connected || hasActiveRepositoryTask} onOpen={onOpenWorktree} onRemoveStarted={onWorktreeRemoveStarted} />}
+        {api && <WorktreeList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} disabled={!connected || hasActiveRepositoryTask} onOpen={onOpenWorktree} onNewWorktreeFrom={onNewWorktreeFrom} onRemove={onRemoveWorktree} onReveal={onRevealPath} onPruneStarted={onWorktreePruneStarted} />}
         <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">{t("nav.loadingRemotes")}</div>}><RemoteManager
           snapshot={remotes}
           branches={branches}

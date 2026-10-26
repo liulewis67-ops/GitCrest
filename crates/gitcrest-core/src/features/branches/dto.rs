@@ -112,6 +112,12 @@ pub(super) struct RemoveWorktreeRequest {
     pub(super) path: String,
     #[serde(default)]
     pub(super) force: bool,
+    /// Also deletes the branch the worktree had checked out, once the folder is gone.
+    #[serde(default)]
+    pub(super) delete_branch: bool,
+    /// Lets `delete_branch` remove a branch whose commits are not merged into the current branch.
+    #[serde(default)]
+    pub(super) allow_unmerged: bool,
 }
 
 #[derive(Deserialize)]

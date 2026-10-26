@@ -102,9 +102,13 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();
     await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).not.toContain("wt-folder");
 
-    // Remove the worktree again from the sidebar (two-step confirmation); the branch is kept.
-    await window.getByRole("button", { name: "Remove worktree wt-folder" }).click();
-    await window.getByRole("button", { name: "Confirm remove worktree wt-folder" }).click();
+    // Remove the worktree again from its right-click menu in the Worktrees list; the branch is kept unless asked.
+    const worktreeRow = window.getByRole("list", { name: "Repository worktrees" }).locator(".branchItem").filter({ hasText: "feature/wt" });
+    await worktreeRow.click({ button: "right" });
+    await window.getByRole("menuitem", { name: "Remove worktree…" }).click();
+    const removeDialog = window.getByRole("dialog", { name: "Remove worktree" });
+    await removeDialog.getByText(/no uncommitted changes/).waitFor({ timeout: 10_000 });
+    await removeDialog.getByRole("button", { name: "Remove worktree" }).click();
     await expect.poll(() => access(resolve(worktreePath, ".git")).then(() => true, () => false), { timeout: 15_000 }).toBe(false);
     expect(await git(fixture.path, "branch", "--list", "feature/wt")).toContain("feature/wt");
     await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
@@ -128,10 +132,35 @@ it("creates, switches, merges and adds worktrees for branches from the UI", asyn
     await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("wt-folder-again");
     await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();
 
+    // The current branch seeds a worktree from its right-click menu, through a new branch at its tip.
+    const fromCurrentFolder = resolve(worktreeParent, "ux-folder");
+    const currentRow = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("feature/ux", { exact: true }) });
+    await currentRow.click({ button: "right" });
+    await window.getByRole("menuitem", { name: "New worktree from feature/ux…" }).click();
+    const fromCurrent = window.getByRole("dialog", { name: "New worktree from feature/ux" });
+    await fromCurrent.getByRole("textbox", { name: "Branch name" }).fill("feature/ux-2");
+    await fromCurrent.getByRole("textbox", { name: "Worktree folder" }).fill(fromCurrentFolder);
+    await fromCurrent.getByRole("button", { name: "Create worktree" }).click();
+    await expect.poll(() => git(fromCurrentFolder, "rev-parse", "--abbrev-ref", "HEAD").catch(() => ""), { timeout: 15_000 }).toBe("feature/ux-2");
+    await expect.poll(() => window.locator(".workspaceCrumb").innerText(), { timeout: 15_000 }).toContain("ux-folder");
+    await window.getByRole("tab", { name: new RegExp("gitcrest-e2e-") }).click();
+
+    // Its branch row's right-click menu removes that worktree and, when asked, the branch with it.
+    const uxRow = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("feature/ux-2", { exact: true }) });
+    await expect.poll(async () => { await uxRow.click({ button: "right" }); return window.getByRole("menuitem", { name: "Remove its worktree…" }).isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    await window.getByRole("menuitem", { name: "Remove its worktree…" }).click();
+    const removeBoth = window.getByRole("dialog", { name: "Remove worktree" });
+    await removeBoth.getByRole("checkbox", { name: "Also delete the branch feature/ux-2" }).check();
+    await removeBoth.getByRole("button", { name: "Remove worktree and branch" }).click();
+    await expect.poll(() => access(fromCurrentFolder).then(() => true, () => false), { timeout: 15_000 }).toBe(false);
+    await expect.poll(() => git(fixture.path, "branch", "--list", "feature/ux-2"), { timeout: 15_000 }).toBe("");
+    await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
+
     // Merge `side` into the current branch from the sidebar row.
     const sideRow = window.locator(".branchItem", { hasText: "side" });
-    await sideRow.hover();
-    await sideRow.getByRole("button", { name: /Merge refs\/heads\/side/ }).click();
+    const mergeSide = sideRow.getByRole("button", { name: /Merge refs\/heads\/side/ });
+    await expect.poll(async () => { await sideRow.hover(); return mergeSide.isEnabled(); }, { timeout: 20_000 }).toBe(true);
+    await mergeSide.click();
     await window.getByRole("button", { name: "Start merge" }).click();
     await expect.poll(() => git(fixture.path, "log", "--format=%s", "-1"), { timeout: 15_000 }).toBe("side work");
     await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close" }).click();
@@ -193,17 +222,20 @@ it("refuses to remove a dirty worktree until changes are explicitly discarded, a
     await window.getByText("Core connected").waitFor({ timeout: 40_000 });
     await openRepository(window, fixture.path);
 
-    expect(await window.getByRole("button", { name: "Remove worktree locked-wt" }).isDisabled()).toBe(true);
+    // A locked worktree offers no Remove button, and its menu says why.
+    expect(await window.getByRole("button", { name: "Remove worktree locked-wt" }).count()).toBe(0);
     // Branches that a worktree has checked out cannot be switched to; the row offers to open that worktree.
     const dirtyBranchRow = window.getByRole("list", { name: "Repository branches" }).locator(".branchItem").filter({ has: window.getByText("wt-dirty", { exact: true }) });
     await dirtyBranchRow.hover();
     expect(await dirtyBranchRow.getByRole("button", { name: "Switch to wt-dirty" }).count()).toBe(0);
     await expect.poll(async () => { await dirtyBranchRow.hover(); return dirtyBranchRow.getByRole("button", { name: "Open the worktree of wt-dirty" }).isEnabled(); }, { timeout: 20_000 }).toBe(true);
     await window.getByRole("button", { name: "Remove worktree dirty-wt" }).click();
-    expect(await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).isDisabled()).toBe(true);
+    const removeDialog = window.getByRole("dialog", { name: "Remove worktree" });
+    await removeDialog.getByRole("checkbox", { name: /discard them/ }).waitFor({ timeout: 10_000 });
+    expect(await removeDialog.getByRole("button", { name: "Remove worktree" }).isDisabled()).toBe(true);
     expect(await access(resolve(dirty, "scratch.txt")).then(() => true, () => false)).toBe(true);
-    await window.getByRole("checkbox", { name: "Discard changes" }).check();
-    await window.getByRole("button", { name: "Confirm remove worktree dirty-wt" }).click();
+    await removeDialog.getByRole("checkbox", { name: /discard them/ }).check();
+    await removeDialog.getByRole("button", { name: "Remove worktree" }).click();
     await expect.poll(() => access(dirty).then(() => true, () => false), { timeout: 15_000 }).toBe(false);
   } finally {
     await app?.close();

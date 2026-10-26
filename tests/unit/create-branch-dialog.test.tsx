@@ -39,3 +39,18 @@ it("offers a worktree folder suggestion, lets the user browse, and sends the wor
   await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "t2" }));
   expect(createRepositoryBranch).toHaveBeenCalledWith("repo_x", "feature/x", { checkout: false, startPoint: "d".repeat(40), worktreePath: "D:/trees/app-feature-x", copyFiles: [] });
 });
+
+it("only creates a worktree when started from a branch that is already checked out", async () => {
+  const createRepositoryBranch = vi.fn().mockResolvedValue({ taskId: "t3" });
+  const onStarted = vi.fn();
+  const api = { createRepositoryBranch } as unknown as GitCrestApiClient;
+  render(<CreateBranchDialog api={api} repoId="repo_x" repositoryPath="C:/work/app" startOid={"e".repeat(40)} worktreeFrom="main" disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
+
+  expect(screen.getByRole("dialog", { name: "New worktree from main" })).toBeTruthy();
+  expect(screen.queryByRole("radio")).toBeNull();
+  fireEvent.change(screen.getByRole("textbox", { name: "Branch name" }), { target: { value: "spike" } });
+  expect((screen.getByRole("textbox", { name: "Worktree folder" }) as HTMLInputElement).value).toBe("C:/work/app-spike");
+  fireEvent.click(screen.getByRole("button", { name: "Create worktree" }));
+  await waitFor(() => expect(onStarted).toHaveBeenCalledWith({ taskId: "t3" }));
+  expect(createRepositoryBranch).toHaveBeenCalledWith("repo_x", "spike", { checkout: false, startPoint: "e".repeat(40), worktreePath: "C:/work/app-spike", copyFiles: [] });
+});

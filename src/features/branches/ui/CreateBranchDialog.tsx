@@ -9,11 +9,13 @@ import { isAbsoluteFolder, rememberCopyFiles, rememberWorktreeParent, suggestWor
 type Placement = "switch" | "stay" | "worktree";
 
 /** Creates a branch that starts at a chosen commit: switch to it, leave HEAD alone, or check it out in a new worktree. */
-export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disabled, onChooseFolder, onClose, onStarted }: {
+export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, worktreeFrom, disabled, onChooseFolder, onClose, onStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   repositoryPath?: string;
   startOid: string;
+  /** Names what `startOid` is, such as the current branch; the dialog then only creates a new worktree. */
+  worktreeFrom?: string;
   disabled: boolean;
   onChooseFolder?: () => Promise<string | undefined>;
   onClose: () => void;
@@ -21,7 +23,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
 }) {
   const { t } = useI18n();
   const [name, setName] = useState("");
-  const [placement, setPlacement] = useState<Placement>("switch");
+  const [placement, setPlacement] = useState<Placement>(worktreeFrom ? "worktree" : "switch");
   const [worktreePath, setWorktreePath] = useState("");
   const [worktreeEdited, setWorktreeEdited] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -70,18 +72,18 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, disa
   return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}>
     <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="create-branch-title" onKeyDown={onKeyDown}>
       <div className="taskCenterHeader">
-        <div><p className="sectionEyebrow">{t("cb.eyebrow")}</p><h2 id="create-branch-title">{t("cb.title")}</h2></div>
+        <div><p className="sectionEyebrow">{worktreeFrom ? t("cb.worktreeEyebrow") : t("cb.eyebrow")}</p><h2 id="create-branch-title">{worktreeFrom ? t("cb.worktreeTitle", { name: worktreeFrom }) : t("cb.title")}</h2></div>
         <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("cb.close")}</button>
       </div>
       <div className="workflowDialogBody">
-        <div className="repositoryFact"><span>{t("cb.startsAt")}</span><strong className="monoText" title={startOid}>{startOid.slice(0, 12)}</strong></div>
+        <div className="repositoryFact"><span>{t("cb.startsAt")}</span><strong className="monoText" title={startOid}>{worktreeFrom ? `${worktreeFrom} · ${startOid.slice(0, 12)}` : startOid.slice(0, 12)}</strong></div>
         <label className="cloneField">{t("cb.name")}<input autoFocus data-dialog-initial-focus value={name} spellCheck={false} placeholder="feature/my-change" onChange={(event) => setName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && ready) { event.preventDefault(); void submit(); } }} /></label>
-        <fieldset className="branchPlacement">
+        {worktreeFrom ? <p className="cloneHelp">{t("cb.worktreeHelp", { name: worktreeFrom })}</p> : <fieldset className="branchPlacement">
           <legend>{t("cb.after")}</legend>
           <label><input type="radio" name="branch-placement" checked={placement === "switch"} onChange={() => setPlacement("switch")} />{t("cb.switch")}</label>
           <label><input type="radio" name="branch-placement" checked={placement === "stay"} onChange={() => setPlacement("stay")} />{t("cb.stay")}</label>
           <label><input type="radio" name="branch-placement" checked={placement === "worktree"} onChange={() => setPlacement("worktree")} />{t("cb.worktree")}</label>
-        </fieldset>
+        </fieldset>}
         {placement === "switch" && <p className="cloneHelp">{t("cb.switchHelp")}</p>}
         {placement === "worktree" && <label className="branchWorktreeField">{t("cb.newWorktreeFolder")}
           <span className="branchWorktreeInput">

@@ -2417,6 +2417,16 @@ export interface components {
             path: string;
             /** @default false */
             force: boolean;
+            /**
+             * @description Also delete the branch the worktree has checked out, after the folder is removed. The branch is checked first, so a refused deletion removes nothing.
+             * @default false
+             */
+            deleteBranch: boolean;
+            /**
+             * @description Lets deleteBranch remove a branch with commits not reachable from the current branch.
+             * @default false
+             */
+            allowUnmerged: boolean;
         };
         WorktreeSnapshot: {
             repoId: components["schemas"]["RepoId"];

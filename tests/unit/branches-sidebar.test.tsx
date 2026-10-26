@@ -25,7 +25,7 @@ function renderSidebar(overrides: Partial<Parameters<typeof BranchesSidebar>[0]>
   const handlers = {
     onSelectBranch: vi.fn(), onManageAccounts: vi.fn(), onRefreshBranches: vi.fn(), onOpenBranchSwitcher: vi.fn(), onDeleteRemoteBranch: vi.fn(),
     onSwitchBranch: vi.fn(), onCheckoutRemoteBranch: vi.fn(), onMergeBranch: vi.fn(), onRebaseOnto: vi.fn(), onCreateBranchFrom: vi.fn(),
-    onCopyBranchName: vi.fn(), onOpenWorktree: vi.fn(), onNewWorktreeForBranch: vi.fn(), onWorktreeRemoveStarted: vi.fn(), onManageBranch: vi.fn(),
+    onCopyBranchName: vi.fn(), onOpenWorktree: vi.fn(), onNewWorktreeForBranch: vi.fn(), onNewWorktreeFrom: vi.fn(), onRemoveWorktree: vi.fn(), onWorktreePruneStarted: vi.fn(), onManageBranch: vi.fn(),
     onToggleBranchFavorite: vi.fn(), onRefreshRemotes: vi.fn(), onAddRemote: vi.fn(), onSetRemoteUrl: vi.fn(), onDeleteRemote: vi.fn(),
     onSetDefaultRemote: vi.fn(), onSetBranchUpstream: vi.fn(),
   };
@@ -108,7 +108,11 @@ it("offers checkout, new branch, merge, rebase, rename and delete for a local br
 
 it("keeps the current branch's menu to what can be done to it, and a remote branch's to its own actions", () => {
   const { handlers } = renderSidebar();
-  expect(itemLabels(openMenu("master"))).toEqual(["New branch from here…", "Rename…", "Copy branch name"]);
+  expect(itemLabels(openMenu("master"))).toEqual(["New branch from here…", "New worktree from master…", "Rename…", "Copy branch name"]);
+  // The current branch cannot be checked out twice, so its worktree gets a new branch that starts at its tip.
+  fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "New worktree from master…" }));
+  expect(handlers.onNewWorktreeFrom).toHaveBeenCalledWith(master.oid, "master");
+  openMenu("master");
   fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
 
   const remote = openMenu("origin/bootbase");
@@ -124,14 +128,17 @@ it("keeps the current branch's menu to what can be done to it, and a remote bran
   expect(handlers.onDeleteRemoteBranch).toHaveBeenCalledWith("refs/remotes/origin/bootbase");
 });
 
-it("opens the worktree of a branch checked out elsewhere and will not delete it", () => {
+it("opens or removes the worktree of a branch checked out elsewhere and will not delete the branch", () => {
   const { handlers } = renderSidebar();
   const menu = openMenu("hotfix");
   expect(itemLabels(menu)[0]).toBe("Open its worktree");
   expect(itemLabels(menu)).not.toContain("Open in new worktree…");
+  expect(itemLabels(menu)).toContain("New worktree from hotfix…");
   expect((within(menu).getByRole("menuitem", { name: "Delete…" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(within(menu).getByRole("menuitem", { name: "Open its worktree" }));
   expect(handlers.onOpenWorktree).toHaveBeenCalledWith("D:/trees/hotfix");
+  fireEvent.click(within(openMenu("hotfix")).getByRole("menuitem", { name: "Remove its worktree…" }));
+  expect(handlers.onRemoveWorktree).toHaveBeenCalledWith("D:/trees/hotfix");
 });
 
 it("disables changing actions while a repository task runs but still copies the name", () => {

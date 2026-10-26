@@ -34,15 +34,8 @@ export const branches = {
   "wt.openAria": ["Open worktree {name}", "打开工作树 {name}"],
   "wt.missing": ["Missing", "已丢失"],
   "wt.open": ["Open", "打开"],
-  "wt.discardTitle": ["Also discard uncommitted changes in that folder", "同时丢弃该文件夹中未提交的变更"],
-  "wt.discard": ["Discard changes", "丢弃变更"],
-  "wt.confirmAria": ["Confirm remove worktree {name}", "确认移除工作树 {name}"],
-  "wt.tickDiscard": ["This worktree has uncommitted changes. Tick Discard changes to remove it.", "此工作树有未提交的变更，请勾选“丢弃变更”后再移除。"],
-  "wt.confirm": ["Confirm", "确认"],
-  "wt.cancelAria": ["Cancel remove", "取消移除"],
-  "wt.cancel": ["Cancel", "取消"],
   "wt.removeAria": ["Remove worktree {name}", "移除工作树 {name}"],
-  "wt.removeTitle": ["Remove {path} (the branch is kept)", "移除 {path}（保留分支）"],
+  "wt.removeTitle": ["Remove {path}…", "移除 {path}…"],
   "wt.remove": ["Remove", "移除"],
 
   // Worktree picker beside the branch in the workspace toolbar

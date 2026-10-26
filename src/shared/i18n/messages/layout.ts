@@ -158,6 +158,8 @@ export const layout = {
   "bs.menuCheckout": ["Check out…", "检出…"],
   "bs.menuCheckoutRemote": ["Check out as local branch…", "检出为本地分支…"],
   "bs.menuOpenWorktree": ["Open its worktree", "打开其工作树"],
+  "bs.menuNewWorktreeFrom": ["New worktree from {name}…", "从 {name} 新建工作树…"],
+  "bs.menuRemoveWorktree": ["Remove its worktree…", "移除其工作树…"],
   "bs.menuNewBranch": ["New branch from here…", "从此处新建分支…"],
   "bs.menuMerge": ["Merge {name} into current branch…", "将 {name} 合并到当前分支…"],
   "bs.menuRebase": ["Rebase current branch onto {name}…", "将当前分支变基到 {name}…"],

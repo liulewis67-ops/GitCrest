@@ -11,5 +11,6 @@ export { WorktreeSwitcher } from "./ui/WorktreeSwitcher";
 export { BranchSyncBadge } from "./ui/BranchSyncBadge";
 export const loadCreateBranchDialog = () => import("./ui/CreateBranchDialog");
 export const loadNewWorktreeDialog = () => import("./ui/NewWorktreeDialog");
+export const loadRemoveWorktreeDialog = () => import("./ui/RemoveWorktreeDialog");
 export { useOpenCreatedWorktree } from "./model/use-open-created-worktree";
 export { BranchRowMenu } from "./ui/BranchRowMenu";

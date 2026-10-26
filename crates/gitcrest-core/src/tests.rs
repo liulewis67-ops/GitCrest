@@ -6360,6 +6360,72 @@ async fn history_api_pages_commits_and_reads_details_and_branch_refs() {
     let cleaned: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(worktree_count(cleaned), 1);
 
+    // Removing a worktree can delete its branch too; an unmerged branch needs explicit consent,
+    // and without it nothing is removed.
+    let gone_dir = worktree_parent.path().join("gone");
+    let creation = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/branches"),
+            &serde_json::json!({ "name": "feature/gone", "worktreePath": gone_dir }).to_string(),
+            WRITE_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(creation.status(), StatusCode::ACCEPTED);
+    let body = to_bytes(creation.into_body(), usize::MAX).await.unwrap();
+    let creation: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let completed = wait_for_task(&app, creation["taskId"].as_str().unwrap()).await;
+    assert_eq!(completed["status"], "succeeded");
+    git_output(
+        &gone_dir,
+        &[
+            "-c",
+            "user.name=GitCrest Test",
+            "-c",
+            "user.email=test@example.com",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "work only on feature/gone",
+        ],
+    );
+    let gone_path = gone_dir.display().to_string();
+    let refused = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/worktrees/remove"),
+            &serde_json::json!({ "path": gone_path, "deleteBranch": true }).to_string(),
+            WRITE_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(refused.status(), StatusCode::CONFLICT);
+    assert!(gone_dir.join(".git").exists());
+    let removal = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/worktrees/remove"),
+            &serde_json::json!({ "path": gone_path, "deleteBranch": true, "allowUnmerged": true })
+                .to_string(),
+            WRITE_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(removal.status(), StatusCode::ACCEPTED);
+    let body = to_bytes(removal.into_body(), usize::MAX).await.unwrap();
+    let removal: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    let completed = wait_for_task(&app, removal["taskId"].as_str().unwrap()).await;
+    assert_eq!(completed["status"], "succeeded");
+    assert!(!gone_dir.exists());
+    assert_eq!(
+        git_output(&root, &["branch", "--list", "feature/gone"]).trim(),
+        ""
+    );
+
     // Ignored local files can be listed and copied into a new worktree, but only when named.
     std::fs::write(root.join(".git").join("info").join("exclude"), "*.local\n").unwrap();
     std::fs::write(root.join("app.local"), "SECRET=1\n").unwrap();

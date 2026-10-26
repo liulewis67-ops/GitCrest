@@ -461,10 +461,38 @@ pub(super) async fn remove_repository_worktree(
     {
         return Err(invalid("The worktree you are viewing cannot be removed."));
     }
+    // The branch is checked before anything is removed, so a branch that cannot be deleted never
+    // leaves the worktree gone and the branch behind.
+    let branch_to_delete = if request.delete_branch {
+        let Some(branch) = entry.branch.clone() else {
+            return Err(invalid("This worktree has no branch to delete."));
+        };
+        let metadata = state
+            .repositories
+            .refresh_metadata(&repo_id)
+            .await
+            .map_err(ApiError::from_repository_error)?;
+        branches::validate_branch_delete_with_git(
+            &target.repository_path,
+            metadata.branch.as_deref(),
+            metadata.detached,
+            &branch,
+            request.allow_unmerged,
+            state.branch_git.as_ref(),
+        )
+        .await
+        .map_err(ApiError::from_branch_error)?;
+        Some(branch)
+    } else {
+        None
+    };
     let path = target.repository_path;
     let command = state.git_commands.clone();
+    let favorites_store = state.branch_favorites.clone();
+    let repo_for_favorite = repo_id.clone();
     let worktree_path = entry.path.clone();
     let force = request.force;
+    let allow_unmerged = request.allow_unmerged;
     let task = state
         .tasks
         .submit(
@@ -480,10 +508,40 @@ pub(super) async fn remove_repository_worktree(
                             path: worktree_path,
                             force,
                         },
-                        context,
+                        context.clone(),
                     )
-                    .await
-                    .map(|()| None)
+                    .await?;
+                let Some(name) = branch_to_delete else {
+                    return Ok(None);
+                };
+                let favorite_mutation = branches::BranchFavoriteMutation::Remove {
+                    full_name: format!("refs/heads/{name}"),
+                };
+                branches::execute_branch_and_update_favorites(
+                    repo_for_favorite,
+                    favorite_mutation,
+                    favorites_store,
+                    || async move {
+                        command
+                            .execute_branch(
+                                &path,
+                                BranchCommand::Delete {
+                                    name,
+                                    allow_unmerged,
+                                },
+                                context,
+                            )
+                            .await
+                    },
+                )
+                .await
+                .map_err(|failure| match failure {
+                    branches::BranchTaskFailure::Command(failure) => failure,
+                    branches::BranchTaskFailure::StorageUnavailable => {
+                        TaskFailure::Failed("Branch favorite storage is unavailable.".into())
+                    }
+                })?;
+                Ok(None)
             },
         )
         .await

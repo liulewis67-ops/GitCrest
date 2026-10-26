@@ -4775,6 +4775,14 @@ components:
       properties:
         path: { type: string, minLength: 1, maxLength: 4096 }
         force: { type: boolean, default: false }
+        deleteBranch:
+          type: boolean
+          default: false
+          description: Also delete the branch the worktree has checked out, after the folder is removed. The branch is checked first, so a refused deletion removes nothing.
+        allowUnmerged:
+          type: boolean
+          default: false
+          description: Lets deleteBranch remove a branch with commits not reachable from the current branch.
     WorktreeSnapshot:
       type: object
       additionalProperties: false
