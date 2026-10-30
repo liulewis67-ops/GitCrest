@@ -1,3 +1,5 @@
+export { BackgroundFetchSettings } from "./ui/BackgroundFetchSettings";
+export { useBackgroundFetch } from "./model/use-background-fetch";
 export const loadRemoteManager = () => import("./ui/RemoteManager");
 export const loadPushDialog = () => import("./ui/PushDialog");
 export const loadPullDialog = () => import("./ui/PullDialog");

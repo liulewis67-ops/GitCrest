@@ -46,7 +46,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | done |
 | U6.1 | Open in editor, terminal and browser | P1 | M | D3 | done |
 | U6.2 | Drop a folder to open a repository | P1 | S | — | done |
-| U7.1 | Background fetch | P1 | M | D2 | not started |
+| U7.1 | Background fetch | P1 | M | D2 | done |
 | U7.2 | System notifications for long tasks | P1 | S | — | not started |
 | U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | not started |
 | U9.1 | Add to `.gitignore` from Changes | P1 | S | — | done |
@@ -78,6 +78,7 @@ Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each aga
 | ID | Decided | Date | Note |
 |---|---|---|---|
 | D1 | (b) one list labelled by source, with import as an action | 2026-10-31 | Adopted from the recommendation while carrying out the plan; revisit if it proves wrong. U4.1 shows Git stash entries in the Shelves tab under their own "Git stash" heading and badge; U4.2 adds the actions and "Import as shelf". |
+| D2 | (b) on by default, every 10 minutes, only for the open repository | 2026-10-31 | Adopted from the recommendation. The interval (5, 10, 15, 30 or 60 minutes), the on/off switch and a per-repository switch are in Settings → General. It pauses while the window is hidden or offline and while the repository has another task; the metered-network part of the recommendation is not implemented because the app has no reliable way to detect a metered connection. |
 | D3 | (b) detect common editors and allow a custom program, stored in Settings → General | 2026-10-31 | Adopted from the recommendation. The custom entry is one program, not a command line: the main process starts it without a shell and gives it the path as its only argument. Windows batch files are refused (they need a shell); choose the .exe. |
 | D4 | (b) both layouts, remembered per user | 2026-10-31 | Adopted from the recommendation. Staging works in both layouts; the choice is stored with the other diff view preferences and shared by the main area and the Diff window. The PRD §7 note that the main area is Split only is therefore out of date (checklist item). |
 
@@ -400,3 +401,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `electron/main/external-tools.ts`, `tests/unit/external-tools.test.ts`
 - Limits / follow-up: "Open in editor" is in the palette (repository) and on file rows in Changes; "Open in terminal" is in the palette; remotes in the sidebar have "Open in browser". The renderer sends only a repository id and a relative path; the main process asks the core for the folder, resolves the path itself, and refuses unknown repositories, absolute paths, `..` and line breaks. Programs start detached without a shell with the path as one argument; terminals start in the folder through the working directory. Detected editors are VS Code, Cursor, Sublime Text and Notepad++ in their usual places (the Windows lookup for names on PATH accepts only .exe). A missing or invalid editor shows its message and opens Settings → General. The web address is derived from the fetch URL (scp-style, ssh, https, git), drops credentials and `.git`, and has no page for local paths; only http and https addresses are opened. Not done: an editor entry on the repository tab menu and a terminal entry for single files, and no terminal choice in Settings (the system default is used).
 - Commit: see git log (`feat: complete U6.1 open repositories in an editor, a terminal and the browser`)
+
+### U7.1 — Background fetch
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (216 tests; new `background_fetch_runs_as_its_own_operation_and_is_skipped_while_a_task_runs` holds a manual fetch with a slow `uploadpack`, sees the scheduled one refused with 409, then accepted as `fetchBackground`), `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (562 tests; new `background-fetch.test.tsx` with fake timers), `pnpm test:e2e` (38 tests, after the build).
+- Manual check: not run. A scheduled fetch against a real remote with real credentials, and the visibility and online checks in a real window, were not exercised.
+- Evidence: `src/features/remotes/model/use-background-fetch.ts`, `crates/gitcrest-core/src/features/remotes/handlers.rs`
+- Limits / follow-up: `POST /repositories/{repoId}/fetch` takes an optional `background` flag. It runs as the operation `fetchBackground` (shown as that in the task list, apart from a manual `fetch`) and is refused with 409 when the repository has a queued or running task, so it never waits in front of the user's work. The renderer checks the schedule every 30 seconds for the open repository only, needs it to be connected, available, have remotes and no task, skips a hidden or offline window, and records the task without opening the task list. A skipped (409) fetch is retried after about a minute. If a scheduled fetch fails to sign in, one notice appears and that repository is not asked again until the user's own fetch succeeds or a background-fetch setting changes; other failures wait for the next interval. Repositories in other tabs are not fetched. The "metered network" pause is not implemented.
+- Commit: see git log (`feat: complete U7.1 fetch the open repository in the background`)

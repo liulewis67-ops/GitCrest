@@ -2880,6 +2880,12 @@ paths:
               properties:
                 prune:
                   type: boolean
+                background:
+                  type: boolean
+                  default: false
+                  description: >-
+                    A scheduled fetch the user did not ask for. It runs as the fetchBackground operation and is
+                    refused with 409 while another task of the repository is queued or running.
       responses:
         "202":
           description: Fetch task accepted and durably recorded before execution.
@@ -2892,6 +2898,12 @@ paths:
                 $ref: "#/components/schemas/TaskSnapshot"
         "400":
           description: Fetch options are malformed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorResponse"
+        "409":
+          description: A background fetch was skipped because another task of the repository is queued or running.
           content:
             application/json:
               schema:

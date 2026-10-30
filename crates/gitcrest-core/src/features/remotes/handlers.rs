@@ -38,15 +38,29 @@ pub(super) async fn fetch_repository(
         .task_target(&repo_id)
         .await
         .map_err(ApiError::from_repository_error)?;
+    if request.background
+        && state.tasks.list().await.iter().any(|task| {
+            task.repo_id.as_deref() == Some(repo_id.as_str()) && !task.status.is_terminal()
+        })
+    {
+        return Err(ApiError::state_conflict(
+            "Another Git task is running in this repository, so the background fetch was skipped.",
+        ));
+    }
     let command = state.remote_commands.clone();
     let path = target.repository_path;
+    let operation = match (request.background, request.prune) {
+        (true, _) => "fetchBackground",
+        (false, true) => "fetchPrune",
+        (false, false) => "fetch",
+    };
     let task = state
         .tasks
         .submit(
             Some(repo_id),
             None,
             target.resource_key,
-            if request.prune { "fetchPrune" } else { "fetch" },
+            operation,
             move |context| async move {
                 command
                     .execute_fetch(&path, request.prune, context)

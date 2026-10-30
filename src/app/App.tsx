@@ -29,7 +29,7 @@ import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferenc
 import { useLanguageRegistry } from "../features/languages";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, loadRemoveWorktreeDialog, useOpenCreatedWorktree, WorktreeSwitcher, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
 import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
-import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
+import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useBackgroundFetch, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAdoptInProgressWorkflow, useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
 
 const TaskCenter = lazy(() => loadTaskCenter().then(({ TaskCenter }) => ({ default: TaskCenter })));
@@ -396,6 +396,17 @@ function App() {
   const sensitiveStagedPaths = getSensitiveStagedPaths(activeStatus);
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
   const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
+  useBackgroundFetch({
+    getApi: () => apiRef.current,
+    repoId: selectedRepository?.repoId,
+    ready: Boolean(
+      page === "workspace" && selectedRepository && connected && selectedRepository.availability === "available"
+      && !hasActiveRepositoryTask && !(activeRemotes && Array.isArray(activeRemotes.remotes) && activeRemotes.remotes.length === 0),
+    ),
+    tasks,
+    onTaskAccepted: appendTask,
+    onAuthenticationFailure: () => setNotice(t("bf.authFailed")),
+  });
   const { remoteDisabledReason, pushDisabledReason, pullDisabledReason } = getRemoteActionDisabledReasons({
     repository: selectedRepository,
     connected,

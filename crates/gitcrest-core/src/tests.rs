@@ -8653,3 +8653,112 @@ async fn stash_operations_preview_apply_drop_and_import_without_losing_changes()
     assert_eq!(imported["dropped"], true);
     assert!(git(&["stash", "list"]).is_empty());
 }
+
+#[tokio::test]
+async fn background_fetch_runs_as_its_own_operation_and_is_skipped_while_a_task_runs() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("bg-repo");
+    let bare = directory.path().join("remote.git");
+    std::fs::create_dir(&root).unwrap();
+    let run = |dir: &std::path::Path, args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    std::process::Command::new("git")
+        .args(["init", "--bare", "--quiet"])
+        .arg(&bare)
+        .output()
+        .unwrap();
+    run(&root, &["init", "--quiet"]);
+    run(&root, &["config", "user.name", "GitCrest Test"]);
+    run(
+        &root,
+        &["config", "user.email", "gitcrest-test@example.invalid"],
+    );
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    run(&root, &["add", "a.txt"]);
+    run(&root, &["commit", "--quiet", "-m", "first"]);
+    run(&root, &["remote", "add", "origin", bare.to_str().unwrap()]);
+    run(&root, &["push", "--quiet", "-u", "origin", "HEAD"]);
+    // Holds the first fetch long enough for a second request to arrive while it runs.
+    run(
+        &root,
+        &[
+            "config",
+            "remote.origin.uploadpack",
+            "sleep 2; git-upload-pack",
+        ],
+    );
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let uri = format!("/api/v1/repositories/{repo_id}/fetch");
+    let post = |payload: serde_json::Value| {
+        let app = app.clone();
+        let uri = uri.clone();
+        async move {
+            let response = app
+                .oneshot(json_request(Method::POST, &uri, &payload.to_string()))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+
+    // The user's own fetch is running, so the scheduled one is skipped without queuing.
+    let (status, manual) = post(serde_json::json!({ "prune": false })).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(manual["operation"], "fetch");
+    let (status, skipped) = post(serde_json::json!({ "prune": false, "background": true })).await;
+    assert_eq!(status, StatusCode::CONFLICT, "{skipped}");
+
+    // Once the repository is idle the scheduled fetch is accepted under its own operation name.
+    assert_eq!(
+        wait_for_task(&app, manual["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    run(&root, &["config", "--unset", "remote.origin.uploadpack"]);
+    let (status, background) =
+        post(serde_json::json!({ "prune": false, "background": true })).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(background["operation"], "fetchBackground");
+    assert_eq!(
+        wait_for_task(&app, background["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+
+    // The flag is optional for existing callers and must be a boolean.
+    assert_eq!(
+        post(serde_json::json!({ "prune": false, "background": "yes" }))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+}

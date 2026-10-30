@@ -656,11 +656,12 @@ export class GitCrestApiClient {
     });
   }
 
-  fetchRepository(repoId: RepoId, prune = false): Promise<TaskSnapshotResponse> {
+  /** With `background`, a scheduled fetch that the core skips (409) while the repository has another task. */
+  fetchRepository(repoId: RepoId, prune = false, background = false): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/fetch`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prune }),
+      body: JSON.stringify(background ? { prune, background } : { prune }),
     });
   }
 

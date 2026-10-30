@@ -7439,6 +7439,11 @@ export interface operations {
             content: {
                 "application/json": {
                     prune: boolean;
+                    /**
+                     * @description A scheduled fetch the user did not ask for. It runs as the fetchBackground operation and is refused with 409 while another task of the repository is queued or running.
+                     * @default false
+                     */
+                    background?: boolean;
                 };
             };
         };
@@ -7474,6 +7479,15 @@ export interface operations {
                 };
             };
             406: components["responses"]["UnsupportedVersion"];
+            /** @description A background fetch was skipped because another task of the repository is queued or running. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
             /** @description The task queue is full or Git cannot be started. */
             503: {
                 headers: {

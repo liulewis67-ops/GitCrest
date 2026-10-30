@@ -6,7 +6,7 @@ export function supportsWorkflowRecovery(operation: string): boolean {
 }
 
 export function isAuthenticationFailure(task: TaskSnapshotResponse): boolean {
-  if (task.status !== "failed" || task.operation !== "fetch") return false;
+  if (task.status !== "failed" || task.operation !== "fetch" && task.operation !== "fetchBackground") return false;
   if (task.errorCategory === "authentication") return true;
   return /authentication failed|authentication required|could not read username|could not read password|access denied|terminal prompts disabled/i.test([task.message, ...task.logs].join("\n"));
 }
