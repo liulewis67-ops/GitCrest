@@ -38,6 +38,8 @@ export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflic
 export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowConflictSuggestionRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
+export type StashEntryResponse = components["schemas"]["StashEntry"];
+export type StashListResponse = components["schemas"]["StashList"];
 export type TagPageResponse = components["schemas"]["TagPage"];
 export type RemoteTagPreviewResponse = components["schemas"]["RemoteTagPreview"];
 export type TagEntryResponse = components["schemas"]["TagEntry"];
@@ -324,6 +326,10 @@ export class GitCrestApiClient {
 
   getRepositoryRemotes(repoId: RepoId): Promise<RemoteSnapshotResponse> {
     return this.request<RemoteSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`);
+  }
+
+  getRepositoryStashes(repoId: RepoId): Promise<StashListResponse> {
+    return this.request<StashListResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/stashes`);
   }
 
   getRepositoryTags(repoId: RepoId, options: { offset?: number; limit?: number; filter?: string; targets?: readonly string[] } = {}): Promise<TagPageResponse> {

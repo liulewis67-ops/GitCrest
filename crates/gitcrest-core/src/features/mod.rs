@@ -10,6 +10,7 @@ pub(crate) mod repositories;
 pub(crate) mod settings;
 pub(crate) mod shelves;
 pub(crate) mod staging;
+pub(crate) mod stash;
 pub(crate) mod status;
 pub(crate) mod system;
 pub(crate) mod tags;

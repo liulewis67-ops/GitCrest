@@ -8149,3 +8149,108 @@ async fn tag_management_api_deletes_pushes_and_never_overwrites_remote_tags() {
     .await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+#[tokio::test]
+async fn stash_api_lists_entries_made_with_git_stash_including_untracked_parts() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("stash-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    git(&["add", "a.txt"]);
+    git(&["commit", "--quiet", "-m", "first"]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let uri = format!("/api/v1/repositories/{repo_id}/stashes");
+    let list = || {
+        let app = app.clone();
+        let uri = uri.clone();
+        async move {
+            let response = app
+                .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+        }
+    };
+
+    assert_eq!(
+        app.clone()
+            .oneshot(request(&uri, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let missing = app
+        .clone()
+        .oneshot(request(
+            "/api/v1/repositories/repo_missing/stashes",
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    assert!(list().await["stashes"].as_array().unwrap().is_empty());
+
+    std::fs::write(root.join("a.txt"), "changed\n").unwrap();
+    git(&["stash", "push", "-m", "tracked work"]);
+    std::fs::write(root.join("a.txt"), "again\n").unwrap();
+    std::fs::write(root.join("new.txt"), "untracked\n").unwrap();
+    git(&[
+        "stash",
+        "push",
+        "--include-untracked",
+        "-m",
+        "with untracked",
+    ]);
+
+    let stashes = list().await;
+    let entries = stashes["stashes"].as_array().unwrap();
+    assert_eq!(entries.len(), 2);
+    // Newest first, matching `git stash list`.
+    assert_eq!(entries[0]["index"], 0);
+    assert_eq!(entries[0]["message"], "with untracked");
+    assert_eq!(entries[0]["oid"], git(&["rev-parse", "stash@{0}"]));
+    assert_eq!(
+        entries[0]["untrackedOid"],
+        git(&["rev-parse", "stash@{0}^3"])
+    );
+    assert!(entries[0]["branch"].is_string());
+    assert_eq!(entries[1]["message"], "tracked work");
+    assert_eq!(entries[1]["oid"], git(&["rev-parse", "stash@{1}"]));
+    assert!(entries[1]["untrackedOid"].is_null());
+    assert_eq!(entries[1]["baseOid"], git(&["rev-parse", "HEAD"]));
+}

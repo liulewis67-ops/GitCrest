@@ -98,6 +98,8 @@ interface CommitPanelProps {
   onStageChanges: (action: StagingRequest["action"], target?: string | string[]) => void;
   onRefreshStatus: (repoId: string, forceRefresh?: boolean) => void;
   onOpenFileDiff: (path: string, scope: DiffScope) => void;
+  /** Opens one file of a commit, such as a Git stash entry, in the read-only diff. */
+  onOpenCommitFile?: (path: string, oid: string) => void;
   /** Right-click actions on a file; an item is left out of the menu when its handler is not given. */
   onOpenDiffWindow?: (path: string, scope: DiffScope) => void;
   onShelveFiles?: (paths: string[], scope: DiffScope) => void;
@@ -119,7 +121,7 @@ export function CommitPanel({
   repository, api, status, statusError, statusLoading, tree, workingCount, stagedCount, hasConflicts,
   stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope, connected, hasActiveRepositoryTask,
   shortcuts, isMacPlatform, tab, historyRefreshKey, shelfComposerRequest, shelfComposerPreselect, shelfComposerAfterSwitch, composer,
-  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
+  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenCommitFile, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
 }: CommitPanelProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState<ReadonlySet<ChangeTreeGroup["id"]>>(() => new Set(["ignored"]));
@@ -316,6 +318,7 @@ export function CommitPanel({
           onTaskSubmitted={onShelfTaskSubmitted}
           onComposerClosed={onShelfComposerClosed}
           onComposerRequestHandled={onShelfComposerRequestHandled}
+          onOpenCommitFile={onOpenCommitFile}
         /></Suspense>
       </div> : null}
     </aside>

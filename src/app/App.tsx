@@ -1144,6 +1144,7 @@ function App() {
               onStageChanges={(action, target) => void stageChanges(action, target)}
               onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
               onOpenFileDiff={openFileDiff}
+              onOpenCommitFile={openCommitFileDiff}
               onOpenDiffWindow={(path, scope) => void openDiffWindow(path, scope)}
               onShelveFiles={(paths, scope) => requestShelfComposer(selectedRepository.repoId, { paths, scope })}
               onRollbackFile={(path) => void rollbackFile(path)}

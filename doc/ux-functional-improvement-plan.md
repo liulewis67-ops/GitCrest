@@ -40,7 +40,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U2.3 | Copy and reuse a commit message | P0 | S | — | done |
 | U3.1 | Tag list and tag labels on the graph | P0 | M | — | done |
 | U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | done |
-| U4.1 | Read existing `git stash` entries | P0 | M | D1 | not started |
+| U4.1 | Read existing `git stash` entries | P0 | M | D1 | done |
 | U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | not started |
 | U5.1 | Complete command-palette coverage | P0 | M | — | not started |
 | U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | not started |
@@ -72,6 +72,12 @@ Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each aga
 | D2 | Should background fetch be on by default? | (a) Off; (b) on, every 10 minutes, only for the active repository; (c) on for all open tabs | (b). It keeps ahead/behind current and never touches the working tree. It pauses on metered or offline networks and when the repository has a running task |
 | D3 | How does the user pick an editor and terminal? | (a) System default only; (b) detect common editors and allow a custom command | (b), stored in Settings → General. The custom command is run by the main process with the path as a single argument, never through a shell string |
 | D4 | Should the main Diff area allow Unified mode? | (a) Keep Split only (current PRD note); (b) allow both, remembered per user | (b). The PRD note reflects what was built, not a product rule. Staging controls must work in both modes |
+
+### Decisions recorded
+
+| ID | Decided | Date | Note |
+|---|---|---|---|
+| D1 | (b) one list labelled by source, with import as an action | 2026-10-31 | Adopted from the recommendation while carrying out the plan; revisit if it proves wrong. U4.1 shows Git stash entries in the Shelves tab under their own "Git stash" heading and badge; U4.2 adds the actions and "Import as shelf". |
 
 ## 5. Workstreams
 
@@ -318,3 +324,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/tags/` (`management.rs`, `remote_handlers.rs`), `src/features/history/ui/TagActionsDialog.tsx`
 - Limits / follow-up: new endpoints `POST /tags/delete`, `GET /tags/remote-preview`, `POST /tags/push`, `POST /tags/remote-delete`, and `tags` (`none`, `followTags`, `all`) on `PushRequest`. Instead of a signed confirmation ticket, the remote delete is bound to the object read by the preview and runs as `--force-with-lease`, and the local delete is bound to the reviewed commit. Tag pushes never force; a remote tag with a different object is refused with 409 before anything is sent, and Git refuses it as a second line. The Push dialog defaults to `followTags`; the quick commit-and-push path sends no tags. Tag actions live in each tag row's menu in the sidebar; palette entries come with U5.1. Deleting a remote tag does not remove other clones' copies.
 - Commit: see git log (`feat: complete U3.2 delete and push tags, and push tags with a branch`)
+
+### U4.1 — Read existing git stash entries
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (210 tests; new `stash_api_lists_entries_made_with_git_stash_including_untracked_parts` compares with `git stash list` order and `stash@{n}^3`, and covers 401 and 404; plus a parser unit test), `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (468 tests; new `stash-list.test.tsx`), `pnpm test:e2e` (38 tests).
+- Manual check: not run (app not started). Opening a stash file goes through the existing commit-file diff navigation; that hop was covered by types and unit tests only.
+- Evidence: `crates/gitcrest-core/src/features/stash/`, `src/features/shelves/ui/StashList.tsx`
+- Limits / follow-up: `GET /repositories/{repoId}/stashes` returns index, commit, base, untracked commit, branch, message and time. Changed files come from the existing commit detail endpoint for the stash commit and, for `-u` stashes, its untracked commit (marked "untracked"). The section is hidden when there is no stash. The list refreshes with the history refresh key, which the watcher bumps on any `refs/stash` or `logs/refs/` change. Only the newest 200 entries are read. Apply, pop, drop and import are U4.2.
+- Commit: see git log (`feat: complete U4.1 read existing git stash entries`)

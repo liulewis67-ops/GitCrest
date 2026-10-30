@@ -23,7 +23,7 @@ use crate::write_probe;
 use crate::{
     features::{
         accounts, branches, commits, credentials, diff, history, identity, remotes, repositories,
-        settings, shelves, staging, status, system, tags, tasks, workflows,
+        settings, shelves, staging, stash, status, system, tags, tasks, workflows,
     },
     AppState,
 };
@@ -48,6 +48,7 @@ pub(crate) fn app_router(state: AppState, cors_origin: Option<HeaderValue>) -> R
         .merge(commits::routes::router())
         .merge(tags::routes::router())
         .merge(identity::routes::router())
+        .merge(stash::routes::router())
         .merge(tasks::routes::router())
         .merge(workflows::routes::router())
         .route("/v1/events", get(crate::events::routes::events))

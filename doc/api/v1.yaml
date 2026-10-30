@@ -2431,6 +2431,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/stashes:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositoryStashes
+      summary: List entries made with git stash, newest first
+      description: >-
+        Read only. The tracked changes of an entry are the diff of its commit against its base;
+        an entry made with --include-untracked also names a commit that holds the untracked files.
+        Both commits can be shown through the commit endpoints.
+      responses:
+        "200":
+          description: The stash list; empty when nothing was stashed.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/StashList" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read the stash list., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/tags:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4461,6 +4486,25 @@ components:
         remoteName: { type: string, minLength: 1, maxLength: 255 }
         name: { type: string, minLength: 1, maxLength: 255 }
         expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$", description: The object read by the preview; the remote deletes the tag only while it still points there. }
+    StashEntry:
+      type: object
+      additionalProperties: false
+      required: [index, oid, baseOid, untrackedOid, branch, message, createdAtMs]
+      properties:
+        index: { type: integer, minimum: 0, description: "Position in the list, as in stash@{index}." }
+        oid: { type: string }
+        baseOid: { type: [string, "null"] }
+        untrackedOid: { type: [string, "null"], description: Commit holding untracked files for a stash made with --include-untracked. }
+        branch: { type: [string, "null"] }
+        message: { type: string }
+        createdAtMs: { type: integer }
+    StashList:
+      type: object
+      additionalProperties: false
+      required: [repoId, stashes]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        stashes: { type: array, items: { $ref: "#/components/schemas/StashEntry" } }
     TagEntry:
       type: object
       additionalProperties: false

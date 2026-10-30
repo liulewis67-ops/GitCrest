@@ -11,6 +11,7 @@ import type {
   StatusSnapshotResponse,
 } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { StashList } from "./StashList";
 
 type SelectedChange = { revision: string; hunks?: number[] };
 type ShelfAfterCreateAction = { switchTarget: string; existingShelfIds: string[] };
@@ -29,6 +30,7 @@ export function ShelfCenter({
   onTaskSubmitted,
   onComposerClosed,
   onComposerRequestHandled,
+  onOpenCommitFile,
 }: {
   api: GitCrestApiClient;
   repoId: string;
@@ -45,6 +47,8 @@ export function ShelfCenter({
   onComposerClosed?: () => void;
   /** Called once a request has opened the composer, so a later remount does not open it again. */
   onComposerRequestHandled?: () => void;
+  /** Opens one file of a commit, such as a Git stash entry, in the read-only diff. */
+  onOpenCommitFile?: (path: string, oid: string) => void;
 }) {
   const { t } = useI18n();
   const [shelves, setShelves] = useState<ShelfResponse[]>([]);
@@ -313,6 +317,8 @@ export function ShelfCenter({
           <button className="shelfDeleteButton" type="button" aria-label={t("sh.reviewDeletion", { name: shelf.name })} disabled={disabled || busy} onClick={() => setDeleteConfirm(shelf)}>×</button>
         </div>
       ))}
+
+      {onOpenCommitFile && <StashList api={api} repoId={repoId} refreshKey={refreshKey} onOpenFile={onOpenCommitFile} />}
 
       {detail && selectedShelfId && <section className="shelfDetail" aria-label={t("sh.previewAria", { name: detail.shelf.name })}>
         <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><button type="button" className="textButton" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>{t("sh.close")}</button></div>
