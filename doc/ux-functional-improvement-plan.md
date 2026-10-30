@@ -33,7 +33,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 
 | ID | Stage | Priority | Size | Depends on | Status |
 |---|---|---|---|---|---|
-| U1.1 | Git identity check and editor | P0 | M | — | not started |
+| U1.1 | Git identity check and editor | P0 | M | — | done |
 | U1.2 | First-run hints and empty states | P2 | M | U1.1 | not started |
 | U2.1 | Check out a commit (detached HEAD) | P0 | M | — | done |
 | U2.2 | Reset to a commit from the history row | P0 | S | — | done |
@@ -286,3 +286,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/tests.rs`, `tests/unit/branch-switcher-commit.test.tsx`
 - Limits / follow-up: the switch endpoints take `commit: true` (`name` is a commit id) and run `git switch --detach` under the same overlap rules as a branch switch; the preflight response gains `detached`. The existing switcher dialog handles the dirty tree (commit / shelve / carry over / cancel), and the shelf flow carries the commit flag. The detached banner gains "Return to <branch>", remembered when the checkout is reviewed (kept in memory, lost on restart); "Create branch here" already existed. The History commit menu has "Check out this commit…". Palette entry comes with U5.1.
 - Commit: see git log (`feat: complete U2.1 check out a commit with a detached HEAD`)
+
+### U1.1 — Git identity check and editor
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (204 tests, new `identity_api_reads_writes_and_clears_a_repository_identity` covers 401, 403, 404, 400 and write/clear, plus a unit test for field validation), `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (454 tests; new `git-identity.test.tsx` and `commit-workbench-identity.test.tsx`), `pnpm test:e2e` (38 tests).
+- Manual check: not run. The tests never write the global Git config; the global PUT is only covered for validation errors.
+- Evidence: `crates/gitcrest-core/src/features/identity/`, `src/features/identity/`
+- Limits / follow-up: instead of a field on the repository response, identity has its own endpoints (`GET/PUT /identity` for global, `GET/PUT/DELETE /repositories/{repoId}/identity` for the repository). Values come from `git config --show-scope`, so the scope of each value is shown; `GIT_AUTHOR_*` environment variables are not detected. The commit panel blocks Commit with a reason and shows "Set identity" with an inline editor (global or this repository, plus "use the global identity"). Settings → General has the global editor. The plan also asked for a repository-context-menu entry; the commit-panel editor covers the repository scope instead. A failed identity read never blocks committing.
+- Commit: see git log (`feat: complete U1.1 check the Git author identity before committing`)

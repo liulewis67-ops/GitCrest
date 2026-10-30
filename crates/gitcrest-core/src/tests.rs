@@ -7702,3 +7702,109 @@ async fn commit_checkout_detaches_head_and_rejects_bad_targets() {
     assert_eq!(git(&["rev-parse", "HEAD"]), first);
     assert_eq!(git(&["branch", "--show-current"]), "");
 }
+
+#[tokio::test]
+async fn identity_api_reads_writes_and_clears_a_repository_identity() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("identity-repo");
+    std::fs::create_dir(&root).unwrap();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["init", "--quiet"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let uri = format!("/api/v1/repositories/{repo_id}/identity");
+
+    let unauthorized = app.clone().oneshot(request(&uri, None)).await.unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::PUT,
+            &uri,
+            &serde_json::json!({ "name": "Ada", "email": "ada@example.test" }).to_string(),
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    let missing = app
+        .clone()
+        .oneshot(request(
+            "/api/v1/repositories/repo_missing/identity",
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    for invalid in [
+        serde_json::json!({ "name": "", "email": "ada@example.test" }),
+        serde_json::json!({ "name": "Ada", "email": "not-an-email" }),
+        serde_json::json!({ "name": "Ada\nEvil", "email": "ada@example.test" }),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::PUT, &uri, &invalid.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    }
+    let invalid_global = app
+        .clone()
+        .oneshot(json_request(
+            Method::PUT,
+            "/api/v1/identity",
+            &serde_json::json!({ "name": "Ada", "email": "bad" }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid_global.status(), StatusCode::BAD_REQUEST);
+
+    let written = app
+        .clone()
+        .oneshot(json_request(
+            Method::PUT,
+            &uri,
+            &serde_json::json!({ "name": "Ada Local", "email": "ada.local@example.test" })
+                .to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(written.status(), StatusCode::OK);
+    let body = to_bytes(written.into_body(), usize::MAX).await.unwrap();
+    let written: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(written["name"], "Ada Local");
+    assert_eq!(written["email"], "ada.local@example.test");
+    assert_eq!(written["nameScope"], "local");
+    assert_eq!(written["resolved"], true);
+
+    let cleared = app
+        .clone()
+        .oneshot(json_request(Method::DELETE, &uri, ""))
+        .await
+        .unwrap();
+    assert_eq!(cleared.status(), StatusCode::OK);
+    let body = to_bytes(cleared.into_body(), usize::MAX).await.unwrap();
+    let cleared: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_ne!(cleared["nameScope"], "local");
+    assert_ne!(cleared["name"], "Ada Local");
+}

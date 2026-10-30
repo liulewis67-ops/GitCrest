@@ -1,7 +1,8 @@
 import { useI18n } from "../../../shared/i18n";
-import { lazy, Suspense, useRef, type KeyboardEvent } from "react";
+import { lazy, Suspense, useRef, useState, type KeyboardEvent } from "react";
 import type { CommitRequest, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../../api/client";
 import { ariaShortcut, displayShortcut, matchesShortcut, type ShortcutPreferences } from "../../settings";
+import { GitIdentityEditor } from "../../identity";
 import type { CommitAction } from "../model/commit-action";
 
 const CommitMessageAssistant = lazy(() => import("./CommitMessageAssistant").then(({ CommitMessageAssistant }) => ({ default: CommitMessageAssistant })));
@@ -40,6 +41,9 @@ interface CommitWorkbenchProps {
   connected: boolean;
   hasActiveRepositoryTask: boolean;
   api?: GitCrestApiClient;
+  /** Git has no author name or email for this repository, so a commit would fail. */
+  identityMissing?: boolean;
+  onIdentitySaved?: () => void;
   onChangeMessage: (message: string) => void;
   onChangeSummary: (summary: string) => void;
   onChangeDescription: (description: string) => void;
@@ -64,6 +68,8 @@ export function CommitWorkbench({
   connected,
   hasActiveRepositoryTask,
   api,
+  identityMissing = false,
+  onIdentitySaved,
   onChangeMessage,
   onChangeSummary,
   onChangeDescription,
@@ -79,12 +85,13 @@ export function CommitWorkbench({
 }: CommitWorkbenchProps) {
   const { t } = useI18n();
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const [identityOpen, setIdentityOpen] = useState(false);
   const commitKeyShortcuts = `${ariaShortcut(shortcuts.commit, isMacPlatform)} ${ariaShortcut(shortcuts.commitAndPush, isMacPlatform)}`;
   const summaryLength = commit.summary.trim().length;
   const summaryTooLong = summaryLength > SUMMARY_SOFT_LIMIT;
   const target = repository?.detached ? t("cmp.titleDetached") : t("cmp.title", { branch: repository?.branch || t("page.unbornBranch") });
   const stagedLabel = status.stagedCount === 0 ? t("cmp.nothingStaged") : t(status.stagedCount === 1 ? "cmp.stagedOne" : "cmp.stagedMany", { count: status.stagedCount });
-  const disabledReason = !connected ? t("cw.tConnect") : status.hasConflicts ? t("cw.tConflicts") : status.stagedCount === 0 ? t("cw.tStage") : !commit.summary.trim() ? t("cw.tMessage") : hasActiveRepositoryTask ? t("cw.tWait") : undefined;
+  const disabledReason = !connected ? t("cw.tConnect") : identityMissing ? t("id.blockedReason") : status.hasConflicts ? t("cw.tConflicts") : status.stagedCount === 0 ? t("cw.tStage") : !commit.summary.trim() ? t("cw.tMessage") : hasActiveRepositoryTask ? t("cw.tWait") : undefined;
 
   function handleSubmitShortcut(event: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>): boolean {
     if (event.nativeEvent.isComposing) return false;
@@ -141,6 +148,12 @@ export function CommitWorkbench({
         onChange={(event) => onChangeDescription(event.target.value)}
         onKeyDown={handleSubmitShortcut}
       />
+      {identityMissing && repository && api && <div className="commitAdvisory identityNotice" role="alert">
+        <strong>{t("id.missingTitle")}</strong>
+        <p>{t("id.missingBody")}</p>
+        <button type="button" className="textButton" aria-expanded={identityOpen} onClick={() => setIdentityOpen((open) => !open)}>{identityOpen ? t("id.hideEditor") : t("id.setIdentity")}</button>
+        {identityOpen && <GitIdentityEditor api={api} repoId={repository.repoId} onSaved={onIdentitySaved} />}
+      </div>}
       {commit.selections.length > 0 && <div className="commitSelectionNotice" role="status">{t(commit.selections.length === 1 ? "cw.selectionOne" : "cw.selectionMany", { count: commit.selections.length })} <button type="button" onClick={onClearSelections}>{t("cw.clearSelection")}</button></div>}
       {commit.assistantOpen && repository && api && <Suspense fallback={<div className="dialogChunkLoading" role="status" aria-live="polite">{t("cw.loadingTools")}</div>}><CommitMessageAssistant api={api} repoId={repository.repoId} draftMessage={commit.message} commitSelections={commit.selections} commitSelectionRepoId={commit.selectionRepoId} statusSnapshot={status.snapshot} onUseSuggestion={(message) => { onChangeTemplate("plain"); onChangeMessage(message); onAssistantOpenChange(false); }} onClose={() => onAssistantOpenChange(false)} /></Suspense>}
       {commit.amend && <p className="amendAdvisory" role="status">{t("cw.amendNote")}</p>}

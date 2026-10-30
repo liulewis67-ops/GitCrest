@@ -809,6 +809,90 @@ paths:
         "404": { description: Repository, remote or branch is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "503": { description: Git or task storage is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/identity:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: getGlobalIdentity
+      summary: Read the global Git author identity (user.name and user.email)
+      responses:
+        "200":
+          description: The author identity Git resolves.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/GitIdentity" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read or change the identity., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+    put:
+      operationId: setGlobalIdentity
+      summary: Write the global Git author identity
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SetIdentityRequest" } } }
+      responses:
+        "200":
+          description: The author identity Git resolves.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/GitIdentity" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read or change the identity., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/identity:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositoryIdentity
+      summary: Read the author identity a commit in this repository would use, with the scope of each value
+      responses:
+        "200":
+          description: The author identity Git resolves.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/GitIdentity" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read or change the identity., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+    put:
+      operationId: setRepositoryIdentity
+      summary: Write a repository-level author identity that overrides the global one
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SetIdentityRequest" } } }
+      responses:
+        "200":
+          description: The author identity Git resolves.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/GitIdentity" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read or change the identity., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+    delete:
+      operationId: clearRepositoryIdentity
+      summary: Remove the repository-level identity so the global one applies again
+      responses:
+        "200":
+          description: The author identity Git resolves.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/GitIdentity" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read or change the identity., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/credentials:
     parameters:
       - name: X-GitCrest-API-Version
@@ -4198,6 +4282,27 @@ components:
       properties:
         fullName: { type: string, minLength: 1 }
         favorite: { type: boolean }
+    GitIdentity:
+      type: object
+      additionalProperties: false
+      required: [name, email, nameScope, emailScope, resolved]
+      properties:
+        name: { type: [string, "null"] }
+        email: { type: [string, "null"] }
+        nameScope:
+          type: [string, "null"]
+          description: Where Git found the name, for example local or global.
+        emailScope: { type: [string, "null"] }
+        resolved:
+          type: boolean
+          description: Both a name and an email are set, so a commit will not fail for a missing identity.
+    SetIdentityRequest:
+      type: object
+      additionalProperties: false
+      required: [name, email]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 256 }
+        email: { type: string, minLength: 3, maxLength: 256 }
     BranchSwitchRequest:
       type: object
       additionalProperties: false
@@ -5247,6 +5352,7 @@ components:
         - REMOTE_NOT_FOUND
         - CREDENTIAL_INPUT_INVALID
         - CREDENTIALS_UNAVAILABLE
+        - IDENTITY_UNAVAILABLE
         - ACCOUNT_INPUT_INVALID
         - ACCOUNT_NOT_FOUND
         - ACCOUNT_TOKEN_REJECTED

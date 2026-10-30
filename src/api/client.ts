@@ -38,6 +38,7 @@ export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflic
 export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowConflictSuggestionRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
+export type GitIdentityResponse = components["schemas"]["GitIdentity"];
 export type HostingProvider = components["schemas"]["HostingProvider"];
 export type AccountResponse = components["schemas"]["Account"];
 export type AccountListResponse = components["schemas"]["AccountList"];
@@ -320,6 +321,34 @@ export class GitCrestApiClient {
 
   getRepositoryRemotes(repoId: RepoId): Promise<RemoteSnapshotResponse> {
     return this.request<RemoteSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`);
+  }
+
+  getGlobalIdentity(): Promise<GitIdentityResponse> {
+    return this.request<GitIdentityResponse>("/api/v1/identity");
+  }
+
+  setGlobalIdentity(name: string, email: string): Promise<GitIdentityResponse> {
+    return this.request<GitIdentityResponse>("/api/v1/identity", true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email } satisfies components["schemas"]["SetIdentityRequest"]),
+    });
+  }
+
+  getRepositoryIdentity(repoId: RepoId): Promise<GitIdentityResponse> {
+    return this.request<GitIdentityResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/identity`);
+  }
+
+  setRepositoryIdentity(repoId: RepoId, name: string, email: string): Promise<GitIdentityResponse> {
+    return this.request<GitIdentityResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/identity`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, email } satisfies components["schemas"]["SetIdentityRequest"]),
+    });
+  }
+
+  clearRepositoryIdentity(repoId: RepoId): Promise<GitIdentityResponse> {
+    return this.request<GitIdentityResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/identity`, true, { method: "DELETE" });
   }
 
   getCredentialStatus(host: string): Promise<CredentialStatusResponse> {

@@ -69,6 +69,7 @@ pub(crate) enum ApiErrorCode {
     RemoteNotFound,
     CredentialInputInvalid,
     CredentialsUnavailable,
+    IdentityUnavailable,
     AccountInputInvalid,
     AccountNotFound,
     AccountTokenRejected,

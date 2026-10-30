@@ -18,6 +18,7 @@ import type { UpdateStatus } from "../../../api/update-status";
 import { LOCALES, useI18n } from "../../../shared/i18n";
 import { AccountsSection } from "../../accounts";
 import { LanguagesSection } from "../../languages";
+import { GitIdentityEditor } from "../../identity";
 
 export function SettingsPage({
   api,
@@ -140,6 +141,12 @@ export function SettingsPage({
                     ))}
                   </div>
                 </div>
+              </div>
+              <div className="settingsCard">
+                <div className="settingsRow">
+                  <div className="settingsRowText"><span>{t("id.title")}</span><p>{t("id.description")}</p></div>
+                </div>
+                <GitIdentityEditor api={api} />
               </div>
             </section>
 

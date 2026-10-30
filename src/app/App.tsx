@@ -9,6 +9,7 @@ import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
 import { CommitPanel, changeCode, type CommitPanelTab } from "../pages/workspace/CommitPanel";
 import { BranchesSidebar } from "../pages/workspace/BranchesSidebar";
+import { useGitIdentity } from "../features/identity";
 import { CommitInspector } from "../pages/workspace/CommitInspector";
 import { WorkspaceDiffPanel } from "../pages/workspace/WorkspaceDiffPanel";
 import { ViewLayout } from "../pages/workspace/ViewLayout";
@@ -147,6 +148,9 @@ function App() {
       if (plan.refreshHistory) historyRequests.refresh();
     },
   });
+  const gitIdentity = useGitIdentity(apiRef.current, selectedRepository?.repoId, Boolean(selectedRepository));
+  // Unknown while loading or after a failed read, so only a confirmed gap blocks committing.
+  const identityMissing = gitIdentity.identity?.resolved === false;
   const {
     tasks,
     error: tasksError,
@@ -386,7 +390,7 @@ function App() {
     retryDiff: diffQuery.retry,
   });
   const commitBusy = commitSubmission.busy;
-  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitSummary.trim() && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
+  const canCommit = Boolean(selectedRepository && activeStatus && stagedCount > 0 && !hasConflicts && commitSummary.trim() && !identityMissing && connected && !commitBusy && !hasActiveRepositoryTask && (!commitSelections.length || commitSelectionRepoId === selectedRepository.repoId));
   const {
     busy: stagingBusy,
     stageChanges,
@@ -1120,6 +1124,8 @@ function App() {
                   connected={connected}
                   hasActiveRepositoryTask={hasActiveRepositoryTask}
                   api={apiRef.current}
+                  identityMissing={identityMissing}
+                  onIdentitySaved={() => void gitIdentity.refresh()}
                   onChangeMessage={setCommitMessage}
                   onChangeSummary={setCommitSummary}
                   onChangeDescription={setCommitDescription}
