@@ -32,3 +32,6 @@ crates/**/target/
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# Local experimental build output folders
+dist-*/

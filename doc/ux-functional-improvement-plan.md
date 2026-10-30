@@ -60,7 +60,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U13.1 | Unified feedback with undo | P2 | M | — | not started |
 | U13.2 | Interface zoom | P2 | S | — | not started |
 | U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | not started |
-| U14.2 | Repository hygiene | P2 | S | — | not started |
+| U14.2 | Repository hygiene | P2 | S | — | done |
 
 Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each against real OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; S7.4 (signing and updates on three platforms) and S7.5 (full P0 E2E and release notes) are blocked on outside environments.
 
@@ -294,3 +294,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/identity/`, `src/features/identity/`
 - Limits / follow-up: instead of a field on the repository response, identity has its own endpoints (`GET/PUT /identity` for global, `GET/PUT/DELETE /repositories/{repoId}/identity` for the repository). Values come from `git config --show-scope`, so the scope of each value is shown; `GIT_AUTHOR_*` environment variables are not detected. The commit panel blocks Commit with a reason and shows "Set identity" with an inline editor (global or this repository, plus "use the global identity"). Settings → General has the global editor. The plan also asked for a repository-context-menu entry; the commit-panel editor covers the repository scope instead. A failed identity read never blocks committing.
 - Commit: see git log (`feat: complete U1.1 check the Git author identity before committing`)
+
+### U14.2 — Repository hygiene
+- Status: done
+- Tests: `git status --short` no longer lists `dist-nosb/`, `dist-nosb2/` or `dist-p15/`.
+- Manual check: not applicable.
+- Evidence: `.gitignore`
+- Limits / follow-up: the three folders are ignored, not deleted; they are local build output and can be removed by hand.
+- Commit: see git log (`chore: complete U14.2 ignore local dist-* build folders`)
