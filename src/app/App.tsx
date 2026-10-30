@@ -24,7 +24,7 @@ import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
 import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, useFolderDrop, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { buildChangeTree, IgnoreRuleDialog, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations, type IgnoreMode } from "../features/changes";
-import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
+import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, loadReflogDialog, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { useLanguageRegistry } from "../features/languages";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, loadRemoveWorktreeDialog, useOpenCreatedWorktree, WorktreeSwitcher, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
@@ -35,6 +35,7 @@ import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAdoptInProgre
 const TaskCenter = lazy(() => loadTaskCenter().then(({ TaskCenter }) => ({ default: TaskCenter })));
 const WorkflowDialog = lazy(() => loadWorkflowDialog().then(({ WorkflowDialog }) => ({ default: WorkflowDialog })));
 const RebaseDialog = lazy(() => loadRebaseDialog().then(({ RebaseDialog }) => ({ default: RebaseDialog })));
+const ReflogDialog = lazy(() => loadReflogDialog().then(({ ReflogDialog }) => ({ default: ReflogDialog })));
 const ResetDialog = lazy(() => loadResetDialog().then(({ ResetDialog }) => ({ default: ResetDialog })));
 const RemoteBranchDeleteDialog = lazy(() => loadRemoteBranchDeleteDialog().then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
 const CreateBranchDialog = lazy(() => loadCreateBranchDialog().then(({ CreateBranchDialog }) => ({ default: CreateBranchDialog })));
@@ -69,6 +70,7 @@ function App() {
   /** The branch chosen in the Branches view, whose history its commit graph shows. */
   const [historyBranch, setHistoryBranch] = useState<{ repoId: string; fullName: string }>();
   const [worktreeForBranch, setWorktreeForBranch] = useState<{ name: string; fromRemote: boolean }>();
+  const [reflogOpen, setReflogOpen] = useState(false);
   const [ignoreRequest, setIgnoreRequest] = useState<{ repoId: string; path: string; mode: IgnoreMode }>();
   const [worktreeFrom, setWorktreeFrom] = useState<{ oid: string; label: string }>();
   const [removeWorktreePath, setRemoveWorktreePath] = useState<string>();
@@ -1000,6 +1002,7 @@ function App() {
       zoomIn,
       zoomOut,
       zoomReset: resetZoom,
+      showReflog: () => setReflogOpen(true),
       openInEditor: () => { if (selectedRepository) void openExternally("editor", selectedRepository.repoId); },
       openInTerminal: () => { if (selectedRepository) void openExternally("terminal", selectedRepository.repoId); },
       manageRemotes: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); },
@@ -1437,6 +1440,15 @@ function App() {
       {discardSelection && <DiscardChangesDialog repositoryPath={discardSelection.repositoryPath} path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveDiscardRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
       {createBranchAt && selectedRepository && apiRef.current && <Suspense fallback={null}><CreateBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} startOid={createBranchAt} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setCreateBranchAt(undefined)} onStarted={(task) => { prependTask(task); setCreateBranchAt(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {worktreeForBranch && selectedRepository && apiRef.current && <Suspense fallback={null}><NewWorktreeDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} branch={worktreeForBranch.name} fromRemote={worktreeForBranch.fromRemote} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setWorktreeForBranch(undefined)} onStarted={(task) => { prependTask(task); setWorktreeForBranch(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
+      {reflogOpen && selectedRepository && apiRef.current && <Suspense fallback={null}><ReflogDialog
+        api={apiRef.current}
+        repoId={selectedRepository.repoId}
+        branchNames={(activeBranches?.branches ?? []).filter((branch) => branch.kind === "local").map((branch) => branch.name)}
+        disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask}
+        onClose={() => setReflogOpen(false)}
+        onCreateBranch={(oid) => { setReflogOpen(false); setCreateBranchAt(oid); }}
+        onResetTo={(oid) => { setReflogOpen(false); workflowDialog.openReset(oid); }}
+      /></Suspense>}
       {ignoreRequest && selectedRepository?.repoId === ignoreRequest.repoId && apiRef.current && <IgnoreRuleDialog
         api={apiRef.current}
         repoId={ignoreRequest.repoId}

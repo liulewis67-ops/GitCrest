@@ -8784,3 +8784,136 @@ async fn background_fetch_runs_as_its_own_operation_and_is_skipped_while_a_task_
         StatusCode::BAD_REQUEST
     );
 }
+
+#[tokio::test]
+async fn reflog_api_finds_a_lost_commit_pages_and_lists_gitcrest_backups() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("reflog-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet", "--initial-branch=main"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    git(&["add", "a.txt"]);
+    git(&["commit", "--quiet", "-m", "first"]);
+    std::fs::write(root.join("a.txt"), "two\n").unwrap();
+    git(&["commit", "--quiet", "-am", "second"]);
+    let lost = git(&["rev-parse", "HEAD"]);
+    std::fs::write(root.join("a.txt"), "three\n").unwrap();
+    git(&["commit", "--quiet", "-am", "third"]);
+    // Throw the last two commits away; they are no longer on any branch.
+    git(&["reset", "--hard", "--quiet", "HEAD~2"]);
+    git(&["update-ref", "refs/gitcrest/reset-backups/task-1", &lost]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/api/v1/repositories/{repo_id}/reflog");
+    let get = |query: &str| {
+        let app = app.clone();
+        let uri = format!("{base}{query}");
+        async move {
+            let response = app
+                .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+
+    assert_eq!(
+        app.clone()
+            .oneshot(request(&base, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo_missing/reflog",
+                Some(READ_ONLY_TOKEN)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+    for bad in [
+        "?ref=main",
+        "?ref=--all",
+        "?ref=refs/tags/v1",
+        "?ref=HEAD@%7B1%7D",
+        "?limit=0",
+        "?limit=501",
+    ] {
+        assert_eq!(get(bad).await.0, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    assert_eq!(get("?ref=refs/heads/nope").await.0, StatusCode::NOT_FOUND);
+
+    // The thrown-away commit is still in the reflog, newest entry first.
+    let (status, page) = get("").await;
+    assert_eq!(status, StatusCode::OK);
+    let entries = page["entries"].as_array().unwrap();
+    assert!(entries.len() >= 4);
+    assert_eq!(entries[0]["index"], 0);
+    assert_eq!(entries[0]["selector"], "HEAD@{0}");
+    assert!(entries[0]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("reset:"));
+    assert!(entries.iter().any(|entry| entry["oid"] == lost.as_str()));
+    assert_eq!(entries[1]["oid"], git(&["rev-parse", "HEAD@{1}"]));
+
+    // GitCrest's own safety ref is listed with its kind.
+    let backups = page["backups"].as_array().unwrap();
+    assert_eq!(backups.len(), 1);
+    assert_eq!(backups[0]["kind"], "reset");
+    assert_eq!(backups[0]["oid"], lost.as_str());
+
+    // Paging: two at a time, the second page has no backups and the offsets continue.
+    let (_, first) = get("?limit=2").await;
+    assert_eq!(first["entries"].as_array().unwrap().len(), 2);
+    assert_eq!(first["nextOffset"], 2);
+    let (_, second) = get("?limit=2&offset=2").await;
+    assert_eq!(second["entries"][0]["index"], 2);
+    assert!(second["backups"].as_array().unwrap().is_empty());
+
+    // A branch has its own reflog.
+    let (status, branch) = get("?ref=refs/heads/main").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(branch["ref"], "refs/heads/main");
+    assert!(!branch["entries"].as_array().unwrap().is_empty());
+}

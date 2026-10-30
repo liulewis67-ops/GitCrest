@@ -1279,6 +1279,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/reflog": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read where HEAD or a local branch has been, newest first
+         * @description Read only. The first page also lists the safety refs GitCrest saved before rebases and resets. Getting a state back is done through the existing branch creation and reset previews.
+         */
+        get: operations["getRepositoryReflog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/stashes": {
         parameters: {
             query?: never;
@@ -2360,6 +2384,31 @@ export interface components {
             name: string;
             pathCount: number;
             dropped: boolean;
+        };
+        ReflogEntry: {
+            index: number;
+            oid: string;
+            /** @description The reflog position, such as HEAD@{3}. */
+            selector: string;
+            message: string;
+            createdAtMs: number;
+        };
+        ReflogBackup: {
+            reference: string;
+            oid: string;
+            /** @enum {string} */
+            kind: "rebase" | "reset";
+            subject: string;
+            createdAtMs: number;
+        };
+        ReflogPage: {
+            repoId: components["schemas"]["RepoId"];
+            ref: string;
+            offset: number;
+            limit: number;
+            entries: components["schemas"]["ReflogEntry"][];
+            nextOffset: number | null;
+            backups: components["schemas"]["ReflogBackup"][];
         };
         StashEntry: {
             /** @description Position in the list, as in stash@{index}. */
@@ -6810,6 +6859,67 @@ export interface operations {
                 };
             };
             406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    getRepositoryReflog: {
+        parameters: {
+            query?: {
+                /** @description HEAD (the default) or a local branch as refs/heads/<name>. */
+                ref?: string;
+                offset?: number;
+                limit?: number;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of the reflog. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReflogPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable or the branch has no reflog. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The reflog is too large to read in one request. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git could not read the reflog. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     getRepositoryStashes: {

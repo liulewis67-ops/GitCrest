@@ -1569,3 +1569,9 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .zoomControl { display: inline-flex; align-items: center; gap: var(--space-2); } .zoomControl output { min-width: 4ch; text-align: center; font-variant-numeric: tabular-nums; }
 .folderDropOverlay { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; background: color-mix(in srgb, var(--accent) 14%, transparent); border: 2px dashed var(--accent); pointer-events: none; }
 .folderDropOverlay > div { padding: var(--space-4) var(--space-6); border-radius: var(--radius-6); background: var(--surface); box-shadow: 0 8px 28px rgb(0 0 0 / .28); font-weight: 650; }
+.reflogDialog { max-width: 760px; }
+.reflogList { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; max-height: 340px; overflow: auto; }
+.reflogList li { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto auto; align-items: center; gap: var(--space-2); min-height: calc(28px * var(--density)); }
+.reflogList li > code:first-child { grid-column: 1; }
+.reflogMessage { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.reflogActions { display: inline-flex; gap: var(--space-2); }

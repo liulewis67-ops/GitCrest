@@ -118,6 +118,7 @@ export interface PaletteInput {
     toggleInspector: () => void;
     toggleFocusMode: () => void;
     toggleDiffView: () => void;
+    showReflog: () => void;
     openInEditor: () => void;
     openInTerminal: () => void;
     zoomIn: () => void;
@@ -208,6 +209,7 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
       input.commitBusy && why.busy,
     ), run.openAiAssistant, "aiCommitMessage"),
     command("branch-switcher", "branches", "cmd.branchSwitcher", shortcutDetail("cmd.branchSwitcherDetail", "branchSwitcher"), repositoryReady, run.openBranchSwitcher, "branchSwitcher"),
+    command("show-reflog", "branches", "cmd.showReflog", t("cmd.showReflogDetail"), repositoryReady, run.showReflog),
     command("branch-here", "branches", "cmd.branchHere", t("cmd.branchHereDetail"), commitReady, () => run.createBranchAt(commitOid)),
     command("checkout-commit", "commits", "cmd.checkoutCommit", t("cmd.checkoutCommitDetail"), commitReady, () => run.checkoutCommit(commitOid)),
     command("reset-to-commit", "commits", "cmd.resetToCommit", t("cmd.resetToCommitDetail"), firstReason(commitReady, !input.hasBranches && t("cmd.why.noBranches")), () => run.resetToCommit(commitOid)),

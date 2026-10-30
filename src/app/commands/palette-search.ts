@@ -34,6 +34,7 @@ export const COMMAND_SYNONYMS: Record<string, string> = {
   "close-tab": "close repository 关闭",
   "new-worktree": "second checkout folder 工作树",
   "toggle-diff-view": "split unified side by side inline layout 并排 统一 分栏",
+  "show-reflog": "lost commit recover undo reset history head moves lost deleted 找回 丢失 恢复",
   "open-in-editor": "code vscode ide edit source 编辑器",
   "open-in-terminal": "shell console command line bash powershell cmd 终端",
   "zoom-in": "bigger larger magnify text size 放大",

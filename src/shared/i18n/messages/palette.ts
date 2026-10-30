@@ -25,6 +25,8 @@ export const paletteMessages = {
   "cmd.zoomOutDetail": ["Make the whole interface smaller", "缩小整个界面"],
   "cmd.zoomReset": ["Reset zoom", "重置缩放"],
   "cmd.zoomResetDetail": ["Return the interface to 100%", "将界面恢复到 100%"],
+  "cmd.showReflog": ["Show reflog and recover a lost commit", "查看引用日志并找回丢失的提交"],
+  "cmd.showReflogDetail": ["See where HEAD or a branch has been, and start a branch or a reset from any of those states", "查看 HEAD 或分支曾经到过的位置，并可从任一状态新建分支或重置"],
   "cmd.openInEditor": ["Open repository in editor", "在编辑器中打开仓库"],
   "cmd.openInEditorDetail": ["Open the repository folder in your editor", "用你的编辑器打开仓库文件夹"],
   "cmd.openInTerminal": ["Open repository in terminal", "在终端中打开仓库"],

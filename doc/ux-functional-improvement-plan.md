@@ -50,7 +50,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U7.2 | System notifications for long tasks | P1 | S | — | done |
 | U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | not started |
 | U9.1 | Add to `.gitignore` from Changes | P1 | S | — | done |
-| U9.2 | Reflog view and lost-commit recovery | P1 | M | — | not started |
+| U9.2 | Reflog view and lost-commit recovery | P1 | M | — | done |
 | U10.1 | Unified mode in the main Diff area | P1 | S | D4 | done |
 | U10.2 | Image diff | P2 | M | — | not started |
 | U10.3 | Submodule status and update | P1 | L | — | not started |
@@ -417,3 +417,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/features/tasks/model/task-notification.ts`, `src/features/tasks/model/use-task-notifications.ts`, `electron/main/index.ts`
 - Limits / follow-up: a notification is raised when push, pull, clone, a fetch whose log shows moved refs, or any other task fails, and only if the task was seen running before and the window is not focused. A scheduled fetch that fails is left to the in-app notice. The text is fixed per kind plus the repository's name; nothing from the task's message or log is used, so a URL or credential cannot reach it (checked by a test). The main process checks the request, shows it only when the window is not focused, and a click restores and focuses the window, selects the repository and opens the task list. Settings → General has a switch (on by default). A task that finishes between two polls without ever being seen running is not announced. Palette entry: none, since this is a setting rather than an action.
 - Commit: see git log (`feat: complete U7.2 notify when long tasks end in the background`)
+
+### U9.2 — Reflog view and lost-commit recovery
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (220 tests; new `reflog_api_finds_a_lost_commit_pages_and_lists_gitcrest_backups` throws two commits away with a hard reset, finds the lost commit in the reflog, checks the entries against `git rev-parse HEAD@{1}`, pages two at a time, reads a branch's own reflog, lists a GitCrest reset-backup ref with its kind, and covers 400, 401 and 404; plus unit tests for reference validation and parsing), `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (580 tests; new `reflog-dialog.test.tsx`), `pnpm test:e2e` (38 tests, after the build).
+- Manual check: not run (app not started).
+- Evidence: `crates/gitcrest-core/src/features/reflog/`, `src/features/history/ui/ReflogDialog.tsx`
+- Limits / follow-up: `GET /repositories/{repoId}/reflog` reads HEAD or a local branch (`refs/heads/<name>` only; anything else is refused), newest first, 100 per page up to 500. The first page also lists GitCrest's rebase and reset safety refs with a "rebase backup" or "reset backup" label. The dialog opens from the command palette ("Show reflog and recover a lost commit"); there is no button for it elsewhere yet. Each row offers "Create branch here…", which opens the existing branch dialog at that commit, and "Reset to here…", which opens the existing reset dialog with the commit chosen; nothing is changed from the reflog itself, so recovery always goes through the reset preview, confirmation and backup ref. Both actions are disabled while a Git task runs. Reflog entries expire with Git's own settings, and a branch that was deleted has no reflog to open (its commits show in HEAD's reflog).
+- Commit: see git log (`feat: complete U9.2 add a reflog view for recovering lost commits`)

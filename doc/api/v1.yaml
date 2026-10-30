@@ -2483,6 +2483,40 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/reflog:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositoryReflog
+      summary: Read where HEAD or a local branch has been, newest first
+      description: >-
+        Read only. The first page also lists the safety refs GitCrest saved before rebases and resets.
+        Getting a state back is done through the existing branch creation and reset previews.
+      parameters:
+        - name: ref
+          in: query
+          required: false
+          description: HEAD (the default) or a local branch as refs/heads/<name>.
+          schema: { type: string, maxLength: 255, default: HEAD }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: One page of the reflog.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ReflogPage" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable or the branch has no reflog., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "413": { description: The reflog is too large to read in one request., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Git could not read the reflog., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/stashes:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4732,6 +4766,38 @@ components:
         name: { type: string }
         pathCount: { type: integer, minimum: 0 }
         dropped: { type: boolean }
+    ReflogEntry:
+      type: object
+      additionalProperties: false
+      required: [index, oid, selector, message, createdAtMs]
+      properties:
+        index: { type: integer, minimum: 0 }
+        oid: { type: string }
+        selector: { type: string, description: "The reflog position, such as HEAD@{3}." }
+        message: { type: string }
+        createdAtMs: { type: integer }
+    ReflogBackup:
+      type: object
+      additionalProperties: false
+      required: [reference, oid, kind, subject, createdAtMs]
+      properties:
+        reference: { type: string }
+        oid: { type: string }
+        kind: { type: string, enum: [rebase, reset] }
+        subject: { type: string }
+        createdAtMs: { type: integer }
+    ReflogPage:
+      type: object
+      additionalProperties: false
+      required: [repoId, ref, offset, limit, entries, nextOffset, backups]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        ref: { type: string }
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        entries: { type: array, items: { $ref: "#/components/schemas/ReflogEntry" } }
+        nextOffset: { type: [integer, "null"] }
+        backups: { type: array, items: { $ref: "#/components/schemas/ReflogBackup" } }
     StashEntry:
       type: object
       additionalProperties: false

@@ -40,6 +40,7 @@ export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type IgnoreRuleResponse = components["schemas"]["IgnoreRule"];
 export type StashPreviewResponse = components["schemas"]["StashPreview"];
+export type ReflogPageResponse = components["schemas"]["ReflogPage"];
 export type StashEntryResponse = components["schemas"]["StashEntry"];
 export type StashListResponse = components["schemas"]["StashList"];
 export type TagPageResponse = components["schemas"]["TagPage"];
@@ -370,6 +371,14 @@ export class GitCrestApiClient {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ oid, name, dropAfter } satisfies components["schemas"]["StashImportRequest"]),
     });
+  }
+
+  getRepositoryReflog(repoId: RepoId, options: { ref?: string; offset?: number; limit?: number } = {}): Promise<ReflogPageResponse> {
+    const query = new URLSearchParams();
+    if (options.ref) query.set("ref", options.ref);
+    if (options.offset) query.set("offset", String(options.offset));
+    if (options.limit) query.set("limit", String(options.limit));
+    return this.request<ReflogPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/reflog?${query}`);
   }
 
   getRepositoryStashes(repoId: RepoId): Promise<StashListResponse> {

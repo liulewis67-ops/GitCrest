@@ -14,7 +14,7 @@ function runners(): PaletteInput["run"] {
     merge: noop, cherryPick: noop, revert: noop, createTag: noop, reset: noop, rebase: noop, fetch: noop, pull: noop, push: noop,
     commit: noop, commitAndPush: noop, stageAll: noop, undo: noop, refreshStatus: noop, openDiff: noop, searchCommits: noop,
     shelve: noop, openSettings: noop, openAiAssistant: noop, showView: noop, toggleSidebar: noop, toggleInspector: noop,
-    toggleFocusMode: noop, toggleDiffView: noop, openInEditor: noop, openInTerminal: noop, zoomIn: noop, zoomOut: noop, zoomReset: noop, manageRemotes: noop, closeTab: noop,
+    toggleFocusMode: noop, toggleDiffView: noop, showReflog: noop, openInEditor: noop, openInTerminal: noop, zoomIn: noop, zoomOut: noop, zoomReset: noop, manageRemotes: noop, closeTab: noop,
   };
 }
 
