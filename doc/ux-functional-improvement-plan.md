@@ -255,7 +255,7 @@ Run the S6 real-provider checks whenever API keys are available; they do not dep
 - [x] Every P0 stage is done, with evidence recorded below (U1.1, U2.1, U2.2, U2.3, U3.1, U3.2, U4.1, U5.1; see the progress log).
 - [x] D1–D4 are decided and recorded in §4 with a date (all four adopted the recommended option on 2026-10-31).
 - [x] `02-prd.md` §7 notes are updated where a stage changes a stated limit (D4 done in U10.1; re-check as later stages land).
-- [ ] `release-notes-alpha-draft.md` lists what this plan added and what remains.
+- [x] `release-notes-alpha-draft.md` lists what this plan added and what remains (section dated 2026-10-31; refresh it when more stages land).
 - [ ] The palette coverage test from U5.1 passes for all actions added by later stages.
 
 ## 8. Progress log
