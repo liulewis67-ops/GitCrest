@@ -55,7 +55,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U10.2 | Image diff | P2 | M | — | not started |
 | U10.3 | Submodule status and update | P1 | L | — | not started |
 | U10.4 | Recognize LFS pointer files | P2 | S | — | done |
-| U11.1 | Commit signing setup and failure help | P1 | M | U1.1 | not started |
+| U11.1 | Commit signing setup and failure help | P1 | M | U1.1 | done |
 | U12.1 | History search under 200 ms after a refs change | P1 | M | — | not started |
 | U13.1 | Unified feedback with undo | P2 | M | — | not started |
 | U13.2 | Interface zoom | P2 | S | — | done |
@@ -433,3 +433,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/features/diff/model/lfs-pointer.ts`, `tests/unit/lfs-pointer.test.tsx`
 - Limits / follow-up: when both sides of a text diff are a Git LFS pointer, or one is and the other is empty, the main diff area and the Diff window show "LFS object changed: <object> · <size> → <object> · <size>" (or added or removed) in place of the three pointer lines, with a note that the content is stored with Git LFS. A new `GET /api/v1/git/lfs` reports whether `git lfs` is installed and its version, and the notice says so, with a pointer to git-lfs.com when it is missing. A pointer needs the version, oid and size lines and at most 12 short key-value lines; anything else stays an ordinary text diff. The plan also mentioned labelling pointers in status; that is not done, because telling a pointer from a normal file needs its content or its attributes for every row. Full LFS management stays in v1.5.
 - Commit: see git log (`feat: complete U10.4 explain Git LFS pointer diffs`)
+
+### U11.1 — Commit signing setup and failure help
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (224 tests; new `signing_api_reads_the_setup_and_tests_a_real_signature_without_moving_anything` creates a real SSH key, reads the setup back, makes a real signature through Git, then points the key at a missing file and checks that the tool's own output comes back while HEAD, the commit count and the working tree stay unchanged; plus unit tests for the config parsing; the test skips when `ssh-keygen` is missing), `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (598 tests; new `signing.test.tsx` and a task-center case), `pnpm test:e2e` (38 tests, after the build). The failure patterns were checked against the real log of a signed commit whose GPG program was missing (`error: cannot spawn …`, `error: gpg failed to sign the data`, `fatal: failed to write commit object`).
+- Manual check: not run. Only SSH signing was exercised for real; GPG and X.509 signing, and a passphrase prompt from a real agent, were not.
+- Evidence: `crates/gitcrest-core/src/features/signing/`, `src/features/identity/ui/SigningSettings.tsx`
+- Limits / follow-up: `GET /repositories/{repoId}/signing` returns the format (GPG, SSH or X.509), `user.signingkey` (an id, public key or file path; key material is never read), `commit.gpgsign` and the configured program. `POST /repositories/{repoId}/signing/test` has Git sign a throwaway commit of the empty tree with `commit-tree -S`; no branch or tag moves, no private key reaches GitCrest, and a failure is a normal answer carrying the tool's output (up to 2,000 characters) or a note after 60 seconds, since a passphrase prompt may be waiting. The test leaves one unreachable object in the repository for Git's normal clean-up to remove. Settings → General shows the facts and the "Test signing" button for the open repository. A commit task that failed because of signing now shows a help block in the task list with the signing tool's own lines and a button that opens Settings. The setup itself is still changed with `git config`; GitCrest does not edit it. As before (S2.5), a failed signature creates no commit.
+- Commit: see git log (`feat: complete U11.1 show the signing setup and explain signing failures`)

@@ -1298,6 +1298,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/signing": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read the commit signing setup Git resolves for the repository
+         * @description Format, key reference, whether commits are signed by default and the configured signing program. The key reference is an id, a public key or a file path; key material is never read or returned.
+         */
+        get: operations["getRepositorySigning"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/signing/test": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sign a throwaway commit with the configured key to check that signing works
+         * @description Git makes the signature with its own configured tool; no branch or tag moves and no private key reaches GitCrest. A failed signature is a normal 200 answer that carries the tool's own output.
+         */
+        post: operations["testRepositorySigning"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/reflog": {
         parameters: {
             query?: never;
@@ -2408,6 +2456,23 @@ export interface components {
             installed: boolean;
             /** @description The first line of git lfs version. */
             version: string | null;
+        };
+        SigningConfig: {
+            repoId: components["schemas"]["RepoId"];
+            /** @enum {string} */
+            format: "openpgp" | "ssh" | "x509";
+            /** @description user.signingkey: a key id, a public key or a key file path. */
+            signingKey: string | null;
+            /** @description commit.gpgsign. */
+            signByDefault: boolean;
+            /** @description The configured signing program; null when Git's default for the format is used. */
+            program: string | null;
+        };
+        SigningTestResult: {
+            repoId: components["schemas"]["RepoId"];
+            signed: boolean;
+            /** @description What the signing tool said when it failed; empty on success. */
+            output: string;
         };
         ReflogEntry: {
             index: number;
@@ -6909,6 +6974,98 @@ export interface operations {
                 };
             };
             406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    getRepositorySigning: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The signing setup. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SigningConfig"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Git could not read or test the signing setup. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    testRepositorySigning: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Whether a signature could be made, and the tool's output when it could not. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SigningTestResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Git could not read or test the signing setup. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     getRepositoryReflog: {

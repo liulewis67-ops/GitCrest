@@ -2,7 +2,7 @@ import { useI18n } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
-import { isAuthenticationFailure, isFailedPush, supportsWorkflowRecovery } from "../model/task-operations";
+import { isAuthenticationFailure, isFailedPush, isSigningFailure, signingFailureOutput, supportsWorkflowRecovery } from "../model/task-operations";
 
 interface TaskCenterProps {
   tasks: TaskSnapshotResponse[];
@@ -14,13 +14,15 @@ interface TaskCenterProps {
   onCopy: (task: TaskSnapshotResponse) => void;
   onRetryClone: (task: TaskSnapshotResponse) => void;
   onConfigureCredentials: (task: TaskSnapshotResponse) => void;
+  /** Opens the signing section of Settings; absent when it cannot be shown. */
+  onOpenSigningSettings?: () => void;
   onReviewPush: (task: TaskSnapshotResponse) => void;
   api?: GitCrestApiClient;
   onRecoverWorkflow: (task: TaskSnapshotResponse, preflight: WorkflowRecoveryPreflightResponse, action: "continue" | "skip" | "abort") => void;
   onOpenConflictWindow: (task: TaskSnapshotResponse) => void;
 }
 
-export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow }: TaskCenterProps) {
+export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow }: TaskCenterProps) {
   const { t } = useI18n();
   const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: string }>>({});
   const [confirmAbortId, setConfirmAbortId] = useState("");
@@ -89,6 +91,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
                 {task.message && <p className="taskMessage">{task.errorCategory && <strong>{task.errorCategory}: </strong>}{task.message}</p>}
                 {task.operation === "clone" && (task.status === "failed" || task.status === "cancelled") && <><p className="cloneHelp">{t("tk.cloneHelp")}</p><button className="textButton taskCancelButton" type="button" onClick={() => onRetryClone(task)}>{t("tk.retryClone")}</button></>}
                 {isAuthenticationFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.updateCred")}</p><button className="secondaryButton" type="button" onClick={() => onConfigureCredentials(task)}>{t("tk.configCred")}</button></div>}
+                {isSigningFailure(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{t("tk.signingFailed")}</p>{signingFailureOutput(task) && <pre className="signingOutput">{signingFailureOutput(task)}</pre>}{onOpenSigningSettings && <button className="secondaryButton" type="button" onClick={onOpenSigningSettings}>{t("tk.signingSettings")}</button>}</div>}
                 {isFailedPush(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{task.errorCategory === "pushRejected" ? t("tk.pushRejected") : t("tk.commitSaved")} {t("tk.forceNote")}</p><button className="secondaryButton" type="button" onClick={() => onReviewPush(task)}>{t("tk.reviewPush")}</button></div>}
                 {task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && <div className="taskCredentialRecovery workflowRecovery"><p className="cloneHelp">{t("tk.resolveListed")}</p>
                   {recovery[task.taskId]?.loading && <p role="status">{t("tk.inspecting")}</p>}

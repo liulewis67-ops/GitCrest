@@ -8945,3 +8945,151 @@ async fn lfs_status_reports_whether_git_lfs_is_installed_and_requires_a_token() 
         .unwrap_or(false);
     assert_eq!(installed, expected);
 }
+
+#[tokio::test]
+async fn signing_api_reads_the_setup_and_tests_a_real_signature_without_moving_anything() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("signing-repo");
+    std::fs::create_dir(&root).unwrap();
+    let key = directory.path().join("signing-key");
+    let keygen = std::process::Command::new("ssh-keygen")
+        .args(["-q", "-t", "ed25519", "-N", ""])
+        .arg("-f")
+        .arg(&key)
+        .output();
+    if !keygen
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+    {
+        eprintln!("skipped: ssh-keygen is not available");
+        return;
+    }
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    git(&["add", "a.txt"]);
+    git(&["commit", "--quiet", "-m", "first"]);
+    let head = git(&["rev-parse", "HEAD"]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let uri = format!("/api/v1/repositories/{repo_id}/signing");
+    let read = || {
+        let app = app.clone();
+        let uri = uri.clone();
+        async move {
+            let response = app
+                .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+        }
+    };
+    let test = || {
+        let app = app.clone();
+        let uri = format!("{uri}/test");
+        async move {
+            let response = app
+                .oneshot(json_request(Method::POST, &uri, ""))
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()
+        }
+    };
+
+    assert_eq!(
+        app.clone()
+            .oneshot(request(&uri, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("{uri}/test"),
+            "",
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo_missing/signing",
+                Some(READ_ONLY_TOKEN)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+
+    // Nothing configured: GPG is the default format and nothing is signed unasked.
+    let plain = read().await;
+    assert_eq!(plain["format"], "openpgp");
+    assert_eq!(plain["signByDefault"], false);
+    assert!(plain["signingKey"].is_null());
+
+    // An SSH key: the setup is read back, and a real signature is made with it.
+    let public_key = format!("{}.pub", key.display());
+    git(&["config", "gpg.format", "ssh"]);
+    git(&["config", "user.signingkey", &public_key]);
+    git(&["config", "commit.gpgsign", "yes"]);
+    let configured = read().await;
+    assert_eq!(configured["format"], "ssh");
+    assert_eq!(configured["signingKey"], public_key.as_str());
+    assert_eq!(configured["signByDefault"], true);
+    assert!(configured["program"].is_null());
+    let good = test().await;
+    assert_eq!(good["signed"], true, "{good}");
+    assert_eq!(good["output"], "");
+
+    // A key that does not exist fails with the tool's own words, and still moves nothing.
+    git(&[
+        "config",
+        "user.signingkey",
+        &format!("{}-missing.pub", key.display()),
+    ]);
+    let bad = test().await;
+    assert_eq!(bad["signed"], false);
+    assert!(!bad["output"].as_str().unwrap().is_empty());
+    assert_eq!(git(&["rev-parse", "HEAD"]), head);
+    assert_eq!(git(&["rev-list", "--all", "--count"]), "1");
+    assert!(git(&["status", "--porcelain"]).is_empty());
+}

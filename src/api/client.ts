@@ -42,6 +42,8 @@ export type IgnoreRuleResponse = components["schemas"]["IgnoreRule"];
 export type StashPreviewResponse = components["schemas"]["StashPreview"];
 export type ReflogPageResponse = components["schemas"]["ReflogPage"];
 export type LfsStatusResponse = components["schemas"]["LfsStatus"];
+export type SigningConfigResponse = components["schemas"]["SigningConfig"];
+export type SigningTestResponse = components["schemas"]["SigningTestResult"];
 export type StashEntryResponse = components["schemas"]["StashEntry"];
 export type StashListResponse = components["schemas"]["StashList"];
 export type TagPageResponse = components["schemas"]["TagPage"];
@@ -384,6 +386,14 @@ export class GitCrestApiClient {
 
   getGitLfsStatus(): Promise<LfsStatusResponse> {
     return this.request<LfsStatusResponse>("/api/v1/git/lfs");
+  }
+
+  getRepositorySigning(repoId: RepoId): Promise<SigningConfigResponse> {
+    return this.request<SigningConfigResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/signing`);
+  }
+
+  testRepositorySigning(repoId: RepoId): Promise<SigningTestResponse> {
+    return this.request<SigningTestResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/signing/test`, true, { method: "POST" });
   }
 
   getRepositoryStashes(repoId: RepoId): Promise<StashListResponse> {

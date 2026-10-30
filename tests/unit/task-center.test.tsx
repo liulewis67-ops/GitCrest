@@ -168,3 +168,19 @@ it("aborts replaced workflow recovery previews and cancels on unmount", async ()
     canContinue: false, canSkip: false, canAbort: true,
   }));
 });
+
+it("explains a commit that could not be signed, with Git's own lines, and links to the signing settings", () => {
+  const onOpenSigningSettings = vi.fn();
+  const failedCommit: TaskSnapshotResponse = {
+    ...failedFetch,
+    taskId: "task-sign",
+    operation: "commit",
+    errorCategory: null,
+    logs: ["git commit --file=-", "error: gpg failed to sign the data", "fatal: failed to write commit object"],
+  };
+  const { container } = render(<TaskCenter tasks={[failedCommit]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onOpenSigningSettings={onOpenSigningSettings} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  expect(screen.getByText(/could not be signed/)).toBeTruthy();
+  expect(container.querySelector(".signingOutput")?.textContent).toBe("error: gpg failed to sign the data\nfatal: failed to write commit object");
+  fireEvent.click(screen.getByRole("button", { name: "Open signing settings" }));
+  expect(onOpenSigningSettings).toHaveBeenCalled();
+});

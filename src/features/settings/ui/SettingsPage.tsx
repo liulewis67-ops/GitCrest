@@ -18,7 +18,7 @@ import type { UpdateStatus } from "../../../api/update-status";
 import { LOCALES, useI18n } from "../../../shared/i18n";
 import { AccountsSection } from "../../accounts";
 import { LanguagesSection } from "../../languages";
-import { GitIdentityEditor } from "../../identity";
+import { GitIdentityEditor, SigningSettings } from "../../identity";
 import { ExternalToolsSettings } from "./ExternalToolsSettings";
 import { BackgroundFetchSettings } from "../../remotes";
 import { NotificationSettings } from "../../tasks";
@@ -150,6 +150,12 @@ export function SettingsPage({
                   <div className="settingsRowText"><span>{t("id.title")}</span><p>{t("id.description")}</p></div>
                 </div>
                 <GitIdentityEditor api={api} />
+              </div>
+              <div className="settingsCard" id="settings-signing">
+                <div className="settingsRow">
+                  <div className="settingsRowText"><span>{t("sg.title")}</span><p>{t("sg.description")}</p></div>
+                </div>
+                <SigningSettings api={api} repoId={repoId} />
               </div>
               <div className="settingsCard">
                 <div className="settingsRow">

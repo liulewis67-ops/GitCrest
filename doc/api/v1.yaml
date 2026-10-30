@@ -2498,6 +2498,54 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/signing:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositorySigning
+      summary: Read the commit signing setup Git resolves for the repository
+      description: >-
+        Format, key reference, whether commits are signed by default and the configured signing program.
+        The key reference is an id, a public key or a file path; key material is never read or returned.
+      responses:
+        "200":
+          description: The signing setup.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/SigningConfig" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read or test the signing setup., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/signing/test:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: testRepositorySigning
+      summary: Sign a throwaway commit with the configured key to check that signing works
+      description: >-
+        Git makes the signature with its own configured tool; no branch or tag moves and no private key
+        reaches GitCrest. A failed signature is a normal 200 answer that carries the tool's own output.
+      responses:
+        "200":
+          description: Whether a signature could be made, and the tool's output when it could not.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/SigningTestResult" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read or test the signing setup., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/reflog:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4788,6 +4836,24 @@ components:
       properties:
         installed: { type: boolean }
         version: { type: [string, "null"], description: The first line of git lfs version. }
+    SigningConfig:
+      type: object
+      additionalProperties: false
+      required: [repoId, format, signingKey, signByDefault, program]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        format: { type: string, enum: [openpgp, ssh, x509] }
+        signingKey: { type: [string, "null"], description: "user.signingkey: a key id, a public key or a key file path." }
+        signByDefault: { type: boolean, description: commit.gpgsign. }
+        program: { type: [string, "null"], description: The configured signing program; null when Git's default for the format is used. }
+    SigningTestResult:
+      type: object
+      additionalProperties: false
+      required: [repoId, signed, output]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        signed: { type: boolean }
+        output: { type: string, description: What the signing tool said when it failed; empty on success. }
     ReflogEntry:
       type: object
       additionalProperties: false

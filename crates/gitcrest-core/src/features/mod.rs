@@ -11,6 +11,7 @@ pub(crate) mod remotes;
 pub(crate) mod repositories;
 pub(crate) mod settings;
 pub(crate) mod shelves;
+pub(crate) mod signing;
 pub(crate) mod staging;
 pub(crate) mod stash;
 pub(crate) mod status;
