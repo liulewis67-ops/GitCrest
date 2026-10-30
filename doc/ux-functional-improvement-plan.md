@@ -249,7 +249,7 @@ Run the S6 real-provider checks whenever API keys are available; they do not dep
 
 ## 7. Closing checklist for this plan
 
-- [ ] Every P0 stage is done, with evidence recorded below.
+- [x] Every P0 stage is done, with evidence recorded below (U1.1, U2.1, U2.2, U2.3, U3.1, U3.2, U4.1, U5.1; see the progress log).
 - [ ] D1–D4 are decided and recorded in §4 with a date.
 - [ ] `02-prd.md` §7 notes are updated where a stage changes a stated limit (for example D4).
 - [ ] `release-notes-alpha-draft.md` lists what this plan added and what remains.
