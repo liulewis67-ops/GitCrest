@@ -2,6 +2,7 @@ import { useI18n } from "../../../shared/i18n";
 import { useRef, useState, type FormEvent } from "react";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../api/client";
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
+import { remoteWebUrl } from "../../../shared/lib/remote-web-url";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 interface RemoteManagerProps {
@@ -19,9 +20,11 @@ interface RemoteManagerProps {
   onDelete: (name: string) => void;
   onSetDefault: (name: string | null) => void;
   onSetUpstream: (localBranch: string, remoteName: string, remoteBranch: string) => void;
+  /** Opens a web address in the default browser; absent outside the desktop app. */
+  onOpenWebUrl?: (url: string) => void;
 }
 
-export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, onManageAccounts, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream }: RemoteManagerProps) {
+export function RemoteManager({ snapshot, branches, loading, busy, disabled, disabledReason, error, onManageAccounts, onRefresh, onAdd, onSetUrl, onDelete, onSetDefault, onSetUpstream, onOpenWebUrl }: RemoteManagerProps) {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -105,6 +108,10 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
                   <label className="cloneField">{t("rm.newUrl")}<input autoFocus disabled={busy || disabled} value={editingUrl} onChange={(event) => setEditingUrl(event.target.value)} autoComplete="url" /></label>
                   <div className="remoteInlineActions"><button className="textButton" type="button" disabled={busy} onClick={() => setEditingName("")}>{t("rm.cancel")}</button><button className="secondaryButton" type="submit" disabled={busy || disabled || !editingUrl.trim()}>{busy ? t("rm.saving") : t("rm.saveUrl")}</button></div>
                 </form> : <div className="remoteCardActions">
+                  {onOpenWebUrl && (() => {
+                    const webUrl = remoteWebUrl(remote.fetchUrls[0] || "");
+                    return <button className="textButton" type="button" disabled={!webUrl} title={webUrl ?? t("rm.noWebPage")} onClick={() => { if (webUrl) onOpenWebUrl(webUrl); }}>{t("rm.openBrowser")}</button>;
+                  })()}
                   <button className="textButton" type="button" disabled={busy || disabled} onClick={() => { setEditingName(remote.name); setEditingUrl(remote.fetchUrls[0] || ""); setDeleteCandidate(""); }}>{t("rm.editUrl")}</button>
                   {deleteCandidate === remote.name ? <><span className="remoteDeletePrompt">{t("rm.removeQ", { name: remote.name })}</span><button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => { onDelete(remote.name); setDeleteCandidate(""); }}>{t("rm.confirmRemove")}</button><button className="textButton" type="button" disabled={busy} onClick={() => setDeleteCandidate("")}>{t("rm.cancel")}</button></> : <button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => { setDeleteCandidate(remote.name); setEditingName(""); }}>{t("rm.remove")}</button>}
                 </div>}

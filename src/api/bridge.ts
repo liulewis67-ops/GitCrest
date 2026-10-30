@@ -41,6 +41,26 @@ export interface GitCrestLanguagePluginListing {
   plugins: GitCrestLanguagePluginEntry[];
 }
 
+export type GitCrestEditorChoice =
+  | { kind: "auto" }
+  | { kind: "known"; id: string }
+  | { kind: "custom"; program: string };
+
+export interface GitCrestExternalTools {
+  editor: GitCrestEditorChoice;
+  detected: Array<{ id: string; name: string }>;
+}
+
+/** A repository by id and, optionally, a path inside it; the main process resolves the folder itself. */
+export interface GitCrestOpenRequest {
+  repoId: string;
+  relativePath?: string;
+}
+
+export type GitCrestOpenResult =
+  | { ok: true }
+  | { ok: false; code: "noEditor" | "badEditor" | "badPath" | "startFailed" | "noTerminal"; message: string };
+
 export interface GitCrestBridge {
   /** Present in frameless windows (Windows and Linux), whose headers draw their own controls. */
   windowControls?: WindowControlsBridge;
@@ -66,6 +86,14 @@ export interface GitCrestBridge {
   installUpdate?: () => Promise<boolean>;
   subscribeToUpdateStatus?: (listener: (status: UpdateStatus) => void) => () => void;
   subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
+  /** Main window only: the saved editor choice and the editors found on this computer. */
+  getExternalTools?: () => Promise<GitCrestExternalTools>;
+  setExternalEditor?: (choice: GitCrestEditorChoice) => Promise<{ ok: true } | { ok: false; message: string }>;
+  /** Opens the repository, or a file or folder inside it, in the chosen editor. */
+  openInEditor?: (request: GitCrestOpenRequest) => Promise<GitCrestOpenResult>;
+  openInTerminal?: (request: GitCrestOpenRequest) => Promise<GitCrestOpenResult>;
+  /** Opens an http or https address in the default browser. */
+  openExternalUrl?: (url: string) => Promise<boolean>;
   /** The disk path of a dropped file or folder. */
   getPathForFile?: (file: File) => string;
   /** Zooms this window's interface; 1 is 100%. */

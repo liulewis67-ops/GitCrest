@@ -88,6 +88,7 @@ interface BranchesSidebarProps {
   onDeleteRemote: (name: string) => void;
   onSetDefaultRemote: (name: string | null) => void;
   onSetBranchUpstream: (localBranch: string, remoteName: string, remoteBranch: string) => void;
+  onOpenWebUrl?: (url: string) => void;
 }
 
 /** Branch browser for the Branches view: filterable local and remote branches, worktrees, and remotes. */
@@ -99,7 +100,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
     selectedBranch, selectedCommit, onSelectCommit, onTagTaskStarted, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
     onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onOpenWorktree,
     onNewWorktreeForBranch, onNewWorktreeFrom, onRemoveWorktree, onRevealPath, onWorktreePruneStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
-    onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream,
+    onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream, onOpenWebUrl,
   } = props;
   const [query, setQuery] = useState("");
   const [branchMenu, setBranchMenu] = useState<BranchMenu>();
@@ -260,6 +261,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
           onDelete={onDeleteRemote}
           onSetDefault={onSetDefaultRemote}
           onSetUpstream={onSetBranchUpstream}
+          onOpenWebUrl={onOpenWebUrl}
         /></Suspense>
       </div>
       {branchMenu && <ContextMenu

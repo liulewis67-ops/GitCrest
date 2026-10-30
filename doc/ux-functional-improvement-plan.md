@@ -44,7 +44,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | done |
 | U5.1 | Complete command-palette coverage | P0 | M | — | done |
 | U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | done |
-| U6.1 | Open in editor, terminal and browser | P1 | M | D3 | not started |
+| U6.1 | Open in editor, terminal and browser | P1 | M | D3 | done |
 | U6.2 | Drop a folder to open a repository | P1 | S | — | done |
 | U7.1 | Background fetch | P1 | M | D2 | not started |
 | U7.2 | System notifications for long tasks | P1 | S | — | not started |
@@ -78,6 +78,7 @@ Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each aga
 | ID | Decided | Date | Note |
 |---|---|---|---|
 | D1 | (b) one list labelled by source, with import as an action | 2026-10-31 | Adopted from the recommendation while carrying out the plan; revisit if it proves wrong. U4.1 shows Git stash entries in the Shelves tab under their own "Git stash" heading and badge; U4.2 adds the actions and "Import as shelf". |
+| D3 | (b) detect common editors and allow a custom program, stored in Settings → General | 2026-10-31 | Adopted from the recommendation. The custom entry is one program, not a command line: the main process starts it without a shell and gives it the path as its only argument. Windows batch files are refused (they need a shell); choose the .exe. |
 | D4 | (b) both layouts, remembered per user | 2026-10-31 | Adopted from the recommendation. Staging works in both layouts; the choice is stored with the other diff view preferences and shared by the main area and the Diff window. The PRD §7 note that the main area is Split only is therefore out of date (checklist item). |
 
 ## 5. Workstreams
@@ -391,3 +392,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/features/repositories/model/use-folder-drop.ts`, `tests/unit/folder-drop.test.tsx`
 - Limits / follow-up: instead of separate targets on the welcome page and tab bar, the whole window accepts the drop, with a full-window "Drop a folder here" hint while files are dragged over it. Text and link drags are ignored. A single folder goes through the existing open flow, which already reports "not a repository", missing and permission errors; a plain file or several items show a clear message (in the welcome page's error area and as a notice). The disk path comes from the preload's `getPathForFile`, which only answers with a real path for files on disk. A drop onto a text field in a dialog is still treated as a folder drop, since the check is on the window.
 - Commit: see git log (`feat: complete U6.2 open a repository by dropping its folder`)
+
+### U6.1 — Open in editor, terminal and browser
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (548 tests; new `external-tools.test.ts` for detection, launching, path checks and the saved choice with a fake environment, `external-tools-settings.test.tsx`, `remote-web-url.test.ts`), `pnpm test:e2e` (38 tests, after the build; `desktop.test.ts` now calls the real bridge in Electron and checks that an unknown repository, a `../` path and an absolute path are refused without starting anything).
+- Manual check: not run. No editor or terminal was actually started in any test, so the real launch on Windows, macOS and Linux (the `start` function in `electron/main/index.ts`) and the macOS and Linux detection paths are untested on real machines.
+- Evidence: `electron/main/external-tools.ts`, `tests/unit/external-tools.test.ts`
+- Limits / follow-up: "Open in editor" is in the palette (repository) and on file rows in Changes; "Open in terminal" is in the palette; remotes in the sidebar have "Open in browser". The renderer sends only a repository id and a relative path; the main process asks the core for the folder, resolves the path itself, and refuses unknown repositories, absolute paths, `..` and line breaks. Programs start detached without a shell with the path as one argument; terminals start in the folder through the working directory. Detected editors are VS Code, Cursor, Sublime Text and Notepad++ in their usual places (the Windows lookup for names on PATH accepts only .exe). A missing or invalid editor shows its message and opens Settings → General. The web address is derived from the fetch URL (scp-style, ssh, https, git), drops credentials and `.git`, and has no page for local paths; only http and https addresses are opened. Not done: an editor entry on the repository tab menu and a terminal entry for single files, and no terminal choice in Settings (the system default is used).
+- Commit: see git log (`feat: complete U6.1 open repositories in an editor, a terminal and the browser`)

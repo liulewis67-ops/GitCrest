@@ -369,6 +369,32 @@ describe("desktop startup E2E", () => {
       expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("change feature branch");
 
       await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
+
+      // Opening other programs goes through the main process, which resolves the folder itself and
+      // refuses anything outside an open repository. Nothing is started here.
+      const externalTools = await window.evaluate(async (repoId) => {
+        const bridge = (globalThis.window as unknown as { gitcrest: {
+          getExternalTools: () => Promise<{ editor: { kind: string }; detected: unknown[] }>;
+          openInEditor: (request: { repoId: string; relativePath?: string }) => Promise<{ ok: boolean; code?: string }>;
+          openInTerminal: (request: { repoId: string; relativePath?: string }) => Promise<{ ok: boolean; code?: string }>;
+          openExternalUrl: (url: string) => Promise<boolean>;
+        } }).gitcrest;
+        return {
+          tools: await bridge.getExternalTools(),
+          unknownRepository: await bridge.openInEditor({ repoId: "repo_unknown" }),
+          escapingPath: await bridge.openInTerminal({ repoId, relativePath: "../outside" }),
+          absolutePath: await bridge.openInEditor({ repoId, relativePath: "C:\\Windows" }),
+          nonWebUrl: await bridge.openExternalUrl("file:///etc/passwd").catch(() => "rejected"),
+        };
+      }, opened.body.repoId as string);
+      expect(externalTools.tools.editor.kind).toBe("auto");
+      expect(Array.isArray(externalTools.tools.detected)).toBe(true);
+      expect(externalTools.unknownRepository).toMatchObject({ ok: false, code: "badPath" });
+      expect(externalTools.escapingPath).toMatchObject({ ok: false, code: "badPath" });
+      expect(externalTools.absolutePath).toMatchObject({ ok: false, code: "badPath" });
+      // The address is checked and dropped without opening anything; the call itself still succeeds.
+      expect(externalTools.nonWebUrl).toBe(true);
+
       await window.keyboard.press("Control+k");
       const commandPalette = window.getByRole("dialog", { name: "Command palette" });
       await commandPalette.getByRole("button", { name: /^Reset current branch Review/ }).click();

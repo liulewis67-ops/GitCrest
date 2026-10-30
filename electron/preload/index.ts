@@ -47,6 +47,11 @@ const api = {
       return "";
     }
   },
+  getExternalTools: (): Promise<unknown> => ipcRenderer.invoke("gitcrest:external-tools-get"),
+  setExternalEditor: (choice: unknown): Promise<unknown> => ipcRenderer.invoke("gitcrest:external-tools-set-editor", choice),
+  openInEditor: (request: unknown): Promise<unknown> => ipcRenderer.invoke("gitcrest:open-in-editor", request),
+  openInTerminal: (request: unknown): Promise<unknown> => ipcRenderer.invoke("gitcrest:open-in-terminal", request),
+  openExternalUrl: (url: string): Promise<boolean> => ipcRenderer.invoke("gitcrest:open-external-url", url),
   setZoomFactor: (factor: number): void => {
     // Only a sane factor reaches the window, whatever the renderer asks for.
     if (Number.isFinite(factor) && factor >= 0.5 && factor <= 2) webFrame.setZoomFactor(factor);

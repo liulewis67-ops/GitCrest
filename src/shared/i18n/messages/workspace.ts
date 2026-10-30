@@ -1,4 +1,5 @@
 export const workspace = {
+  "ctx.openInEditor": ["Open in editor", "在编辑器中打开"],
   "ctx.ignoreFile": ["Add file to ignore list…", "将文件加入忽略列表…"],
   "ctx.ignoreFolderItself": ["Add folder to ignore list…", "将文件夹加入忽略列表…"],
   "ctx.ignoreExtension": ["Ignore all files with this extension…", "忽略所有该扩展名的文件…"],

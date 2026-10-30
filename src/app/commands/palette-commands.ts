@@ -118,6 +118,8 @@ export interface PaletteInput {
     toggleInspector: () => void;
     toggleFocusMode: () => void;
     toggleDiffView: () => void;
+    openInEditor: () => void;
+    openInTerminal: () => void;
     zoomIn: () => void;
     zoomOut: () => void;
     zoomReset: () => void;
@@ -229,6 +231,8 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
     command("toggle-details", "view", "cmd.toggleDetails", shortcutDetail("cmd.toggleDetailsDetail", "toggleInspector"), firstReason(inWorkspace, input.mode === "changes" && t("cmd.why.notHistory")), run.toggleInspector, "toggleInspector"),
     command("focus-mode", "view", "cmd.focus", shortcutDetail("cmd.focusDetail", "focusMode"), firstReason(inWorkspace, !input.hasDiffTarget && t("cmd.why.noDiff")), run.toggleFocusMode, "focusMode"),
     command("toggle-diff-view", "view", "cmd.toggleDiffView", t("cmd.toggleDiffViewDetail"), firstReason(inWorkspace, !input.hasDiffTarget && t("cmd.why.noDiff")), run.toggleDiffView, "toggleDiffView"),
+    command("open-in-editor", "repository", "cmd.openInEditor", t("cmd.openInEditorDetail"), repositoryReady, run.openInEditor),
+    command("open-in-terminal", "repository", "cmd.openInTerminal", t("cmd.openInTerminalDetail"), repositoryReady, run.openInTerminal),
     command("zoom-in", "view", "cmd.zoomIn", t("cmd.zoomInDetail"), false, run.zoomIn, "zoomIn"),
     command("zoom-out", "view", "cmd.zoomOut", t("cmd.zoomOutDetail"), false, run.zoomOut, "zoomOut"),
     command("zoom-reset", "view", "cmd.zoomReset", t("cmd.zoomResetDetail"), false, run.zoomReset, "zoomReset"),

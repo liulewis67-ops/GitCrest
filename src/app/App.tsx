@@ -182,6 +182,33 @@ function App() {
     refreshTasks,
   });
   const openConflictWindow = useOpenConflictWindow({ clearTaskError: () => setTasksError(""), setTaskError: setTasksError });
+  /** Starts an external program through the desktop app; a missing editor sends the user to Settings. */
+  async function openExternally(kind: "editor" | "terminal", repoId: string, relativePath?: string) {
+    const bridge = getGitCrestBridge();
+    const open = kind === "editor" ? bridge?.openInEditor : bridge?.openInTerminal;
+    if (!open) {
+      setNotice(t("tools.desktopOnly"));
+      return;
+    }
+    try {
+      const result = await open({ repoId, ...(relativePath ? { relativePath } : {}) });
+      if (result.ok) return;
+      setNotice(result.message);
+      if (result.code === "noEditor" || result.code === "badEditor") setSettingsView({ section: "general" });
+    } catch {
+      setNotice(t("tools.openFailed"));
+    }
+  }
+
+  function openWebUrl(url: string) {
+    const bridge = getGitCrestBridge();
+    if (!bridge?.openExternalUrl) {
+      setNotice(t("tools.desktopOnly"));
+      return;
+    }
+    void bridge.openExternalUrl(url).then((opened) => { if (!opened) setNotice(t("tools.openFailed")); }, () => setNotice(t("tools.openFailed")));
+  }
+
   const folderDragging = useFolderDrop({
     onFolder: (path) => { void repositoryOpening.openAtPath(path); },
     onProblem: (message) => { setOpenError(message); setNotice(message); },
@@ -943,6 +970,8 @@ function App() {
       zoomIn,
       zoomOut,
       zoomReset: resetZoom,
+      openInEditor: () => { if (selectedRepository) void openExternally("editor", selectedRepository.repoId); },
+      openInTerminal: () => { if (selectedRepository) void openExternally("terminal", selectedRepository.repoId); },
       manageRemotes: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); },
       closeTab: closeRepositoryTab,
     },
@@ -1203,6 +1232,7 @@ function App() {
               onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
               onOpenFileDiff={openFileDiff}
               onOpenCommitFile={openCommitFileDiff}
+              onOpenInEditor={getGitCrestBridge()?.openInEditor ? (path) => void openExternally("editor", selectedRepository.repoId, path) : undefined}
               onIgnorePath={(path, ignoreMode) => setIgnoreRequest({ repoId: selectedRepository.repoId, path, mode: ignoreMode })}
               onOpenDiffWindow={(path, scope) => void openDiffWindow(path, scope)}
               onShelveFiles={(paths, scope) => requestShelfComposer(selectedRepository.repoId, { paths, scope })}
@@ -1291,6 +1321,7 @@ function App() {
               onSetRemoteUrl={remoteMutations.setRepositoryRemoteUrl}
               onDeleteRemote={remoteMutations.deleteRepositoryRemote}
               onSetDefaultRemote={remoteMutations.setRepositoryDefaultRemote}
+              onOpenWebUrl={getGitCrestBridge()?.openExternalUrl ? openWebUrl : undefined}
               onSetBranchUpstream={remoteMutations.setRepositoryBranchUpstream}
             /> : undefined}
             sidebarSize={{ width: sidebarWidth, min: SIDEBAR_WIDTH.min, max: SIDEBAR_WIDTH.max, label: t("app.resizeNav"), onResize: setSidebarWidth }}

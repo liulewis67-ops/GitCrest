@@ -19,6 +19,7 @@ import { LOCALES, useI18n } from "../../../shared/i18n";
 import { AccountsSection } from "../../accounts";
 import { LanguagesSection } from "../../languages";
 import { GitIdentityEditor } from "../../identity";
+import { ExternalToolsSettings } from "./ExternalToolsSettings";
 
 export function SettingsPage({
   api,
@@ -147,6 +148,12 @@ export function SettingsPage({
                   <div className="settingsRowText"><span>{t("id.title")}</span><p>{t("id.description")}</p></div>
                 </div>
                 <GitIdentityEditor api={api} />
+              </div>
+              <div className="settingsCard">
+                <div className="settingsRow">
+                  <div className="settingsRowText"><span>{t("tools.title")}</span><p>{t("tools.description")}</p></div>
+                </div>
+                <ExternalToolsSettings />
               </div>
             </section>
 

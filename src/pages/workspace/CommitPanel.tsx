@@ -106,6 +106,8 @@ interface CommitPanelProps {
   onShelveFiles?: (paths: string[], scope: DiffScope) => void;
   onRollbackFile?: (path: string) => void;
   onShowFileHistory?: (path: string) => void;
+  /** Opens the file in the chosen editor; left out when the desktop app is not available. */
+  onOpenInEditor?: (path: string) => void;
   /** Starts adding an ignore rule for an untracked path; the caller shows the rule before writing it. */
   onIgnorePath?: (path: string, mode: IgnoreMode) => void;
   onRevealFile?: (absolutePath: string) => void;
@@ -124,7 +126,7 @@ export function CommitPanel({
   repository, api, status, statusError, statusLoading, tree, workingCount, stagedCount, hasConflicts,
   stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope, connected, hasActiveRepositoryTask,
   shortcuts, isMacPlatform, tab, historyRefreshKey, shelfComposerRequest, shelfComposerPreselect, shelfComposerAfterSwitch, composer,
-  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenCommitFile, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onIgnorePath, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
+  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenCommitFile, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onOpenInEditor, onIgnorePath, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
 }: CommitPanelProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState<ReadonlySet<ChangeTreeGroup["id"]>>(() => new Set(["ignored"]));
@@ -201,6 +203,9 @@ export function CommitPanel({
     }
     if (onShowFileHistory && (tracked || group === "conflicts")) {
       add({ id: "history", label: t("ctx.history"), icon: <MenuIcon name="history" />, separatorBefore: true, disabled: file.kind === "added", title: file.kind === "added" ? t("ctx.historyNone") : undefined, onSelect: () => onShowFileHistory(file.path) });
+    }
+    if (onOpenInEditor && file.kind !== "deleted") {
+      add({ id: "open-editor", label: t("ctx.openInEditor"), separatorBefore: true, disabled: !connected || repository.availability !== "available", onSelect: () => onOpenInEditor(file.path) });
     }
     const copy = (text: string) => { void navigator.clipboard?.writeText(text).catch(() => undefined); };
     add({ id: "copy", label: t("ctx.copyPath"), icon: <MenuIcon name="copy" />, separatorBefore: true, onSelect: () => copy(absoluteFilePath(repository.path, file.path)) });

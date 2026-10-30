@@ -1,10 +1,24 @@
-import { readFileSync } from "node:fs";
-import { mkdir } from "node:fs/promises";
-import { isAbsolute, join } from "node:path";
+import { spawn } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
+import { delimiter, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type { CoreStatus } from "../../src/api/core-status";
 import { CoreRestartPolicy } from "./core-supervisor";
+import {
+  DEFAULT_EXTERNAL_TOOLS,
+  detectEditors,
+  openInEditor,
+  openInTerminal,
+  parseExternalToolsConfig,
+  resolveInsideRepository,
+  validateCustomProgram,
+  type EditorChoice,
+  type ExternalToolsConfig,
+  type ExternalToolsEnvironment,
+  type OpenResult,
+} from "./external-tools";
 import { listLanguagePlugins, readLanguagePluginGrammar } from "./language-plugins";
 import { onSidecarUnexpectedExit, startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
 import { UpdateController, type UpdateEventSource } from "./update-controller";
@@ -255,6 +269,125 @@ ipcMain.handle("gitcrest:show-item-in-folder", (event, value: unknown) => {
     throw new Error("Invalid file path to reveal.");
   }
   shell.showItemInFolder(value);
+});
+
+// --- Opening a repository in other programs -------------------------------------------------------
+
+function externalToolsConfigPath(): string {
+  return join(app.getPath("userData"), "external-tools.json");
+}
+
+function readExternalToolsConfig(): ExternalToolsConfig {
+  try {
+    return parseExternalToolsConfig(JSON.parse(readFileSync(externalToolsConfigPath(), "utf8")));
+  } catch {
+    return DEFAULT_EXTERNAL_TOOLS;
+  }
+}
+
+/** The program found on PATH, with the extensions Windows adds to a bare name. */
+function findOnPath(program: string): string | undefined {
+  const extensions = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE").split(";").filter((extension) => extension.toLowerCase() === ".exe") : [""];
+  for (const directory of (process.env.PATH ?? "").split(delimiter)) {
+    if (!directory) continue;
+    const names = /\.[A-Za-z0-9]+$/.test(program) ? [program] : extensions.map((extension) => program + extension);
+    for (const name of names) {
+      const candidate = join(directory, name);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return undefined;
+}
+
+const externalToolsEnvironment: ExternalToolsEnvironment = {
+  platform: process.platform,
+  env: process.env,
+  fileExists: (path) => existsSync(path),
+  findOnPath,
+  // Started detached and without a shell; resolves once the program is running, or with why it was not.
+  start: (program, args, options) => new Promise((resolve) => {
+    try {
+      const child = spawn(program, args, { cwd: options.cwd, detached: true, stdio: "ignore", shell: false });
+      child.once("error", (error) => resolve(error.message));
+      child.once("spawn", () => {
+        child.unref();
+        resolve(undefined);
+      });
+    } catch (error) {
+      resolve(error instanceof Error ? error.message : "The program could not be started.");
+    }
+  }),
+};
+
+/** The folder of an open repository, asked of the core so a window can only name repositories that exist. */
+async function repositoryFolder(repoId: unknown): Promise<string | undefined> {
+  if (typeof repoId !== "string" || repoId.length === 0 || repoId.length > 200 || !sidecarConnection) return undefined;
+  try {
+    const response = await fetch(new URL(`/api/v1/repositories/${encodeURIComponent(repoId)}`, sidecarConnection.baseUrl), {
+      headers: { Authorization: `Bearer ${sidecarConnection.token}`, "X-GitCrest-API-Version": "1" },
+    });
+    if (!response.ok) return undefined;
+    const body = await response.json() as { path?: unknown };
+    return typeof body.path === "string" ? body.path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function requireMainWindow(event: IpcMainInvokeEvent): void {
+  if (windowAccessByContentsId.get(event.sender.id) !== "readWrite") {
+    throw new Error("Only the main window can open other programs.");
+  }
+}
+
+async function repositoryTarget(value: unknown): Promise<string | undefined> {
+  const request = value as { repoId?: unknown; relativePath?: unknown } | null;
+  if (!request || typeof request !== "object") return undefined;
+  if (request.relativePath !== undefined && typeof request.relativePath !== "string") return undefined;
+  const folder = await repositoryFolder(request.repoId);
+  return folder ? resolveInsideRepository(folder, request.relativePath as string | undefined) : undefined;
+}
+
+const BAD_PATH: OpenResult = { ok: false, code: "badPath", message: "That path is not inside an open repository." };
+
+ipcMain.handle("gitcrest:external-tools-get", (event) => {
+  requireMainWindow(event);
+  return { editor: readExternalToolsConfig().editor, detected: detectEditors(externalToolsEnvironment) };
+});
+
+ipcMain.handle("gitcrest:external-tools-set-editor", async (event, value: unknown): Promise<{ ok: true } | { ok: false; message: string }> => {
+  requireMainWindow(event);
+  const choice = (value ?? {}) as Partial<EditorChoice> & { program?: unknown };
+  const config = parseExternalToolsConfig({ editor: choice });
+  // A custom program is checked now, so a typo is reported where it was typed and not on first use.
+  if (choice.kind === "custom") {
+    const problem = validateCustomProgram(typeof choice.program === "string" ? choice.program : "", externalToolsEnvironment);
+    if (problem) return { ok: false, message: problem };
+  } else if (choice.kind !== "auto" && choice.kind !== "known") {
+    return { ok: false, message: "Choose an editor." };
+  }
+  await mkdir(app.getPath("userData"), { recursive: true });
+  await writeFile(externalToolsConfigPath(), JSON.stringify(config), "utf8");
+  return { ok: true };
+});
+
+ipcMain.handle("gitcrest:open-in-editor", async (event, value: unknown): Promise<OpenResult> => {
+  requireMainWindow(event);
+  const target = await repositoryTarget(value);
+  return target ? openInEditor(target, readExternalToolsConfig(), externalToolsEnvironment) : BAD_PATH;
+});
+
+ipcMain.handle("gitcrest:open-in-terminal", async (event, value: unknown): Promise<OpenResult> => {
+  requireMainWindow(event);
+  const target = await repositoryTarget(value);
+  return target ? openInTerminal(target, externalToolsEnvironment) : BAD_PATH;
+});
+
+ipcMain.handle("gitcrest:open-external-url", (event, value: unknown): boolean => {
+  requireMainWindow(event);
+  if (typeof value !== "string" || value.length > 2048) return false;
+  openExternalHttpUrl(value);
+  return true;
 });
 
 /** Language plugins live beside the app's other data; tests point this at a temporary folder. */

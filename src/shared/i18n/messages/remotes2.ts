@@ -27,6 +27,8 @@ export const remotes2 = {
   "rm.saving": ["Saving…", "保存中…"],
   "rm.saveUrl": ["Save URL", "保存地址"],
   "rm.editUrl": ["Edit URL", "修改地址"],
+  "rm.openBrowser": ["Open in browser", "在浏览器中打开"],
+  "rm.noWebPage": ["This remote has no web page address GitCrest can work out.", "GitCrest 无法从此远程推断出网页地址。"],
   "rm.removeQ": ["Remove {name}?", "要移除 {name} 吗？"],
   "rm.confirmRemove": ["Confirm remove", "确认移除"],
   "rm.remove": ["Remove", "移除"],
