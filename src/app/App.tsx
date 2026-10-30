@@ -17,13 +17,15 @@ import { ViewLayout } from "../pages/workspace/ViewLayout";
 import { HistorySplit } from "../pages/workspace/HistorySplit";
 import { ariaShortcut, displayShortcut, loadSettingsPage, resetZoom, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus, zoomIn, zoomOut, type SettingsSectionId } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
+import { NoticeRegion } from "../shared/ui/NoticeRegion";
+import { notify } from "../shared/notices/notice-store";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
 import { isComposerVisible, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
 import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, useFolderDrop, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
-import { buildChangeTree, IgnoreRuleDialog, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations, type IgnoreMode } from "../features/changes";
+import { buildChangeTree, IgnoreRuleDialog, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingNotices, useStagingOperations, type IgnoreMode } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, loadReflogDialog, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { useLanguageRegistry } from "../features/languages";
@@ -189,7 +191,7 @@ function App() {
     const bridge = getGitCrestBridge();
     const open = kind === "editor" ? bridge?.openInEditor : bridge?.openInTerminal;
     if (!open) {
-      setNotice(t("tools.desktopOnly"));
+      notify.warning(t("tools.desktopOnly"));
       return;
     }
     try {
@@ -205,12 +207,18 @@ function App() {
   function openWebUrl(url: string) {
     const bridge = getGitCrestBridge();
     if (!bridge?.openExternalUrl) {
-      setNotice(t("tools.desktopOnly"));
+      notify.warning(t("tools.desktopOnly"));
       return;
     }
     void bridge.openExternalUrl(url).then((opened) => { if (!opened) setNotice(t("tools.openFailed")); }, () => setNotice(t("tools.openFailed")));
   }
 
+  useStagingNotices({
+    tasks,
+    repoId: selectedRepository?.repoId,
+    announce: (message, undo) => { notify.success(message, { label: t("stn.undo"), run: undo }); },
+    undo: () => { void undoRecentOperation(); },
+  });
   useTaskNotifications({
     tasks,
     repositoryName: (repoId) => {
@@ -232,7 +240,7 @@ function App() {
   }, [repositories]);
   const folderDragging = useFolderDrop({
     onFolder: (path) => { void repositoryOpening.openAtPath(path); },
-    onProblem: (message) => { setOpenError(message); setNotice(message); },
+    onProblem: (message) => { setOpenError(message); notify.warning(message); },
   });
   useOpenCreatedWorktree({ tasks, getApi: () => apiRef.current, openPath: (path) => repositoryOpening.openAtPath(path), onOpened: () => setTasksOpen(false) });
   useAutoOpenConflicts({ tasks, isRecoverableOperation: supportsWorkflowRecovery, openConflictWindow: (task) => void openConflictWindow(task) });
@@ -300,7 +308,8 @@ function App() {
   const [overlayInspectorFor, setOverlayInspectorFor] = useState<WorkspaceMode>();
   const [focusMode, setFocusMode] = useState(false);
   const [commitPanelTab, setCommitPanelTab] = useState<CommitPanelTab>("commit");
-  const [notice, setNotice] = useState("");
+  // Failures go to the shared notice queue; the helpers below pick the kind for the other cases.
+  const setNotice = (message: string) => { notify.error(message); };
   const sidebarVisible = !focusMode && !panelPreferences.sidebarHidden[mode];
   const inspectorVisible = mode !== "changes" && !focusMode && (inspectorOverlay ? overlayInspectorFor === mode : panelPreferences.inspectorOpen[mode]);
   const rememberGraphScroll = useWorkspaceGraphScroll(selectedRepository?.repoId, mode, setWorkspaceSession);
@@ -426,7 +435,7 @@ function App() {
     ),
     tasks,
     onTaskAccepted: appendTask,
-    onAuthenticationFailure: () => setNotice(t("bf.authFailed")),
+    onAuthenticationFailure: () => { notify.warning(t("bf.authFailed")); },
   });
   const { remoteDisabledReason, pushDisabledReason, pullDisabledReason } = getRemoteActionDisabledReasons({
     repository: selectedRepository,
@@ -752,7 +761,7 @@ function App() {
     try {
       if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
       await navigator.clipboard.writeText(oid);
-      setNotice(t("hv.copied", { oid: oid.slice(0, 7) }));
+      notify.success(t("hv.copied", { oid: oid.slice(0, 7) }));
     } catch {
       setNotice(t("hv.copyFailed"));
     }
@@ -762,7 +771,7 @@ function App() {
     try {
       if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
       await navigator.clipboard.writeText(name);
-      setNotice(t("bs.copiedName", { name }));
+      notify.success(t("bs.copiedName", { name }));
     } catch {
       setNotice(t("bs.copyNameFailed"));
     }
@@ -846,12 +855,6 @@ function App() {
   useEffect(() => {
     setOverlayInspectorFor(undefined);
   }, [windowSizeClass]);
-
-  useEffect(() => {
-    if (!notice) return;
-    const timer = window.setTimeout(() => setNotice(""), 2400);
-    return () => window.clearTimeout(timer);
-  }, [notice]);
 
   // Keep the Changes selection on a file that still exists: follow it between staged and
   // unstaged, fall back to the first changed file, or clear it once the tree is clean.
@@ -1467,7 +1470,7 @@ function App() {
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} initialTargetOid={workflowDialog.resetTargetOid} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
       {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
       {folderDragging && <div className="folderDropOverlay" aria-hidden="true"><div>{t("drop.hint")}</div></div>}
-      {notice && <div className="appNotice" role="status" aria-live="polite">{notice}</div>}
+      <NoticeRegion />
       {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} onManageAccounts={(draft, hosts) => { cloneSubmission.stashDraft(draft); openAccountSettings(hosts, true); }} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>
     </main>

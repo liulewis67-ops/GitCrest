@@ -57,7 +57,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U10.4 | Recognize LFS pointer files | P2 | S | — | done |
 | U11.1 | Commit signing setup and failure help | P1 | M | U1.1 | done |
 | U12.1 | History search under 200 ms after a refs change | P1 | M | — | not started |
-| U13.1 | Unified feedback with undo | P2 | M | — | not started |
+| U13.1 | Unified feedback with undo | P2 | M | — | done |
 | U13.2 | Interface zoom | P2 | S | — | done |
 | U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | not started |
 | U14.2 | Repository hygiene | P2 | S | — | done |
@@ -449,3 +449,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/shared/hints/hints-store.ts`, `src/shared/ui/InlineHint.tsx`, `src/shared/ui/EmptyState.tsx`, `tests/unit/hints-empty-states.test.tsx`
 - Limits / follow-up: four short hints, each shown once with a "Got it" button: at the top of the Changes panel (staging by tick, line or function), in the Shelves tab (shelves versus stash), at the top of the structure outline, and in the AI assistant (nothing is sent until you confirm). They are `role="note"` blocks, so a screen reader reads them in place without an alert and focus does not move. Dismissals are kept in local storage, and Settings → General has "Show tips again". The plan also named "safety previews" as a hint topic; there is no hint for it. Empty states: no changes (already had "Browse history"), no history (new "Go to Changes"), no remotes (new "Add a remote", opens the remote manager), no shelves (new "Shelve some changes…", opens the shelve dialog, with a reason when a Git task blocks it), no tags (new "Create a tag", on the selected commit or HEAD); a tag search with no matches stays a plain sentence. The empty branch list has no action. The actions work by keyboard because they are buttons. No modal tour was added.
 - Commit: see git log (`feat: complete U1.2 add first-use hints and next steps to empty states`)
+
+### U13.1 — Unified feedback with undo
+- Status: done (partly migrated; see limits)
+- Tests: `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (614 tests; new `notices.test.tsx`), `pnpm test:e2e` (38 tests, after the build). No Rust or API change.
+- Manual check: not run (app not started); the position and look of the notices on screen were not checked.
+- Evidence: `src/shared/notices/notice-store.ts`, `src/shared/ui/NoticeRegion.tsx`, `src/features/changes/model/use-staging-notices.ts`
+- Limits / follow-up: one notice queue with success, warning and error kinds, rendered by one always-present polite live region that never takes focus and spells out the kind for screen readers. Success notices last 4 seconds, warnings 8, a notice with an action 10, and errors stay until dismissed; a repeated key replaces the earlier notice, the queue holds four (the oldest non-error makes room), and every notice has a Dismiss button. The app's old toast now uses it: copy confirmations are successes, "desktop app only" and dropped-folder problems are warnings, and failures such as a rollback that could not be read or an editor that would not start are errors. Undo: a bulk stage or unstage (stage all, unstage all, a chosen set of files) shows "Undo", wired to the existing undo operation behind Mod+Z; a single tick shows nothing. Not migrated: the notices that live inside a component (the copy and save confirmations in commit details, the identity, editor and signing cards, the task list's own error line, the open-repository error on the welcome page) still render where they were, and they are not in the queue yet. Undo for a deleted branch (through its backup) and a deleted shelf was not added, since neither has a recorded inverse operation today. The 4-second lifetime is fixed; hovering a notice does not pause it.
+- Commit: see git log (`feat: complete U13.1 add a shared notice queue with undo for bulk staging`)
