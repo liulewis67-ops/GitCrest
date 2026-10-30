@@ -1234,6 +1234,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/ignore-preview": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Show the line an ignore rule would add, and whether it is already there */
+        get: operations["previewIgnoreRule"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/ignore": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add an ignore rule to the repository .gitignore or to the private exclude file
+         * @description Appends one line; a line that is already present is not repeated. The change is an ordinary edit of the ignore file.
+         */
+        post: operations["addIgnoreRule"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/stashes": {
         parameters: {
             query?: never;
@@ -2166,6 +2211,27 @@ export interface components {
             name: string;
             /** @description The object read by the preview; the remote deletes the tag only while it still points there. */
             expectedRemoteOid: string;
+        };
+        /**
+         * @description Ignore exactly this path, every file with its extension, or the folder that holds it.
+         * @enum {string}
+         */
+        IgnoreMode: "file" | "extension" | "folder";
+        /**
+         * @description The shared .gitignore at the repository root, or the private .git/info/exclude.
+         * @enum {string}
+         */
+        IgnoreTarget: "gitignore" | "exclude";
+        IgnoreRuleRequest: {
+            path: string;
+            mode: components["schemas"]["IgnoreMode"];
+            target: components["schemas"]["IgnoreTarget"];
+        };
+        IgnoreRule: {
+            repoId: components["schemas"]["RepoId"];
+            line: string;
+            file: string;
+            alreadyPresent: boolean;
         };
         StashEntry: {
             /** @description Position in the list, as in stash@{index}. */
@@ -6531,6 +6597,91 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    previewIgnoreRule: {
+        parameters: {
+            query: {
+                /** @description Repository-relative path; a trailing slash marks a folder. */
+                path: string;
+                mode: components["schemas"]["IgnoreMode"];
+                target: components["schemas"]["IgnoreTarget"];
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ignore rule and where it goes. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IgnoreRule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    addIgnoreRule: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IgnoreRuleRequest"];
+            };
+        };
+        responses: {
+            /** @description The ignore rule and where it goes. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IgnoreRule"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     getRepositoryStashes: {

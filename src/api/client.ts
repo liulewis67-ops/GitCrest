@@ -38,6 +38,7 @@ export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflic
 export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowConflictSuggestionRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
+export type IgnoreRuleResponse = components["schemas"]["IgnoreRule"];
 export type StashEntryResponse = components["schemas"]["StashEntry"];
 export type StashListResponse = components["schemas"]["StashList"];
 export type TagPageResponse = components["schemas"]["TagPage"];
@@ -326,6 +327,19 @@ export class GitCrestApiClient {
 
   getRepositoryRemotes(repoId: RepoId): Promise<RemoteSnapshotResponse> {
     return this.request<RemoteSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`);
+  }
+
+  previewIgnoreRule(repoId: RepoId, path: string, mode: components["schemas"]["IgnoreMode"], target: components["schemas"]["IgnoreTarget"]): Promise<IgnoreRuleResponse> {
+    const query = new URLSearchParams({ path, mode, target });
+    return this.request<IgnoreRuleResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/ignore-preview?${query}`);
+  }
+
+  addIgnoreRule(repoId: RepoId, path: string, mode: components["schemas"]["IgnoreMode"], target: components["schemas"]["IgnoreTarget"]): Promise<IgnoreRuleResponse> {
+    return this.request<IgnoreRuleResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/ignore`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, mode, target } satisfies components["schemas"]["IgnoreRuleRequest"]),
+    });
   }
 
   getRepositoryStashes(repoId: RepoId): Promise<StashListResponse> {

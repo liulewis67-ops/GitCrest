@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { GitCrestApiClient, RepositoryResponse, StagingRequest, StatusSnapshotResponse, TaskSnapshotResponse } from "../../api/client";
-import type { ChangeTreeFile, ChangeTreeGroup } from "../../features/changes";
+import type { ChangeTreeFile, ChangeTreeGroup, IgnoreMode } from "../../features/changes";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n } from "../../shared/i18n";
 import { ContextMenu, type ContextMenuItem } from "../../shared/ui/ContextMenu";
@@ -45,7 +45,7 @@ function Icon({ name }: { name: "refresh" | "shelve" | "expand" | "collapse" | "
   return <svg className="toolbarIcon" viewBox="0 0 16 16" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function MenuIcon({ name }: { name: "diff" | "window" | "add" | "remove" | "shelve" | "rollback" | "history" | "copy" | "reveal" }) {
+function MenuIcon({ name }: { name: "diff" | "window" | "add" | "remove" | "shelve" | "rollback" | "history" | "copy" | "reveal" | "ignore" }) {
   const paths = {
     diff: <><path d="M5 2.5v7M1.5 6h7" /><path d="M8.5 12.5h6" /></>,
     window: <><rect x="2.5" y="3" width="11" height="10" rx="1.5" /><path d="M2.5 6h11" /></>,
@@ -55,6 +55,7 @@ function MenuIcon({ name }: { name: "diff" | "window" | "add" | "remove" | "shel
     rollback: <><path d="M5.5 3.5 3 6l2.5 2.5" /><path d="M3 6h6.5a3.5 3.5 0 0 1 0 7H7" /></>,
     history: <><circle cx="8" cy="8" r="5.5" /><path d="M8 5v3l2 1.5" /></>,
     copy: <><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" /></>,
+    ignore: <><circle cx="8" cy="8" r="5.5" /><path d="m4.2 4.2 7.6 7.6" /></>,
     reveal: <path d="M2.5 4.5a1 1 0 0 1 1-1h3L8 5h4.5a1 1 0 0 1 1 1v5.5a1 1 0 0 1-1 1h-9a1 1 0 0 1-1-1Z" />,
   };
   return <svg viewBox="0 0 16 16">{paths[name]}</svg>;
@@ -105,6 +106,8 @@ interface CommitPanelProps {
   onShelveFiles?: (paths: string[], scope: DiffScope) => void;
   onRollbackFile?: (path: string) => void;
   onShowFileHistory?: (path: string) => void;
+  /** Starts adding an ignore rule for an untracked path; the caller shows the rule before writing it. */
+  onIgnorePath?: (path: string, mode: IgnoreMode) => void;
   onRevealFile?: (absolutePath: string) => void;
   onShelve: () => void;
   onShelfTaskSubmitted: (task?: TaskSnapshotResponse, afterCreate?: ShelfAfterCreateAction) => void;
@@ -121,7 +124,7 @@ export function CommitPanel({
   repository, api, status, statusError, statusLoading, tree, workingCount, stagedCount, hasConflicts,
   stagingBusy, hasActiveStagingTask, selectedFilePath, selectedFileScope, connected, hasActiveRepositoryTask,
   shortcuts, isMacPlatform, tab, historyRefreshKey, shelfComposerRequest, shelfComposerPreselect, shelfComposerAfterSwitch, composer,
-  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenCommitFile, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
+  onTabChange, onStageChanges, onRefreshStatus, onOpenFileDiff, onOpenCommitFile, onOpenDiffWindow, onShelveFiles, onRollbackFile, onShowFileHistory, onIgnorePath, onRevealFile, onShelve, onShelfTaskSubmitted, onShelfComposerClosed, onShelfComposerRequestHandled,
 }: CommitPanelProps) {
   const { t } = useI18n();
   const [collapsed, setCollapsed] = useState<ReadonlySet<ChangeTreeGroup["id"]>>(() => new Set(["ignored"]));
@@ -182,6 +185,15 @@ export function CommitPanel({
     if (onShelveFiles && (tracked || group === "unversioned")) {
       const scope: DiffScope = scopes.includes("workingTree") ? "workingTree" : "index";
       add({ id: "shelve", label: t("ctx.shelve"), title: t("ctx.shelveTitle"), icon: <MenuIcon name="shelve" />, separatorBefore: true, disabled: shelveBlocked, onSelect: () => onShelveFiles([file.path], scope) });
+    }
+    if (onIgnorePath && group === "unversioned") {
+      const ignoreBlocked = !connected || repository.availability !== "available";
+      const isFolder = file.path.endsWith("/");
+      const hasFolder = isFolder || file.path.includes("/");
+      const hasExtension = !isFolder && /[^/]\.[^./]+$/.test(file.path);
+      add({ id: "ignore-file", label: isFolder ? t("ctx.ignoreFolderItself") : t("ctx.ignoreFile"), icon: <MenuIcon name="ignore" />, separatorBefore: true, disabled: ignoreBlocked, onSelect: () => onIgnorePath(file.path, "file") });
+      add({ id: "ignore-extension", label: t("ctx.ignoreExtension"), disabled: ignoreBlocked || !hasExtension, title: hasExtension ? undefined : t("ctx.ignoreNoExtension"), onSelect: () => onIgnorePath(file.path, "extension") });
+      if (!isFolder) add({ id: "ignore-folder", label: t("ctx.ignoreFolder"), disabled: ignoreBlocked || !hasFolder, title: hasFolder ? undefined : t("ctx.ignoreNoFolder"), onSelect: () => onIgnorePath(file.path, "folder") });
     }
     if (onRollbackFile && tracked) {
       const rollbackable = scopes.includes("workingTree");

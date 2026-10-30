@@ -8254,3 +8254,172 @@ async fn stash_api_lists_entries_made_with_git_stash_including_untracked_parts()
     assert!(entries[1]["untrackedOid"].is_null());
     assert_eq!(entries[1]["baseOid"], git(&["rev-parse", "HEAD"]));
 }
+
+#[tokio::test]
+async fn ignore_api_writes_rules_that_git_honours_and_refuses_unsafe_paths() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("ignore-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        (
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+        )
+    };
+    assert!(git(&["init", "--quiet"]).0);
+    std::fs::create_dir_all(root.join("build")).unwrap();
+    std::fs::write(root.join("build/out.log"), "x").unwrap();
+    std::fs::write(root.join("notes.tmp"), "x").unwrap();
+    std::fs::write(root.join("secret.txt"), "x").unwrap();
+    std::fs::write(root.join(".gitignore"), "existing").unwrap();
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let post = |payload: serde_json::Value| {
+        let app = app.clone();
+        let uri = format!("/api/v1/repositories/{repo_id}/ignore");
+        async move {
+            let response = app
+                .oneshot(json_request(Method::POST, &uri, &payload.to_string()))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+
+    // Authorization, validation and the preview change nothing.
+    let preview_uri = format!("/api/v1/repositories/{repo_id}/ignore-preview?path=build%2Fout.log&mode=extension&target=gitignore");
+    assert_eq!(
+        app.clone()
+            .oneshot(request(&preview_uri, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("/api/v1/repositories/{repo_id}/ignore"),
+            &serde_json::json!({ "path": "notes.tmp", "mode": "file", "target": "gitignore" })
+                .to_string(),
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    let missing = app
+        .clone()
+        .oneshot(request(
+            "/api/v1/repositories/repo_missing/ignore-preview?path=a.log&mode=file&target=gitignore",
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    assert_eq!(
+        post(serde_json::json!({ "path": "../outside", "mode": "file", "target": "gitignore" }))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        post(serde_json::json!({ "path": ".git/config", "mode": "file", "target": "exclude" }))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        post(serde_json::json!({ "path": "Makefile", "mode": "extension", "target": "gitignore" }))
+            .await
+            .0,
+        StatusCode::BAD_REQUEST
+    );
+    let preview = app
+        .clone()
+        .oneshot(request(&preview_uri, Some(READ_ONLY_TOKEN)))
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let body = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+    let preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(preview["line"], "*.log");
+    assert_eq!(preview["alreadyPresent"], false);
+    assert_eq!(
+        std::fs::read_to_string(root.join(".gitignore")).unwrap(),
+        "existing"
+    );
+
+    // The shared file gets the rule on its own line, even after a last line without a newline.
+    let (status, rule) = post(
+        serde_json::json!({ "path": "build/out.log", "mode": "folder", "target": "gitignore" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(rule["line"], "/build/");
+    assert_eq!(rule["file"], ".gitignore");
+    assert_eq!(
+        std::fs::read_to_string(root.join(".gitignore")).unwrap(),
+        "existing\n/build/\n"
+    );
+    assert!(git(&["check-ignore", "-q", "build/out.log"]).0);
+
+    // The same rule twice is written once.
+    let (_, again) = post(
+        serde_json::json!({ "path": "build/out.log", "mode": "folder", "target": "gitignore" }),
+    )
+    .await;
+    assert_eq!(again["alreadyPresent"], true);
+    assert_eq!(
+        std::fs::read_to_string(root.join(".gitignore")).unwrap(),
+        "existing\n/build/\n"
+    );
+
+    // An extension rule applies everywhere; a private rule goes to the exclude file.
+    assert_eq!(
+        post(
+            serde_json::json!({ "path": "notes.tmp", "mode": "extension", "target": "gitignore" })
+        )
+        .await
+        .0,
+        StatusCode::OK
+    );
+    assert!(git(&["check-ignore", "-q", "notes.tmp"]).0);
+    let (status, private) =
+        post(serde_json::json!({ "path": "secret.txt", "mode": "file", "target": "exclude" }))
+            .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(private["file"], ".git/info/exclude");
+    assert!(std::fs::read_to_string(root.join(".git/info/exclude"))
+        .unwrap()
+        .contains("/secret.txt"));
+    assert!(git(&["check-ignore", "-q", "secret.txt"]).0);
+    assert!(!std::fs::read_to_string(root.join(".gitignore"))
+        .unwrap()
+        .contains("secret"));
+}

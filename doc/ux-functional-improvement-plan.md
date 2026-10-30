@@ -49,7 +49,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U7.1 | Background fetch | P1 | M | D2 | not started |
 | U7.2 | System notifications for long tasks | P1 | S | — | not started |
 | U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | not started |
-| U9.1 | Add to `.gitignore` from Changes | P1 | S | — | not started |
+| U9.1 | Add to `.gitignore` from Changes | P1 | S | — | done |
 | U9.2 | Reflog view and lost-commit recovery | P1 | M | — | not started |
 | U10.1 | Unified mode in the main Diff area | P1 | S | D4 | not started |
 | U10.2 | Image diff | P2 | M | — | not started |
@@ -340,3 +340,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/app/commands/palette-commands.ts`, `tests/unit/palette-commands.test.ts`
 - Limits / follow-up: the command list moved out of `App.tsx` into `createPaletteCommands`. It now holds 40 commands in groups, each with the current binding of its shortcut and, when unavailable, a reason in place of the description. `SHORTCUT_COMMANDS` maps every remappable shortcut to its palette entry or a stated exemption (the palette itself, and the Diff-window-only split/unified toggle); adding a shortcut without a mapping fails the type check, and the unit test checks that every mapped entry exists and shows the same binding. New entries: initialize, commit, commit and push, stage all, undo, refresh, open diff, search commits, shelve, settings, merge, cherry-pick, revert, tag, check out and reset to the selected commit, branch at current commit, rename current branch, new worktree, close tab. Not in the palette: per-tag actions (U3.2), "use as commit message" (U2.3, needs the commit panel's state) and the Git stash list; delete branch needs a branch choice and stays in the switcher. `App.tsx` still holds the shortcut handlers separately (U14.1). The plan's search, synonyms and recent commands are U5.2.
 - Commit: see git log (`feat: complete U5.1 cover every action in the command palette`)
+
+### U9.1 — Add to .gitignore from Changes
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (214 tests; new `ignore_api_writes_rules_that_git_honours_and_refuses_unsafe_paths` covers 401, 403, 404, 400, the preview, the shared and private files, a missing final newline, duplicate lines and `git check-ignore`; plus unit tests for the pattern builder and escaping), `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (480 tests; new `ignore-rule-dialog.test.tsx`), `pnpm test:e2e` (38 tests).
+- Manual check: not run (app not started).
+- Evidence: `crates/gitcrest-core/src/features/ignore/`, `src/features/changes/ui/IgnoreRuleDialog.tsx`
+- Limits / follow-up: new `GET /repositories/{repoId}/ignore-preview` and `POST /repositories/{repoId}/ignore`. Untracked files and folders in Changes get "Add file to ignore list…", "Ignore all files with this extension…" and "Ignore the containing folder…". The dialog shows the line and the file first and offers the shared `.gitignore` or the private `.git/info/exclude`. Paths outside the repository, inside `.git`, or with line breaks are refused, and characters that gitignore reads specially are escaped. An existing identical line is not repeated. The status is refreshed after the write, so the file moves to the ignored group. Already-tracked files are not touched, as the menu only appears for untracked entries. No palette entry: the action is per file, and the palette has no file picker.
+- Commit: see git log (`feat: complete U9.1 add ignore rules from the Changes view`)

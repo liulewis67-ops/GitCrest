@@ -23,7 +23,7 @@ import { isComposerVisible, getSensitiveStagedPaths, loadCommitWorkbench, useCom
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
 import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
-import { buildChangeTree, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations } from "../features/changes";
+import { buildChangeTree, IgnoreRuleDialog, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations, type IgnoreMode } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { useLanguageRegistry } from "../features/languages";
@@ -69,6 +69,7 @@ function App() {
   /** The branch chosen in the Branches view, whose history its commit graph shows. */
   const [historyBranch, setHistoryBranch] = useState<{ repoId: string; fullName: string }>();
   const [worktreeForBranch, setWorktreeForBranch] = useState<{ name: string; fromRemote: boolean }>();
+  const [ignoreRequest, setIgnoreRequest] = useState<{ repoId: string; path: string; mode: IgnoreMode }>();
   const [worktreeFrom, setWorktreeFrom] = useState<{ oid: string; label: string }>();
   const [removeWorktreePath, setRemoveWorktreePath] = useState<string>();
   // Settings covers the content area while open; the page underneath stays mounted.
@@ -1192,6 +1193,7 @@ function App() {
               onRefreshStatus={(repoId, force) => void refreshRepositoryStatus(repoId, force)}
               onOpenFileDiff={openFileDiff}
               onOpenCommitFile={openCommitFileDiff}
+              onIgnorePath={(path, ignoreMode) => setIgnoreRequest({ repoId: selectedRepository.repoId, path, mode: ignoreMode })}
               onOpenDiffWindow={(path, scope) => void openDiffWindow(path, scope)}
               onShelveFiles={(paths, scope) => requestShelfComposer(selectedRepository.repoId, { paths, scope })}
               onRollbackFile={(path) => void rollbackFile(path)}
@@ -1364,6 +1366,14 @@ function App() {
       {discardSelection && <DiscardChangesDialog repositoryPath={discardSelection.repositoryPath} path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveDiscardRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
       {createBranchAt && selectedRepository && apiRef.current && <Suspense fallback={null}><CreateBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} startOid={createBranchAt} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setCreateBranchAt(undefined)} onStarted={(task) => { prependTask(task); setCreateBranchAt(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {worktreeForBranch && selectedRepository && apiRef.current && <Suspense fallback={null}><NewWorktreeDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} branch={worktreeForBranch.name} fromRemote={worktreeForBranch.fromRemote} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setWorktreeForBranch(undefined)} onStarted={(task) => { prependTask(task); setWorktreeForBranch(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
+      {ignoreRequest && selectedRepository?.repoId === ignoreRequest.repoId && apiRef.current && <IgnoreRuleDialog
+        api={apiRef.current}
+        repoId={ignoreRequest.repoId}
+        path={ignoreRequest.path}
+        mode={ignoreRequest.mode}
+        onClose={() => setIgnoreRequest(undefined)}
+        onAdded={() => { const { repoId } = ignoreRequest; setIgnoreRequest(undefined); void refreshRepositoryStatus(repoId, true); }}
+      />}
       {worktreeFrom && selectedRepository && apiRef.current && <Suspense fallback={null}><CreateBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} startOid={worktreeFrom.oid} worktreeFrom={worktreeFrom.label} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setWorktreeFrom(undefined)} onStarted={(task) => { prependTask(task); setWorktreeFrom(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {removeWorktreePath && selectedRepository && apiRef.current && <Suspense fallback={null}><RemoveWorktreeDialog api={apiRef.current} repoId={selectedRepository.repoId} path={removeWorktreePath} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setRemoveWorktreePath(undefined)} onStarted={(task) => { prependTask(task); setRemoveWorktreePath(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {localBranchAction && selectedRepository && apiRef.current && <Suspense fallback={null}><LocalBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} action={localBranchAction} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setLocalBranchAction(undefined)} onStarted={(task) => { prependTask(task); setLocalBranchAction(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}

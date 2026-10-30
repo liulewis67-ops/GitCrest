@@ -2431,6 +2431,58 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/ignore-preview:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: previewIgnoreRule
+      summary: Show the line an ignore rule would add, and whether it is already there
+      parameters:
+        - { name: path, in: query, required: true, description: "Repository-relative path; a trailing slash marks a folder.", schema: { type: string, minLength: 1, maxLength: 1024 } }
+        - { name: mode, in: query, required: true, schema: { $ref: "#/components/schemas/IgnoreMode" } }
+        - { name: target, in: query, required: true, schema: { $ref: "#/components/schemas/IgnoreTarget" } }
+      responses:
+        "200":
+          description: The ignore rule and where it goes.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/IgnoreRule" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/ignore:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: addIgnoreRule
+      summary: Add an ignore rule to the repository .gitignore or to the private exclude file
+      description: >-
+        Appends one line; a line that is already present is not repeated. The change is an ordinary edit
+        of the ignore file.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/IgnoreRuleRequest" } } }
+      responses:
+        "200":
+          description: The ignore rule and where it goes.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/IgnoreRule" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/stashes:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4486,6 +4538,31 @@ components:
         remoteName: { type: string, minLength: 1, maxLength: 255 }
         name: { type: string, minLength: 1, maxLength: 255 }
         expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$", description: The object read by the preview; the remote deletes the tag only while it still points there. }
+    IgnoreMode:
+      type: string
+      enum: [file, extension, folder]
+      description: Ignore exactly this path, every file with its extension, or the folder that holds it.
+    IgnoreTarget:
+      type: string
+      enum: [gitignore, exclude]
+      description: The shared .gitignore at the repository root, or the private .git/info/exclude.
+    IgnoreRuleRequest:
+      type: object
+      additionalProperties: false
+      required: [path, mode, target]
+      properties:
+        path: { type: string, minLength: 1, maxLength: 1024 }
+        mode: { $ref: "#/components/schemas/IgnoreMode" }
+        target: { $ref: "#/components/schemas/IgnoreTarget" }
+    IgnoreRule:
+      type: object
+      additionalProperties: false
+      required: [repoId, line, file, alreadyPresent]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        line: { type: string }
+        file: { type: string }
+        alreadyPresent: { type: boolean }
     StashEntry:
       type: object
       additionalProperties: false

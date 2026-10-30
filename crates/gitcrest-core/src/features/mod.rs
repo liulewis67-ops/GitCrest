@@ -5,6 +5,7 @@ pub(crate) mod credentials;
 pub(crate) mod diff;
 pub(crate) mod history;
 pub(crate) mod identity;
+pub(crate) mod ignore;
 pub(crate) mod remotes;
 pub(crate) mod repositories;
 pub(crate) mod settings;
