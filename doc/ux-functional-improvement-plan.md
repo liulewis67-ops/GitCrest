@@ -54,7 +54,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U10.1 | Unified mode in the main Diff area | P1 | S | D4 | done |
 | U10.2 | Image diff | P2 | M | — | not started |
 | U10.3 | Submodule status and update | P1 | L | — | not started |
-| U10.4 | Recognize LFS pointer files | P2 | S | — | not started |
+| U10.4 | Recognize LFS pointer files | P2 | S | — | done |
 | U11.1 | Commit signing setup and failure help | P1 | M | U1.1 | not started |
 | U12.1 | History search under 200 ms after a refs change | P1 | M | — | not started |
 | U13.1 | Unified feedback with undo | P2 | M | — | not started |
@@ -425,3 +425,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/reflog/`, `src/features/history/ui/ReflogDialog.tsx`
 - Limits / follow-up: `GET /repositories/{repoId}/reflog` reads HEAD or a local branch (`refs/heads/<name>` only; anything else is refused), newest first, 100 per page up to 500. The first page also lists GitCrest's rebase and reset safety refs with a "rebase backup" or "reset backup" label. The dialog opens from the command palette ("Show reflog and recover a lost commit"); there is no button for it elsewhere yet. Each row offers "Create branch here…", which opens the existing branch dialog at that commit, and "Reset to here…", which opens the existing reset dialog with the commit chosen; nothing is changed from the reflog itself, so recovery always goes through the reset preview, confirmation and backup ref. Both actions are disabled while a Git task runs. Reflog entries expire with Git's own settings, and a branch that was deleted has no reflog to open (its commits show in HEAD's reflog).
 - Commit: see git log (`feat: complete U9.2 add a reflog view for recovering lost commits`)
+
+### U10.4 — Recognize LFS pointer files
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (221 tests; new `lfs_status_reports_whether_git_lfs_is_installed_and_requires_a_token` compares the answer with `git lfs version` on the machine and covers 401), `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (589 tests; new `lfs-pointer.test.tsx` for parsing, the diff check, sizes and the notice), `pnpm test:e2e` (38 tests, after the build).
+- Manual check: not run. No real LFS-tracked repository was opened, so how the diff API presents a pointer file when `git lfs` filters are active was not observed; the parser works on the pointer text the diff rows carry.
+- Evidence: `src/features/diff/model/lfs-pointer.ts`, `tests/unit/lfs-pointer.test.tsx`
+- Limits / follow-up: when both sides of a text diff are a Git LFS pointer, or one is and the other is empty, the main diff area and the Diff window show "LFS object changed: <object> · <size> → <object> · <size>" (or added or removed) in place of the three pointer lines, with a note that the content is stored with Git LFS. A new `GET /api/v1/git/lfs` reports whether `git lfs` is installed and its version, and the notice says so, with a pointer to git-lfs.com when it is missing. A pointer needs the version, oid and size lines and at most 12 short key-value lines; anything else stays an ordinary text diff. The plan also mentioned labelling pointers in status; that is not done, because telling a pointer from a normal file needs its content or its attributes for every row. Full LFS management stays in v1.5.
+- Commit: see git log (`feat: complete U10.4 explain Git LFS pointer diffs`)

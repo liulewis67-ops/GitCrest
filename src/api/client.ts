@@ -41,6 +41,7 @@ export type CredentialStatusResponse = components["schemas"]["CredentialStatus"]
 export type IgnoreRuleResponse = components["schemas"]["IgnoreRule"];
 export type StashPreviewResponse = components["schemas"]["StashPreview"];
 export type ReflogPageResponse = components["schemas"]["ReflogPage"];
+export type LfsStatusResponse = components["schemas"]["LfsStatus"];
 export type StashEntryResponse = components["schemas"]["StashEntry"];
 export type StashListResponse = components["schemas"]["StashList"];
 export type TagPageResponse = components["schemas"]["TagPage"];
@@ -379,6 +380,10 @@ export class GitCrestApiClient {
     if (options.offset) query.set("offset", String(options.offset));
     if (options.limit) query.set("limit", String(options.limit));
     return this.request<ReflogPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/reflog?${query}`);
+  }
+
+  getGitLfsStatus(): Promise<LfsStatusResponse> {
+    return this.request<LfsStatusResponse>("/api/v1/git/lfs");
   }
 
   getRepositoryStashes(repoId: RepoId): Promise<StashListResponse> {

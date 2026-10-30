@@ -38,6 +38,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/git/lfs": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** Report whether the Git LFS extension is installed */
+        get: operations["getGitLfsStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/initialize": {
         parameters: {
             query?: never;
@@ -2385,6 +2404,11 @@ export interface components {
             pathCount: number;
             dropped: boolean;
         };
+        LfsStatus: {
+            installed: boolean;
+            /** @description The first line of git lfs version. */
+            version: string | null;
+        };
         ReflogEntry: {
             index: number;
             oid: string;
@@ -3330,6 +3354,32 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    getGitLfsStatus: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description LFS availability; never an error when it is missing. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LfsStatus"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     initializeRepository: {

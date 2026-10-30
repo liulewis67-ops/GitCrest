@@ -8,6 +8,8 @@ import { WindowControls } from "../../../shared/ui/WindowControls";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../settings";
 import { BlameAnnotation, createBlameLookup, type BlameLookup } from "./BlameAnnotation";
 import { useDiffViewPreferences } from "../model/use-diff-view-preferences";
+import { lfsPointerChange } from "../model/lfs-pointer";
+import { LfsPointerNotice } from "./LfsPointerNotice";
 
 type View = "split" | "unified";
 /** One tab's blame: loading while neither is set. */
@@ -178,6 +180,7 @@ export function DiffWindow() {
 
   const apiRef = useRef(api);
   apiRef.current = api;
+  const lfsChange = useMemo(() => (document ? lfsPointerChange(document) : undefined), [document]);
   useEffect(() => {
     if (!blameOn || !api || !activeTab || blameDisabled) return;
     const tab = activeTab;
@@ -252,6 +255,7 @@ export function DiffWindow() {
         {document && activeBlame && !activeBlame.document && <div className="diffBlameNotice" role={activeBlame.error ? "alert" : "status"}>{activeBlame.error || t("dw.loadingBlame")}</div>}
         {error ? <div className="diffSpecialState" role="alert"><p>{error}</p></div>
           : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
+            : lfsChange ? <LfsPointerNotice change={lfsChange} path={document.path} loadAvailability={api ? () => api.getGitLfsStatus() : undefined} />
             : view === "split"
               ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} blame={blameLookup} /></Suspense>
               : <UnifiedDiff document={document} blame={blameLookup} />}

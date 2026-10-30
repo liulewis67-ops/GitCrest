@@ -1034,6 +1034,7 @@ function App() {
 
   function renderDiffPanel(target: NonNullable<typeof diffTarget>, extra: { status?: { code: string; kind: string }; fileMissing?: boolean; scopes?: Array<"workingTree" | "index">; fileNavigation?: CommitFileNavigation }) {
     return <WorkspaceDiffPanel
+      loadLfsAvailability={apiRef.current ? () => apiRef.current!.getGitLfsStatus() : undefined}
       scopeOptions={extra.scopes && extra.scopes.length > 1 && target.scope !== "commit" ? { available: extra.scopes, onChange: (scope) => openFileDiff(target.path, scope) } : undefined}
       path={target.path}
       scope={target.scope}

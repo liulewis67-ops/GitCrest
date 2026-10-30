@@ -45,6 +45,21 @@ paths:
                 apiVersion: 1
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /api/v1/git/lfs:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+    get:
+      operationId: getGitLfsStatus
+      summary: Report whether the Git LFS extension is installed
+      responses:
+        "200":
+          description: LFS availability; never an error when it is missing.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/LfsStatus" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/initialize:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4766,6 +4781,13 @@ components:
         name: { type: string }
         pathCount: { type: integer, minimum: 0 }
         dropped: { type: boolean }
+    LfsStatus:
+      type: object
+      additionalProperties: false
+      required: [installed, version]
+      properties:
+        installed: { type: boolean }
+        version: { type: [string, "null"], description: The first line of git lfs version. }
     ReflogEntry:
       type: object
       additionalProperties: false

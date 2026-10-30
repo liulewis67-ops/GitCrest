@@ -8917,3 +8917,31 @@ async fn reflog_api_finds_a_lost_commit_pages_and_lists_gitcrest_backups() {
     assert_eq!(branch["ref"], "refs/heads/main");
     assert!(!branch["entries"].as_array().unwrap().is_empty());
 }
+
+#[tokio::test]
+async fn lfs_status_reports_whether_git_lfs_is_installed_and_requires_a_token() {
+    let app = test_app(None);
+    let unauthorized = app
+        .clone()
+        .oneshot(request("/api/v1/git/lfs", None))
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+
+    let response = app
+        .oneshot(request("/api/v1/git/lfs", Some(READ_ONLY_TOKEN)))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    let status: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    // The answer depends on the machine, but its shape does not: a missing extension is not an error.
+    let installed = status["installed"].as_bool().unwrap();
+    assert_eq!(status["version"].is_string(), installed);
+    let expected = std::process::Command::new("git")
+        .args(["lfs", "version"])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false);
+    assert_eq!(installed, expected);
+}
