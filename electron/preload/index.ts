@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, webFrame } from "electron";
+import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 import type { components } from "../../src/api/schema";
 import type { CoreStatus } from "../../src/api/core-status";
 import type { UpdateStatus } from "../../src/api/update-status";
@@ -39,6 +39,14 @@ const windowControls = process.platform === "darwin" ? undefined : {
 
 const api = {
   windowControls,
+  /** The path of a file or folder the user dropped on the window; empty for anything that is not on disk. */
+  getPathForFile: (file: File): string => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return "";
+    }
+  },
   setZoomFactor: (factor: number): void => {
     // Only a sane factor reaches the window, whatever the renderer asks for.
     if (Number.isFinite(factor) && factor >= 0.5 && factor <= 2) webFrame.setZoomFactor(factor);

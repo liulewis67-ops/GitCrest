@@ -66,6 +66,8 @@ export interface GitCrestBridge {
   installUpdate?: () => Promise<boolean>;
   subscribeToUpdateStatus?: (listener: (status: UpdateStatus) => void) => () => void;
   subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
+  /** The disk path of a dropped file or folder. */
+  getPathForFile?: (file: File) => string;
   /** Zooms this window's interface; 1 is 100%. */
   setZoomFactor?: (factor: number) => void;
 }

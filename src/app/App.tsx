@@ -22,7 +22,7 @@ import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
 import { isComposerVisible, getSensitiveStagedPaths, loadCommitWorkbench, useCommitDraft, useCommitSubmission, type CommitAction } from "../features/commits";
 import { loadCloneDialog, useCloneSubmission } from "../features/cloning";
 import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
-import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
+import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, useFolderDrop, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { buildChangeTree, IgnoreRuleDialog, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingOperations, type IgnoreMode } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
 import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
@@ -182,6 +182,10 @@ function App() {
     refreshTasks,
   });
   const openConflictWindow = useOpenConflictWindow({ clearTaskError: () => setTasksError(""), setTaskError: setTasksError });
+  const folderDragging = useFolderDrop({
+    onFolder: (path) => { void repositoryOpening.openAtPath(path); },
+    onProblem: (message) => { setOpenError(message); setNotice(message); },
+  });
   useOpenCreatedWorktree({ tasks, getApi: () => apiRef.current, openPath: (path) => repositoryOpening.openAtPath(path), onOpened: () => setTasksOpen(false) });
   useAutoOpenConflicts({ tasks, isRecoverableOperation: supportsWorkflowRecovery, openConflictWindow: (task) => void openConflictWindow(task) });
   const [page, setPage] = useState<AppPage>("welcome");
@@ -1387,6 +1391,7 @@ function App() {
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} initialOntoOid={workflowDialog.rebaseOnto} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
       {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} initialTargetOid={workflowDialog.resetTargetOid} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
       {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
+      {folderDragging && <div className="folderDropOverlay" aria-hidden="true"><div>{t("drop.hint")}</div></div>}
       {notice && <div className="appNotice" role="status" aria-live="polite">{notice}</div>}
       {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} onManageAccounts={(draft, hosts) => { cloneSubmission.stashDraft(draft); openAccountSettings(hosts, true); }} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}
       </Suspense>

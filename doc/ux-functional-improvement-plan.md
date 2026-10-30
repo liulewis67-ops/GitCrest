@@ -45,7 +45,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U5.1 | Complete command-palette coverage | P0 | M | — | done |
 | U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | done |
 | U6.1 | Open in editor, terminal and browser | P1 | M | D3 | not started |
-| U6.2 | Drop a folder to open a repository | P1 | S | — | not started |
+| U6.2 | Drop a folder to open a repository | P1 | S | — | done |
 | U7.1 | Background fetch | P1 | M | D2 | not started |
 | U7.2 | System notifications for long tasks | P1 | S | — | not started |
 | U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | not started |
@@ -383,3 +383,11 @@ Add one entry per finished or blocked stage, in this format:
 - Limits / follow-up: six levels from 80% to 150%, kept in local storage and shared by every window (a change in one follows in the others). Mod+=, Mod+- and Mod+0 are remappable shortcuts handled in every window, including from text fields; they replace the window's built-in zoom keys and are also in the command palette. Settings → Appearance has minus, plus and reset buttons with the current level. The desktop app zooms through Electron's `webFrame` (the preload accepts only factors from 0.5 to 2); outside it the page falls back to CSS zoom. Ctrl+Plus on keyboards that need Shift for "+" is not bound; Ctrl+= is.
 - Process finding, which affects earlier entries: `pnpm test:e2e` runs against the built app in `out/` and does not rebuild it, and I ran it without rebuilding for most stages since U2.1. Those runs therefore did not always exercise the newest code. The full suite now passes against a fresh build that contains every change up to this stage, so the cumulative state is verified, but individual earlier "38 passed" figures should be read with that caveat. `pnpm check` builds first and is the reliable gate. Running it against the fresh build also found and fixed three real problems: a stale-closure bug in the Diff window's Split/Unified shortcut (from U10.1), two palette lookups in `desktop.test.ts` that the U5.1 palette entries made ambiguous, and the Tab limit in `keyboard-workflow.test.ts` (see U10.1).
 - Commit: see git log (`feat: complete U13.2 add interface zoom`)
+
+### U6.2 — Drop a folder to open a repository
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (523 tests; new `folder-drop.test.tsx`), `pnpm test:e2e` (38 tests, after the build).
+- Manual check: not run. A real drag from the file manager into the Electron window was not exercised, so the `webUtils.getPathForFile` path (the part unit tests replace with a stub) is untested end to end.
+- Evidence: `src/features/repositories/model/use-folder-drop.ts`, `tests/unit/folder-drop.test.tsx`
+- Limits / follow-up: instead of separate targets on the welcome page and tab bar, the whole window accepts the drop, with a full-window "Drop a folder here" hint while files are dragged over it. Text and link drags are ignored. A single folder goes through the existing open flow, which already reports "not a repository", missing and permission errors; a plain file or several items show a clear message (in the welcome page's error area and as a notice). The disk path comes from the preload's `getPathForFile`, which only answers with a real path for files on disk. A drop onto a text field in a dialog is still treated as a folder drop, since the check is on the window.
+- Commit: see git log (`feat: complete U6.2 open a repository by dropping its folder`)

@@ -7,6 +7,7 @@ export { useWorkspaceSessionActions } from "./model/use-workspace-session-action
 export { useRepositoryCacheLifecycle } from "./model/use-repository-cache-lifecycle";
 export { useRepositoryMutations } from "./model/use-repository-mutations";
 export { useRepositoryOpening } from "./model/use-repository-opening";
+export { useFolderDrop } from "./model/use-folder-drop";
 export { useRepositoryListRefresh } from "./model/use-repository-list-refresh";
 export { useRepositoryTabLifecycle } from "./model/use-repository-tab-lifecycle";
 export { getRepositoryEventRefreshPlan } from "./model/repository-event-refresh-plan";
