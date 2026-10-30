@@ -23,6 +23,8 @@ interface CommitInspectorProps {
   onOpenFile: (path: string, oid: string) => void;
   onOpenDiffWindow: (path: string, oid: string) => void;
   onTagRequestHandled: (sequence: number) => void;
+  onUseMessage?: (message: string) => void;
+  draftHasText?: boolean;
 }
 
 /** Optional details of the selected commit: SHA, author, date, parents, message and tag creation. */
@@ -41,6 +43,8 @@ export function CommitInspector({
   onOpenFile,
   onOpenDiffWindow,
   onTagRequestHandled,
+  onUseMessage,
+  draftHasText,
 }: CommitInspectorProps) {
   const { t } = useI18n();
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -78,6 +82,8 @@ export function CommitInspector({
           onOpenDiffWindow={onOpenDiffWindow}
           openTagRequest={openTagRequest}
           onTagRequestHandled={onTagRequestHandled}
+          onUseMessage={onUseMessage}
+          draftHasText={draftHasText}
           tagShortcut={ariaShortcut(shortcuts.createTag, isMacPlatform)}
           cherryPickShortcut={ariaShortcut(shortcuts.cherryPick, isMacPlatform)}
         />

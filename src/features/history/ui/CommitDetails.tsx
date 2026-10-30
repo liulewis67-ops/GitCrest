@@ -16,6 +16,8 @@ export function CommitDetails({
   onOpenDiffWindow,
   onWorkflow,
   onCreateBranch,
+  onUseMessage,
+  draftHasText = false,
   workflowDisabledReason,
   openTagRequest,
   tagShortcut,
@@ -32,6 +34,10 @@ export function CommitDetails({
   onOpenDiffWindow?: (path: string, oid: string) => void;
   onWorkflow?: (action: "merge" | "cherryPick" | "revert", oid: string) => void;
   onCreateBranch?: (oid: string) => void;
+  /** Fills the commit draft with this commit's full message. */
+  onUseMessage?: (message: string) => void;
+  /** True when the commit draft already holds text, so replacing it needs a confirmation. */
+  draftHasText?: boolean;
   workflowDisabledReason?: string;
   openTagRequest?: { repoId: string; oid: string; sequence: number };
   tagShortcut?: string;
@@ -41,9 +47,11 @@ export function CommitDetails({
   const { t } = useI18n();
   const state = useRepositoryCommitDetail(api, repoId, oid);
   const [copyMessage, setCopyMessage] = useState("");
+  const [confirmReplace, setConfirmReplace] = useState(false);
   const tagCreation = useCommitTagCreation(api, repoId, oid);
   useEffect(() => {
     setCopyMessage("");
+    setConfirmReplace(false);
   }, [oid]);
 
   useEffect(() => {
@@ -67,6 +75,21 @@ export function CommitDetails({
       setCopyMessage(t("cd.copyFailed"));
     }
   }
+  async function copyCommitMessage() {
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error(t("cd.clipboardUnavailable"));
+      await navigator.clipboard.writeText(detail?.message ?? "");
+      setCopyMessage(t("cd.messageCopied"));
+    } catch {
+      setCopyMessage(t("cd.copyMessageFailed"));
+    }
+  }
+  function applyCommitMessage() {
+    if (!onUseMessage || !detail) return;
+    onUseMessage(detail.message);
+    setConfirmReplace(false);
+    setCopyMessage(t("cd.messageUsed"));
+  }
   async function createAnnotatedTag(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     await tagCreation.createTag();
@@ -88,6 +111,11 @@ export function CommitDetails({
     <div className="repositoryFact"><span>{t("cd.date")}</span><strong>{formatCommitDate(detail.committedAtMs)}</strong></div>
     {detail.parents.length > 0 && <div className="repositoryFact"><span>{t("cd.parents")}</span><strong className="monoText">{detail.parents.map((parent) => parent.slice(0, 8)).join(" ")}</strong></div>}
     <div className="commitDetailMessage">{detail.message}</div>
+    <div className="commitDetailLinks"><button className="textButton commitCopyButton" type="button" onClick={() => void copyCommitMessage()}>{t("cd.copyMessage")}</button>
+    {onUseMessage && <button className="textButton commitCopyButton" type="button" onClick={() => draftHasText ? setConfirmReplace(true) : applyCommitMessage()}>{t("cd.useMessage")}</button>}</div>
+    {confirmReplace && <div className="commitDetailLinks" role="group" aria-label={t("cd.replaceDraftAria")}><span>{t("cd.replaceDraft")}</span>
+    <button className="quietButton compact" type="button" onClick={applyCommitMessage}>{t("cd.replaceDraftYes")}</button>
+    <button className="quietButton compact" type="button" onClick={() => setConfirmReplace(false)}>{t("cd.replaceDraftNo")}</button></div>}
     <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> {t("cd.files")} <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
     {showFiles && <div className="commitDetailFiles" aria-label={t("cd.changedFiles")}>{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className={`commitDetailFile${file.path === selectedPath ? " selected" : ""}`} type="button" aria-label={t("cd.openDiffFor", { path: file.path })} aria-pressed={file.path === selectedPath} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, detail.oid)}>↗</button>}</div>)}</div>}
   </div>;

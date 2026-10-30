@@ -989,6 +989,8 @@ function App() {
       onOpenFile={openCommitFileDiff}
       onOpenDiffWindow={(path, oid) => void openDiffWindow(path, "commit", oid)}
       onTagRequestHandled={historyRequests.markTagEditorHandled}
+      onUseMessage={setCommitMessage}
+      draftHasText={Boolean(commitMessage.trim())}
     />;
   }
 

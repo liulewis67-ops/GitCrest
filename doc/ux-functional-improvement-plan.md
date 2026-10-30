@@ -37,7 +37,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U1.2 | First-run hints and empty states | P2 | M | U1.1 | not started |
 | U2.1 | Check out a commit (detached HEAD) | P0 | M | — | not started |
 | U2.2 | Reset to a commit from the history row | P0 | S | — | not started |
-| U2.3 | Copy and reuse a commit message | P0 | S | — | not started |
+| U2.3 | Copy and reuse a commit message | P0 | S | — | done |
 | U3.1 | Tag list and tag labels on the graph | P0 | M | — | not started |
 | U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | not started |
 | U4.1 | Read existing `git stash` entries | P0 | M | D1 | not started |
@@ -262,3 +262,11 @@ Add one entry per finished or blocked stage, in this format:
 - Limits / follow-up:
 - Commit: <SHA>
 ```
+
+### U2.3 — Copy and reuse a commit message
+- Status: done
+- Tests: `tsc --noEmit` (app and test configs), `pnpm frontend:boundaries`, `vitest run` (79 files, 446 tests, including `tests/unit/commit-details-message.test.tsx`). Rust, clippy and E2E not run: no core or API change.
+- Manual check: not run (app not started in this session).
+- Evidence: `tests/unit/commit-details-message.test.tsx`
+- Limits / follow-up: "Copy message" and "Use as new commit message" live in the commit inspector (`CommitDetails`). Command-palette entries come with U5.1. The draft is filled through `setCommitMessage`, so the AI suggestion state is untouched; undo relies on the draft field's own undo.
+- Commit: see git log (`feat: complete U2.3 copy and reuse a commit message`)
