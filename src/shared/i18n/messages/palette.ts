@@ -39,6 +39,8 @@ export const paletteMessages = {
   "cmd.newWorktreeDetail": ["Check out a new branch in another folder", "在另一个文件夹中检出新分支"],
   "cmd.closeTab": ["Close current repository tab", "关闭当前仓库标签页"],
   "cmd.closeTabDetail": ["Close this repository; its files stay on disk", "关闭此仓库；文件仍保留在磁盘上"],
+  "cmd.group.recent": ["Recent", "最近使用"],
+  "cmd.group.results": ["Results", "结果"],
   "cmd.group.navigate": ["Go to", "前往"],
   "cmd.group.repository": ["Repository", "仓库"],
   "cmd.group.changes": ["Changes", "更改"],

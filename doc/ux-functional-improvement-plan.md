@@ -43,7 +43,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U4.1 | Read existing `git stash` entries | P0 | M | D1 | done |
 | U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | done |
 | U5.1 | Complete command-palette coverage | P0 | M | — | done |
-| U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | not started |
+| U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | done |
 | U6.1 | Open in editor, terminal and browser | P1 | M | D3 | not started |
 | U6.2 | Drop a folder to open a repository | P1 | S | — | not started |
 | U7.1 | Background fetch | P1 | M | D2 | not started |
@@ -356,3 +356,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/stash/` (`ops.rs`, `ops_handlers.rs`), `src/features/shelves/ui/StashActionDialog.tsx`
 - Limits / follow-up: new `GET /stashes/preview` and `POST /stashes/apply`, `/stashes/drop`, `/stashes/import`. Every request names the entry by its stash commit, not its position, and finds it again before acting, so a list that changed in between is refused (404) instead of touching another entry. Apply and pop run as tasks and are refused (409) when HEAD moved after the review or an operation is in progress; the preview blocks them when local edits overlap the stash's files. Pop drops the entry only when it applied cleanly. "Import as shelf" writes a shelf (tracked changes plus the untracked files of a `-u` stash) without touching the working tree, and drops the entry only on request and after the shelf is saved. A conflicting apply fails the task, keeps the stash entry and leaves the conflicted files in Changes; it does not open the merge conflict window, because a stash apply creates no in-progress operation to continue or abort. A dropped entry's commit stays in Git until garbage collection. Palette entries for stash actions are not added: they need an entry picked from the list.
 - Commit: see git log (`feat: complete U4.2 apply, pop, drop and import git stash entries`)
+
+### U5.2 — Palette search, grouping and recent commands
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (500 tests; new `palette-search.test.tsx`), `pnpm test:e2e` (38 tests on the final run). One earlier E2E run in this stage failed a single test that I could not identify, and two further runs were killed by my own 280-second timeout, so they say nothing; the next full run passed 38 of 38. The earlier unexplained failure in U3.2 may be the same intermittent test; neither failure was reproduced with a log.
+- Manual check: not run (app not started).
+- Evidence: `src/app/commands/palette-search.ts`, `tests/unit/palette-search.test.tsx`
+- Limits / follow-up: matching covers the label, the description and a synonym list (`stash` finds Shelve, `checkout` finds the branch switcher and commit checkout, `ship` finds Commit and push, with Chinese terms too), every word of a multi-word query must appear, and a run of letters inside a label matches (`cpk` finds Cherry-pick). A search shows one ranked list, where a runnable command beats an equally good unavailable one. With no search, the last five commands run lead in a "Recent" group, moved out of their own group so nothing is listed twice, and the rest follow in groups. Recents live in the browser's local storage and the palette works without it. Matching is not typo-tolerant, and Chinese queries match only the Chinese strings in the synonym list and labels.
+- Commit: see git log (`feat: complete U5.2 rank palette search and remember recent commands`)

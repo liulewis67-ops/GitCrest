@@ -2,6 +2,8 @@ import { useDialogFocus } from "../../shared/hooks/use-dialog-focus";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n, type MessageKey } from "../../shared/i18n";
 import type { CommandGroup, CommandPaletteCommand } from "../commands/palette-commands";
+import { rankCommands, readRecentCommands, recentCommands, rememberRecentCommand } from "../commands/palette-search";
+import { useEffect, useState } from "react";
 
 export type { CommandPaletteCommand };
 
@@ -32,14 +34,25 @@ export function CommandPalette({
 }: CommandPaletteProps) {
   const { t } = useI18n();
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false, undefined, open);
+  const [recentIds, setRecentIds] = useState<string[]>([]);
+  useEffect(() => {
+    if (open) setRecentIds(readRecentCommands());
+  }, [open]);
   if (!open) return null;
 
-  const filteredCommands = commands.filter((command) =>
-    `${command.label} ${command.detail}`.toLowerCase().includes(query.toLowerCase()),
-  );
-  const groups = GROUP_ORDER
-    .map((group) => ({ group, items: filteredCommands.filter((command) => command.group === group) }))
-    .filter(({ items }) => items.length > 0);
+  const searching = query.trim().length > 0;
+  const filteredCommands = rankCommands(commands, query);
+  // A search shows one ranked list; without one, the last commands used lead and the rest follow in groups.
+  const recent = searching ? [] : recentCommands(commands, recentIds);
+  const recentSet = new Set(recent.map((command) => command.id));
+  const groups: Array<{ group: CommandGroup | "recent" | "results"; items: CommandPaletteCommand[] }> = searching
+    ? [{ group: "results", items: filteredCommands }]
+    : [
+      ...(recent.length > 0 ? [{ group: "recent" as const, items: recent }] : []),
+      ...GROUP_ORDER
+        .map((group) => ({ group, items: filteredCommands.filter((command) => command.group === group && !recentSet.has(command.id)) }))
+        .filter(({ items }) => items.length > 0),
+    ];
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     onKeyDown(event);
@@ -89,7 +102,7 @@ export function CommandPalette({
         <div className="commandList">
           {groups.map(({ group, items }) => (
             <div className="commandGroup" role="group" aria-label={t(`cmd.group.${group}` as MessageKey)} key={group}>
-              <div className="commandGroupLabel" aria-hidden="true">{t(`cmd.group.${group}` as MessageKey)}</div>
+              {group !== "results" && <div className="commandGroupLabel" aria-hidden="true">{t(`cmd.group.${group}` as MessageKey)}</div>}
               {items.map((command) => (
                 <button
                   key={command.id}
@@ -98,6 +111,7 @@ export function CommandPalette({
                   disabled={!command.available}
                   aria-keyshortcuts={command.shortcut ? ariaShortcut(shortcuts[command.shortcut], isMacPlatform) : undefined}
                   onClick={() => {
+                    setRecentIds(rememberRecentCommand(command.id, recentIds));
                     command.run();
                     onClose();
                   }}
