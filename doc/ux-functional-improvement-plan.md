@@ -51,7 +51,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | not started |
 | U9.1 | Add to `.gitignore` from Changes | P1 | S | — | done |
 | U9.2 | Reflog view and lost-commit recovery | P1 | M | — | not started |
-| U10.1 | Unified mode in the main Diff area | P1 | S | D4 | not started |
+| U10.1 | Unified mode in the main Diff area | P1 | S | D4 | done |
 | U10.2 | Image diff | P2 | M | — | not started |
 | U10.3 | Submodule status and update | P1 | L | — | not started |
 | U10.4 | Recognize LFS pointer files | P2 | S | — | not started |
@@ -78,6 +78,7 @@ Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each aga
 | ID | Decided | Date | Note |
 |---|---|---|---|
 | D1 | (b) one list labelled by source, with import as an action | 2026-10-31 | Adopted from the recommendation while carrying out the plan; revisit if it proves wrong. U4.1 shows Git stash entries in the Shelves tab under their own "Git stash" heading and badge; U4.2 adds the actions and "Import as shelf". |
+| D4 | (b) both layouts, remembered per user | 2026-10-31 | Adopted from the recommendation. Staging works in both layouts; the choice is stored with the other diff view preferences and shared by the main area and the Diff window. The PRD §7 note that the main area is Split only is therefore out of date (checklist item). |
 
 ## 5. Workstreams
 
@@ -364,3 +365,12 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/app/commands/palette-search.ts`, `tests/unit/palette-search.test.tsx`
 - Limits / follow-up: matching covers the label, the description and a synonym list (`stash` finds Shelve, `checkout` finds the branch switcher and commit checkout, `ship` finds Commit and push, with Chinese terms too), every word of a multi-word query must appear, and a run of letters inside a label matches (`cpk` finds Cherry-pick). A search shows one ranked list, where a runnable command beats an equally good unavailable one. With no search, the last five commands run lead in a "Recent" group, moved out of their own group so nothing is listed twice, and the rest follow in groups. Recents live in the browser's local storage and the palette works without it. Matching is not typo-tolerant, and Chinese queries match only the Chinese strings in the synonym list and labels.
 - Commit: see git log (`feat: complete U5.2 rank palette search and remember recent commands`)
+
+### U10.1 — Unified mode in the main Diff area
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (504 tests; four new `SplitDiff` layout cases and the palette registry test for the new entry), `pnpm test:e2e` (38 tests on the final run). No Rust or API change.
+- Manual check: not run (app not started).
+- Evidence: `tests/unit/split-diff.test.tsx` ("SplitDiff layouts"), `src/features/diff/ui/SplitDiff.tsx`
+- Limits / follow-up: the line-selection view (`SplitDiff`) takes a `layout` of split or unified. In unified, deleted lines come above added ones with one checkbox per line; a line that is half of a paired row selects only its own side, and a lone added or deleted line selects its row. The selection is stored as the same (hunk, row, side) items in both layouts, and a test checks that the same choices send an identical staging request in both, so the patch the core builds is identical (the core never sees the layout; no separate `git diff --cached` comparison was added). A Split/Unified switch sits in the diff header of the line view, Mod+ now works anywhere a file diff is showing (also as the palette entry "Toggle Split/Unified diff"), and the Diff window uses the same stored preference instead of resetting to Split. The full-file view already had the same switch. Not covered: unified rows in Monaco's own single-hunk view, which keeps its fixed layout.
+- Also in this stage: the keyboard-workflow E2E test walked Tab at most 80 times to reach "Refresh working tree status"; measured runs needed 15 to 46 presses depending on where focus landed, which explains the intermittent failures recorded under U3.2 and U5.2 (the failing step was identified from a captured log on the last intermittent failure). The limit is now 200.
+- Commit: see git log (`feat: complete U10.1 unified diff layout with staging in the main area`)

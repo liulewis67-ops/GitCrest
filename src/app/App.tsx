@@ -818,6 +818,7 @@ function App() {
     hasActiveRepositoryTask,
     activeStatusLoading,
     hasSelectedFile: Boolean(selectedFilePath),
+    hasDiffTarget: Boolean(diffTarget),
     stagedCount,
     commitBusy,
     hasActiveBranches: Boolean(activeBranches),
@@ -865,6 +866,7 @@ function App() {
     toggleSidebar,
     toggleInspector,
     toggleFocusMode,
+    toggleDiffView: () => updateDiffViewPreferences({ sideBySide: !diffViewPreferences.sideBySide }),
     dismissTransientPanels,
   });
 
@@ -933,6 +935,7 @@ function App() {
       toggleSidebar,
       toggleInspector,
       toggleFocusMode,
+      toggleDiffView: () => updateDiffViewPreferences({ sideBySide: !diffViewPreferences.sideBySide }),
       manageRemotes: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); },
       closeTab: closeRepositoryTab,
     },

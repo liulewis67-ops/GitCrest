@@ -13,7 +13,7 @@ const OID = "a".repeat(40);
 function input(run: Partial<PaletteInput["run"]> = {}): PaletteInput {
   const noop = vi.fn();
   const base = Object.fromEntries(
-    ["showWelcome", "showWorkspace", "openAppearance", "nextTheme", "openRepository", "initializeRepository", "cloneRepository", "openBranchSwitcher", "createBranchAt", "checkoutCommit", "resetToCommit", "renameCurrentBranch", "newWorktreeFrom", "merge", "cherryPick", "revert", "createTag", "reset", "rebase", "fetch", "pull", "push", "commit", "commitAndPush", "stageAll", "undo", "refreshStatus", "openDiff", "searchCommits", "shelve", "openSettings", "openAiAssistant", "showView", "toggleSidebar", "toggleInspector", "toggleFocusMode", "manageRemotes", "closeTab"].map((name) => [name, noop]),
+    ["showWelcome", "showWorkspace", "openAppearance", "nextTheme", "openRepository", "initializeRepository", "cloneRepository", "openBranchSwitcher", "createBranchAt", "checkoutCommit", "resetToCommit", "renameCurrentBranch", "newWorktreeFrom", "merge", "cherryPick", "revert", "createTag", "reset", "rebase", "fetch", "pull", "push", "commit", "commitAndPush", "stageAll", "undo", "refreshStatus", "openDiff", "searchCommits", "shelve", "openSettings", "openAiAssistant", "showView", "toggleSidebar", "toggleInspector", "toggleFocusMode", "toggleDiffView", "manageRemotes", "closeTab"].map((name) => [name, noop]),
   ) as unknown as PaletteInput["run"];
   return {
     t, shortcuts: defaultShortcutPreferences, isMacPlatform: false, page: "workspace", mode: "history", connected: true,

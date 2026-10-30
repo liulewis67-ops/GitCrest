@@ -37,7 +37,7 @@ export const SHORTCUT_COMMANDS: Record<ShortcutAction, string | { exempt: string
   pull: "pull",
   refreshStatus: "refresh",
   openDiff: "open-diff",
-  toggleDiffView: { exempt: "It only exists inside the Diff window." },
+  toggleDiffView: "toggle-diff-view",
   searchCommits: "search-commits",
   shelve: "shelve",
   settings: "settings",
@@ -114,6 +114,7 @@ export interface PaletteInput {
     toggleSidebar: () => void;
     toggleInspector: () => void;
     toggleFocusMode: () => void;
+    toggleDiffView: () => void;
     manageRemotes: () => void;
     closeTab: (repoId: string) => void;
   };
@@ -221,6 +222,7 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
     command("toggle-sidebar", "view", "cmd.toggleSidebar", shortcutDetail("cmd.toggleSidebarDetail", "toggleSidebar"), inWorkspace, run.toggleSidebar, "toggleSidebar"),
     command("toggle-details", "view", "cmd.toggleDetails", shortcutDetail("cmd.toggleDetailsDetail", "toggleInspector"), firstReason(inWorkspace, input.mode === "changes" && t("cmd.why.notHistory")), run.toggleInspector, "toggleInspector"),
     command("focus-mode", "view", "cmd.focus", shortcutDetail("cmd.focusDetail", "focusMode"), firstReason(inWorkspace, !input.hasDiffTarget && t("cmd.why.noDiff")), run.toggleFocusMode, "focusMode"),
+    command("toggle-diff-view", "view", "cmd.toggleDiffView", t("cmd.toggleDiffViewDetail"), firstReason(inWorkspace, !input.hasDiffTarget && t("cmd.why.noDiff")), run.toggleDiffView, "toggleDiffView"),
     command("settings", "app", "cmd.settings", t("cmd.settingsDetail"), false, run.openSettings, "settings"),
     command("appearance", "app", "cmd.appearance", t("cmd.appearanceDetail"), false, run.openAppearance),
     command("theme", "app", "cmd.theme", input.themeDetail, false, run.nextTheme),

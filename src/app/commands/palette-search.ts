@@ -33,6 +33,7 @@ export const COMMAND_SYNONYMS: Record<string, string> = {
   clone: "download repository remote 克隆",
   "close-tab": "close repository 关闭",
   "new-worktree": "second checkout folder 工作树",
+  "toggle-diff-view": "split unified side by side inline layout 并排 统一 分栏",
   "manage-remotes": "origin upstream url 远程",
 };
 

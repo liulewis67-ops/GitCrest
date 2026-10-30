@@ -23,6 +23,8 @@ type GlobalShortcutContext = {
   hasActiveRepositoryTask: boolean;
   activeStatusLoading: boolean;
   hasSelectedFile: boolean;
+  /** A file diff is showing in the main area, so its Split/Unified layout can be switched. */
+  hasDiffTarget: boolean;
   stagedCount: number;
   commitBusy: boolean;
   hasActiveBranches: boolean;
@@ -55,6 +57,7 @@ type GlobalShortcutActions = {
   toggleSidebar: () => void;
   toggleInspector: () => void;
   toggleFocusMode: () => void;
+  toggleDiffView: () => void;
   dismissTransientPanels: () => void;
 };
 
@@ -156,6 +159,9 @@ export function useGlobalShortcuts(context: GlobalShortcutContext, actions: Glob
       } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.toggleInspector, isMacPlatform)) {
         event.preventDefault();
         run.toggleInspector();
+      } else if (page === "workspace" && repository && state.hasDiffTarget && matchesShortcut(event, shortcuts.toggleDiffView, isMacPlatform)) {
+        event.preventDefault();
+        run.toggleDiffView();
       } else if (page === "workspace" && repository && matchesShortcut(event, shortcuts.focusMode, isMacPlatform)) {
         event.preventDefault();
         run.toggleFocusMode();

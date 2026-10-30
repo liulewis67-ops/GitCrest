@@ -1,6 +1,6 @@
 import { useI18n } from "../../../shared/i18n";
 import type { DiffDocumentResponse } from "../../../api/client";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { OTHER_STRUCTURE_ID, rowKey, structureSelection, type ReviewStructure, type SideLine } from "../model/code-review-analysis";
 import { splitInlineDiff } from "../model/inline-diff";
 import { monacoLanguageForPath } from "../model/monaco-language";
@@ -42,9 +42,11 @@ interface SplitDiffProps {
   /** Annotates the new side's lines with their date and author, in a middle column between the two sides. */
   blame?: BlameLookup;
   codeReview?: CodeReviewSource;
+  /** Two columns, or one column with deleted lines above added ones. Selecting rows works the same in both. */
+  layout?: "split" | "unified";
 }
 
-export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true, blame, codeReview }: SplitDiffProps) {
+export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCommitSelection, disabled, readOnly: readOnlyOverride = false, onOpenWindow, onShowFullFile, showFileMeta = true, blame, codeReview, layout = "split" }: SplitDiffProps) {
   const { t } = useI18n();
   const [selection, setSelection] = useState<DiffSelectionItem[]>([]);
   const [collapsedHunks, setCollapsedHunks] = useState<Set<number>>(() => new Set());
@@ -331,7 +333,32 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
               modifiedGutter={monacoGutters?.[hunkIndex]}
             />
           </Suspense>}
-          {!collapsedHunks.has(hunkIndex) && view === "split" && hunk.rows.map((row, rowIndex) => {
+          {!collapsedHunks.has(hunkIndex) && view === "split" && layout === "unified" && hunk.rows.map((row, rowIndex) => {
+            const state = row.kind === "change" ? rowState(selectedKeys, hunkIndex, rowIndex) : "none";
+            const paired = row.kind === "change" && !readOnly && row.oldText !== null && row.newText !== null;
+            if (row.kind === "context") {
+              return <div className="unifiedDiffRow unifiedSelectable" role="group" aria-label={t("sd.contextLine", { line: row.oldLine ?? row.newLine ?? t("sd.unknown"), text: row.oldText ?? row.newText ?? "" })} data-row={rowKey(hunkIndex, rowIndex)} key={`${hunkIndex}:${rowIndex}`}><span className="diffRowSelect" aria-hidden="true" /><span>{row.oldLine ?? ""}</span><span>{row.newLine ?? ""}</span><code>{row.oldText ?? row.newText ?? ""}</code></div>;
+            }
+            // One checkbox per line. A line that is half of a paired row selects only its own side.
+            const lineBox = (side: "old" | "new") => {
+              if (readOnly) return <span className="diffRowSelect" aria-hidden="true" />;
+              const checked = paired ? state === "all" || state === side : state === "all";
+              return <label className="diffRowSelect"><input
+                type="checkbox"
+                aria-label={side === "old" ? t("sd.selectDeletedLineAria", { hunk: hunkIndex + 1, row: rowIndex + 1 }) : t("sd.selectAddedLineAria", { hunk: hunkIndex + 1, row: rowIndex + 1 })}
+                checked={checked}
+                disabled={disabled}
+                onChange={(event) => paired ? toggleSide(hunkIndex, rowIndex, state, side) : setRowSelection(hunkIndex, rowIndex, event.target.checked ? "all" : "none")}
+              /></label>;
+            };
+            const atomIndex = analysis?.rowAtoms.get(rowKey(hunkIndex, rowIndex));
+            const inStructure = atomIndex !== undefined && highlightedAtoms.has(atomIndex);
+            return <Fragment key={`${hunkIndex}:${rowIndex}`}>
+              {row.oldText !== null && row.oldText !== undefined && <div className={`unifiedDiffRow unifiedDiffDeletion unifiedSelectable${inStructure ? " splitDiffRow-structure" : ""}`} role="group" aria-label={t("sd.deletedLine", { line: row.oldLine ?? t("sd.unknown"), text: row.oldText })} data-row={rowKey(hunkIndex, rowIndex)}>{lineBox("old")}<span>{row.oldLine ?? ""}</span><span /><code><span aria-hidden="true">- </span>{row.newText !== null && row.newText !== undefined ? <InlineDiffText text={row.oldText} counterpart={row.newText} /> : row.oldText}</code></div>}
+              {row.newText !== null && row.newText !== undefined && <div className={`unifiedDiffRow unifiedDiffAddition unifiedSelectable${inStructure ? " splitDiffRow-structure" : ""}`} role="group" aria-label={t("sd.addedLine", { line: row.newLine ?? t("sd.unknown"), text: row.newText })} data-row={row.oldText === null || row.oldText === undefined ? rowKey(hunkIndex, rowIndex) : undefined}>{lineBox("new")}<span /><span>{row.newLine ?? ""}</span><code><span aria-hidden="true">+ </span>{row.oldText !== null && row.oldText !== undefined ? <InlineDiffText text={row.newText} counterpart={row.oldText} /> : row.newText}</code></div>}
+            </Fragment>;
+          })}
+          {!collapsedHunks.has(hunkIndex) && view === "split" && layout === "split" && hunk.rows.map((row, rowIndex) => {
             const state = row.kind === "change" ? rowState(selectedKeys, hunkIndex, rowIndex) : "none";
             // Only a row with both a deleted and an added line can be selected one side at a time.
             const paired = row.kind === "change" && !readOnly && row.oldText !== null && row.newText !== null;

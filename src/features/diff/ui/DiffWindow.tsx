@@ -7,6 +7,7 @@ import { BrandMark } from "../../../shared/ui/BrandMark";
 import { WindowControls } from "../../../shared/ui/WindowControls";
 import { ariaShortcut, displayShortcut, matchesShortcut, readShortcutPreferences, SHORTCUT_PREFERENCES_KEY, type ShortcutPreferences } from "../../settings";
 import { BlameAnnotation, createBlameLookup, type BlameLookup } from "./BlameAnnotation";
+import { useDiffViewPreferences } from "../model/use-diff-view-preferences";
 
 type View = "split" | "unified";
 /** One tab's blame: loading while neither is set. */
@@ -37,7 +38,12 @@ export function DiffWindow() {
   const requestedBlames = useRef(new Set<string>());
   const [error, setError] = useState("");
   const [tabsTruncated, setTabsTruncated] = useState(false);
-  const [view, setView] = useState<View>("split");
+  const { preferences: viewPreferences, updatePreferences: updateViewPreferences } = useDiffViewPreferences();
+  const view: View = viewPreferences.sideBySide ? "split" : "unified";
+  const setView = (next: View | ((current: View) => View)) => {
+    const resolved = typeof next === "function" ? next(view) : next;
+    updateViewPreferences({ sideBySide: resolved === "split" });
+  };
   const coreRestarts = useCoreRestartCount();
   const tabsLoadedRef = useRef(false);
   const [shortcuts, setShortcuts] = useState<ShortcutPreferences>(() => {

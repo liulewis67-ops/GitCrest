@@ -17,6 +17,8 @@ export const paletteMessages = {
   "cmd.searchCommitsDetail": ["Go to History and focus the message search", "前往历史并聚焦提交说明搜索"],
   "cmd.shelve": ["Shelve changes", "搁置更改"],
   "cmd.shelveDetail": ["Choose changes to put aside on the shelf", "选择要放入搁置区的更改"],
+  "cmd.toggleDiffView": ["Toggle Split/Unified diff", "切换分栏/统一差异"],
+  "cmd.toggleDiffViewDetail": ["Switch the open file diff between side-by-side and one-column layouts", "在并排与单列布局之间切换当前文件差异"],
   "cmd.settings": ["Open settings", "打开设置"],
   "cmd.settingsDetail": ["Accounts, identity, appearance, shortcuts and AI providers", "账号、身份、外观、快捷键和 AI 服务商"],
   "cmd.cherryPick": ["Cherry-pick selected commit", "挑选所选提交"],

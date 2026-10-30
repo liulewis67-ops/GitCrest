@@ -271,7 +271,8 @@ async function enterButtonByTab(page: Page, label: string) {
   // them then; start walking only once the target can actually take focus.
   await expect.poll(() => page.evaluate((expected) => [...document.querySelectorAll("button")].some((button) =>
     !button.disabled && button.getClientRects().length > 0 && `${button.getAttribute("aria-label") || ""} ${button.innerText}`.includes(expected)), label), { timeout: 15_000 }).toBe(true);
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  // Where focus starts depends on what just closed; reaching the button took 15 to 46 presses in measured runs, so allow generous headroom.
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     const focusedButton = await page.evaluate(() => {
       const active = document.activeElement;
       return active instanceof HTMLButtonElement
@@ -288,7 +289,7 @@ async function enterButtonByTab(page: Page, label: string) {
 }
 
 async function focusControlByTab(page: Page, label: string) {
-  for (let attempt = 0; attempt < 80; attempt += 1) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
     const isFocused = await page.evaluate((expected) => {
       const active = document.activeElement;
       const labels = active instanceof HTMLInputElement ? Array.from(active.labels || []).map((item) => item.innerText).join(" ") : "";

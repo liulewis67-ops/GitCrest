@@ -1562,3 +1562,7 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .commandGroupLabel { padding: var(--space-2) 8px 2px; color: var(--text-muted); font-size: var(--type-2xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
 .ignoreRulePreview { display: grid; gap: var(--space-1); padding: var(--space-2); border: 1px solid var(--line); border-radius: var(--radius-5); font-size: var(--type-sm); }
 .ignoreRulePreview code { font-family: var(--font-mono, monospace); color: var(--accent-strong); }
+.unifiedDiffRow.unifiedSelectable { grid-template-columns: 24px 48px 48px minmax(0, 1fr); }
+.unifiedDiff.withBlame .unifiedDiffRow.unifiedSelectable { grid-template-columns: 24px minmax(150px, 190px) 48px 48px minmax(0, 1fr); }
+.unifiedSelectable > .diffRowSelect { display: flex; align-items: center; justify-content: center; padding: 0; }
+.unifiedSelectable { font: var(--code-size)/var(--code-leading) var(--font-mono); }

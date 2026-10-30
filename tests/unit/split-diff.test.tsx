@@ -142,3 +142,72 @@ describe("SplitDiff", () => {
     expect(screen.getByRole("status").textContent).toContain("showing plain text");
   });
 });
+
+describe("SplitDiff layouts", () => {
+  const document: DiffDocumentResponse = {
+    repoId: "repo_fixture",
+    path: "src/file.ts",
+    revision: "sha256:layouts",
+    originalPath: null,
+    scope: "workingTree",
+    changeKind: "modified",
+    status: "text",
+    hunks: [{
+      oldStart: 1,
+      oldLines: 3,
+      newStart: 1,
+      newLines: 4,
+      rows: [
+        { kind: "context", oldLine: 1, newLine: 1, oldText: "keep", newText: "keep" },
+        { kind: "change", oldLine: 2, newLine: 2, oldText: "old two", newText: "new two" },
+        { kind: "change", oldLine: null, newLine: 3, oldText: null, newText: "added three" },
+        { kind: "change", oldLine: 3, newLine: null, oldText: "removed four", newText: null },
+      ],
+    }],
+  };
+
+  /** The same clicks in either layout: the new side of the paired row, the added line, and the removed line. */
+  function stagedWith(layout: "split" | "unified") {
+    const onStageSelection = vi.fn();
+    render(<SplitDiff layout={layout} document={document} onStageSelection={onStageSelection} disabled={false} />);
+    if (layout === "split") {
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select only added line 2" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1 change row 3" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select hunk 1 change row 4" }));
+    } else {
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select the added line in hunk 1, row 2" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select the added line in hunk 1, row 3" }));
+      fireEvent.click(screen.getByRole("checkbox", { name: "Select the deleted line in hunk 1, row 4" }));
+    }
+    fireEvent.click(screen.getByRole("button", { name: /^Stage selected/ }));
+    return onStageSelection.mock.calls[0][0];
+  }
+
+  it("sends the same selection to staging in both layouts", () => {
+    const split = stagedWith("split");
+    cleanup();
+    const unified = stagedWith("unified");
+    expect(unified).toEqual(split);
+    expect(split.length).toBeGreaterThan(0);
+  });
+
+  it("shows one line per side in the unified layout, with context shown once", () => {
+    render(<SplitDiff layout="unified" document={document} onStageSelection={vi.fn()} disabled={false} />);
+    expect(screen.getByRole("group", { name: "Deleted line 2: old two" })).toBeDefined();
+    expect(screen.getByRole("group", { name: "Added line 2: new two" })).toBeDefined();
+    expect(screen.getAllByText("keep")).toHaveLength(1);
+  });
+
+  it("selects only the deleted half of a paired row from its own line", () => {
+    const onStageSelection = vi.fn();
+    render(<SplitDiff layout="unified" document={document} onStageSelection={onStageSelection} disabled={false} />);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select the deleted line in hunk 1, row 2" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Stage selected/ }));
+    expect(onStageSelection).toHaveBeenCalledWith([{ hunkIndex: 0, rowIndex: 1, side: "old" }]);
+  });
+
+  it("offers no checkboxes in the unified layout when read-only", () => {
+    render(<SplitDiff layout="unified" document={{ ...document, scope: "commit" }} onStageSelection={vi.fn()} disabled={false} />);
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+});
