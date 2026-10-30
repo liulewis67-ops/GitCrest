@@ -3,6 +3,7 @@ import { useI18n, type MessageKey } from "../../../shared/i18n";
 import { OTHER_STRUCTURE_ID, type ChangeFactKind, type CodeReviewAnalysis, type ReviewStructure, type SideLine } from "../model/code-review-analysis";
 import type { CodeReviewState } from "../model/use-code-review-analysis";
 import { useReviewedStructures } from "../model/use-reviewed-structures";
+import { InlineHint } from "../../../shared/ui/InlineHint";
 
 export type StructureSelectionState = "all" | "some" | "none";
 
@@ -128,6 +129,7 @@ export function StructureOutline({ state, activeId, onActivate, onJump, reviewKe
 
   return (
     <aside className="structureOutline" aria-label={t("cr.title")}>
+      <InlineHint id="structure" title={t("hint.structureTitle")}>{t("hint.structure")}</InlineHint>
       <header className="structureOutlineHeader">
         <strong>{t("cr.title")}</strong>
         {analysis && <span>{t("cr.summary", { structures: listedCount, lines: analysis.atoms.length })}</span>}

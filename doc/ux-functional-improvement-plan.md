@@ -34,7 +34,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | ID | Stage | Priority | Size | Depends on | Status |
 |---|---|---|---|---|---|
 | U1.1 | Git identity check and editor | P0 | M | — | done |
-| U1.2 | First-run hints and empty states | P2 | M | U1.1 | not started |
+| U1.2 | First-run hints and empty states | P2 | M | U1.1 | done |
 | U2.1 | Check out a commit (detached HEAD) | P0 | M | — | done |
 | U2.2 | Reset to a commit from the history row | P0 | S | — | done |
 | U2.3 | Copy and reuse a commit message | P0 | S | — | done |
@@ -441,3 +441,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/signing/`, `src/features/identity/ui/SigningSettings.tsx`
 - Limits / follow-up: `GET /repositories/{repoId}/signing` returns the format (GPG, SSH or X.509), `user.signingkey` (an id, public key or file path; key material is never read), `commit.gpgsign` and the configured program. `POST /repositories/{repoId}/signing/test` has Git sign a throwaway commit of the empty tree with `commit-tree -S`; no branch or tag moves, no private key reaches GitCrest, and a failure is a normal answer carrying the tool's output (up to 2,000 characters) or a note after 60 seconds, since a passphrase prompt may be waiting. The test leaves one unreachable object in the repository for Git's normal clean-up to remove. Settings → General shows the facts and the "Test signing" button for the open repository. A commit task that failed because of signing now shows a help block in the task list with the signing tool's own lines and a button that opens Settings. The setup itself is still changed with `git config`; GitCrest does not edit it. As before (S2.5), a failed signature creates no commit.
 - Commit: see git log (`feat: complete U11.1 show the signing setup and explain signing failures`)
+
+### U1.2 — First-run hints and empty states
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (605 tests; new `hints-empty-states.test.tsx`), `pnpm test:e2e` (38 tests, after the build). No Rust or API change.
+- Manual check: not run (app not started); the wording and placement of the hints were not looked at on screen.
+- Evidence: `src/shared/hints/hints-store.ts`, `src/shared/ui/InlineHint.tsx`, `src/shared/ui/EmptyState.tsx`, `tests/unit/hints-empty-states.test.tsx`
+- Limits / follow-up: four short hints, each shown once with a "Got it" button: at the top of the Changes panel (staging by tick, line or function), in the Shelves tab (shelves versus stash), at the top of the structure outline, and in the AI assistant (nothing is sent until you confirm). They are `role="note"` blocks, so a screen reader reads them in place without an alert and focus does not move. Dismissals are kept in local storage, and Settings → General has "Show tips again". The plan also named "safety previews" as a hint topic; there is no hint for it. Empty states: no changes (already had "Browse history"), no history (new "Go to Changes"), no remotes (new "Add a remote", opens the remote manager), no shelves (new "Shelve some changes…", opens the shelve dialog, with a reason when a Git task blocks it), no tags (new "Create a tag", on the selected commit or HEAD); a tag search with no matches stays a plain sentence. The empty branch list has no action. The actions work by keyboard because they are buttons. No modal tour was added.
+- Commit: see git log (`feat: complete U1.2 add first-use hints and next steps to empty states`)

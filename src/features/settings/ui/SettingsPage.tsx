@@ -22,6 +22,7 @@ import { GitIdentityEditor, SigningSettings } from "../../identity";
 import { ExternalToolsSettings } from "./ExternalToolsSettings";
 import { BackgroundFetchSettings } from "../../remotes";
 import { NotificationSettings } from "../../tasks";
+import { resetHints, useAnyHintDismissed } from "../../../shared/hints/hints-store";
 
 export function SettingsPage({
   api,
@@ -47,6 +48,7 @@ export function SettingsPage({
   onInstallUpdate?: () => void;
 }) {
   const { t, locale, setLocale } = useI18n();
+  const anyHintDismissed = useAnyHintDismissed();
   const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction>();
   const [shortcutError, setShortcutError] = useState("");
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? "general");
@@ -171,6 +173,12 @@ export function SettingsPage({
               </div>
               <div className="settingsCard">
                 <NotificationSettings />
+              </div>
+              <div className="settingsCard">
+                <div className="settingsRow">
+                  <div className="settingsRowText"><span>{t("hint.settingsTitle")}</span><p>{t("hint.settingsHelp")}</p></div>
+                  <button className="secondaryButton" type="button" disabled={!anyHintDismissed} onClick={resetHints}>{t("hint.showAgain")}</button>
+                </div>
               </div>
             </section>
 

@@ -58,6 +58,8 @@ interface BranchesSidebarProps {
   /** The commit selected in History, marked in the tag list when a tag points at it. */
   selectedCommit?: string;
   onSelectCommit?: (oid: string) => void;
+  /** Starts a tag on the selected commit, or on HEAD; offered from the empty tag list. */
+  onCreateTag?: () => void;
   /** A tag push or remote tag delete started as a background task. */
   onTagTaskStarted?: (task: TaskSnapshotResponse) => void;
   onSelectBranch: (branch: Branch) => void;
@@ -97,7 +99,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
   const {
     repository, api, branches, orderedBranches, branchError, branchesLoading, remotes, remoteError, remotesLoading,
     remoteActionBusy, remoteDisabledReason, connected, hasActiveRepositoryTask, historyRefreshKey, shortcuts, isMacPlatform,
-    selectedBranch, selectedCommit, onSelectCommit, onTagTaskStarted, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
+    selectedBranch, selectedCommit, onSelectCommit, onCreateTag, onTagTaskStarted, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
     onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onOpenWorktree,
     onNewWorktreeForBranch, onNewWorktreeFrom, onRemoveWorktree, onRevealPath, onWorktreePruneStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
     onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream, onOpenWebUrl,
@@ -244,7 +246,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
           {remoteBranches.length > 0 && groupLabel(t("bs.remote"), remoteBranches.length, showRemote, showRemote ? t("bs.hideRemote") : t("bs.showRemote"), () => setRemoteGroupOpen((open) => !open))}
           {showRemote && remoteBranches.map(branchRow)}
         </ul>}
-        {api && onSelectCommit && <TagList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} selectedOid={selectedCommit} remoteNames={remotes?.remotes.map((remote) => remote.name)} disabled={blocked} onSelectCommit={onSelectCommit} onTaskStarted={onTagTaskStarted} />}
+        {api && onSelectCommit && <TagList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} selectedOid={selectedCommit} remoteNames={remotes?.remotes.map((remote) => remote.name)} disabled={blocked} onSelectCommit={onSelectCommit} onCreateTag={onCreateTag} onTaskStarted={onTagTaskStarted} />}
         {api && <WorktreeList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} disabled={!connected || hasActiveRepositoryTask} onOpen={onOpenWorktree} onNewWorktreeFrom={onNewWorktreeFrom} onRemove={onRemoveWorktree} onReveal={onRevealPath} onPruneStarted={onWorktreePruneStarted} />}
         <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">{t("nav.loadingRemotes")}</div>}><RemoteManager
           snapshot={remotes}

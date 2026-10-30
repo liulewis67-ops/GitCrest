@@ -14,7 +14,7 @@ function renderShelfCenter(shelves: ShelfResponse[] = []) {
 
 it("moves focus into the shelf composer and closes it with Escape", async () => {
   renderShelfCenter();
-  await screen.findByText("No saved shelves");
+  await screen.findByText(/No saved shelves/);
   fireEvent.click(screen.getByRole("button", { name: /Shelve selected changes/ }));
   const dialog = screen.getByRole("dialog", { name: "Shelve selected changes" });
   const name = screen.getByRole("textbox", { name: "Name" });

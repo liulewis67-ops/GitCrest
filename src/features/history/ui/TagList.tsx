@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TagEntryResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
 import { MenuButton } from "../../../shared/ui/MenuButton";
+import { EmptyState } from "../../../shared/ui/EmptyState";
 import { TagActionsDialog, type TagAction } from "./TagActionsDialog";
 
 const PAGE_SIZE = 100;
@@ -11,7 +12,7 @@ const FILTER_DELAY_MS = 250;
  * The repository tags, newest version first, a page at a time so a repository with thousands of tags
  * costs nothing until the section is used. Selecting a tag selects the commit it points at.
  */
-export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = [], disabled = false, onSelectCommit, onTaskStarted }: {
+export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = [], disabled = false, onSelectCommit, onCreateTag, onTaskStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   refreshKey: number;
@@ -21,6 +22,8 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
   /** Git operations cannot start now, so tag changes are unavailable. */
   disabled?: boolean;
   onSelectCommit: (oid: string) => void;
+  /** Starts a tag on the selected commit or HEAD; the empty list offers it as its next step. */
+  onCreateTag?: () => void;
   /** A push or remote delete started as a background task. */
   onTaskStarted?: (task: TaskSnapshotResponse) => void;
 }) {
@@ -88,7 +91,9 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
     </div>}
     {loading && !loaded && <p className="sidebarNotice" role="status">{t("tags.loading")}</p>}
     {error && <div className="statusLoadError" role="alert"><span>{error}</span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
-    {empty && <p className="sidebarNotice">{filter ? t("tags.noMatch", { query: filter }) : t("tags.none")}</p>}
+    {empty && (filter
+      ? <p className="sidebarNotice">{t("tags.noMatch", { query: filter })}</p>
+      : <EmptyState actionLabel={t("tags.createFirst")} onAction={onCreateTag} actionDisabled={disabled} actionTitle={disabled ? t("tags.busyTitle") : undefined}>{t("tags.none")}</EmptyState>)}
     {tags.length > 0 && <ul className="branchList" aria-label={t("tags.title")}>
       {tags.map((tag) => <li className="tagListRow" key={tag.name}>
         <button className={`tagListItem${tag.annotated ? " annotated" : ""}${selectedOid === tag.targetOid ? " selected" : ""}`} type="button" aria-label={t("tags.showCommit", { oid: tag.targetOid.slice(0, 8), name: tag.name })} aria-pressed={selectedOid === tag.targetOid} title={tag.message ?? tag.name} onClick={() => onSelectCommit(tag.targetOid)}>

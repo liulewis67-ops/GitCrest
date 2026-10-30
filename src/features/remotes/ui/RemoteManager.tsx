@@ -3,6 +3,7 @@ import { useRef, useState, type FormEvent } from "react";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../api/client";
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
 import { remoteWebUrl } from "../../../shared/lib/remote-web-url";
+import { EmptyState } from "../../../shared/ui/EmptyState";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 interface RemoteManagerProps {
@@ -78,7 +79,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
       </div>
       {!snapshot && loading && <div className="navEmpty" role="status">{t("rm.loading")}</div>}
       {!snapshot && !loading && !error && <div className="navEmpty">{t("rm.openToView")}</div>}
-      {remoteList && remoteList.length === 0 && <div className="navEmpty">{t("rm.none")}</div>}
+      {remoteList && remoteList.length === 0 && <EmptyState actionLabel={t("rm.addFirst")} onAction={() => setOpen(true)} actionDisabled={disabled} actionTitle={disabled ? disabledReason : undefined}>{t("rm.none")}</EmptyState>}
       {remoteList && remoteList.length > 0 && <ul className="remoteList" aria-label={t("rm.listAria")}>
         {remoteList.map((remote) => <li className="remoteItem" key={remote.name}>
           <span className="remoteName" title={remote.name}>{remote.name}</span>

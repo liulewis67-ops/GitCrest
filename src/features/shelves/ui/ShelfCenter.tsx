@@ -12,6 +12,8 @@ import type {
 } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { StashList } from "./StashList";
+import { InlineHint } from "../../../shared/ui/InlineHint";
+import { EmptyState } from "../../../shared/ui/EmptyState";
 
 type SelectedChange = { revision: string; hunks?: number[] };
 type ShelfAfterCreateAction = { switchTarget: string; existingShelfIds: string[] };
@@ -302,12 +304,13 @@ export function ShelfCenter({
 
   return (
     <div className="shelfCenter">
+      <InlineHint id="shelves" title={t("hint.shelvesTitle")}>{t("hint.shelves")}</InlineHint>
       <div className="navGroupTitle"><span>{t("sh.title")}</span><span className="countBadge">{shelves.length}</span></div>
       <button className="shelfCreateButton" type="button" disabled={disabled} onClick={() => { setComposerOpen(true); setLoadError(""); }}>
         <span aria-hidden="true">＋</span> {t("sh.shelveSelected")}
       </button>
       {loadError && <div className="shelfInlineError" role="alert">{loadError}</div>}
-      {shelves.length === 0 && !loadError && <div className="navEmpty">{t("sh.none")}</div>}
+      {shelves.length === 0 && !loadError && <EmptyState actionLabel={t("sh.emptyAction")} onAction={() => { setComposerOpen(true); setLoadError(""); }} actionDisabled={disabled} actionTitle={disabled ? t("sh.emptyDisabled") : undefined}>{t("sh.none")} {t("sh.emptyHint")}</EmptyState>}
       {shelves.map((shelf) => (
         <div className={`shelfListItem${selectedShelfId === shelf.shelfId ? " active" : ""}`} key={shelf.shelfId}>
           <button className="shelfSelectButton" type="button" onClick={() => void selectShelf(shelf)}>

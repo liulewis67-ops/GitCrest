@@ -4,6 +4,7 @@ import type { ChangeTreeFile, ChangeTreeGroup, IgnoreMode } from "../../features
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n } from "../../shared/i18n";
 import { ContextMenu, type ContextMenuItem } from "../../shared/ui/ContextMenu";
+import { InlineHint } from "../../shared/ui/InlineHint";
 
 const ShelfCenter = lazy(() => import("../../features/shelves").then(({ ShelfCenter }) => ({ default: ShelfCenter })));
 
@@ -267,6 +268,7 @@ export function CommitPanel({
       </div>
 
       {tab === "commit" ? <div className="commitPanelBody" id="commit-panel-commit" role="tabpanel" aria-labelledby="commit-panel-tab-commit">
+        <InlineHint id="changes" title={t("hint.changesTitle")}>{t("hint.changes")}</InlineHint>
         <div className="commitPanelToolbar" role="toolbar" aria-label={t("cp.toolbar")}>
           <button className="quietButton compact iconButton" type="button" disabled={statusLoading} onClick={() => onRefreshStatus(repository.repoId, true)} aria-keyshortcuts={ariaShortcut(shortcuts.refreshStatus, isMacPlatform)} aria-label={statusLoading ? t("main.refreshingLabel") : t("main.refreshLabel")} title={statusLoading ? t("main.refreshingLabel") : t("main.refreshTitle", { shortcut: displayShortcut(shortcuts.refreshStatus, isMacPlatform) })}><span className={statusLoading ? "spinGlyph" : undefined}><Icon name="refresh" /></span></button>
           <button className="quietButton compact iconButton" type="button" disabled={!status || workingCount === 0 || bulkBlocked} aria-keyshortcuts={ariaShortcut(shortcuts.stageAll, isMacPlatform)} aria-label={t("nav.stageAll")} title={t("nav.stageAllTitle", { shortcut: displayShortcut(shortcuts.stageAll, isMacPlatform) })} onClick={() => onStageChanges("stageAll")}><Icon name="stageAll" /></button>

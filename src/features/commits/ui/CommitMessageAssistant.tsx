@@ -1,3 +1,4 @@
+import { InlineHint } from "../../../shared/ui/InlineHint";
 import { t } from "../../../shared/i18n";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
@@ -243,6 +244,7 @@ export function CommitMessageAssistant({
   return (
     <section className="commitAiAssistant" aria-labelledby="commit-ai-title">
       <div className="commitAiHeader"><h4 id="commit-ai-title">{t("ai.title")}</h4><button className="textButton" type="button" onClick={onClose}>{t("ai.close")}</button></div>
+      <InlineHint id="ai" title={t("hint.aiTitle")}>{t("hint.ai")}</InlineHint>
       <p className="settingsNotice">{t("ai.notice")}</p>
       <label className="commitAiOutputMode">{t("ai.output")}<select aria-label={t("ai.output")} value={outputMode} disabled={busy} onChange={(event) => { setOutputMode(event.target.value as typeof outputMode); setSuggestion(undefined); setSummaryResult(undefined); setSuggestionText(""); setConfirmed(false); setDraftChanged(false); }}><option value="commitMessage">{t("ai.modeCommit")}</option><option value="changeSummary">{t("ai.modeSummary")}</option></select></label>
       {busy && reviewed.length === 0 && <p role="status">{t("ai.loadingStaged")}</p>}

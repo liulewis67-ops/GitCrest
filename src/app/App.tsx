@@ -1063,7 +1063,7 @@ function App() {
   function renderCommitGraph() {
     if (!selectedRepository || !apiRef.current) return null;
     if (!isFullGitObjectId(selectedRepository.head)) {
-      return <div className="viewEmpty"><h2>{selectedRepository.head ? t("main.connectingHistory") : t("hv.noCommits")}</h2><p>{t("hv.noCommitsHint")}</p></div>;
+      return <div className="viewEmpty"><h2>{selectedRepository.head ? t("main.connectingHistory") : t("hv.noCommits")}</h2><p>{t("hv.noCommitsHint")}</p>{!selectedRepository.head && <button className="secondaryButton" type="button" onClick={() => changeWorkspaceMode("changes")}>{t("hv.openChanges")}</button>}</div>;
     }
     return <Suspense fallback={<div className="graphViewport" role="status" aria-live="polite">{t("main.loadingHistory")}</div>}>
       <CommitGraph
@@ -1327,6 +1327,7 @@ function App() {
               selectedBranch={shownHistoryBranch?.fullName}
               selectedCommit={selectedCommit}
               onSelectCommit={selectCommit}
+              onCreateTag={() => { const target = isFullGitObjectId(selectedCommit) ? selectedCommit : selectedRepository.head; if (isFullGitObjectId(target)) openTagEditor(target); }}
               onTagTaskStarted={(task) => { prependTask(task); setTasksError(""); setTasksOpen(true); }}
               onSelectBranch={(branch) => {
                 setHistoryBranch({ repoId: selectedRepository.repoId, fullName: branch.fullName });
