@@ -145,3 +145,66 @@ pub(super) async fn repository_commit_file_diff(
     .map(Json)
     .map_err(ApiError::from_diff_error)
 }
+
+/// One side of an image file, as the bytes of the image itself. It is read only, limited to a few
+/// image types and a size cap, and sent so that a browser can neither run nor sniff it.
+pub(super) async fn repository_image(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<super::images::ImageQuery>, QueryRejection>,
+) -> Result<axum::response::Response, ApiError> {
+    use super::images::{self, ImageError};
+
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "An image path, scope and side are required.",
+        )
+    })?;
+    let target = state
+        .repository_targets
+        .task_target(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let (bytes, media) = images::read_image(&target.repository_path, &query)
+        .await
+        .map_err(|error| match error {
+            ImageError::InvalidRequest => ApiError::new(
+                StatusCode::BAD_REQUEST,
+                ApiErrorCode::RequestInvalid,
+                "Choose a PNG, JPEG, GIF, WebP or SVG file inside the repository.",
+            ),
+            ImageError::NotFound => ApiError::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::RepositoryFileNotFound,
+                "This version of the image does not exist.",
+            ),
+            ImageError::TooLarge => ApiError::new(
+                StatusCode::PAYLOAD_TOO_LARGE,
+                ApiErrorCode::DiffTooLarge,
+                "The image is too large to compare here.",
+            ),
+            ImageError::GitUnavailable => ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::GitUnavailable,
+                "Git could not be started. Install Git or check that it is on PATH.",
+            ),
+            ImageError::Failed => ApiError::new(
+                StatusCode::SERVICE_UNAVAILABLE,
+                ApiErrorCode::DiffUnavailable,
+                "The image could not be read.",
+            ),
+        })?;
+    Ok(axum::response::Response::builder()
+        .status(StatusCode::OK)
+        .header("Content-Type", media)
+        .header("Cache-Control", "no-store")
+        .header("X-Content-Type-Options", "nosniff")
+        .header(
+            "Content-Security-Policy",
+            "sandbox; default-src 'none'; style-src 'unsafe-inline'",
+        )
+        .body(axum::body::Body::from(bytes))
+        .unwrap_or_default())
+}

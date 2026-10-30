@@ -2,7 +2,7 @@ import { useI18n } from "../../shared/i18n";
 import { lazy, Suspense, useState } from "react";
 import type { DiffDocumentResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
-import { LfsPointerNotice, lfsPointerChange, loadFileDiffViewer, loadSplitDiff, type CodeReviewSource, type DiffViewPreferences, type LfsAvailability } from "../../features/diff";
+import { ImageDiff, isComparableImagePath, LfsPointerNotice, lfsPointerChange, loadFileDiffViewer, loadSplitDiff, type CodeReviewSource, type DiffViewPreferences, type ImageSource, type LfsAvailability } from "../../features/diff";
 
 const SplitDiff = lazy(() => loadSplitDiff().then(({ SplitDiff }) => ({ default: SplitDiff })));
 const FileDiffViewer = lazy(() => loadFileDiffViewer().then(({ FileDiffViewer }) => ({ default: FileDiffViewer })));
@@ -39,6 +39,8 @@ interface WorkspaceDiffPanelProps {
   onOpenDiffWindow: (path: string, scope: "workingTree" | "index" | "commit", commitOid?: string) => void;
   /** Asks the core whether Git LFS is installed, for the note under an LFS pointer diff. */
   loadLfsAvailability?: () => Promise<LfsAvailability>;
+  /** Loads one side of an image file, so a changed picture can be compared instead of reported as binary. */
+  loadImage?: ImageSource["load"];
 }
 
 /** The diff of one file, with its name, file-to-file navigation and focus mode above it. */
@@ -66,6 +68,7 @@ export function WorkspaceDiffPanel({
   onCommitSelection,
   onOpenDiffWindow,
   loadLfsAvailability,
+  loadImage,
 }: WorkspaceDiffPanelProps) {
   const { t } = useI18n();
   const slash = path.lastIndexOf("/");
@@ -116,6 +119,7 @@ export function WorkspaceDiffPanel({
       </div>
       {diffState.key !== activeDiffKey || (diffState.loading && !diffState.document) ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
         : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button>{diffViewPreferences.layout === "full" && <button className="secondaryButton" type="button" onClick={() => onChangeDiffViewPreferences({ layout: "hunks" })}>{t("fd.hunks")}</button>}</div>
+          : diffState.document && loadImage && diffState.document.status === "binary" && isComparableImagePath(diffState.document.path) ? <ImageDiff key={diffState.document.revision} path={path} source={{ load: loadImage }} />
           : diffState.document && lfsPointerChange(diffState.document) ? <LfsPointerNotice change={lfsPointerChange(diffState.document)!} path={path} loadAvailability={loadLfsAvailability} />
           : diffState.document && diffViewPreferences.layout === "full" ? <div className="fileDiffViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><FileDiffViewer document={diffState.document} commitOid={commitOid} preferences={diffViewPreferences} onChangePreferences={onChangeDiffViewPreferences} onShowHunks={() => onChangeDiffViewPreferences({ layout: "hunks" })} onOpenWindow={openWindow} structure={structure} /></Suspense></div>
             : diffState.document ? <div className="graphViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><SplitDiff layout={diffViewPreferences.sideBySide ? "split" : "unified"} document={diffState.document} onStageSelection={onStageSelection} onDiscardSelection={diffState.document.scope === "workingTree" ? (selections) => onDiscardSelection(diffState.document!, selections) : undefined} onCommitSelection={onCommitSelection} onOpenWindow={openWindow} onShowFullFile={() => onChangeDiffViewPreferences({ layout: "full" })} disabled={diffState.document.scope === "commit" || selectionDisabled || diffState.loading} codeReview={codeReview} /></Suspense></div>

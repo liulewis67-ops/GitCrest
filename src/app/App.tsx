@@ -1038,6 +1038,7 @@ function App() {
   function renderDiffPanel(target: NonNullable<typeof diffTarget>, extra: { status?: { code: string; kind: string }; fileMissing?: boolean; scopes?: Array<"workingTree" | "index">; fileNavigation?: CommitFileNavigation }) {
     return <WorkspaceDiffPanel
       loadLfsAvailability={apiRef.current ? () => apiRef.current!.getGitLfsStatus() : undefined}
+      loadImage={apiRef.current && selectedRepository ? (side) => apiRef.current!.getRepositoryImage(selectedRepository.repoId, { path: target.path, scope: target.scope, side, ...(target.scope === "commit" && target.commitOid ? { commitOid: target.commitOid } : {}), ...(diffState.document?.originalPath ? { originalPath: diffState.document.originalPath } : {}) }) : undefined}
       scopeOptions={extra.scopes && extra.scopes.length > 1 && target.scope !== "commit" ? { available: extra.scopes, onChange: (scope) => openFileDiff(target.path, scope) } : undefined}
       path={target.path}
       scope={target.scope}

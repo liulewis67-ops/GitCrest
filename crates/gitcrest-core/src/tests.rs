@@ -9093,3 +9093,184 @@ async fn signing_api_reads_the_setup_and_tests_a_real_signature_without_moving_a
     assert_eq!(git(&["rev-list", "--all", "--count"]), "1");
     assert!(git(&["status", "--porcelain"]).is_empty());
 }
+
+#[tokio::test]
+async fn image_api_returns_each_version_as_an_image_and_refuses_anything_else() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("image-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    git(&["config", "core.autocrlf", "false"]);
+    let first: Vec<u8> = vec![0x89, b'P', b'N', b'G', 1, 2, 3, 4];
+    let second: Vec<u8> = vec![0x89, b'P', b'N', b'G', 9, 9, 9, 9, 9];
+    let third: Vec<u8> = vec![0x89, b'P', b'N', b'G', 7];
+    std::fs::write(root.join("logo.png"), &first).unwrap();
+    std::fs::write(root.join("notes.txt"), "text\n").unwrap();
+    git(&["add", "."]);
+    git(&["commit", "--quiet", "-m", "first"]);
+    std::fs::write(root.join("logo.png"), &second).unwrap();
+    git(&["commit", "--quiet", "-am", "second"]);
+    let commit = git(&["rev-parse", "HEAD"]);
+    git(&["add", "logo.png"]);
+    std::fs::write(root.join("logo.png"), &third).unwrap();
+    git(&["add", "logo.png"]);
+    std::fs::write(root.join("logo.png"), [0x89, b'P', 1u8, 1u8]).unwrap();
+    let working: Vec<u8> = vec![0x89, b'P', 1, 1];
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let get = |query: String| {
+        let app = app.clone();
+        let uri = format!("/api/v1/repositories/{repo_id}/image?{query}");
+        async move {
+            let response = app
+                .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap();
+            let status = response.status();
+            let headers = response.headers().clone();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (status, headers, body.to_vec())
+        }
+    };
+
+    // Each scope's old and new side is the version that scope compares.
+    let (status, headers, bytes) = get("path=logo.png&scope=workingTree&side=new".into()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(bytes, working);
+    assert_eq!(headers["content-type"], "image/png");
+    assert_eq!(headers["x-content-type-options"], "nosniff");
+    assert!(headers["content-security-policy"]
+        .to_str()
+        .unwrap()
+        .contains("sandbox"));
+    assert_eq!(
+        get("path=logo.png&scope=workingTree&side=old".into())
+            .await
+            .2,
+        third
+    );
+    assert_eq!(
+        get("path=logo.png&scope=index&side=new".into()).await.2,
+        third
+    );
+    assert_eq!(
+        get("path=logo.png&scope=index&side=old".into()).await.2,
+        second
+    );
+    assert_eq!(
+        get(format!(
+            "path=logo.png&scope=commit&side=new&commitOid={commit}"
+        ))
+        .await
+        .2,
+        second
+    );
+    assert_eq!(
+        get(format!(
+            "path=logo.png&scope=commit&side=old&commitOid={commit}"
+        ))
+        .await
+        .2,
+        first
+    );
+
+    // A side that does not exist is a 404: the first commit has no earlier version.
+    let root_commit = git(&["rev-list", "--max-parents=0", "HEAD"]);
+    assert_eq!(
+        get(format!(
+            "path=logo.png&scope=commit&side=old&commitOid={root_commit}"
+        ))
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        get("path=missing.png&scope=workingTree&side=new".into())
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+
+    // Anything that is not a plain repository image is refused.
+    for bad in [
+        "path=notes.txt&scope=workingTree&side=new",
+        "path=..%2Foutside.png&scope=workingTree&side=new",
+        "path=%2Fetc%2Fa.png&scope=workingTree&side=new",
+        "path=.git%2Fa.png&scope=workingTree&side=new",
+        "path=logo.png&scope=commit&side=new",
+        "path=logo.png&scope=commit&side=new&commitOid=notanoid",
+        "path=logo.png&scope=bogus&side=new",
+    ] {
+        assert_eq!(get(bad.into()).await.0, StatusCode::BAD_REQUEST, "{bad}");
+    }
+
+    // The size cap holds for files on disk and for stored versions.
+    std::fs::write(root.join("huge.png"), vec![0u8; 9 * 1024 * 1024]).unwrap();
+    assert_eq!(
+        get("path=huge.png&scope=workingTree&side=new".into())
+            .await
+            .0,
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+    git(&["add", "huge.png"]);
+    assert_eq!(
+        get("path=huge.png&scope=index&side=new".into()).await.0,
+        StatusCode::PAYLOAD_TOO_LARGE
+    );
+
+    // Authorization and unknown repositories.
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                &format!(
+                    "/api/v1/repositories/{repo_id}/image?path=logo.png&scope=workingTree&side=new"
+                ),
+                None
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo_missing/image?path=logo.png&scope=workingTree&side=new",
+                Some(READ_ONLY_TOKEN)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+}

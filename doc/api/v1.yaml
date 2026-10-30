@@ -2498,6 +2498,45 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/image:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositoryImage
+      summary: Read one side of a PNG, JPEG, GIF, WebP or SVG file as the image itself
+      description: >-
+        Read only. The old side of the working-tree scope is the staged version, of the index scope is HEAD,
+        and of the commit scope is the commit's first parent; the new side is the file on disk, the staged
+        version and the commit's own version. Images over 8 MiB are refused. The response is sent with
+        nosniff and a sandboxing Content-Security-Policy so that it can only be shown as a picture.
+      parameters:
+        - { name: path, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 1024 } }
+        - { name: scope, in: query, required: true, schema: { type: string, enum: [workingTree, index, commit] } }
+        - { name: side, in: query, required: true, schema: { type: string, enum: [old, new] } }
+        - { name: commitOid, in: query, required: false, description: Required for the commit scope., schema: { type: string, minLength: 40, maxLength: 64 } }
+        - { name: originalPath, in: query, required: false, description: Where the file was before a rename; used for the old side., schema: { type: string, maxLength: 1024 } }
+      responses:
+        "200":
+          description: The image bytes with the matching media type.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/gif: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+            image/svg+xml: { schema: { type: string, format: binary } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable or this version of the image does not exist., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "413": { description: The image is larger than 8 MiB., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Git could not read the image., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/signing:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"

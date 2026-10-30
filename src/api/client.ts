@@ -384,6 +384,17 @@ export class GitCrestApiClient {
     return this.request<ReflogPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/reflog?${query}`);
   }
 
+  /** One side of an image file: the image bytes, its media type and size. */
+  getRepositoryImage(repoId: RepoId, request: { path: string; scope: "workingTree" | "index" | "commit"; side: "old" | "new"; commitOid?: string; originalPath?: string }): Promise<{ blob: Blob; type: string; size: number }> {
+    const query = new URLSearchParams({ path: request.path, scope: request.scope, side: request.side });
+    if (request.commitOid) query.set("commitOid", request.commitOid);
+    if (request.originalPath) query.set("originalPath", request.originalPath);
+    return this.request(`/api/v1/repositories/${encodeURIComponent(repoId)}/image?${query}`, true, {}, async (response) => {
+      const blob = await response.blob();
+      return { blob, type: response.headers.get("Content-Type") ?? blob.type, size: blob.size };
+    });
+  }
+
   getGitLfsStatus(): Promise<LfsStatusResponse> {
     return this.request<LfsStatusResponse>("/api/v1/git/lfs");
   }
@@ -922,7 +933,7 @@ export class GitCrestApiClient {
     });
   }
 
-  private async request<T>(path: string, versioned = true, init: RequestInit = {}): Promise<T> {
+  private async request<T>(path: string, versioned = true, init: RequestInit = {}, read: (response: Response) => Promise<T> = (response) => response.json() as Promise<T>): Promise<T> {
     const headers = new Headers(init.headers);
     headers.set("Authorization", `Bearer ${this.token}`);
     if (versioned) {
@@ -946,6 +957,6 @@ export class GitCrestApiClient {
     }
 
     if (response.status === 204) return undefined as T;
-    return (await response.json()) as T;
+    return read(response);
   }
 }

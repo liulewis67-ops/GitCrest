@@ -10,6 +10,7 @@ import { BlameAnnotation, createBlameLookup, type BlameLookup } from "./BlameAnn
 import { useDiffViewPreferences } from "../model/use-diff-view-preferences";
 import { lfsPointerChange } from "../model/lfs-pointer";
 import { LfsPointerNotice } from "./LfsPointerNotice";
+import { ImageDiff, isComparableImagePath } from "./ImageDiff";
 
 type View = "split" | "unified";
 /** One tab's blame: loading while neither is set. */
@@ -255,6 +256,7 @@ export function DiffWindow() {
         {document && activeBlame && !activeBlame.document && <div className="diffBlameNotice" role={activeBlame.error ? "alert" : "status"}>{activeBlame.error || t("dw.loadingBlame")}</div>}
         {error ? <div className="diffSpecialState" role="alert"><p>{error}</p></div>
           : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
+            : document.status === "binary" && isComparableImagePath(document.path) && api ? <ImageDiff key={document.revision} path={document.path} source={{ load: (side) => api.getRepositoryImage(document.repoId, { path: document.path, scope: document.scope, side, ...(document.scope === "commit" && activeTab?.commitOid ? { commitOid: activeTab.commitOid } : {}), ...(document.originalPath ? { originalPath: document.originalPath } : {}) }) }} />
             : lfsChange ? <LfsPointerNotice change={lfsChange} path={document.path} loadAvailability={api ? () => api.getGitLfsStatus() : undefined} />
             : view === "split"
               ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} blame={blameLookup} /></Suspense>
