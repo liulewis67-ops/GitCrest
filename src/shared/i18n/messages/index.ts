@@ -19,6 +19,7 @@ import { accounts } from "./accounts";
 import { layout } from "./layout";
 import { languages } from "./languages";
 import { ai } from "./ai";
+import { paletteMessages } from "./palette";
 import { identity } from "./identity";
 
-export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout, ...languages, ...ai, ...identity } as const;
+export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout, ...languages, ...ai, ...identity, ...paletteMessages } as const;

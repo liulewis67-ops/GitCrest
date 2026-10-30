@@ -1,19 +1,19 @@
 import { useDialogFocus } from "../../shared/hooks/use-dialog-focus";
-import { useI18n } from "../../shared/i18n";
+import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
+import { useI18n, type MessageKey } from "../../shared/i18n";
+import type { CommandGroup, CommandPaletteCommand } from "../commands/palette-commands";
 
-export interface CommandPaletteCommand {
-  id: string;
-  label: string;
-  detail: string;
-  available: boolean;
-  run: () => void;
-}
+export type { CommandPaletteCommand };
+
+const GROUP_ORDER: CommandGroup[] = ["navigate", "repository", "changes", "branches", "commits", "remote", "view", "app"];
 
 interface CommandPaletteProps {
   open: boolean;
   context: string;
   commands: CommandPaletteCommand[];
   navigationShortcut: string;
+  shortcuts: ShortcutPreferences;
+  isMacPlatform: boolean;
   query: string;
   onQueryChange: (query: string) => void;
   onClose: () => void;
@@ -24,6 +24,8 @@ export function CommandPalette({
   context,
   commands,
   navigationShortcut,
+  shortcuts,
+  isMacPlatform,
   query,
   onQueryChange,
   onClose,
@@ -35,6 +37,9 @@ export function CommandPalette({
   const filteredCommands = commands.filter((command) =>
     `${command.label} ${command.detail}`.toLowerCase().includes(query.toLowerCase()),
   );
+  const groups = GROUP_ORDER
+    .map((group) => ({ group, items: filteredCommands.filter((command) => command.group === group) }))
+    .filter(({ items }) => items.length > 0);
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLElement>) {
     onKeyDown(event);
@@ -82,22 +87,28 @@ export function CommandPalette({
         </div>
         <div className="paletteContext">{context}</div>
         <div className="commandList">
-          {filteredCommands.map((command) => (
-            <button
-              key={command.id}
-              className="commandItem"
-              type="button"
-              disabled={!command.available}
-              onClick={() => {
-                command.run();
-                onClose();
-              }}
-            >
-              <span className="commandItemMain"><strong>{command.label}</strong><small>{command.detail}</small></span>
-              {command.available
-                ? <kbd>{command.id === "workspace" ? `${navigationShortcut} 2` : command.id === "welcome" ? `${navigationShortcut} 1` : "↵"}</kbd>
-                : <span className="unavailableTag">{t("palette.unavailable")}</span>}
-            </button>
+          {groups.map(({ group, items }) => (
+            <div className="commandGroup" role="group" aria-label={t(`cmd.group.${group}` as MessageKey)} key={group}>
+              <div className="commandGroupLabel" aria-hidden="true">{t(`cmd.group.${group}` as MessageKey)}</div>
+              {items.map((command) => (
+                <button
+                  key={command.id}
+                  className="commandItem"
+                  type="button"
+                  disabled={!command.available}
+                  aria-keyshortcuts={command.shortcut ? ariaShortcut(shortcuts[command.shortcut], isMacPlatform) : undefined}
+                  onClick={() => {
+                    command.run();
+                    onClose();
+                  }}
+                >
+                  <span className="commandItemMain"><strong>{command.label}</strong><small>{!command.available && command.unavailableReason ? command.unavailableReason : command.detail}</small></span>
+                  {command.available
+                    ? <kbd>{command.id === "workspace" ? `${navigationShortcut} 2` : command.id === "welcome" ? `${navigationShortcut} 1` : command.shortcut ? displayShortcut(shortcuts[command.shortcut], isMacPlatform) : "↵"}</kbd>
+                    : <span className="unavailableTag">{t("palette.unavailable")}</span>}
+                </button>
+              ))}
+            </div>
           ))}
           {filteredCommands.length === 0 && <p className="noCommands">{t("palette.noMatch", { query })}</p>}
         </div>

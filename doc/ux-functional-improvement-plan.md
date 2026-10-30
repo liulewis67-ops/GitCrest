@@ -42,7 +42,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | done |
 | U4.1 | Read existing `git stash` entries | P0 | M | D1 | done |
 | U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | not started |
-| U5.1 | Complete command-palette coverage | P0 | M | — | not started |
+| U5.1 | Complete command-palette coverage | P0 | M | — | done |
 | U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | not started |
 | U6.1 | Open in editor, terminal and browser | P1 | M | D3 | not started |
 | U6.2 | Drop a folder to open a repository | P1 | S | — | not started |
@@ -332,3 +332,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/stash/`, `src/features/shelves/ui/StashList.tsx`
 - Limits / follow-up: `GET /repositories/{repoId}/stashes` returns index, commit, base, untracked commit, branch, message and time. Changed files come from the existing commit detail endpoint for the stash commit and, for `-u` stashes, its untracked commit (marked "untracked"). The section is hidden when there is no stash. The list refreshes with the history refresh key, which the watcher bumps on any `refs/stash` or `logs/refs/` change. Only the newest 200 entries are read. Apply, pop, drop and import are U4.2.
 - Commit: see git log (`feat: complete U4.1 read existing git stash entries`)
+
+### U5.1 — Complete command-palette coverage
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (477 tests; new `palette-commands.test.ts`), `pnpm test:e2e` (38 tests). No Rust or API change.
+- Manual check: not run (app not started).
+- Evidence: `src/app/commands/palette-commands.ts`, `tests/unit/palette-commands.test.ts`
+- Limits / follow-up: the command list moved out of `App.tsx` into `createPaletteCommands`. It now holds 40 commands in groups, each with the current binding of its shortcut and, when unavailable, a reason in place of the description. `SHORTCUT_COMMANDS` maps every remappable shortcut to its palette entry or a stated exemption (the palette itself, and the Diff-window-only split/unified toggle); adding a shortcut without a mapping fails the type check, and the unit test checks that every mapped entry exists and shows the same binding. New entries: initialize, commit, commit and push, stage all, undo, refresh, open diff, search commits, shelve, settings, merge, cherry-pick, revert, tag, check out and reset to the selected commit, branch at current commit, rename current branch, new worktree, close tab. Not in the palette: per-tag actions (U3.2), "use as commit message" (U2.3, needs the commit panel's state) and the Git stash list; delete branch needs a branch choice and stays in the switcher. `App.tsx` still holds the shortcut handlers separately (U14.1). The plan's search, synonyms and recent commands are U5.2.
+- Commit: see git log (`feat: complete U5.1 cover every action in the command palette`)

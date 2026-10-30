@@ -3,13 +3,14 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type GitCrestApiClient, type RepositoryResponse, type TaskSnapshotResponse } from "../api/client";
 import { getGitCrestBridge, requireGitCrestBridge } from "../api/bridge";
 import { AppTitlebar, type AppPage } from "./layouts/AppTitlebar";
-import { CommandPalette, type CommandPaletteCommand } from "./layouts/CommandPalette";
+import { CommandPalette } from "./layouts/CommandPalette";
 import { useCoreConnection } from "./use-core-connection";
 import { WelcomePage } from "../pages/welcome/WelcomePage";
 import { WorkspacePage } from "../pages/workspace/WorkspacePage";
 import { CommitPanel, changeCode, type CommitPanelTab } from "../pages/workspace/CommitPanel";
 import { BranchesSidebar } from "../pages/workspace/BranchesSidebar";
 import { useGitIdentity } from "../features/identity";
+import { createPaletteCommands } from "./commands/palette-commands";
 import { CommitInspector } from "../pages/workspace/CommitInspector";
 import { WorkspaceDiffPanel } from "../pages/workspace/WorkspaceDiffPanel";
 import { ViewLayout } from "../pages/workspace/ViewLayout";
@@ -867,28 +868,74 @@ function App() {
   });
 
 
-  const commands: CommandPaletteCommand[] = [
-    { id: "welcome", label: t("cmd.welcome"), detail: t("cmd.welcomeDetail"), available: true, run: () => setPage("welcome") },
-    { id: "workspace", label: t("cmd.workspace"), detail: t("cmd.workspaceDetail"), available: true, run: () => setPage("workspace") },
-    { id: "appearance", label: t("cmd.appearance"), detail: t("cmd.appearanceDetail"), available: true, run: () => setSettingsView({ section: "appearance" }) },
-    { id: "theme", label: t("cmd.theme"), detail: t("cmd.themeDetail", { current: t(`theme.${theme}`), next: t(`theme.${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`) }), available: true, run: nextTheme },
-    { id: "open", label: t("cmd.open"), detail: t("cmd.openDetail"), available: true, run: () => { void repositoryOpening.chooseAndOpenLocal(); } },
-    { id: "branch-switcher", label: t("cmd.branchSwitcher"), detail: t("cmd.branchSwitcherDetail", { shortcut: displayShortcut(shortcuts.branchSwitcher, isMacPlatform) }), available: Boolean(selectedRepository && connected && selectedRepository.availability === "available"), run: branchSwitcher.openSwitcher },
-    { id: "branch-here", label: t("cmd.branchHere"), detail: t("cmd.branchHereDetail"), available: Boolean(selectedRepository && connected && selectedRepository.availability === "available" && !hasActiveRepositoryTask && isFullGitObjectId(selectedCommit)), run: () => { if (isFullGitObjectId(selectedCommit)) setCreateBranchAt(selectedCommit); } },
-    { id: "fetch", label: t("cmd.fetch"), detail: t("cmd.fetchDetail"), available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
-    { id: "pull", label: t("cmd.pull"), detail: t("cmd.pullDetail"), available: Boolean(selectedRepository), run: () => openPullDialog() },
-    { id: "rebase", label: t("cmd.rebase"), detail: t("cmd.rebaseDetail", { shortcut: displayShortcut(shortcuts.rebase, isMacPlatform) }), available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openRebase },
-    { id: "reset", label: t("cmd.reset"), detail: t("cmd.resetDetail"), available: Boolean(selectedRepository && activeBranches && connected), run: () => workflowDialog.openReset() },
-    { id: "push", label: t("cmd.push"), detail: t("cmd.pushDetail"), available: Boolean(selectedRepository), run: () => openPushDialog() },
-    { id: "ai-commit-message", label: t("cmd.ai"), detail: t("cmd.aiDetail", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) }), available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
-    { id: "clone", label: t("cmd.clone"), detail: t("cmd.cloneDetail"), available: connected, run: () => cloneSubmission.openDialog() },
-    { id: "view-changes", label: t("cmd.viewChanges"), detail: t("cmd.viewChangesDetail", { shortcut: displayShortcut(shortcuts.viewChanges, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("changes") },
-    { id: "view-history", label: t("cmd.viewHistory"), detail: t("cmd.viewHistoryDetail", { shortcut: displayShortcut(shortcuts.viewHistory, isMacPlatform) }), available: Boolean(selectedRepository), run: () => changeWorkspaceMode("history") },
-    { id: "toggle-sidebar", label: t("cmd.toggleSidebar"), detail: t("cmd.toggleSidebarDetail", { shortcut: displayShortcut(shortcuts.toggleSidebar, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace"), run: toggleSidebar },
-    { id: "toggle-details", label: t("cmd.toggleDetails"), detail: t("cmd.toggleDetailsDetail", { shortcut: displayShortcut(shortcuts.toggleInspector, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace" && mode !== "changes"), run: toggleInspector },
-    { id: "focus-mode", label: t("cmd.focus"), detail: t("cmd.focusDetail", { shortcut: displayShortcut(shortcuts.focusMode, isMacPlatform) }), available: Boolean(selectedRepository && page === "workspace" && diffTarget), run: toggleFocusMode },
-    { id: "manage-remotes", label: t("cmd.manageRemotes"), detail: t("cmd.manageRemotesDetail"), available: Boolean(selectedRepository), run: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); } },
-  ];
+  const commands = createPaletteCommands({
+    t,
+    shortcuts,
+    isMacPlatform,
+    page: page === "welcome" ? "welcome" : "workspace",
+    mode: mode === "history" ? "history" : "changes",
+    connected,
+    repository: selectedRepository
+      ? { repoId: selectedRepository.repoId, availability: selectedRepository.availability, head: selectedRepository.head, branch: selectedRepository.branch, detached: selectedRepository.detached }
+      : undefined,
+    hasActiveRepositoryTask,
+    hasBranches: Boolean(activeBranches),
+    stagedCount,
+    workingCount,
+    hasConflicts,
+    commitBusy,
+    canCommit,
+    hasCommitMessage: Boolean(commitSummary.trim()),
+    selectedCommit: isFullGitObjectId(selectedCommit) ? selectedCommit : undefined,
+    hasDiffTarget: Boolean(diffTarget),
+    hasSelectedFile: Boolean(selectedFilePath),
+    activeStatusLoading,
+    themeDetail: t("cmd.themeDetail", { current: t(`theme.${theme}`), next: t(`theme.${THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length]}`) }),
+    run: {
+      showWelcome: () => setPage("welcome"),
+      showWorkspace: () => setPage("workspace"),
+      openAppearance: () => setSettingsView({ section: "appearance" }),
+      nextTheme,
+      openRepository: () => { void repositoryOpening.chooseAndOpenLocal(); },
+      initializeRepository: () => { void repositoryOpening.chooseAndInitializeLocal(); },
+      cloneRepository: () => cloneSubmission.openDialog(),
+      openBranchSwitcher: branchSwitcher.openSwitcher,
+      createBranchAt: setCreateBranchAt,
+      checkoutCommit: branchSwitcher.checkoutCommit,
+      resetToCommit: (oid) => workflowDialog.openReset(oid),
+      renameCurrentBranch: (name) => setLocalBranchAction({ name, mode: "rename" }),
+      newWorktreeFrom: (oid) => setWorktreeFrom({ oid, label: oid.slice(0, 7) }),
+      merge: (oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, "merge"); },
+      cherryPick: (oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, "cherryPick"); },
+      revert: (oid) => { if (selectedRepository) workflowDialog.open(selectedRepository.repoId, oid, "revert"); },
+      createTag: openTagEditor,
+      reset: () => workflowDialog.openReset(),
+      rebase: workflowDialog.openRebase,
+      fetch: () => { void fetchRepository(); },
+      pull: () => openPullDialog(),
+      push: () => openPushDialog(),
+      commit: () => { void commitChanges("commit"); },
+      commitAndPush: () => { void commitChanges("commitAndPush"); },
+      stageAll: () => { void stageChanges("stageAll"); },
+      undo: () => { void undoRecentOperation(); },
+      refreshStatus: (repoId) => { void refreshRepositoryStatus(repoId, true); },
+      openDiff: () => changeWorkspaceMode("changes"),
+      searchCommits: (repoId) => {
+        if (mode === "changes") changeWorkspaceMode("history");
+        setFocusMode(false);
+        historyRequests.focusSearch(repoId);
+      },
+      shelve: (repoId) => requestShelfComposer(repoId),
+      openSettings: () => setSettingsView({}),
+      openAiAssistant: () => setCommitAssistantOpen(true),
+      showView: changeWorkspaceMode,
+      toggleSidebar,
+      toggleInspector,
+      toggleFocusMode,
+      manageRemotes: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); },
+      closeTab: closeRepositoryTab,
+    },
+  });
   const composerVisible = isComposerVisible({
     inChangesView: mode === "changes" && !focusMode,
     statusReady: Boolean(activeStatus),
@@ -1301,6 +1348,8 @@ function App() {
         open={paletteOpen}
         context={paletteContext}
         commands={commands}
+        shortcuts={shortcuts}
+        isMacPlatform={isMacPlatform}
         navigationShortcut={commandKey}
         query={paletteQuery}
         onQueryChange={setPaletteQuery}

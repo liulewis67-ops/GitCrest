@@ -1559,3 +1559,4 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .tagListRow { display: flex; align-items: center; gap: var(--space-1); }
 .tagListRow .tagListItem { flex: 1; width: auto; }
 .tagActionsDialog { max-width: 520px; }
+.commandGroupLabel { padding: var(--space-2) 8px 2px; color: var(--text-muted); font-size: var(--type-2xs); font-weight: 650; letter-spacing: .04em; text-transform: uppercase; }
