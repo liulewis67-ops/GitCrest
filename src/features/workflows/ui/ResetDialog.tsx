@@ -7,10 +7,12 @@ import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 type ResetMode = components["schemas"]["ResetMode"];
 const MODES: ResetMode[] = ["soft", "mixed", "hard"];
 
-export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarted }: {
+export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled, onClose, onStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   branches?: BranchSnapshotResponse;
+  /** A commit chosen in History: selected as the target and listed even when no branch points at it. */
+  initialTargetOid?: string;
   disabled: boolean;
   onClose: () => void;
   onStarted: (task: TaskSnapshotResponse) => void;
@@ -18,7 +20,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
   const { t } = useI18n();
   const current = branches?.branches.find((branch) => branch.isCurrent);
   const targets = (branches?.branches || []).filter((branch) => !branch.isCurrent && branch.oid !== current?.oid);
-  const [targetOid, setTargetOid] = useState("");
+  const [targetOid, setTargetOid] = useState(initialTargetOid || "");
   const [mode, setMode] = useState<ResetMode>("mixed");
   const [preview, setPreview] = useState<ResetPreviewResponse>();
   const [backupSnapshot, setBackupSnapshot] = useState<ResetBackupSnapshotResponse>();
@@ -105,6 +107,7 @@ export function ResetDialog({ api, repoId, branches, disabled, onClose, onStarte
         <label className="rebaseTargetField" htmlFor="reset-target">{t("rs.moveTo", { name: current?.fullName || t("rs.currentBranch") })}
           <select id="reset-target" value={targetOid} disabled={disabled || loading || busy} onChange={(event) => { setTargetOid(event.target.value); setPreview(undefined); setConfirmed(false); }}>
             <option value="">{t("rs.chooseCommit")}</option>
+            {initialTargetOid && !targets.some((branch) => branch.oid === initialTargetOid) && <option value={initialTargetOid}>{t("rs.commitOption", { oid: initialTargetOid.slice(0, 9) })}</option>}
             {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} · {branch.oid.slice(0, 9)}</option>)}
           </select>
         </label>

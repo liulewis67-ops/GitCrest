@@ -874,7 +874,7 @@ function App() {
     { id: "fetch", label: t("cmd.fetch"), detail: t("cmd.fetchDetail"), available: Boolean(selectedRepository), run: () => { void fetchRepository(); } },
     { id: "pull", label: t("cmd.pull"), detail: t("cmd.pullDetail"), available: Boolean(selectedRepository), run: () => openPullDialog() },
     { id: "rebase", label: t("cmd.rebase"), detail: t("cmd.rebaseDetail", { shortcut: displayShortcut(shortcuts.rebase, isMacPlatform) }), available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openRebase },
-    { id: "reset", label: t("cmd.reset"), detail: t("cmd.resetDetail"), available: Boolean(selectedRepository && activeBranches && connected), run: workflowDialog.openReset },
+    { id: "reset", label: t("cmd.reset"), detail: t("cmd.resetDetail"), available: Boolean(selectedRepository && activeBranches && connected), run: () => workflowDialog.openReset() },
     { id: "push", label: t("cmd.push"), detail: t("cmd.pushDetail"), available: Boolean(selectedRepository), run: () => openPushDialog() },
     { id: "ai-commit-message", label: t("cmd.ai"), detail: t("cmd.aiDetail", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) }), available: Boolean(selectedRepository && stagedCount > 0 && !hasConflicts && !commitBusy), run: () => setCommitAssistantOpen(true) },
     { id: "clone", label: t("cmd.clone"), detail: t("cmd.cloneDetail"), available: connected, run: () => cloneSubmission.openDialog() },
@@ -969,6 +969,8 @@ function App() {
       onCreateBranch={setCreateBranchAt}
       onCreateTag={openTagEditor}
       onCopySha={(target) => void copyCommitSha(target)}
+      onReset={(target) => workflowDialog.openReset(target)}
+      resetDisabledReason={activeBranches?.branches.find((branch) => branch.isCurrent)?.oid === oid ? t("hv.resetIsHead") : undefined}
     />;
   }
 
@@ -1305,7 +1307,7 @@ function App() {
       {localBranchAction && selectedRepository && apiRef.current && <Suspense fallback={null}><LocalBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} action={localBranchAction} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setLocalBranchAction(undefined)} onStarted={(task) => { prependTask(task); setLocalBranchAction(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {workflowDialog.context && apiRef.current && <WorkflowDialog api={apiRef.current} repoId={workflowDialog.context.repoId} targetOid={workflowDialog.context.targetOid} action={workflowDialog.context.action} targetLabel={workflowDialog.context.targetLabel} onClose={workflowDialog.close} onStarted={workflowDialog.startTask} />}
       {workflowDialog.rebaseOpen && selectedRepository && apiRef.current && <RebaseDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} initialOntoOid={workflowDialog.rebaseOnto} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeRebase} onStarted={(task) => { workflowDialog.closeRebase(); workflowDialog.startTask(task); }} />}
-      {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
+      {workflowDialog.resetOpen && selectedRepository && apiRef.current && <ResetDialog api={apiRef.current} repoId={selectedRepository.repoId} branches={activeBranches} initialTargetOid={workflowDialog.resetTargetOid} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={workflowDialog.closeReset} onStarted={(task) => { workflowDialog.closeReset(); workflowDialog.startTask(task); }} />}
       {remoteBranchDelete.target && selectedRepository && apiRef.current && <RemoteBranchDeleteDialog api={apiRef.current} repoId={selectedRepository.repoId} branchRef={remoteBranchDelete.target} remotes={activeRemotes} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={remoteBranchDelete.close} onStarted={remoteBranchDelete.startTask} />}
       {notice && <div className="appNotice" role="status" aria-live="polite">{notice}</div>}
       {cloneSubmission.dialogOpen && <CloneDialog initialRemoteUrl={cloneSubmission.draft.remoteUrl} initialDirectoryName={cloneSubmission.draft.directoryName} parentPath={cloneSubmission.draft.parentPath} error={cloneSubmission.error} busy={cloneSubmission.busy} onManageAccounts={(draft, hosts) => { cloneSubmission.stashDraft(draft); openAccountSettings(hosts, true); }} onChooseParent={() => requireGitCrestBridge().chooseCloneParent()} onClose={cloneSubmission.closeDialog} onSubmit={(remoteUrl, parentPath, directoryName) => void cloneSubmission.submit(remoteUrl, parentPath, directoryName)} />}

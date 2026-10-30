@@ -40,6 +40,7 @@ export const workflows = {
   "rs.moveTo": ["Move {name} to", "将 {name} 移动到"],
   "rs.currentBranch": ["current branch", "当前分支"],
   "rs.chooseCommit": ["Choose a branch commit…", "选择一个分支提交…"],
+  "rs.commitOption": ["Commit {oid}", "提交 {oid}"],
   "rs.mode": ["Reset mode", "重置模式"],
   "rs.modeHelp": ["Soft moves HEAD and keeps the index and files. Mixed moves HEAD and resets the index while keeping files. Hard also replaces tracked files and is available only when the working tree is clean.", "Soft 只移动 HEAD，保留暂存区和文件。Mixed 移动 HEAD 并重置暂存区，保留文件。Hard 还会替换已跟踪的文件，且仅在工作区干净时可用。"],
   "rs.restoreHeading": ["Restore a reset backup", "恢复重置备份"],

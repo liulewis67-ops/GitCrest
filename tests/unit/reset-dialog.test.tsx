@@ -143,3 +143,16 @@ it("aborts a reset backup read when the dialog unmounts", async () => {
   expect(signals[0]?.aborted).toBe(true);
   await act(async () => pending.resolve({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }));
 });
+
+it("preselects a history commit that no branch points at and previews it", async () => {
+  const target = "d".repeat(40);
+  const api = cancellableApi({
+    getRepositoryResetBackups: vi.fn().mockResolvedValue({ headOid: preview.expectedHeadOid, currentBranch: "feature", dirtyPaths: [], operationInProgress: null, backups: [], canRestore: false }),
+    preflightRepositoryReset: vi.fn().mockResolvedValue({ ...preview, targetOid: target }),
+  });
+  render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} initialTargetOid={target} disabled={false} onClose={vi.fn()} onStarted={vi.fn()} />);
+
+  expect((screen.getByLabelText(/Move feature to/) as HTMLSelectElement).value).toBe(target);
+  fireEvent.click(screen.getByRole("button", { name: "Review impact" }));
+  await waitFor(() => expect(api.preflightRepositoryReset).toHaveBeenCalledWith("repo_fixture", target, "mixed"));
+});

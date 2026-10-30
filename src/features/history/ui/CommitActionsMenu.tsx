@@ -4,7 +4,7 @@ import { MenuButton } from "../../../shared/ui/MenuButton";
 export type CommitWorkflowAction = "merge" | "cherryPick" | "revert";
 
 /** Secondary operations on one commit, kept behind a single button instead of a row of always-visible actions. */
-export function CommitActionsMenu({ oid, workflowDisabledReason, onWorkflow, onCreateBranch, onCreateTag, onCopySha, className = "quietButton compact iconButton" }: {
+export function CommitActionsMenu({ oid, workflowDisabledReason, onWorkflow, onCreateBranch, onCreateTag, onCopySha, onReset, resetDisabledReason, className = "quietButton compact iconButton" }: {
   oid: string;
   /** Set when Git operations cannot start; every operation item shows it. */
   workflowDisabledReason?: string;
@@ -12,6 +12,10 @@ export function CommitActionsMenu({ oid, workflowDisabledReason, onWorkflow, onC
   onCreateBranch: (oid: string) => void;
   onCreateTag: (oid: string) => void;
   onCopySha: (oid: string) => void;
+  /** Opens the reset dialog with this commit as the target. */
+  onReset?: (oid: string) => void;
+  /** Why resetting to this commit is unavailable, such as it already being HEAD. */
+  resetDisabledReason?: string;
   className?: string;
 }) {
   const { t } = useI18n();
@@ -28,6 +32,7 @@ export function CommitActionsMenu({ oid, workflowDisabledReason, onWorkflow, onC
       { id: "merge", label: t("hv.merge"), disabled: blocked, title: workflowDisabledReason, separatorBefore: true, onSelect: () => onWorkflow("merge", oid) },
       { id: "cherryPick", label: t("hv.cherryPick"), disabled: blocked, title: workflowDisabledReason, onSelect: () => onWorkflow("cherryPick", oid) },
       { id: "revert", label: t("hv.revert"), disabled: blocked, title: workflowDisabledReason, onSelect: () => onWorkflow("revert", oid) },
+      ...(onReset ? [{ id: "reset", label: t("hv.reset"), disabled: blocked || Boolean(resetDisabledReason), title: workflowDisabledReason ?? resetDisabledReason, onSelect: () => onReset(oid) }] : []),
     ]}
   ><span aria-hidden="true">⋯</span></MenuButton>;
 }

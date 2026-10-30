@@ -36,7 +36,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U1.1 | Git identity check and editor | P0 | M | — | not started |
 | U1.2 | First-run hints and empty states | P2 | M | U1.1 | not started |
 | U2.1 | Check out a commit (detached HEAD) | P0 | M | — | not started |
-| U2.2 | Reset to a commit from the history row | P0 | S | — | not started |
+| U2.2 | Reset to a commit from the history row | P0 | S | — | done |
 | U2.3 | Copy and reuse a commit message | P0 | S | — | done |
 | U3.1 | Tag list and tag labels on the graph | P0 | M | — | not started |
 | U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | not started |
@@ -270,3 +270,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `tests/unit/commit-details-message.test.tsx`
 - Limits / follow-up: "Copy message" and "Use as new commit message" live in the commit inspector (`CommitDetails`). Command-palette entries come with U5.1. The draft is filled through `setCommitMessage`, so the AI suggestion state is untouched; undo relies on the draft field's own undo.
 - Commit: see git log (`feat: complete U2.3 copy and reuse a commit message`)
+
+### U2.2 — Reset to a commit from the history row
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (447 tests, new case in `tests/unit/reset-dialog.test.tsx`), `pnpm test:e2e` (38 tests). Rust not run: no core change.
+- Manual check: not run.
+- Evidence: `tests/unit/reset-dialog.test.tsx`
+- Limits / follow-up: the commit menu gains "Reset current branch to here…", which opens `ResetDialog` with the commit preselected; preview, ticket and backup ref are unchanged. The item is disabled with a reason when the commit is already the current branch tip. Reachability from HEAD is not checked in the UI; the core preview decides. Palette entry comes with U5.1.
+- Commit: see git log (`feat: complete U2.2 reset to a commit from the history row`)

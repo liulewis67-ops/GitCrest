@@ -21,6 +21,7 @@ export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCen
   /** The branch tip the rebase dialog starts on; undefined lets the dialog choose. */
   const [rebaseOnto, setRebaseOnto] = useState<string>();
   const [resetOpen, setResetOpen] = useState(false);
+  const [resetTargetOid, setResetTargetOid] = useState<string>();
 
   function open(repoId: string, targetOid: string, action: WorkflowAction, targetLabel?: string) {
     setContext({ repoId, targetOid, action, targetLabel });
@@ -44,7 +45,8 @@ export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCen
     setRebaseOpen(false);
   }
 
-  function openReset() {
+  function openReset(targetOid?: string) {
+    setResetTargetOid(targetOid);
     setResetOpen(true);
   }
 
@@ -59,5 +61,5 @@ export function useWorkflowDialogSession({ appendTask, setTaskError, openTaskCen
     openTaskCenter();
   }
 
-  return { context, open, close, rebaseOpen, rebaseOnto, openRebase, openRebaseOnto, closeRebase, resetOpen, openReset, closeReset, startTask };
+  return { context, open, close, rebaseOpen, rebaseOnto, openRebase, openRebaseOnto, closeRebase, resetOpen, resetTargetOid, openReset, closeReset, startTask };
 }
