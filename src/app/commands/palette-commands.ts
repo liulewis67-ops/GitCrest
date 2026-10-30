@@ -38,6 +38,9 @@ export const SHORTCUT_COMMANDS: Record<ShortcutAction, string | { exempt: string
   refreshStatus: "refresh",
   openDiff: "open-diff",
   toggleDiffView: "toggle-diff-view",
+  zoomIn: "zoom-in",
+  zoomOut: "zoom-out",
+  zoomReset: "zoom-reset",
   searchCommits: "search-commits",
   shelve: "shelve",
   settings: "settings",
@@ -115,6 +118,9 @@ export interface PaletteInput {
     toggleInspector: () => void;
     toggleFocusMode: () => void;
     toggleDiffView: () => void;
+    zoomIn: () => void;
+    zoomOut: () => void;
+    zoomReset: () => void;
     manageRemotes: () => void;
     closeTab: (repoId: string) => void;
   };
@@ -223,6 +229,9 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
     command("toggle-details", "view", "cmd.toggleDetails", shortcutDetail("cmd.toggleDetailsDetail", "toggleInspector"), firstReason(inWorkspace, input.mode === "changes" && t("cmd.why.notHistory")), run.toggleInspector, "toggleInspector"),
     command("focus-mode", "view", "cmd.focus", shortcutDetail("cmd.focusDetail", "focusMode"), firstReason(inWorkspace, !input.hasDiffTarget && t("cmd.why.noDiff")), run.toggleFocusMode, "focusMode"),
     command("toggle-diff-view", "view", "cmd.toggleDiffView", t("cmd.toggleDiffViewDetail"), firstReason(inWorkspace, !input.hasDiffTarget && t("cmd.why.noDiff")), run.toggleDiffView, "toggleDiffView"),
+    command("zoom-in", "view", "cmd.zoomIn", t("cmd.zoomInDetail"), false, run.zoomIn, "zoomIn"),
+    command("zoom-out", "view", "cmd.zoomOut", t("cmd.zoomOutDetail"), false, run.zoomOut, "zoomOut"),
+    command("zoom-reset", "view", "cmd.zoomReset", t("cmd.zoomResetDetail"), false, run.zoomReset, "zoomReset"),
     command("settings", "app", "cmd.settings", t("cmd.settingsDetail"), false, run.openSettings, "settings"),
     command("appearance", "app", "cmd.appearance", t("cmd.appearanceDetail"), false, run.openAppearance),
     command("theme", "app", "cmd.theme", input.themeDetail, false, run.nextTheme),

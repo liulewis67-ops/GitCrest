@@ -371,7 +371,7 @@ describe("desktop startup E2E", () => {
       await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
       await window.keyboard.press("Control+k");
       const commandPalette = window.getByRole("dialog", { name: "Command palette" });
-      await commandPalette.getByRole("button", { name: /Reset current branch/ }).click();
+      await commandPalette.getByRole("button", { name: /^Reset current branch Review/ }).click();
       const resetDialog = window.getByRole("dialog", { name: "Reset current branch" });
       await resetDialog.waitFor();
       await resetDialog.locator("#reset-target").selectOption(mainOid);
@@ -390,7 +390,7 @@ describe("desktop startup E2E", () => {
       await execFileAsync("git", ["-C", fixture.path, "clean", "-f"]);
       await window.keyboard.press("Control+k");
       const restorePalette = window.getByRole("dialog", { name: "Command palette" });
-      await restorePalette.getByRole("button", { name: /Reset current branch/ }).click();
+      await restorePalette.getByRole("button", { name: /^Reset current branch Review/ }).click();
       const restoreResetDialog = window.getByRole("dialog", { name: "Reset current branch" });
       await restoreResetDialog.getByRole("button", { name: "Restore selected reset backup" }).waitFor({ state: "visible" });
       await restoreResetDialog.getByLabel(/replaces the current branch and checked-out files/).check();

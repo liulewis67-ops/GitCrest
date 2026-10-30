@@ -40,9 +40,12 @@ export function DiffWindow() {
   const [tabsTruncated, setTabsTruncated] = useState(false);
   const { preferences: viewPreferences, updatePreferences: updateViewPreferences } = useDiffViewPreferences();
   const view: View = viewPreferences.sideBySide ? "split" : "unified";
+  // Computed from the stored preference, because the shortcut handler below outlives any one render.
   const setView = (next: View | ((current: View) => View)) => {
-    const resolved = typeof next === "function" ? next(view) : next;
-    updateViewPreferences({ sideBySide: resolved === "split" });
+    updateViewPreferences((current) => {
+      const resolved = typeof next === "function" ? next(current.sideBySide ? "split" : "unified") : next;
+      return { sideBySide: resolved === "split" };
+    });
   };
   const coreRestarts = useCoreRestartCount();
   const tabsLoadedRef = useRef(false);

@@ -66,6 +66,8 @@ export interface GitCrestBridge {
   installUpdate?: () => Promise<boolean>;
   subscribeToUpdateStatus?: (listener: (status: UpdateStatus) => void) => () => void;
   subscribeToEvents: (listener: (event: GitCrestEventEnvelope) => void) => Promise<() => void>;
+  /** Zooms this window's interface; 1 is 100%. */
+  setZoomFactor?: (factor: number) => void;
 }
 
 export function getGitCrestBridge(): GitCrestBridge | undefined {

@@ -15,7 +15,7 @@ import { CommitInspector } from "../pages/workspace/CommitInspector";
 import { WorkspaceDiffPanel } from "../pages/workspace/WorkspaceDiffPanel";
 import { ViewLayout } from "../pages/workspace/ViewLayout";
 import { HistorySplit } from "../pages/workspace/HistorySplit";
-import { ariaShortcut, displayShortcut, loadSettingsPage, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus, type SettingsSectionId } from "../features/settings";
+import { ariaShortcut, displayShortcut, loadSettingsPage, resetZoom, THEME_CYCLE, useShortcutPreferences, useThemePreference, useUpdateStatus, zoomIn, zoomOut, type SettingsSectionId } from "../features/settings";
 import { useGlobalShortcuts } from "./use-global-shortcuts";
 import { getRepositoryDisplayName } from "../shared/lib/repository-display-name";
 import { useWindowSizeClass } from "../shared/hooks/use-window-size-class";
@@ -866,7 +866,7 @@ function App() {
     toggleSidebar,
     toggleInspector,
     toggleFocusMode,
-    toggleDiffView: () => updateDiffViewPreferences({ sideBySide: !diffViewPreferences.sideBySide }),
+    toggleDiffView: () => updateDiffViewPreferences((current) => ({ sideBySide: !current.sideBySide })),
     dismissTransientPanels,
   });
 
@@ -935,7 +935,10 @@ function App() {
       toggleSidebar,
       toggleInspector,
       toggleFocusMode,
-      toggleDiffView: () => updateDiffViewPreferences({ sideBySide: !diffViewPreferences.sideBySide }),
+      toggleDiffView: () => updateDiffViewPreferences((current) => ({ sideBySide: !current.sideBySide })),
+      zoomIn,
+      zoomOut,
+      zoomReset: resetZoom,
       manageRemotes: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); },
       closeTab: closeRepositoryTab,
     },

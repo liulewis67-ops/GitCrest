@@ -58,7 +58,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U11.1 | Commit signing setup and failure help | P1 | M | U1.1 | not started |
 | U12.1 | History search under 200 ms after a refs change | P1 | M | — | not started |
 | U13.1 | Unified feedback with undo | P2 | M | — | not started |
-| U13.2 | Interface zoom | P2 | S | — | not started |
+| U13.2 | Interface zoom | P2 | S | — | done |
 | U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | not started |
 | U14.2 | Repository hygiene | P2 | S | — | done |
 
@@ -374,3 +374,12 @@ Add one entry per finished or blocked stage, in this format:
 - Limits / follow-up: the line-selection view (`SplitDiff`) takes a `layout` of split or unified. In unified, deleted lines come above added ones with one checkbox per line; a line that is half of a paired row selects only its own side, and a lone added or deleted line selects its row. The selection is stored as the same (hunk, row, side) items in both layouts, and a test checks that the same choices send an identical staging request in both, so the patch the core builds is identical (the core never sees the layout; no separate `git diff --cached` comparison was added). A Split/Unified switch sits in the diff header of the line view, Mod+ now works anywhere a file diff is showing (also as the palette entry "Toggle Split/Unified diff"), and the Diff window uses the same stored preference instead of resetting to Split. The full-file view already had the same switch. Not covered: unified rows in Monaco's own single-hunk view, which keeps its fixed layout.
 - Also in this stage: the keyboard-workflow E2E test walked Tab at most 80 times to reach "Refresh working tree status"; measured runs needed 15 to 46 presses depending on where focus landed, which explains the intermittent failures recorded under U3.2 and U5.2 (the failing step was identified from a captured log on the last intermittent failure). The limit is now 200.
 - Commit: see git log (`feat: complete U10.1 unified diff layout with staging in the main area`)
+
+### U13.2 — Interface zoom
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm build` (includes the preload change), `pnpm frontend:boundaries`, `vitest run` (516 tests; new `zoom.test.tsx`, `diff-view-preferences.test.tsx`), `pnpm test:e2e` (38 tests, run after a fresh `pnpm build`).
+- Manual check: not run (app not started). The plan's "layout stays usable at 80–150%" was not checked by eye; only the mechanism is tested.
+- Evidence: `src/features/settings/model/zoom-store.ts`, `tests/unit/zoom.test.tsx`
+- Limits / follow-up: six levels from 80% to 150%, kept in local storage and shared by every window (a change in one follows in the others). Mod+=, Mod+- and Mod+0 are remappable shortcuts handled in every window, including from text fields; they replace the window's built-in zoom keys and are also in the command palette. Settings → Appearance has minus, plus and reset buttons with the current level. The desktop app zooms through Electron's `webFrame` (the preload accepts only factors from 0.5 to 2); outside it the page falls back to CSS zoom. Ctrl+Plus on keyboards that need Shift for "+" is not bound; Ctrl+= is.
+- Process finding, which affects earlier entries: `pnpm test:e2e` runs against the built app in `out/` and does not rebuild it, and I ran it without rebuilding for most stages since U2.1. Those runs therefore did not always exercise the newest code. The full suite now passes against a fresh build that contains every change up to this stage, so the cumulative state is verified, but individual earlier "38 passed" figures should be read with that caveat. `pnpm check` builds first and is the reliable gate. Running it against the fresh build also found and fixed three real problems: a stale-closure bug in the Diff window's Split/Unified shortcut (from U10.1), two palette lookups in `desktop.test.ts` that the U5.1 palette entries made ambiguous, and the Tab limit in `keyboard-workflow.test.ts` (see U10.1).
+- Commit: see git log (`feat: complete U13.2 add interface zoom`)

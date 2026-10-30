@@ -29,6 +29,9 @@ export const shortcutActions = [
   { id: "toggleSidebar", label: "Show or hide the sidebar", defaultBinding: "Mod+Shift+B" },
   { id: "toggleInspector", label: "Show or hide commit details", defaultBinding: "Mod+Shift+D" },
   { id: "focusMode", label: "Focus mode", defaultBinding: "Mod+Shift+M" },
+  { id: "zoomIn", label: "Zoom in", defaultBinding: "Mod+=" },
+  { id: "zoomOut", label: "Zoom out", defaultBinding: "Mod+-" },
+  { id: "zoomReset", label: "Reset zoom", defaultBinding: "Mod+0" },
 ] as const;
 
 export type ShortcutAction = (typeof shortcutActions)[number]["id"];

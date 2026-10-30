@@ -44,9 +44,10 @@ export function useDiffViewPreferences() {
       return DEFAULT_DIFF_VIEW_PREFERENCES;
     }
   });
-  const updatePreferences = useCallback((change: Partial<DiffViewPreferences>) => {
+  /** A change can be computed from the current preferences, so a handler set up earlier never works from stale values. */
+  const updatePreferences = useCallback((change: Partial<DiffViewPreferences> | ((current: DiffViewPreferences) => Partial<DiffViewPreferences>)) => {
     setPreferences((current) => {
-      const next = { ...current, ...change };
+      const next = { ...current, ...(typeof change === "function" ? change(current) : change) };
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {

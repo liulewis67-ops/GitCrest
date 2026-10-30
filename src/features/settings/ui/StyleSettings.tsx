@@ -2,6 +2,7 @@ import { useI18n, type MessageKey } from "../../../shared/i18n";
 import { MOTION_PREFERENCES, setMotion, setStyle } from "../model/appearance-store";
 import { STYLE_FIELDS, STYLE_OPTIONS, type StyleField, type ThemeDefinition, type ThemeStyle } from "../model/themes";
 import { useAppearance } from "../model/use-theme-preference";
+import { resetZoom, useZoom, ZOOM_LEVELS, zoomIn, zoomOut } from "../model/zoom-store";
 
 /** Message key for one style choice, e.g. `appearance.style.density.compact`. */
 export function styleOptionKey<Field extends StyleField>(field: Field, value: ThemeStyle[Field]): MessageKey {
@@ -65,6 +66,7 @@ export function StyleSettings({ themeName }: { themeName: (theme: ThemeDefinitio
   const { t } = useI18n();
   const { preferences, activeTheme } = useAppearance();
   const themeOverrides = Object.keys(activeTheme.style ?? {}).length > 0;
+  const zoom = useZoom();
   return (
     <div className="settingsCard">
       <div className="settingsSectionHeading">
@@ -88,6 +90,15 @@ export function StyleSettings({ themeName }: { themeName: (theme: ThemeDefinitio
               />
             </div>
           ))}
+          <div className="settingsRow">
+            <div className="settingsRowText"><span id="appearance-zoom-label">{t("appearance.zoom")}</span><p>{t("appearance.zoomHelp")}</p></div>
+            <div className="zoomControl" role="group" aria-labelledby="appearance-zoom-label">
+              <button className="quietButton compact" type="button" aria-label={t("appearance.zoomOut")} disabled={zoom <= ZOOM_LEVELS[0]} onClick={zoomOut}>−</button>
+              <output aria-live="polite">{Math.round(zoom * 100)}%</output>
+              <button className="quietButton compact" type="button" aria-label={t("appearance.zoomIn")} disabled={zoom >= ZOOM_LEVELS[ZOOM_LEVELS.length - 1]} onClick={zoomIn}>+</button>
+              <button className="quietButton compact" type="button" disabled={zoom === 1} onClick={resetZoom}>{t("appearance.zoomReset")}</button>
+            </div>
+          </div>
           <div className="settingsRow">
             <div className="settingsRowText"><span id="appearance-motion-label">{t("appearance.motion")}</span><p>{t("appearance.motionHelp")}</p></div>
             <SegmentedChoice

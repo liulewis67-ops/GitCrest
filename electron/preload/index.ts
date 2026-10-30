@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from "electron";
+import { contextBridge, ipcRenderer, webFrame } from "electron";
 import type { components } from "../../src/api/schema";
 import type { CoreStatus } from "../../src/api/core-status";
 import type { UpdateStatus } from "../../src/api/update-status";
@@ -39,6 +39,10 @@ const windowControls = process.platform === "darwin" ? undefined : {
 
 const api = {
   windowControls,
+  setZoomFactor: (factor: number): void => {
+    // Only a sane factor reaches the window, whatever the renderer asks for.
+    if (Number.isFinite(factor) && factor >= 0.5 && factor <= 2) webFrame.setZoomFactor(factor);
+  },
   getSidecarConnection: (): Promise<SidecarConnection> => {
     return ipcRenderer.invoke("gitcrest:get-sidecar-connection");
   },

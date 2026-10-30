@@ -5,6 +5,7 @@ export type { AppearanceSnapshot } from "./model/appearance-store";
 export { hexWithAlpha } from "./model/color";
 export { GRAPH_ROW_HEIGHT } from "./model/themes";
 export type { ThemePalette } from "./model/themes";
+export { DEFAULT_ZOOM, resetZoom, setZoom, startZoom, useZoom, zoomIn, zoomOut, ZOOM_LEVELS } from "./model/zoom-store";
 export { useUpdateStatus } from "./model/use-update-status";
 export { useShortcutPreferences } from "./model/use-shortcut-preferences";
 export {
