@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::api::workflow::WorkflowOperationDto;
+use crate::{api::workflow::WorkflowOperationDto, domain::remote::PushTags};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -121,4 +121,7 @@ pub(super) struct PushRequest {
     pub(super) force_with_lease: bool,
     pub(super) remote_name: String,
     pub(super) remote_branch: String,
+    /// Tags to push along with the branch; none unless chosen.
+    #[serde(default)]
+    pub(super) tags: PushTags,
 }

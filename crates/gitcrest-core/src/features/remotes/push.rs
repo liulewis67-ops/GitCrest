@@ -2,7 +2,7 @@ use std::path::Path;
 
 use crate::{
     domain::error::GitAdapterError,
-    domain::remote::RemotePushCommand,
+    domain::remote::{PushTags, RemotePushCommand},
     ports::{branches::BranchGitPort, remotes::RemoteGitPort},
 };
 use serde::Serialize;
@@ -30,6 +30,7 @@ pub struct PushPreflight {
 impl From<&PushPreflight> for RemotePushCommand {
     fn from(preflight: &PushPreflight) -> Self {
         Self {
+            tags: PushTags::None,
             local_branch: preflight.local_branch.clone(),
             remote_name: preflight.remote_name.clone(),
             remote_branch: preflight.remote_branch.clone(),

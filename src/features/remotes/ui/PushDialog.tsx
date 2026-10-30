@@ -4,6 +4,7 @@ import type { components } from "../../../api/schema";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 
 type PushPreflight = components["schemas"]["PushPreflight"];
+export type PushTagsChoice = components["schemas"]["PushRequest"]["tags"];
 
 interface PushDialogProps {
   snapshot?: PushPreflight;
@@ -15,7 +16,7 @@ interface PushDialogProps {
   forceWithLeaseOnly?: boolean;
   onRefresh: () => void;
   onFetch: () => void;
-  onPush: (forceWithLease: boolean) => void;
+  onPush: (forceWithLease: boolean, tags: PushTagsChoice) => void;
   onClose: () => void;
 }
 
@@ -24,6 +25,7 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const forceButtonRef = useRef<HTMLButtonElement>(null);
   const [confirmLease, setConfirmLease] = useState(false);
+  const [tags, setTags] = useState<PushTagsChoice>("followTags");
   const forceAvailable = Boolean(snapshot && snapshot.ahead > 0 && (snapshot.behind > 0 || forceWithLeaseOnly));
   const activeSnapshot = snapshot;
 
@@ -42,9 +44,16 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
             <div className="pushCounts"><div><strong>{snapshot.ahead}</strong><span>{t("push.commitsToPush")}</span></div><div><strong>{snapshot.behind}</strong><span>{t("push.remoteOnly")}</span></div><div><strong>{snapshot.changedPathCount}</strong><span>{t("push.changedPaths")}</span></div></div>
             {snapshot.behind > 0 && <div className="pushWarning" role="alert"><strong>{t("push.fetchBefore")}</strong><span>{snapshot.behind === 1 ? t("push.remoteHasOne", { count: snapshot.behind }) : t("push.remoteHasMany", { count: snapshot.behind })}</span><button className="textButton" type="button" disabled={busy || disabled} onClick={onFetch}>{t("push.fetchReview")}</button></div>}
             {snapshot.ahead === 0 && <p className="cloneHelp">{t("push.nothing")}</p>}
+            <label className="rebaseTargetField">{t("push.tags")}
+              <select value={tags} disabled={busy} onChange={(event) => setTags(event.target.value as PushTagsChoice)}>
+                <option value="followTags">{t("push.tagsFollow")}</option>
+                <option value="none">{t("push.tagsNone")}</option>
+                <option value="all">{t("push.tagsAll")}</option>
+              </select>
+            </label>
             {snapshot.commitsToPush.length > 0 && <section className="pushPreviewSection" aria-label={t("push.commitsAria")}><h3>{t("push.commitsAria")}</h3><ul>{snapshot.commitsToPush.map((commit) => <li key={commit.oid}><code>{commit.oid.slice(0, 8)}</code><span>{commit.subject || t("push.noSubject")}</span></li>)}</ul>{snapshot.ahead > snapshot.commitsToPush.length && <p className="cloneHelp">{t("push.showing", { shown: snapshot.commitsToPush.length, total: snapshot.ahead })}</p>}</section>}
             {snapshot.changedPaths.length > 0 && <section className="pushPreviewSection" aria-label={t("push.pathsAria")}><h3>{t("push.pathsHeading", { count: snapshot.changedPathCount })}</h3><ul>{snapshot.changedPaths.map((path) => <li key={path}><code>{path}</code></li>)}</ul>{snapshot.omittedChangedPathCount > 0 && <p className="cloneHelp">{t("push.omitted", { count: snapshot.omittedChangedPathCount })}</p>}</section>}
-            {confirmLease && forceAvailable && activeSnapshot && <ForcePushConfirmation snapshot={activeSnapshot} busy={busy} disabled={disabled} returnFocus={() => forceButtonRef.current} onPush={() => { setConfirmLease(false); onPush(true); }} onCancel={() => setConfirmLease(false)} />}
+            {confirmLease && forceAvailable && activeSnapshot && <ForcePushConfirmation snapshot={activeSnapshot} busy={busy} disabled={disabled} returnFocus={() => forceButtonRef.current} onPush={() => { setConfirmLease(false); onPush(true, tags); }} onCancel={() => setConfirmLease(false)} />}
           </>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
           {error && <div className="taskCenterError" role="alert"><span>{error}</span><button className="textButton" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</button></div>}
@@ -53,7 +62,7 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
           <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>
           <button className="quietButton compact" type="button" disabled={busy || disabled || loading} onClick={onRefresh}>{t("pull.refresh")}</button>
           {forceAvailable && !confirmLease && <button ref={forceButtonRef} className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => setConfirmLease(true)}>{t("push.forceLease")}</button>}
-          {snapshot && snapshot.ahead > 0 && snapshot.behind === 0 && !forceWithLeaseOnly && <button className="primaryButton" type="button" disabled={busy || disabled} onClick={() => onPush(false)}>{busy ? t("push.starting") : t("push.push")}</button>}
+          {snapshot && snapshot.ahead > 0 && snapshot.behind === 0 && !forceWithLeaseOnly && <button className="primaryButton" type="button" disabled={busy || disabled} onClick={() => onPush(false, tags)}>{busy ? t("push.starting") : t("push.push")}</button>}
         </footer>
       </section>
     </div>

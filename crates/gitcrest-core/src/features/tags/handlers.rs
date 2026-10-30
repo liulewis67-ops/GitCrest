@@ -18,6 +18,10 @@ use super::{
     service::{self, CreateTagRequest},
 };
 
+pub(crate) use super::remote_handlers::{
+    delete_remote_tag, delete_repository_tag, preview_remote_tag, push_repository_tag,
+};
+
 pub(crate) async fn list_repository_tags(
     State(state): State<AppState>,
     Path(repo_id): Path<String>,

@@ -94,6 +94,7 @@ pub(crate) enum ApiErrorCode {
     WorkflowRecoveryNotAllowed,
     WorkflowNoActiveOperation,
     TagAlreadyExists,
+    TagNotFound,
     InternalError,
 }
 
@@ -810,6 +811,21 @@ impl ApiError {
                 StatusCode::NOT_FOUND,
                 ApiErrorCode::HistoryCommitNotFound,
                 "The requested commit does not exist in this repository.",
+            ),
+            tags::TagError::NotFound => Self::new(
+                StatusCode::NOT_FOUND,
+                ApiErrorCode::TagNotFound,
+                "The tag does not exist.",
+            ),
+            tags::TagError::Stale => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::RepositoryStateConflict,
+                "The tag changed after it was reviewed. Review it again before continuing.",
+            ),
+            tags::TagError::RemoteDiffers => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::TagAlreadyExists,
+                "The remote already has a tag with this name that points to a different commit. GitCrest does not overwrite remote tags.",
             ),
             tags::TagError::GitUnavailable => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,

@@ -1556,3 +1556,6 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .identityScope label { display: inline-flex; align-items: center; gap: var(--space-1); }
 .identityActions { display: flex; align-items: center; gap: var(--space-3); }
 .identityNotice { display: grid; gap: var(--space-1); }
+.tagListRow { display: flex; align-items: center; gap: var(--space-1); }
+.tagListRow .tagListItem { flex: 1; width: auto; }
+.tagActionsDialog { max-width: 520px; }

@@ -704,7 +704,7 @@ describe("GitCrestApiClient", () => {
       headers: { "X-GitCrest-API-Version": "1" },
     }));
     const client = new GitCrestApiClient(baseUrl, token, fetcher);
-    const request = { expectedLocalOid: "a".repeat(40), expectedRemoteOid: "b".repeat(40), forceWithLease: true, remoteName: "backup", remoteBranch: "release" };
+    const request = { expectedLocalOid: "a".repeat(40), expectedRemoteOid: "b".repeat(40), forceWithLease: true, remoteName: "backup", remoteBranch: "release", tags: "none" as const };
 
     await expect(client.pushRepository("repo/fixture", request)).resolves.toEqual(task);
     expect(String(fetcher.mock.calls[0][0])).toBe(`${baseUrl}/api/v1/repositories/repo%2Ffixture/push`);

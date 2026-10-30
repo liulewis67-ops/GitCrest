@@ -2468,6 +2468,108 @@ paths:
         "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "503": { description: Git could not list tags., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/tags/delete:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: deleteRepositoryTag
+      summary: Delete a local tag that still points at the reviewed commit
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DeleteTagRequest" } } }
+      responses:
+        "200":
+          description: The tag was deleted locally; remote tags are untouched.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/DeletedTag" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository or tag is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "409": { description: The tag now points at another commit., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/tags/remote-preview:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: previewRemoteTag
+      summary: Read a tag on a remote before pushing or deleting it
+      parameters:
+        - { name: remoteName, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: name, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 255 } }
+      responses:
+        "200":
+          description: The remote and local objects the tag points at.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/RemoteTagPreview" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository or remote is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: The remote could not be reached., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/tags/push:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: pushRepositoryTag
+      summary: Queue a push of one local tag without force
+      description: >-
+        A remote tag with the same name that points at another object is refused (409) and never overwritten.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PushTagRequest" } } }
+      responses:
+        "202":
+          description: Task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository, remote or tag is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "409": { description: The remote already has this tag at another commit., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: The remote could not be reached., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/tags/remote-delete:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: deleteRemoteTag
+      summary: Queue deletion of a remote tag with a lease on the reviewed object
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/DeleteRemoteTagRequest" } } }
+      responses:
+        "202":
+          description: Task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository or remote is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/commits/{oid}/tags:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4319,6 +4421,46 @@ components:
       properties:
         fullName: { type: string, minLength: 1 }
         favorite: { type: boolean }
+    DeleteTagRequest:
+      type: object
+      additionalProperties: false
+      required: [name, expectedTargetOid]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 255 }
+        expectedTargetOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$", description: The commit the tag pointed at when it was reviewed. }
+    DeletedTag:
+      type: object
+      additionalProperties: false
+      required: [repoId, name]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        name: { type: string }
+    RemoteTagPreview:
+      type: object
+      additionalProperties: false
+      required: [repoId, remoteName, name, remoteOid, localOid, sameAsLocal]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        remoteName: { type: string }
+        name: { type: string }
+        remoteOid: { type: [string, "null"], description: The object the remote tag points at; null when the remote has no such tag. }
+        localOid: { type: [string, "null"], description: The object the local tag points at; null when there is no local tag. }
+        sameAsLocal: { type: boolean }
+    PushTagRequest:
+      type: object
+      additionalProperties: false
+      required: [remoteName, name]
+      properties:
+        remoteName: { type: string, minLength: 1, maxLength: 255 }
+        name: { type: string, minLength: 1, maxLength: 255 }
+    DeleteRemoteTagRequest:
+      type: object
+      additionalProperties: false
+      required: [remoteName, name, expectedRemoteOid]
+      properties:
+        remoteName: { type: string, minLength: 1, maxLength: 255 }
+        name: { type: string, minLength: 1, maxLength: 255 }
+        expectedRemoteOid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$", description: The object read by the preview; the remote deletes the tag only while it still points there. }
     TagEntry:
       type: object
       additionalProperties: false
@@ -4710,6 +4852,11 @@ components:
         forceWithLease: { type: boolean, description: Explicitly select force-with-lease after reviewing the preview. }
         remoteName: { type: string, minLength: 1, maxLength: 255, description: Explicit target matching the reviewed Push preview. }
         remoteBranch: { type: string, minLength: 1, maxLength: 255, description: Explicit branch matching the reviewed Push preview. }
+        tags:
+          type: string
+          enum: [none, followTags, all]
+          default: none
+          description: Tags to push with the branch. followTags sends annotated tags on the pushed commits; all sends every local tag. Never forces.
     RemoteSnapshot:
       type: object
       additionalProperties: false
@@ -5411,6 +5558,7 @@ components:
         - CREDENTIAL_INPUT_INVALID
         - CREDENTIALS_UNAVAILABLE
         - IDENTITY_UNAVAILABLE
+        - TAG_NOT_FOUND
         - ACCOUNT_INPUT_INVALID
         - ACCOUNT_NOT_FOUND
         - ACCOUNT_TOKEN_REJECTED

@@ -8,6 +8,8 @@ import {
 import type { components } from "../../../api/schema";
 import type { PushTarget } from "./push-target";
 
+type PushTagsChoice = components["schemas"]["PushRequest"]["tags"];
+
 interface RepositoryPushOptions {
   tasks: TaskSnapshotResponse[];
   getApi: () => GitCrestApiClient | undefined;
@@ -78,7 +80,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
     void refreshPreflight(targetRepoId, pushTarget || null);
   }
 
-  async function submit(forceWithLease: boolean) {
+  async function submit(forceWithLease: boolean, tags: PushTagsChoice = "none") {
     const api = getApi();
     const preview = preflight;
     if (!api || !repoId || !preview || preview.repoId !== repoId || busy) return;
@@ -91,6 +93,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
         forceWithLease,
         remoteName: preview.remoteName,
         remoteBranch: preview.remoteBranch,
+        tags,
       });
       acceptTask(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, true);
       setOpen(false);
@@ -128,6 +131,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
         forceWithLease: false,
         remoteName: preview.remoteName,
         remoteBranch: preview.remoteBranch,
+        tags: "none",
       });
       acceptTask(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, false);
       setOpen(false);

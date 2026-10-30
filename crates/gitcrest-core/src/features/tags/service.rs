@@ -14,6 +14,12 @@ pub enum TagError {
     Invalid,
     AlreadyExists,
     CommitNotFound,
+    /// No tag with this name exists (locally, or on the remote).
+    NotFound,
+    /// The tag moved after it was reviewed.
+    Stale,
+    /// The remote already has a tag with this name that points somewhere else.
+    RemoteDiffers,
     GitUnavailable,
     TimedOut,
     GitFailed,

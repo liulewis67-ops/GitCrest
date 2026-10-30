@@ -39,6 +39,7 @@ export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowC
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type TagPageResponse = components["schemas"]["TagPage"];
+export type RemoteTagPreviewResponse = components["schemas"]["RemoteTagPreview"];
 export type TagEntryResponse = components["schemas"]["TagEntry"];
 export type GitIdentityResponse = components["schemas"]["GitIdentity"];
 export type HostingProvider = components["schemas"]["HostingProvider"];
@@ -332,6 +333,35 @@ export class GitCrestApiClient {
     if (options.filter) query.set("filter", options.filter);
     if (options.targets) query.set("targets", options.targets.join(","));
     return this.request<TagPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/tags?${query}`);
+  }
+
+  deleteRepositoryTag(repoId: RepoId, name: string, expectedTargetOid: string): Promise<components["schemas"]["DeletedTag"]> {
+    return this.request<components["schemas"]["DeletedTag"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/tags/delete`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, expectedTargetOid } satisfies components["schemas"]["DeleteTagRequest"]),
+    });
+  }
+
+  previewRemoteTag(repoId: RepoId, remoteName: string, name: string): Promise<RemoteTagPreviewResponse> {
+    const query = new URLSearchParams({ remoteName, name });
+    return this.request<RemoteTagPreviewResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/tags/remote-preview?${query}`);
+  }
+
+  pushRepositoryTag(repoId: RepoId, remoteName: string, name: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/tags/push`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ remoteName, name } satisfies components["schemas"]["PushTagRequest"]),
+    });
+  }
+
+  deleteRemoteTag(repoId: RepoId, remoteName: string, name: string, expectedRemoteOid: string): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/tags/remote-delete`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ remoteName, name, expectedRemoteOid } satisfies components["schemas"]["DeleteRemoteTagRequest"]),
+    });
   }
 
   getGlobalIdentity(): Promise<GitIdentityResponse> {

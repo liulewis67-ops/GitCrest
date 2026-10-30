@@ -316,7 +316,8 @@ pub(super) async fn push_repository(
     }
     let command = state.remote_commands.clone();
     let path = target.repository_path;
-    let operation_command = RemotePushCommand::from(&preflight);
+    let mut operation_command = RemotePushCommand::from(&preflight);
+    operation_command.tags = request.tags;
     let branch_git = state.branch_git.clone();
     let remote_git = state.remote_git.clone();
     let task_repo_id = repo_id.clone();

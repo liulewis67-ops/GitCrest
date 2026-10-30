@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type TagEntryResponse } from "../../../api/client";
+import { GitCrestApiError, type GitCrestApiClient, type TagEntryResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
+import { MenuButton } from "../../../shared/ui/MenuButton";
+import { TagActionsDialog, type TagAction } from "./TagActionsDialog";
 
 const PAGE_SIZE = 100;
 const FILTER_DELAY_MS = 250;
@@ -9,12 +11,18 @@ const FILTER_DELAY_MS = 250;
  * The repository tags, newest version first, a page at a time so a repository with thousands of tags
  * costs nothing until the section is used. Selecting a tag selects the commit it points at.
  */
-export function TagList({ api, repoId, refreshKey, selectedOid, onSelectCommit }: {
+export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = [], disabled = false, onSelectCommit, onTaskStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   refreshKey: number;
   selectedOid?: string;
+  /** Remotes a tag can be pushed to or deleted from. */
+  remoteNames?: readonly string[];
+  /** Git operations cannot start now, so tag changes are unavailable. */
+  disabled?: boolean;
   onSelectCommit: (oid: string) => void;
+  /** A push or remote delete started as a background task. */
+  onTaskStarted?: (task: TaskSnapshotResponse) => void;
 }) {
   const { t } = useI18n();
   const [query, setQuery] = useState("");
@@ -26,6 +34,7 @@ export function TagList({ api, repoId, refreshKey, selectedOid, onSelectCommit }
   const [error, setError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const requestRef = useRef(0);
+  const [action, setAction] = useState<{ kind: TagAction; tag: TagEntryResponse }>();
 
   useEffect(() => {
     const timer = window.setTimeout(() => setFilter(query.trim()), FILTER_DELAY_MS);
@@ -81,14 +90,36 @@ export function TagList({ api, repoId, refreshKey, selectedOid, onSelectCommit }
     {error && <div className="statusLoadError" role="alert"><span>{error}</span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
     {empty && <p className="sidebarNotice">{filter ? t("tags.noMatch", { query: filter }) : t("tags.none")}</p>}
     {tags.length > 0 && <ul className="branchList" aria-label={t("tags.title")}>
-      {tags.map((tag) => <li key={tag.name}>
+      {tags.map((tag) => <li className="tagListRow" key={tag.name}>
         <button className={`tagListItem${tag.annotated ? " annotated" : ""}${selectedOid === tag.targetOid ? " selected" : ""}`} type="button" aria-label={t("tags.showCommit", { oid: tag.targetOid.slice(0, 8), name: tag.name })} aria-pressed={selectedOid === tag.targetOid} title={tag.message ?? tag.name} onClick={() => onSelectCommit(tag.targetOid)}>
           <span className="tagKind" aria-hidden="true">{tag.annotated ? "◆" : "◇"}</span>
           <span className="tagName">{tag.name}</span>
           <small className="tagKind">{tag.annotated ? t("tags.annotated") : t("tags.lightweight")}</small>
         </button>
+        <MenuButton
+          className="quietButton compact iconButton"
+          label={t("tags.actionsFor", { name: tag.name })}
+          title={t("tags.actions")}
+          menuLabel={t("tags.actionsFor", { name: tag.name })}
+          disabled={disabled}
+          items={[
+            { id: "push", label: t("tags.push"), disabled: remoteNames.length === 0, title: remoteNames.length === 0 ? t("tags.noRemotes") : undefined, onSelect: () => setAction({ kind: "push", tag }) },
+            { id: "delete", label: t("tags.delete"), separatorBefore: true, danger: true, onSelect: () => setAction({ kind: "delete", tag }) },
+            { id: "remoteDelete", label: t("tags.deleteRemote"), danger: true, disabled: remoteNames.length === 0, title: remoteNames.length === 0 ? t("tags.noRemotes") : undefined, onSelect: () => setAction({ kind: "remoteDelete", tag }) },
+          ]}
+        ><span aria-hidden="true">⋯</span></MenuButton>
       </li>)}
     </ul>}
     {nextOffset !== null && <button className="quietButton compact" type="button" disabled={loading} onClick={() => void loadMore()}>{t("tags.loadMore")}</button>}
+    {action && <TagActionsDialog
+      api={api}
+      repoId={repoId}
+      action={action.kind}
+      tag={action.tag}
+      remoteNames={remoteNames}
+      onClose={() => setAction(undefined)}
+      onDeleted={() => { setAction(undefined); setAttempt((value) => value + 1); }}
+      onTaskStarted={(task) => { setAction(undefined); onTaskStarted?.(task); }}
+    />}
   </section>;
 }

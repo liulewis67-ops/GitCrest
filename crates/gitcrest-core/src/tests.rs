@@ -5337,6 +5337,11 @@ async fn push_api_requires_reviewed_oids_and_updates_the_configured_upstream() {
     assert_eq!(preview["behind"], 0);
     assert_eq!(preview["changedPaths"][0], "change.txt");
 
+    git(
+        &repository_path,
+        &["tag", "-a", "pushed-tag", "-m", "release note"],
+    );
+    git(&repository_path, &["tag", "local-only-light"]);
     let accepted = app
         .clone()
         .oneshot(json_request(
@@ -5348,6 +5353,7 @@ async fn push_api_requires_reviewed_oids_and_updates_the_configured_upstream() {
                 "forceWithLease": false,
                 "remoteName": preview["remoteName"],
                 "remoteBranch": preview["remoteBranch"],
+                "tags": "followTags",
             })
             .to_string(),
         ))
@@ -5373,6 +5379,16 @@ async fn push_api_requires_reviewed_oids_and_updates_the_configured_upstream() {
             .unwrap(),
         preview["localOid"].as_str().unwrap()
     );
+    // --follow-tags sends the annotated tag on the pushed commit, not the lightweight one.
+    let remote_tags = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&bare_path)
+        .args(["tag", "--list"])
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).into_owned())
+        .unwrap();
+    assert!(remote_tags.contains("pushed-tag"));
+    assert!(!remote_tags.contains("local-only-light"));
 
     let branches = app
         .clone()
@@ -7931,4 +7947,205 @@ async fn tag_list_api_pages_filters_and_distinguishes_annotated_tags() {
         .all(|tag| tag["targetOid"] == head));
     let (_, none) = get(&format!("?targets={}", "0".repeat(40))).await;
     assert!(none["tags"].as_array().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn tag_management_api_deletes_pushes_and_never_overwrites_remote_tags() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("tag-manage-repo");
+    let remote = directory.path().join("remote.git");
+    std::fs::create_dir(&root).unwrap();
+    let run = |dir: &std::path::Path, args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    std::process::Command::new("git")
+        .args(["init", "--bare", "--quiet"])
+        .arg(&remote)
+        .output()
+        .unwrap();
+    run(&root, &["init", "--quiet"]);
+    run(&root, &["config", "user.name", "GitCrest Test"]);
+    run(
+        &root,
+        &["config", "user.email", "gitcrest-test@example.invalid"],
+    );
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    run(&root, &["add", "a.txt"]);
+    run(&root, &["commit", "--quiet", "-m", "first"]);
+    let first = run(&root, &["rev-parse", "HEAD"]);
+    std::fs::write(root.join("a.txt"), "two\n").unwrap();
+    run(&root, &["commit", "--quiet", "-am", "second"]);
+    let second = run(&root, &["rev-parse", "HEAD"]);
+    run(
+        &root,
+        &["remote", "add", "origin", remote.to_str().unwrap()],
+    );
+    run(&root, &["tag", "v1", &first]);
+    run(&root, &["tag", "v2", &second]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/api/v1/repositories/{repo_id}/tags");
+    let post = |path: &str, payload: serde_json::Value| {
+        let app = app.clone();
+        let uri = format!("{base}{path}");
+        async move {
+            let response = app
+                .oneshot(json_request(Method::POST, &uri, &payload.to_string()))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+
+    // Authorization and validation.
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("{base}/delete"),
+            &serde_json::json!({ "name": "v1", "expectedTargetOid": first }).to_string(),
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    assert_eq!(
+        post(
+            "/push",
+            serde_json::json!({ "remoteName": "-x", "name": "v1" })
+        )
+        .await
+        .0,
+        StatusCode::BAD_REQUEST
+    );
+    assert_eq!(
+        post(
+            "/push",
+            serde_json::json!({ "remoteName": "nope", "name": "v1" })
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        post(
+            "/push",
+            serde_json::json!({ "remoteName": "origin", "name": "missing" })
+        )
+        .await
+        .0,
+        StatusCode::NOT_FOUND
+    );
+
+    // Push v1; the remote now has it, and the preview says so.
+    let (status, task) = post(
+        "/push",
+        serde_json::json!({ "remoteName": "origin", "name": "v1" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    assert_eq!(run(&remote, &["rev-parse", "refs/tags/v1^{commit}"]), first);
+    let preview = app
+        .clone()
+        .oneshot(request(
+            &format!("{base}/remote-preview?remoteName=origin&name=v1"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), StatusCode::OK);
+    let body = to_bytes(preview.into_body(), usize::MAX).await.unwrap();
+    let preview: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(preview["sameAsLocal"], true);
+    let remote_oid = preview["remoteOid"].as_str().unwrap().to_owned();
+
+    // A local tag moved to another commit is refused instead of overwriting the remote tag.
+    run(&root, &["tag", "--force", "v1", &second]);
+    let (status, error) = post(
+        "/push",
+        serde_json::json!({ "remoteName": "origin", "name": "v1" }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    assert_eq!(error["error"]["code"], "TAG_ALREADY_EXISTS");
+    assert_eq!(run(&remote, &["rev-parse", "refs/tags/v1^{commit}"]), first);
+
+    // Deleting the remote tag needs the reviewed object; a wrong one is not applied.
+    let (status, task) = post(
+        "/remote-delete",
+        serde_json::json!({ "remoteName": "origin", "name": "v1", "expectedRemoteOid": second }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "failed"
+    );
+    assert_eq!(run(&remote, &["rev-parse", "refs/tags/v1^{commit}"]), first);
+    let (status, task) = post(
+        "/remote-delete",
+        serde_json::json!({ "remoteName": "origin", "name": "v1", "expectedRemoteOid": remote_oid }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    assert!(run(&remote, &["tag", "--list"]).is_empty());
+
+    // Local delete: a stale target is refused, the reviewed one is removed.
+    let (status, _) = post(
+        "/delete",
+        serde_json::json!({ "name": "v2", "expectedTargetOid": first }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+    let (status, _) = post(
+        "/delete",
+        serde_json::json!({ "name": "v2", "expectedTargetOid": second }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!run(&root, &["tag", "--list"]).contains("v2"));
+    let (status, _) = post(
+        "/delete",
+        serde_json::json!({ "name": "v2", "expectedTargetOid": second }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }

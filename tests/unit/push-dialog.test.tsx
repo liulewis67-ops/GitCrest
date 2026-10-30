@@ -35,14 +35,14 @@ it("shows the target and overwrite scope, then requires explicit force-with-leas
   expect(within(dialog).getByRole("alertdialog", { name: "Confirm force with lease" })).toBeTruthy();
   expect(onPush).not.toHaveBeenCalled();
   fireEvent.click(within(dialog).getByRole("button", { name: "Confirm force-with-lease" }));
-  expect(onPush).toHaveBeenCalledWith(true);
+  expect(onPush).toHaveBeenCalledWith(true, "followTags");
 });
 
 it("offers normal push only when the remote has no unseen commits", () => {
   const onPush = vi.fn();
   render(<PushDialog snapshot={{ ...preview, behind: 0, overwrittenCommitCount: 0 }} loading={false} busy={false} error="" disabled={false} disabledReason="" onRefresh={vi.fn()} onFetch={vi.fn()} onPush={onPush} onClose={vi.fn()} />);
   fireEvent.click(screen.getByRole("button", { name: "Push" }));
-  expect(onPush).toHaveBeenCalledWith(false);
+  expect(onPush).toHaveBeenCalledWith(false, "followTags");
   expect(screen.queryByRole("button", { name: /Force with lease/ })).toBeNull();
 });
 
@@ -54,7 +54,7 @@ it("keeps a selected force action behind the lease confirmation even for a fast-
   expect(screen.getByText("Confirm lease-protected push?")).toBeTruthy();
   expect(onPush).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Confirm force-with-lease" }));
-  expect(onPush).toHaveBeenCalledWith(true);
+  expect(onPush).toHaveBeenCalledWith(true, "followTags");
 });
 
 it("focuses the push dialog and keeps Escape inside the nested lease confirmation", async () => {
@@ -77,4 +77,12 @@ it("focuses the push dialog and keeps Escape inside the nested lease confirmatio
   expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Force with lease…" }));
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("lets the user choose which tags travel with the branch", () => {
+  const onPush = vi.fn();
+  render(<PushDialog snapshot={{ ...preview, behind: 0, overwrittenCommitCount: 0 }} loading={false} busy={false} error="" disabled={false} disabledReason="" onRefresh={vi.fn()} onFetch={vi.fn()} onPush={onPush} onClose={vi.fn()} />);
+  fireEvent.change(screen.getByLabelText("Tags"), { target: { value: "all" } });
+  fireEvent.click(screen.getByRole("button", { name: "Push" }));
+  expect(onPush).toHaveBeenCalledWith(false, "all");
 });

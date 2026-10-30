@@ -39,7 +39,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U2.2 | Reset to a commit from the history row | P0 | S | — | done |
 | U2.3 | Copy and reuse a commit message | P0 | S | — | done |
 | U3.1 | Tag list and tag labels on the graph | P0 | M | — | done |
-| U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | not started |
+| U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | done |
 | U4.1 | Read existing `git stash` entries | P0 | M | D1 | not started |
 | U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | not started |
 | U5.1 | Complete command-palette coverage | P0 | M | — | not started |
@@ -310,3 +310,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/tags/listing.rs`, `src/features/history/ui/TagList.tsx`, `src/features/history/model/use-commit-tags.ts`
 - Limits / follow-up: `GET /repositories/{repoId}/tags` pages by version-sorted name (newest version first), not by date, because sorting by date needs every tag object. Lightweight tags have no date or message. The 100k-commit S7.2 first-frame benchmark was not re-run; the first snapshot is unchanged because tags still stay out of `/refs`, and the sidebar and graph labels load afterwards. Graph labels are fetched per page of loaded commits (100 commits per request). A lightweight tag on a non-commit object is not detected without reading the object. Annotated and lightweight tags differ by marker (◆/◇) and badge border.
 - Commit: see git log (`feat: complete U3.1 list tags and label them on the commit graph`)
+
+### U3.2 — Delete and push tags; push with tags
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (208 tests; new `tag_management_api_deletes_pushes_and_never_overwrites_remote_tags` runs against a local bare remote and covers 400, 403, 404, 409, push, refusal to overwrite, remote delete with a wrong and a right lease, and local delete; the existing push test now also pushes an annotated tag with `--follow-tags`), `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (464 tests; new `tag-actions.test.tsx` and a push-dialog case), `pnpm test:e2e` (38 tests). The first E2E run of the day failed one test that I could not identify; two reruns passed 38 of 38, so it is recorded as an unexplained flake.
+- Manual check: not run (app not started). Real-remote authentication was not exercised; the tests use a local bare remote.
+- Evidence: `crates/gitcrest-core/src/features/tags/` (`management.rs`, `remote_handlers.rs`), `src/features/history/ui/TagActionsDialog.tsx`
+- Limits / follow-up: new endpoints `POST /tags/delete`, `GET /tags/remote-preview`, `POST /tags/push`, `POST /tags/remote-delete`, and `tags` (`none`, `followTags`, `all`) on `PushRequest`. Instead of a signed confirmation ticket, the remote delete is bound to the object read by the preview and runs as `--force-with-lease`, and the local delete is bound to the reviewed commit. Tag pushes never force; a remote tag with a different object is refused with 409 before anything is sent, and Git refuses it as a second line. The Push dialog defaults to `followTags`; the quick commit-and-push path sends no tags. Tag actions live in each tag row's menu in the sidebar; palette entries come with U5.1. Deleting a remote tag does not remove other clones' copies.
+- Commit: see git log (`feat: complete U3.2 delete and push tags, and push tags with a branch`)

@@ -185,8 +185,22 @@ pub(crate) enum RemotePullStrategy {
     Rebase,
 }
 
+/// Which tags travel with a branch push.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum PushTags {
+    /// Only the branch.
+    #[default]
+    None,
+    /// Annotated tags that point at the pushed commits (`--follow-tags`).
+    FollowTags,
+    /// Every local tag (`--tags`).
+    All,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct RemotePushCommand {
+    pub(crate) tags: PushTags,
     pub(crate) local_branch: String,
     pub(crate) remote_name: String,
     pub(crate) remote_branch: String,

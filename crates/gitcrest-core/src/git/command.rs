@@ -24,8 +24,8 @@ use crate::{
         branch::BranchCommand,
         error::WorkflowError,
         remote::{
-            RemoteBranchDeleteCommand, RemoteCommand, RemotePullCommand, RemotePullStrategy,
-            RemotePushCommand,
+            PushTags, RemoteBranchDeleteCommand, RemoteCommand, RemotePullCommand,
+            RemotePullStrategy, RemotePushCommand,
         },
         staging::StagingOperation,
         workflow::{
@@ -1154,6 +1154,11 @@ impl GitCommandService {
                 .into(),
             );
         }
+        match expected.tags {
+            PushTags::None => {}
+            PushTags::FollowTags => arguments.push("--follow-tags".into()),
+            PushTags::All => arguments.push("--tags".into()),
+        }
         arguments.extend([
             "--".into(),
             expected.remote_name.clone().into(),
@@ -1180,6 +1185,96 @@ impl GitCommandService {
             } else {
                 "Push"
             },
+            task,
+        )
+        .await
+    }
+
+    /// The object a tag points at on the remote, or `None` when the remote has no such tag.
+    pub async fn read_remote_tag(
+        &self,
+        repository_path: &Path,
+        remote_name: &str,
+        tag_name: &str,
+    ) -> Result<Option<String>, TaskFailure> {
+        let reference = format!("refs/tags/{tag_name}");
+        let output = capture_git_output_args_with_env(
+            &self.git_program,
+            repository_path,
+            vec![
+                "ls-remote".into(),
+                "--tags".into(),
+                "--".into(),
+                remote_name.into(),
+                reference.clone().into(),
+            ],
+            &self.network_environment().await?,
+            64 * 1024,
+        )
+        .await?;
+        Ok(String::from_utf8_lossy(&output).lines().find_map(|line| {
+            let (oid, name) = line.split_once("\t")?;
+            (name == reference).then(|| oid.to_owned())
+        }))
+    }
+
+    /// Pushes one tag without force: Git itself refuses to move a tag the remote already has.
+    pub async fn execute_tag_push(
+        &self,
+        repository_path: &Path,
+        remote_name: &str,
+        tag_name: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let reference = format!("refs/tags/{tag_name}");
+        run_command(
+            &self.git_program,
+            vec![
+                "push".into(),
+                "--progress".into(),
+                "--porcelain".into(),
+                "--".into(),
+                remote_name.into(),
+                format!("{reference}:{reference}").into(),
+            ],
+            Some(format!("push {remote_name} tag {tag_name}")),
+            None,
+            Vec::new(),
+            self.network_environment().await?,
+            Some(repository_path),
+            "Push tag",
+            task,
+        )
+        .await
+    }
+
+    /// Deletes a tag on the remote only while it still points at `expected_oid`.
+    pub async fn execute_remote_tag_delete(
+        &self,
+        repository_path: &Path,
+        remote_name: &str,
+        tag_name: &str,
+        expected_oid: &str,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let reference = format!("refs/tags/{tag_name}");
+        run_command(
+            &self.git_program,
+            vec![
+                "push".into(),
+                "--progress".into(),
+                "--porcelain".into(),
+                format!("--force-with-lease={reference}:{expected_oid}").into(),
+                "--".into(),
+                remote_name.into(),
+                format!(":{reference}").into(),
+            ],
+            Some(format!("git push --delete {remote_name} tag {tag_name}")),
+            None,
+            Vec::new(),
+            self.network_environment().await?,
+            Some(repository_path),
+            "Delete remote tag",
             task,
         )
         .await
