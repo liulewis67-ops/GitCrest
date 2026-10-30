@@ -8423,3 +8423,233 @@ async fn ignore_api_writes_rules_that_git_honours_and_refuses_unsafe_paths() {
         .unwrap()
         .contains("secret"));
 }
+
+#[tokio::test]
+async fn stash_operations_preview_apply_drop_and_import_without_losing_changes() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("stash-ops-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    git(&["add", "a.txt"]);
+    git(&["commit", "--quiet", "-m", "first"]);
+    std::fs::write(root.join("a.txt"), "stashed\n").unwrap();
+    std::fs::write(root.join("new.txt"), "untracked\n").unwrap();
+    git(&["stash", "push", "--include-untracked", "-m", "work"]);
+    let stash_oid = git(&["rev-parse", "stash@{0}"]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/api/v1/repositories/{repo_id}/stashes");
+    let post = |path: &str, payload: serde_json::Value| {
+        let app = app.clone();
+        let uri = format!("{base}{path}");
+        async move {
+            let response = app
+                .oneshot(json_request(Method::POST, &uri, &payload.to_string()))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+    let preview = |oid: String| {
+        let app = app.clone();
+        let uri = format!("{base}/preview?oid={oid}");
+        async move {
+            let response = app
+                .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+
+    // Authorization and validation.
+    assert_eq!(
+        app.clone()
+            .oneshot(request(&format!("{base}/preview?oid={stash_oid}"), None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &format!("{base}/drop"),
+            &serde_json::json!({ "oid": stash_oid }).to_string(),
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    assert_eq!(preview("nothex".into()).await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(preview("0".repeat(40)).await.0, StatusCode::NOT_FOUND);
+
+    // The preview lists tracked and untracked paths, and blocks over local edits.
+    let (status, clean) = preview(stash_oid.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(clean["paths"], serde_json::json!(["a.txt", "new.txt"]));
+    assert_eq!(clean["canApply"], true);
+    std::fs::write(root.join("a.txt"), "local edit\n").unwrap();
+    let (_, blocked) = preview(stash_oid.clone()).await;
+    assert_eq!(blocked["canApply"], false);
+    assert_eq!(
+        blocked["overlappingDirtyPaths"],
+        serde_json::json!(["a.txt"])
+    );
+    git(&["checkout", "--", "a.txt"]);
+
+    // Import keeps the working tree and the stash; the shelf is listed.
+    let (status, imported) = post(
+        "/import",
+        serde_json::json!({ "oid": stash_oid, "dropAfter": false }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{imported}");
+    assert_eq!(imported["name"], "work");
+    assert_eq!(imported["pathCount"], 2);
+    assert_eq!(imported["dropped"], false);
+    assert!(std::fs::read_to_string(root.join("a.txt"))
+        .unwrap()
+        .starts_with("one"));
+    assert!(!root.join("new.txt").exists());
+    let shelves = app
+        .clone()
+        .oneshot(request(
+            &format!("/api/v1/repositories/{repo_id}/shelves"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(shelves.into_body(), usize::MAX).await.unwrap();
+    let shelves: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(shelves.as_array().unwrap().len(), 1);
+
+    // Apply restores both parts and keeps the entry.
+    let (status, task) = post(
+        "/apply",
+        serde_json::json!({ "oid": stash_oid, "pop": false }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("a.txt"))
+            .unwrap()
+            .trim_end(),
+        "stashed"
+    );
+    assert_eq!(
+        std::fs::read_to_string(root.join("new.txt"))
+            .unwrap()
+            .trim_end(),
+        "untracked"
+    );
+    assert_eq!(git(&["stash", "list"]).lines().count(), 1);
+
+    // A stale HEAD is refused.
+    let (status, _) = post(
+        "/apply",
+        serde_json::json!({ "oid": stash_oid, "pop": true, "expectedHeadOid": "f".repeat(40) }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::CONFLICT);
+
+    // Pop over the already applied files fails and keeps the entry.
+    let (status, task) = post(
+        "/apply",
+        serde_json::json!({ "oid": stash_oid, "pop": true }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "failed"
+    );
+    assert_eq!(git(&["stash", "list"]).lines().count(), 1);
+
+    // After cleaning up, pop succeeds and removes the entry.
+    git(&["checkout", "--", "a.txt"]);
+    std::fs::remove_file(root.join("new.txt")).unwrap();
+    let (status, task) = post(
+        "/apply",
+        serde_json::json!({ "oid": stash_oid, "pop": true }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    assert!(git(&["stash", "list"]).is_empty());
+    assert_eq!(
+        post("/drop", serde_json::json!({ "oid": stash_oid }))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+
+    // Drop removes a second entry; import with dropAfter removes the entry after saving.
+    git(&["stash", "push", "-m", "second"]);
+    let second = git(&["rev-parse", "stash@{0}"]);
+    let (status, dropped) = post("/drop", serde_json::json!({ "oid": second })).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(dropped["oid"], second);
+    assert!(git(&["stash", "list"]).is_empty());
+    std::fs::write(root.join("a.txt"), "third\n").unwrap();
+    git(&["stash", "push", "-m", "third"]);
+    let third = git(&["rev-parse", "stash@{0}"]);
+    let (status, imported) = post(
+        "/import",
+        serde_json::json!({ "oid": third, "name": "kept", "dropAfter": true }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(imported["name"], "kept");
+    assert_eq!(imported["dropped"], true);
+    assert!(git(&["stash", "list"]).is_empty());
+}

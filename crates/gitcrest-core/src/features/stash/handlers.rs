@@ -1,18 +1,11 @@
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     Json,
 };
 
-use crate::{
-    api::error::{ApiError, ApiErrorCode},
-    state::AppState,
-};
+use crate::{api::error::ApiError, state::AppState};
 
-use super::{
-    dto::StashList,
-    service::{self, StashError},
-};
+use super::{dto::StashList, service};
 
 pub(super) async fn list_repository_stashes(
     State(state): State<AppState>,
@@ -25,17 +18,6 @@ pub(super) async fn list_repository_stashes(
         .map_err(ApiError::from_repository_error)?;
     let stashes = service::list(&target.repository_path)
         .await
-        .map_err(|error| match error {
-            StashError::GitUnavailable => ApiError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                ApiErrorCode::GitUnavailable,
-                "Git could not be started. Install Git or check that it is on PATH.",
-            ),
-            StashError::TimedOut | StashError::Failed => ApiError::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                ApiErrorCode::HistoryUnavailable,
-                "Git could not read the stash list.",
-            ),
-        })?;
+        .map_err(super::ops_handlers::api_error)?;
     Ok(Json(StashList { repo_id, stashes }))
 }

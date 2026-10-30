@@ -39,6 +39,7 @@ export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowC
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
 export type IgnoreRuleResponse = components["schemas"]["IgnoreRule"];
+export type StashPreviewResponse = components["schemas"]["StashPreview"];
 export type StashEntryResponse = components["schemas"]["StashEntry"];
 export type StashListResponse = components["schemas"]["StashList"];
 export type TagPageResponse = components["schemas"]["TagPage"];
@@ -339,6 +340,35 @@ export class GitCrestApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path, mode, target } satisfies components["schemas"]["IgnoreRuleRequest"]),
+    });
+  }
+
+  previewStash(repoId: RepoId, oid: string): Promise<StashPreviewResponse> {
+    const query = new URLSearchParams({ oid });
+    return this.request<StashPreviewResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/stashes/preview?${query}`);
+  }
+
+  applyStash(repoId: RepoId, oid: string, pop: boolean, expectedHeadOid: string | null): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/stashes/apply`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oid, pop, expectedHeadOid } satisfies components["schemas"]["StashApplyRequest"]),
+    });
+  }
+
+  dropStash(repoId: RepoId, oid: string): Promise<components["schemas"]["StashDropped"]> {
+    return this.request<components["schemas"]["StashDropped"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/stashes/drop`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oid } satisfies components["schemas"]["StashDropRequest"]),
+    });
+  }
+
+  importStash(repoId: RepoId, oid: string, name: string, dropAfter: boolean): Promise<components["schemas"]["StashImported"]> {
+    return this.request<components["schemas"]["StashImported"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/stashes/import`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ oid, name, dropAfter } satisfies components["schemas"]["StashImportRequest"]),
     });
   }
 

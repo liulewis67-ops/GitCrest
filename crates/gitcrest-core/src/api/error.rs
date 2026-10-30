@@ -95,6 +95,7 @@ pub(crate) enum ApiErrorCode {
     WorkflowNoActiveOperation,
     TagAlreadyExists,
     TagNotFound,
+    StashNotFound,
     InternalError,
 }
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiError, type CommitDetailResponse, type GitCrestApiClient, type StashEntryResponse } from "../../../api/client";
+import { GitCrestApiError, type CommitDetailResponse, type GitCrestApiClient, type StashEntryResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
+import { MenuButton } from "../../../shared/ui/MenuButton";
+import { StashActionDialog, type StashAction } from "./StashActionDialog";
 
 type StashFile = { path: string; oid: string; untracked: boolean; additions: number | null; deletions: number | null };
 
@@ -17,10 +19,16 @@ function formatDate(ms: number) {
  * Entries made with `git stash`, listed beside the shelves and marked as Git stash. They are read
  * only here: each shows its changed files, and a file opens in the usual read-only diff.
  */
-export function StashList({ api, repoId, refreshKey, onOpenFile }: {
+export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFile, onTaskStarted, onShelvesChanged }: {
   api: GitCrestApiClient;
   repoId: string;
   refreshKey: number;
+  /** Git operations cannot start now, so stash changes are unavailable. */
+  disabled?: boolean;
+  /** Apply or pop started as a background task. */
+  onTaskStarted?: (task: TaskSnapshotResponse) => void;
+  /** A stash was imported as a shelf, so the shelf list is out of date. */
+  onShelvesChanged?: () => void;
   /** Shows one file of a stash commit in the read-only diff. */
   onOpenFile: (path: string, oid: string) => void;
 }) {
@@ -32,6 +40,7 @@ export function StashList({ api, repoId, refreshKey, onOpenFile }: {
   const [filesError, setFilesError] = useState("");
   const [attempt, setAttempt] = useState(0);
   const requestRef = useRef(0);
+  const [action, setAction] = useState<{ kind: StashAction; stash: StashEntryResponse }>();
 
   useEffect(() => {
     const controller = new AbortController();
@@ -77,7 +86,7 @@ export function StashList({ api, repoId, refreshKey, onOpenFile }: {
   if (!error && (!stashes || stashes.length === 0)) return null;
   return <section className="stashList" aria-label={t("stash.title")}>
     <div className="navGroupTitle"><span>{t("stash.title")}</span>{stashes && <span className="countBadge">{stashes.length}</span>}</div>
-    <p className="cloneHelp">{t("stash.readOnlyHint")}</p>
+    <p className="cloneHelp">{t("stash.hint")}</p>
     {error && <div className="shelfInlineError" role="alert"><span>{error}</span> <button type="button" className="textButton" onClick={() => setAttempt((value) => value + 1)}>{t("stash.retry")}</button></div>}
     {stashes?.map((stash) => {
       const open = openOid === stash.oid;
@@ -86,6 +95,19 @@ export function StashList({ api, repoId, refreshKey, onOpenFile }: {
           <span className="shelfItemName" title={stash.message}>{stash.message || `stash@{${stash.index}}`}</span>
           <span className="shelfItemMeta"><span className="commitRefBadge">{t("stash.source")}</span> stash@{`{${stash.index}}`}{stash.branch ? ` · ${stash.branch}` : ""}{stash.untrackedOid ? ` · ${t("stash.hasUntracked")}` : ""} · {formatDate(stash.createdAtMs)}</span>
         </button>
+        <MenuButton
+          className="quietButton compact iconButton"
+          label={t("stash.actionsFor", { name: stash.message || `stash@{${stash.index}}` })}
+          title={t("stash.actions")}
+          menuLabel={t("stash.actionsFor", { name: stash.message || `stash@{${stash.index}}` })}
+          disabled={disabled}
+          items={[
+            { id: "apply", label: t("stash.apply"), onSelect: () => setAction({ kind: "apply", stash }) },
+            { id: "pop", label: t("stash.pop"), onSelect: () => setAction({ kind: "pop", stash }) },
+            { id: "import", label: t("stash.import"), separatorBefore: true, onSelect: () => setAction({ kind: "import", stash }) },
+            { id: "drop", label: t("stash.drop"), danger: true, separatorBefore: true, onSelect: () => setAction({ kind: "drop", stash }) },
+          ]}
+        ><span aria-hidden="true">⋯</span></MenuButton>
         {open && <div className="shelfDetail" role="region" aria-label={t("stash.filesAria", { name: stash.message })}>
           {!files && !filesError && <p role="status" className="cloneHelp">{t("stash.loadingFiles")}</p>}
           {filesError && <p role="alert" className="shelfInlineError">{filesError}</p>}
@@ -97,5 +119,15 @@ export function StashList({ api, repoId, refreshKey, onOpenFile }: {
         </div>}
       </div>;
     })}
+    {action && <StashActionDialog
+      api={api}
+      repoId={repoId}
+      stash={action.stash}
+      action={action.kind}
+      disabled={disabled}
+      onClose={() => setAction(undefined)}
+      onTaskStarted={(task) => { setAction(undefined); onTaskStarted?.(task); }}
+      onChanged={() => { const imported = action.kind === "import"; setAction(undefined); setOpenOid(undefined); setAttempt((value) => value + 1); if (imported) onShelvesChanged?.(); }}
+    />}
   </section>;
 }

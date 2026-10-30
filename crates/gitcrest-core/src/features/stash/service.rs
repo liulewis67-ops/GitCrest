@@ -9,6 +9,11 @@ const LIST_TIMEOUT: Duration = Duration::from_secs(10);
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum StashError {
+    /// A stash id is not a full object id.
+    Invalid,
+    /// No stash entry has this commit any more.
+    NotFound,
+    TooLarge,
     GitUnavailable,
     TimedOut,
     Failed,

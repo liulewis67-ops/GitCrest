@@ -1190,6 +1190,37 @@ impl GitCommandService {
         .await
     }
 
+    /// Applies a stash entry to the working tree; `pop` also drops it, but only when it applied cleanly.
+    pub async fn execute_stash_apply(
+        &self,
+        repository_path: &Path,
+        index: usize,
+        pop: bool,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let reference = format!("stash@{{{index}}}");
+        run_command(
+            &self.git_program,
+            vec![
+                "stash".into(),
+                if pop { "pop" } else { "apply" }.into(),
+                "--quiet".into(),
+                reference.into(),
+            ],
+            Some(format!(
+                "git stash {} stash@{{{index}}}",
+                if pop { "pop" } else { "apply" }
+            )),
+            None,
+            Vec::new(),
+            Vec::new(),
+            Some(repository_path),
+            if pop { "Pop stash" } else { "Apply stash" },
+            task,
+        )
+        .await
+    }
+
     /// The object a tag points at on the remote, or `None` when the remote has no such tag.
     pub async fn read_remote_tag(
         &self,

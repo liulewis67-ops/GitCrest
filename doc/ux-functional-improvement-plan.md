@@ -41,7 +41,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U3.1 | Tag list and tag labels on the graph | P0 | M | — | done |
 | U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | done |
 | U4.1 | Read existing `git stash` entries | P0 | M | D1 | done |
-| U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | not started |
+| U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | done |
 | U5.1 | Complete command-palette coverage | P0 | M | — | done |
 | U5.2 | Palette search, grouping and recent commands | P2 | S | U5.1 | not started |
 | U6.1 | Open in editor, terminal and browser | P1 | M | D3 | not started |
@@ -348,3 +348,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/ignore/`, `src/features/changes/ui/IgnoreRuleDialog.tsx`
 - Limits / follow-up: new `GET /repositories/{repoId}/ignore-preview` and `POST /repositories/{repoId}/ignore`. Untracked files and folders in Changes get "Add file to ignore list…", "Ignore all files with this extension…" and "Ignore the containing folder…". The dialog shows the line and the file first and offers the shared `.gitignore` or the private `.git/info/exclude`. Paths outside the repository, inside `.git`, or with line breaks are refused, and characters that gitignore reads specially are escaped. An existing identical line is not repeated. The status is refreshed after the write, so the file moves to the ignored group. Already-tracked files are not touched, as the menu only appears for untracked entries. No palette entry: the action is per file, and the palette has no file picker.
 - Commit: see git log (`feat: complete U9.1 add ignore rules from the Changes view`)
+
+### U4.2 — Apply, pop, drop or import a stash
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (215 tests; new `stash_operations_preview_apply_drop_and_import_without_losing_changes` covers 400, 401, 403, 404, the preview with and without blocking local edits, import with the entry kept, apply keeping the entry, a stale HEAD (409), a failed pop keeping the entry, a clean pop, drop, and import with drop), `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (488 tests; new `stash-actions.test.tsx`), `pnpm test:e2e` (38 tests).
+- Manual check: not run (app not started).
+- Evidence: `crates/gitcrest-core/src/features/stash/` (`ops.rs`, `ops_handlers.rs`), `src/features/shelves/ui/StashActionDialog.tsx`
+- Limits / follow-up: new `GET /stashes/preview` and `POST /stashes/apply`, `/stashes/drop`, `/stashes/import`. Every request names the entry by its stash commit, not its position, and finds it again before acting, so a list that changed in between is refused (404) instead of touching another entry. Apply and pop run as tasks and are refused (409) when HEAD moved after the review or an operation is in progress; the preview blocks them when local edits overlap the stash's files. Pop drops the entry only when it applied cleanly. "Import as shelf" writes a shelf (tracked changes plus the untracked files of a `-u` stash) without touching the working tree, and drops the entry only on request and after the shelf is saved. A conflicting apply fails the task, keeps the stash entry and leaves the conflicted files in Changes; it does not open the merge conflict window, because a stash apply creates no in-progress operation to continue or abort. A dropped entry's commit stays in Git until garbage collection. Palette entries for stash actions are not added: they need an entry picked from the list.
+- Commit: see git log (`feat: complete U4.2 apply, pop, drop and import git stash entries`)

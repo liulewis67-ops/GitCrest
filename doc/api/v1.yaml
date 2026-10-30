@@ -2508,6 +2508,109 @@ paths:
         "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "503": { description: Git could not read the stash list., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/stashes/preview:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: previewStash
+      summary: Review what applying a stash entry would touch
+      parameters:
+        - { name: oid, in: query, required: true, description: The stash commit from the stash list., schema: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" } }
+      responses:
+        "200":
+          description: The paths the entry changes and the local changes that block it.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/StashPreview" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository or the stash entry is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/stashes/apply:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: applyStash
+      summary: Queue applying (or popping) a stash entry
+      description: >-
+        The entry is found again by its commit when the task runs. Pop drops the entry only when it applied cleanly.
+        A conflicting apply leaves the entry in place and the conflicts in the working tree.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StashApplyRequest" } } }
+      responses:
+        "202":
+          description: Task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository or the stash entry is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "409": { description: A Git operation is in progress or HEAD moved after review., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/stashes/drop:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: dropStash
+      summary: Drop a stash entry that is still the reviewed commit
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StashDropRequest" } } }
+      responses:
+        "200":
+          description: The entry was dropped; its commit stays recoverable from Git until it is garbage collected.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/StashDropped" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository or the stash entry is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/stashes/import:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: importStash
+      summary: Save a stash entry as a shelf
+      description: >-
+        Writes a shelf from the entry, including the untracked files of a stash made with --include-untracked.
+        The working tree is not changed. The entry is dropped only when requested, and only after the shelf is saved.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StashImportRequest" } } }
+      responses:
+        "200":
+          description: The shelf that was saved.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/StashImported" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository or the stash entry is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "413": { description: The stash is too large to become a shelf., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/tags:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4563,6 +4666,60 @@ components:
         line: { type: string }
         file: { type: string }
         alreadyPresent: { type: boolean }
+    StashPreview:
+      type: object
+      additionalProperties: false
+      required: [repoId, oid, index, headOid, baseOid, paths, omittedPathCount, overlappingDirtyPaths, operationInProgress, canApply]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        oid: { type: string }
+        index: { type: integer, minimum: 0 }
+        headOid: { type: [string, "null"] }
+        baseOid: { type: [string, "null"] }
+        paths: { type: array, maxItems: 200, items: { type: string } }
+        omittedPathCount: { type: integer, minimum: 0 }
+        overlappingDirtyPaths: { type: array, items: { type: string }, description: Paths with local changes that the stash also changes. }
+        operationInProgress: { type: boolean }
+        canApply: { type: boolean }
+    StashApplyRequest:
+      type: object
+      additionalProperties: false
+      required: [oid, pop]
+      properties:
+        oid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        pop: { type: boolean }
+        expectedHeadOid: { type: [string, "null"], description: HEAD when the entry was reviewed; the apply is refused if it moved. }
+    StashDropRequest:
+      type: object
+      additionalProperties: false
+      required: [oid]
+      properties:
+        oid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+    StashDropped:
+      type: object
+      additionalProperties: false
+      required: [repoId, oid]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        oid: { type: string }
+    StashImportRequest:
+      type: object
+      additionalProperties: false
+      required: [oid, dropAfter]
+      properties:
+        oid: { type: string, minLength: 40, maxLength: 64, pattern: "^[0-9a-fA-F]+$" }
+        name: { type: [string, "null"], maxLength: 120 }
+        dropAfter: { type: boolean }
+    StashImported:
+      type: object
+      additionalProperties: false
+      required: [repoId, shelfId, name, pathCount, dropped]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        shelfId: { type: string }
+        name: { type: string }
+        pathCount: { type: integer, minimum: 0 }
+        dropped: { type: boolean }
     StashEntry:
       type: object
       additionalProperties: false
@@ -5680,6 +5837,7 @@ components:
         - CREDENTIALS_UNAVAILABLE
         - IDENTITY_UNAVAILABLE
         - TAG_NOT_FOUND
+        - STASH_NOT_FOUND
         - ACCOUNT_INPUT_INVALID
         - ACCOUNT_NOT_FOUND
         - ACCOUNT_TOKEN_REJECTED

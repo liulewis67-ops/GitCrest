@@ -318,7 +318,7 @@ export function ShelfCenter({
         </div>
       ))}
 
-      {onOpenCommitFile && <StashList api={api} repoId={repoId} refreshKey={refreshKey} onOpenFile={onOpenCommitFile} />}
+      {onOpenCommitFile && <StashList api={api} repoId={repoId} refreshKey={refreshKey} disabled={disabled} onOpenFile={onOpenCommitFile} onTaskStarted={(task) => onTaskSubmitted(task)} onShelvesChanged={() => void refreshShelves()} />}
 
       {detail && selectedShelfId && <section className="shelfDetail" aria-label={t("sh.previewAria", { name: detail.shelf.name })}>
         <div className="shelfDetailHeading"><strong>{detail.shelf.name}</strong><button type="button" className="textButton" onClick={() => { setDetail(undefined); setApplyPreview(undefined); }}>{t("sh.close")}</button></div>
