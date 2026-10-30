@@ -9,3 +9,4 @@ export { useRepositoryHistory } from "./model/use-repository-history";
 export { useRepositoryCommitDetail } from "./model/use-repository-commit-detail";
 export { useCommitTagCreation } from "./model/use-commit-tag-creation";
 export { useHistoryFilters } from "./model/use-history-filters";
+export { TagList } from "./ui/TagList";

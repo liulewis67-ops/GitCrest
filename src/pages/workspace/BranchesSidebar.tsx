@@ -2,6 +2,7 @@ import { lazy, Suspense, useState, type KeyboardEvent, type MouseEvent } from "r
 import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse, RepositoryResponse, TaskSnapshotResponse } from "../../api/client";
 import { loadRemoteManager } from "../../features/remotes";
 import { BranchRowMenu, BranchSyncBadge, WorktreeList } from "../../features/branches";
+import { TagList } from "../../features/history";
 import { displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n } from "../../shared/i18n";
 import { ContextMenu, type ContextMenuItem } from "../../shared/ui/ContextMenu";
@@ -54,6 +55,9 @@ interface BranchesSidebarProps {
   isMacPlatform: boolean;
   /** Full ref name of the branch whose history the commit graph shows. */
   selectedBranch?: string;
+  /** The commit selected in History, marked in the tag list when a tag points at it. */
+  selectedCommit?: string;
+  onSelectCommit?: (oid: string) => void;
   onSelectBranch: (branch: Branch) => void;
   onManageAccounts: (hosts: string[]) => void;
   onRefreshBranches: (repoId: string) => void;
@@ -90,7 +94,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
   const {
     repository, api, branches, orderedBranches, branchError, branchesLoading, remotes, remoteError, remotesLoading,
     remoteActionBusy, remoteDisabledReason, connected, hasActiveRepositoryTask, historyRefreshKey, shortcuts, isMacPlatform,
-    selectedBranch, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
+    selectedBranch, selectedCommit, onSelectCommit, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
     onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onOpenWorktree,
     onNewWorktreeForBranch, onNewWorktreeFrom, onRemoveWorktree, onRevealPath, onWorktreePruneStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
     onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream,
@@ -237,6 +241,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
           {remoteBranches.length > 0 && groupLabel(t("bs.remote"), remoteBranches.length, showRemote, showRemote ? t("bs.hideRemote") : t("bs.showRemote"), () => setRemoteGroupOpen((open) => !open))}
           {showRemote && remoteBranches.map(branchRow)}
         </ul>}
+        {api && onSelectCommit && <TagList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} selectedOid={selectedCommit} onSelectCommit={onSelectCommit} />}
         {api && <WorktreeList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} disabled={!connected || hasActiveRepositoryTask} onOpen={onOpenWorktree} onNewWorktreeFrom={onNewWorktreeFrom} onRemove={onRemoveWorktree} onReveal={onRevealPath} onPruneStarted={onWorktreePruneStarted} />}
         <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">{t("nav.loadingRemotes")}</div>}><RemoteManager
           snapshot={remotes}

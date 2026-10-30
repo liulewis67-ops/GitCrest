@@ -38,6 +38,8 @@ export type WorkflowConflictSaveRequest = components["schemas"]["WorkflowConflic
 export type WorkflowConflictSuggestionRequest = components["schemas"]["WorkflowConflictSuggestionRequest"];
 export type RemoteSnapshotResponse = components["schemas"]["RemoteSnapshot"];
 export type CredentialStatusResponse = components["schemas"]["CredentialStatus"];
+export type TagPageResponse = components["schemas"]["TagPage"];
+export type TagEntryResponse = components["schemas"]["TagEntry"];
 export type GitIdentityResponse = components["schemas"]["GitIdentity"];
 export type HostingProvider = components["schemas"]["HostingProvider"];
 export type AccountResponse = components["schemas"]["Account"];
@@ -321,6 +323,15 @@ export class GitCrestApiClient {
 
   getRepositoryRemotes(repoId: RepoId): Promise<RemoteSnapshotResponse> {
     return this.request<RemoteSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/remotes`);
+  }
+
+  getRepositoryTags(repoId: RepoId, options: { offset?: number; limit?: number; filter?: string; targets?: readonly string[] } = {}): Promise<TagPageResponse> {
+    const query = new URLSearchParams();
+    if (options.offset) query.set("offset", String(options.offset));
+    if (options.limit) query.set("limit", String(options.limit));
+    if (options.filter) query.set("filter", options.filter);
+    if (options.targets) query.set("targets", options.targets.join(","));
+    return this.request<TagPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/tags?${query}`);
   }
 
   getGlobalIdentity(): Promise<GitIdentityResponse> {

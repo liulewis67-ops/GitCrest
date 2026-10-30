@@ -7808,3 +7808,127 @@ async fn identity_api_reads_writes_and_clears_a_repository_identity() {
     assert_ne!(cleared["nameScope"], "local");
     assert_ne!(cleared["name"], "Ada Local");
 }
+
+#[tokio::test]
+async fn tag_list_api_pages_filters_and_distinguishes_annotated_tags() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("tags-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    git(&["add", "a.txt"]);
+    git(&["commit", "--quiet", "-m", "first"]);
+    let head = git(&["rev-parse", "HEAD"]);
+    git(&["tag", "light-1"]);
+    git(&["tag", "-a", "release-1", "-m", "Release one\n\nBody"]);
+    // Many tags can be written at once through update-ref --stdin.
+    let mut batch = String::new();
+    for index in 0..500 {
+        batch.push_str(&format!("create refs/tags/bulk-{index:04} {head}\n"));
+    }
+    let mut child = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["update-ref", "--stdin"])
+        .stdin(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    std::io::Write::write_all(child.stdin.as_mut().unwrap(), batch.as_bytes()).unwrap();
+    assert!(child.wait().unwrap().success());
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/api/v1/repositories/{repo_id}/tags");
+    let get = |query: &str| {
+        let app = app.clone();
+        let uri = format!("{base}{query}");
+        async move {
+            let response = app
+                .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap(),
+            )
+        }
+    };
+
+    assert_eq!(
+        app.clone()
+            .oneshot(request(&base, None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(get("?limit=0").await.0, StatusCode::BAD_REQUEST);
+    assert_eq!(get("?targets=not-hex").await.0, StatusCode::BAD_REQUEST);
+    let missing = app
+        .clone()
+        .oneshot(request(
+            "/api/v1/repositories/repo_missing/tags",
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    let (status, first) = get("?limit=50").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(first["tags"].as_array().unwrap().len(), 50);
+    assert_eq!(first["nextOffset"], 50);
+    let (_, last) = get("?offset=500&limit=50").await;
+    assert_eq!(last["tags"].as_array().unwrap().len(), 2);
+    assert!(last["nextOffset"].is_null());
+
+    let (_, found) = get("?filter=RELEASE").await;
+    let tags = found["tags"].as_array().unwrap();
+    assert_eq!(tags.len(), 1);
+    assert_eq!(tags[0]["name"], "release-1");
+    assert_eq!(tags[0]["annotated"], true);
+    assert_eq!(tags[0]["message"], "Release one");
+    assert_eq!(tags[0]["targetOid"], head);
+    let (_, light) = get("?filter=light-1").await;
+    assert_eq!(light["tags"][0]["annotated"], false);
+
+    let (_, by_target) = get(&format!("?targets={head}&filter=1&limit=500")).await;
+    assert!(by_target["tags"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|tag| tag["targetOid"] == head));
+    let (_, none) = get(&format!("?targets={}", "0".repeat(40))).await;
+    assert!(none["tags"].as_array().unwrap().is_empty());
+}

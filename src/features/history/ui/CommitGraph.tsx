@@ -6,6 +6,7 @@ import type { GitCrestApiClient } from "../../../api/client";
 import type { components } from "../../../api/schema";
 import { useHistoryFilters } from "../model/use-history-filters";
 import { useRepositoryHistory } from "../model/use-repository-history";
+import { useCommitTags, type CommitTagLabel } from "../model/use-commit-tags";
 import { formatCommitDate } from "./format-commit-date";
 
 const OVERSCAN = 8;
@@ -38,12 +39,14 @@ type CommitGraphProps = {
 };
 
 const NO_REFS: string[] = [];
+const NO_TAGS: CommitTagLabel[] = [];
 
 const CommitGraphEntry = memo(function CommitGraphEntry({
   commit,
   index,
   lane,
   refNames,
+  tagLabels,
   selected,
   tabIndex,
   onSelect,
@@ -53,17 +56,19 @@ const CommitGraphEntry = memo(function CommitGraphEntry({
   index: number;
   lane: number;
   refNames: string[];
+  tagLabels: CommitTagLabel[];
   selected: boolean;
   tabIndex: 0 | -1;
   onSelect: (oid: string) => void;
   onMoveFocus: (event: KeyboardEvent<HTMLButtonElement>, index: number) => void;
 }) {
   const { t } = useI18n();
-  return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${refNames.length ? `, ${refNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
+  const allNames = tagLabels.length ? [...refNames, ...tagLabels.map((tag) => tag.name)] : refNames;
+  return <button className={`commitGraphEntry${selected ? " selected" : ""}`} type="button" data-commit-index={index} data-commit-oid={commit.oid} style={{ paddingLeft: lane * 20 + 42 }} aria-current={selected ? "true" : undefined} aria-label={`${commit.subject}, ${commit.authorName}, ${formatCommitDate(commit.committedAtMs)}, ${commit.oid.slice(0, 12)}${allNames.length ? `, ${allNames.join(", ")}` : ""}`} tabIndex={tabIndex} onClick={() => onSelect(commit.oid)} onKeyDown={(event) => onMoveFocus(event, index)}>
     <span className={`commitGraphNode ${laneClass(lane)}${commit.parents.length > 1 ? " merge" : ""}`} style={{ left: lane * 20 + 16 }} aria-hidden="true" />
     <span className="commitGraphText"><span className="commitGraphSubject">{commit.subject || t("push.noSubject")}</span><span className="commitGraphMeta">{commit.authorName} · {formatCommitDate(commit.committedAtMs)}</span></span>
     <span className="commitGraphOid">{commit.oid.slice(0, 8)}</span>
-    {refNames.length > 0 && <span className="commitGraphRefs" title={refNames.join(", ")}>{refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}{refNames.length > 1 && <span className="commitRefMore" aria-hidden="true">+{refNames.length - 1}</span>}</span>}
+    {allNames.length > 0 && <span className="commitGraphRefs" title={allNames.join(", ")}>{refNames.map((name) => <span className="commitRefBadge" key={name}>{name}</span>)}{tagLabels.map((tag) => <span className={`commitRefBadge commitTagBadge${tag.annotated ? " annotated" : ""}`} key={`tag:${tag.name}`} title={t(tag.annotated ? "hist.tagAnnotated" : "hist.tagLightweight", { name: tag.name })}><span aria-hidden="true">{tag.annotated ? "◆" : "◇"} </span>{tag.name}</span>)}{allNames.length > 1 && <span className="commitRefMore" aria-hidden="true">+{allNames.length - 1}</span>}</span>}
   </button>;
 });
 
@@ -149,6 +154,8 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     });
     return { laneByOid, edgesByFrom, maxLane: Math.max(0, nextLane - 1) };
   }, [commits]);
+  const loadedOids = useMemo(() => commits.map((commit) => commit.oid), [commits]);
+  const tagsByOid = useCommitTags(api, repoId, loadedOids, refreshKey);
   const refNamesByOid = useMemo(() => {
     const namesByOid = new Map<string, string[]>();
     for (const ref of refs) {
@@ -274,6 +281,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
                     index={index}
                     lane={lane}
                     refNames={refNames}
+                    tagLabels={tagsByOid.get(commit.oid) || NO_TAGS}
                     selected={selected}
                     tabIndex={selected || (!selectedOid && index === 0) ? 0 : -1}
                     onSelect={onSelect}

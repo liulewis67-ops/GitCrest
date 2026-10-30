@@ -38,7 +38,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U2.1 | Check out a commit (detached HEAD) | P0 | M | — | done |
 | U2.2 | Reset to a commit from the history row | P0 | S | — | done |
 | U2.3 | Copy and reuse a commit message | P0 | S | — | done |
-| U3.1 | Tag list and tag labels on the graph | P0 | M | — | not started |
+| U3.1 | Tag list and tag labels on the graph | P0 | M | — | done |
 | U3.2 | Delete and push tags; push with tags | P0 | M | U3.1 | not started |
 | U4.1 | Read existing `git stash` entries | P0 | M | D1 | not started |
 | U4.2 | Apply, pop, drop or import a stash | P1 | M | U4.1 | not started |
@@ -302,3 +302,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `.gitignore`
 - Limits / follow-up: the three folders are ignored, not deleted; they are local build output and can be removed by hand.
 - Commit: see git log (`chore: complete U14.2 ignore local dist-* build folders`)
+
+### U3.1 — Tag list and tag labels on the graph
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (207 tests; new `tag_list_api_pages_filters_and_distinguishes_annotated_tags` covers 401, 400, 404, paging over 500 tags, name filter, target filter and annotated vs lightweight), `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (459 tests; new `tag-list.test.tsx`), `pnpm test:e2e` (38 tests).
+- Manual check: not run (app not started). Timing on this machine: `git for-each-ref` over 10,000 tags took 1.5 s with names only, but 8–10 s as soon as tag objects were read. The endpoint therefore reads names and peeled targets only and loads tagger, date and message just for the annotated tags on the returned page.
+- Evidence: `crates/gitcrest-core/src/features/tags/listing.rs`, `src/features/history/ui/TagList.tsx`, `src/features/history/model/use-commit-tags.ts`
+- Limits / follow-up: `GET /repositories/{repoId}/tags` pages by version-sorted name (newest version first), not by date, because sorting by date needs every tag object. Lightweight tags have no date or message. The 100k-commit S7.2 first-frame benchmark was not re-run; the first snapshot is unchanged because tags still stay out of `/refs`, and the sidebar and graph labels load afterwards. Graph labels are fetched per page of loaded commits (100 commits per request). A lightweight tag on a non-commit object is not detected without reading the object. Annotated and lightweight tags differ by marker (◆/◇) and badge border.
+- Commit: see git log (`feat: complete U3.1 list tags and label them on the commit graph`)

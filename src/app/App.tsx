@@ -1201,6 +1201,8 @@ function App() {
               shortcuts={shortcuts}
               isMacPlatform={isMacPlatform}
               selectedBranch={shownHistoryBranch?.fullName}
+              selectedCommit={selectedCommit}
+              onSelectCommit={selectCommit}
               onSelectBranch={(branch) => {
                 setHistoryBranch({ repoId: selectedRepository.repoId, fullName: branch.fullName });
                 if (isFullGitObjectId(branch.oid)) selectCommit(branch.oid);

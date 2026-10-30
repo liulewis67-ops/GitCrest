@@ -1234,6 +1234,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/tags": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Page through tags, newest version first, optionally filtered by name or target commit */
+        get: operations["getRepositoryTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/commits/{oid}/tags": {
         parameters: {
             query?: never;
@@ -2005,6 +2026,23 @@ export interface components {
         BranchFavoriteRequest: {
             fullName: string;
             favorite: boolean;
+        };
+        TagEntry: {
+            name: string;
+            /** @description The commit the tag points at. */
+            targetOid: string;
+            annotated: boolean;
+            taggerName: string | null;
+            createdAtMs: number | null;
+            /** @description First line of an annotated tag's message. */
+            message: string | null;
+        };
+        TagPage: {
+            repoId: components["schemas"]["RepoId"];
+            offset: number;
+            limit: number;
+            tags: components["schemas"]["TagEntry"][];
+            nextOffset: number | null;
         };
         GitIdentity: {
             name: string | null;
@@ -6325,6 +6363,60 @@ export interface operations {
             };
             /** @description Git diff exceeded its deadline. */
             504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getRepositoryTags: {
+        parameters: {
+            query?: {
+                offset?: number;
+                limit?: number;
+                /** @description Case-insensitive part of the tag name. */
+                filter?: string;
+                /** @description Comma-separated commit ids (at most 200); only tags that point at one of them are listed. */
+                targets?: string;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description One page of tags that point at commits. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Git could not list tags. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

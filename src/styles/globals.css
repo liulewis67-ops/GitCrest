@@ -1537,3 +1537,22 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .structureOutlineTools button { padding: 1px 7px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface); color: var(--text-secondary); font-size: var(--type-2xs); cursor: pointer; }
 .structureOutlineTools button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent-strong); background: var(--accent-soft); }
 .structureOutlineTools button:disabled { opacity: .55; cursor: default; }
+
+/* Tags: a solid badge for an annotated tag, a dashed one for a lightweight tag. */
+.commitTagBadge { border-style: dashed; color: var(--text); }
+.commitTagBadge.annotated { border-style: solid; color: var(--accent-strong); font-weight: 650; }
+.tagList { display: grid; gap: var(--space-1); margin-top: var(--space-2); }
+.tagListHeader { display: flex; align-items: center; gap: var(--space-2); min-height: calc(30px * var(--density)); font-size: var(--type-sm); font-weight: 650; }
+.tagListItem { display: flex; align-items: center; gap: var(--space-2); width: 100%; min-width: 0; min-height: calc(26px * var(--density)); padding: 0 var(--space-1); border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text); font: inherit; font-size: var(--type-sm); text-align: left; cursor: pointer; }
+.tagListItem:hover { background: var(--surface-raised); }
+.tagListItem.selected { background: var(--surface-raised); box-shadow: inset 2px 0 0 var(--accent); }
+.tagListItem .tagName { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tagListItem .tagKind { flex: none; color: var(--text-muted); }
+.tagListItem.annotated .tagKind { color: var(--accent-strong); }
+.identityEditor { display: grid; gap: var(--space-2); padding: var(--space-2) 0; }
+.identityEditor label { display: grid; gap: var(--space-1); font-size: var(--type-sm); }
+.identityScope { display: flex; flex-wrap: wrap; gap: var(--space-3); border: 0; margin: 0; padding: 0; }
+.identityScope legend { padding: 0; font-size: var(--type-sm); }
+.identityScope label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.identityActions { display: flex; align-items: center; gap: var(--space-3); }
+.identityNotice { display: grid; gap: var(--space-1); }

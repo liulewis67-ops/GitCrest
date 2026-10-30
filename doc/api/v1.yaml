@@ -2431,6 +2431,43 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiErrorResponse"
+  /api/v1/repositories/{repoId}/tags:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositoryTags
+      summary: Page through tags, newest version first, optionally filtered by name or target commit
+      parameters:
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+        - name: filter
+          in: query
+          required: false
+          description: Case-insensitive part of the tag name.
+          schema: { type: string, maxLength: 255 }
+        - name: targets
+          in: query
+          required: false
+          description: Comma-separated commit ids (at most 200); only tags that point at one of them are listed.
+          schema: { type: string }
+      responses:
+        "200":
+          description: One page of tags that point at commits.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TagPage" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not list tags., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/commits/{oid}/tags:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4282,6 +4319,27 @@ components:
       properties:
         fullName: { type: string, minLength: 1 }
         favorite: { type: boolean }
+    TagEntry:
+      type: object
+      additionalProperties: false
+      required: [name, targetOid, annotated, taggerName, createdAtMs, message]
+      properties:
+        name: { type: string }
+        targetOid: { type: string, description: The commit the tag points at. }
+        annotated: { type: boolean }
+        taggerName: { type: [string, "null"] }
+        createdAtMs: { type: [integer, "null"] }
+        message: { type: [string, "null"], description: First line of an annotated tag's message. }
+    TagPage:
+      type: object
+      additionalProperties: false
+      required: [repoId, offset, limit, tags, nextOffset]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        tags: { type: array, items: { $ref: "#/components/schemas/TagEntry" } }
+        nextOffset: { type: [integer, "null"] }
     GitIdentity:
       type: object
       additionalProperties: false
