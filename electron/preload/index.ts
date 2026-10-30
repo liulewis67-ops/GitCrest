@@ -51,6 +51,12 @@ const api = {
   setExternalEditor: (choice: unknown): Promise<unknown> => ipcRenderer.invoke("gitcrest:external-tools-set-editor", choice),
   openInEditor: (request: unknown): Promise<unknown> => ipcRenderer.invoke("gitcrest:open-in-editor", request),
   openInTerminal: (request: unknown): Promise<unknown> => ipcRenderer.invoke("gitcrest:open-in-terminal", request),
+  showNotification: (request: unknown): Promise<boolean> => ipcRenderer.invoke("gitcrest:show-notification", request),
+  subscribeToNotificationClicks: (listener: (target: { repoId?: string; taskId: string }) => void): (() => void) => {
+    const handle = (_event: Electron.IpcRendererEvent, target: { repoId?: string; taskId: string }): void => listener(target);
+    ipcRenderer.on("gitcrest:notification-click", handle);
+    return () => ipcRenderer.removeListener("gitcrest:notification-click", handle);
+  },
   openExternalUrl: (url: string): Promise<boolean> => ipcRenderer.invoke("gitcrest:open-external-url", url),
   setZoomFactor: (factor: number): void => {
     // Only a sane factor reaches the window, whatever the renderer asks for.

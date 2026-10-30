@@ -47,7 +47,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U6.1 | Open in editor, terminal and browser | P1 | M | D3 | done |
 | U6.2 | Drop a folder to open a repository | P1 | S | — | done |
 | U7.1 | Background fetch | P1 | M | D2 | done |
-| U7.2 | System notifications for long tasks | P1 | S | — | not started |
+| U7.2 | System notifications for long tasks | P1 | S | — | done |
 | U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | not started |
 | U9.1 | Add to `.gitignore` from Changes | P1 | S | — | done |
 | U9.2 | Reflog view and lost-commit recovery | P1 | M | — | not started |
@@ -409,3 +409,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/features/remotes/model/use-background-fetch.ts`, `crates/gitcrest-core/src/features/remotes/handlers.rs`
 - Limits / follow-up: `POST /repositories/{repoId}/fetch` takes an optional `background` flag. It runs as the operation `fetchBackground` (shown as that in the task list, apart from a manual `fetch`) and is refused with 409 when the repository has a queued or running task, so it never waits in front of the user's work. The renderer checks the schedule every 30 seconds for the open repository only, needs it to be connected, available, have remotes and no task, skips a hidden or offline window, and records the task without opening the task list. A skipped (409) fetch is retried after about a minute. If a scheduled fetch fails to sign in, one notice appears and that repository is not asked again until the user's own fetch succeeds or a background-fetch setting changes; other failures wait for the next interval. Repositories in other tabs are not fetched. The "metered network" pause is not implemented.
 - Commit: see git log (`feat: complete U7.1 fetch the open repository in the background`)
+
+### U7.2 — System notifications for long tasks
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (216 tests; the background-fetch test now also pushes a commit from another clone and checks that the fetch log names the moved refs with `->`, which the new-commits detection relies on), `tsc --noEmit` (both configs), `pnpm build`, `pnpm frontend:boundaries`, `vitest run` (573 tests; new `task-notifications.test.tsx`), `pnpm test:e2e` (38 tests, after the build; the desktop test also checks that Electron's main process drops a malformed notification request).
+- Manual check: not run. No system notification was shown on screen, and clicking one to bring the window back and open the task list was not exercised in a real window.
+- Evidence: `src/features/tasks/model/task-notification.ts`, `src/features/tasks/model/use-task-notifications.ts`, `electron/main/index.ts`
+- Limits / follow-up: a notification is raised when push, pull, clone, a fetch whose log shows moved refs, or any other task fails, and only if the task was seen running before and the window is not focused. A scheduled fetch that fails is left to the in-app notice. The text is fixed per kind plus the repository's name; nothing from the task's message or log is used, so a URL or credential cannot reach it (checked by a test). The main process checks the request, shows it only when the window is not focused, and a click restores and focuses the window, selects the repository and opens the task list. Settings → General has a switch (on by default). A task that finishes between two polls without ever being seen running is not announced. Palette entry: none, since this is a setting rather than an action.
+- Commit: see git log (`feat: complete U7.2 notify when long tasks end in the background`)

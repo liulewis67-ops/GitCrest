@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { delimiter, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { BrowserWindow, app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
+import { BrowserWindow, Notification, app, dialog, ipcMain, shell, type IpcMainInvokeEvent, type WebContents } from "electron";
 import type { CoreStatus } from "../../src/api/core-status";
 import { CoreRestartPolicy } from "./core-supervisor";
 import {
@@ -381,6 +381,37 @@ ipcMain.handle("gitcrest:open-in-terminal", async (event, value: unknown): Promi
   requireMainWindow(event);
   const target = await repositoryTarget(value);
   return target ? openInTerminal(target, externalToolsEnvironment) : BAD_PATH;
+});
+
+interface NotificationRequest { title: string; body: string; repoId?: string; taskId: string }
+
+function parseNotificationRequest(value: unknown): NotificationRequest | undefined {
+  const request = value as Partial<NotificationRequest> | null;
+  if (!request || typeof request !== "object") return undefined;
+  const { title, body, repoId, taskId } = request;
+  if (typeof title !== "string" || title.length === 0 || title.length > 120) return undefined;
+  if (typeof body !== "string" || body.length > 300) return undefined;
+  if (typeof taskId !== "string" || taskId.length === 0 || taskId.length > 200) return undefined;
+  if (repoId !== undefined && (typeof repoId !== "string" || repoId.length > 200)) return undefined;
+  return { title, body, taskId, ...(repoId ? { repoId } : {}) };
+}
+
+// A notification is only raised while the window is not in front, and clicking it brings the window back.
+ipcMain.handle("gitcrest:show-notification", (event, value: unknown): boolean => {
+  requireMainWindow(event);
+  const request = parseNotificationRequest(value);
+  const window = mainWindow;
+  if (!request || !window || window.isDestroyed() || window.isFocused() || !Notification.isSupported()) return false;
+  const notification = new Notification({ title: request.title, body: request.body, silent: false });
+  notification.on("click", () => {
+    if (window.isDestroyed()) return;
+    if (window.isMinimized()) window.restore();
+    window.show();
+    window.focus();
+    window.webContents.send("gitcrest:notification-click", { repoId: request.repoId, taskId: request.taskId });
+  });
+  notification.show();
+  return true;
 });
 
 ipcMain.handle("gitcrest:open-external-url", (event, value: unknown): boolean => {

@@ -8745,13 +8745,35 @@ async fn background_fetch_runs_as_its_own_operation_and_is_skipped_while_a_task_
         "succeeded"
     );
     run(&root, &["config", "--unset", "remote.origin.uploadpack"]);
+    // Someone else pushes a commit, so the scheduled fetch has something to bring in.
+    let other = directory.path().join("other");
+    std::process::Command::new("git")
+        .args(["clone", "--quiet"])
+        .arg(&bare)
+        .arg(&other)
+        .output()
+        .unwrap();
+    run(&other, &["config", "user.name", "Other"]);
+    run(&other, &["config", "user.email", "other@example.invalid"]);
+    std::fs::write(other.join("b.txt"), "two\n").unwrap();
+    run(&other, &["add", "b.txt"]);
+    run(&other, &["commit", "--quiet", "-m", "from someone else"]);
+    run(&other, &["push", "--quiet"]);
     let (status, background) =
         post(serde_json::json!({ "prune": false, "background": true })).await;
     assert_eq!(status, StatusCode::ACCEPTED);
     assert_eq!(background["operation"], "fetchBackground");
-    assert_eq!(
-        wait_for_task(&app, background["taskId"].as_str().unwrap()).await["status"],
-        "succeeded"
+    let finished = wait_for_task(&app, background["taskId"].as_str().unwrap()).await;
+    assert_eq!(finished["status"], "succeeded");
+    // The log names the refs that moved, which is how the app tells a fetch that brought something.
+    assert!(
+        finished["logs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|line| line.as_str().is_some_and(|text| text.contains("->"))),
+        "{}",
+        finished["logs"]
     );
 
     // The flag is optional for existing callers and must be a boolean.

@@ -385,6 +385,7 @@ describe("desktop startup E2E", () => {
           escapingPath: await bridge.openInTerminal({ repoId, relativePath: "../outside" }),
           absolutePath: await bridge.openInEditor({ repoId, relativePath: "C:\\Windows" }),
           nonWebUrl: await bridge.openExternalUrl("file:///etc/passwd").catch(() => "rejected"),
+          badNotification: await (globalThis.window as unknown as { gitcrest: { showNotification: (request: unknown) => Promise<boolean> } }).gitcrest.showNotification({ title: "", body: "x", taskId: "t" }),
         };
       }, opened.body.repoId as string);
       expect(externalTools.tools.editor.kind).toBe("auto");
@@ -394,6 +395,8 @@ describe("desktop startup E2E", () => {
       expect(externalTools.absolutePath).toMatchObject({ ok: false, code: "badPath" });
       // The address is checked and dropped without opening anything; the call itself still succeeds.
       expect(externalTools.nonWebUrl).toBe(true);
+      // A malformed notification request is dropped by the main process.
+      expect(externalTools.badNotification).toBe(false);
 
       await window.keyboard.press("Control+k");
       const commandPalette = window.getByRole("dialog", { name: "Command palette" });

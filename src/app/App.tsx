@@ -28,7 +28,7 @@ import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGrap
 import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { useLanguageRegistry } from "../features/languages";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, loadRemoveWorktreeDialog, useOpenCreatedWorktree, WorktreeSwitcher, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
-import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskRefreshLifecycle } from "../features/tasks";
+import { loadTaskCenter, supportsWorkflowRecovery, useTaskCenter, useTaskRefreshEffects, useTaskNotifications, useTaskRefreshLifecycle } from "../features/tasks";
 import { getRemoteActionDisabledReasons, loadPullDialog, loadPushDialog, loadPushTargetDialog, useBackgroundFetch, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush, type PushTarget } from "../features/remotes";
 import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAdoptInProgressWorkflow, useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../features/workflows";
 
@@ -209,6 +209,25 @@ function App() {
     void bridge.openExternalUrl(url).then((opened) => { if (!opened) setNotice(t("tools.openFailed")); }, () => setNotice(t("tools.openFailed")));
   }
 
+  useTaskNotifications({
+    tasks,
+    repositoryName: (repoId) => {
+      const repository = repositories.find((entry) => entry.repoId === repoId);
+      return repository ? getRepositoryDisplayName(repository.path) : undefined;
+    },
+    notify: getGitCrestBridge()?.showNotification ? (request) => { void getGitCrestBridge()?.showNotification?.(request); } : undefined,
+  });
+  // Clicking a notification shows the repository and the task list.
+  useEffect(() => {
+    return getGitCrestBridge()?.subscribeToNotificationClicks?.((target) => {
+      const repository = target.repoId ? repositories.find((entry) => entry.repoId === target.repoId) : undefined;
+      if (repository) {
+        activateRepository(repository);
+        setPage("workspace");
+      }
+      setTasksOpen(true);
+    });
+  }, [repositories]);
   const folderDragging = useFolderDrop({
     onFolder: (path) => { void repositoryOpening.openAtPath(path); },
     onProblem: (message) => { setOpenError(message); setNotice(message); },

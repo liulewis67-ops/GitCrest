@@ -92,6 +92,10 @@ export interface GitCrestBridge {
   /** Opens the repository, or a file or folder inside it, in the chosen editor. */
   openInEditor?: (request: GitCrestOpenRequest) => Promise<GitCrestOpenResult>;
   openInTerminal?: (request: GitCrestOpenRequest) => Promise<GitCrestOpenResult>;
+  /** Main window only: raises a system notification, but only while the window is not in front. */
+  showNotification?: (request: { title: string; body: string; repoId?: string; taskId: string }) => Promise<boolean>;
+  /** Called when the user clicks a notification; the window has already been brought to the front. */
+  subscribeToNotificationClicks?: (listener: (target: { repoId?: string; taskId: string }) => void) => () => void;
   /** Opens an http or https address in the default browser. */
   openExternalUrl?: (url: string) => Promise<boolean>;
   /** The disk path of a dropped file or folder. */

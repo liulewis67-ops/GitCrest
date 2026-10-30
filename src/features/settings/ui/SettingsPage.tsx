@@ -21,6 +21,7 @@ import { LanguagesSection } from "../../languages";
 import { GitIdentityEditor } from "../../identity";
 import { ExternalToolsSettings } from "./ExternalToolsSettings";
 import { BackgroundFetchSettings } from "../../remotes";
+import { NotificationSettings } from "../../tasks";
 
 export function SettingsPage({
   api,
@@ -161,6 +162,9 @@ export function SettingsPage({
                   <div className="settingsRowText"><span>{t("bf.title")}</span><p>{t("bf.description")}</p></div>
                 </div>
                 <BackgroundFetchSettings repoId={repoId} />
+              </div>
+              <div className="settingsCard">
+                <NotificationSettings />
               </div>
             </section>
 
