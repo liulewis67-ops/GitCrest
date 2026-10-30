@@ -925,6 +925,10 @@ impl GitCommandService {
                 ],
                 "Switch branch",
             ),
+            BranchCommand::SwitchDetached { oid } => (
+                vec!["switch".into(), "--detach".into(), "--".into(), oid.into()],
+                "Check out commit",
+            ),
             BranchCommand::SwitchTracking {
                 local_branch,
                 remote_ref,

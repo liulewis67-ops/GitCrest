@@ -969,6 +969,7 @@ function App() {
       onCreateBranch={setCreateBranchAt}
       onCreateTag={openTagEditor}
       onCopySha={(target) => void copyCommitSha(target)}
+      onCheckout={(target) => branchSwitcher.checkoutCommit(target)}
       onReset={(target) => workflowDialog.openReset(target)}
       resetDisabledReason={activeBranches?.branches.find((branch) => branch.isCurrent)?.oid === oid ? t("hv.resetIsHead") : undefined}
     />;
@@ -1079,6 +1080,8 @@ function App() {
           onToggleSidebar={toggleSidebar}
           onToggleInspector={toggleInspector}
           onOpenTasks={() => setTasksOpen(true)}
+          returnBranch={(selectedRepository ? branchSwitcher.returnBranches[selectedRepository.repoId] : undefined)}
+          onReturnToBranch={(name) => { branchSwitcher.openSwitcher(); void branchSwitcher.inspect(name); }}
           onCreateBranchAtHead={() => { if (isFullGitObjectId(selectedRepository?.head)) setCreateBranchAt(selectedRepository.head); }}
           onOpenRepository={() => void repositoryOpening.chooseAndOpenLocal()}
         >

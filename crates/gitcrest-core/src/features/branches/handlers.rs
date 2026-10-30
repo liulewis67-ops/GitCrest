@@ -7,9 +7,10 @@ use axum::{
 use super::local_files;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
-    domain::branch::BranchCommand,
+    domain::{branch::BranchCommand, error::WorkflowError},
     features::branches,
     features::repositories::{Repository, TaskTarget},
+    ports::git::GitReadPort,
     AppState, TaskFailure, TaskSnapshot,
 };
 
@@ -1034,7 +1035,10 @@ pub(super) async fn preflight_branch_switch(
         )
     })?;
     // A remote target is compared with its last fetched state; the switch fetches and checks again.
-    let (target, metadata, compare_ref, local_branch, creates_local_branch) = if request.remote {
+    let (target, metadata, compare_ref, local_branch, creates_local_branch) = if request.commit {
+        let (target, metadata, oid) = commit_for_checkout(&state, &repo_id, &request.name).await?;
+        (target, metadata, oid.clone(), oid, false)
+    } else if request.remote {
         let target = state
             .repository_targets
             .task_target(&repo_id)
@@ -1095,6 +1099,7 @@ pub(super) async fn preflight_branch_switch(
         target: request.name,
         local_branch,
         creates_local_branch,
+        detached: request.commit,
         is_clean: dirty_files.is_empty(),
         dirty_files,
         potentially_overwritten_paths,
@@ -1113,6 +1118,9 @@ pub(super) async fn switch_repository_branch(
             "A target branch name is required.",
         )
     })?;
+    if request.commit {
+        return switch_to_commit(state, repo_id, request.name).await;
+    }
     if request.remote {
         return switch_to_remote_branch(state, repo_id, request.name).await;
     }
@@ -1174,6 +1182,111 @@ pub(super) async fn switch_repository_branch(
                 .refresh_metadata(&repo_for_check)
                 .await
                 .map_err(|_| TaskFailure::Failed("Branch switched but repository metadata could not be refreshed.".into()))?;
+            Ok(None)
+        }).await.map_err(ApiError::task_submit)?;
+    Ok((StatusCode::ACCEPTED, Json(task)))
+}
+
+/// Resolves a commit id typed by the client to a full object id that names a commit.
+async fn commit_for_checkout(
+    state: &AppState,
+    repo_id: &str,
+    name: &str,
+) -> Result<(TaskTarget, Repository, String), ApiError> {
+    if !(4..=64).contains(&name.len()) || !name.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A commit id is required.",
+        ));
+    }
+    let target = state
+        .repository_targets
+        .task_target(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let oid = state
+        .git_commands
+        .resolve_commit_target(&target.repository_path, name)
+        .await
+        // The id is well-formed hex, so a failed lookup means no such commit.
+        .map_err(|error| match error {
+            WorkflowError::GitFailed => {
+                ApiError::from_workflow_error(WorkflowError::CommitNotFound)
+            }
+            other => ApiError::from_workflow_error(other),
+        })?;
+    let metadata = state
+        .repositories
+        .refresh_metadata(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    Ok((target, metadata, oid))
+}
+
+/// Checks out a commit with a detached HEAD, under the same overlap rules as a branch switch.
+async fn switch_to_commit(
+    state: AppState,
+    repo_id: String,
+    name: String,
+) -> Result<(StatusCode, Json<TaskSnapshot>), ApiError> {
+    let (target, metadata, oid) = commit_for_checkout(&state, &repo_id, &name).await?;
+    branches::ensure_branch_not_current(metadata.head.as_deref(), &oid)
+        .map_err(ApiError::from_branch_error)?;
+    let status = state
+        .status
+        .snapshot(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    let dirty_files = status
+        .files
+        .iter()
+        .filter(|file| file.has_unignored_changes())
+        .map(|file| file.path.clone())
+        .collect::<Vec<_>>();
+    branches::ensure_no_dirty_path_overlap_with_git(
+        &target.repository_path,
+        metadata.head.as_deref(),
+        &oid,
+        &dirty_files,
+        state.branch_git.as_ref(),
+    )
+    .await
+    .map_err(ApiError::from_branch_error)?;
+    let expected_head = metadata.head.clone();
+    let expected_branch = metadata.branch.clone();
+    let path = target.repository_path;
+    let repo_for_check = repo_id.clone();
+    let repositories = state.repositories.clone();
+    let status_service = state.status.clone();
+    let command = state.git_commands.clone();
+    let branch_git = state.branch_git.clone();
+    let task = state
+        .tasks
+        .submit(Some(repo_id), None, target.resource_key, "branchSwitchCommit", move |context| async move {
+            let fresh_repository = repositories
+                .refresh_metadata(&repo_for_check)
+                .await
+                .map_err(|_| TaskFailure::Failed("Could not verify the current branch before checking out.".into()))?;
+            if fresh_repository.head != expected_head || fresh_repository.branch != expected_branch {
+                return Err(TaskFailure::Failed("The current branch changed. Review branch state and retry the checkout.".into()));
+            }
+            let fresh_status = status_service.snapshot(&repo_for_check).await
+                .map_err(|_| TaskFailure::Failed("Could not verify the working tree before checking out.".into()))?;
+            let fresh_dirty_paths = fresh_status.files.iter()
+                .filter(|file| file.has_unignored_changes())
+                .map(|file| file.path.clone())
+                .collect::<Vec<_>>();
+            match branches::ensure_no_dirty_path_overlap_with_git(&path, fresh_repository.head.as_deref(), &oid, &fresh_dirty_paths, branch_git.as_ref()).await {
+                Ok(()) => {}
+                Err(branches::BranchError::WorktreeDirty) => return Err(TaskFailure::Failed("The working tree changed and now overlaps the target commit. Commit or shelve the listed changes before retrying.".into())),
+                Err(_) => return Err(TaskFailure::Failed("Could not verify whether local edits overlap the target commit.".into())),
+            }
+            command.execute_branch(&path, BranchCommand::SwitchDetached { oid }, context).await?;
+            repositories
+                .refresh_metadata(&repo_for_check)
+                .await
+                .map_err(|_| TaskFailure::Failed("Commit checked out but repository metadata could not be refreshed.".into()))?;
             Ok(None)
         }).await.map_err(ApiError::task_submit)?;
     Ok((StatusCode::ACCEPTED, Json(task)))

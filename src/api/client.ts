@@ -302,18 +302,19 @@ export class GitCrestApiClient {
   }
 
   /** With `remote`, `name` is a remote-tracking branch such as `origin/feature`. */
-  preflightRepositoryBranchSwitch(repoId: RepoId, name: string, remote = false): Promise<BranchSwitchPreflightResponse> {
+  preflightRepositoryBranchSwitch(repoId: RepoId, name: string, remote = false, commit = false): Promise<BranchSwitchPreflightResponse> {
     const query = new URLSearchParams({ name });
     if (remote) query.set("remote", "true");
+    if (commit) query.set("commit", "true");
     return this.request<BranchSwitchPreflightResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/switch-preflight?${query}`);
   }
 
   /** With `remote`, the remote branch is fetched and checked out through a local tracking branch. */
-  switchRepositoryBranch(repoId: RepoId, name: string, remote = false): Promise<TaskSnapshotResponse> {
+  switchRepositoryBranch(repoId: RepoId, name: string, remote = false, commit = false): Promise<TaskSnapshotResponse> {
     return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/branches/switch`, true, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, remote } satisfies components["schemas"]["BranchSwitchRequest"]),
+      body: JSON.stringify({ name, remote, commit } satisfies components["schemas"]["BranchSwitchRequest"]),
     });
   }
 

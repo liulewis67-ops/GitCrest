@@ -586,6 +586,11 @@ paths:
           required: false
           description: The name is a remote-tracking branch such as origin/feature. It is compared with its last fetched state.
           schema: { type: boolean, default: false }
+        - name: commit
+          in: query
+          required: false
+          description: The name is a commit id. The preflight describes checking it out with a detached HEAD.
+          schema: { type: boolean, default: false }
       responses:
         "200":
           description: Branch switch preflight details.
@@ -4203,10 +4208,14 @@ components:
           type: boolean
           default: false
           description: The name is a remote-tracking branch such as origin/feature.
+        commit:
+          type: boolean
+          default: false
+          description: The name is a commit id, checked out with a detached HEAD.
     BranchSwitchPreflight:
       type: object
       additionalProperties: false
-      required: [repoId, current, target, localBranch, createsLocalBranch, isClean, dirtyFiles, potentiallyOverwrittenPaths]
+      required: [repoId, current, target, localBranch, createsLocalBranch, detached, isClean, dirtyFiles, potentiallyOverwrittenPaths]
       properties:
         repoId: { $ref: "#/components/schemas/RepoId" }
         current: { type: [string, "null"] }
@@ -4217,6 +4226,9 @@ components:
         createsLocalBranch:
           type: boolean
           description: No local branch tracks the remote target yet, so one is created.
+        detached:
+          type: boolean
+          description: The target is a commit, so HEAD will be detached.
         isClean: { type: boolean }
         dirtyFiles: { type: array, items: { type: string } }
         potentiallyOverwrittenPaths: { type: array, items: { type: string } }

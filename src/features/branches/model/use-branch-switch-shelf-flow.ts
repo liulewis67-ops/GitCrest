@@ -11,6 +11,8 @@ interface BranchSwitchShelfContext {
   target: string;
   /** The target is a remote-tracking branch, switched to through a local tracking branch. */
   remote?: boolean;
+  /** The target is a commit id, checked out with a detached HEAD. */
+  commit?: boolean;
   existingShelfIds: string[];
 }
 
@@ -28,12 +30,13 @@ interface BranchSwitchShelfFlowOptions {
   branchSwitcher: {
     targetName: string;
     targetRemote: boolean;
+    targetCommit: boolean;
     setError: (message: string) => void;
     close: () => void;
     runWhileBusy: <T>(action: () => Promise<T>) => Promise<T>;
   };
   requestShelfComposer: (repoId: string) => void;
-  onBranchSwitchReview: (target: string, remote: boolean, preflight: Awaited<ReturnType<GitCrestApiClient["preflightRepositoryBranchSwitch"]>>, message: string) => void;
+  onBranchSwitchReview: (target: string, remote: boolean, preflight: Awaited<ReturnType<GitCrestApiClient["preflightRepositoryBranchSwitch"]>>, message: string, commit?: boolean) => void;
   appendTask: (task: TaskSnapshotResponse) => void;
   setTaskError: (message: string) => void;
   openTaskCenter: () => void;
@@ -97,13 +100,14 @@ export function useBranchSwitchShelfFlow({
     const repoId = getSelectedRepositoryId();
     const target = branchSwitcher.targetName;
     const remote = branchSwitcher.targetRemote;
+    const commit = branchSwitcher.targetCommit;
     if (!repoId || !target) return;
     await branchSwitcher.runWhileBusy(async () => {
       branchSwitcher.setError("");
       try {
         const existingShelfIds = await prepareShelfSwitch(repoId, target);
         if (!existingShelfIds) return;
-        prepareShelfComposerForBranchSwitch({ repoId, target, remote, existingShelfIds });
+        prepareShelfComposerForBranchSwitch({ repoId, target, remote, commit, existingShelfIds });
         branchSwitcher.close();
         requestShelfComposer(repoId);
       } catch (error) {
@@ -118,6 +122,7 @@ export function useBranchSwitchShelfFlow({
       repoId: shelfComposerAfterSwitch.repoId,
       target: afterCreate.switchTarget,
       remote: shelfComposerAfterSwitch.remote,
+      commit: shelfComposerAfterSwitch.commit,
       existingShelfIds: afterCreate.existingShelfIds,
     });
     setShelfComposerAfterSwitch(undefined);
@@ -132,16 +137,16 @@ export function useBranchSwitchShelfFlow({
     const api = getApi();
     if (!api) return;
     try {
-      const preflight = await api.preflightRepositoryBranchSwitch(context.repoId, context.target, context.remote);
+      const preflight = await api.preflightRepositoryBranchSwitch(context.repoId, context.target, context.remote, context.commit);
       if (preflight.potentiallyOverwrittenPaths.length > 0) {
         if (getSelectedRepositoryId() === context.repoId) {
-          onBranchSwitchReview(context.target, Boolean(context.remote), preflight, t("bm.remainOverlap"));
+          onBranchSwitchReview(context.target, Boolean(context.remote), preflight, t("bm.remainOverlap"), Boolean(context.commit));
         } else {
           setTaskError(t("bm.remainPaths", { count: preflight.potentiallyOverwrittenPaths.length, target: context.target }));
         }
         return;
       }
-      const task = await api.switchRepositoryBranch(context.repoId, context.target, context.remote);
+      const task = await api.switchRepositoryBranch(context.repoId, context.target, context.remote, context.commit);
       applyAfterSwitchRef.current.set(task.taskId, context);
       appendTask(task);
       openTaskCenter();

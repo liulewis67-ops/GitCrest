@@ -17,6 +17,8 @@ pub(super) struct BranchSwitchPreflight {
     pub(super) local_branch: String,
     /// A remote target has no local branch tracking it yet, so one is created.
     pub(super) creates_local_branch: bool,
+    /// The target is a commit, so HEAD will be detached.
+    pub(super) detached: bool,
     pub(super) is_clean: bool,
     pub(super) dirty_files: Vec<String>,
     pub(super) potentially_overwritten_paths: Vec<String>,
@@ -29,6 +31,9 @@ pub(super) struct BranchNameQuery {
     /// `name` is a remote-tracking branch such as `origin/feature`.
     #[serde(default)]
     pub(super) remote: bool,
+    /// `name` is a commit id, checked out with a detached HEAD.
+    #[serde(default)]
+    pub(super) commit: bool,
 }
 
 #[derive(Deserialize)]
@@ -39,6 +44,9 @@ pub(super) struct SwitchBranchRequest {
     /// checked out through a local tracking branch that is created or fast-forwarded as needed.
     #[serde(default)]
     pub(super) remote: bool,
+    /// `name` is a commit id: it is checked out with a detached HEAD.
+    #[serde(default)]
+    pub(super) commit: bool,
 }
 
 #[derive(Deserialize)]

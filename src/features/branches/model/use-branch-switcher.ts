@@ -26,6 +26,10 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   const [targetName, setTargetName] = useState("");
   /** The target is a remote-tracking branch such as origin/feature. */
   const [targetRemote, setTargetRemote] = useState(false);
+  /** The target is a commit id, checked out with a detached HEAD. */
+  const [targetCommit, setTargetCommit] = useState(false);
+  /** The branch each repository was on when a commit checkout was reviewed, so a detached HEAD can return to it. */
+  const [returnBranches, setReturnBranches] = useState<Record<string, string>>({});
   const [preflight, setPreflight] = useState<BranchSwitchPreflightResponse>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,6 +39,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     if (!repository || repository.availability !== "available") return;
     setTargetName("");
     setTargetRemote(false);
+    setTargetCommit(false);
     setPreflight(undefined);
     setError("");
     setOpen(true);
@@ -48,21 +53,24 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   function chooseAnother() {
     setTargetName("");
     setTargetRemote(false);
+    setTargetCommit(false);
     setPreflight(undefined);
     setError("");
   }
 
-  async function inspect(name: string, remote = false) {
+  async function inspect(name: string, remote = false, commit = false) {
     const api = getApi();
     const repository = getRepository();
     if (!api || !repository) return;
     setTargetName(name);
     setTargetRemote(remote);
+    setTargetCommit(commit);
+    if (commit && repository.branch) setReturnBranches((current) => ({ ...current, [repository.repoId]: repository.branch! }));
     setPreflight(undefined);
     setError("");
     setBusy(true);
     try {
-      setPreflight(await api.preflightRepositoryBranchSwitch(repository.repoId, name, remote));
+      setPreflight(await api.preflightRepositoryBranchSwitch(repository.repoId, name, remote, commit));
     } catch (reason) {
       setError(errorMessage(reason, t("bm.checkSwitch")));
     } finally {
@@ -77,10 +85,10 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     setBusy(true);
     setError("");
     try {
-      const nextPreflight = await api.preflightRepositoryBranchSwitch(repository.repoId, targetName, targetRemote);
+      const nextPreflight = await api.preflightRepositoryBranchSwitch(repository.repoId, targetName, targetRemote, targetCommit);
       setPreflight(nextPreflight);
       if (nextPreflight.potentiallyOverwrittenPaths.length > 0) return;
-      onTaskAccepted(await api.switchRepositoryBranch(repository.repoId, targetName, targetRemote));
+      onTaskAccepted(await api.switchRepositoryBranch(repository.repoId, targetName, targetRemote, targetCommit));
       close();
       openTaskCenter();
     } catch (reason) {
@@ -108,9 +116,16 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     }
   }
 
-  function reviewAfterShelf(target: string, remote: boolean, nextPreflight: BranchSwitchPreflightResponse, message: string) {
+  /** Opens the switcher on a commit, ready to review the checkout. */
+  function checkoutCommit(oid: string) {
+    openSwitcher();
+    void inspect(oid, false, true);
+  }
+
+  function reviewAfterShelf(target: string, remote: boolean, nextPreflight: BranchSwitchPreflightResponse, message: string, commit = false) {
     setTargetName(target);
     setTargetRemote(remote);
+    setTargetCommit(commit);
     setPreflight(nextPreflight);
     setError(message);
     setOpen(true);
@@ -130,6 +145,8 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     setOpen,
     targetName,
     targetRemote,
+    targetCommit,
+    returnBranches,
     preflight,
     error,
     setError,
@@ -138,6 +155,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
     close,
     chooseAnother,
     inspect,
+    checkoutCommit,
     continueSwitch,
     createBranch,
     reviewAfterShelf,

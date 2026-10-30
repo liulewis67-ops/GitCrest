@@ -124,6 +124,8 @@ export const layout = {
   "hv.merge": ["Merge into current branch…", "合并到当前分支…"],
   "hv.cherryPick": ["Cherry-pick…", "挑选提交…"],
   "hv.revert": ["Revert…", "还原…"],
+  "hv.checkout": ["Check out this commit…", "检出此提交…"],
+  "state.returnToBranch": ["Return to {name}", "返回 {name}"],
   "hv.reset": ["Reset current branch to here…", "将当前分支重置到此处…"],
   "hv.resetIsHead": ["The current branch is already at this commit.", "当前分支已在此提交。"],
   "hv.selectCommit": ["Select a commit", "请选择一个提交"],

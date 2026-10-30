@@ -7576,3 +7576,129 @@ async fn cors_exposes_the_api_version_header_to_the_renderer() {
         .to_ascii_lowercase();
     assert!(exposed.contains("x-gitcrest-api-version"));
 }
+
+#[tokio::test]
+async fn commit_checkout_detaches_head_and_rejects_bad_targets() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("checkout-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    git(&["add", "a.txt"]);
+    git(&["commit", "--quiet", "-m", "first"]);
+    let first = git(&["rev-parse", "HEAD"]);
+    std::fs::write(root.join("a.txt"), "two\n").unwrap();
+    git(&["commit", "--quiet", "-am", "second"]);
+    let second = git(&["rev-parse", "HEAD"]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let preflight_uri = |oid: &str| {
+        format!("/api/v1/repositories/{repo_id}/branches/switch-preflight?name={oid}&commit=true")
+    };
+    let switch_uri = format!("/api/v1/repositories/{repo_id}/branches/switch");
+
+    let unauthorized = app
+        .clone()
+        .oneshot(request(&preflight_uri(&first), None))
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &switch_uri,
+            &serde_json::json!({ "name": first, "commit": true }).to_string(),
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+
+    let invalid = app
+        .clone()
+        .oneshot(request(&preflight_uri("not-a-sha"), Some(READ_ONLY_TOKEN)))
+        .await
+        .unwrap();
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let missing = app
+        .clone()
+        .oneshot(request(
+            &preflight_uri(&"0".repeat(40)),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+
+    let current = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &switch_uri,
+            &serde_json::json!({ "name": second, "commit": true }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(current.status(), StatusCode::CONFLICT);
+
+    let preflight = app
+        .clone()
+        .oneshot(request(&preflight_uri(&first), Some(READ_ONLY_TOKEN)))
+        .await
+        .unwrap();
+    assert_eq!(preflight.status(), StatusCode::OK);
+    let body = to_bytes(preflight.into_body(), usize::MAX).await.unwrap();
+    let preflight: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(preflight["detached"], true);
+    assert_eq!(preflight["isClean"], true);
+
+    let switch = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &switch_uri,
+            &serde_json::json!({ "name": first, "commit": true }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(switch.status(), StatusCode::ACCEPTED);
+    let body = to_bytes(switch.into_body(), usize::MAX).await.unwrap();
+    let task: serde_json::Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(
+        wait_for_task(&app, task["taskId"].as_str().unwrap()).await["status"],
+        "succeeded"
+    );
+    assert_eq!(git(&["rev-parse", "HEAD"]), first);
+    assert_eq!(git(&["branch", "--show-current"]), "");
+}

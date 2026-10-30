@@ -9,6 +9,10 @@ pub(crate) enum BranchCommand {
     Switch {
         name: String,
     },
+    /// Checks out a commit with a detached HEAD.
+    SwitchDetached {
+        oid: String,
+    },
     /// Creates `local_branch` at `remote_ref` (for example `origin/feature`), sets it to track
     /// that remote branch, and checks it out.
     SwitchTracking {

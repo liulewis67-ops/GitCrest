@@ -1970,6 +1970,11 @@ export interface components {
              * @default false
              */
             remote: boolean;
+            /**
+             * @description The name is a commit id, checked out with a detached HEAD.
+             * @default false
+             */
+            commit: boolean;
         };
         BranchSwitchPreflight: {
             repoId: components["schemas"]["RepoId"];
@@ -1979,6 +1984,8 @@ export interface components {
             localBranch: string;
             /** @description No local branch tracks the remote target yet, so one is created. */
             createsLocalBranch: boolean;
+            /** @description The target is a commit, so HEAD will be detached. */
+            detached: boolean;
             isClean: boolean;
             dirtyFiles: string[];
             potentiallyOverwrittenPaths: string[];
@@ -3471,6 +3478,8 @@ export interface operations {
                 name: string;
                 /** @description The name is a remote-tracking branch such as origin/feature. It is compared with its last fetched state. */
                 remote?: boolean;
+                /** @description The name is a commit id. The preflight describes checking it out with a detached HEAD. */
+                commit?: boolean;
             };
             header: {
                 "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];

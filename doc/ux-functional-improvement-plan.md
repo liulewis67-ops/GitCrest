@@ -35,7 +35,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 |---|---|---|---|---|---|
 | U1.1 | Git identity check and editor | P0 | M | — | not started |
 | U1.2 | First-run hints and empty states | P2 | M | U1.1 | not started |
-| U2.1 | Check out a commit (detached HEAD) | P0 | M | — | not started |
+| U2.1 | Check out a commit (detached HEAD) | P0 | M | — | done |
 | U2.2 | Reset to a commit from the history row | P0 | S | — | done |
 | U2.3 | Copy and reuse a commit message | P0 | S | — | done |
 | U3.1 | Tag list and tag labels on the graph | P0 | M | — | not started |
@@ -278,3 +278,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `tests/unit/reset-dialog.test.tsx`
 - Limits / follow-up: the commit menu gains "Reset current branch to here…", which opens `ResetDialog` with the commit preselected; preview, ticket and backup ref are unchanged. The item is disabled with a reason when the commit is already the current branch tip. Reachability from HEAD is not checked in the UI; the core preview decides. Palette entry comes with U5.1.
 - Commit: see git log (`feat: complete U2.2 reset to a commit from the history row`)
+
+### U2.1 — Check out a commit (detached HEAD)
+- Status: done
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (202 tests, new `commit_checkout_detaches_head_and_rejects_bad_targets` covers 401, 403, 400, 404, 409 and success), `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (449 tests, new `tests/unit/branch-switcher-commit.test.tsx`), `pnpm test:e2e` (38 tests).
+- Manual check: not run (app not started in this session).
+- Evidence: `crates/gitcrest-core/src/tests.rs`, `tests/unit/branch-switcher-commit.test.tsx`
+- Limits / follow-up: the switch endpoints take `commit: true` (`name` is a commit id) and run `git switch --detach` under the same overlap rules as a branch switch; the preflight response gains `detached`. The existing switcher dialog handles the dirty tree (commit / shelve / carry over / cancel), and the shelf flow carries the commit flag. The detached banner gains "Return to <branch>", remembered when the checkout is reviewed (kept in memory, lost on restart); "Create branch here" already existed. The History commit menu has "Check out this commit…". Palette entry comes with U5.1.
+- Commit: see git log (`feat: complete U2.1 check out a commit with a detached HEAD`)

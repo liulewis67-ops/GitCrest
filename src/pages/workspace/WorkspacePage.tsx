@@ -40,6 +40,9 @@ interface WorkspacePageProps {
   onToggleInspector: () => void;
   onOpenTasks: () => void;
   onCreateBranchAtHead: () => void;
+  /** The branch this repository was on before a commit was checked out, if known. */
+  returnBranch?: string;
+  onReturnToBranch?: (name: string) => void;
   onOpenRepository: () => void;
 }
 
@@ -81,6 +84,8 @@ export function WorkspacePage({
   onToggleInspector,
   onOpenTasks,
   onCreateBranchAtHead,
+  returnBranch,
+  onReturnToBranch,
   onOpenRepository,
 }: WorkspacePageProps) {
   const { t } = useI18n();
@@ -174,6 +179,7 @@ export function WorkspacePage({
         <span>{t("state.detachedHint")}</span>
         <span className="workspaceBannerSpacer" />
         <button className="secondaryButton compact" type="button" disabled={!repositoryReady || hasActiveRepositoryTask || !repository.head} onClick={() => onCreateBranchAtHead()}>{t("state.createBranch")}</button>
+        {returnBranch && onReturnToBranch && <button className="secondaryButton compact" type="button" disabled={!repositoryReady || hasActiveRepositoryTask} onClick={() => onReturnToBranch?.(returnBranch)}>{t("state.returnToBranch", { name: returnBranch })}</button>}
       </div>}
       <div className="workspaceView" id="workspace-view" role="tabpanel" aria-labelledby={`workspace-tab-${mode}`}>
         {children}

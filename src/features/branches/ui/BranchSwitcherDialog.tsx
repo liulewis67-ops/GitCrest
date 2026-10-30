@@ -115,7 +115,8 @@ export function BranchSwitcherDialog({
         {branchSwitcher.targetName ? (
           <div className="branchSwitchDetails">
             <button className="textButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.chooseAnother}>{t("bs.chooseAnother")}</button>
-            <h3>{branchSwitcher.targetName}</h3>
+            <h3>{branchSwitcher.targetCommit ? t("bs.commitTitle", { oid: branchSwitcher.targetName.slice(0, 12) }) : branchSwitcher.targetName}</h3>
+            {branchSwitcher.targetCommit && <p className="branchRemotePlan">{t("bs.detachedPlan")}</p>}
             {branchSwitcher.targetRemote && targetPreflight && <p className="branchRemotePlan">{targetPreflight.createsLocalBranch
               ? t("bs.remoteCreates", { remote: branchSwitcher.targetName, local: targetPreflight.localBranch })
               : t("bs.remoteUpdates", { remote: branchSwitcher.targetName, local: targetPreflight.localBranch })}</p>}
@@ -266,7 +267,7 @@ export function BranchSwitcherDialog({
           <button className="secondaryButton" type="button" disabled={branchSwitcher.busy} onClick={branchSwitcher.close}>{t("bs.cancel")}</button>
           {branchSwitcher.targetName && branchSwitcher.preflight?.isClean && (
             <button className="primaryButton" type="button" disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.continueSwitch()}>
-              {branchSwitcher.busy ? t("bs.switching") : branchSwitcher.targetRemote ? t("bs.fetchSwitch", { name: branchSwitcher.preflight.localBranch }) : t("bs.switchTo", { name: branchSwitcher.targetName })}
+              {branchSwitcher.busy ? t("bs.switching") : branchSwitcher.targetCommit ? t("bs.checkoutCommit") : branchSwitcher.targetRemote ? t("bs.fetchSwitch", { name: branchSwitcher.preflight.localBranch }) : t("bs.switchTo", { name: branchSwitcher.targetName })}
             </button>
           )}
         </div>
