@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import { _electron as electron, type ElectronApplication, type Page } from "playwright";
 import { afterEach, expect, it } from "vitest";
 import { createTempGitRepository } from "../fixtures/temp-repo";
+import { expectReadableText } from "./readability";
 
 const execFileAsync = promisify(execFile);
 const git = async (repo: string, ...args: string[]) => (await execFileAsync("git", ["-C", repo, ...args])).stdout.trim();
@@ -64,6 +65,8 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
 
     const conflictWindow: Page = await conflictWindowPromise;
     await conflictWindow.getByRole("main", { name: "Conflict resolution window" }).waitFor();
+    await conflictWindow.locator(".conflictLine").first().waitFor({ state: "visible" });
+    await expectReadableText(conflictWindow, "Conflict window");
     await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
     try {

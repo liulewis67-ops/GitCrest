@@ -1,6 +1,6 @@
 # GitCrest Visual Optimization Plan
 
-Status: proposal, not implemented
+Status: Phase 1 completed; Phases 2–4 proposed.
 Scope: renderer UI (`src/`), main window first, then the Diff and Conflict windows
 Related specs: [05-uiux-spec.md](05-uiux-spec.md), [06-design-language.md](06-design-language.md), [07-interaction-accessibility.md](07-interaction-accessibility.md)
 
@@ -341,15 +341,16 @@ Each phase can ship on its own and leaves the app consistent.
 - Add the type-scale tokens; replace every 7–10px value; set diff code to 13/20px.
 - Add Git status, diff and lane color tokens.
 - Add CJK fonts to the font stack.
-- **Accept when:** no computed font-size under 11px in the main window, Diff window or Conflict window (checked by a script over all elements); diff code is 13px.
+- **Accept when:** no computed font-size under 11px in the main window, Diff window or Conflict window (checked by a script over all elements); diff code is 13px. The live-window check runs in `tests/e2e/readability.ts` from the desktop and conflict E2E flows.
 - **Done 2026-10-19.** Notes:
   - The scale lives in `tokens.css` as `--type-2xs … --type-xl`, `--code-size` and `--code-leading`. Tailwind gets matching `text-2xs … text-xl` utilities through `@theme inline`.
   - Git state colors are `--git-*` tokens, diff backgrounds are `--diff-*` tokens. Untracked files now use a neutral gray instead of the added-green, and conflicts use their own orange instead of the deleted-red.
   - Four variables that were used but never defined are fixed: `--red`, `--success`, `--text-primary`, `--danger-soft`. Because of them, the force-push button and failed tasks weren't red, and unified-diff additions had no background.
   - The `button, input, textarea { font: inherit }` reset moved into `@layer base`. Unlayered, it overrode every Tailwind text utility on buttons.
   - Wide letter-spacing on small labels is removed.
-  - The graph lane palette is deferred to Phase 4. The graph draws only one edge color today, so lane tokens would have nothing to use them yet.
+  - The graph lane palette was deferred initially. Lane tokens are now present and used when colored graph lanes are enabled; the default remains neutral.
   - Side effect: the bigger filter labels make the history filters 9px taller (graph 407 → 398px at 1440×900). Phase 2 collapses the filters and recovers this.
+  - Rechecked 2026-10-31 in live Electron E2E runs: the main, Diff and Conflict windows have no visible text below 11px, and split-diff code computes to 13px. The check caught a 10.4px `<small>` label in the Conflict window; the base style now gives semantic small text an 11px floor.
 
 ### Phase 2 – Initial screen ratio
 - L1–L5 from §3.1: slimmer titlebar and toolbar, no main heading or footers, collapsed history filters, one status bar.

@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { _electron as electron, type ElectronApplication } from "playwright";
 import { afterEach, describe, expect, it } from "vitest";
 import { createTempGitRepository } from "../fixtures/temp-repo";
+import { expectReadableText } from "./readability";
 
 const execFileAsync = promisify(execFile);
 
@@ -116,6 +117,7 @@ describe("desktop startup E2E", () => {
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
       expect(await window.locator(".workspaceCrumb").innerText()).toContain(fixture.path);
+      await expectReadableText(window, "main window");
 
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
       await writeFile(resolve(fixture.path, "src/example.ts"), "export const greeting = 'hello';\n");
@@ -244,6 +246,8 @@ describe("desktop startup E2E", () => {
       expect(await diffTitle.getAttribute("title")).toBe("src/example.ts");
       await diffWindow.locator(".diffWindowHeader .diffWindowScope").waitFor({ state: "visible" });
       await diffWindow.locator(".splitDiffRow").first().waitFor({ state: "visible" });
+      await expectReadableText(diffWindow, "Diff window");
+      expect(await diffWindow.locator(".splitDiffCell code").first().evaluate((element) => getComputedStyle(element).fontSize)).toBe("13px");
       expect(await diffWindow.locator(".diffWindowTabSelect").count()).toBe(2);
       await diffWindow.locator(".diffWindowTabSelect").filter({ hasText: "src/other.ts" }).click();
       await diffWindow.getByText("changed", { exact: false }).waitFor({ state: "visible" });
