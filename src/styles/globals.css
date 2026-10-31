@@ -1644,3 +1644,24 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .submoduleList li { display: grid; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-5); }
 .submoduleHead { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
 .submoduleState-outOfDate, .submoduleState-conflicted { border-color: var(--warning, currentColor); }
+
+/* Automations (post-push pipelines) */
+.pipelineModes { display: grid; gap: 8px; margin: 0 0 12px; padding: 0; border: 0; }
+.pipelineModes legend { padding: 0; margin-bottom: 6px; font-weight: 600; }
+.pipelineModes label { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; }
+.pipelineModes small { grid-column: 2; }
+.pipelineRuleList { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; }
+.pipelineRuleList li { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; }
+.pipelineRuleList p { margin: 2px 0 0; }
+.pipelineRuleActions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.pipelineRuleEditor { display: grid; gap: 10px; margin-top: 12px; padding: 12px; border: 1px solid var(--line-strong); border-radius: 6px; }
+.pipelineRuleEditor label { display: grid; gap: 4px; }
+.pipelineRuleEditor .settingsCheck { display: flex; align-items: center; gap: 8px; }
+.pipelineRuleEditor p { margin: 0; }
+.pipelineTargets { display: grid; gap: 6px; margin: 0; padding: 0; border: 0; }
+.pipelineTargets legend { padding: 0; margin-bottom: 4px; font-weight: 600; }
+.pipelineTargets ol { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.pipelineTargets li { display: flex; align-items: center; gap: 6px; }
+.pipelineTargets li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.pipelineAddTarget { display: flex; gap: 8px; }
+.pipelineAddTarget select { flex: 1; min-width: 0; }

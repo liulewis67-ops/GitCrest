@@ -15,7 +15,7 @@ const ONE_PROVIDER = { activeProviderId: "openai", providers: [{ id: "openai", n
 
 function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
   let api: Record<string, unknown>;
-  api = { listAccounts: vi.fn().mockResolvedValue({ accounts: [] }), ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
+  api = { listAccounts: vi.fn().mockResolvedValue({ accounts: [] }), getPipelineAppSettings: vi.fn().mockResolvedValue({ executionMode: "temporaryWorktree", inPlaceDirtyPolicy: "shelve" }), ...methods, withSignal: vi.fn((signal: AbortSignal) => { signals.push(signal); return api; }) };
   return api as unknown as GitCrestApiClient;
 }
 

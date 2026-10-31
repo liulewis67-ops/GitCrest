@@ -21,6 +21,7 @@ import { LanguagesSection } from "../../languages";
 import { GitIdentityEditor, SigningSettings } from "../../identity";
 import { ExternalToolsSettings } from "./ExternalToolsSettings";
 import { BackgroundFetchSettings } from "../../remotes";
+import { AutomationsSection } from "../../pipelines";
 import { NotificationSettings } from "../../tasks";
 import { resetHints, useAnyHintDismissed } from "../../../shared/hints/hints-store";
 
@@ -217,6 +218,8 @@ export function SettingsPage({
             </section>
 
             <AiProvidersSection api={api} repoId={repoId} />
+
+            <AutomationsSection api={api} repoId={repoId} />
 
             {updateStatus && <section className="settingsSection" id="settings-section-updates" aria-labelledby="application-updates-title">
               <h3 id="application-updates-title" tabIndex={-1}>{t("settings.updates")}</h3>

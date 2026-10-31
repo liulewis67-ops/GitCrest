@@ -7,3 +7,4 @@ export {
   usePipelineState,
 } from "./model/pipeline-store";
 export type { PipelineConflictPrompt, PipelineTriggerPrompt } from "./model/pipeline-store";
+export { AutomationsSection } from "./ui/AutomationsSection";
