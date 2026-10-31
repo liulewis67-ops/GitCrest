@@ -66,7 +66,15 @@ pub async fn read_page_indexed(
     if cached_page.is_none() && indexable_message_search && index_miss && store.has_index(&repo_id)
     {
         if let Some(current) = fingerprint.clone() {
-            if refresh_index_quickly(&repo_id, repository_path, head, &current, store.clone()).await
+            if refresh_index_quickly(
+                &repo_id,
+                repository_path,
+                head,
+                &current,
+                store.clone(),
+                QUICK_REFRESH_BUDGET,
+            )
+            .await
             {
                 let message = filters.message.as_deref().unwrap_or_default();
                 let retried = cached_message_page(
@@ -503,7 +511,7 @@ async fn history_index_tips(repository_path: &Path) -> Result<Vec<String>, Histo
 
 /// How long a search may spend bringing the index up to date before it answers from Git instead.
 /// Short, because the search itself still has to run afterwards.
-const QUICK_REFRESH_BUDGET: std::time::Duration = std::time::Duration::from_millis(150);
+pub(super) const QUICK_REFRESH_BUDGET: std::time::Duration = std::time::Duration::from_millis(150);
 
 /// Adds the commits that appeared since the index was built, within a short budget. True when the
 /// index now matches `fingerprint`; false when nothing could be added in time or the change was one
@@ -515,6 +523,7 @@ pub(super) async fn refresh_index_quickly(
     head: Option<&str>,
     fingerprint: &str,
     store: Arc<dyn HistorySearchIndexPort>,
+    budget: std::time::Duration,
 ) -> bool {
     if store.is_index_building(repo_id) {
         return false;
@@ -535,10 +544,7 @@ pub(super) async fn refresh_index_quickly(
         )
         .await
     };
-    matches!(
-        tokio::time::timeout(QUICK_REFRESH_BUDGET, attempt).await,
-        Ok(Ok(true))
-    )
+    matches!(tokio::time::timeout(budget, attempt).await, Ok(Ok(true)))
 }
 
 /// Every commit reachable from the old tips is still reachable from the new ones. Asked of the

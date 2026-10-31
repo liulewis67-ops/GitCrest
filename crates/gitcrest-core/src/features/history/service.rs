@@ -512,6 +512,9 @@ mod tests {
         assert!(after_reset.len() < 5);
     }
 
+    /// Generous, so a loaded test machine cannot turn the logic test into a timing test.
+    const TEST_BUDGET: std::time::Duration = std::time::Duration::from_secs(30);
+
     #[tokio::test]
     async fn a_search_after_new_commits_refreshes_the_index_itself_and_stays_in_git_order() {
         let directory = tempfile::tempdir().unwrap();
@@ -549,7 +552,8 @@ mod tests {
                 path,
                 Some(&head),
                 &current,
-                store.clone()
+                store.clone(),
+                TEST_BUDGET
             )
             .await
         );
@@ -605,7 +609,8 @@ mod tests {
                 path,
                 Some(&rewound),
                 &rewound_fingerprint,
-                store.clone()
+                store.clone(),
+                TEST_BUDGET
             )
             .await
         );
