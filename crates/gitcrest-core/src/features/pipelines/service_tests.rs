@@ -330,3 +330,127 @@ async fn resume_waits_for_the_worktree_conflicts_to_be_resolved() {
         "resolved"
     );
 }
+
+async fn wait_for_conflicts(harness: &Harness) -> PipelineRun {
+    for _ in 0..300 {
+        let run = harness
+            .store
+            .list_pipeline_runs("repo", 1)
+            .unwrap()
+            .remove(0);
+        if run.status == RunStatus::WaitingForConflicts {
+            return run;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    panic!("the run never waited for conflicts");
+}
+
+fn conflict_on_uat(harness: &Harness) {
+    use super::worktree_tests::commit_file;
+    let repository = &harness.fixture.repository;
+    git(repository, &["stash", "-u", "-q"]);
+    git(repository, &["checkout", "-q", "uat"]);
+    commit_file(repository, "feature.txt", "uat version\n", "uat edit");
+    git(repository, &["push", "-q", "origin", "uat"]);
+    git(repository, &["checkout", "-q", "feature/1"]);
+    git(repository, &["stash", "pop", "-q"]);
+}
+
+#[tokio::test]
+async fn a_continued_recovery_on_the_pipeline_context_resumes_the_run() {
+    use super::service::RecoveryOutcome;
+    let harness = harness(auto_rule());
+    conflict_on_uat(&harness);
+    harness
+        .service
+        .on_push_succeeded(pushed(&harness), PushOrigin::User)
+        .await;
+    let waiting = wait_for_conflicts(&harness).await;
+    let context = waiting.steps[0].ephemeral_repo_id.clone().unwrap();
+    let worktree = harness.service.contexts().path(&context).unwrap();
+
+    // Recoveries on unrelated contexts change nothing.
+    harness
+        .service
+        .on_workflow_recovered("some-other-repo", RecoveryOutcome::Continued)
+        .await;
+    assert_eq!(
+        harness
+            .store
+            .pipeline_run(&waiting.run_id)
+            .unwrap()
+            .unwrap()
+            .status,
+        RunStatus::WaitingForConflicts
+    );
+
+    std::fs::write(worktree.join("feature.txt"), "resolved\n").unwrap();
+    git(&worktree, &["add", "feature.txt"]);
+    git(&worktree, &["commit", "-q", "--no-edit"]);
+    harness
+        .service
+        .on_workflow_recovered(&context, RecoveryOutcome::Continued)
+        .await;
+
+    let run = wait_for_terminal(&harness.store, "repo").await;
+    assert_eq!(run.status, RunStatus::Succeeded);
+    assert_eq!(
+        git(&harness.fixture.remote, &["show", "uat:feature.txt"]),
+        "resolved"
+    );
+}
+
+#[tokio::test]
+async fn an_aborted_recovery_asks_the_user_and_skipping_then_finishes_the_run() {
+    use super::service::RecoveryOutcome;
+    let harness = harness(auto_rule());
+    conflict_on_uat(&harness);
+    let mut events = harness.events.subscribe();
+    harness
+        .service
+        .on_push_succeeded(pushed(&harness), PushOrigin::User)
+        .await;
+    let waiting = wait_for_conflicts(&harness).await;
+    let context = waiting.steps[0].ephemeral_repo_id.clone().unwrap();
+    let worktree = harness.service.contexts().path(&context).unwrap();
+
+    // The conflict window aborted the merge inside the pipeline worktree.
+    git(&worktree, &["merge", "--abort"]);
+    harness
+        .service
+        .on_workflow_recovered(&context, RecoveryOutcome::Aborted)
+        .await;
+
+    let mut asked = None;
+    while let Ok(event) = events.try_recv() {
+        if event.event_type == "pipeline.conflict.aborted" {
+            asked = Some(event.payload);
+        }
+    }
+    let asked = asked.expect("pipeline.conflict.aborted was published");
+    assert_eq!(asked["runId"], waiting.run_id);
+    assert_eq!(asked["targetBranch"], "uat");
+    assert_eq!(
+        harness
+            .store
+            .pipeline_run(&waiting.run_id)
+            .unwrap()
+            .unwrap()
+            .status,
+        RunStatus::WaitingForConflicts
+    );
+
+    harness
+        .service
+        .act("repo", &waiting.run_id, RunAction::SkipTarget)
+        .await
+        .unwrap();
+    let run = wait_for_terminal(&harness.store, "repo").await;
+    assert_eq!(run.status, RunStatus::PartiallySucceeded);
+    assert_eq!(run.steps[0].state, StepState::Skipped);
+    assert_eq!(
+        run.steps[0].message.as_deref(),
+        Some("Skipped after conflicts")
+    );
+}

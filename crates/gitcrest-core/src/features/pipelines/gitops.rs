@@ -172,6 +172,9 @@ impl GitRunner {
     }
 
     pub(super) async fn abort_merge(&self, directory: &Path) -> Result<(), PipelineStepError> {
+        if !self.merge_in_progress(directory).await {
+            return Ok(());
+        }
         self.git_ok(
             directory,
             &["merge", "--abort"],

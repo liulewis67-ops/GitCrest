@@ -8,6 +8,7 @@ use super::super::dto::{
     WorkflowAdoptionDto, WorkflowRecoveryPreflightDto, WorkflowRecoveryQuery,
     WorkflowRecoveryRequest,
 };
+use crate::features::pipelines::service::RecoveryOutcome;
 use crate::{
     api::error::{ApiError, ApiErrorCode},
     domain::diff::DiffScope,
@@ -215,6 +216,7 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
     let undo_store = state.undo_store.clone();
     let status_service = state.status.clone();
     let tasks = state.tasks.clone();
+    let pipelines = state.pipelines.clone();
     let task_repo_id = repo_id.clone();
     let waiting_task_id = request.task_id.clone();
     let path = target.repository_path;
@@ -412,6 +414,16 @@ pub(in crate::features::workflows) async fn recover_repository_workflow(
                             .log("Repository metadata refresh failed after workflow recovery; refresh the repository before the next write.")
                             .await;
                     }
+                    pipelines
+                        .on_workflow_recovered(
+                            &task_repo_id,
+                            if action == WorkflowRecoveryAction::Abort {
+                                RecoveryOutcome::Aborted
+                            } else {
+                                RecoveryOutcome::Continued
+                            },
+                        )
+                        .await;
                 }
                 result.map(|()| None)
             },

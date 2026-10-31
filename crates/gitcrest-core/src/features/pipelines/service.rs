@@ -168,6 +168,13 @@ pub(crate) enum StartRun {
     },
 }
 
+/// How a recovery on a repository context ended.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RecoveryOutcome {
+    Continued,
+    Aborted,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RunAction {
     Resume,
@@ -476,6 +483,50 @@ impl PipelineService {
             _ => return Err(EngineError::InvalidState.into()),
         }
         self.owned_run(repo_id, run_id).map(|run| (&run).into())
+    }
+
+    /// Called when a workflow recovery (continue or abort) succeeded on a repository
+    /// context. If a pipeline step waits for conflicts there, a continue resumes the run
+    /// and an abort asks the user whether to skip the target or stop.
+    pub(crate) async fn on_workflow_recovered(&self, repo_context: &str, outcome: RecoveryOutcome) {
+        let Ok(runs) = self.store.list_active_pipeline_runs() else {
+            return;
+        };
+        let waiting = runs.iter().find_map(|run| {
+            if run.status != RunStatus::WaitingForConflicts {
+                return None;
+            }
+            run.steps
+                .iter()
+                .find(|step| {
+                    step.state == StepState::WaitingForConflicts
+                        && step.ephemeral_repo_id.as_deref() == Some(repo_context)
+                })
+                .map(|step| (run, step))
+        });
+        let Some((run, step)) = waiting else {
+            return;
+        };
+        match outcome {
+            RecoveryOutcome::Continued => {
+                let engine = self.engine.clone();
+                let run_id = run.run_id.clone();
+                tokio::spawn(async move {
+                    let _ = engine
+                        .resume(&run_id, ResumeAction::ConflictsResolved)
+                        .await;
+                });
+            }
+            RecoveryOutcome::Aborted => self.events.publish(
+                Some(run.repo_id.clone()),
+                "pipeline.conflict.aborted",
+                serde_json::json!({
+                    "runId": run.run_id,
+                    "position": step.position,
+                    "targetBranch": step.target_branch,
+                }),
+            ),
+        }
     }
 
     pub(crate) fn list_runs(

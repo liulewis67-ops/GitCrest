@@ -179,3 +179,56 @@ mod tests {
             .starts_with("pipeline-worktree:"));
     }
 }
+
+#[cfg(test)]
+mod target_tests {
+    use super::*;
+    use crate::{
+        features::{
+            pipelines::worktree_tests::{fixture, git},
+            repositories::RepositoryTargetReader,
+        },
+        git::repository::GitRepositoryAdapter,
+        storage::{repository_paths::RepositoryFilesystemAdapter, RepositoryStore},
+    };
+
+    #[tokio::test]
+    async fn task_targets_of_a_pipeline_context_use_the_worktree_and_their_own_lock() {
+        let fixture = fixture();
+        let worktree = fixture.data_dir.join("pipelines/run/0");
+        std::fs::create_dir_all(worktree.parent().unwrap()).unwrap();
+        git(
+            &fixture.repository,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                worktree.to_str().unwrap(),
+                "HEAD",
+            ],
+        );
+
+        let store = RepositoryStore::default();
+        store.insert_test_repository_at("main", &fixture.repository);
+        let contexts = Arc::new(EphemeralContexts::default());
+        contexts.register("pipeline-run-0", &worktree);
+        let catalog: Arc<dyn RepositoryCatalogPort> = Arc::new(EphemeralAwareCatalog::new(
+            Arc::new(store),
+            contexts.clone(),
+        ));
+        let reader = RepositoryTargetReader::new(
+            catalog,
+            Arc::new(GitRepositoryAdapter),
+            Arc::new(RepositoryFilesystemAdapter),
+        )
+        .with_ephemeral_contexts(contexts);
+
+        let main = reader.task_target("main").await.unwrap();
+        let pipeline = reader.task_target("pipeline-run-0").await.unwrap();
+
+        assert_eq!(pipeline.repository_path, worktree);
+        assert_ne!(pipeline.resource_key, main.resource_key);
+        assert!(pipeline.resource_key.starts_with("pipeline-worktree:"));
+        assert!(reader.task_target("pipeline-gone").await.is_err());
+    }
+}
