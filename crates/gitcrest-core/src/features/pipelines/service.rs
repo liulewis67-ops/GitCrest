@@ -341,6 +341,8 @@ impl PipelineService {
         let paths_catalog = catalog.clone();
         let views = Views::default();
         let observer_views = views.clone();
+        let engine_cell: Arc<std::sync::OnceLock<std::sync::Weak<Engine>>> = Arc::default();
+        let observer_cell = engine_cell.clone();
         let data_dir_copy = data_dir.clone();
         let in_place_catalog = paths_catalog.clone();
         let policy_store = store.clone();
@@ -398,11 +400,36 @@ impl PipelineService {
                     serde_json::to_value(dto_for(&observer_views, run)).unwrap_or_default(),
                 );
                 waiting_tasks.sync(run);
+                // A finished in-place run may have left the user's changes in the stash list.
+                if run.status.is_terminal()
+                    && run.shelf_id.is_some()
+                    && run.execution_mode == ExecutionMode::SwitchInPlace
+                {
+                    if let Some(engine) = observer_cell.get().and_then(std::sync::Weak::upgrade) {
+                        let run = run.clone();
+                        let views = observer_views.clone();
+                        let events = observer_events.clone();
+                        tokio::spawn(async move {
+                            if engine.workspace().in_place().shelf_pending(&run).await {
+                                if let Ok(mut shelves) = views.shelves.lock() {
+                                    shelves.insert(run.run_id.clone());
+                                }
+                                events.publish(
+                                    Some(run.repo_id.clone()),
+                                    "pipeline.run.updated",
+                                    serde_json::to_value(dto_for(&views, &run)).unwrap_or_default(),
+                                );
+                            }
+                        });
+                    }
+                }
             }),
         );
+        let engine = Arc::new(engine);
+        let _ = engine_cell.set(Arc::downgrade(&engine));
         Self {
             store,
-            engine: Arc::new(engine),
+            engine,
             events,
             contexts,
             views,

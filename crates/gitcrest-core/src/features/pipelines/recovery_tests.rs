@@ -371,3 +371,31 @@ async fn a_shelf_that_was_never_restored_stays_visible_after_a_restart() {
     last.service.recover_on_startup().await;
     assert_eq!(shown(&last.service), false);
 }
+
+#[tokio::test]
+async fn a_shelf_left_behind_is_flagged_as_soon_as_the_run_ends() {
+    let harness = harness(auto_rule());
+    use_in_place(&harness);
+    let waiting = start_waiting_run(&harness).await;
+    git(&harness.fixture.repository, &["merge", "--abort"]);
+    let after = restart(&harness);
+    after.service.recover_on_startup().await;
+
+    after
+        .service
+        .act("repo", &waiting.run_id, RunAction::Discard)
+        .await
+        .unwrap();
+
+    let mut flagged = false;
+    for _ in 0..100 {
+        let dto =
+            serde_json::to_value(after.service.run("repo", &waiting.run_id).unwrap()).unwrap();
+        flagged = dto["shelfPending"] == true;
+        if flagged {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(flagged, "no restart was needed to see the leftover shelf");
+}
