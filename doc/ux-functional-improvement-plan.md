@@ -1,6 +1,6 @@
 # UX and Functional Completeness Improvement Plan
 
-Status: proposed, nothing started. Date: 2026-10-31.
+Status: U1.1–U16.1 completed (see stage ledger); external release verification remains tracked in `13`. Updated: 2026-11-01.
 Scope: user-facing gaps in the desktop client (`src/`, `electron/`) and the core APIs they need (`crates/gitcrest-core/`, `doc/api/v1.yaml`). Release blockers already tracked in `13` (S6.x real-provider checks, S7.4, S7.5) are referenced, not repeated.
 Related: [02-prd.md](02-prd.md) (requirements), [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard and safety rules), [13-implementation-plan.md](13-implementation-plan.md) (ledger and commit rules), [electron-performance-optimization-plan.md](electron-performance-optimization-plan.md) (performance work).
 

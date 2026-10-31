@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 in progress; D0.1–D0.2 complete, D0.3 under verification. D1 not started. Updated: 2026-11-01.
+Status: D0 complete; D1 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the error text the core returns (`crates/gitcrest-core/src/api/error.rs`), and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -45,6 +45,8 @@ Correction from checking the code while writing this plan: the core **already** 
 
 ## 3. Document conflicts to resolve in D0.3
 
+D0.3 resolved the current-state conflicts below. D2's shared-component styling choice and D3.2's proposed palette collapse remain future decisions; current styling and palette behavior are explicitly recorded in DESIGN.md and `15`/`07`.
+
 | Conflict | Documents | Resolution |
 |---|---|---|
 | Colour values and type scale differ from the shipped tokens; dark is called the default though the app follows the system | `06` vs `src/styles/tokens.css` | `tokens.css` wins; `DESIGN.md` records it; `06` marked superseded for colour and type |
@@ -62,7 +64,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 |---|---|---|---|---|---|
 | D0.1 | Seeded review fixture repository | P1 | S | — | done |
 | D0.2 | Screenshot matrix script | P1 | M | D0.1 | done |
-| D0.3 | `DESIGN.md` and document precedence | P1 | M | — | not started |
+| D0.3 | `DESIGN.md` and document precedence | P1 | M | — | done |
 | D1.1 | Translated error messages from API codes | P1 | M | — | not started |
 | D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | not started |
 | D1.3 | One error per view; no endless loading | P1 | S | D1.1 | not started |
@@ -110,6 +112,8 @@ Both throwaway repositories used during the review had been deleted from disk, s
 - Update the status headers of `visual-optimization-plan.md` and `ux-functional-improvement-plan.md`.
 
 **Pass rule:** no two documents in `doc/` give different values for the same token, view count or layout element; every superseded document says so in its first lines.
+
+**Done 2026-11-01.** Root `DESIGN.md` documents shipped light/dark colour roles, type and spacing scales, configurable density/corners, component states, dialog/focus behavior and the current mixed icon inventory. It preserves the agreed calm neutral direction with meaningful Git cues. `00` defines precedence; `03` now describes two views and the sidebar composer; `05`, `06` and `09` identify superseded material in their opening lines. The visual plan's status-bar proposal is retired, its historical/proposed status is explicit, and `15` removes its competing palette example and records actual CSS/Tailwind usage with Button/Dialog deferred to D2. `07` and the U5.1 ledger now agree on the current unavailable-command behavior; D3.2 remains a proposal. The UX status header reflects its completed ledger. `git diff --check` and `pnpm check` passed; no renderer behavior changed.
 
 ## 6. Stage D1: errors and feedback
 

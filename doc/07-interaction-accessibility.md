@@ -1,5 +1,7 @@
 # GitCrest 交互与可访问性规范
 
+当前视觉与布局依据：[DESIGN.md](../DESIGN.md)。快捷键完整默认值及用户覆盖以 `src/features/settings/model/shortcut-preferences.ts` 为准。命令面板当前保留不可用命令并显示原因（U5.1）；D3.2 提议折叠这些命令，尚未实施。
+
 ## 1. 键盘优先
 
 所有 P0 操作必须支持键盘。
@@ -45,7 +47,7 @@
 
 示例：
 
-- 当前无仓库时，不显示 commit 命令。
+- 当前无仓库时，commit 命令不可用并显示需要仓库的原因；D3.2 的折叠方案另行验收。
 - 选中提交时，显示 cherry-pick、copy SHA、tag。
 - 工作区有冲突时，置顶打开冲突解决器。
 

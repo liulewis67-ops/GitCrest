@@ -1,5 +1,7 @@
 # GitCrest UI/UX 规格
 
+> **Superseded by [DESIGN.md](../DESIGN.md)** for current layout and visual rules. This document preserves historical proposals, including the bottom workbench; use shipped code and DESIGN.md for the two-view workbench. Functional requirements remain subject to the API contract and implementation ledger.
+
 ## 1. 体验定位
 
 GitCrest 的界面应像专业工程工具，而不是营销产品。整体风格应高密度、稳定、克制，适合用户连续工作数小时。

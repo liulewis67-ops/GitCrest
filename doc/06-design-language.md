@@ -1,5 +1,7 @@
 # GitCrest 设计语言
 
+> **Colour and typography sections superseded by [DESIGN.md](../DESIGN.md)** and `src/styles/tokens.css`. Values below are historical, not a second token source. The shipped theme follows the system by default. DESIGN.md also records current spacing, component and focus behavior.
+
 ## 1. 设计人格
 
 GitCrest 的视觉语言应体现“安静、精确、可靠”。它不是炫技型开发者玩具，也不是轻量消费应用，而是每天使用的工程工作台。

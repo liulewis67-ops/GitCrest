@@ -23,9 +23,9 @@
 
 - 标题栏和仓库 Tab。
 - 左侧 Changes 列表（仅显示有 Git 状态的文件）和分支 / Remotes / Shelves 区。
-- 中央主区：双模式 —— 提交图模式 / Diff 模式（IDEA-Split 左右分栏）。两模式互斥但可随时切换。
-- 右侧提交详情（仅提交图模式下显示；Diff 模式下收起）。
-- 底部工作区和暂存区。
+- 中央主区：Workspace（变更与 Diff）/ History（提交图与提交变更）两个视图。
+- History 可选提交详情；窄窗口为覆盖层。
+- 提交编辑器位于 Workspace 左侧 Commit 面板内；无跨窗口底部工作台或状态栏。现行视觉依据见 [DESIGN.md](../DESIGN.md)。
 
 ### Diff 窗口
 
@@ -67,25 +67,25 @@
 
 ## 3. 主窗口布局
 
-主窗口按任务组织为三个视图，每个仓库 Tab 记住自己的视图。同一时间只显示当前任务需要的面板，可选面板隐藏时不留空位，中央内容占满剩余宽度。
+主窗口按任务组织为两个视图，每个仓库 Tab 记住自己的视图。同一时间只显示当前任务需要的面板，可选面板隐藏时不留空位，中央内容占满剩余宽度。
 
 ```text
 Title Bar: Repo Tabs / Command Palette / Tasks (运行中才突出) / Settings / Core status (正常时只显示圆点)
-Toolbar:   [Workspace n | History | Branches]  path   branch ▾  [Fetch | Pull ↓n | Push ↑n]  ◧ ◨
+Toolbar:   [Workspace n | History]  path   branch ▾  [Fetch | Pull ↓n | Push ↑n]  ◧ ◨
 Banner:    合并/变基/挑选提交/二分查找进行中、冲突（任何视图都显示）
 
 Workspace: 提交面板 [Commit | Shelves]（工具栏、变更树、提交编辑器） | 工作区 Diff（全高）
 History:   提交列表（搜索 + 可展开筛选） | 所选提交：标题、文件列表、Diff | 可选提交详情
-Branches:  分支浏览器（筛选、本地/远程）、Worktrees、Remotes | 提交图 | 提交详情
+History sidebar: 分支浏览器（本地/远程）、Worktrees、Remotes、Shelves；Branches 不是独立视图
 ```
 
 - 提交面板参照 IntelliJ 的 Commit 工具窗口：顶部为 Commit 与 Shelves 两个标签；Commit 标签下依次是图标工具栏（刷新、全部暂存、全部取消暂存、搁置、展开/折叠）、变更树和提交编辑器。
 - 变更树分组：合并冲突、Changes（所有已跟踪文件的变更，不再按已暂存/未暂存拆分）、Unversioned Files（尚未 git add 的文件）、Ignored Files（默认折叠）。每个文件前的复选框表示是否已暂存：勾选=全部暂存，半选=部分暂存，未勾选=未暂存；分组复选框一次暂存或取消暂存整组（core 的 stagePaths / unstagePaths 动作）。部分暂存的文件可在 Diff 头部切换查看未暂存与已暂存部分。
 - 提交编辑器位于提交面板底部（Amend 等选项、摘要、说明、Commit 与 Commit and Push to…）；工作区干净且没有草稿时隐藏。草稿在切换视图时保留。
-- 提交详情（inspector）在 History 默认隐藏、在 Branches 默认显示；窗口宽度 ≥1440px 时停靠在右侧，更窄时浮于内容之上，Esc 关闭。
+- 提交详情（inspector）在 History 默认隐藏；窗口宽度 ≥1440px 时可停靠在右侧，更窄时浮于内容之上，Esc 关闭。
 - 专注模式隐藏侧栏、工具栏与提交详情，只保留 Diff 与文件间导航；Esc 恢复。
 - 提交操作（合并、挑选、还原、建分支、打标签、复制 SHA）收在所选提交的“⋯”菜单中，仍经过原有确认对话框。
-- 视图切换：`Cmd/Ctrl+1/2/3`；侧栏 `Cmd/Ctrl+Shift+B`；提交详情 `Cmd/Ctrl+Shift+D`；专注模式 `Cmd/Ctrl+Shift+M`。
+- 视图切换：`Cmd/Ctrl+1/2`；侧栏 `Cmd/Ctrl+Shift+B`；提交详情 `Cmd/Ctrl+Shift+D`；专注模式 `Cmd/Ctrl+Shift+M`。完整默认绑定与用户覆盖以 `shortcut-preferences.ts` 为准。
 
 ## 4. 导航模型
 

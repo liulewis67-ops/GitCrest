@@ -1,5 +1,7 @@
 # GitCrest 开发前产品设计文档包
 
+文档优先级：**已交付代码与根目录 [DESIGN.md](../DESIGN.md) 描述现状；计划文档描述待变更的目标；标为 superseded 的文档仅作历史参考。** Token 以 `src/styles/tokens.css` 和运行时主题实现为准。界面现状为 Workspace / History 两个视图，无状态栏；旧线框不得覆盖当前实现。
+
 版本：v1.0  
 日期：2026-06-04  
 来源：项目根目录 `GitCrest_产品技术文档.md`

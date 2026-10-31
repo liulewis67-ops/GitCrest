@@ -1,5 +1,7 @@
 # GitCrest 前端开发规范
 
+> Current implementation note (2026-11-01, D0.3): [DESIGN.md](../DESIGN.md) and shipped code take precedence for visual rules. Styling currently combines Tailwind v4 utilities with `globals.css` semantic classes and CSS tokens. Shared Button/Dialog and shadcn are not shipped; the component tree and Tailwind-only examples below are migration proposals. D2 will choose and record the shared-component styling approach; do not add a library or rewrite existing styles solely to satisfy these older examples.
+
 版本：v1.0  
 日期：2026-10-08  
 适用范围：React renderer、前端构建、与 Electron preload 的通信边界，以及相关测试。
@@ -39,8 +41,8 @@
 | UI 框架 | React / React DOM 18.3 | 保持 React 18 基线；大版本升级单独实施 |
 | 语言 | TypeScript 5，已启用 strict | 前端业务代码使用 TypeScript，禁止关闭 strict 规避错误 |
 | 构建 | Vite + electron-vite | 浏览器预览和 Electron renderer 使用一致的样式、别名配置 |
-| 样式 | `src/App.css` | 新样式体系采用 Tailwind CSS v4 + CSS 变量；尚待接入 |
-| 基础组件 | 尚未接入 shadcn/ui | 按需引入 shadcn/ui，并以项目 Token 定制源码 |
+| 样式 | `src/styles/globals.css`、`tokens.css`，Tailwind v4 已接入 | 保留现有语义类与工具类，D2 统一基础组件样式方案 |
+| 基础组件 | `src/shared/ui` 的菜单、提示、分隔器等；暂无共享 Button/Dialog | D2 建设 Button/Dialog；不预设必须安装 shadcn/ui |
 | 服务端状态 | 现有 API client + React 状态 | 按功能接入 TanStack Query，统一查询、失效和 mutation 状态 |
 | 跨组件 UI 状态 | React 状态 | 局部状态优先；跨页面状态复杂后按需引入 Zustand |
 | 路由 | 当前页面状态切换 | 多页面需求落地时接入 React Router，并验证打包后的地址解析 |
@@ -267,7 +269,7 @@ import tailwindcss from "@tailwindcss/vite";
 
 颜色通过语义 Token 消费，例如 `bg-surface`、`text-foreground`、`border-line`。业务组件禁止散落十六进制颜色或按页面单独定义灰度体系。
 
-Token 分两层：运行时 CSS 变量负责主题切换，`@theme inline` 映射为 Tailwind 工具类。下例是最小接入样例，完整 Token 还需覆盖 Git 状态、Diff、危险/警告、选中态、控件边界与浮层。变量映射方式参考 [Tailwind Theme variables](https://tailwindcss.com/docs/theme)。
+Token 分两层：运行时 CSS 变量负责主题切换，`@theme inline` 映射为 Tailwind 工具类。下例节选当前命名；完整 Token、字体与主题值以 `src/styles/tokens.css`、`globals.css` 和运行时主题实现为准，视觉说明见 [DESIGN.md](../DESIGN.md)。变量映射方式参考 [Tailwind Theme variables](https://tailwindcss.com/docs/theme)。
 
 ```css
 /* globals.css：@import 必须位于其他规则之前 */
@@ -277,54 +279,24 @@ Token 分两层：运行时 CSS 变量负责主题切换，`@theme inline` 映�
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
-  --color-canvas: var(--gc-bg);
-  --color-surface: var(--gc-surface);
-  --color-raised: var(--gc-raised);
-  --color-line: var(--gc-border);
-  --color-foreground: var(--gc-text);
-  --color-muted: var(--gc-text-muted);
-  --color-accent: var(--gc-accent);
-  --color-on-accent: var(--gc-on-accent);
-  --font-sans: var(--gc-font-ui);
-  --font-mono: var(--gc-font-code);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-raised: var(--surface-raised);
+  --color-line: var(--line);
+  --color-foreground: var(--text);
+  --color-muted: var(--text-muted);
+  --color-accent: var(--accent);
 }
 ```
 
-```css
-/* tokens.css：沿用设计语言的基础色；新增主按钮前景配对 */
-:root {
-  color-scheme: dark;
-  --gc-bg: #101214;
-  --gc-surface: #16191d;
-  --gc-raised: #1d2127;
-  --gc-border: #2a3038;
-  --gc-text: #e6eaf0;
-  --gc-text-muted: #9aa4b2;
-  --gc-accent: #4f8cff;
-  --gc-on-accent: #101214;
-  --gc-font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --gc-font-code: "JetBrains Mono", "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-}
-
-:root[data-theme="light"] {
-  color-scheme: light;
-  --gc-bg: #f7f8fa;
-  --gc-surface: #ffffff;
-  --gc-raised: #eef2f7;
-  --gc-border: #d9dee7;
-  --gc-text: #17202c;
-  --gc-text-muted: #5d6878;
-  --gc-accent: #2563eb;
-  --gc-on-accent: #ffffff;
-}
-```
+不在本文复制另一份调色板；新增颜色角色时同步 Token 文件、运行时主题与 DESIGN.md。
 
 约定：
 
 - 用户偏好保留 `system / light / dark` 三种值，根节点 `data-theme` 只写解析后的 `light / dark`，沿用当前 DOM 属性约定。显式选择优先；system 跟随系统变化；无法读取偏好和系统值时回退深色。
 - 应在首次绘制前完成主题解析，初始化脚本必须符合 Electron CSP；不要通过允许任意内联脚本消除闪烁。
 - 用根节点 Token 完成常规主题切换，`dark:` 仅处理确有结构差异的情况。自定义 data 属性暗色变体参考 [Tailwind Dark mode](https://tailwindcss.com/docs/dark-mode)。
-- 色值只在 Token 文件中维护。本文 `--gc-*` 是底层存储命名，不建立另一套视觉标准；调整视觉值时同步设计语言文档。
+- 色值在 Token 与运行时主题中统一维护；不引入旧示例的 `--gc-*` 命名。调整视觉值时同步 DESIGN.md。
 - shadcn/ui 接入时，把 `background / foreground / primary / primary-foreground / muted / muted-foreground / destructive / border / ring` 等映射到统一 Token；注意 shadcn 的 `muted` 通常是背景，本例 `text-muted` 是次级文本，不能同名机械覆盖。
 - 装饰分隔线与输入框边界分开定义。柔和的面板边线不能自动当作已满足可访问性的控件边界。
 

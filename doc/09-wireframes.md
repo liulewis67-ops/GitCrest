@@ -1,5 +1,7 @@
 # GitCrest 低保真线框图
 
+> **Superseded by [DESIGN.md](../DESIGN.md)**. These drawings are historical proposals. The shipped app has Workspace and History views, a composer in the Commit panel, and no status bar; do not implement a third view or bottom workbench from these drawings.
+
 ## 1. 欢迎页
 
 用途：让用户快速进入最近仓库，或开始克隆、打开、初始化。

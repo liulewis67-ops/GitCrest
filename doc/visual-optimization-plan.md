@@ -1,6 +1,7 @@
 # GitCrest Visual Optimization Plan
 
 Status: Phase 1 completed; Phases 2–4 proposed.
+Current baseline (2026-11-01): [DESIGN.md](../DESIGN.md) and shipped code take precedence. The diagnosis below is historical; Phases 2–4 contain proposals, not a description of today's app. Execute design-review D0/D1 first. The current two-view layout, sidebar composer and no-status-bar decision supersede older drawings here. Density and graph-colour preferences already exist and need evaluation rather than reimplementation.
 Scope: renderer UI (`src/`), main window first, then the Diff and Conflict windows
 Related specs: [05-uiux-spec.md](05-uiux-spec.md), [06-design-language.md](06-design-language.md), [07-interaction-accessibility.md](07-interaction-accessibility.md)
 
@@ -139,7 +140,7 @@ The two left columns of the commit workbench (about 2/3 of a 1440×204 band) onl
 │ Remotes  ▸   │ │                                            │               │
 │ Shelves  ▸   │ │                                            │               │
 ├──────────────┴────────────────────────────────────────────────┴───────────────┤
-│ ● Engine ready   2 tasks running                               main ↑2  UTF-8 │ 22  Status bar
+│ No status bar: engine/tasks in titlebar; branch/upstream in repository toolbar │
 └───────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -151,7 +152,7 @@ Key moves:
 | L2 | Toolbar 40 → 36px. Drop the breadcrumb and full path; the path goes into the repo tab tooltip and the details panel. The **branch switcher moves to the far left** and becomes the toolbar's anchor, with ahead/behind counts. Graph/Diff becomes a centered segmented control. Refresh moves here as an icon. | 4 |
 | L3 | Remove the main panel heading row. The view name already lives in the segmented control. | 36 |
 | L4 | History filters collapse into one 36px search row: a free-text box (SHA, message or author, detected automatically), a branch dropdown, and a "Filters" button that opens path/date filters as a popover. Active filters show as removable chips in the same row. | 72 |
-| L5 | Remove the main panel footer and the sidebar footer. Status bar 25 → 22px is the single home for engine state, version (tooltip) and task progress. | 31 |
+| L5 | Remove the main panel footer and the sidebar footer. No status bar. Engine state and task progress stay in the titlebar; branch state stays in the repository toolbar. | 31 |
 | L6 | **Move the commit composer into the left sidebar** under the Changes list (the JetBrains / VS Code / Fork pattern). Remove the bottom workbench and its redundant summary columns. | 210 |
 
 ### 3.2 Initial screen ratio targets
@@ -297,7 +298,7 @@ Rule: **at most one L1 per region.** Push is L1 in the toolbar only when there a
 - The fake "Favorites first" button becomes plain label text or a real sort toggle.
 
 ### 6.9 Status bar
-- 22px, 12px text. Left: engine state, running tasks (click opens the Task Center). Right: branch/upstream, last fetch time. The version only goes in the engine tooltip.
+- **Superseded in D0.3:** no status bar. Keep engine state and Task Center access in the titlebar, and branch/upstream in the repository toolbar. Do not add a footer to meet this older proposal.
 
 ### 6.10 Iconography
 - Replace the Unicode glyphs with one SVG icon set. Recommended: `lucide-react` (tree-shakable, MIT, 1.5px stroke fits the "quiet precision" tone). Icons are 16px in toolbars and 14px in rows, always `currentColor`.
@@ -313,7 +314,7 @@ Rule: **at most one L1 per region.** Push is L1 in the toolbar only when there a
 | Hit targets | Minimum 24×24px for icon buttons, 28px row height | branch actions are 20px now |
 | Keyboard | `↑/↓` move in every list, `Space` stages/unstages the focused file, `Enter` opens its diff, `Ctrl+B` toggles the sidebar, `Ctrl+Alt+B` toggles details, `F7/Shift+F7` move between hunks | the loop can be done without the mouse |
 | Discoverability | Every hover action is also in the context menu and the command palette | hover-only actions are invisible to keyboard users |
-| Feedback | Push/Pull/Fetch show inline progress in the button + status bar; success shows a 2s toast with an Undo where it exists | today the only feedback is the task count |
+| Feedback | Push/Pull/Fetch show inline progress in the button + Task Center; success shows a 2s toast with an Undo where it exists | today the only feedback is the task count |
 | Empty states | One short sentence + one action per [05-uiux-spec.md §6](05-uiux-spec.md), using `--text-lg` titles; remove the decorative "clear view" eyebrow | the current empty states are mostly decoration |
 | Motion | 120ms ease-out for hover/press/expand; no motion on list virtualization; respect `prefers-reduced-motion` | calm and fast |
 | Persistence | Keep the current per-repo layout storage; add collapsed sections, density and column visibility to it | |
@@ -329,7 +330,7 @@ Rule: **at most one L1 per region.** Push is L1 in the toolbar only when there a
 | 960–1199px | 240px | flex | drawer over the main area, toggled from the toolbar |
 | < 960px | 48px icon rail; expands as an overlay | flex | drawer |
 
-Height: below 700px, the commit composer body field starts at 2 lines and the status bar hides the branch block.
+Height: below 700px, keep the commit composer compact. No status bar is added; branch state remains in the repository toolbar.
 
 ---
 
@@ -353,7 +354,7 @@ Each phase can ship on its own and leaves the app consistent.
   - Rechecked 2026-10-31 in live Electron E2E runs: the main, Diff and Conflict windows have no visible text below 11px, and split-diff code computes to 13px. The check caught a 10.4px `<small>` label in the Conflict window; the base style now gives semantic small text an 11px floor.
 
 ### Phase 2 – Initial screen ratio
-- L1–L5 from §3.1: slimmer titlebar and toolbar, no main heading or footers, collapsed history filters, one status bar.
+- L1–L5 from §3.1, subject to DESIGN.md: slimmer titlebar and toolbar, no main heading or footers, collapsed history filters, no status bar. Engine state and tasks remain in the titlebar.
 - Commit graph rows at 32px with single-line columns.
 - Fallback composer (§3.3) if Phase 3 isn't scheduled right after.
 - **Accept when:** graph viewport ≥ 75% of window height at 1366×728 and ≥ 80% at 1440×900; ≥ 16 commits visible at 1366×728.
