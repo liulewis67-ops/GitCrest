@@ -307,6 +307,7 @@ pub(crate) struct PipelineService {
 }
 
 impl PipelineService {
+    #[allow(clippy::too_many_arguments)] // wired once in bootstrap; a config struct would only move the list
     pub(crate) fn new(
         store: Arc<dyn PipelineStorePort>,
         catalog: Arc<dyn RepositoryCatalogPort>,
@@ -315,6 +316,7 @@ impl PipelineService {
         data_dir: PathBuf,
         tasks: TaskService,
         targets: RepositoryTargetReader,
+        git: crate::git::command::GitCommandService,
     ) -> Self {
         let paths_catalog = catalog.clone();
         let proposals = Proposals::default();
@@ -333,7 +335,8 @@ impl PipelineService {
                         .map(|record| PathBuf::from(record.path))
                 }),
                 contexts.clone(),
-            ),
+            )
+            .with_credentials(git.clone()),
             in_place: InPlaceWorkspace::new(
                 Arc::new(move |repo_id| {
                     in_place_catalog
@@ -349,7 +352,8 @@ impl PipelineService {
                         .unwrap_or_default();
                     app.resolve(repository).in_place_dirty_policy
                 }),
-            ),
+            )
+            .with_credentials(git),
         };
         let observer_events = events.clone();
         let waiting_tasks = WaitingTasks::new(tasks, targets, contexts.clone());

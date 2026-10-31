@@ -295,7 +295,9 @@ impl GitCommandService {
 
     /// The askpass environment for a Git command that talks to a remote, after renewing any
     /// selected account's OAuth token that is about to expire.
-    async fn network_environment(&self) -> Result<Vec<(OsString, OsString)>, TaskFailure> {
+    pub(crate) async fn network_environment(
+        &self,
+    ) -> Result<Vec<(OsString, OsString)>, TaskFailure> {
         self.account_selections.refresh_expiring_tokens().await;
         askpass_environment(&self.account_selections)
     }

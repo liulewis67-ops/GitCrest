@@ -1,8 +1,10 @@
-use std::{ffi::OsString, path::Path, process::Stdio};
+use std::{path::Path, process::Stdio};
 
 use tokio::process::Command;
 
 use crate::domain::pipeline::{MergeMode, PipelineRun, PipelineStep};
+
+use crate::git::command::GitCommandService;
 
 use super::workspace::{MergeOutcome, PipelineStepError, PublishOutcome};
 
@@ -15,22 +17,20 @@ pub(super) struct GitOutput {
 /// Plain Git processes shared by the workspaces.
 pub(super) struct GitRunner {
     program: String,
-    network_environment: Vec<(OsString, OsString)>,
+    /// Supplies the askpass environment (selected account, renewed tokens) for remote commands.
+    credentials: Option<GitCommandService>,
 }
 
 impl GitRunner {
     pub(super) fn new() -> Self {
         Self {
             program: "git".into(),
-            network_environment: Vec::new(),
+            credentials: None,
         }
     }
 
-    pub(super) fn with_network_environment(
-        mut self,
-        environment: Vec<(OsString, OsString)>,
-    ) -> Self {
-        self.network_environment = environment;
+    pub(super) fn with_credentials(mut self, service: GitCommandService) -> Self {
+        self.credentials = Some(service);
         self
     }
 
@@ -51,7 +51,13 @@ impl GitRunner {
             .env("GIT_MERGE_AUTOEDIT", "no")
             .kill_on_drop(true);
         if network {
-            command.envs(self.network_environment.iter().cloned());
+            if let Some(service) = &self.credentials {
+                let environment = service
+                    .network_environment()
+                    .await
+                    .map_err(|_| PipelineStepError::new("Credentials are unavailable"))?;
+                command.envs(environment);
+            }
         }
         #[cfg(windows)]
         command.creation_flags(0x0800_0000);

@@ -9948,6 +9948,7 @@ fn test_pipelines(
         std::env::temp_dir().join("gitcrest-test-pipelines"),
         TaskService::default(),
         repositories.target_reader(),
+        GitCommandService::default(),
     ))
 }
 

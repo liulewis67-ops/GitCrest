@@ -1,4 +1,4 @@
-use std::{ffi::OsString, path::PathBuf, sync::Arc};
+use std::{path::PathBuf, sync::Arc};
 
 use crate::domain::pipeline::{InPlaceDirtyPolicy, PipelineRun, PipelineStep};
 
@@ -48,12 +48,12 @@ impl InPlaceWorkspace {
         }
     }
 
-    /// Environment for commands that talk to a remote (credential helpers).
-    pub(crate) fn with_network_environment(
+    /// Remote commands use the app's credential flow, like a manual push.
+    pub(crate) fn with_credentials(
         mut self,
-        environment: Vec<(OsString, OsString)>,
+        service: crate::git::command::GitCommandService,
     ) -> Self {
-        self.git = self.git.with_network_environment(environment);
+        self.git = self.git.with_credentials(service);
         self
     }
 

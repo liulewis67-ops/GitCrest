@@ -162,6 +162,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
             pipeline_data_dir,
             tasks.clone(),
             repository_targets.clone(),
+            git_commands.clone(),
         )),
         ai_providers: Arc::new(ai_providers),
         history_search_index: Arc::new(store),

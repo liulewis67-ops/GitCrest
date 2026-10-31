@@ -15,6 +15,7 @@ use crate::{
     domain::pipeline::{ExecutionMode, PipelineRepositorySettings, RunStatus, StepState},
     events::publisher::EventBus,
     features::{repositories::RepositoryTargetReader, tasks::TaskService},
+    git::command::GitCommandService,
     git::repository::GitRepositoryAdapter,
     ports::{pipelines::PipelineStorePort, repository::RepositoryCatalogPort},
     storage::repository_paths::RepositoryFilesystemAdapter,
@@ -51,6 +52,7 @@ fn restart(harness: &Harness) -> Restarted {
         harness.fixture.data_dir.clone(),
         tasks.clone(),
         targets,
+        GitCommandService::default(),
     );
     Restarted {
         service,

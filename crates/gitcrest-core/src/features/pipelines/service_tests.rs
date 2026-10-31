@@ -12,6 +12,7 @@ use crate::{
     },
     events::publisher::EventBus,
     features::{repositories::RepositoryTargetReader, tasks::TaskService},
+    git::command::GitCommandService,
     git::repository::GitRepositoryAdapter,
     ports::pipelines::PipelineStorePort,
     ports::repository::RepositoryCatalogPort,
@@ -51,6 +52,7 @@ pub(super) fn harness(rule: PipelineRule) -> Harness {
         fixture.data_dir.clone(),
         tasks.clone(),
         targets,
+        GitCommandService::default(),
     );
     Harness {
         fixture,
@@ -593,6 +595,7 @@ async fn a_worktree_that_cannot_be_created_fails_the_step_without_falling_back_t
         fixture.data_dir.clone(),
         TaskService::default(),
         targets,
+        GitCommandService::default(),
     );
 
     service
