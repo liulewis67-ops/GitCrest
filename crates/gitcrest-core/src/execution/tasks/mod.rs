@@ -33,6 +33,8 @@ pub struct TaskService {
     inner: Arc<TaskServiceInner>,
 }
 
+type RepositoryHold = Arc<dyn Fn(&str) -> bool + Send + Sync>;
+
 pub(super) struct TaskServiceInner {
     pub(super) data: Mutex<TaskData>,
     pub(super) repo_locks: super::locks::ResourceLocks,
@@ -43,6 +45,8 @@ pub(super) struct TaskServiceInner {
     /// Called with a failed task's message and log when Git reported an authentication failure.
     pub(super) authentication_failures:
         std::sync::RwLock<Option<Arc<AuthenticationFailureObserver>>>,
+    /// Tells whether a repository is held by something that owns its working tree.
+    pub(super) repository_hold: std::sync::RwLock<Option<RepositoryHold>>,
 }
 
 impl Default for TaskServiceInner {
@@ -55,6 +59,7 @@ impl Default for TaskServiceInner {
             store: None,
             status_invalidator: None,
             authentication_failures: std::sync::RwLock::new(None),
+            repository_hold: std::sync::RwLock::new(None),
         }
     }
 }
@@ -80,6 +85,8 @@ pub enum TaskSubmitError {
     QueueFull,
     StorageUnavailable,
     ShuttingDown,
+    /// A pipeline running in place owns the repository's working tree.
+    RepositoryHeld,
 }
 
 #[derive(Clone)]
@@ -185,8 +192,20 @@ impl TaskService {
                 store: Some(store),
                 status_invalidator,
                 authentication_failures: std::sync::RwLock::new(None),
+                repository_hold: std::sync::RwLock::new(None),
             }),
         })
+    }
+
+    /// Registers a check that refuses new tasks on a repository while something else, such as a
+    /// switch-in-place pipeline run, owns its working tree.
+    pub(crate) fn hold_repositories_when(
+        &self,
+        hold: impl Fn(&str) -> bool + Send + Sync + 'static,
+    ) {
+        if let Ok(mut current) = self.inner.repository_hold.write() {
+            *current = Some(Arc::new(hold));
+        }
     }
 
     /// Registers the code that reacts when a task fails because a remote refused Git's
@@ -297,6 +316,18 @@ impl TaskService {
         let operation = operation.into();
         if !self.inner.data.lock().await.accepting {
             return Err(TaskSubmitError::ShuttingDown);
+        }
+        if let Some(repo) = &repo_id {
+            let held = self
+                .inner
+                .repository_hold
+                .read()
+                .ok()
+                .and_then(|guard| guard.clone())
+                .is_some_and(|hold| hold(repo));
+            if held {
+                return Err(TaskSubmitError::RepositoryHeld);
+            }
         }
         let worker_capacity_full = {
             let mut workers = self.inner.worker_tasks.lock().await;

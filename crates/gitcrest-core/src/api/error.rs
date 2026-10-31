@@ -250,6 +250,11 @@ impl ApiError {
                 ApiErrorCode::TaskQueueFull,
                 "The background task queue is full. Wait for current work to finish.",
             ),
+            TaskSubmitError::RepositoryHeld => Self::new(
+                StatusCode::CONFLICT,
+                ApiErrorCode::RepositoryStateConflict,
+                "A pipeline is using this repository's working tree. Wait for it to finish.",
+            ),
             TaskSubmitError::StorageUnavailable => Self::task_storage_unavailable(),
             TaskSubmitError::ShuttingDown => Self::new(
                 StatusCode::SERVICE_UNAVAILABLE,

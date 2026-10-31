@@ -629,3 +629,41 @@ async fn a_worktree_that_cannot_be_created_fails_the_step_without_falling_back_t
     );
     assert_eq!(git(&fixture.repository, &["stash", "list"]), "");
 }
+
+#[tokio::test]
+async fn a_running_in_place_run_holds_the_repository_against_new_tasks() {
+    use crate::domain::pipeline::{
+        tests::{run, step},
+        ExecutionMode,
+    };
+    use crate::execution::TaskFailure;
+    use crate::features::tasks::TaskSubmitError;
+    let harness = harness(auto_rule());
+    let mut held = run(vec![step(0, StepState::Merging)]);
+    held.repo_id = "repo".into();
+    held.execution_mode = ExecutionMode::SwitchInPlace;
+    held.status = RunStatus::Running;
+    harness.store.insert_pipeline_run(&held).unwrap();
+    let submit = |repo: &'static str| {
+        let tasks = harness.tasks.clone();
+        async move {
+            tasks
+                .submit(Some(repo.into()), None, repo, "push", |_| async {
+                    Ok::<Option<String>, TaskFailure>(None)
+                })
+                .await
+        }
+    };
+
+    assert!(matches!(
+        submit("repo").await,
+        Err(TaskSubmitError::RepositoryHeld)
+    ));
+    assert!(submit("other").await.is_ok());
+
+    harness
+        .store
+        .update_pipeline_run("run", RunStatus::WaitingForConflicts, None)
+        .unwrap();
+    assert!(submit("repo").await.is_ok());
+}

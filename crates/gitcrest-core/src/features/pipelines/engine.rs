@@ -625,8 +625,9 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
     ) -> Result<StepFlow, EngineError> {
         match run.rule.on_conflict {
             ConflictPolicy::OpenResolver => {
-                self.set_step(run, index, StepState::WaitingForConflicts, None)?;
+                // The run stops holding the working tree before its waiting task is announced.
                 self.set_run_status(run, RunStatus::WaitingForConflicts)?;
+                self.set_step(run, index, StepState::WaitingForConflicts, None)?;
                 Ok(StepFlow::Paused)
             }
             ConflictPolicy::SkipTarget => {

@@ -356,6 +356,19 @@ impl PipelineService {
             .with_credentials(git),
         };
         let observer_events = events.clone();
+        let hold_store = store.clone();
+        tasks.hold_repositories_when(move |repo_id| {
+            hold_store
+                .list_active_pipeline_runs()
+                .map(|runs| {
+                    runs.iter().any(|run| {
+                        run.repo_id == repo_id
+                            && run.execution_mode == ExecutionMode::SwitchInPlace
+                            && run.status == RunStatus::Running
+                    })
+                })
+                .unwrap_or(false)
+        });
         let waiting_tasks = WaitingTasks::new(tasks, targets, contexts.clone());
         let engine = PipelineEngine::new(store.clone(), Arc::new(workspace)).with_observer(
             Arc::new(move |run: &PipelineRun| {
