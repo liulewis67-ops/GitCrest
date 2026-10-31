@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
@@ -5,7 +6,7 @@ import type { GitCrestApiClient } from "../../../api/client";
 export function useCommitTagCreation(api: GitCrestApiClient, repoId: string, oid?: string) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [editorOpen, setEditorOpen] = useState(false);
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
@@ -51,7 +52,7 @@ export function useCommitTagCreation(api: GitCrestApiClient, repoId: string, oid
       return true;
     } catch (reason) {
       if (generation.current === requestGeneration) {
-        setError(reason instanceof Error ? reason.message : t("err.tagFailed"));
+        setError(describeApiError(reason, t("err.tagFailed")));
       }
       return false;
     } finally {

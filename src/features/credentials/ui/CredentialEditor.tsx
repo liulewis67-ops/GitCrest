@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState, type FormEvent } from "react";
 import type { CredentialStatusResponse, GitCrestApiClient } from "../../../api/client";
@@ -15,7 +17,7 @@ export function CredentialEditor({ api, host, disabled = false }: CredentialEdit
   const [token, setToken] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [notice, setNotice] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -32,7 +34,7 @@ export function CredentialEditor({ api, host, disabled = false }: CredentialEdit
       setStatus(value);
       setUsername(value.username || "");
     }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : t("cred.readFailed"));
+      if (active) setError(describeApiError(reason, t("cred.readFailed")));
     }).finally(() => {
       if (active) setLoading(false);
     });
@@ -52,7 +54,7 @@ export function CredentialEditor({ api, host, disabled = false }: CredentialEdit
       setToken("");
       setNotice(t("cred.saved"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("cred.saveFailed"));
+      setError(describeApiError(reason, t("cred.saveFailed")));
     } finally {
       setBusy(false);
     }
@@ -71,7 +73,7 @@ export function CredentialEditor({ api, host, disabled = false }: CredentialEdit
       setConfirmDelete(false);
       setNotice(t("cred.removed"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("cred.removeFailed"));
+      setError(describeApiError(reason, t("cred.removeFailed")));
     } finally {
       setBusy(false);
     }
@@ -88,7 +90,7 @@ export function CredentialEditor({ api, host, disabled = false }: CredentialEdit
           {status?.isConfigured && (confirmDelete ? <><span className="remoteDeletePrompt">{t("cred.removeQ")}</span><button className="dangerTextButton" type="button" disabled={busy || disabled} onClick={() => void remove()}>{t("cred.confirmRemove")}</button><button className="textButton" type="button" disabled={busy} onClick={() => setConfirmDelete(false)}>{t("cred.cancel")}</button></> : <button className="textButton" type="button" disabled={busy || disabled} onClick={() => setConfirmDelete(true)}>{t("cred.remove")}</button>)}
         </div>
       </form>
-      {error && <p className="taskCenterError" role="alert">{error}</p>}
+      {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       {notice && <p className="credentialNotice" role="status">{notice}</p>}
       <p className="cloneHelp">{t("cred.note")}</p>
     </article>

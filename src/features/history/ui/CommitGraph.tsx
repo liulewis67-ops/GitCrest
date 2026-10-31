@@ -1,3 +1,4 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
 import { GRAPH_ROW_HEIGHT, useAppearance } from "../../settings";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -254,7 +255,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
     </div>}
     <div className="graphViewport" ref={viewportRef} onScroll={(event) => void onScroll(event)} role="region" aria-label={t("main.graphView")}>
     {loading ? <div className="graphState" role="status"><span className="loadingSpinner" aria-hidden="true" />{searchPending ? t("hist.preparing") : t("hist.loading")}</div>
-      : error ? <div className="graphState" role="alert"><p>{error}</p><button className="secondaryButton" type="button" onClick={retry}>{t("hist.retry")}</button></div>
+      : error ? <div className="graphState" role="alert"><p><ErrorMessage error={error} /></p><button className="secondaryButton" type="button" onClick={retry}>{t("hist.retry")}</button></div>
         : commits.length === 0 ? <div className="graphEmpty"><div className="graphIllustration" aria-hidden="true"><div className="graphLine" /><span className="graphNode nodeOne" /><span className="graphNode nodeTwo" /><span className="graphNode nodeThree" /><span className="graphNode nodeFour" /></div><p className="sectionEyebrow">{t("hist.clearView")}</p><h2>{hasFilters ? t("hist.noMatching") : t("hist.noCommits")}</h2><p>{hasFilters ? t("hist.adjust") : t("hist.emptyRepo")}</p>{hasFilters && <button className="secondaryButton" type="button" onClick={clearFilters}>{t("hist.clear")}</button>}</div>
           : <div className="commitGraphCanvas" style={{ height: graphHeight, minWidth: graphWidth }}>
             <svg className="commitGraphEdges" aria-hidden="true" width={graphWidth} height={visibleEnd - visibleStart} viewBox={`0 ${visibleStart} ${graphWidth} ${visibleEnd - visibleStart}`} style={{ top: visibleStart }}>
@@ -293,7 +294,7 @@ export function CommitGraph({ api, repoId, selectedOid, initialScrollTop, refres
             </div>
       </div>}
     {loadingMore && <div className="historyLoadingMore" role="status">{t("hist.loadingOlder")}</div>}
-    {refsError && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status">{t("hist.labelsUnavailable", { error: refsError })}</div>}
+    {refsError && !loading && commits.length > 0 && <div className="historyLoadingMore" role="status"><ErrorMessage error={refsError} /></div>}
     </div>
   </div>;
 }

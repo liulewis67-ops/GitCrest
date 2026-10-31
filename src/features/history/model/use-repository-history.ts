@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CommitHistoryFilters, CommitPageResponse, GitCrestApiClient, RefSnapshotResponse } from "../../../api/client";
@@ -44,8 +45,8 @@ export function useRepositoryHistory(
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchPending, setSearchPending] = useState(false);
-  const [error, setError] = useState("");
-  const [refsError, setRefsError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
+  const [refsError, setRefsError] = useState<DisplayError>("");
   const requestGeneration = useRef(0);
   const offsetsInFlight = useRef(new Set<string>());
   const activeController = useRef<AbortController>();
@@ -83,7 +84,7 @@ export function useRepositoryHistory(
       setNextOffset(typeof page.nextOffset === "number" && Number.isSafeInteger(page.nextOffset) ? page.nextOffset : null);
     } catch (reason) {
       if (requestGeneration.current !== generation) return;
-      setError(reason instanceof Error ? reason.message : t("err.readHistory"));
+      setError(describeApiError(reason, t("err.readHistory")));
     } finally {
       offsetsInFlight.current.delete(requestKey);
       if (requestGeneration.current === generation) {
@@ -121,7 +122,7 @@ export function useRepositoryHistory(
     void api.withSignal(controller.signal).getRepositoryRefs(repoId).then((snapshot) => {
       if (!controller.signal.aborted) setRefs(Array.isArray(snapshot.refs) ? snapshot.refs : []);
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setRefsError(reason instanceof Error ? reason.message : t("err.readRefs"));
+      if (!controller.signal.aborted) setRefsError(describeApiError(reason, t("err.readRefs")));
     });
     return () => controller.abort();
   }, [api, repoId, refreshKey]);

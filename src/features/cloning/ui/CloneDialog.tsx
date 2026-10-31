@@ -1,3 +1,5 @@
+import { type DisplayError } from "../../../shared/i18n/api-errors";
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
 import { useState } from "react";
 import { httpsHostFromRemote } from "../../../shared/lib/https-remote-host";
@@ -7,7 +9,7 @@ interface CloneDialogProps {
   initialRemoteUrl?: string;
   initialDirectoryName?: string;
   parentPath?: string;
-  error: string;
+  error: DisplayError;
   busy: boolean;
   onManageAccounts: (draft: { remoteUrl: string; parentPath: string; directoryName: string }, hosts: string[]) => void;
   onChooseParent: () => Promise<string | undefined>;
@@ -27,7 +29,7 @@ export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", 
   const [directoryName, setDirectoryName] = useState(initialDirectoryName || folderFromRemote(initialRemoteUrl));
   const [folderEdited, setFolderEdited] = useState(Boolean(initialDirectoryName));
   const [selectedParent, setSelectedParent] = useState(parentPath || "");
-  const [parentError, setParentError] = useState("");
+  const [parentError, setParentError] = useState<DisplayError>("");
 
   async function chooseParent() {
     try {
@@ -52,7 +54,7 @@ export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", 
           <div className="cloneFormBody">
           <label className="cloneField">{t("clone.folderName")}<input value={directoryName} onChange={(event) => { setDirectoryName(event.target.value); setFolderEdited(true); }} placeholder={inferredFolder || t("clone.folderPlaceholder")} /></label>
           <div className="cloneDestination"><div><strong>{t("clone.location")}</strong><small>{selectedParent || t("clone.chooseParentHint")}</small></div><button className="secondaryButton" type="button" disabled={busy} onClick={() => void chooseParent()}>{t("clone.chooseFolder")}</button></div>
-          {(error || parentError) && <p className="taskCenterError" role="alert">{error || parentError}</p>}
+          {(error || parentError) && <p className="taskCenterError" role="alert"><ErrorMessage error={error || parentError} /></p>}
           </div>
           <div className="cloneDialogActions"><button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button><button className="primaryButton" type="submit" disabled={busy || !remoteUrl.trim() || !directoryName.trim() || !selectedParent}>{busy ? t("clone.starting") : t("clone.start")}</button></div>
         </form>

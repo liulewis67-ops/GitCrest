@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import type { GitCrestApiClient, TaskSnapshotResponse } from "../../../api/client";
 
@@ -5,7 +6,7 @@ interface RepositoryFetchOptions {
   getApi: () => GitCrestApiClient | undefined;
   repoId?: string;
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
-  onError: (message: string) => void;
+  onError: (message: DisplayError) => void;
 }
 
 export function useRepositoryFetch({ getApi, repoId, onTaskAccepted, onError }: RepositoryFetchOptions) {
@@ -15,7 +16,7 @@ export function useRepositoryFetch({ getApi, repoId, onTaskAccepted, onError }: 
     try {
       onTaskAccepted(await api.fetchRepository(repoId));
     } catch (error) {
-      onError(error instanceof Error ? error.message : t("err.fetchStart"));
+      onError(describeApiError(error, t("err.fetchStart")));
     }
   }
 

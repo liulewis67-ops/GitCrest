@@ -1,3 +1,4 @@
+import { describeApiError, errorText } from "../../shared/i18n/api-errors";
 import { useEffect } from "react";
 import { getGitCrestBridge, requireGitCrestBridge } from "../../api/bridge";
 import { useCoreConnection } from "../use-core-connection";
@@ -59,7 +60,9 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
           if (plan.reportRepositoryRefreshError && isActive()) setConnectionProblem(undefined);
         }, (syncError: unknown) => {
           if (plan.reportRepositoryRefreshError && isActive()) {
-            setConnectionProblem(syncError instanceof Error ? syncError.message : t("app.refreshFailed"));
+            const problem = describeApiError(syncError, t("app.refreshFailed"));
+            setConnectionProblem(errorText(problem));
+            setNotice(problem);
           }
         });
       }

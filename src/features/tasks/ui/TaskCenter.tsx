@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
@@ -6,7 +8,7 @@ import { isAuthenticationFailure, isFailedPush, isSigningFailure, signingFailure
 
 interface TaskCenterProps {
   tasks: TaskSnapshotResponse[];
-  error: string;
+  error: DisplayError;
   actionId: string;
   onClose: () => void;
   onRefresh: () => void;
@@ -26,7 +28,7 @@ interface TaskCenterProps {
 
 export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow, extra }: TaskCenterProps) {
   const { t } = useI18n();
-  const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: string }>>({});
+  const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: DisplayError }>>({});
   const [confirmAbortId, setConfirmAbortId] = useState("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
   const recoveryControllers = useRef(new Map<string, AbortController>());
@@ -49,7 +51,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
       }
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted && waitingTaskIds.current.has(task.taskId)) {
-        setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: reason instanceof Error ? reason.message : t("tk.recoveryFailed") } }));
+        setRecovery((current) => ({ ...current, [task.taskId]: { loading: false, error: describeApiError(reason, t("tk.recoveryFailed")) } }));
       }
     }).finally(() => {
       if (recoveryControllers.current.get(task.taskId) === controller) recoveryControllers.current.delete(task.taskId);
@@ -82,7 +84,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
             <button className="quietButton compact" type="button" onClick={onClose} aria-label={t("tk.closeAria")}>{t("tk.close")}</button>
           </div>
         </div>
-        {error && <p role="alert" className="taskCenterError">{error}</p>}
+        {error && <p role="alert" className="taskCenterError"><ErrorMessage error={error} /></p>}
         {extra}
         {tasks.length === 0 ? <p className="taskCenterEmpty">{t("tk.empty")}</p> : (
           <div className="taskList">
@@ -98,7 +100,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
                 {isFailedPush(task) && <div className="taskCredentialRecovery"><p className="cloneHelp">{task.errorCategory === "pushRejected" ? t("tk.pushRejected") : t("tk.commitSaved")} {t("tk.forceNote")}</p><button className="secondaryButton" type="button" onClick={() => onReviewPush(task)}>{t("tk.reviewPush")}</button></div>}
                 {task.status === "waitingForInput" && supportsWorkflowRecovery(task.operation) && <div className="taskCredentialRecovery workflowRecovery"><p className="cloneHelp">{t("tk.resolveListed")}</p>
                   {recovery[task.taskId]?.loading && <p role="status">{t("tk.inspecting")}</p>}
-                  {recovery[task.taskId]?.error && <p className="taskCenterError" role="alert">{recovery[task.taskId]?.error}</p>}
+                  {recovery[task.taskId]?.error && <p className="taskCenterError" role="alert"><ErrorMessage error={recovery[task.taskId]?.error} /></p>}
                   {recovery[task.taskId]?.snapshot && <>
                     {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 && <button className="secondaryButton" type="button" onClick={() => onOpenConflictWindow(task)}>{t("tk.openResolver")}</button>}
                     {recovery[task.taskId]!.snapshot!.conflictedPaths.length > 0 ? <ul className="workflowPathList" aria-label={t("tk.conflictedFiles")}>{recovery[task.taskId]!.snapshot!.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul> : <p className="cloneHelp">{t("tk.noneLeft")}</p>}

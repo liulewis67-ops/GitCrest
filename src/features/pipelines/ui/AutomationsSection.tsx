@@ -1,6 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useCallback, useEffect, useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type PipelineAppSettingsResponse,
   type PipelineRepositorySettingsResponse,
@@ -13,8 +14,8 @@ import { PipelineRuleEditor, type RemoteBranchChoice } from "./PipelineRuleEdito
 type Mode = PipelineAppSettingsResponse["executionMode"];
 type Policy = PipelineAppSettingsResponse["inPlaceDirtyPolicy"];
 
-function message(reason: unknown, fallback: string): string {
-  return reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : fallback;
+function message(reason: unknown, fallback: string): DisplayError {
+  return describeApiError(reason, fallback);
 }
 
 /** Settings → Automations: how post-push pipelines run, and the open repository's rules. */
@@ -26,8 +27,8 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
   const [localBranches, setLocalBranches] = useState<string[]>([]);
   const [remoteBranches, setRemoteBranches] = useState<RemoteBranchChoice[]>([]);
   const [editing, setEditing] = useState<{ rule: PipelineRule; isNew: boolean }>();
-  const [error, setError] = useState("");
-  const [editorError, setEditorError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
+  const [editorError, setEditorError] = useState<DisplayError>("");
   const [saving, setSaving] = useState(false);
   const [review, setReview] = useState<PipelineRule[]>();
   const [notice, setNotice] = useState("");
@@ -156,7 +157,7 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
     <h3 id="settings-automations-title" tabIndex={-1}>{t("settings.section.automations")}</h3>
     <div className="settingsCard">
       <p className="settingsHint">{t("pl.settings.description")}</p>
-      {error && <p className="formError" role="alert">{error}</p>}
+      {error && <p className="formError" role="alert"><ErrorMessage error={error} /></p>}
       {app && <>
         <fieldset className="pipelineModes">
           <legend>{t("pl.mode.title")} · {t("pl.mode.appDefault")}</legend>

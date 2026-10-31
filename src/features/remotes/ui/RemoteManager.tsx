@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useRef, useState, type FormEvent } from "react";
 import type { BranchSnapshotResponse, RemoteSnapshotResponse } from "../../../api/client";
@@ -13,7 +15,7 @@ interface RemoteManagerProps {
   busy: boolean;
   disabled: boolean;
   disabledReason: string;
-  error: string;
+  error: DisplayError;
   onManageAccounts: (hosts: string[]) => void;
   onRefresh: () => void;
   onAdd: (name: string, url: string) => void;
@@ -87,7 +89,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
           <small title={remote.fetchUrls[0] || t("rm.noFetchUrl")}>{remote.fetchUrls[0] || t("rm.noFetchUrl")}</small>
         </li>)}
       </ul>}
-      {error && <div className="statusLoadError remoteManagerError" role="alert"><span>{error}</span><button type="button" disabled={disabled} onClick={onRefresh}>{t("rm.retry")}</button></div>}
+      {error && <div className="statusLoadError remoteManagerError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" disabled={disabled} onClick={onRefresh}>{t("rm.retry")}</button></div>}
       {disabled && disabledReason && <p className="cloneHelp remoteDisabledReason">{disabledReason}</p>}
 
       {open && <div className="paletteBackdrop remoteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setOpen(false); }}>
@@ -145,7 +147,7 @@ export function RemoteManager({ snapshot, branches, loading, busy, disabled, dis
               </div>}
               <button className="secondaryButton" type="submit" disabled={busy || disabled || !localBranch || !upstreamRemote || !upstreamBranch}>{t("rm.setUpstream")}</button>
             </form>
-            {error && <p className="taskCenterError" role="alert">{error}</p>}
+            {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
           </div>
         </section>
       </div>}

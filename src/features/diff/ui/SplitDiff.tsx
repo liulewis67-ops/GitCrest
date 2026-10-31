@@ -1,3 +1,4 @@
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import type { DiffDocumentResponse } from "../../../api/client";
 import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -19,7 +20,7 @@ export interface CodeReviewSource {
   /** The same file and scope read with `context=full`. */
   fullDocument?: DiffDocumentResponse;
   loading: boolean;
-  error?: string;
+  error?: DisplayError;
   onRefresh: () => void;
   open: boolean;
   onToggle: () => void;

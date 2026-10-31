@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useCallback } from "react";
 import type { TaskSnapshotResponse } from "../../../api/client";
@@ -8,7 +9,7 @@ const PIPELINE_WORKTREE_SUFFIX = " · pipeline worktree";
 
 interface OpenConflictWindowOptions {
   clearTaskError: () => void;
-  setTaskError: (message: string) => void;
+  setTaskError: (message: DisplayError) => void;
 }
 
 export function useOpenConflictWindow({ clearTaskError, setTaskError }: OpenConflictWindowOptions) {
@@ -18,7 +19,7 @@ export function useOpenConflictWindow({ clearTaskError, setTaskError }: OpenConf
       await requireGitCrestBridge().openConflictWindow({ repoId: task.repoId, taskId: task.taskId, ...(task.targetPath?.endsWith(PIPELINE_WORKTREE_SUFFIX) ? { label: task.targetPath } : {}) });
       clearTaskError();
     } catch (error) {
-      setTaskError(error instanceof Error ? error.message : t("err.openConflict"));
+      setTaskError(describeApiError(error, t("err.openConflict")));
     }
   }, [clearTaskError, setTaskError]);
 }

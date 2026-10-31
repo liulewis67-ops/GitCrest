@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useState } from "react";
 import type { components } from "../../../api/schema";
@@ -10,7 +12,7 @@ interface PullDialogProps {
   snapshot?: PullPreflight;
   loading: boolean;
   busy: boolean;
-  error: string;
+  error: DisplayError;
   disabled: boolean;
   disabledReason: string;
   onRefresh: () => void;
@@ -45,7 +47,7 @@ export function PullDialog({ snapshot, loading, busy, error, disabled, disabledR
             </fieldset>
           </>}
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
-          {error && <div className="taskCenterError" role="alert"><span>{error}</span><button className="textButton" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</button></div>}
+          {error && <div className="taskCenterError" role="alert"><span><ErrorMessage error={error} /></span><button className="textButton" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</button></div>}
         </div>
         <footer className="cloneDialogActions">
           <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>

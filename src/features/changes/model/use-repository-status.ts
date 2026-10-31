@@ -1,6 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type StatusSnapshotResponse } from "../../../api/client";
+import { type GitCrestApiClient, type StatusSnapshotResponse } from "../../../api/client";
 import { mergeStatusScope } from "../../../api/status-snapshot";
 
 type PendingStatusRefresh = { full: boolean; forceRefresh: boolean; paths: Set<string> };
@@ -27,7 +28,7 @@ export function useRepositoryStatus({
   finishCacheRequest,
 }: RepositoryStatusOptions) {
   const [snapshots, setSnapshots] = useState<Record<string, StatusSnapshotResponse>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, DisplayError>>({});
   const [loadingByRepo, setLoadingByRepo] = useState<Record<string, boolean>>({});
   const snapshotsRef = useRef(snapshots);
   snapshotsRef.current = snapshots;
@@ -83,9 +84,8 @@ export function useRepositoryStatus({
         setSnapshots((current) => ({ ...current, [repoId]: next }));
       }
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
-        setErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : t("err.refreshStatus")) }));
+        setErrors((current) => ({ ...current, [repoId]: describeApiError(error, t("err.refreshStatus")) }));
       }
     } finally {
       activeRefreshesRef.current.delete(repoId);

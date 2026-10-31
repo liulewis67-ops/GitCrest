@@ -71,7 +71,7 @@ Corners use `--radius-2/3/4/5/6/7/8/9/12`, multiplied by the user's `--radius-sc
 
 ## Components
 
-Current shared UI includes BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint and NoticeRegion. A shared Button and Dialog are **planned in D2**, not implemented yet.
+Current shared UI includes BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint, NoticeRegion and ErrorMessage. API failures use translated recovery guidance; their original diagnostics sit behind a collapsed Details disclosure. A shared Button and Dialog are **planned in D2**, not implemented yet.
 
 | Surface | Current styles and states |
 |---|---|

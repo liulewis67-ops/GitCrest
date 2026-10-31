@@ -1,11 +1,11 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useCallback, useEffect, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type GitIdentityResponse } from "../../../api/client";
+import { type GitCrestApiClient, type GitIdentityResponse } from "../../../api/client";
 
 export type IdentityScope = "global" | "local";
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 /**
@@ -14,7 +14,7 @@ function errorMessage(error: unknown, fallback: string) {
  */
 export function useGitIdentity(api: GitCrestApiClient | undefined, repoId?: string, enabled = true) {
   const [identity, setIdentity] = useState<{ key: string; value: GitIdentityResponse }>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const key = repoId ?? "";
 
   const refresh = useCallback(async () => {

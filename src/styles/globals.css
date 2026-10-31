@@ -75,6 +75,11 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 
 button:disabled { cursor: not-allowed; }
 
+.apiErrorMessage { display: inline-flex; flex-direction: column; align-items: flex-start; gap: var(--space-1); min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.apiErrorDetailsToggle { align-self: flex-start; }
+.apiErrorDetails { max-width: 100%; max-height: 220px; overflow: auto; white-space: pre-wrap; font-family: var(--font-mono); font-size: var(--type-xs); color: var(--text-secondary); }
+.apiErrorDetails[hidden] { display: none; }
+
 /* Browser-drawn surfaces follow the theme too: selected text and scrollbars. */
 ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
 :root { scrollbar-color: color-mix(in srgb, var(--text-muted) 45%, transparent) transparent; }

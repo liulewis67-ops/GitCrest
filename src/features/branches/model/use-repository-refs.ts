@@ -1,6 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type RemoteSnapshotResponse } from "../../../api/client";
+import { type BranchSnapshotResponse, type GitCrestApiClient, type RemoteSnapshotResponse } from "../../../api/client";
 
 interface RepositoryRefsOptions {
   getApi: () => GitCrestApiClient | undefined;
@@ -24,10 +25,10 @@ export function useRepositoryRefs({
   finishCacheRequest,
 }: RepositoryRefsOptions) {
   const [branches, setBranches] = useState<Record<string, BranchSnapshotResponse>>({});
-  const [branchErrors, setBranchErrors] = useState<Record<string, string>>({});
+  const [branchErrors, setBranchErrors] = useState<Record<string, DisplayError>>({});
   const [branchLoadingByRepo, setBranchLoadingByRepo] = useState<Record<string, boolean>>({});
   const [remotes, setRemotes] = useState<Record<string, RemoteSnapshotResponse>>({});
-  const [remoteErrors, setRemoteErrors] = useState<Record<string, string>>({});
+  const [remoteErrors, setRemoteErrors] = useState<Record<string, DisplayError>>({});
   const [remoteLoadingByRepo, setRemoteLoadingByRepo] = useState<Record<string, boolean>>({});
   const controllersByRepoRef = useRef(new Map<string, Set<AbortController>>());
 
@@ -66,9 +67,8 @@ export function useRepositoryRefs({
         setBranches((current) => ({ ...current, [repoId]: snapshot }));
       }
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
-        setBranchErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : t("bm.readBranches")) }));
+        setBranchErrors((current) => ({ ...current, [repoId]: describeApiError(error, t("bm.readBranches")) }));
       }
     } finally {
       releaseController(repoId, controller);
@@ -93,9 +93,8 @@ export function useRepositoryRefs({
         setRemotes((current) => ({ ...current, [repoId]: snapshot }));
       }
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (!controller.signal.aborted && isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
-        setRemoteErrors((current) => ({ ...current, [repoId]: message || (error instanceof Error ? error.message : t("bm.readRemotes")) }));
+        setRemoteErrors((current) => ({ ...current, [repoId]: describeApiError(error, t("bm.readRemotes")) }));
       }
     } finally {
       releaseController(repoId, controller);
@@ -116,11 +115,10 @@ export function useRepositoryRefs({
         setBranches((current) => ({ ...current, [repoId]: snapshot }));
       }
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (isRepositoryOpen(repoId) && getCacheGeneration(repoId) === requestGeneration) {
         setBranchErrors((current) => ({
           ...current,
-          [repoId]: message || (error instanceof Error ? error.message : t("bm.favoriteFailed")),
+          [repoId]: describeApiError(error, t("bm.favoriteFailed")),
         }));
       }
     } finally {
@@ -128,7 +126,7 @@ export function useRepositoryRefs({
     }
   }
 
-  function setRemoteError(repoId: string, message: string) {
+  function setRemoteError(repoId: string, message: DisplayError) {
     setRemoteErrors((current) => ({ ...current, [repoId]: message }));
   }
 

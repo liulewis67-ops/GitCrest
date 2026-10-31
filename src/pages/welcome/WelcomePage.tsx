@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../shared/i18n/api-errors";
 import { useState } from "react";
 import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
@@ -16,7 +18,7 @@ interface WelcomePageProps {
   connected: boolean;
   shortcuts: ShortcutPreferences;
   isMacPlatform: boolean;
-  openError: string;
+  openError: DisplayError;
   version?: string;
   onOpenLocalRepository: () => void;
   onCloneRepository: () => void;
@@ -66,7 +68,7 @@ export function WelcomePage({
               <button className="textButton" type="button" onClick={() => onNavigateWorkspace()}>{t("welcome.previewWorkspace")}</button>
             </div>
           </div>
-          {openError && <div className="max-w-[720px] mt-[13px] border border-[color-mix(in_srgb,var(--danger),transparent_55%)] rounded-[var(--radius-5)] bg-[color-mix(in_srgb,var(--danger),transparent_93%)] px-[11px] py-[9px] text-danger text-sm" role="alert">{openError}</div>}
+          {openError && <div className="max-w-[720px] mt-[13px] border border-[color-mix(in_srgb,var(--danger),transparent_55%)] rounded-[var(--radius-5)] bg-[color-mix(in_srgb,var(--danger),transparent_93%)] px-[11px] py-[9px] text-danger text-sm" role="alert"><ErrorMessage error={openError} /></div>}
           <div className="welcomeColumns grid grid-cols-[minmax(0,1.5fr)_minmax(280px,0.86fr)] gap-[clamp(30px,6vw,88px)] mt-[clamp(44px,8vh,76px)] max-[1120px]:gap-[32px] max-[900px]:grid-cols-[minmax(0,1fr)] max-[900px]:gap-[26px] max-[900px]:mt-[36px]">
             <section className="recentSection min-w-0" aria-labelledby="recent-heading">
               <div className="flex min-h-[42px] items-center justify-between border-b border-line pb-[11px]">

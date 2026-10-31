@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type FormEvent } from "react";
 import { getGitCrestBridge, type GitCrestEditorChoice, type GitCrestExternalTools } from "../../../api/bridge";
 import { useI18n } from "../../../shared/i18n";
@@ -13,7 +15,7 @@ export function ExternalToolsSettings() {
   const [selection, setSelection] = useState(AUTO);
   const [program, setProgram] = useState("");
   const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function ExternalToolsSettings() {
       <input value={program} maxLength={1024} spellCheck={false} placeholder={t("tools.programPlaceholder")} disabled={busy} onChange={(event) => setProgram(event.target.value)} />
     </label>}
     {selection === CUSTOM && <p className="cloneHelp">{t("tools.programHelp")}</p>}
-    {error && <p className="dialogError" role="alert">{error}</p>}
+    {error && <p className="dialogError" role="alert"><ErrorMessage error={error} /></p>}
     {message && <p className="commitCopyStatus" role="status">{message}</p>}
     <div className="identityActions"><button className="secondaryButton" type="submit" disabled={busy || !tools || (selection === CUSTOM && !program.trim())}>{busy ? t("id.saving") : t("tools.save")}</button></div>
   </form>;

@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type PipelineRule } from "../../../api/client";
+import { type GitCrestApiClient, type PipelineRule } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { isProtectedTarget } from "../model/rule-form";
@@ -37,7 +39,7 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
   const [ruleId, setRuleId] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const rule = rules?.find((candidate) => candidate.ruleId === ruleId);
 
@@ -52,7 +54,7 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
     }, (reason: unknown) => {
       if (!cancelled) {
         setRules([]);
-        setError(reason instanceof Error ? reason.message : t("pl.loadFailed"));
+        setError(describeApiError(reason, t("pl.loadFailed")));
       }
     });
     return () => { cancelled = true; };
@@ -76,7 +78,7 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
       });
       onClose();
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("pl.actionFailed"));
+      setError(describeApiError(reason, t("pl.actionFailed")));
     } finally {
       setBusy(false);
     }
@@ -104,7 +106,7 @@ export function PipelineRunPickerDialog({ api, repoId, source, onClose }: {
           </fieldset>}
           <p className="cloneHelp">{t("pl.picker.help", { commit: source.oid.slice(0, 12) })}</p>
         </>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions">
           <button className="primaryButton" type="button" disabled={!rule || busy || selected.length === 0} onClick={() => void run()}>{busy ? t("pl.trigger.starting") : t("pl.trigger.run")}</button>
         </div>

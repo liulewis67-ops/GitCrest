@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiError, type CommitDetailResponse, type GitCrestApiClient, type StashEntryResponse, type TaskSnapshotResponse } from "../../../api/client";
+import { type CommitDetailResponse, type GitCrestApiClient, type StashEntryResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
 import { MenuButton } from "../../../shared/ui/MenuButton";
 import { StashActionDialog, type StashAction } from "./StashActionDialog";
@@ -7,8 +9,7 @@ import { StashActionDialog, type StashAction } from "./StashActionDialog";
 type StashFile = { path: string; oid: string; untracked: boolean; additions: number | null; deletions: number | null };
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 function formatDate(ms: number) {
@@ -34,10 +35,10 @@ export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFil
 }) {
   const { t } = useI18n();
   const [stashes, setStashes] = useState<StashEntryResponse[]>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [openOid, setOpenOid] = useState<string>();
   const [files, setFiles] = useState<StashFile[]>();
-  const [filesError, setFilesError] = useState("");
+  const [filesError, setFilesError] = useState<DisplayError>("");
   const [attempt, setAttempt] = useState(0);
   const requestRef = useRef(0);
   const [action, setAction] = useState<{ kind: StashAction; stash: StashEntryResponse }>();
@@ -87,7 +88,7 @@ export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFil
   return <section className="stashList" aria-label={t("stash.title")}>
     <div className="navGroupTitle"><span>{t("stash.title")}</span>{stashes && <span className="countBadge">{stashes.length}</span>}</div>
     <p className="cloneHelp">{t("stash.hint")}</p>
-    {error && <div className="shelfInlineError" role="alert"><span>{error}</span> <button type="button" className="textButton" onClick={() => setAttempt((value) => value + 1)}>{t("stash.retry")}</button></div>}
+    {error && <div className="shelfInlineError" role="alert"><span><ErrorMessage error={error} /></span> <button type="button" className="textButton" onClick={() => setAttempt((value) => value + 1)}>{t("stash.retry")}</button></div>}
     {stashes?.map((stash) => {
       const open = openOid === stash.oid;
       return <div className={`shelfListItem stashItem${open ? " active" : ""}`} key={stash.oid}>
@@ -110,7 +111,7 @@ export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFil
         ><span aria-hidden="true">⋯</span></MenuButton>
         {open && <div className="shelfDetail" role="region" aria-label={t("stash.filesAria", { name: stash.message })}>
           {!files && !filesError && <p role="status" className="cloneHelp">{t("stash.loadingFiles")}</p>}
-          {filesError && <p role="alert" className="shelfInlineError">{filesError}</p>}
+          {filesError && <p role="alert" className="shelfInlineError"><ErrorMessage error={filesError} /></p>}
           {files?.length === 0 && <p className="cloneHelp">{t("stash.noFiles")}</p>}
           {files?.map((file) => <button className="commitDetailFile" type="button" key={`${file.oid}:${file.path}`} aria-label={t("cd.openDiffFor", { path: file.path })} onClick={() => onOpenFile(file.path, file.oid)}>
             <span title={file.path}>{file.path}</span>

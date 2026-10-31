@@ -1,3 +1,4 @@
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import type { DiffDocumentResponse } from "../../../api/client";
 import { languageForPath, useLanguageRegistry, type LanguageDefinition } from "../../languages";
@@ -19,7 +20,7 @@ interface Options {
   /** The complete file (`context=full`), read for the same scope as `hunksDocument`. */
   fullDocument?: DiffDocumentResponse;
   fullLoading?: boolean;
-  fullError?: string;
+  fullError?: DisplayError;
   /** The hunk document whose rows a structure selection stages; omitted for read-only navigation. */
   hunksDocument?: DiffDocumentResponse;
 }

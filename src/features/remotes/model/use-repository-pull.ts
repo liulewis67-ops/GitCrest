@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
@@ -28,7 +29,7 @@ export function useRepositoryPull({
   const [preflight, setPreflight] = useState<components["schemas"]["PullPreflight"]>();
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
 
   async function refreshPreflight(targetRepoId = repoId) {
     const api = getApi();
@@ -38,9 +39,8 @@ export function useRepositoryPull({
     try {
       setPreflight(await api.preflightRepositoryPull(targetRepoId));
     } catch (requestError) {
-      const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
       setPreflight(undefined);
-      setError(message || (requestError instanceof Error ? requestError.message : t("err.pullPreview")));
+      setError(describeApiError(requestError, t("err.pullPreview")));
     } finally {
       setLoading(false);
     }
@@ -67,8 +67,7 @@ export function useRepositoryPull({
       }));
       setOpen(false);
     } catch (requestError) {
-      const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : t("err.pullStart")));
+      setError(describeApiError(requestError, t("err.pullStart")));
       if (requestError instanceof GitCrestApiError && ["PULL_PREFLIGHT_STALE", "PULL_REQUIRES_CLEAN"].includes(requestError.body.error.code)) {
         void refreshPreflight(repoId);
         refreshRepositoryStatus(repoId);

@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useMemo, useState } from "react";
 import type { PipelineRule } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -38,7 +40,7 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
   localBranches: readonly string[];
   remoteBranches: readonly RemoteBranchChoice[];
   saving?: boolean;
-  error?: string;
+  error?: DisplayError;
   onSave: (rule: PipelineRule) => void;
   onCancel: () => void;
 }) {
@@ -128,7 +130,7 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
     </label>
 
     {issue && touched && <p className="formError" role="alert">{issueText(issue, t)}</p>}
-    {error && <p className="formError" role="alert">{error}</p>}
+    {error && <p className="formError" role="alert"><ErrorMessage error={error} /></p>}
     <div className="settingsActions">
       <button className="quietButton" type="button" onClick={onCancel} disabled={saving}>{t("pl.editor.cancel")}</button>
       <button className="primaryButton" type="submit" disabled={Boolean(issue) || saving}>{t("pl.editor.save")}</button>

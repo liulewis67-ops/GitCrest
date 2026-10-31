@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 complete; D1 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
+Status: D0 and D1.1 complete; D1.2–D1.6 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the error text the core returns (`crates/gitcrest-core/src/api/error.rs`), and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -65,7 +65,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D0.1 | Seeded review fixture repository | P1 | S | — | done |
 | D0.2 | Screenshot matrix script | P1 | M | D0.1 | done |
 | D0.3 | `DESIGN.md` and document precedence | P1 | M | — | done |
-| D1.1 | Translated error messages from API codes | P1 | M | — | not started |
+| D1.1 | Translated error messages from API codes | P1 | M | — | done |
 | D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | not started |
 | D1.3 | One error per view; no endless loading | P1 | S | D1.1 | not started |
 | D1.4 | Readable Task Center | P1 | M | — | not started |
@@ -127,6 +127,8 @@ Both throwaway repositories used during the review had been deleted from disk, s
 - Add a unit test that every `ApiErrorCode` in the schema has both an English and a Chinese entry.
 
 **Pass rule:** with the UI in Chinese, no screen in the D0.2 error state shows English text outside the details disclosure.
+
+**Done 2026-11-01.** `describeApiError` maps every current API code to English/Chinese guidance explaining the problem, likely cause and recovery. Renderer error state now keeps diagnostics separately from its message; shared `ErrorMessage` exposes them through a keyboard-accessible, initially collapsed Details disclosure. Unknown codes use translated generic guidance. Existing local validation strings remain supported, and text-only notifications/tooltips use `errorText`. The transport's raw error contract is unchanged. Exhaustive schema coverage lives in tests to preserve the shared-layer import boundary. `pnpm check` passed: 707 frontend tests, 334 Rust tests and 43 desktop E2E tests, including a Chinese missing-path response and four real repository-opening failures with diagnostic disclosure. Before/after matrices are `.review/screens/d0-baseline/` and `.review/screens/d1.1-after/` (56 captures each). Source detection found 11 existing stripe warnings; live detection found the existing Inter and Welcome contrast findings tracked for later work. Screenshot inspection confirmed readable error guidance and collapsed diagnostics; error deduplication remains D1.3.
 
 ### D1.2 Missing-repository detection and recovery
 

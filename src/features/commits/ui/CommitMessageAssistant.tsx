@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { InlineHint } from "../../../shared/ui/InlineHint";
 import { t } from "../../../shared/i18n";
 import { useI18n } from "../../../shared/i18n";
@@ -122,7 +124,7 @@ export function CommitMessageAssistant({
   const [reviewDiffBytes, setReviewDiffBytes] = useState(0);
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [suggestion, setSuggestion] = useState<AiReplyResponse>();
   const [summaryResult, setSummaryResult] = useState<AiReplyResponse>();
   const [suggestionText, setSuggestionText] = useState("");
@@ -155,7 +157,7 @@ export function CommitMessageAssistant({
   useEffect(() => {
     let current = true;
     void api.getAiSettings().then((value) => { if (current) setSettings(value); }).catch((reason: unknown) => {
-      if (current) setError(reason instanceof Error ? reason.message : t("ai.settingsLoadFailed"));
+      if (current) setError(describeApiError(reason, t("ai.settingsLoadFailed")));
     });
     void reviewCurrentChanges();
     return () => { current = false; };
@@ -192,7 +194,7 @@ export function CommitMessageAssistant({
       if (commitSelections.length > 0 && paths.length !== commitSelections.length) throw new Error(t("ai.duplicate"));
       setReviewed(documents); setReviewFingerprint(statusFingerprint(snapshot)); setReviewDiffBytes(bytes);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("ai.reviewFailed"));
+      setError(describeApiError(reason, t("ai.reviewFailed")));
     } finally { setBusy(false); }
   }
 
@@ -234,7 +236,7 @@ export function CommitMessageAssistant({
       setWorkspaceStale(!freshWorkspace);
       setDraftChanged(!draftStillMatches);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("ai.requestFailed"));
+      setError(describeApiError(reason, t("ai.requestFailed")));
       setConfirmed(false);
     } finally { setBusy(false); }
   }
@@ -273,7 +275,7 @@ export function CommitMessageAssistant({
         {summaryResult && <section className="commitAiSummary" aria-label={t("ai.summaryAria")}><h5>{t("ai.summaryHeading", { model: summaryResult.model })}</h5><pre>{summaryResult.response}</pre><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewAgain")}</button></section>}
         {!suggestion && !summaryResult && <button type="button" className="primaryButton" disabled={!confirmed || busy || !provider} onClick={() => void sendReviewed()}>{busy ? t("ai.waiting") : outputMode === "changeSummary" ? t("ai.summarize") : t("ai.send")}</button>}
       </>}
-      {error && <div className="commitAiError" role="alert"><span>{error}</span><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewRetry")}</button></div>}
+      {error && <div className="commitAiError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" className="secondaryButton" disabled={busy} onClick={() => void reviewCurrentChanges()}>{t("ai.reviewRetry")}</button></div>}
     </section>
   );
 }

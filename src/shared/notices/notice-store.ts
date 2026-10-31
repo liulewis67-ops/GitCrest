@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from "react";
+import type { DisplayError } from "../i18n/api-errors";
 
 export type NoticeKind = "success" | "warning" | "error";
 
@@ -11,13 +12,13 @@ export interface NoticeAction {
 export interface Notice {
   id: number;
   kind: NoticeKind;
-  message: string;
+  message: DisplayError;
   action?: NoticeAction;
 }
 
 export interface NoticeInput {
   kind: NoticeKind;
-  message: string;
+  message: DisplayError;
   action?: NoticeAction;
   /** A notice with the same key replaces the earlier one instead of stacking. */
   key?: string;
@@ -53,7 +54,7 @@ export function dismissNotice(id: number) {
 
 /** Adds a notice and returns its id. Empty messages are ignored. */
 export function pushNotice(input: NoticeInput): number | undefined {
-  const message = input.message.trim();
+  const message = typeof input.message === "string" ? input.message.trim() : input.message;
   if (!message) return undefined;
   const replaced = input.key ? [...keys].find(([, key]) => key === input.key)?.[0] : undefined;
   if (replaced !== undefined) dismissNotice(replaced);
@@ -77,7 +78,7 @@ export function pushNotice(input: NoticeInput): number | undefined {
 export const notify = {
   success: (message: string, action?: NoticeAction) => pushNotice({ kind: "success", message, action }),
   warning: (message: string, action?: NoticeAction) => pushNotice({ kind: "warning", message, action }),
-  error: (message: string, action?: NoticeAction) => pushNotice({ kind: "error", message, action }),
+  error: (message: DisplayError, action?: NoticeAction) => pushNotice({ kind: "error", message, action }),
 };
 
 /** For tests: remove every notice and timer. */

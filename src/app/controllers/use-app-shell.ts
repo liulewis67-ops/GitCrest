@@ -1,3 +1,4 @@
+import { type DisplayError } from "../../shared/i18n/api-errors";
 import { useI18n } from "../../shared/i18n";
 import { useRef, useState } from "react";
 import { type RepositoryResponse } from "../../api/client";
@@ -88,7 +89,7 @@ export function useAppShell() {
 
   const [commitActionMenuOpen, setCommitActionMenuOpen] = useState(false);
 
-  const [openError, setOpenError] = useState("");
+  const [openError, setOpenError] = useState<DisplayError>("");
 
   const [page, setPage] = useState<AppPage>("welcome");
 
@@ -102,7 +103,7 @@ export function useAppShell() {
   const [commitPanelTab, setCommitPanelTab] = useState<CommitPanelTab>("commit");
 
   // Failures go to the shared notice queue; the helpers below pick the kind for the other cases.
-  const setNotice = (message: string) => { notify.error(message); };
+  const setNotice = (message: DisplayError) => { notify.error(message); };
 
   const [paletteOpen, setPaletteOpen] = useState(false);
 

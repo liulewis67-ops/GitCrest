@@ -1,7 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
-  GitCrestApiError,
   type DiffDocumentResponse,
   type GitCrestApiClient,
   type RepositoryResponse,
@@ -28,7 +28,7 @@ interface StagingOperationsOptions {
   document?: DiffDocumentResponse;
   appendTask: (task: TaskSnapshotResponse) => void;
   prependTask: (task: TaskSnapshotResponse) => void;
-  setTaskError: (message: string) => void;
+  setTaskError: (message: DisplayError) => void;
   openTaskCenter: () => void;
 }
 
@@ -70,8 +70,7 @@ export function useStagingOperations({
       // Staging is quick and local: its progress shows in the titlebar, and the task center opens only if it fails.
       appendTask(await api.stageRepositoryChanges(repoId, request));
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : t("err.stagingStart")));
+      setTaskError(describeApiError(error, t("err.stagingStart")));
       openTaskCenter();
     } finally {
       setBusy(false);
@@ -86,8 +85,7 @@ export function useStagingOperations({
       prependTask(await api.undoRecentOperation(repository.repoId));
       openTaskCenter();
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : t("err.stagingUndo")));
+      setTaskError(describeApiError(error, t("err.stagingUndo")));
       openTaskCenter();
     }
   }
@@ -107,8 +105,7 @@ export function useStagingOperations({
       };
       appendTask(await api.stageSelectedDiffHunks(repository.repoId, request));
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : t("err.partialStaging")));
+      setTaskError(describeApiError(error, t("err.partialStaging")));
       openTaskCenter();
     } finally {
       setBusy(false);
@@ -127,8 +124,7 @@ export function useStagingOperations({
       openTaskCenter();
       clearDiscardSelection();
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-      setTaskError(message || (error instanceof Error ? error.message : t("err.discardStart")));
+      setTaskError(describeApiError(error, t("err.discardStart")));
     } finally {
       setBusy(false);
     }

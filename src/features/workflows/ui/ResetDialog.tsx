@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import { GitCrestApiError, type BranchSnapshotResponse, type GitCrestApiClient, type ResetBackupSnapshotResponse, type ResetPreviewResponse, type TaskSnapshotResponse } from "../../../api/client";
@@ -29,7 +31,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
   const [confirmRestore, setConfirmRestore] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
       setBackupSnapshot(snapshot);
       setSelectedBackup(snapshot.backups[0]?.reference || "");
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? reason.body.error.message : t("rs.loadBackups"));
+      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? describeApiError(reason) : t("rs.loadBackups"));
     });
     return () => controller.abort();
   }, [api, repoId]);
@@ -53,7 +55,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
     try {
       setPreview(await api.preflightRepositoryReset(repoId, targetOid, mode));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rs.inspectFailed"));
+      setError(describeApiError(reason, t("rs.inspectFailed")));
     } finally {
       setLoading(false);
     }
@@ -72,7 +74,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
         confirmReset: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rs.startFailed"));
+      setError(describeApiError(reason, t("rs.startFailed")));
     } finally {
       setBusy(false);
     }
@@ -91,7 +93,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
         confirmRestore: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rs.restoreFailed"));
+      setError(describeApiError(reason, t("rs.restoreFailed")));
     } finally {
       setBusy(false);
     }
@@ -117,7 +119,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
           </select>
         </label>
         <p className="cloneHelp">{t("rs.modeHelp")}</p>
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <section className="rebaseRollbackPanel" aria-labelledby="reset-restore-heading">
           <h3 id="reset-restore-heading">{t("rs.restoreHeading")}</h3>
           {backupSnapshot?.backups.length ? <>

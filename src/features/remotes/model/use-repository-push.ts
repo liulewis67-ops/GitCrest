@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -23,7 +24,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
   const [preflight, setPreflight] = useState<components["schemas"]["PushPreflight"]>();
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [forceOnly, setForceOnly] = useState(false);
   const [target, setTarget] = useState<PushTarget>();
   const targetsByTask = useRef(new Map<string, PushTarget>());
@@ -63,9 +64,8 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
     try {
       setPreflight(await api.preflightRepositoryPush(targetRepoId, pushTarget || undefined));
     } catch (requestError) {
-      const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
       setPreflight(undefined);
-      setError(message || (requestError instanceof Error ? requestError.message : t("err.pushPreview")));
+      setError(describeApiError(requestError, t("err.pushPreview")));
     } finally {
       setLoading(false);
     }
@@ -98,8 +98,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
       acceptTask(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, true);
       setOpen(false);
     } catch (requestError) {
-      const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : t("err.pushStart")));
+      setError(describeApiError(requestError, t("err.pushStart")));
       if (requestError instanceof GitCrestApiError && requestError.body.error.code === "PUSH_PREFLIGHT_STALE") {
         void refreshPreflight(repoId, target || null);
       }
@@ -136,8 +135,7 @@ export function useRepositoryPush({ tasks, getApi, repoId, onSelectRepository, o
       acceptTask(task, { remoteName: preview.remoteName, remoteBranch: preview.remoteBranch }, false);
       setOpen(false);
     } catch (requestError) {
-      const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : t("err.pushAfterCommit")));
+      setError(describeApiError(requestError, t("err.pushAfterCommit")));
     } finally {
       setLoading(false);
       setBusy(false);

@@ -1,12 +1,14 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse, type WorktreeSnapshotResponse } from "../../../api/client";
+import { type GitCrestApiClient, type TaskSnapshotResponse, type WorktreeSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 type Worktree = WorktreeSnapshotResponse["worktrees"][number];
 
 function messageOf(reason: unknown, fallback: string) {
-  return reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : fallback;
+  return describeApiError(reason, fallback);
 }
 
 function samePath(left: string, right: string) {
@@ -33,7 +35,7 @@ export function RemoveWorktreeDialog({ api, repoId, path, disabled, onClose, onS
   const [deleteBranch, setDeleteBranch] = useState(false);
   const [allowUnmerged, setAllowUnmerged] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
@@ -93,7 +95,7 @@ export function RemoveWorktreeDialog({ api, repoId, path, disabled, onClose, onS
           {branchUnmerged && <label className="rebaseConfirm"><input type="checkbox" checked={allowUnmerged} onChange={(event) => setAllowUnmerged(event.target.checked)} />{t("lb.unmerged", { name: worktree.branch ?? "", count: unmerged ?? 0 })}</label>}
           {!deleteBranch && worktree.branch && <p className="cloneHelp">{t("rw.branchKept", { name: worktree.branch })}</p>}
         </>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("rw.cancel")}</button>
           <button className="dangerTextButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("rw.removing") : deleteBranch ? t("rw.removeBoth") : t("rw.remove")}</button>

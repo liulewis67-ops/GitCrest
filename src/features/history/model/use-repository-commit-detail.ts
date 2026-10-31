@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import type { CommitDetailResponse, GitCrestApiClient } from "../../../api/client";
@@ -16,7 +17,7 @@ function isCommitDetail(value: unknown): value is CommitDetailResponse {
 }
 
 export function useRepositoryCommitDetail(api: GitCrestApiClient, repoId: string, oid?: string) {
-  const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: string; loading: boolean }>({ loading: false });
+  const [state, setState] = useState<{ oid?: string; detail?: CommitDetailResponse; error?: DisplayError; loading: boolean }>({ loading: false });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -29,7 +30,7 @@ export function useRepositoryCommitDetail(api: GitCrestApiClient, repoId: string
       if (!isCommitDetail(response)) throw new Error(t("err.commitDetailInvalid"));
       if (!controller.signal.aborted) setState({ oid, detail: response, loading: false });
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setState({ oid, error: reason instanceof Error ? reason.message : t("err.commitDetail"), loading: false });
+      if (!controller.signal.aborted) setState({ oid, error: describeApiError(reason, t("err.commitDetail")), loading: false });
     });
     return () => controller.abort();
   }, [api, oid, repoId]);

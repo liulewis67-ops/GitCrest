@@ -1,3 +1,4 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
@@ -62,7 +63,7 @@ export function CommitDetails({
 
   if (!oid) return <div className="detailsEmpty"><span className="detailsGlyph" aria-hidden="true">⌁</span><h2>{t("cd.none")}</h2><p>{t("cd.noneHint")}</p></div>;
   if (state.oid !== oid || state.loading) return <div className="commitDetailsState" role="status">{t("cd.loading")}</div>;
-  if (state.error) return <div className="commitDetailsState" role="alert"><p>{state.error}</p></div>;
+  if (state.error) return <div className="commitDetailsState" role="alert"><p><ErrorMessage error={state.error} /></p></div>;
   const detail = state.detail;
   if (!detail) return null;
   const commitOid = detail.oid;
@@ -103,7 +104,7 @@ export function CommitDetails({
     {tagCreation.editorOpen && <form className="commitTagForm" onSubmit={(event) => void createAnnotatedTag(event)}>
       <label>{t("cd.tagName")}<input aria-label={t("cd.tagName")} value={tagCreation.name} maxLength={255} required onChange={(event) => tagCreation.setName(event.target.value)} placeholder="v1.0.0" /></label>
       <label>{t("cd.annotation")}<textarea aria-label={t("cd.annotationAria")} value={tagCreation.message} maxLength={8192} onChange={(event) => tagCreation.setMessage(event.target.value)} placeholder={t("cd.annotationPlaceholder")} /></label>
-      {tagCreation.error && <p className="commitTagError" role="alert">{tagCreation.error}</p>}
+      {tagCreation.error && <p className="commitTagError" role="alert"><ErrorMessage error={tagCreation.error} /></p>}
       <button className="secondaryButton" type="submit" disabled={tagCreation.busy || !tagCreation.name.trim()}>{tagCreation.busy ? t("cd.creatingTag") : t("cd.createAnnotated")}</button>
     </form>}
     {tagCreation.status && <p className="commitCopyStatus" role="status">{tagCreation.status}</p>}

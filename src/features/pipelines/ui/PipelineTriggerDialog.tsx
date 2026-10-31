@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient } from "../../../api/client";
+import { type GitCrestApiClient } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { dismissPipelineTrigger, type PipelineTriggerPrompt } from "../model/pipeline-store";
@@ -12,7 +14,7 @@ export function PipelineTriggerDialog({ api, prompt }: { api: GitCrestApiClient;
   const [mode, setMode] = useState<"temporaryWorktree" | "switchInPlace">();
   const [dontAsk, setDontAsk] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const anyProtected = prompt.protectedTarget || prompt.targets.some(isProtectedTarget);
   const notNow = () => dismissPipelineTrigger(prompt.runId);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(notNow, busy);
@@ -37,7 +39,7 @@ export function PipelineTriggerDialog({ api, prompt }: { api: GitCrestApiClient;
       await api.startPipelineRun(prompt.repoId, { runId: prompt.runId, ...(selected.length === prompt.targets.length ? {} : { targets: selected }) });
       dismissPipelineTrigger(prompt.runId);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("pl.actionFailed"));
+      setError(describeApiError(reason, t("pl.actionFailed")));
     } finally {
       setBusy(false);
     }
@@ -58,7 +60,7 @@ export function PipelineTriggerDialog({ api, prompt }: { api: GitCrestApiClient;
         </fieldset>
         {mode && <p className="cloneHelp" role="status">{mode === "temporaryWorktree" ? t("pl.trigger.modeWorktree") : t("pl.trigger.modeInPlace")}</p>}
         {!anyProtected && <label className="settingsCheck"><input type="checkbox" checked={dontAsk} disabled={busy} onChange={(event) => setDontAsk(event.target.checked)} />{t("pl.trigger.dontAsk")}</label>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={notNow}>{t("pl.trigger.notNow")}</button>
           <button className="primaryButton" type="button" disabled={busy || selected.length === 0} onClick={() => void run()}>{busy ? t("pl.trigger.starting") : t("pl.trigger.run")}</button>

@@ -1,7 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type TaskSnapshotResponse,
 } from "../../../api/client";
@@ -13,7 +13,7 @@ interface RemoteMutationsOptions {
   getCacheGeneration: (repoId: string) => number;
   beginCacheRequest: (repoId: string) => number;
   finishCacheRequest: (repoId: string) => void;
-  setRemoteError: (repoId: string, message: string) => void;
+  setRemoteError: (repoId: string, message: DisplayError) => void;
   onTaskAccepted: (task: TaskSnapshotResponse) => void;
 }
 
@@ -40,9 +40,8 @@ export function useRemoteMutations({
       const task = await action();
       onTaskAccepted(task);
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (isRepositoryOpen(targetRepoId) && getCacheGeneration(targetRepoId) === requestGeneration) {
-        setRemoteError(targetRepoId, message || (error instanceof Error ? error.message : t("err.updateRemotes")));
+        setRemoteError(targetRepoId, describeApiError(error, t("err.updateRemotes")));
       }
     } finally {
       setBusy(false);

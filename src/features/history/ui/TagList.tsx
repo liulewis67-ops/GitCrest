@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
 import { GitCrestApiError, type GitCrestApiClient, type TagEntryResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -36,7 +38,7 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [attempt, setAttempt] = useState(0);
   const requestRef = useRef(0);
   const [action, setAction] = useState<{ kind: TagAction; tag: TagEntryResponse }>();
@@ -61,7 +63,7 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
       })
       .catch((reason) => {
         if (controller.signal.aborted || request !== requestRef.current) return;
-        setError(reason instanceof GitCrestApiError ? reason.body.error.message : t("tags.loadFailed"));
+        setError(reason instanceof GitCrestApiError ? describeApiError(reason) : t("tags.loadFailed"));
       })
       .finally(() => {
         if (request === requestRef.current) setLoading(false);
@@ -79,7 +81,7 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
       setTags((current) => [...current, ...page.tags]);
       setNextOffset(page.nextOffset);
     } catch (reason) {
-      if (request === requestRef.current) setError(reason instanceof GitCrestApiError ? reason.body.error.message : t("tags.loadFailed"));
+      if (request === requestRef.current) setError(reason instanceof GitCrestApiError ? describeApiError(reason) : t("tags.loadFailed"));
     } finally {
       if (request === requestRef.current) setLoading(false);
     }
@@ -92,7 +94,7 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
       <input type="search" aria-label={t("tags.filter")} placeholder={t("tags.filterPlaceholder")} value={query} onChange={(event) => setQuery(event.target.value)} />
     </div>}
     {loading && !loaded && <p className="sidebarNotice" role="status">{t("tags.loading")}</p>}
-    {error && <div className="statusLoadError" role="alert"><span>{error}</span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
+    {error && <div className="statusLoadError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
     {empty && (filter
       ? <p className="sidebarNotice">{t("tags.noMatch", { query: filter })}</p>
       : <EmptyState actionLabel={t("tags.createFirst")} onAction={onCreateTag} actionDisabled={disabled} actionTitle={disabled ? t("tags.busyTitle") : undefined}>{t("tags.none")}</EmptyState>)}

@@ -24,5 +24,6 @@ import { identity } from "./identity";
 import { compareMessages } from "./compare";
 import { submodulesMessages } from "./submodules";
 import { pipelinesMessages } from "./pipelines";
+import { apiErrorMessages, apiErrorCommonMessages } from "./api-errors";
 
-export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout, ...languages, ...ai, ...identity, ...compareMessages, ...submodulesMessages, ...pipelinesMessages, ...paletteMessages } as const;
+export const allMessages = { ...workspace, ...app, ...branches, ...branches2, ...branches3, ...remotes, ...remotes2, ...history, ...commits, ...diff, ...workflows, ...conflicts, ...tasks, ...privacy, ...errors, ...misc, ...settings, ...accounts, ...layout, ...languages, ...ai, ...identity, ...compareMessages, ...submodulesMessages, ...pipelinesMessages, ...paletteMessages, ...apiErrorMessages, ...apiErrorCommonMessages } as const;

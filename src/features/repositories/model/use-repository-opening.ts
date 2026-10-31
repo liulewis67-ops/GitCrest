@@ -1,7 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type RepositoryResponse,
 } from "../../../api/client";
@@ -11,12 +11,11 @@ interface RepositoryOpeningOptions {
   chooseRepository: () => Promise<string | undefined>;
   onRepositoryOpened: (repository: RepositoryResponse, sortByRecentAccess: boolean) => void;
   refreshRepositories: (api: GitCrestApiClient) => Promise<void>;
-  setError: (message: string) => void;
+  setError: (message: DisplayError) => void;
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 export function useRepositoryOpening({ getApi, chooseRepository, onRepositoryOpened, refreshRepositories, setError }: RepositoryOpeningOptions) {

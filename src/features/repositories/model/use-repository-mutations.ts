@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import {
   type GitCrestApiClient,
@@ -8,7 +9,7 @@ interface RepositoryMutationsOptions {
   getApi: () => GitCrestApiClient | undefined;
   onRepositoriesChanged: (update: (current: RepositoryResponse[]) => RepositoryResponse[]) => void;
   onRepositoryForgotten: (repoId: string) => void;
-  setError: (message: string) => void;
+  setError: (message: DisplayError) => void;
 }
 
 export function useRepositoryMutations({
@@ -26,7 +27,7 @@ export function useRepositoryMutations({
       onRepositoriesChanged((current) => current.map((item) => item.repoId === updated.repoId ? updated : item)
         .sort((left, right) => Number(right.isFavorite) - Number(left.isFavorite) || right.lastAccessedAt - left.lastAccessedAt));
     } catch (error) {
-      setError(error instanceof Error ? error.message : t("err.favorite"));
+      setError(describeApiError(error, t("err.favorite")));
     }
   }
 
@@ -39,7 +40,7 @@ export function useRepositoryMutations({
       onRepositoriesChanged((current) => current.filter((item) => item.repoId !== repository.repoId));
       onRepositoryForgotten(repository.repoId);
     } catch (error) {
-      setError(error instanceof Error ? error.message : t("err.removeRecent"));
+      setError(describeApiError(error, t("err.removeRecent")));
     }
   }
 

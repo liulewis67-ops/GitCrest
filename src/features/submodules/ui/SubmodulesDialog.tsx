@@ -1,13 +1,14 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type SubmoduleListResponse, type TaskSnapshotResponse } from "../../../api/client";
+import { type GitCrestApiClient, type SubmoduleListResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
 type Entry = SubmoduleListResponse["items"][number];
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 const short = (oid: string | null) => (oid ? oid.slice(0, 9) : null);
@@ -29,7 +30,7 @@ export function SubmodulesDialog({ api, repoId, disabled, onClose, onOpen, onSta
   const { t } = useI18n();
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false);
   const [items, setItems] = useState<Entry[]>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const requestRef = useRef(0);
@@ -76,7 +77,7 @@ export function SubmodulesDialog({ api, repoId, disabled, onClose, onOpen, onSta
       </header>
       <div className="cloneFormBody">
         <p className="cloneHelp">{t("sm.help")}</p>
-        {error && <div className="statusLoadError" role="alert"><span>{error}</span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
+        {error && <div className="statusLoadError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
         {items === undefined && <p role="status" className="cloneHelp">{t("sm.loading")}</p>}
         {items?.length === 0 && !error && <p className="cloneHelp">{t("sm.empty")}</p>}
         {items && items.length > 0 && <>

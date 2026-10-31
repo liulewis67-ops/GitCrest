@@ -1,6 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type RemoteTagPreviewResponse,
   type TagEntryResponse,
@@ -12,8 +13,7 @@ import { useI18n } from "../../../shared/i18n";
 export type TagAction = "push" | "delete" | "remoteDelete";
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 /**
@@ -37,7 +37,7 @@ export function TagActionsDialog({ api, repoId, action, tag, remoteNames, onClos
   const [preview, setPreview] = useState<RemoteTagPreviewResponse>();
   const [checking, setChecking] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const needsRemote = action !== "delete";
 
   useEffect(() => {
@@ -106,7 +106,7 @@ export function TagActionsDialog({ api, repoId, action, tag, remoteNames, onClos
         {action === "delete" && <p className="pushWarning">{t("tags.deleteLocalWarning")}</p>}
         {action === "remoteDelete" && preview?.remoteOid && <p className="pushWarning">{t("tags.deleteRemoteWarning", { remote })}</p>}
         {danger && <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} disabled={busy || (action === "remoteDelete" && !preview?.remoteOid)} onChange={(event) => setConfirmed(event.target.checked)} />{t("tags.confirmDelete")}</label>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
       <footer className="cloneDialogActions">
         <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>

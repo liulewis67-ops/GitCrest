@@ -1,3 +1,5 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import type { AiReplyResponse, ConflictWindowAiSettingsResponse, GitCrestApiClient, WorkflowConflictFileResponse } from "../../../api/client";
@@ -18,7 +20,7 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onUseSug
   const [busy, setBusy] = useState(false);
   const [reply, setReply] = useState<AiReplyResponse>();
   const [stale, setStale] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const requestLifetime = useRef<AbortController | null>(null);
   const provider = settings?.providers.find(({ id }) => id === settings.activeProviderId);
 
@@ -36,7 +38,7 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onUseSug
     void api.withSignal(controller.signal).getRepositoryWorkflowConflictAiSettings(file.repoId).then((value) => {
       if (!controller.signal.aborted) setSettings(value);
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("cs.settingsFailed"));
+      if (!controller.signal.aborted) setError(describeApiError(reason, t("cs.settingsFailed")));
     });
     return () => controller.abort();
   }, [api, file.repoId]);
@@ -65,7 +67,7 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onUseSug
       setConfirmed(false);
     } catch (reason) {
       if (!controller.signal.aborted) {
-        setError(reason instanceof Error ? reason.message : t("cs.failed"));
+        setError(describeApiError(reason, t("cs.failed")));
         setConfirmed(false);
       }
     } finally {
@@ -109,7 +111,7 @@ export function ConflictSuggestionPanel({ api, file, hasUnsavedChanges, onUseSug
       </div>
     </section>}
     {!reply && <label className="aiRequestConsent"><input type="checkbox" checked={confirmed} disabled={!canRequest} onChange={(event) => setConfirmed(event.target.checked)} />{t("cs.consent")}</label>}
-    {error && <p className="taskCenterError" role="alert">{t("cs.manualRemains", { error })}</p>}
+    {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /> {t("cs.manualRemains", { error: "" })}</p>}
     {!reply && <button type="button" className="primaryButton" disabled={!confirmed || !canRequest} onClick={() => void requestSuggestion()}>{busy ? t("cs.waiting") : t("cs.request")}</button>}
   </section>;
 }

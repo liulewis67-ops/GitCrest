@@ -1,3 +1,4 @@
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
 import type { TaskSnapshotResponse } from "../../../api/client";
 import type { WorkflowAction } from "./workflow-action";
@@ -11,7 +12,7 @@ interface WorkflowDialogContext {
 
 interface WorkflowDialogSessionOptions {
   appendTask: (task: TaskSnapshotResponse) => void;
-  setTaskError: (message: string) => void;
+  setTaskError: (message: DisplayError) => void;
   openTaskCenter: () => void;
 }
 

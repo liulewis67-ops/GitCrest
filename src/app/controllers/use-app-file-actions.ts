@@ -1,3 +1,4 @@
+import { describeApiError } from "../../shared/i18n/api-errors";
 import { type TaskSnapshotResponse } from "../../api/client";
 import { getGitCrestBridge } from "../../api/bridge";
 import { notify } from "../../shared/notices/notice-store";
@@ -31,13 +32,13 @@ export function useAppFileActions(ctx: Shell & Connection & Repositories & DiffA
       }
       requestDiscard(document, document.hunks.map((_, hunkIndex) => ({ hunkIndex })));
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : t("ctx.rollbackNoText", { path }));
+      setNotice(describeApiError(error, t("ctx.rollbackNoText", { path })));
     }
   }
 
   function revealFile(absolutePath: string) {
     void getGitCrestBridge()?.showItemInFolder?.(absolutePath).catch((error: unknown) => {
-      setNotice(error instanceof Error ? error.message : String(error));
+      setNotice(describeApiError(error));
     });
   }
 

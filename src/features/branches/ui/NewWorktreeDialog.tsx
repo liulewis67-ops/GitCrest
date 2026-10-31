@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
+import { type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { LocalFilesPicker } from "./LocalFilesPicker";
@@ -25,7 +27,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
   const [folder, setFolder] = useState(suggested);
   const [busy, setBusy] = useState(false);
   const [copyFiles, setCopyFiles] = useState<string[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const relative = folder.trim() !== "" && !isAbsoluteFolder(folder);
   const folderProblem = useWorktreeFolderCheck(api, repoId, folder, true);
@@ -41,7 +43,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
       rememberCopyFiles(repoId, copyFiles);
       onStarted(task);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("nw.createFailed"));
+      setError(describeApiError(reason, t("nw.createFailed")));
     } finally {
       setBusy(false);
     }
@@ -75,7 +77,7 @@ export function NewWorktreeDialog({ api, repoId, repositoryPath, branch, fromRem
         <p className="cloneHelp">{t("nw.help")}</p>
         {relative && <p className="taskCenterError" role="alert">{t("nw.fullPath")}</p>}
         {folderProblem && <p className="taskCenterError" role="alert">{worktreeFolderProblemMessage(folderProblem)}</p>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("nw.cancel")}</button>
           <button className="primaryButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("nw.creating") : t("nw.create")}</button>

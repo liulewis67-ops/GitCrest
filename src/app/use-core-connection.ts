@@ -1,3 +1,4 @@
+import { describeApiError, errorText } from "../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient } from "../api/client";
 import { getGitCrestBridge, type GitCrestEventEnvelope } from "../api/bridge";
@@ -69,7 +70,7 @@ export function useCoreConnection({ onConnected, onEvent }: CoreConnectionOption
         const coreStatus = await getGitCrestBridge()?.getCoreStatus?.().catch(() => undefined);
         if (isStale()) return;
         if (coreStatus?.state === "restarting") showStatus("connecting", coreStatus.message);
-        else showStatus("failed", error instanceof Error ? error.message : "Failed to connect to local Rust core");
+        else showStatus("failed", errorText(describeApiError(error)));
       }
     }
 
@@ -112,7 +113,7 @@ export function useCoreConnection({ onConnected, onEvent }: CoreConnectionOption
       // The core was running all along, so only this window lost it: connect to it again.
       else if (coreStatus.state === "ready") reconnectRef.current?.();
     } catch (error) {
-      showStatus("failed", error instanceof Error ? error.message : "Failed to restart the local Rust core");
+      showStatus("failed", errorText(describeApiError(error)));
     }
   }
 

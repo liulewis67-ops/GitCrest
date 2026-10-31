@@ -1,7 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useCallback } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type TaskSnapshotResponse,
 } from "../../../api/client";
@@ -11,7 +11,7 @@ type WorkflowRecoveryAction = "continue" | "skip" | "abort";
 interface WorkflowRecoveryOptions {
   getApi: () => GitCrestApiClient | undefined;
   setActionId: (taskId: string) => void;
-  setTaskError: (message: string) => void;
+  setTaskError: (message: DisplayError) => void;
   refreshTasks: () => Promise<void>;
 }
 
@@ -34,7 +34,7 @@ export function useWorkflowRecovery({ getApi, setActionId, setTaskError, refresh
       });
       await refreshTasks();
     } catch (reason) {
-      setTaskError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("err.queueRecovery"));
+      setTaskError(describeApiError(reason, t("err.queueRecovery")));
     } finally {
       setActionId("");
     }

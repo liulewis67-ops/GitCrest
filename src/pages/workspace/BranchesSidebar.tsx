@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../shared/i18n/api-errors";
 import { lazy, Suspense, useState, type KeyboardEvent, type MouseEvent } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse, RepositoryResponse, TaskSnapshotResponse } from "../../api/client";
 import { loadRemoteManager } from "../../features/remotes";
@@ -42,10 +44,10 @@ interface BranchesSidebarProps {
   api?: GitCrestApiClient;
   branches?: BranchSnapshotResponse;
   orderedBranches: Branch[];
-  branchError?: string;
+  branchError?: DisplayError;
   branchesLoading: boolean;
   remotes?: RemoteSnapshotResponse;
-  remoteError?: string;
+  remoteError?: DisplayError;
   remotesLoading: boolean;
   remoteActionBusy: boolean;
   remoteDisabledReason: string;
@@ -258,7 +260,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
       </div>}
       <div className="sidePanelScroll">
         {branchesLoading && !branches && <p className="sidebarNotice" role="status">{t("nav.loadingBranches")}</p>}
-        {branchError && <div className="statusLoadError" role="alert"><span>{branchError}</span><button type="button" onClick={() => onRefreshBranches(repository.repoId)}>{t("nav.retry")}</button></div>}
+        {branchError && <div className="statusLoadError" role="alert"><span><ErrorMessage error={branchError} /></span><button type="button" onClick={() => onRefreshBranches(repository.repoId)}>{t("nav.retry")}</button></div>}
         {hasSnapshot && listedBranches.length === 0 && <p className="sidebarNotice">{t("nav.noBranches")}</p>}
         {hasSnapshot && needle && matching.length === 0 && <p className="sidebarNotice" role="status">{t("bs.noMatch", { query: query.trim() })}</p>}
         {hasSnapshot && matching.length > 0 && <ul className="branchList" aria-label={t("nav.branchListAria")}>

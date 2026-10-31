@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type IgnoreRuleResponse } from "../../../api/client";
+import { type GitCrestApiClient, type IgnoreRuleResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
@@ -7,8 +9,7 @@ export type IgnoreMode = "file" | "extension" | "folder";
 type IgnoreTarget = "gitignore" | "exclude";
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 /**
@@ -29,7 +30,7 @@ export function IgnoreRuleDialog({ api, repoId, path, mode, onClose, onAdded }: 
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const [target, setTarget] = useState<IgnoreTarget>("gitignore");
   const [rule, setRule] = useState<IgnoreRuleResponse>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -73,7 +74,7 @@ export function IgnoreRuleDialog({ api, repoId, path, mode, onClose, onAdded }: 
           <code>{rule.line}</code>
           {rule.alreadyPresent && <p className="cloneHelp">{t("ign.already")}</p>}
         </div>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
       <footer className="cloneDialogActions">
         <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>

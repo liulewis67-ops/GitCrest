@@ -92,7 +92,14 @@ it("keeps the dialog open and shows the error when the choice fails", async () =
   }
   render(<Host />);
   fireEvent.click(screen.getByRole("button", { name: "Stop the pipeline" }));
-  expect((await screen.findByRole("alert")).textContent).toBe("not allowed now");
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  const disclosure = screen.getByRole("button", { name: "Details" });
+  const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
+  expect(diagnostic?.textContent).toContain("not allowed now");
+  expect(diagnostic?.hidden).toBe(true);
+  fireEvent.click(disclosure);
+  expect(diagnostic?.hidden).toBe(false);
   expect(screen.getByRole("dialog")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Decide later" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());

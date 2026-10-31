@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient } from "../../../api/client";
+import { type GitCrestApiClient } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { dismissPipelineConflictPrompt, type PipelineConflictPrompt } from "../model/pipeline-store";
@@ -8,7 +10,7 @@ import { dismissPipelineConflictPrompt, type PipelineConflictPrompt } from "../m
 export function PipelineConflictAbortedDialog({ api, prompt }: { api: GitCrestApiClient; prompt: PipelineConflictPrompt }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const later = () => dismissPipelineConflictPrompt(prompt.runId);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(later, busy);
 
@@ -20,7 +22,7 @@ export function PipelineConflictAbortedDialog({ api, prompt }: { api: GitCrestAp
       await api.actOnPipelineRun(prompt.repoId, prompt.runId, action);
       dismissPipelineConflictPrompt(prompt.runId);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("pl.actionFailed"));
+      setError(describeApiError(reason, t("pl.actionFailed")));
     } finally {
       setBusy(false);
     }
@@ -31,7 +33,7 @@ export function PipelineConflictAbortedDialog({ api, prompt }: { api: GitCrestAp
       <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("pl.conflictAborted.eyebrow")}</p><h2 id="pipeline-aborted-title">{t("pl.conflictAborted.title", { target: prompt.targetBranch })}</h2></div></div>
       <div className="workflowDialogBody">
         <p className="cloneHelp">{t("pl.conflictAborted.body", { target: prompt.targetBranch })}</p>
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={later}>{t("pl.conflictAborted.later")}</button>
           <button className="quietButton compact" type="button" disabled={busy} onClick={() => void choose("stop")}>{t("pl.conflictAborted.stop")}</button>

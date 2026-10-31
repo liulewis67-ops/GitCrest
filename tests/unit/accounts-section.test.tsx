@@ -79,7 +79,7 @@ it("signs in with a token and never shows the token afterwards", async () => {
   expect(document.body.textContent).not.toContain("test-secret-token");
 });
 
-it("keeps the form open with the provider's message when sign-in fails", async () => {
+it("keeps the form open with recovery guidance and diagnostic details when sign-in fails", async () => {
   const api = apiWith({
     listAccounts: vi.fn().mockResolvedValue({ accounts: [] }),
     signInWithToken: vi.fn().mockRejectedValue(new GitCrestApiError(422, { error: { code: "ACCOUNT_TOKEN_REJECTED", message: "The provider rejected this token." } })),
@@ -89,7 +89,14 @@ it("keeps the form open with the provider's message when sign-in fails", async (
   fireEvent.click(screen.getByRole("button", { name: "Add account" }));
   fireEvent.change(screen.getByLabelText("Personal access token"), { target: { value: "expired" } });
   fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
-  expect((await screen.findByRole("alert")).textContent).toBe("The provider rejected this token.");
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The provider rejected this token. It may have expired or lack permission.");
+  const disclosure = screen.getByRole("button", { name: "Details" });
+  const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
+  expect(diagnostic?.textContent).toContain("The provider rejected this token.");
+  expect(diagnostic?.hidden).toBe(true);
+  fireEvent.click(disclosure);
+  expect(diagnostic?.hidden).toBe(false);
   expect(screen.getByLabelText("Personal access token")).toHaveProperty("value", "expired");
 });
 

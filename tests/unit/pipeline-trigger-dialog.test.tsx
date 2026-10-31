@@ -79,12 +79,19 @@ it("does not offer to stop asking when a target is protected", () => {
   expect(screen.getByText("protected branch")).toBeTruthy();
 });
 
-it("leaves the run queued on Not now and shows the core's message when starting fails", async () => {
+it("leaves the run queued on Not now and discloses start-failure diagnostics", async () => {
   const client = api({ startPipelineRun: vi.fn().mockRejectedValue(new Error("Another pipeline run of this repository is in progress.")) });
   announce();
   render(<Host client={client} />);
   fireEvent.click(screen.getByRole("button", { name: "Run" }));
-  expect((await screen.findByRole("alert")).textContent).toBe("Another pipeline run of this repository is in progress.");
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  const disclosure = screen.getByRole("button", { name: "Details" });
+  const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
+  expect(diagnostic?.textContent).toContain("Another pipeline run of this repository is in progress.");
+  expect(diagnostic?.hidden).toBe(true);
+  fireEvent.click(disclosure);
+  expect(diagnostic?.hidden).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Not now" }));
   await waitFor(() => expect(screen.getByText("closed")).toBeTruthy());
   expect(client.replacePipelineRules).not.toHaveBeenCalled();

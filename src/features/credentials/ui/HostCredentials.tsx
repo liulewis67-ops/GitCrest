@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useState, type FormEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
@@ -21,7 +23,7 @@ export function HostCredentials({ api, initialHosts = [] }: HostCredentialsProps
   // The system credential store cannot list saved hosts, so only hosts asked for here are shown.
   const [hosts, setHosts] = useState<string[]>(() => [...new Set(initialHosts)]);
   const [hostInput, setHostInput] = useState("");
-  const [inputError, setInputError] = useState("");
+  const [inputError, setInputError] = useState<DisplayError>("");
 
   function addHost(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,7 +45,7 @@ export function HostCredentials({ api, initialHosts = [] }: HostCredentialsProps
         <label className="cloneField">{t("cred.hosts.host")}<input value={hostInput} onChange={(event) => { setHostInput(event.target.value); setInputError(""); }} placeholder="git.example.com" maxLength={2048} autoComplete="off" spellCheck={false} /></label>
         <button className="secondaryButton" type="submit" disabled={!hostInput.trim()}>{t("cred.hosts.open")}</button>
       </form>
-      {inputError && <p className="formError" role="alert">{inputError}</p>}
+      {inputError && <p className="formError" role="alert"><ErrorMessage error={inputError} /></p>}
       {hosts.map((host) => <CredentialEditor key={host} api={api} host={host} />)}
     </div>
   );

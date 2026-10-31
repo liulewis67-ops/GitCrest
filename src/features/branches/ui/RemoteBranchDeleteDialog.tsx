@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type RemoteBranchDeletePreviewResponse, type RemoteSnapshotResponse, type TaskSnapshotResponse } from "../../../api/client";
+import { type GitCrestApiClient, type RemoteBranchDeletePreviewResponse, type RemoteSnapshotResponse, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
@@ -30,7 +32,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
   const [confirmed, setConfirmed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   async function inspect() {
@@ -41,7 +43,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
     try {
       setPreview(await api.previewRepositoryRemoteBranchDelete(repoId, target.remoteName, target.remoteBranch));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rbd.inspectFailed"));
+      setError(describeApiError(reason, t("rbd.inspectFailed")));
     } finally {
       setLoading(false);
     }
@@ -60,7 +62,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
         confirmDelete: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rbd.deleteFailed"));
+      setError(describeApiError(reason, t("rbd.deleteFailed")));
     } finally {
       setBusy(false);
     }
@@ -75,7 +77,7 @@ export function RemoteBranchDeleteDialog({ api, repoId, branchRef, remotes, disa
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>{t("rbd.targetRef")}</span><strong className="monoText">{branchRef}</strong></div>
         {!target && <p className="taskCenterError" role="alert">{t("rbd.cannotMap")}</p>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         {loading && <p role="status">{t("rbd.reviewing")}</p>}
         {preview && <>
           <div className="rebasePreviewFacts">

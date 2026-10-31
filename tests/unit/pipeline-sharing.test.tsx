@@ -73,13 +73,20 @@ it("can cancel the review without saving anything", async () => {
   expect(client.importPipelineRules).toHaveBeenCalledTimes(1);
 });
 
-it("shows the core's message for a malformed or missing rules file", async () => {
+it("shows import guidance and diagnostic details for a malformed or missing rules file", async () => {
   const client = api();
   client.importPipelineRules.mockRejectedValue(new Error("The rules file is not a valid GitCrest pipelines file."));
   show(client);
   await screen.findByText("Mine");
   fireEvent.click(screen.getByRole("button", { name: "Import from repository" }));
-  expect((await screen.findByRole("alert")).textContent).toBe("The rules file is not a valid GitCrest pipelines file.");
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("Could not import the rules file.");
+  const disclosure = screen.getByRole("button", { name: "Details" });
+  const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
+  expect(diagnostic?.textContent).toContain("The rules file is not a valid GitCrest pipelines file.");
+  expect(diagnostic?.hidden).toBe(true);
+  fireEvent.click(disclosure);
+  expect(diagnostic?.hidden).toBe(false);
   expect(screen.queryByRole("region", { name: "Review imported rules" })).toBeNull();
 });
 

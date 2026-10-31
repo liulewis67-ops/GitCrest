@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useRef } from "react";
 import type { GitCrestApiClient, RepositoryResponse, TaskSnapshotResponse } from "../../../api/client";
@@ -11,7 +12,7 @@ interface TaskRefreshEffectsOptions {
   refreshRepositoryRemotes: (repoId: string) => Promise<void>;
   refreshHistory: () => void;
   updateRepository: (repository: RepositoryResponse) => void;
-  reportError: (message: string) => void;
+  reportError: (message: DisplayError) => void;
   onTerminalPlan?: (task: TaskSnapshotResponse, plan: TaskRepositoryRefreshPlan) => void;
 }
 
@@ -51,7 +52,7 @@ export function useTaskRefreshEffects(options: TaskRefreshEffectsOptions): void 
             }
           }).catch((error: unknown) => {
             if (!controller.signal.aborted && plan.reportRepositoryRefreshError) {
-              optionsRef.current.reportError(error instanceof Error ? error.message : t("err.refreshMeta"));
+              optionsRef.current.reportError(describeApiError(error, t("err.refreshMeta")));
             }
           }).finally(() => {
             if (repositoryRefreshControllersRef.current.get(repoId) === controller) {

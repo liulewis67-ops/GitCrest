@@ -1,3 +1,4 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useRef, useState } from "react";
 import {
@@ -28,7 +29,7 @@ interface CommitSubmissionOptions {
   sign: boolean;
   setSelections: (selections: CommitSelections) => void;
   appendTask: (task: TaskSnapshotResponse) => void;
-  setTaskError: (message: string) => void;
+  setTaskError: (message: DisplayError) => void;
   openTaskCenter: () => void;
   openPushTargetPicker: () => void;
   refreshRepositoryStatus: (repoId: string) => void;
@@ -82,13 +83,12 @@ export function useCommitSubmission({
       });
       openTaskCenter();
     } catch (error) {
-      const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
       if (error instanceof GitCrestApiError && error.body.error.code === "RESOURCE_VERSION_STALE") {
         setSelections([]);
         retryDiff();
         refreshRepositoryStatus(repoId);
       }
-      setTaskError(message || (error instanceof Error ? error.message : t("err.commitStart")));
+      setTaskError(describeApiError(error, t("err.commitStart")));
       openTaskCenter();
     } finally {
       setBusy(false);

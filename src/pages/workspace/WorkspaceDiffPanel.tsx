@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../shared/i18n/api-errors";
 import { useI18n } from "../../shared/i18n";
 import { lazy, Suspense, useState } from "react";
 import type { DiffDocumentResponse } from "../../api/client";
@@ -18,9 +20,9 @@ interface WorkspaceDiffPanelProps {
   /** Status letter and kind shown before the path, for working-tree files. */
   status?: { code: string; kind: string };
   activeDiffKey: string;
-  diffState: { key: string; loading: boolean; document?: DiffDocumentResponse; error?: string };
+  diffState: { key: string; loading: boolean; document?: DiffDocumentResponse; error?: DisplayError };
   /** The same file read in full, so the line view can group its changes by code structure. */
-  structureSource?: { state: { key: string; loading: boolean; document?: DiffDocumentResponse; error?: string }; activeKey: string; retry: () => void };
+  structureSource?: { state: { key: string; loading: boolean; document?: DiffDocumentResponse; error?: DisplayError }; activeKey: string; retry: () => void };
   /** The file left the latest status snapshot. */
   fileMissing?: boolean;
   /** Staging, discarding and committing selected lines are blocked. */
@@ -118,7 +120,7 @@ export function WorkspaceDiffPanel({
         <button className={`quietButton compact focusToggle${focusMode ? " active" : ""}`} type="button" aria-pressed={focusMode} aria-keyshortcuts={ariaShortcut(shortcuts.focusMode, isMacPlatform)} title={focusMode ? t("panel.exitFocusTitle", { shortcut: focusShortcut }) : t("panel.focusTitle", { shortcut: focusShortcut })} onClick={onToggleFocusMode}><span aria-hidden="true">{focusMode ? "⤡" : "⤢"}</span><span>{focusMode ? t("panel.exitFocus") : t("panel.focus")}</span></button>
       </div>
       {diffState.key !== activeDiffKey || (diffState.loading && !diffState.document) ? <div className="diffSpecialState" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("main.readingDiff")}</div>
-        : diffState.error ? <div className="diffSpecialState" role="alert"><p>{diffState.error}</p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button>{diffViewPreferences.layout === "full" && <button className="secondaryButton" type="button" onClick={() => onChangeDiffViewPreferences({ layout: "hunks" })}>{t("fd.hunks")}</button>}</div>
+        : diffState.error ? <div className="diffSpecialState" role="alert"><p><ErrorMessage error={diffState.error} /></p><button className="secondaryButton" type="button" onClick={onRetryDiff}>{t("main.retryDiff")}</button>{diffViewPreferences.layout === "full" && <button className="secondaryButton" type="button" onClick={() => onChangeDiffViewPreferences({ layout: "hunks" })}>{t("fd.hunks")}</button>}</div>
           : diffState.document && loadImage && diffState.document.status === "binary" && isComparableImagePath(diffState.document.path) ? <ImageDiff key={diffState.document.revision} path={path} source={{ load: loadImage }} />
           : diffState.document && lfsPointerChange(diffState.document) ? <LfsPointerNotice change={lfsPointerChange(diffState.document)!} path={path} loadAvailability={loadLfsAvailability} />
           : diffState.document && diffViewPreferences.layout === "full" ? <div className="fileDiffViewport"><Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("main.loadingDiffViewer")}</div>}><FileDiffViewer document={diffState.document} commitOid={commitOid} preferences={diffViewPreferences} onChangePreferences={onChangeDiffViewPreferences} onShowHunks={() => onChangeDiffViewPreferences({ layout: "hunks" })} onOpenWindow={openWindow} structure={structure} /></Suspense></div>

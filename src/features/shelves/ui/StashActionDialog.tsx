@@ -1,6 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type StashEntryResponse,
   type StashPreviewResponse,
@@ -12,8 +13,7 @@ import { useI18n } from "../../../shared/i18n";
 export type StashAction = "apply" | "pop" | "drop" | "import";
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 /**
@@ -41,7 +41,7 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
   const [confirmed, setConfirmed] = useState(false);
   const [name, setName] = useState(stash.message || `stash@{${stash.index}}`);
   const [dropAfter, setDropAfter] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -111,7 +111,7 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
         </>}
         {needsConfirm && <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} disabled={busy || !preview} onChange={(event) => setConfirmed(event.target.checked)} />{t("stash.confirmDrop")}</label>}
         {disabled && <p className="cloneHelp" role="note">{t("stash.busyNote")}</p>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
       <footer className="cloneDialogActions">
         <button className="quietButton" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</button>

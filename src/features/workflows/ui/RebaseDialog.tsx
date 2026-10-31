@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -42,7 +44,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
   const [confirmDrop, setConfirmDrop] = useState(false);
   const [confirmPublishedRewrite, setConfirmPublishedRewrite] = useState(false);
   const [confirmRollback, setConfirmRollback] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
 
   useEffect(() => {
@@ -52,7 +54,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
       setBackupSnapshot(snapshot);
       setSelectedBackup(snapshot.backups[0]?.reference || "");
     }).catch((reason) => {
-      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? reason.body.error.message : t("rb.loadBackups"));
+      if (!controller.signal.aborted) setError(reason instanceof GitCrestApiError ? describeApiError(reason) : t("rb.loadBackups"));
     });
     return () => controller.abort();
   }, [api, repoId]);
@@ -85,7 +87,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
       setPreview(next);
       setTodo(next.commits.map((commit) => ({ oid: commit.oid, action: "pick", message: null })));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rb.inspectFailed"));
+      setError(describeApiError(reason, t("rb.inspectFailed")));
     } finally {
       setLoading(false);
     }
@@ -119,7 +121,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
         confirmPublishedRewrite,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rb.startFailed"));
+      setError(describeApiError(reason, t("rb.startFailed")));
     } finally {
       setBusy(false);
     }
@@ -138,7 +140,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
         confirmRollback: true,
       }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("rb.rollbackFailed"));
+      setError(describeApiError(reason, t("rb.rollbackFailed")));
     } finally {
       setBusy(false);
     }
@@ -158,7 +160,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
         </label>
         {targets.length === 0 && <p className="cloneHelp">{t("rb.noTargets")}</p>}
         {disabled && <p className="cloneHelp">{t("rb.waitTask")}</p>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <section className="rebaseRollbackPanel" aria-labelledby="rebase-rollback-heading">
           <h3 id="rebase-rollback-heading">{t("rb.restoreHeading")}</h3>
           {backupSnapshot?.backups.length ? <>

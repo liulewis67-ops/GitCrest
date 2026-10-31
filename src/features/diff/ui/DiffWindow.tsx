@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { Fragment, lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { GitCrestApiClient, type BlameDocumentResponse, type DiffDocumentResponse, type StatusSnapshotResponse } from "../../../api/client";
@@ -14,7 +16,7 @@ import { ImageDiff, isComparableImagePath } from "./ImageDiff";
 
 type View = "split" | "unified";
 /** One tab's blame: loading while neither is set. */
-type TabBlame = { document?: BlameDocumentResponse; error?: string };
+type TabBlame = { document?: BlameDocumentResponse; error?: DisplayError };
 type DiffTab = {
   key: string;
   path: string;
@@ -45,7 +47,7 @@ export function DiffWindow() {
   const [blameOn, setBlameOn] = useState(false);
   const [blames, setBlames] = useState<Record<string, TabBlame>>({});
   const requestedBlames = useRef(new Set<string>());
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [tabsTruncated, setTabsTruncated] = useState(false);
   const { preferences: viewPreferences, updatePreferences: updateViewPreferences } = useDiffViewPreferences();
   const view: View = viewPreferences.sideBySide ? "split" : "unified";
@@ -140,7 +142,7 @@ export function DiffWindow() {
         tabsLoadedRef.current = true;
       }
     }).catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason.message : t("dw.loadFilesFailed"));
+      if (active) setError(describeApiError(reason, t("dw.loadFilesFailed")));
     });
     return () => {
       active = false;
@@ -180,7 +182,7 @@ export function DiffWindow() {
     void request.then((result) => {
       if (active) setDocument(result);
     }).catch((reason: unknown) => {
-      if (active && !controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("dw.loadDiffFailed"));
+      if (active && !controller.signal.aborted) setError(describeApiError(reason, t("dw.loadDiffFailed")));
     });
     return () => {
       active = false;
@@ -210,7 +212,7 @@ export function DiffWindow() {
       // A failure from a client the window has since replaced is not this tab's answer.
       if (apiRef.current !== api) return;
       requestedBlames.current.delete(tab.key);
-      setBlames((current) => ({ ...current, [tab.key]: { error: reason instanceof Error ? reason.message : t("dw.loadBlameFailed") } }));
+      setBlames((current) => ({ ...current, [tab.key]: { error: describeApiError(reason, t("dw.loadBlameFailed")) } }));
     });
   }, [blameOn, api, activeTab?.key, blameDisabled, repoId]);
 
@@ -268,8 +270,8 @@ export function DiffWindow() {
       </nav>}
       <section className="diffWindowContent" aria-label={t("dw.contentAria")}>
         {/* The diff shows at once; its blame fills in when it arrives. */}
-        {document && activeBlame && !activeBlame.document && <div className="diffBlameNotice" role={activeBlame.error ? "alert" : "status"}>{activeBlame.error || t("dw.loadingBlame")}</div>}
-        {error ? <div className="diffSpecialState" role="alert"><p>{error}</p></div>
+        {document && activeBlame && !activeBlame.document && <div className="diffBlameNotice" role={activeBlame.error ? "alert" : "status"}><ErrorMessage error={activeBlame.error || t("dw.loadingBlame")} /></div>}
+        {error ? <div className="diffSpecialState" role="alert"><p><ErrorMessage error={error} /></p></div>
           : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
             : document.status === "binary" && activeTab?.scope !== "range" && isComparableImagePath(document.path) && api ? <ImageDiff key={document.revision} path={document.path} source={{ load: (side) => api.getRepositoryImage(document.repoId, { path: document.path, scope: document.scope, side, ...(document.scope === "commit" && activeTab?.commitOid ? { commitOid: activeTab.commitOid } : {}), ...(document.originalPath ? { originalPath: document.originalPath } : {}) }) }} />
             : lfsChange ? <LfsPointerNotice change={lfsChange} path={document.path} loadAvailability={api ? () => api.getGitLfsStatus() : undefined} />

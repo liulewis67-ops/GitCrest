@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
+import { type GitCrestApiClient, type TaskSnapshotResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { LocalFilesPicker } from "./LocalFilesPicker";
@@ -28,7 +30,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, work
   const [worktreeEdited, setWorktreeEdited] = useState(false);
   const [busy, setBusy] = useState(false);
   const [copyFiles, setCopyFiles] = useState<string[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
   const suggested = suggestWorktreePath(repositoryPath, name.trim());
   const folder = (worktreeEdited ? worktreePath : suggested).trim();
@@ -52,7 +54,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, work
       }
       onStarted(task);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("cb.createFailed"));
+      setError(describeApiError(reason, t("cb.createFailed")));
     } finally {
       setBusy(false);
     }
@@ -94,7 +96,7 @@ export function CreateBranchDialog({ api, repoId, repositoryPath, startOid, work
         {placement === "worktree" && <LocalFilesPicker api={api} repoId={repoId} selected={copyFiles} onChange={setCopyFiles} disabled={busy} />}
         {relativeFolder && <p className="taskCenterError" role="alert">{t("nw.fullPath")}</p>}
         {placement === "worktree" && folderProblem && <p className="taskCenterError" role="alert">{worktreeFolderProblemMessage(folderProblem)}</p>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("cb.cancel")}</button>
           <button className="primaryButton" type="button" disabled={!ready} onClick={() => void submit()}>{busy ? t("cb.creating") : placement === "switch" ? t("cb.createSwitch") : placement === "worktree" ? t("cb.createWorktree") : t("cb.create")}</button>

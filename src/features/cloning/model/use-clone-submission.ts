@@ -1,7 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type RepositoryResponse,
   type TaskSnapshotResponse,
@@ -20,7 +20,7 @@ interface CloneSubmissionOptions {
   onRepositoryOpened: (repository: RepositoryResponse) => void;
   closeTaskCenter: () => void;
   clearTaskError: () => void;
-  setTaskError: (message: string) => void;
+  setTaskError: (message: DisplayError) => void;
   openTaskCenter: () => void;
 }
 
@@ -35,7 +35,7 @@ export function useCloneSubmission({
   openTaskCenter,
 }: CloneSubmissionOptions) {
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draft, setDraft] = useState<CloneDraft>({ remoteUrl: "", parentPath: "", directoryName: "" });
   const cloneTaskIdsRef = useRef(new Set<string>());
@@ -54,8 +54,7 @@ export function useCloneSubmission({
       onTaskAccepted(task);
       closeDialog();
     } catch (requestError) {
-      const message = requestError instanceof GitCrestApiError ? requestError.body.error.message : undefined;
-      setError(message || (requestError instanceof Error ? requestError.message : t("err.cloneStart")));
+      setError(describeApiError(requestError, t("err.cloneStart")));
     } finally {
       setBusy(false);
     }
@@ -108,7 +107,7 @@ export function useCloneSubmission({
       clearTaskError();
     } catch (error) {
       openedTaskIdsRef.current.delete(task.taskId);
-      setTaskError(error instanceof Error ? error.message : "Clone completed, but the repository could not be opened.");
+      setTaskError(describeApiError(error, "Clone completed, but the repository could not be opened."));
       openTaskCenter();
     }
   }

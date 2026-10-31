@@ -1,3 +1,4 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
@@ -88,7 +89,7 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
       >
         {!filesHidden && <nav className="commitFileList" aria-label={t("hv.files")}>
           <div className="sidebarSectionTitle"><span>{t("hv.files")}</span>{detail && <span className="countBadge">{detail.files.length}</span>}</div>
-          {state.error && state.oid === oid ? <p className="sidebarNotice" role="alert">{state.error}</p>
+          {state.error && state.oid === oid ? <p className="sidebarNotice" role="alert"><ErrorMessage error={state.error} /></p>
             : !detail ? <p className="sidebarNotice" role="status">{t("hv.loadingCommit")}</p>
               : detail.files.length === 0 ? <p className="sidebarNotice">{t("hv.noFiles")}</p>
                 : <ul>{detail.files.map((file, index) => {

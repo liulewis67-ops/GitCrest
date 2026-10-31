@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useState } from "react";
 import type {
@@ -57,7 +59,7 @@ export function ShelfCenter({
   const [selectedShelfId, setSelectedShelfId] = useState<string>();
   const [detail, setDetail] = useState<ShelfDetailResponse>();
   const [applyPreview, setApplyPreview] = useState<ShelfApplyPreviewResponse>();
-  const [loadError, setLoadError] = useState("");
+  const [loadError, setLoadError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
   const [taskPending, setTaskPending] = useState(false);
   const [pendingTaskId, setPendingTaskId] = useState<string>();
@@ -95,7 +97,7 @@ export function ShelfCenter({
         setApplyPreview(undefined);
       }
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : t("sh.loadFailed"));
+      setLoadError(describeApiError(error, t("sh.loadFailed")));
     }
   }
 
@@ -150,7 +152,7 @@ export function ShelfCenter({
       try {
         return [path, await api.getFileDiff(repoId, path, nextScope)] as const;
       } catch (error) {
-        setLoadError(error instanceof Error ? error.message : t("sh.readFailed", { path }));
+        setLoadError(describeApiError(error, t("sh.readFailed", { path })));
         return undefined;
       }
     }));
@@ -167,7 +169,7 @@ export function ShelfCenter({
       setDiffs((current) => ({ ...current, [path]: response }));
       return response;
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : t("sh.readFailed", { path }));
+      setLoadError(describeApiError(error, t("sh.readFailed", { path })));
       return undefined;
     }
   }
@@ -232,7 +234,7 @@ export function ShelfCenter({
       onTaskSubmitted(task, afterCreateAction);
       await refreshShelves();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : t("sh.createFailed"));
+      setLoadError(describeApiError(error, t("sh.createFailed")));
     } finally {
       setBusy(false);
     }
@@ -246,7 +248,7 @@ export function ShelfCenter({
     try {
       setDetail(await api.getRepositoryShelf(repoId, shelf.shelfId));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : t("sh.patchFailed"));
+      setLoadError(describeApiError(error, t("sh.patchFailed")));
     }
   }
 
@@ -257,7 +259,7 @@ export function ShelfCenter({
     try {
       setApplyPreview(await api.preflightRepositoryShelfApply(repoId, selectedShelfId));
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : t("sh.previewFailed"));
+      setLoadError(describeApiError(error, t("sh.previewFailed")));
     } finally {
       setBusy(false);
     }
@@ -276,7 +278,7 @@ export function ShelfCenter({
       setPendingTaskId(task.taskId);
       onTaskSubmitted();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : t("sh.applyFailed"));
+      setLoadError(describeApiError(error, t("sh.applyFailed")));
     } finally {
       setBusy(false);
     }
@@ -296,7 +298,7 @@ export function ShelfCenter({
       setDeleteConfirm(undefined);
       await refreshShelves();
     } catch (error) {
-      setLoadError(error instanceof Error ? error.message : t("sh.deleteFailed"));
+      setLoadError(describeApiError(error, t("sh.deleteFailed")));
     } finally {
       setBusy(false);
     }
@@ -309,7 +311,7 @@ export function ShelfCenter({
       <button className="shelfCreateButton" type="button" disabled={disabled} onClick={() => { setComposerOpen(true); setLoadError(""); }}>
         <span aria-hidden="true">＋</span> {t("sh.shelveSelected")}
       </button>
-      {loadError && <div className="shelfInlineError" role="alert">{loadError}</div>}
+      {loadError && <div className="shelfInlineError" role="alert"><ErrorMessage error={loadError} /></div>}
       {shelves.length === 0 && !loadError && <EmptyState actionLabel={t("sh.emptyAction")} onAction={() => { setComposerOpen(true); setLoadError(""); }} actionDisabled={disabled} actionTitle={disabled ? t("sh.emptyDisabled") : undefined}>{t("sh.none")} {t("sh.emptyHint")}</EmptyState>}
       {shelves.map((shelf) => (
         <div className={`shelfListItem${selectedShelfId === shelf.shelfId ? " active" : ""}`} key={shelf.shelfId}>
@@ -360,7 +362,7 @@ export function ShelfCenter({
               </div>;
             })}
           </div>
-          {loadError && <div className="shelfInlineError" role="alert">{loadError}</div>}
+          {loadError && <div className="shelfInlineError" role="alert"><ErrorMessage error={loadError} /></div>}
           <div className="dialogActions"><button className="secondaryButton" type="button" disabled={busy} onClick={closeComposer}>{t("sh.cancel")}</button><button className="primaryButton" type="button" disabled={busy || disabled || Object.keys(selected).length === 0 || !name.trim()} onClick={() => void createShelf()}>{busy ? t("sh.saving") : t("sh.create")}</button></div>
         </section>
       </div>}

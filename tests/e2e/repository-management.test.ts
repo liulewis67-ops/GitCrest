@@ -94,7 +94,11 @@ it("explains that the selected folder is not a Git repository", async () => {
     await window.getByRole("button", { name: "Open local repository" }).click();
     const errorAlert = window.getByRole("alert");
     await errorAlert.waitFor({ state: "visible" });
-    expect(await errorAlert.innerText()).toBe("The selected folder is not a Git working tree.");
+    expect(await errorAlert.innerText()).toContain("This folder is not a readable Git repository.");
+    expect(await errorAlert.innerText()).toContain("Locate the correct repository folder");
+    expect(await errorAlert.locator(".apiErrorDetails").isVisible()).toBe(false);
+    await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
+    expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("The selected folder is not a Git working tree.");
     expect(await window.locator(".workspaceCrumb").count()).toBe(0);
   } finally {
     await app?.close();
@@ -124,7 +128,11 @@ it("reports when the selected repository path disappears before it can be opened
     await window.getByRole("button", { name: "Open local repository" }).click();
     const errorAlert = window.getByRole("alert");
     await errorAlert.waitFor({ state: "visible" });
-    expect(await errorAlert.innerText()).toBe("The selected repository path no longer exists.");
+    expect(await errorAlert.innerText()).toContain("The repository folder is missing.");
+    expect(await errorAlert.innerText()).toContain("Locate its new folder");
+    expect(await errorAlert.locator(".apiErrorDetails").isVisible()).toBe(false);
+    await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
+    expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("The selected repository path no longer exists.");
     expect(await window.locator(".workspaceCrumb").count()).toBe(0);
   } finally {
     await app?.close();
@@ -161,7 +169,11 @@ it.skipIf(process.platform !== "win32")("reports an access error for a folder de
     await window.getByRole("button", { name: "Open local repository" }).click();
     const errorAlert = window.getByRole("alert");
     await errorAlert.waitFor({ state: "visible" });
-    expect(await errorAlert.innerText()).toBe("GitCrest does not have permission to read the selected repository.");
+    expect(await errorAlert.innerText()).toContain("The repository folder cannot be accessed.");
+    expect(await errorAlert.innerText()).toContain("Check the folder permissions");
+    expect(await errorAlert.locator(".apiErrorDetails").isVisible()).toBe(false);
+    await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
+    expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("GitCrest does not have permission to read the selected repository.");
     expect(await window.locator(".workspaceCrumb").count()).toBe(0);
   } finally {
     await app?.close();
@@ -204,7 +216,11 @@ it("keeps a failed Git template initialization out of the selected project folde
     await window.getByRole("button", { name: INITIALIZE_QUICK_ACTION }).click();
     const errorAlert = window.getByRole("alert");
     await errorAlert.waitFor({ state: "visible" });
-    expect(await errorAlert.innerText()).toBe("Git could not initialize this folder.");
+    expect(await errorAlert.innerText()).toContain("The repository could not be initialized.");
+    expect(await errorAlert.innerText()).toContain("Check the folder and Git configuration");
+    expect(await errorAlert.locator(".apiErrorDetails").isVisible()).toBe(false);
+    await errorAlert.getByRole("button", { name: "Details", exact: true }).click();
+    expect(await errorAlert.locator(".apiErrorDetails").innerText()).toContain("Git could not initialize this folder.");
     expect(await readFile(projectFile, "utf8")).toBe("# Keep this project unchanged\n");
     expect(await window.locator(".workspaceCrumb").count()).toBe(0);
     expect(await readdir(projectPath)).toEqual(["README.md"]);

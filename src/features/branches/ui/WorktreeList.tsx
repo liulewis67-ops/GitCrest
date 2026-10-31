@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type MouseEvent } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type TaskSnapshotResponse, type WorktreeSnapshotResponse } from "../../../api/client";
+import { type GitCrestApiClient, type TaskSnapshotResponse, type WorktreeSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
 import { ContextMenu, type ContextMenuItem } from "../../../shared/ui/ContextMenu";
 
@@ -34,14 +36,14 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onNewW
   const { t } = useI18n();
   const [snapshot, setSnapshot] = useState<WorktreeSnapshotResponse>();
   const [menu, setMenu] = useState<{ worktree: Worktree; x: number; y: number; anchor: HTMLElement }>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
 
   async function prune() {
     setError("");
     try {
       onPruneStarted(await api.pruneRepositoryWorktrees(repoId));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("wt.cleanupFailed"));
+      setError(describeApiError(reason, t("wt.cleanupFailed")));
     }
   }
 
@@ -97,7 +99,7 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onNewW
     <div className="navDivider" />
     <div className="navGroup worktreesNavigation">
       <div className="navGroupTitle"><span>{t("wt.title")}</span><span className="countBadge">{snapshot.worktrees.length}</span>{anyPrunable && <button className="textButton" type="button" disabled={disabled} title={t("wt.forgetTitle")} onClick={() => void prune()}>{t("wt.cleanUp")}</button>}</div>
-      {error && <p className="dialogError" role="alert">{error}</p>}
+      {error && <p className="dialogError" role="alert"><ErrorMessage error={error} /></p>}
       <ul className="branchList" aria-label={t("wt.listAria")}>
         {snapshot.worktrees.map((worktree) => (
           <li className={`branchItem${worktree.isCurrent ? " current" : ""}${menu?.worktree.path === worktree.path ? " menuOpen" : ""}`} key={worktree.path} onContextMenu={(event) => openMenu(event, worktree)}>

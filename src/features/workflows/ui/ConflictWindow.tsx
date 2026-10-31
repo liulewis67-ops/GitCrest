@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
 import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../../api/client";
@@ -12,8 +14,8 @@ import { useDraftHistory } from "../model/use-draft-history";
 import { ConflictBlockRow, type IgnoredSides } from "./ConflictBlockRow";
 import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
 
-type RequestState<T> = { key: string; loading: boolean; data?: T; error?: string };
-type ActionState = { busy?: "save" | "resolve"; message?: string; error?: string };
+type RequestState<T> = { key: string; loading: boolean; data?: T; error?: DisplayError };
+type ActionState = { busy?: "save" | "resolve"; message?: string; error?: DisplayError };
 
 const TASK_POLL_INTERVAL_MS = 250;
 const TASK_POLL_ATTEMPTS = 60;
@@ -82,7 +84,7 @@ export function ConflictWindow() {
       setSession({ key: sessionKey, loading: false, data: preview });
       setSelectedPath((current) => preview.conflictedPaths.includes(current) ? current : preview.conflictedPaths[0] || "");
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setSession({ key: sessionKey, loading: false, error: reason instanceof Error ? reason.message : t("cf.loadTask") });
+      if (!controller.signal.aborted) setSession({ key: sessionKey, loading: false, error: describeApiError(reason, t("cf.loadTask")) });
     });
     return () => controller.abort();
   }, [repoId, taskId, sessionKey, coreRestarts]);
@@ -113,7 +115,7 @@ export function ConflictWindow() {
         setActiveBlock(0);
       }
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted && selectedPathRef.current === selectedPath) setFile({ key: fileKey, loading: false, error: reason instanceof Error ? reason.message : t("cf.loadStages") });
+      if (!controller.signal.aborted && selectedPathRef.current === selectedPath) setFile({ key: fileKey, loading: false, error: describeApiError(reason, t("cf.loadStages")) });
     });
     return () => controller.abort();
   }, [api, repoId, taskId, selectedPath, fileKey, resetHistory]);
@@ -169,7 +171,7 @@ export function ConflictWindow() {
       throw new Error(t("cf.saveIncomplete"));
     } catch (reason) {
       if (controller.signal.aborted) return undefined;
-      setAction({ error: reason instanceof Error ? reason.message : t("cf.saveFailed") });
+      setAction({ error: describeApiError(reason, t("cf.saveFailed")) });
       try { await refreshSession(controller.signal); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
     } finally {
       if (actionControllerRef.current === controller) actionControllerRef.current = null;
@@ -207,7 +209,7 @@ export function ConflictWindow() {
       throw new Error(t("cf.resolveIncomplete"));
     } catch (reason) {
       if (controller.signal.aborted) return;
-      setAction({ error: reason instanceof Error ? reason.message : t("cf.resolveFailed") });
+      setAction({ error: describeApiError(reason, t("cf.resolveFailed")) });
       try { await refreshSession(controller.signal); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
     } finally {
       if (actionControllerRef.current === controller) actionControllerRef.current = null;
@@ -365,7 +367,7 @@ export function ConflictWindow() {
       <div className="conflictWindowProgress" role="status">{currentSession.data ? t("cf.unresolved", { count: currentSession.data.conflictedPaths.length }) : t("cf.waiting")}</div>
       <WindowControls controls={getGitCrestBridge()?.windowControls} />
     </header>
-    {currentSession.error && <p className="taskCenterError" role="alert">{currentSession.error}</p>}
+    {currentSession.error && <p className="taskCenterError" role="alert"><ErrorMessage error={currentSession.error} /></p>}
     {currentSession.loading && <p className="diffSpecialState" role="status">{t("cf.loadingTask")}</p>}
     {!currentSession.loading && currentSession.data && <div className="conflictWindowLayout">
       <nav className="conflictFileList" aria-label={t("cf.filesAria")}>
@@ -375,7 +377,7 @@ export function ConflictWindow() {
         {currentSession.data.conflictedPaths.length === 0 && <p className="diffSpecialState">{t("cf.noneLeft")}</p>}
       </nav>
       <section className="conflictFileReview" aria-label={t("cf.reviewAria")}>
-        {currentFile.error && <p className="taskCenterError" role="alert">{currentFile.error}</p>}
+        {currentFile.error && <p className="taskCenterError" role="alert"><ErrorMessage error={currentFile.error} /></p>}
         {currentFile.loading && <p className="diffSpecialState" role="status">{t("cf.loadingStages")}</p>}
         {currentFile.data && <>
           <div className="conflictFileHeading"><strong title={currentFile.data.path}>{currentFile.data.path}</strong><span className="monoText" title={currentFile.data.headOid || t("cf.unbornHead")}>{t("cf.headLabel", { oid: currentFile.data.headOid?.slice(0, 12) || "—" })}</span></div>
@@ -466,7 +468,7 @@ export function ConflictWindow() {
           </>}
         </>}
         {action.message && <p className="conflictActionStatus" role="status">{action.message}</p>}
-        {action.error && <p className="taskCenterError" role="alert">{action.error}</p>}
+        {action.error && <p className="taskCenterError" role="alert"><ErrorMessage error={action.error} /></p>}
         {currentFile.data?.isText && <button type="button" className="secondaryButton" disabled={Boolean(action.busy) || hasUnsavedChanges} title={hasUnsavedChanges ? t("cf.aiSaveFirst") : t("cf.aiPreview")} onClick={() => setSuggestionOpen((open) => !open)}>{t("cf.aiButton")}</button>}
         {suggestionOpen && api && currentFile.data?.isText && <ConflictSuggestionPanel key={`${currentFile.data.path}:${currentFile.data.resultRevision}`} api={api} file={currentFile.data} hasUnsavedChanges={hasUnsavedChanges} onUseSuggestion={applyAiMerge} onClose={() => setSuggestionOpen(false)} />}
       </section>

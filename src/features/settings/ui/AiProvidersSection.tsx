@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type FormEvent } from "react";
 import type { AiApiFormat, AiSettingsResponse, GitCrestApiClient } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -16,7 +18,7 @@ import {
 } from "../model/ai-providers";
 import { PrivacyScopePreview } from "./PrivacyScopePreview";
 
-type TestState = { busy?: boolean; message?: string; error?: string };
+type TestState = { busy?: boolean; message?: string; error?: DisplayError };
 
 function isLoopbackUrl(value: string): boolean {
   try {
@@ -34,7 +36,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
   const [dirty, setDirty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [tests, setTests] = useState<Record<string, TestState>>({});
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [notice, setNotice] = useState("");
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
       setSettings(value);
       setDraft(draftFromSettings(value));
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("aip.loadFailed"));
+      if (!controller.signal.aborted) setError(describeApiError(reason, t("aip.loadFailed")));
     });
     return () => controller.abort();
   }, [api]);
@@ -80,7 +82,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
       setDirty(false);
       setNotice(t("aip.saved"));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("aip.saveFailed"));
+      setError(describeApiError(reason, t("aip.saveFailed")));
     } finally { setBusy(false); }
   }
 
@@ -95,7 +97,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
       const reply = await api.testAiProvider(providerInput(provider));
       setTests((current) => ({ ...current, [provider.id]: { message: t("aip.testOk", { model: reply.model, response: reply.response.trim() }) } }));
     } catch (reason) {
-      setTests((current) => ({ ...current, [provider.id]: { error: reason instanceof Error ? reason.message : t("aip.testFailed") } }));
+      setTests((current) => ({ ...current, [provider.id]: { error: describeApiError(reason, t("aip.testFailed")) } }));
     }
   }
 
@@ -152,7 +154,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
             <button type="button" className="secondaryButton" disabled={state?.busy || !provider.baseUrl.trim() || !provider.model.trim() || tokensInvalid} title={t("aip.testHelp")} onClick={() => void test(provider)}>{state?.busy ? t("aip.testing") : t("aip.test")}</button>
             {state?.message && <span className="settingsNotice" role="status">{state.message}</span>}
           </div>
-          {state?.error && <p className="formError" role="alert">{state.error}</p>}
+          {state?.error && <p className="formError" role="alert"><ErrorMessage error={state.error} /></p>}
         </fieldset>;
       })}
       <div className="settingsActions">
@@ -161,7 +163,7 @@ export function AiProvidersSection({ api, repoId }: { api: GitCrestApiClient; re
         {dirty && <span className="settingsHint">{t("aip.unsaved")}</span>}
       </div>
     </form>}
-    {error && <p className="formError" role="alert">{error}</p>}
+    {error && <p className="formError" role="alert"><ErrorMessage error={error} /></p>}
     {notice && <p className="settingsNotice" role="status">{notice}</p>}
     <PrivacyScopePreview api={api} repoId={repoId} settings={settings} />
   </section>;

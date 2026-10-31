@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import type { GitCrestApiClient } from "../../../api/client";
 import {
@@ -51,7 +53,7 @@ export function SettingsPage({
   const { t, locale, setLocale } = useI18n();
   const anyHintDismissed = useAnyHintDismissed();
   const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction>();
-  const [shortcutError, setShortcutError] = useState("");
+  const [shortcutError, setShortcutError] = useState<DisplayError>("");
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? "general");
   const contentRef = useRef<HTMLDivElement>(null);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose);
@@ -213,7 +215,7 @@ export function SettingsPage({
                     </button>
                   </div>)}
                 </div>
-                {shortcutError && <p className="formError" role="alert">{shortcutError}</p>}
+                {shortcutError && <p className="formError" role="alert"><ErrorMessage error={shortcutError} /></p>}
               </div>
             </section>
 

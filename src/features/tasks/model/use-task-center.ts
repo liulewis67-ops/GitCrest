@@ -1,10 +1,11 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse } from "../../../api/client";
 
 export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
   const [tasks, setTasks] = useState<TaskSnapshotResponse[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [actionId, setActionId] = useState("");
   const refreshControllerRef = useRef<AbortController>();
   const refreshGenerationRef = useRef(0);
@@ -30,7 +31,7 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
       }
     } catch (reason) {
       if (!controller.signal.aborted && refreshGenerationRef.current === generation) {
-        setError(reason instanceof Error ? reason.message : t("err.taskHistory"));
+        setError(describeApiError(reason, t("err.taskHistory")));
       }
     } finally {
       if (refreshControllerRef.current === controller) refreshControllerRef.current = undefined;
@@ -45,7 +46,7 @@ export function useTaskCenter(getApi: () => GitCrestApiClient | undefined) {
       await api.cancelTask(taskId);
       await refresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("err.cancelTask"));
+      setError(describeApiError(reason, t("err.cancelTask")));
     } finally {
       setActionId("");
     }

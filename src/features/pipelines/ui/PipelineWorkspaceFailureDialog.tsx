@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient } from "../../../api/client";
+import { type GitCrestApiClient } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { dismissPipelineWorkspaceFailure, type PipelineWorkspaceFailure } from "../model/pipeline-store";
@@ -11,7 +13,7 @@ import { dismissPipelineWorkspaceFailure, type PipelineWorkspaceFailure } from "
 export function PipelineWorkspaceFailureDialog({ api, failure }: { api: GitCrestApiClient; failure: PipelineWorkspaceFailure }) {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const cancel = () => dismissPipelineWorkspaceFailure(failure.runId);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(cancel, busy);
 
@@ -32,7 +34,7 @@ export function PipelineWorkspaceFailureDialog({ api, failure }: { api: GitCrest
       });
       dismissPipelineWorkspaceFailure(failure.runId);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("pl.actionFailed"));
+      setError(describeApiError(reason, t("pl.actionFailed")));
     } finally {
       setBusy(false);
     }
@@ -45,7 +47,7 @@ export function PipelineWorkspaceFailureDialog({ api, failure }: { api: GitCrest
         <p className="cloneHelp">{t("pl.workspace.body")}</p>
         {failure.message && <p className="taskMessage">{failure.message}</p>}
         <p className="cloneHelp">{t("pl.workspace.warning")}</p>
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions">
           <button className="quietButton compact" type="button" disabled={busy} onClick={cancel}>{t("pl.workspace.cancel")}</button>
           <button className="quietButton compact" type="button" disabled={busy} onClick={() => void runInPlace(true)}>{t("pl.workspace.always")}</button>

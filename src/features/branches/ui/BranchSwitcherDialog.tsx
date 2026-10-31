@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
 import type { BranchSnapshotResponse, GitCrestApiClient, RepositoryResponse } from "../../../api/client";
@@ -14,7 +16,7 @@ interface BranchSwitcherDialogProps {
   branches: BranchSnapshotResponse["branches"];
   hasBranchSnapshot: boolean;
   branchesLoading: boolean;
-  branchError?: string;
+  branchError?: DisplayError;
   connected: boolean;
   hasActiveRepositoryTask: boolean;
   branchSwitcherShortcut: string;
@@ -121,7 +123,7 @@ export function BranchSwitcherDialog({
               ? t("bs.remoteCreates", { remote: branchSwitcher.targetName, local: targetPreflight.localBranch })
               : t("bs.remoteUpdates", { remote: branchSwitcher.targetName, local: targetPreflight.localBranch })}</p>}
             {branchSwitcher.busy && !branchSwitcher.preflight && <p role="status">{t("bs.checking")}</p>}
-            {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
+            {branchSwitcher.error && <p className="dialogError" role="alert"><ErrorMessage error={branchSwitcher.error} /></p>}
             {branchSwitcher.preflight?.isClean && <p className="branchCleanNotice" role="status">{t("bs.clean")}</p>}
             {branchSwitcher.preflight && !branchSwitcher.preflight.isClean && <>
               <p className="branchDirtyNotice" role="alert">{t("bs.dirty")}</p>
@@ -196,8 +198,8 @@ export function BranchSwitcherDialog({
               />
             )}
             {!hasBranchSnapshot && branchesLoading && <p role="status">{t("bs.loadingBranches")}</p>}
-            {branchError && <p className="dialogError" role="alert">{branchError}</p>}
-            {branchSwitcher.error && <p className="dialogError" role="alert">{branchSwitcher.error}</p>}
+            {branchError && <p className="dialogError" role="alert"><ErrorMessage error={branchError} /></p>}
+            {branchSwitcher.error && <p className="dialogError" role="alert"><ErrorMessage error={branchSwitcher.error} /></p>}
             {query && !branches.some((branch) => branch.kind === "local" && branch.name === filter.trim()) && (
               <div className="branchCreateOptions">
                 <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected} onClick={() => void branchSwitcher.createBranch(filter, { checkout: true })}>

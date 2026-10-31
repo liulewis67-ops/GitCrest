@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AiReplyResponse, AiSettingsResponse, DiffDocumentResponse, GitCrestApiClient, StatusSnapshotResponse } from "../../../api/client";
@@ -40,7 +42,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
   const [prompt, setPrompt] = useState("Summarize the selected changes and note any risks.");
   const [requestBusy, setRequestBusy] = useState(false);
   const [reply, setReply] = useState<AiReplyResponse>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const diffRequest = useRef(0);
   const reviewAttempt = useRef(0);
   const diffController = useRef<AbortController>();
@@ -56,7 +58,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
     void api.withSignal(controller.signal).getRepositoryStatus(repoId).then((snapshot) => {
       if (!controller.signal.aborted) setStatus(snapshot);
     }).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("pv.loadFailed"));
+      if (!controller.signal.aborted) setError(describeApiError(reason, t("pv.loadFailed")));
     });
     return () => {
       controller.abort();
@@ -101,7 +103,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
       const result = await api.withSignal(controller.signal).getFileDiff(repoId, candidate.path, candidate.scope);
       if (!controller.signal.aborted && diffRequest.current === requestId) setDocument(result);
     } catch (reason) {
-      if (!controller.signal.aborted && diffRequest.current === requestId) setError(reason instanceof Error ? reason.message : t("pv.previewFailed"));
+      if (!controller.signal.aborted && diffRequest.current === requestId) setError(describeApiError(reason, t("pv.previewFailed")));
     } finally {
       if (diffController.current === controller) diffController.current = undefined;
       if (!controller.signal.aborted && diffRequest.current === requestId) setLoading(false);
@@ -130,7 +132,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
         setConfirmSend(true);
       }
     } catch (reason) {
-      if (!controller.signal.aborted && reviewAttempt.current === attempt) setError(reason instanceof Error ? reason.message : t("pv.prepFailed"));
+      if (!controller.signal.aborted && reviewAttempt.current === attempt) setError(describeApiError(reason, t("pv.prepFailed")));
     } finally {
       if (reviewController.current === controller) reviewController.current = undefined;
       if (!controller.signal.aborted && reviewAttempt.current === attempt) setReviewBusy(false);
@@ -148,7 +150,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
       })));
       setReply(result); setConfirmSend(false); setConfirmed(false);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("pv.requestFailed"));
+      setError(describeApiError(reason, t("pv.requestFailed")));
       setReviewed([]); setConfirmSend(false); setConfirmed(false);
     } finally { setRequestBusy(false); }
   }
@@ -188,7 +190,7 @@ export function PrivacyScopePreview({ api, repoId, settings }: { api: GitCrestAp
         <button type="button" className="primaryButton" disabled={!confirmed || !prompt.trim() || requestBusy || !provider} onClick={() => void sendReviewedDiffs()}>{requestBusy ? t("pv.waiting") : t("pv.send")}</button>
       </section>}
       {reply && <section className="aiReply" aria-labelledby="ai-reply-title"><h4 id="ai-reply-title">{t("pv.response", { model: reply.model })}</h4><p>{t("pv.sentScopes", { files: reply.files.join(", ") })}</p><pre>{reply.response}</pre></section>}
-      {error && <p className="taskCenterError" role="alert">{error}</p>}
+      {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
     </section>
   );
 }

@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type ReflogPageResponse } from "../../../api/client";
+import { type GitCrestApiClient, type ReflogPageResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 import { formatCommitDate } from "./format-commit-date";
@@ -8,8 +10,7 @@ type Entry = ReflogPageResponse["entries"][number];
 type Backup = ReflogPageResponse["backups"][number];
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 /**
@@ -34,7 +35,7 @@ export function ReflogDialog({ api, repoId, branchNames, disabled, onClose, onCr
   const [backups, setBackups] = useState<Backup[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [attempt, setAttempt] = useState(0);
   const requestRef = useRef(0);
 
@@ -97,7 +98,7 @@ export function ReflogDialog({ api, repoId, branchNames, disabled, onClose, onCr
             {branchNames.map((name) => <option key={name} value={`refs/heads/${name}`}>{name}</option>)}
           </select>
         </label>
-        {error && <div className="statusLoadError" role="alert"><span>{error}</span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
+        {error && <div className="statusLoadError" role="alert"><span><ErrorMessage error={error} /></span><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t("tags.retry")}</button></div>}
         {backups.length > 0 && <section aria-label={t("reflog.backups")}>
           <h3>{t("reflog.backups")}</h3>
           <ul className="reflogList">{backups.map((backup) => <li key={backup.reference}>

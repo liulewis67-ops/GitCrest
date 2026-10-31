@@ -1,7 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useState } from "react";
 import {
-  GitCrestApiError,
   type BranchSwitchPreflightResponse,
   type GitCrestApiClient,
   type RepositoryResponse,
@@ -17,8 +17,7 @@ interface BranchSwitcherOptions {
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTaskAccepted, openTaskCenter }: BranchSwitcherOptions) {
@@ -31,7 +30,7 @@ export function useBranchSwitcher({ getApi, getRepository, refreshBranches, onTa
   /** The branch each repository was on when a commit checkout was reviewed, so a detached HEAD can return to it. */
   const [returnBranches, setReturnBranches] = useState<Record<string, string>>({});
   const [preflight, setPreflight] = useState<BranchSwitchPreflightResponse>();
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [busy, setBusy] = useState(false);
 
   function openSwitcher() {

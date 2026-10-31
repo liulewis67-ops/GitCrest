@@ -1,6 +1,8 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
-import { GitCrestApiError, type GitCrestApiClient, type WorkflowPreflightResponse } from "../../../api/client";
+import { type GitCrestApiClient, type WorkflowPreflightResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import type { WorkflowAction } from "../model/workflow-action";
 
@@ -17,11 +19,11 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
   const { t } = useI18n();
   const labels: Record<WorkflowAction, string> = { merge: t("wf.merge"), cherryPick: t("wf.cherryPick"), revert: t("wf.revert") };
   const startLabels: Record<WorkflowAction, string> = { merge: t("wf.startMerge"), cherryPick: t("wf.startCherryPick"), revert: t("wf.startRevert") };
-  const [state, setState] = useState<{ key: string; loading: boolean; snapshot?: WorkflowPreflightResponse; error?: string }>({ key: "", loading: false });
+  const [state, setState] = useState<{ key: string; loading: boolean; snapshot?: WorkflowPreflightResponse; error?: DisplayError }>({ key: "", loading: false });
   const [busy, setBusy] = useState(false);
   const [noFastForward, setNoFastForward] = useState(false);
   const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, busy);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [refreshKey, setRefreshKey] = useState(0);
   const key = `${repoId}:${action}:${targetOid}`;
 
@@ -31,7 +33,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
     void api.withSignal(controller.signal).preflightRepositoryWorkflow(repoId, action, targetOid).then((snapshot) => {
       if (!controller.signal.aborted) setState({ key, loading: false, snapshot });
     }).catch((reason: unknown) => {
-      const message = reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("wf.inspectFailed");
+      const message = describeApiError(reason, t("wf.inspectFailed"));
       if (!controller.signal.aborted) setState({ key, loading: false, error: message });
     });
     return () => controller.abort();
@@ -45,7 +47,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
     try {
       onStarted(await api.startRepositoryWorkflow(repoId, { action, targetOid, expectedHeadOid: snapshot.headOid, ...(action === "merge" && noFastForward ? { noFastForward: true } : {}) }));
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("wf.startFailed"));
+      setError(describeApiError(reason, t("wf.startFailed")));
     } finally {
       setBusy(false);
     }
@@ -57,7 +59,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
       <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("wf.eyebrow")}</p><h2 id="workflow-dialog-title">{t("wf.title", { action: labels[action], target: targetLabel ?? t("wf.commitWord") })}</h2></div><button className="quietButton compact" type="button" disabled={busy} onClick={onClose}>{t("wf.close")}</button></div>
       <div className="workflowDialogBody">
         <div className="repositoryFact"><span>{targetLabel ? t("wf.targetBranch") : t("wf.targetCommit")}</span><strong className="monoText" title={targetOid}>{targetLabel ? `${targetLabel} · ${targetOid.slice(0, 12)}` : targetOid.slice(0, 12)}</strong></div>
-        {state.key !== key || state.loading ? <p role="status">{t("wf.checking")}</p> : state.error && <p className="taskCenterError" role="alert">{state.error}</p>}
+        {state.key !== key || state.loading ? <p role="status">{t("wf.checking")}</p> : state.error && <p className="taskCenterError" role="alert"><ErrorMessage error={state.error} /></p>}
         {snapshot && <>
           <div className="repositoryFact"><span>{t("wf.subject")}</span><strong>{snapshot.targetSubject || t("push.noSubject")}</strong></div>
           <div className="repositoryFact"><span>{t("wf.head")}</span><strong className="monoText">{snapshot.headOid?.slice(0, 12) || t("wf.unborn")}</strong></div>
@@ -71,7 +73,7 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
           {snapshot.conflictedPaths.length > 0 && <ul className="workflowPathList">{snapshot.conflictedPaths.map((path) => <li key={path} title={path}>{path}</li>)}</ul>}
           {!snapshot.canStart && !snapshot.operationInProgress && snapshot.isClean && snapshot.mergeKind !== "upToDate" && <p className="cloneHelp">{t("wf.notAvailable")}</p>}
         </>}
-        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
         <div className="taskCenterActions"><button className="quietButton compact" type="button" disabled={busy || state.loading} onClick={() => { setError(""); setRefreshKey((current) => current + 1); }}>{t("wf.refresh")}</button><button className="primaryButton" type="button" disabled={!snapshot?.canStart || !snapshot.headOid || busy} onClick={() => void confirm()}>{busy ? t("wf.starting") : startLabels[action]}</button></div>
       </div>
     </section>

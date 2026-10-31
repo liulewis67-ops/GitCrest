@@ -1,12 +1,13 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
-import { GitCrestApiError, type DiffContext, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse } from "../../../api/client";
+import { type DiffContext, type DiffDocumentResponse, type GitCrestApiClient, type RepositoryResponse } from "../../../api/client";
 
 export type RepositoryDiffQueryState = {
   key: string;
   loading: boolean;
   document?: DiffDocumentResponse;
-  error?: string;
+  error?: DisplayError;
 };
 
 type Options = {
@@ -48,8 +49,8 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
     request
       .then((document) => { if (active) setState({ key: requestKey, loading: false, document }); })
       .catch((error: unknown) => {
-        const message = error instanceof GitCrestApiError ? error.body.error.message : undefined;
-        if (active) setState({ key: requestKey, loading: false, error: message || (error instanceof Error ? error.message : t("err.readDiff")) });
+
+        if (active) setState({ key: requestKey, loading: false, error: describeApiError(error, t("err.readDiff")) });
       });
     return () => { active = false; };
   }, [enabled, repository?.repoId, path, scope, commitOid, context, refreshKey, retryVersion, api]);
@@ -62,7 +63,7 @@ export function useRepositoryDiffQuery({ api, enabled, repository, path, scope, 
     setState((current) => ({
       ...current,
       loading: false,
-      error: error instanceof Error ? error.message : t("err.openDiffWindow"),
+      error: describeApiError(error, t("err.openDiffWindow")),
     }));
   }
 

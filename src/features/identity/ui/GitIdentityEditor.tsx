@@ -1,3 +1,5 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useEffect, useState, type FormEvent } from "react";
 import { GitCrestApiError, type GitCrestApiClient } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -19,7 +21,7 @@ export function GitIdentityEditor({ api, repoId, onSaved }: {
   const [scope, setScope] = useState<IdentityScope>("global");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
-  const [failure, setFailure] = useState("");
+  const [failure, setFailure] = useState<DisplayError>("");
 
   useEffect(() => {
     if (!identity) return;
@@ -37,7 +39,7 @@ export function GitIdentityEditor({ api, repoId, onSaved }: {
       setMessage(t("id.saved"));
       onSaved?.();
     } catch (reason) {
-      setFailure(reason instanceof GitCrestApiError ? reason.body.error.message : t("id.saveFailed"));
+      setFailure(reason instanceof GitCrestApiError ? describeApiError(reason) : t("id.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -51,7 +53,7 @@ export function GitIdentityEditor({ api, repoId, onSaved }: {
       await clearLocal();
       onSaved?.();
     } catch (reason) {
-      setFailure(reason instanceof GitCrestApiError ? reason.body.error.message : t("id.saveFailed"));
+      setFailure(reason instanceof GitCrestApiError ? describeApiError(reason) : t("id.saveFailed"));
     } finally {
       setBusy(false);
     }
@@ -67,7 +69,7 @@ export function GitIdentityEditor({ api, repoId, onSaved }: {
       <label><input type="radio" name="identity-scope" checked={scope === "local"} onChange={() => setScope("local")} />{t("id.scopeLocal")}</label>
     </fieldset>}
     {repoId && identity && <p className="cloneHelp">{usesLocal ? t("id.appliesLocal") : t("id.appliesGlobal")}</p>}
-    {failure && <p className="dialogError" role="alert">{failure}</p>}
+    {failure && <p className="dialogError" role="alert"><ErrorMessage error={failure} /></p>}
     {!failure && loadError && <p className="cloneHelp">{t("id.loadFailed")}</p>}
     {message && <p className="commitCopyStatus" role="status">{message}</p>}
     <div className="identityActions">

@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../shared/ui/ErrorMessage";
+import { type DisplayError } from "../../shared/i18n/api-errors";
 import { lazy, Suspense, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import type { GitCrestApiClient, RepositoryResponse, StagingRequest, StatusSnapshotResponse, TaskSnapshotResponse } from "../../api/client";
 import type { ChangeTreeFile, ChangeTreeGroup, IgnoreMode } from "../../features/changes";
@@ -75,7 +77,7 @@ interface CommitPanelProps {
   repository: RepositoryResponse;
   api?: GitCrestApiClient;
   status?: StatusSnapshotResponse;
-  statusError?: string;
+  statusError?: DisplayError;
   statusLoading: boolean;
   tree: ChangeTreeGroup[];
   workingCount: number;
@@ -280,7 +282,7 @@ export function CommitPanel({
         </div>
         <div className="changeTree">
           {!status && statusLoading && <p className="sidebarNotice" role="status">{t("nav.loadingStatus")}</p>}
-          {!status && statusError && <div className="statusLoadError" role="alert"><span>{statusError}</span><button type="button" onClick={() => onRefreshStatus(repository.repoId, true)}>{t("nav.retry")}</button></div>}
+          {!status && statusError && <div className="statusLoadError" role="alert"><span><ErrorMessage error={statusError} /></span><button type="button" onClick={() => onRefreshStatus(repository.repoId, true)}>{t("nav.retry")}</button></div>}
           {status && statusError && <div className="statusStaleNotice" role="status">{t("nav.staleStatus")}</div>}
           {status && visibleGroups.length === 0 && <p className="sidebarNotice">{t("cp.noChanges")}</p>}
           {visibleGroups.map((group) => {

@@ -75,7 +75,7 @@ it("can run a subset of the targets", async () => {
   await waitFor(() => expect(api.startPipelineRun).toHaveBeenCalledWith("repo_a", { ruleId: "r_01", sourceBranch: "feature/1", sourceOid: source.oid, targets: ["uat"] }));
 });
 
-it("says so when there is no enabled rule and shows the core's message when starting fails", async () => {
+it("reports missing rules and keeps start-failure diagnostics in Details", async () => {
   const empty = pickerApi([]);
   const { unmount } = render(<PipelineRunPickerDialog api={empty as unknown as GitCrestApiClient} repoId="repo_a" source={source} onClose={vi.fn()} />);
   expect(await screen.findByText(/no enabled rule yet/)).toBeTruthy();
@@ -86,7 +86,14 @@ it("says so when there is no enabled rule and shows the core's message when star
   failing.startPipelineRun.mockRejectedValue(new Error("Another pipeline run of this repository is in progress."));
   render(<PipelineRunPickerDialog api={failing as unknown as GitCrestApiClient} repoId="repo_a" source={source} onClose={vi.fn()} />);
   fireEvent.click(await screen.findByRole("button", { name: "Run" }));
-  expect((await screen.findByRole("alert")).textContent).toBe("Another pipeline run of this repository is in progress.");
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  const disclosure = screen.getByRole("button", { name: "Details" });
+  const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
+  expect(diagnostic?.textContent).toContain("Another pipeline run of this repository is in progress.");
+  expect(diagnostic?.hidden).toBe(true);
+  fireEvent.click(disclosure);
+  expect(diagnostic?.hidden).toBe(false);
 });
 
 function failedRun(overrides: Partial<PipelineRunResponse> = {}): PipelineRunResponse {

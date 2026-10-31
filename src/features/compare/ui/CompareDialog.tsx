@@ -1,5 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useId, useRef, useState } from "react";
-import { GitCrestApiError, type CompareResultResponse, type DiffDocumentResponse, type GitCrestApiClient } from "../../../api/client";
+import { type CompareResultResponse, type DiffDocumentResponse, type GitCrestApiClient } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { useI18n } from "../../../shared/i18n";
 
@@ -11,8 +13,7 @@ type ListKey = "onlyInBase" | "onlyInHead" | "files";
 const PAGE = 100;
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 function formatDate(ms: number) {
@@ -43,12 +44,12 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
   const [mode, setMode] = useState<Mode>("threeDot");
   const [result, setResult] = useState<CompareResultResponse>();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [more, setMore] = useState<ListKey | "">("");
   const [tagNames, setTagNames] = useState<string[]>([]);
   const [selected, setSelected] = useState<FileItem>();
   const [document, setDocument] = useState<DiffDocumentResponse>();
-  const [diffError, setDiffError] = useState("");
+  const [diffError, setDiffError] = useState<DisplayError>("");
   const [diffLoading, setDiffLoading] = useState(false);
   const controllerRef = useRef<AbortController>();
   const requestRef = useRef(0);
@@ -198,7 +199,7 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
           {blocker && <small className="cloneHelp">{blocker}</small>}
         </div>
         {loading && <p role="status" className="cloneHelp">{t("compare.loading")}</p>}
-        {error && <div className="statusLoadError" role="alert"><span>{error}</span></div>}
+        {error && <div className="statusLoadError" role="alert"><span><ErrorMessage error={error} /></span></div>}
         {result && <>
           <p className="cloneHelp" role="status">
             {t("compare.summary", { base: result.base, head: headLabel })}
@@ -221,12 +222,12 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
             {result.mode === "twoDot" && !result.headOid && <p className="cloneHelp">{t("compare.untrackedNote")}</p>}
           </section>
           {selected && onOpenFile && <section aria-label={t("compare.diffOf", { path: selected.path })} className="compareDiff">
-            {diffError ? <div className="statusLoadError" role="alert"><span>{diffError}</span></div> : <p className="cloneHelp" role="status">{t("compare.openedInWindow", { path: selected.path })}</p>}
+            {diffError ? <div className="statusLoadError" role="alert"><span><ErrorMessage error={diffError} /></span></div> : <p className="cloneHelp" role="status">{t("compare.openedInWindow", { path: selected.path })}</p>}
           </section>}
           {selected && !onOpenFile && <section aria-label={t("compare.diffOf", { path: selected.path })} className="compareDiff">
             <h3>{selected.path}</h3>
             {diffLoading && <p role="status" className="cloneHelp">{t("compare.loading")}</p>}
-            {diffError && <div className="statusLoadError" role="alert"><span>{diffError}</span></div>}
+            {diffError && <div className="statusLoadError" role="alert"><span><ErrorMessage error={diffError} /></span></div>}
             {document && (document.status === "text"
               ? <table className="compareDiffTable"><tbody>{document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.map((row, rowIndex) => {
                 const key = `${hunkIndex}:${rowIndex}`;

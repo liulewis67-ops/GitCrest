@@ -1,3 +1,5 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type FormEvent } from "react";
 import type { AccountResponse, BrowserSignInHost, DeviceFlowResponse, GitCrestApiClient, HostingProvider } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -26,7 +28,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
   const [codeCopied, setCodeCopied] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [confirmSignOut, setConfirmSignOut] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const [notice, setNotice] = useState("");
 
   async function reload(signal?: AbortSignal) {
@@ -39,7 +41,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
   useEffect(() => {
     const controller = new AbortController();
     void reload(controller.signal).catch((reason: unknown) => {
-      if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : t("accounts.loadFailed"));
+      if (!controller.signal.aborted) setError(describeApiError(reason, t("accounts.loadFailed")));
     });
     return () => controller.abort();
   }, [api]);
@@ -63,7 +65,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
       }, (reason: unknown) => {
         if (cancelled) return;
         setFlow(undefined);
-        setError(reason instanceof Error ? reason.message : t("accounts.browser.failed"));
+        setError(describeApiError(reason, t("accounts.browser.failed")));
       });
     }, DEVICE_FLOW_POLL_MS);
     return () => {
@@ -81,7 +83,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
       await reload();
       setNotice(message);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : fallback);
+      setError(describeApiError(reason, fallback));
     } finally {
       setBusyAction("");
     }
@@ -121,7 +123,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
     try {
       setFlow(await api.startDeviceFlow(draft.provider, draft.host.trim()));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : t("accounts.browser.failed"));
+      setError(describeApiError(reason, t("accounts.browser.failed")));
     } finally {
       setBusyAction("");
     }
@@ -241,7 +243,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
             <p id="device-flow-title" className="formError" role="alert">
               {flow.status === "denied" && t("accounts.browser.denied", { provider: draftProvider })}
               {flow.status === "expired" && t("accounts.browser.expired")}
-              {flow.status === "failed" && (flow.error?.message ?? t("accounts.browser.failed"))}
+              {flow.status === "failed" && <ErrorMessage error={flow.error ? describeApiError({ body: { error: flow.error } }) : t("accounts.browser.failed")} />}
             </p>
             <div className="settingsActions">
               <button className="primaryButton" type="button" disabled={busy} onClick={() => void startBrowserSignIn()}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.retry")}</button>
@@ -310,7 +312,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
           </ul>
         </div>
       ))}
-      {error && <p className="formError" role="alert">{error}</p>}
+      {error && <p className="formError" role="alert"><ErrorMessage error={error} /></p>}
       {notice && <p className="settingsNotice" role="status">{notice}</p>}
       <HostCredentials api={api} initialHosts={credentialHosts} />
     </section>

@@ -91,12 +91,19 @@ it.each([
   await waitFor(() => expect(client.actOnPipelineRun).toHaveBeenLastCalledWith("repo_a", "run_1", secondaryAction));
 });
 
-it("runs a failed run again from its commit and reports errors from the core", async () => {
+it("runs a failed run again from its commit and keeps failure diagnostics in Details", async () => {
   const client = api([run({ status: "failed" })]);
   client.startPipelineRun.mockRejectedValueOnce(new Error("Another pipeline run of this repository is in progress."));
   show(client);
   fireEvent.click(await screen.findByRole("button", { name: "Run again" }));
-  expect((await screen.findByRole("alert")).textContent).toBe("Another pipeline run of this repository is in progress.");
+  const alert = await screen.findByRole("alert");
+  expect(alert.textContent).toContain("The pipeline could not apply that choice.");
+  const disclosure = screen.getByRole("button", { name: "Details" });
+  const diagnostic = document.getElementById(disclosure.getAttribute("aria-controls")!);
+  expect(diagnostic?.textContent).toContain("Another pipeline run of this repository is in progress.");
+  expect(diagnostic?.hidden).toBe(true);
+  fireEvent.click(disclosure);
+  expect(diagnostic?.hidden).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Run again" }));
   await waitFor(() => expect(client.startPipelineRun).toHaveBeenLastCalledWith("repo_a", { ruleId: "r_01", sourceBranch: "feature/1", sourceOid: "a".repeat(40) }));
 });

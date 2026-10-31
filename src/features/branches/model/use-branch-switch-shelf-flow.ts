@@ -1,7 +1,7 @@
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { t } from "../../../shared/i18n";
 import { useEffect, useRef, useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type TaskSnapshotResponse,
 } from "../../../api/client";
@@ -31,20 +31,19 @@ interface BranchSwitchShelfFlowOptions {
     targetName: string;
     targetRemote: boolean;
     targetCommit: boolean;
-    setError: (message: string) => void;
+    setError: (message: DisplayError) => void;
     close: () => void;
     runWhileBusy: <T>(action: () => Promise<T>) => Promise<T>;
   };
   requestShelfComposer: (repoId: string) => void;
   onBranchSwitchReview: (target: string, remote: boolean, preflight: Awaited<ReturnType<GitCrestApiClient["preflightRepositoryBranchSwitch"]>>, message: string, commit?: boolean) => void;
   appendTask: (task: TaskSnapshotResponse) => void;
-  setTaskError: (message: string) => void;
+  setTaskError: (message: DisplayError) => void;
   openTaskCenter: () => void;
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof GitCrestApiError) return error.body.error.message;
-  return error instanceof Error ? error.message : fallback;
+  return describeApiError(error, fallback);
 }
 
 function shelfSwitchKey(repoId: string, target: string) {

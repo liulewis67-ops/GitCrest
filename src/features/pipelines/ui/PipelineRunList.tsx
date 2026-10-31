@@ -1,6 +1,7 @@
+import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
+import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState } from "react";
 import {
-  GitCrestApiError,
   type GitCrestApiClient,
   type PipelineRunActionKind,
   type PipelineRunResponse,
@@ -34,7 +35,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
   const { t } = useI18n();
   const state = usePipelineState();
   const [busyRun, setBusyRun] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState<DisplayError>("");
   const runs = Object.values(state.runs)
     .filter((run) => run.repoId === repoId)
     .sort((a, b) => b.createdAtMs - a.createdAtMs);
@@ -51,7 +52,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
     try {
       await api.actOnPipelineRun(repoId, run.runId, action);
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("pl.actionFailed"));
+      setError(describeApiError(reason, t("pl.actionFailed")));
     } finally {
       setBusyRun("");
     }
@@ -63,7 +64,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
     try {
       await api.startPipelineRun(repoId, { ruleId: run.ruleId, sourceBranch: run.sourceBranch, sourceOid: run.sourceOid });
     } catch (reason) {
-      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("pl.actionFailed"));
+      setError(describeApiError(reason, t("pl.actionFailed")));
     } finally {
       setBusyRun("");
     }
@@ -72,7 +73,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
   if (runs.length === 0) return null;
   return <section className="pipelineRuns" aria-label={t("pl.runs.title")}>
     <h3>{t("pl.runs.title")}</h3>
-    {error && <p className="taskCenterError" role="alert">{error}</p>}
+    {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
     {runs.map((run) => {
       const waiting = run.steps.find((step) => step.state === "waitingForConflicts");
       const busy = busyRun === run.runId;
