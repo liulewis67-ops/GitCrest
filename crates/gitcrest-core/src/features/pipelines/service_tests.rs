@@ -2,7 +2,7 @@ use std::{sync::Arc, time::Duration};
 
 use super::{
     engine::PushOrigin,
-    ephemeral::EphemeralContexts,
+    ephemeral::{EphemeralAwareCatalog, EphemeralContexts},
     service::{PipelineService, PipelineServiceError, PushedBranch, RunAction, StartRun},
     worktree_tests::{fixture, git, Fixture},
 };
@@ -11,7 +11,11 @@ use crate::{
         tests::rule, Confirmation, PipelineRule, PipelineRun, RunStatus, StepState,
     },
     events::publisher::EventBus,
+    features::{repositories::RepositoryTargetReader, tasks::TaskService},
+    git::repository::GitRepositoryAdapter,
     ports::pipelines::PipelineStorePort,
+    ports::repository::RepositoryCatalogPort,
+    storage::repository_paths::RepositoryFilesystemAdapter,
     storage::RepositoryStore,
 };
 
@@ -20,6 +24,7 @@ struct Harness {
     store: Arc<RepositoryStore>,
     service: PipelineService,
     events: EventBus,
+    tasks: TaskService,
 }
 
 fn harness(rule: PipelineRule) -> Harness {
@@ -28,18 +33,31 @@ fn harness(rule: PipelineRule) -> Harness {
     store.insert_test_repository_at("repo", &fixture.repository);
     store.replace_pipeline_rules("repo", &[rule]).unwrap();
     let events = EventBus::default();
+    let contexts = Arc::new(EphemeralContexts::default());
+    let catalog: Arc<dyn RepositoryCatalogPort> =
+        Arc::new(EphemeralAwareCatalog::new(store.clone(), contexts.clone()));
+    let targets = RepositoryTargetReader::new(
+        catalog.clone(),
+        Arc::new(GitRepositoryAdapter),
+        Arc::new(RepositoryFilesystemAdapter),
+    )
+    .with_ephemeral_contexts(contexts.clone());
+    let tasks = TaskService::default();
     let service = PipelineService::new(
         store.clone(),
-        store.clone(),
-        Arc::new(EphemeralContexts::default()),
+        catalog,
+        contexts,
         events.clone(),
         fixture.data_dir.clone(),
+        tasks.clone(),
+        targets,
     );
     Harness {
         fixture,
         store,
         service,
         events,
+        tasks,
     }
 }
 
@@ -453,4 +471,59 @@ async fn an_aborted_recovery_asks_the_user_and_skipping_then_finishes_the_run() 
         run.steps[0].message.as_deref(),
         Some("Skipped after conflicts")
     );
+}
+
+async fn waiting_task_for(
+    harness: &Harness,
+    context: &str,
+) -> Option<crate::features::tasks::TaskSnapshot> {
+    for _ in 0..100 {
+        let found = harness
+            .tasks
+            .list()
+            .await
+            .into_iter()
+            .find(|task| task.repo_id.as_deref() == Some(context));
+        if found.is_some() {
+            return found;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    None
+}
+
+#[tokio::test]
+async fn a_conflicting_step_is_mirrored_by_a_waiting_task_that_ends_with_the_step() {
+    use crate::domain::task::TaskStatus;
+    let harness = harness(auto_rule());
+    conflict_on_uat(&harness);
+    harness
+        .service
+        .on_push_succeeded(pushed(&harness), PushOrigin::User)
+        .await;
+    let waiting = wait_for_conflicts(&harness).await;
+    let context = waiting.steps[0].ephemeral_repo_id.clone().unwrap();
+
+    let task = waiting_task_for(&harness, &context)
+        .await
+        .expect("a waiting task exists for the pipeline context");
+    assert_eq!(task.operation, "merge");
+    assert_eq!(task.target_path.as_deref(), Some("uat · pipeline worktree"));
+    assert!(context.starts_with("repo_") && context.len() == 69);
+    assert_eq!(task.status, TaskStatus::WaitingForInput);
+
+    harness
+        .service
+        .act("repo", &waiting.run_id, RunAction::SkipTarget)
+        .await
+        .unwrap();
+    let mut status = TaskStatus::WaitingForInput;
+    for _ in 0..100 {
+        status = harness.tasks.get(&task.task_id).await.unwrap().status;
+        if status != TaskStatus::WaitingForInput {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert_eq!(status, TaskStatus::Cancelled);
 }

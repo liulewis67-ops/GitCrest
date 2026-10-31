@@ -8,7 +8,7 @@ use std::{
 use crate::domain::pipeline::{PipelineRun, PipelineStep};
 
 use super::{
-    ephemeral::EphemeralContexts,
+    ephemeral::{context_id, EphemeralContexts},
     gitops::GitRunner,
     workspace::{
         MergeOutcome, PipelineStepError, PipelineWorkspace, PreparedStep, PublishOutcome,
@@ -177,7 +177,7 @@ impl PipelineWorkspace for WorktreeWorkspace {
             )
             .await?;
 
-        let repo_context = format!("pipeline-{}-{}", run.run_id, step.position);
+        let repo_context = context_id(&run.run_id, step.position);
         self.contexts.register(&repo_context, &directory);
         Ok(PreparedStep {
             lease_oid,
@@ -239,7 +239,7 @@ impl PipelineWorkspace for WorktreeWorkspace {
     ) -> Result<(), PipelineStepError> {
         let directory = self.step_dir(run, step);
         self.contexts
-            .unregister(&format!("pipeline-{}-{}", run.run_id, step.position));
+            .unregister(&context_id(&run.run_id, step.position));
         let repository = self.repository(run)?;
         if directory.exists() {
             let path = directory.to_string_lossy().into_owned();

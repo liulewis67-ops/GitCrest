@@ -9,6 +9,19 @@ use crate::{
     ports::repository::RepositoryCatalogPort,
 };
 
+/// The RepoId of a pipeline step's worktree. It has the same shape as the ids of
+/// opened repositories (`repo_` and 64 hex digits) so every window that takes a
+/// RepoId accepts it.
+pub(crate) fn context_id(run_id: &str, position: u32) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("gitcrest-pipeline:{run_id}:{position}").as_bytes());
+    let mut id = String::from("repo_");
+    for byte in digest {
+        id.push_str(&format!("{byte:02x}"));
+    }
+    id
+}
+
 /// Pipeline worktrees that behave like repository contexts (own RepoId, own
 /// resource key) without ever being saved to the repository list.
 #[derive(Default)]
@@ -133,6 +146,19 @@ mod tests {
             EphemeralAwareCatalog::new(Arc::new(store), contexts.clone()),
             contexts,
         )
+    }
+
+    #[test]
+    fn context_ids_look_like_repository_ids_and_differ_per_step() {
+        let id = context_id("run1", 0);
+        assert_eq!(id.len(), 5 + 64);
+        assert!(id.starts_with("repo_"));
+        assert!(id[5..]
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_ascii_uppercase()));
+        assert_ne!(id, context_id("run1", 1));
+        assert_ne!(id, context_id("run2", 0));
+        assert_eq!(id, context_id("run1", 0));
     }
 
     #[test]

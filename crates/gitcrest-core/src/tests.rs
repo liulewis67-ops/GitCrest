@@ -9946,6 +9946,8 @@ fn test_pipelines(
         Arc::new(features::pipelines::ephemeral::EphemeralContexts::default()),
         EventBus::default(),
         std::env::temp_dir().join("gitcrest-test-pipelines"),
+        TaskService::default(),
+        repositories.target_reader(),
     ))
 }
 

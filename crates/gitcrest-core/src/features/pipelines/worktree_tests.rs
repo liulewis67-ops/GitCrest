@@ -2,7 +2,7 @@ use std::{collections::HashSet, path::Path, process::Command};
 
 use super::{
     engine::{NewRun, PipelineEngine, ResumeAction},
-    ephemeral::EphemeralContexts,
+    ephemeral::{context_id, EphemeralContexts},
     worktree::WorktreeWorkspace,
 };
 use crate::ports::pipelines::PipelineStorePort;
@@ -142,8 +142,8 @@ fn assert_no_worktree_left(fixture: &Fixture, contexts: &EphemeralContexts) {
     let worktrees = git(&fixture.repository, &["worktree", "list", "--porcelain"]);
     assert_eq!(worktrees.matches("worktree ").count(), 1, "{worktrees}");
     assert!(!fixture.data_dir.join("pipelines/run1").exists());
-    assert_eq!(contexts.path("pipeline-run1-0"), None);
-    assert_eq!(contexts.path("pipeline-run1-1"), None);
+    assert_eq!(contexts.path(&context_id("run1", 0)), None);
+    assert_eq!(contexts.path(&context_id("run1", 1)), None);
 }
 
 #[tokio::test]
@@ -247,7 +247,7 @@ async fn a_conflict_waits_in_the_worktree_and_resolving_it_continues_to_the_next
 
     // The conflict window serves the ephemeral context, which points at the worktree.
     let worktree = contexts
-        .path("pipeline-run1-0")
+        .path(&context_id("run1", 0))
         .expect("context registered");
     assert!(worktree.starts_with(fixture.data_dir.join("pipelines/run1")));
     assert!(git(&worktree, &["status", "--porcelain"]).contains("AA feature.txt"));

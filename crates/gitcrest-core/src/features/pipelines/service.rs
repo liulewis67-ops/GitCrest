@@ -10,6 +10,11 @@ use std::{
 use serde::Serialize;
 
 use crate::{
+    execution::TaskFailure,
+    features::{repositories::RepositoryTargetReader, tasks::TaskService},
+};
+
+use crate::{
     domain::{
         error::RepositoryError,
         pipeline::{ExecutionMode, PipelineRun, PipelineStep, RunStatus, StepState},
@@ -267,6 +272,8 @@ impl PipelineService {
         contexts: Arc<EphemeralContexts>,
         events: EventBus,
         data_dir: PathBuf,
+        tasks: TaskService,
+        targets: RepositoryTargetReader,
     ) -> Self {
         let paths_catalog = catalog;
         let in_place_catalog = paths_catalog.clone();
@@ -301,6 +308,7 @@ impl PipelineService {
             ),
         };
         let observer_events = events.clone();
+        let waiting_tasks = WaitingTasks::new(tasks, targets, contexts.clone());
         let engine = PipelineEngine::new(store.clone(), Arc::new(workspace)).with_observer(
             Arc::new(move |run: &PipelineRun| {
                 observer_events.publish(
@@ -308,6 +316,7 @@ impl PipelineService {
                     "pipeline.run.updated",
                     serde_json::to_value(PipelineRunDto::from(run)).unwrap_or_default(),
                 );
+                waiting_tasks.sync(run);
             }),
         );
         Self {
@@ -555,5 +564,141 @@ impl PipelineService {
             Some(run) if run.repo_id == repo_id => Ok(run),
             _ => Err(PipelineServiceError::RunNotFound),
         }
+    }
+}
+
+type OpenTasks = std::sync::Mutex<std::collections::HashMap<(String, u32), Option<String>>>;
+
+/// A step that waits for conflicts is mirrored by a task in `waitingForInput`
+/// on its repository context. That is what the conflict window auto-opens on
+/// and what workflow recovery resolves, so pipeline conflicts reuse that flow.
+#[derive(Clone)]
+struct WaitingTasks {
+    tasks: TaskService,
+    targets: RepositoryTargetReader,
+    contexts: Arc<EphemeralContexts>,
+    open: Arc<OpenTasks>,
+}
+
+impl WaitingTasks {
+    fn new(
+        tasks: TaskService,
+        targets: RepositoryTargetReader,
+        contexts: Arc<EphemeralContexts>,
+    ) -> Self {
+        Self {
+            tasks,
+            targets,
+            contexts,
+            open: Arc::default(),
+        }
+    }
+
+    /// Reconciles the waiting tasks with the steps of `run`.
+    fn sync(&self, run: &PipelineRun) {
+        for step in &run.steps {
+            let key = (run.run_id.clone(), step.position);
+            let waiting = step.state == StepState::WaitingForConflicts;
+            let Ok(mut open) = self.open.lock() else {
+                return;
+            };
+            if waiting && !open.contains_key(&key) {
+                open.insert(key.clone(), None);
+                drop(open);
+                if let Some(context) = step.ephemeral_repo_id.clone() {
+                    self.spawn_open(
+                        key,
+                        run.repo_id.clone(),
+                        context,
+                        step.target_branch.clone(),
+                        run.execution_mode == ExecutionMode::TemporaryWorktree,
+                    );
+                }
+            } else if !waiting {
+                let task_id = open.remove(&key).flatten();
+                drop(open);
+                if let Some(task_id) = task_id {
+                    let tasks = self.tasks.clone();
+                    let succeeded = step.state.is_success();
+                    tokio::spawn(async move {
+                        let (status, message) = if succeeded {
+                            (
+                                crate::domain::task::TaskStatus::Succeeded,
+                                "The pipeline target was merged.",
+                            )
+                        } else {
+                            (
+                                crate::domain::task::TaskStatus::Cancelled,
+                                "The pipeline target was not merged.",
+                            )
+                        };
+                        let _ = tasks
+                            .resolve_waiting_for_input(&task_id, status, message)
+                            .await;
+                    });
+                }
+            }
+        }
+    }
+
+    fn spawn_open(
+        &self,
+        key: (String, u32),
+        repo_id: String,
+        context: String,
+        target: String,
+        in_worktree: bool,
+    ) {
+        let label = in_worktree.then(|| format!("{target} · pipeline worktree"));
+        let this = self.clone();
+        tokio::spawn(async move {
+            let resource_key = match this.contexts.resource_key(&context) {
+                Some(key) => Some(key),
+                None => this
+                    .targets
+                    .task_target(&context)
+                    .await
+                    .ok()
+                    .map(|target| target.resource_key),
+            };
+            let Some(resource_key) = resource_key else {
+                return;
+            };
+            let message = format!("Merging into {target} stopped on conflicts. Resolve them to continue the pipeline.");
+            let submitted = this
+                .tasks
+                .submit(
+                    Some(context),
+                    label,
+                    resource_key,
+                    "merge",
+                    move |_| async move { Err(TaskFailure::WaitingForInput(message)) },
+                )
+                .await;
+            let _ = repo_id;
+            if let Ok(snapshot) = submitted {
+                let still_waiting = match this.open.lock() {
+                    Ok(mut open) => match open.get_mut(&key) {
+                        Some(slot) => {
+                            *slot = Some(snapshot.task_id.clone());
+                            true
+                        }
+                        None => false,
+                    },
+                    Err(_) => true,
+                };
+                if !still_waiting {
+                    // The step ended before its waiting task was registered.
+                    let _ = this
+                        .tasks
+                        .resolve_waiting_for_input(
+                            &snapshot.task_id,
+                            crate::domain::task::TaskStatus::Cancelled,
+                            "The pipeline target is no longer waiting.",
+                        )
+                        .await;
+                }
+            }
+        });
     }
 }
