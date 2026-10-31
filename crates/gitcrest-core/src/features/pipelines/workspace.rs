@@ -51,6 +51,23 @@ pub(crate) enum StepOutcome {
     Failed,
     /// The step is about to be prepared again after a rejected lease.
     Retry,
+    /// The user chose to leave things as they are (in place: stay on the branch).
+    Stay,
+}
+
+/// What a step left behind when GitCrest closed in the middle of it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RecoveryFinding {
+    /// A merge waits to be concluded.
+    MergeInProgress,
+    /// The merge commit exists but was not pushed.
+    MergedNotPushed,
+    /// Nothing of the merge happened yet; the step can start over.
+    NotMerged,
+    /// In place only: the user was left on the target branch with no merge.
+    LeftOnTarget,
+    /// The worktree or its state is gone.
+    WorkspaceLost,
 }
 
 /// Where a step does its Git work. The engine owns the state machine; a
@@ -101,6 +118,16 @@ pub(crate) trait PipelineWorkspace: Send + Sync {
         _run: &PipelineRun,
     ) -> impl Future<Output = Result<(), PipelineStepError>> + Send {
         async { Ok(()) }
+    }
+
+    /// Looks at what a step left behind after a restart, and re-registers anything the
+    /// running app held in memory (the hidden context of a pipeline worktree).
+    fn inspect(
+        &self,
+        _run: &PipelineRun,
+        _step: &PipelineStep,
+    ) -> impl Future<Output = RecoveryFinding> + Send {
+        async { RecoveryFinding::NotMerged }
     }
 
     /// Release the step: remove the worktree, or return to the source branch.

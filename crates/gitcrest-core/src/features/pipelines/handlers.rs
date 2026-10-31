@@ -292,6 +292,8 @@ pub(super) async fn run_action(
         PipelineRunActionKind::Resume => RunAction::Resume,
         PipelineRunActionKind::SkipTarget => RunAction::SkipTarget,
         PipelineRunActionKind::Stop => RunAction::Stop,
+        PipelineRunActionKind::ReturnToSource => RunAction::ReturnToSource,
+        PipelineRunActionKind::Discard => RunAction::Discard,
     };
     state
         .pipelines

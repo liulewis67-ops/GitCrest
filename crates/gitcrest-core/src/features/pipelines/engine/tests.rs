@@ -4,6 +4,7 @@ use super::*;
 use crate::{
     domain::pipeline::{tests::rule, Confirmation, ConflictPolicy, PipelineTarget, StepState},
     features::pipelines::workspace::PreparedStep,
+    features::pipelines::workspace::RecoveryFinding,
     storage::RepositoryStore,
 };
 
@@ -16,6 +17,7 @@ struct Script {
     begin_failure: Option<PipelineStepError>,
     shelf: Option<String>,
     end_failure: Option<PipelineStepError>,
+    findings: VecDeque<RecoveryFinding>,
 }
 
 struct FakeWorkspace {
@@ -131,6 +133,16 @@ impl PipelineWorkspace for FakeWorkspace {
             Some(error) => Err(error),
             None => Ok(()),
         }
+    }
+
+    async fn inspect(&self, _run: &PipelineRun, step: &PipelineStep) -> RecoveryFinding {
+        self.record(format!("inspect {}", step.target_branch));
+        self.script
+            .lock()
+            .unwrap()
+            .findings
+            .pop_front()
+            .unwrap_or(RecoveryFinding::NotMerged)
     }
 
     async fn finish(
@@ -663,4 +675,210 @@ async fn a_failing_end_hook_is_reported_on_the_last_step_of_a_finished_run() {
         stored.steps[1].message.as_deref(),
         Some("stash pop conflicted")
     );
+}
+
+/// Simulates GitCrest closing while a step was in `state`: the run and step are persisted,
+/// and a fresh engine over the same store takes over.
+fn crashed_in(
+    store: &Arc<RepositoryStore>,
+    workspace: &Arc<FakeWorkspace>,
+    state: StepState,
+    status: RunStatus,
+) -> Engine {
+    let mut run = crate::domain::pipeline::tests::run(vec![
+        crate::domain::pipeline::tests::step(0, state),
+        crate::domain::pipeline::tests::step(1, StepState::Pending),
+    ]);
+    run.rule = auto_rule();
+    run.status = status;
+    run.steps[0].target_branch = "uat".into();
+    run.steps[1].target_branch = "dev".into();
+    if state != StepState::Pending {
+        run.steps[0].lease_oid = Some("b".repeat(40));
+    }
+    store.insert_pipeline_run(&run).unwrap();
+    PipelineEngine::new(store.clone(), workspace.clone())
+}
+
+#[tokio::test]
+async fn a_restart_during_any_step_state_leads_to_the_matching_proposal() {
+    let cases = [
+        (StepState::Pending, None, RecoveryProposal::RestartStep),
+        (
+            StepState::Preparing,
+            Some(RecoveryFinding::NotMerged),
+            RecoveryProposal::RestartStep,
+        ),
+        (
+            StepState::Merging,
+            Some(RecoveryFinding::MergeInProgress),
+            RecoveryProposal::ResumeConflicts,
+        ),
+        (
+            StepState::WaitingForConflicts,
+            Some(RecoveryFinding::MergeInProgress),
+            RecoveryProposal::ResumeConflicts,
+        ),
+        (
+            StepState::WaitingForConflicts,
+            Some(RecoveryFinding::MergedNotPushed),
+            RecoveryProposal::ResumePush,
+        ),
+        (
+            StepState::Pushing,
+            Some(RecoveryFinding::MergedNotPushed),
+            RecoveryProposal::ResumePush,
+        ),
+        (
+            StepState::Finishing,
+            Some(RecoveryFinding::LeftOnTarget),
+            RecoveryProposal::ReturnToSource,
+        ),
+    ];
+    for (state, finding, expected) in cases {
+        let (store, workspace, _) = setup();
+        workspace.script(|s| s.findings.extend(finding));
+        let status = if state == StepState::WaitingForConflicts {
+            RunStatus::WaitingForConflicts
+        } else {
+            RunStatus::Running
+        };
+        let engine = crashed_in(&store, &workspace, state, status);
+
+        assert_eq!(
+            engine.recover_run("run").await,
+            Ok(Some(expected)),
+            "{state:?}"
+        );
+
+        let stored = store.pipeline_run("run").unwrap().unwrap();
+        let expected_status = if expected == RecoveryProposal::ResumeConflicts {
+            RunStatus::WaitingForConflicts
+        } else {
+            RunStatus::Interrupted
+        };
+        assert_eq!(stored.status, expected_status, "{state:?}");
+        if expected == RecoveryProposal::ResumeConflicts {
+            assert_eq!(stored.steps[0].state, StepState::WaitingForConflicts);
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_lost_workspace_fails_the_run_and_skips_the_rest() {
+    let (store, workspace, _) = setup();
+    workspace.script(|s| s.findings.push_back(RecoveryFinding::WorkspaceLost));
+    let engine = crashed_in(&store, &workspace, StepState::Merging, RunStatus::Running);
+
+    assert_eq!(engine.recover_run("run").await, Ok(None));
+
+    let stored = store.pipeline_run("run").unwrap().unwrap();
+    assert_eq!(stored.status, RunStatus::Failed);
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::Failed, StepState::Skipped]
+    );
+    assert!(stored.steps[0].message.as_deref().unwrap().contains("lost"));
+    assert!(workspace.calls().contains(&"end".to_string()));
+}
+
+#[tokio::test]
+async fn recovery_ignores_runs_that_are_not_in_progress() {
+    let (_store, _workspace, engine) = setup();
+    engine.create_run(new_run("pending", rule())).await.unwrap();
+    assert_eq!(engine.recover_run("pending").await, Ok(None));
+    assert_eq!(
+        engine.recover_run("missing").await,
+        Err(EngineError::RunNotFound)
+    );
+}
+
+#[tokio::test]
+async fn resuming_an_interrupted_push_skips_prepare_and_merge_for_that_target() {
+    let (store, workspace, _) = setup();
+    workspace.script(|s| s.findings.push_back(RecoveryFinding::MergedNotPushed));
+    let engine = crashed_in(&store, &workspace, StepState::Pushing, RunStatus::Running);
+    engine.recover_run("run").await.unwrap();
+
+    assert_eq!(
+        engine.resume_interrupted("run", true).await,
+        Ok(RunStatus::Succeeded)
+    );
+
+    let calls = workspace.calls();
+    assert!(!calls
+        .iter()
+        .any(|c| c == "prepare uat" || c.starts_with("merge uat")));
+    assert!(calls.contains(&"publish uat".to_string()));
+    assert!(calls.contains(&"prepare dev".to_string()));
+    assert_eq!(states(&store, "run"), [StepState::Done, StepState::Done]);
+}
+
+#[tokio::test]
+async fn restarting_an_interrupted_step_prepares_and_merges_it_again() {
+    let (store, workspace, _) = setup();
+    let engine = crashed_in(&store, &workspace, StepState::Merging, RunStatus::Running);
+    engine.recover_run("run").await.unwrap();
+
+    assert_eq!(
+        engine.resume_interrupted("run", false).await,
+        Ok(RunStatus::Succeeded)
+    );
+
+    assert!(workspace.calls().contains(&"prepare uat".to_string()));
+    assert_eq!(
+        engine.resume_interrupted("run", false).await,
+        Err(EngineError::InvalidState)
+    );
+}
+
+#[tokio::test]
+async fn abandoning_an_interrupted_run_can_return_to_the_source_or_stay() {
+    let (store, workspace, _) = setup();
+    workspace.script(|s| s.findings.push_back(RecoveryFinding::LeftOnTarget));
+    let engine = crashed_in(&store, &workspace, StepState::Merging, RunStatus::Running);
+    engine.recover_run("run").await.unwrap();
+
+    assert_eq!(
+        engine.abandon_interrupted("run", true).await,
+        Ok(RunStatus::Cancelled)
+    );
+    let calls = workspace.calls();
+    assert!(calls.contains(&"finish uat Skipped".to_string()));
+    assert_eq!(calls.last().map(String::as_str), Some("end"));
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::Skipped, StepState::Skipped]
+    );
+
+    let (store, workspace, _) = setup();
+    workspace.script(|s| s.findings.push_back(RecoveryFinding::LeftOnTarget));
+    let engine = crashed_in(&store, &workspace, StepState::Merging, RunStatus::Running);
+    engine.recover_run("run").await.unwrap();
+    assert_eq!(
+        engine.abandon_interrupted("run", false).await,
+        Ok(RunStatus::Cancelled)
+    );
+    let calls = workspace.calls();
+    assert!(calls.contains(&"finish uat Stay".to_string()));
+    assert!(!calls.contains(&"end".to_string()));
+}
+
+#[tokio::test]
+async fn an_interrupted_run_keeps_the_repository_busy() {
+    let (store, workspace, engine) = setup();
+    let _ = crashed_in(
+        &store,
+        &workspace,
+        StepState::Merging,
+        RunStatus::Interrupted,
+    );
+
+    let queued = engine
+        .create_run(new_run("second", auto_rule()))
+        .await
+        .unwrap();
+
+    assert_eq!(queued.status, RunStatus::PendingConfirmation);
+    assert_eq!(engine.start_run("second").await, Err(EngineError::Busy));
 }

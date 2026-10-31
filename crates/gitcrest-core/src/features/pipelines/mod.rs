@@ -7,6 +7,8 @@ mod handlers;
 pub(crate) mod inplace;
 #[cfg(test)]
 mod inplace_tests;
+#[cfg(test)]
+mod recovery_tests;
 pub(crate) mod routes;
 pub(crate) mod service;
 #[cfg(test)]

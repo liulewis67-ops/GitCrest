@@ -12,7 +12,7 @@ use super::{
     gitops::GitRunner,
     workspace::{
         MergeOutcome, PipelineStepError, PipelineWorkspace, PreparedStep, PublishOutcome,
-        StepOutcome,
+        RecoveryFinding, StepOutcome,
     },
 };
 
@@ -229,6 +229,36 @@ impl PipelineWorkspace for WorktreeWorkspace {
                 .await;
         }
         Ok(outcome)
+    }
+
+    async fn inspect(&self, run: &PipelineRun, step: &PipelineStep) -> RecoveryFinding {
+        let directory = self.step_dir(run, step);
+        if !directory.exists() {
+            return RecoveryFinding::WorkspaceLost;
+        }
+        self.contexts
+            .register(&context_id(&run.run_id, step.position), &directory);
+        if self.git.merge_in_progress(&directory).await {
+            return RecoveryFinding::MergeInProgress;
+        }
+        let Some(lease) = step.lease_oid.as_deref() else {
+            return RecoveryFinding::NotMerged;
+        };
+        let head = self
+            .git
+            .git(&directory, &["rev-parse", "HEAD"], false)
+            .await
+            .ok()
+            .filter(|output| output.success)
+            .map(|output| output.stdout);
+        let Some(head) = head else {
+            return RecoveryFinding::WorkspaceLost;
+        };
+        if head != lease && self.git.contains_source(&directory, run).await {
+            RecoveryFinding::MergedNotPushed
+        } else {
+            RecoveryFinding::NotMerged
+        }
     }
 
     async fn finish(

@@ -578,7 +578,7 @@ export interface paths {
         put?: never;
         /**
          * Resume, skip the waiting target, or stop a run
-         * @description resume starts a run that waits for confirmation or continues one whose conflicts were resolved; skipTarget and stop apply to a run waiting for conflicts.
+         * @description resume starts a run that waits for confirmation, continues one whose conflicts were resolved, or pushes/restarts an interrupted one; skipTarget and stop apply to a run waiting for conflicts; returnToSource (back on the source branch, shelf restored) and discard (leave everything where it is) apply to an interrupted run.
          */
         post: operations["actOnPipelineRun"];
         delete?: never;
@@ -2925,7 +2925,7 @@ export interface components {
         };
         PipelineRunActionRequest: {
             /** @enum {string} */
-            action: "resume" | "skipTarget" | "stop";
+            action: "resume" | "skipTarget" | "stop" | "returnToSource" | "discard";
         };
         PipelineRunStep: {
             position: number;
@@ -2948,8 +2948,13 @@ export interface components {
             sourceOid: string;
             executionMode: components["schemas"]["PipelineExecutionMode"];
             /** @enum {string} */
-            status: "pendingConfirmation" | "running" | "waitingForConflicts" | "succeeded" | "partiallySucceeded" | "failed" | "cancelled";
+            status: "pendingConfirmation" | "running" | "waitingForConflicts" | "interrupted" | "succeeded" | "partiallySucceeded" | "failed" | "cancelled";
             shelfId: string | null;
+            /**
+             * @description What the user can choose for an interrupted run (status interrupted); null otherwise. resumePush and restartStep are answered with the resume action, returnToSource with the returnToSource or discard action.
+             * @enum {string|null}
+             */
+            recovery: "resumePush" | "restartStep" | "returnToSource" | null;
             createdAtMs: number;
             updatedAtMs: number;
             steps: components["schemas"]["PipelineRunStep"][];

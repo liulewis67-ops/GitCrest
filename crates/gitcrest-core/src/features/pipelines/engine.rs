@@ -14,7 +14,8 @@ use crate::{
 };
 
 use super::workspace::{
-    MergeOutcome, PipelineStepError, PipelineWorkspace, PublishOutcome, StepOutcome,
+    MergeOutcome, PipelineStepError, PipelineWorkspace, PublishOutcome, RecoveryFinding,
+    StepOutcome,
 };
 
 /// Who pushed. Pushes made by a pipeline run never evaluate triggers.
@@ -37,6 +38,30 @@ pub(crate) fn triggered_rules<'a>(
         .iter()
         .filter(|rule| rule.enabled && rule.trigger.matches_branch(branch))
         .collect()
+}
+
+/// What the user can choose for a run that was interrupted by closing GitCrest.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RecoveryProposal {
+    /// A merge waits in the workspace; the conflict flow takes over.
+    ResumeConflicts,
+    /// The merge commit exists; push it.
+    ResumePush,
+    /// Start the interrupted target over.
+    RestartStep,
+    /// In place: go back to the source branch and restore the shelf.
+    ReturnToSource,
+}
+
+impl RecoveryProposal {
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::ResumeConflicts => "resumeConflicts",
+            Self::ResumePush => "resumePush",
+            Self::RestartStep => "restartStep",
+            Self::ReturnToSource => "returnToSource",
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -308,6 +333,137 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         self.drive(run_id).await
     }
 
+    /// Decides what an unfinished run needs after a restart. Runs whose workspace is
+    /// gone are failed here; the others wait for the user (`None` when nothing is left).
+    pub(crate) async fn recover_run(
+        &self,
+        run_id: &str,
+    ) -> Result<Option<RecoveryProposal>, EngineError> {
+        let mut run = self.load(run_id)?;
+        if !matches!(
+            run.status,
+            RunStatus::Running | RunStatus::WaitingForConflicts | RunStatus::Interrupted
+        ) {
+            return Ok(None);
+        }
+        let Some(index) = run.steps.iter().position(|s| !s.state.is_terminal()) else {
+            self.finalize(&run).await?;
+            return Ok(None);
+        };
+        if run.steps[index].state == StepState::Pending {
+            self.interrupt(&mut run)?;
+            return Ok(Some(RecoveryProposal::RestartStep));
+        }
+        match self.workspace.inspect(&run, &run.steps[index]).await {
+            RecoveryFinding::MergeInProgress => {
+                if run.steps[index].state != StepState::WaitingForConflicts {
+                    self.set_step(&mut run, index, StepState::WaitingForConflicts, None)?;
+                }
+                self.set_run_status(&mut run, RunStatus::WaitingForConflicts)?;
+                Ok(Some(RecoveryProposal::ResumeConflicts))
+            }
+            RecoveryFinding::MergedNotPushed => {
+                self.interrupt(&mut run)?;
+                Ok(Some(RecoveryProposal::ResumePush))
+            }
+            RecoveryFinding::NotMerged => {
+                self.interrupt(&mut run)?;
+                Ok(Some(RecoveryProposal::RestartStep))
+            }
+            RecoveryFinding::LeftOnTarget => {
+                self.interrupt(&mut run)?;
+                Ok(Some(RecoveryProposal::ReturnToSource))
+            }
+            RecoveryFinding::WorkspaceLost => {
+                let error = PipelineStepError::new(
+                    "The pipeline workspace was lost when GitCrest closed; run it again",
+                );
+                self.fail_step(&mut run, index, error).await?;
+                let run = self.load(run_id)?;
+                self.finalize(&run).await?;
+                Ok(None)
+            }
+        }
+    }
+
+    fn interrupt(&self, run: &mut PipelineRun) -> Result<(), EngineError> {
+        if run.status != RunStatus::Interrupted {
+            self.set_run_status(run, RunStatus::Interrupted)?;
+        }
+        Ok(())
+    }
+
+    /// Continues an interrupted run: pushes the existing merge commit, or starts the
+    /// interrupted target over.
+    pub(crate) async fn resume_interrupted(
+        &self,
+        run_id: &str,
+        push: bool,
+    ) -> Result<RunStatus, EngineError> {
+        self.begin_interrupted(run_id).await?;
+        self.continue_interrupted(run_id, push).await
+    }
+
+    /// Marks an interrupted run as running again, so a second request cannot start it twice.
+    pub(crate) async fn begin_interrupted(&self, run_id: &str) -> Result<(), EngineError> {
+        let _gate = self.gate.lock().await;
+        let mut run = self.load(run_id)?;
+        if run.status != RunStatus::Interrupted || run.steps.iter().all(|s| s.state.is_terminal()) {
+            return Err(EngineError::InvalidState);
+        }
+        self.set_run_status(&mut run, RunStatus::Running)
+    }
+
+    /// Runs the interrupted step again (pushing the existing merge commit when `push`),
+    /// then the remaining targets. Call after [`Self::begin_interrupted`].
+    pub(crate) async fn continue_interrupted(
+        &self,
+        run_id: &str,
+        push: bool,
+    ) -> Result<RunStatus, EngineError> {
+        let mut run = self.load(run_id)?;
+        let Some(index) = run.steps.iter().position(|s| !s.state.is_terminal()) else {
+            return self.drive(run_id).await;
+        };
+        let phase = if push { Phase::Publish } else { Phase::Prepare };
+        self.run_step(&mut run, index, phase).await?;
+        self.drive(run_id).await
+    }
+
+    /// Ends an interrupted run without finishing its targets. `return_to_source` also
+    /// puts the user back on the source branch and restores the shelf; otherwise things
+    /// stay where they are.
+    pub(crate) async fn abandon_interrupted(
+        &self,
+        run_id: &str,
+        return_to_source: bool,
+    ) -> Result<RunStatus, EngineError> {
+        let mut run = self.load(run_id)?;
+        if run.status != RunStatus::Interrupted {
+            return Err(EngineError::InvalidState);
+        }
+        if let Some(index) = run.steps.iter().position(|s| !s.state.is_terminal()) {
+            let outcome = if return_to_source {
+                StepOutcome::Skipped
+            } else {
+                StepOutcome::Stay
+            };
+            self.release(&run, index, outcome).await;
+            self.set_step(
+                &mut run,
+                index,
+                StepState::Skipped,
+                Some("Abandoned after GitCrest closed".into()),
+            )?;
+        }
+        self.skip_remaining(&mut run, "Not run: the pipeline was abandoned")?;
+        if return_to_source {
+            self.end(&mut run).await?;
+        }
+        self.set_run_status(&mut run, RunStatus::Cancelled)?;
+        Ok(run.status)
+    }
+
     fn load(&self, run_id: &str) -> Result<PipelineRun, EngineError> {
         self.store
             .pipeline_run(run_id)?
@@ -323,7 +479,9 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
                 run.repo_id == repo_id
                     && matches!(
                         run.status,
-                        RunStatus::Running | RunStatus::WaitingForConflicts
+                        RunStatus::Running
+                            | RunStatus::WaitingForConflicts
+                            | RunStatus::Interrupted
                     )
             })
             .collect())

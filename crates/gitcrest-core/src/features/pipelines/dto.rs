@@ -63,6 +63,8 @@ pub(super) enum PipelineRunActionKind {
     Resume,
     SkipTarget,
     Stop,
+    ReturnToSource,
+    Discard,
 }
 
 #[derive(Deserialize)]

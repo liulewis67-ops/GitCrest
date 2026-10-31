@@ -6,7 +6,7 @@ use super::{
     gitops::GitRunner,
     workspace::{
         MergeOutcome, PipelineStepError, PipelineWorkspace, PreparedStep, PublishOutcome,
-        StepOutcome,
+        RecoveryFinding, StepOutcome,
     },
     worktree::RepositoryPaths,
 };
@@ -309,13 +309,50 @@ impl PipelineWorkspace for InPlaceWorkspace {
         self.git.push_head(&repository, step).await
     }
 
+    async fn inspect(&self, run: &PipelineRun, step: &PipelineStep) -> RecoveryFinding {
+        let Ok(repository) = self.repository(run) else {
+            return RecoveryFinding::WorkspaceLost;
+        };
+        if self.git.merge_in_progress(&repository).await {
+            return RecoveryFinding::MergeInProgress;
+        }
+        let current = self
+            .git
+            .git(
+                &repository,
+                &["symbolic-ref", "-q", "--short", "HEAD"],
+                false,
+            )
+            .await
+            .ok()
+            .filter(|output| output.success)
+            .map(|output| output.stdout);
+        if current.as_deref() != Some(step.target_branch.as_str()) {
+            return RecoveryFinding::NotMerged;
+        }
+        let head = self
+            .git
+            .git(&repository, &["rev-parse", "HEAD"], false)
+            .await
+            .ok()
+            .map(|output| output.stdout);
+        let merged = step.lease_oid.is_some()
+            && head != step.lease_oid
+            && self.git.contains_source(&repository, run).await;
+        if merged {
+            RecoveryFinding::MergedNotPushed
+        } else {
+            RecoveryFinding::LeftOnTarget
+        }
+    }
+
     async fn finish(
         &self,
         run: &PipelineRun,
         _step: &PipelineStep,
         outcome: StepOutcome,
     ) -> Result<(), PipelineStepError> {
-        if outcome == StepOutcome::Retry {
+        if matches!(outcome, StepOutcome::Retry | StepOutcome::Stay) {
             return Ok(());
         }
         let repository = self.repository(run)?;

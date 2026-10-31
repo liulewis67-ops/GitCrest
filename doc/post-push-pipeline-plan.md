@@ -1,6 +1,6 @@
 # Post-Push Pipeline Plan
 
-Status: in progress (A0.1, A1.1, A1.2, A2.1, A2.2, A2.3, A3.1, A3.2 done). Date: 2026-10-31.
+Status: in progress (A0.1 to A3.3 done; A4.1 to A4.3, the UI stages, remain). Date: 2026-10-31.
 Scope: user-defined automations that run after a successful push, starting with "merge the pushed branch into one or more integration branches and push them" (`crates/gitcrest-core/`, `src/`, `doc/api/v1.yaml`).
 Related: [12-git-engine-architecture.md](12-git-engine-architecture.md) (tasks and locks), [conflict-resolver-enhancement-plan.md](conflict-resolver-enhancement-plan.md) (conflict window), [07-interaction-accessibility.md](07-interaction-accessibility.md) (safety rules), [13-implementation-plan.md](13-implementation-plan.md) (ledger and commit rules).
 
@@ -271,7 +271,7 @@ Same rules as [13-implementation-plan.md](13-implementation-plan.md) §2 and [ux
 | A2.3 | Switch-in-place workspace | M | A2.1 | Preconditions, auto-shelve or refuse (D2), tracking-branch creation, fast-forward-only pull, divergence failure, guaranteed return to source and shelf restore on every outcome, repository lock held for the run. Integration tests cover each outcome and confirm the user ends on the source branch with their changes restored. | done (the shelf is a Git stash named gitcrest-pipeline-<runId>, restored with stash pop; branch operations are not locked by the backend, the in-place banner in A4.2 disables them) |
 | A3.1 | Triggers and run API | M | A1.2, A2.2 | Evaluation after a successful push in core, `ask`/`auto`, `pipeline.trigger.pending` and `pipeline.run.updated` events, run endpoints and actions, manual run. Contract tests, plus a test that pipeline pushes do not trigger. | done |
 | A3.2 | Conflict integration | M | A3.1, A2.3 | Conflict policies (§7), recovery hook, conflict window and auto-open for ephemeral contexts, abort dialog. E2E: a conflict on `uat` opens the window, resolving continues to `dev`, and both are pushed. | done (the E2E is covered by service-level tests that drive real repositories; no Electron window is automated) |
-| A3.3 | Restart recovery | M | A3.2 | Startup proposals for every row in §8, orphan sweep. Tests kill the engine at each persisted step and check the proposal. | not started |
+| A3.3 | Restart recovery | M | A3.2 | Startup proposals for every row in §8, orphan sweep. Tests kill the engine at each persisted step and check the proposal. | done (the engine is "killed" by building a second service over the same database and folders; leftover stashes of finished in-place runs are not surfaced yet) |
 | A4.1 | Settings UI | M | A1.2 | Automations section, mode setting with override, rule list and editor with pattern and message previews, validation messages, i18n. Component tests for the editor. | not started |
 | A4.2 | Run UI | M | A3.2, A4.1 | Trigger confirmation dialog, grouped Task Center row with actions, in-place banner with disabled actions, **Run pipeline…** in the branch menu and command palette, worktree-failure dialog (§5.5). E2E for the main path in both modes. | not started |
 | A4.3 | Import and export | S | A4.1 | `.gitcrest/pipelines.json` schema, export, import with review and forced `ask`. Tests cover a malformed file and a protected target. | not started |

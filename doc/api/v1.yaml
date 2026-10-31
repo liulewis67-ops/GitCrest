@@ -1097,7 +1097,7 @@ paths:
     post:
       operationId: actOnPipelineRun
       summary: Resume, skip the waiting target, or stop a run
-      description: resume starts a run that waits for confirmation or continues one whose conflicts were resolved; skipTarget and stop apply to a run waiting for conflicts.
+      description: resume starts a run that waits for confirmation, continues one whose conflicts were resolved, or pushes/restarts an interrupted one; skipTarget and stop apply to a run waiting for conflicts; returnToSource (back on the source branch, shelf restored) and discard (leave everything where it is) apply to an interrupted run.
       requestBody:
         required: true
         content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRunActionRequest" } } }
@@ -5476,7 +5476,7 @@ components:
       additionalProperties: false
       required: [action]
       properties:
-        action: { type: string, enum: [resume, skipTarget, stop] }
+        action: { type: string, enum: [resume, skipTarget, stop, returnToSource, discard] }
     PipelineRunStep:
       type: object
       additionalProperties: false
@@ -5497,7 +5497,7 @@ components:
     PipelineRun:
       type: object
       additionalProperties: false
-      required: [runId, repoId, ruleId, ruleName, sourceBranch, sourceOid, executionMode, status, shelfId, createdAtMs, updatedAtMs, steps]
+      required: [runId, repoId, ruleId, ruleName, sourceBranch, sourceOid, executionMode, status, shelfId, createdAtMs, updatedAtMs, steps, recovery]
       properties:
         runId: { type: string }
         repoId: { $ref: "#/components/schemas/RepoId" }
@@ -5508,8 +5508,12 @@ components:
         executionMode: { $ref: "#/components/schemas/PipelineExecutionMode" }
         status:
           type: string
-          enum: [pendingConfirmation, running, waitingForConflicts, succeeded, partiallySucceeded, failed, cancelled]
+          enum: [pendingConfirmation, running, waitingForConflicts, interrupted, succeeded, partiallySucceeded, failed, cancelled]
         shelfId: { type: [string, "null"] }
+        recovery:
+          type: [string, "null"]
+          enum: [resumePush, restartStep, returnToSource, null]
+          description: What the user can choose for an interrupted run (status interrupted); null otherwise. resumePush and restartStep are answered with the resume action, returnToSource with the returnToSource or discard action.
         createdAtMs: { type: integer }
         updatedAtMs: { type: integer }
         steps:

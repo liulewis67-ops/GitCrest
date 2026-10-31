@@ -181,6 +181,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         accounts,
         events: events.clone(),
     };
+    // Unfinished pipeline runs are looked at before triggers can start new ones.
+    state.pipelines.recover_on_startup().await;
     let app = app_router(state, config.cors_origin);
 
     let listener = TcpListener::bind(config.listen_address).await?;

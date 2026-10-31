@@ -160,6 +160,18 @@ impl GitRunner {
         }
     }
 
+    /// Whether the run's source commit is part of what `directory` has checked out.
+    pub(super) async fn contains_source(&self, directory: &Path, run: &PipelineRun) -> bool {
+        self.git(
+            directory,
+            &["merge-base", "--is-ancestor", &run.source_oid, "HEAD"],
+            false,
+        )
+        .await
+        .map(|output| output.success)
+        .unwrap_or(false)
+    }
+
     pub(super) async fn merge_in_progress(&self, directory: &Path) -> bool {
         self.git(
             directory,

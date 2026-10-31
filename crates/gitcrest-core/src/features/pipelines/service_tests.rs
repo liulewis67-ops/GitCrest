@@ -19,15 +19,15 @@ use crate::{
     storage::RepositoryStore,
 };
 
-struct Harness {
-    fixture: Fixture,
-    store: Arc<RepositoryStore>,
-    service: PipelineService,
-    events: EventBus,
-    tasks: TaskService,
+pub(super) struct Harness {
+    pub(super) fixture: Fixture,
+    pub(super) store: Arc<RepositoryStore>,
+    pub(super) service: PipelineService,
+    pub(super) events: EventBus,
+    pub(super) tasks: TaskService,
 }
 
-fn harness(rule: PipelineRule) -> Harness {
+pub(super) fn harness(rule: PipelineRule) -> Harness {
     let fixture = fixture();
     let store = Arc::new(RepositoryStore::default());
     store.insert_test_repository_at("repo", &fixture.repository);
@@ -61,13 +61,13 @@ fn harness(rule: PipelineRule) -> Harness {
     }
 }
 
-fn auto_rule() -> PipelineRule {
+pub(super) fn auto_rule() -> PipelineRule {
     let mut rule = rule();
     rule.confirmation = Confirmation::Auto;
     rule
 }
 
-fn pushed(harness: &Harness) -> PushedBranch {
+pub(super) fn pushed(harness: &Harness) -> PushedBranch {
     PushedBranch {
         repo_id: "repo".into(),
         branch: "feature/1".into(),
@@ -75,7 +75,7 @@ fn pushed(harness: &Harness) -> PushedBranch {
     }
 }
 
-async fn wait_for_terminal(store: &RepositoryStore, repo_id: &str) -> PipelineRun {
+pub(super) async fn wait_for_terminal(store: &RepositoryStore, repo_id: &str) -> PipelineRun {
     for _ in 0..300 {
         if let Some(run) = store
             .list_pipeline_runs(repo_id, 1)
@@ -349,7 +349,7 @@ async fn resume_waits_for_the_worktree_conflicts_to_be_resolved() {
     );
 }
 
-async fn wait_for_conflicts(harness: &Harness) -> PipelineRun {
+pub(super) async fn wait_for_conflicts(harness: &Harness) -> PipelineRun {
     for _ in 0..300 {
         let run = harness
             .store
@@ -364,7 +364,7 @@ async fn wait_for_conflicts(harness: &Harness) -> PipelineRun {
     panic!("the run never waited for conflicts");
 }
 
-fn conflict_on_uat(harness: &Harness) {
+pub(super) fn conflict_on_uat(harness: &Harness) {
     use super::worktree_tests::commit_file;
     let repository = &harness.fixture.repository;
     git(repository, &["stash", "-u", "-q"]);
