@@ -12,7 +12,7 @@ use crate::{
 };
 
 use super::{
-    dto::{CommitDiffQuery, DiffDocumentDto, DiffQuery},
+    dto::{CommitDiffQuery, DiffDocumentDto, DiffQuery, RangeDiffQuery},
     service,
 };
 use crate::domain::diff::{DiffContext, DiffScope};
@@ -137,6 +137,39 @@ pub(super) async fn repository_commit_file_diff(
         &target.repository_path,
         &oid,
         commit.parents.first().map(String::as_str),
+        &query.path,
+        query.context.into(),
+    )
+    .await
+    .map(DiffDocumentDto::from)
+    .map(Json)
+    .map_err(ApiError::from_diff_error)
+}
+
+/// A file's change between two commits, or between a commit and the working tree.
+pub(super) async fn repository_range_file_diff(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<RangeDiffQuery>, QueryRejection>,
+) -> Result<Json<DiffDocumentDto>, ApiError> {
+    let Query(query) = query.map_err(|_| {
+        ApiError::new(
+            StatusCode::BAD_REQUEST,
+            ApiErrorCode::RequestInvalid,
+            "A starting commit and a repository-relative file path are required.",
+        )
+    })?;
+    let repository_path = state
+        .repository_targets
+        .read_repository_path(&repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)?;
+    service::read_range_file(
+        &state.git_commands,
+        repo_id,
+        &repository_path,
+        &query.from,
+        query.to.as_deref(),
         &query.path,
         query.context.into(),
     )

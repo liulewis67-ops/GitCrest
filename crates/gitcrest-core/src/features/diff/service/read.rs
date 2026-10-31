@@ -42,12 +42,59 @@ pub async fn read_commit_file<G: DiffGitPort + ?Sized>(
     context: DiffContext,
 ) -> Result<DiffDocument, DiffError> {
     validate_repo_relative_path(relative_path)?;
-    if !matches!(oid.len(), 40 | 64) || !oid.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+    if !is_object_id(oid) {
         return Err(DiffError::InvalidPath);
     }
     let patch = git
         .read_commit_file_patch(repository_path, oid, parent_oid, relative_path, context)
         .await?;
+    document_from_patch(repo_id, relative_path, &patch)
+}
+
+/// One file as it changed from `from_oid` to `to_oid`, or to the working tree when `to_oid` is
+/// absent. Both ends must be full object ids that the comparison already resolved.
+pub async fn read_range_file<G: DiffGitPort + ?Sized>(
+    git: &G,
+    repo_id: String,
+    repository_path: &Path,
+    from_oid: &str,
+    to_oid: Option<&str>,
+    relative_path: &str,
+    context: DiffContext,
+) -> Result<DiffDocument, DiffError> {
+    validate_repo_relative_path(relative_path)?;
+    if !is_object_id(from_oid) || to_oid.is_some_and(|oid| !is_object_id(oid)) {
+        return Err(DiffError::InvalidPath);
+    }
+    let patch = match to_oid {
+        Some(to_oid) => {
+            git.read_commit_file_patch(
+                repository_path,
+                to_oid,
+                Some(from_oid),
+                relative_path,
+                context,
+            )
+            .await?
+        }
+        None => {
+            git.read_worktree_range_patch(repository_path, from_oid, relative_path, context)
+                .await?
+        }
+    };
+    document_from_patch(repo_id, relative_path, &patch)
+}
+
+fn is_object_id(value: &str) -> bool {
+    matches!(value.len(), 40 | 64) && value.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn document_from_patch(
+    repo_id: String,
+    relative_path: &str,
+    patch: &[u8],
+) -> Result<DiffDocument, DiffError> {
+    let patch = patch.to_vec();
     let parsed = parse_diff(&patch);
     let mut document = DiffDocument {
         repo_id,

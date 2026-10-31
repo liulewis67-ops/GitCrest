@@ -92,6 +92,26 @@ pub(crate) async fn read_commit_file_patch(
     run_diff(repository_path, arguments, false).await
 }
 
+/// One file of the working tree against a commit.
+pub(crate) async fn read_worktree_range_patch(
+    repository_path: &Path,
+    from_oid: &str,
+    relative_path: &str,
+    context: DiffContext,
+) -> Result<Vec<u8>, DiffError> {
+    let arguments = vec![
+        OsString::from("--literal-pathspecs"),
+        OsString::from("diff"),
+        OsString::from("--no-ext-diff"),
+        OsString::from("--no-color"),
+        unified_argument(context),
+        from_oid.into(),
+        OsString::from("--"),
+        relative_path.into(),
+    ];
+    run_diff(repository_path, arguments, false).await
+}
+
 async fn run_diff(
     repository_path: &Path,
     arguments: Vec<OsString>,

@@ -1,0 +1,222 @@
+import { useEffect, useId, useRef, useState } from "react";
+import { GitCrestApiError, type CompareResultResponse, type DiffDocumentResponse, type GitCrestApiClient } from "../../../api/client";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { useI18n } from "../../../shared/i18n";
+
+type Mode = "threeDot" | "twoDot";
+type CommitItem = CompareResultResponse["onlyInBase"]["items"][number];
+type FileItem = CompareResultResponse["files"]["items"][number];
+type ListKey = "onlyInBase" | "onlyInHead" | "files";
+
+const PAGE = 100;
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof GitCrestApiError) return error.body.error.message;
+  return error instanceof Error ? error.message : fallback;
+}
+
+function formatDate(ms: number) {
+  return new Date(ms).toLocaleDateString();
+}
+
+/**
+ * Compares two branches, tags or commits, or a commit with the working tree. It only reads: it lists
+ * the commits that are on one side only and the files that differ, and shows one file's change at a time.
+ */
+export function CompareDialog({ api, repoId, initial, currentBranch, refNames, onClose }: {
+  api: GitCrestApiClient;
+  repoId: string;
+  initial: { base?: string; head?: string; workingTree?: boolean };
+  currentBranch?: string;
+  /** Branch names offered as suggestions; any tag, commit or relative name can be typed too. */
+  refNames: readonly string[];
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(onClose, false);
+  const listId = useId();
+  const [base, setBase] = useState(initial.base ?? currentBranch ?? "");
+  const [head, setHead] = useState(initial.head ?? "");
+  const [workingTree, setWorkingTree] = useState(Boolean(initial.workingTree));
+  const [mode, setMode] = useState<Mode>("threeDot");
+  const [result, setResult] = useState<CompareResultResponse>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [more, setMore] = useState<ListKey | "">("");
+  const [selected, setSelected] = useState<FileItem>();
+  const [document, setDocument] = useState<DiffDocumentResponse>();
+  const [diffError, setDiffError] = useState("");
+  const [diffLoading, setDiffLoading] = useState(false);
+  const controllerRef = useRef<AbortController>();
+  const requestRef = useRef(0);
+  const autoRan = useRef(false);
+
+  const trimmedBase = base.trim();
+  const trimmedHead = head.trim();
+  const blocker = !trimmedBase ? t("compare.needBase") : !workingTree && !trimmedHead ? t("compare.needHead") : "";
+
+  function run() {
+    if (blocker) return;
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    const request = ++requestRef.current;
+    setLoading(true);
+    setError("");
+    setResult(undefined);
+    setSelected(undefined);
+    setDocument(undefined);
+    api.withSignal(controller.signal)
+      .compareRevisions(repoId, { base: trimmedBase, ...(workingTree ? {} : { head: trimmedHead }), mode, limit: PAGE })
+      .then((next) => { if (request === requestRef.current) setResult(next); })
+      .catch((reason) => {
+        if (controller.signal.aborted || request !== requestRef.current) return;
+        setError(errorMessage(reason, t("compare.failed")));
+      })
+      .finally(() => { if (request === requestRef.current) setLoading(false); });
+  }
+
+  function cancel() {
+    controllerRef.current?.abort();
+    requestRef.current += 1;
+    setLoading(false);
+    setMore("");
+    setError(t("compare.cancelled"));
+  }
+
+  useEffect(() => {
+    if (autoRan.current) return;
+    autoRan.current = true;
+    if (initial.base && (initial.workingTree || initial.head)) run();
+    return () => controllerRef.current?.abort();
+  }, []);
+
+  async function loadMore(key: ListKey) {
+    if (!result || more) return;
+    const request = requestRef.current;
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setMore(key);
+    try {
+      const page = await api.withSignal(controller.signal).compareRevisions(repoId, {
+        base: result.base,
+        ...(result.head ? { head: result.head } : {}),
+        mode: result.mode,
+        offset: result[key].items.length,
+        limit: PAGE,
+      });
+      if (request !== requestRef.current) return;
+      setResult((current) => current && {
+        ...current,
+        [key]: { items: [...current[key].items, ...page[key].items] as never, hasMore: page[key].hasMore },
+      });
+    } catch (reason) {
+      if (!controller.signal.aborted && request === requestRef.current) setError(errorMessage(reason, t("compare.failed")));
+    } finally {
+      if (request === requestRef.current) setMore("");
+    }
+  }
+
+  useEffect(() => {
+    if (!result || !selected) return;
+    const controller = new AbortController();
+    setDocument(undefined);
+    setDiffError("");
+    setDiffLoading(true);
+    api.withSignal(controller.signal)
+      .getRepositoryCompareDiff(repoId, { from: result.fromOid, ...(result.headOid ? { to: result.headOid } : {}), path: selected.path })
+      .then(setDocument)
+      .catch((reason) => { if (!controller.signal.aborted) setDiffError(errorMessage(reason, t("compare.diffFailed"))); })
+      .finally(() => { if (!controller.signal.aborted) setDiffLoading(false); });
+    return () => controller.abort();
+  }, [api, repoId, result?.fromOid, result?.headOid, selected?.path]);
+
+  const headLabel = result ? (result.head ?? t("compare.workingTree")) : "";
+
+  const commitList = (key: "onlyInBase" | "onlyInHead", title: string, empty: string) => {
+    if (!result) return null;
+    const list = result[key];
+    return <section aria-label={title} className="compareColumn">
+      <h3>{title}<span className="compareCount">{list.items.length}{list.hasMore ? "+" : ""}</span></h3>
+      {list.items.length === 0
+        ? <p className="cloneHelp">{empty}</p>
+        : <ul className="compareList">{list.items.map((commit: CommitItem) => <li key={commit.oid}>
+          <code>{commit.shortOid}</code>
+          <span className="reflogMessage" title={commit.subject}>{commit.subject || t("push.noSubject")}</span>
+          <small title={commit.authorName}>{formatDate(commit.authoredAtMs)}</small>
+        </li>)}</ul>}
+      {list.hasMore && <button className="quietButton compact" type="button" disabled={Boolean(more)} onClick={() => void loadMore(key)}>{t("compare.loadMore")}</button>}
+    </section>;
+  };
+
+  return <div className="paletteBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+    <section ref={dialogRef} className="cloneDialog compareDialog" role="dialog" aria-modal="true" aria-labelledby="compare-title" onKeyDown={onKeyDown}>
+      <header className="taskCenterHeader">
+        <div><p className="sectionEyebrow">{t("compare.eyebrow")}</p><h2 id="compare-title">{t("compare.title")}</h2></div>
+        <button className="quietButton compact" type="button" onClick={onClose}>{t("common.close")}</button>
+      </header>
+      <form className="cloneFormBody" onSubmit={(event) => { event.preventDefault(); run(); }}>
+        <p className="cloneHelp">{t("compare.help")}</p>
+        <datalist id={listId}>{refNames.map((name) => <option key={name} value={name} />)}</datalist>
+        <div className="compareFields">
+          <label className="rebaseTargetField">{t("compare.base")}
+            <input value={base} list={listId} spellCheck={false} autoComplete="off" data-dialog-initial-focus onChange={(event) => setBase(event.target.value)} />
+          </label>
+          <label className="rebaseTargetField">{t("compare.head")}
+            <input value={head} list={listId} spellCheck={false} autoComplete="off" disabled={workingTree} placeholder={workingTree ? t("compare.workingTree") : undefined} onChange={(event) => setHead(event.target.value)} />
+          </label>
+        </div>
+        <label className="compareCheck"><input type="checkbox" checked={workingTree} onChange={(event) => setWorkingTree(event.target.checked)} />{t("compare.withTree")}</label>
+        <fieldset className="compareMode" disabled={workingTree}>
+          <legend>{t("compare.mode")}</legend>
+          <label><input type="radio" name="compare-mode" checked={mode === "threeDot"} onChange={() => setMode("threeDot")} />{t("compare.threeDot")}</label>
+          <label><input type="radio" name="compare-mode" checked={mode === "twoDot"} onChange={() => setMode("twoDot")} />{t("compare.twoDot")}</label>
+        </fieldset>
+        <div className="compareActions">
+          <button className="primaryButton" type="submit" disabled={Boolean(blocker) || loading} title={blocker || undefined}>{t("compare.run")}</button>
+          {loading && <button className="quietButton compact" type="button" onClick={cancel}>{t("compare.cancel")}</button>}
+          {blocker && <small className="cloneHelp">{blocker}</small>}
+        </div>
+        {loading && <p role="status" className="cloneHelp">{t("compare.loading")}</p>}
+        {error && <div className="statusLoadError" role="alert"><span>{error}</span></div>}
+        {result && <>
+          <p className="cloneHelp" role="status">
+            {t("compare.summary", { base: result.base, head: headLabel })}
+            {result.mergeBaseOid && result.mode === "threeDot" ? ` ${t("compare.ancestor", { oid: result.mergeBaseOid.slice(0, 7) })}` : ""}
+            {result.mode === "twoDot" && result.headOid ? ` ${t("compare.twoDotNote")}` : ""}
+          </p>
+          <div className="compareColumns">
+            {commitList("onlyInBase", t("compare.onlyIn", { name: result.base }), t("compare.noneOnly", { name: result.base }))}
+            {commitList("onlyInHead", t("compare.onlyIn", { name: headLabel }), t("compare.noneOnly", { name: headLabel }))}
+          </div>
+          <section aria-label={t("compare.files")}>
+            <h3>{t("compare.files")}<span className="compareCount">{result.files.items.length}{result.files.hasMore ? "+" : ""}</span></h3>
+            {result.files.items.length === 0
+              ? <p className="cloneHelp">{t("compare.noFiles")}</p>
+              : <ul className="compareList">{result.files.items.map((file) => <li key={`${file.originalPath ?? ""}>${file.path}`}>
+                <span className="commitRefBadge">{t(`compare.kind.${file.kind}`)}</span>
+                <button type="button" className="textButton reflogMessage" aria-pressed={selected?.path === file.path} title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path} onClick={() => setSelected(file)}>{file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}</button>
+              </li>)}</ul>}
+            {result.files.hasMore && <button className="quietButton compact" type="button" disabled={Boolean(more)} onClick={() => void loadMore("files")}>{t("compare.loadMore")}</button>}
+            {result.mode === "twoDot" && !result.headOid && <p className="cloneHelp">{t("compare.untrackedNote")}</p>}
+          </section>
+          {selected && <section aria-label={t("compare.diffOf", { path: selected.path })} className="compareDiff">
+            <h3>{selected.path}</h3>
+            {diffLoading && <p role="status" className="cloneHelp">{t("compare.loading")}</p>}
+            {diffError && <div className="statusLoadError" role="alert"><span>{diffError}</span></div>}
+            {document && (document.status === "text"
+              ? <table className="compareDiffTable"><tbody>{document.hunks.flatMap((hunk, hunkIndex) => hunk.rows.map((row, rowIndex) => {
+                const key = `${hunkIndex}:${rowIndex}`;
+                if (row.kind === "context") return <tr key={key}><td className="compareLine">{row.oldLine}</td><td className="compareLine">{row.newLine}</td><td><code>{" "}{row.newText}</code></td></tr>;
+                return [
+                  row.oldText !== null && <tr key={`${key}-old`} className="compareRemoved"><td className="compareLine">{row.oldLine}</td><td className="compareLine" /><td><code>-{row.oldText}</code></td></tr>,
+                  row.newText !== null && <tr key={`${key}-new`} className="compareAdded"><td className="compareLine" /><td className="compareLine">{row.newLine}</td><td><code>+{row.newText}</code></td></tr>,
+                ];
+              }))}</tbody></table>
+              : <p className="cloneHelp">{document.status === "binary" ? t("compare.binary") : document.status === "empty" ? t("compare.emptyDiff") : t("compare.notText")}</p>)}
+          </section>}
+        </>}
+      </form>
+    </section>
+  </div>;
+}

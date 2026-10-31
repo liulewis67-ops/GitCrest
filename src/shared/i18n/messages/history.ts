@@ -4,6 +4,8 @@ export const history = {
   "hist.shaAria": ["Filter by SHA", "按 SHA 筛选"],
   "hist.tagAnnotated": ["Annotated tag {name}", "附注标签 {name}"],
   "hist.tagLightweight": ["Lightweight tag {name}", "轻量标签 {name}"],
+  "hv.compare": ["Compare with…", "与…比较"],
+  "hv.compareTree": ["Compare with working tree", "与工作区比较"],
   "reflog.eyebrow": ["RECOVERY", "恢复"],
   "reflog.title": ["Reflog", "引用日志"],
   "reflog.help": ["Git remembers where HEAD and each branch have been for a while, even after a reset or a deleted branch. Start a branch from a state to keep it, or review a reset to it.", "Git 会在一段时间内记住 HEAD 和各分支到过的位置，即使在重置或删除分支之后也是如此。可从某个状态新建分支以保留它，或预览重置到该状态。"],

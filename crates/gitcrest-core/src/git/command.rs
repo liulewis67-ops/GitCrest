@@ -120,6 +120,17 @@ impl DiffGitPort for GitCommandService {
         )
         .await
     }
+
+    async fn read_worktree_range_patch(
+        &self,
+        repository_path: &Path,
+        from_oid: &str,
+        relative_path: &str,
+        context: crate::domain::diff::DiffContext,
+    ) -> Result<Vec<u8>, crate::domain::error::DiffError> {
+        super::diff::read_worktree_range_patch(repository_path, from_oid, relative_path, context)
+            .await
+    }
 }
 
 impl StatusReadPort for GitCommandService {

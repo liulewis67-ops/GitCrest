@@ -196,6 +196,18 @@ pub(super) struct CommitDiffQuery {
     pub(super) context: DiffContextDto,
 }
 
+/// One file of a comparison. `from` and `to` are the full object ids the comparison returned;
+/// leaving `to` out compares with the working tree.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct RangeDiffQuery {
+    pub(super) from: String,
+    pub(super) to: Option<String>,
+    pub(super) path: String,
+    #[serde(default)]
+    pub(super) context: DiffContextDto,
+}
+
 #[derive(Clone, Copy, Debug, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) enum DiffContextDto {

@@ -119,6 +119,7 @@ export interface PaletteInput {
     toggleFocusMode: () => void;
     toggleDiffView: () => void;
     showReflog: () => void;
+    compare: (request: { base?: string; head?: string; workingTree?: boolean }) => void;
     openInEditor: () => void;
     openInTerminal: () => void;
     zoomIn: () => void;
@@ -209,6 +210,9 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
       input.commitBusy && why.busy,
     ), run.openAiAssistant, "aiCommitMessage"),
     command("branch-switcher", "branches", "cmd.branchSwitcher", shortcutDetail("cmd.branchSwitcherDetail", "branchSwitcher"), repositoryReady, run.openBranchSwitcher, "branchSwitcher"),
+    command("compare-refs", "branches", "cmd.compareRefs", t("cmd.compareRefsDetail"), repositoryReady, () => run.compare({})),
+    command("compare-commit", "commits", "cmd.compareCommit", t("cmd.compareCommitDetail"), commitReady, () => run.compare({ base: commitOid })),
+    command("compare-commit-tree", "commits", "cmd.compareCommitTree", t("cmd.compareCommitTreeDetail"), commitReady, () => run.compare({ base: commitOid, workingTree: true })),
     command("show-reflog", "branches", "cmd.showReflog", t("cmd.showReflogDetail"), repositoryReady, run.showReflog),
     command("branch-here", "branches", "cmd.branchHere", t("cmd.branchHereDetail"), commitReady, () => run.createBranchAt(commitOid)),
     command("checkout-commit", "commits", "cmd.checkoutCommit", t("cmd.checkoutCommitDetail"), commitReady, () => run.checkoutCommit(commitOid)),

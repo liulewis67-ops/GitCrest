@@ -34,4 +34,13 @@ pub(crate) trait DiffGitPort: Send + Sync {
         relative_path: &str,
         context: DiffContext,
     ) -> Result<Vec<u8>, DiffError>;
+
+    /// One file as it changed between a commit and the working tree.
+    async fn read_worktree_range_patch(
+        &self,
+        repository_path: &Path,
+        from_oid: &str,
+        relative_path: &str,
+        context: DiffContext,
+    ) -> Result<Vec<u8>, DiffError>;
 }

@@ -9274,3 +9274,217 @@ async fn image_api_returns_each_version_as_an_image_and_refuses_anything_else() 
         StatusCode::NOT_FOUND
     );
 }
+
+#[tokio::test]
+async fn compare_api_matches_git_log_and_diff_pages_and_refuses_unsafe_names() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("compare-repo");
+    std::fs::create_dir(&root).unwrap();
+    let git = |args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    git(&["init", "--quiet", "--initial-branch=main"]);
+    git(&["config", "user.name", "GitCrest Test"]);
+    git(&["config", "user.email", "gitcrest-test@example.invalid"]);
+    std::fs::write(root.join("a.txt"), "one\n").unwrap();
+    git(&["add", "a.txt"]);
+    git(&["commit", "--quiet", "-m", "first"]);
+    git(&["checkout", "--quiet", "-b", "feature"]);
+    std::fs::write(root.join("feat.txt"), "feature\n").unwrap();
+    git(&["add", "feat.txt"]);
+    git(&["commit", "--quiet", "-m", "add feature file"]);
+    std::fs::write(root.join("a.txt"), "one\ntwo\n").unwrap();
+    git(&["commit", "--quiet", "-am", "extend a"]);
+    git(&["checkout", "--quiet", "main"]);
+    std::fs::write(root.join("main.txt"), "main\n").unwrap();
+    git(&["add", "main.txt"]);
+    git(&["commit", "--quiet", "-m", "add main file"]);
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+    let repo_id = serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/api/v1/repositories/{repo_id}");
+    let get = |path: String| {
+        let app = app.clone();
+        let uri = format!("{base}{path}");
+        async move {
+            let response = app
+                .oneshot(request(&uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+    let subjects = |list: &serde_json::Value| {
+        list["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|commit| commit["subject"].as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    let paths = |list: &serde_json::Value| {
+        let mut paths = list["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|file| {
+                format!(
+                    "{}:{}",
+                    file["kind"].as_str().unwrap(),
+                    file["path"].as_str().unwrap()
+                )
+            })
+            .collect::<Vec<_>>();
+        paths.sort();
+        paths
+    };
+
+    // The commit lists are `git log head..base` and `git log base..head`.
+    let (status, three) = get("/compare?base=main&head=feature".into()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(subjects(&three["onlyInBase"]), ["add main file"]);
+    assert_eq!(
+        subjects(&three["onlyInHead"]),
+        ["extend a", "add feature file"]
+    );
+    assert_eq!(
+        subjects(&three["onlyInHead"]),
+        git(&["log", "--format=%s", "main..feature"])
+            .lines()
+            .collect::<Vec<_>>()
+    );
+    // Three dots leave out what only main changed, as `git diff main...feature` does.
+    assert_eq!(three["mode"], "threeDot");
+    assert_eq!(paths(&three["files"]), ["added:feat.txt", "modified:a.txt"]);
+    assert_eq!(
+        three["fromOid"].as_str().unwrap(),
+        git(&["merge-base", "main", "feature"])
+    );
+    assert_eq!(
+        three["headOid"].as_str().unwrap(),
+        git(&["rev-parse", "feature"])
+    );
+    let (_, two) = get("/compare?base=main&head=feature&mode=twoDot".into()).await;
+    assert_eq!(two["fromOid"], two["baseOid"]);
+    assert_eq!(
+        paths(&two["files"]),
+        ["added:feat.txt", "deleted:main.txt", "modified:a.txt"]
+    );
+
+    // Large comparisons page: one commit at a time.
+    let (_, first_page) = get("/compare?base=main&head=feature&limit=1".into()).await;
+    assert_eq!(subjects(&first_page["onlyInHead"]), ["extend a"]);
+    assert_eq!(first_page["onlyInHead"]["hasMore"], true);
+    assert_eq!(first_page["onlyInBase"]["hasMore"], false);
+    assert_eq!(first_page["files"]["hasMore"], true);
+    let (_, second_page) = get("/compare?base=main&head=feature&limit=1&offset=1".into()).await;
+    assert_eq!(subjects(&second_page["onlyInHead"]), ["add feature file"]);
+    assert_eq!(second_page["onlyInHead"]["hasMore"], false);
+
+    // One file of a comparison, between the two commits.
+    let from = three["fromOid"].as_str().unwrap();
+    let to = three["headOid"].as_str().unwrap();
+    let (status, document) = get(format!("/compare/diff?from={from}&to={to}&path=a.txt")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(document["status"], "text");
+    assert_eq!(document["path"], "a.txt");
+    assert!(document["hunks"].as_array().is_some_and(|h| !h.is_empty()));
+
+    // The working tree against a commit.
+    std::fs::write(root.join("a.txt"), "one\nlocal\n").unwrap();
+    let (status, against_tree) = get("/compare?base=feature".into()).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(against_tree["headOid"].is_null());
+    assert_eq!(against_tree["mode"], "twoDot");
+    assert!(paths(&against_tree["files"]).contains(&"modified:a.txt".to_owned()));
+    let from = against_tree["fromOid"].as_str().unwrap();
+    let (status, document) = get(format!("/compare/diff?from={from}&path=a.txt")).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(document["status"], "text");
+
+    // Histories with nothing in common allow only the two-dot view.
+    git(&["checkout", "--quiet", "-f", "--orphan", "unrelated"]);
+    git(&["rm", "-rfq", "."]);
+    std::fs::write(root.join("other.txt"), "other\n").unwrap();
+    git(&["add", "other.txt"]);
+    git(&["commit", "--quiet", "-m", "unrelated root"]);
+    assert_eq!(
+        get("/compare?base=main&head=unrelated".into()).await.0,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(
+        get("/compare?base=main&head=unrelated&mode=twoDot".into())
+            .await
+            .0,
+        StatusCode::OK
+    );
+
+    // Anything that is not one plain revision, a missing one, and bad paging or ids are refused.
+    for bad in [
+        "/compare?base=--output%3Dx",
+        "/compare?base=main..feature",
+        "/compare?base=main&head=a%20b",
+        "/compare?base=main&limit=0",
+        "/compare?base=main&limit=501",
+        "/compare?base=main&mode=bogus",
+        "/compare",
+        "/compare/diff?from=main&path=a.txt",
+        "/compare/diff?from=0123456789abcdef0123456789abcdef01234567&path=..%2Fx",
+    ] {
+        assert_eq!(get(bad.into()).await.0, StatusCode::BAD_REQUEST, "{bad}");
+    }
+    assert_eq!(
+        get("/compare?base=missing-branch".into()).await.0,
+        StatusCode::NOT_FOUND
+    );
+
+    // Authorization and unknown repositories.
+    assert_eq!(
+        app.clone()
+            .oneshot(request(&format!("{base}/compare?base=main"), None))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                "/api/v1/repositories/repo_missing/compare?base=main",
+                Some(READ_ONLY_TOKEN)
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::NOT_FOUND
+    );
+}

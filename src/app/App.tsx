@@ -27,6 +27,7 @@ import { httpsHostFromRemote } from "../shared/lib/https-remote-host";
 import { DEFAULT_WORKSPACE_MODE, COMMIT_FILES_WIDTH, DETAILS_WIDTH, HISTORY_GRAPH_HEIGHT, SIDEBAR_WIDTH, getRepositoryEventRefreshPlan, useFolderDrop, usePanelPreferences, useRepositoryCacheLifecycle, useRepositoryListRefresh, useRepositoryMutations, useRepositoryOpening, useRepositoryTabLifecycle, useWorkspaceCommitAction, useWorkspaceCommitSelection, useWorkspaceGraphScroll, useWorkspaceLayout, useWorkspaceSessionActions, useWorkspaceSessionState, type WorkspaceMode } from "../features/repositories";
 import { buildChangeTree, IgnoreRuleDialog, listReviewableFiles, reconcileWorkingSelection, summarizeRepositoryStatus, useRepositoryStatus, useStagingNotices, useStagingOperations, type IgnoreMode } from "../features/changes";
 import { CommitActionsMenu, isFullGitObjectId, loadCommitChanges, loadCommitGraph, loadReflogDialog, useHistoryViewRequests, type CommitFileNavigation, type CommitWorkflowAction } from "../features/history";
+import { loadCompareDialog } from "../features/compare";
 import { hasCodeStructureSupport, loadDiscardChangesDialog, useDiffViewPreferences, useRepositoryDiffQuery } from "../features/diff";
 import { useLanguageRegistry } from "../features/languages";
 import { loadBranchSwitcherDialog, loadLocalBranchDialog, loadCreateBranchDialog, loadNewWorktreeDialog, loadRemoveWorktreeDialog, useOpenCreatedWorktree, WorktreeSwitcher, type LocalBranchAction, loadRemoteBranchDeleteDialog, useBranchSwitchShelfFlow, useBranchSwitcher, useRemoteBranchDeleteSession, useRepositoryRefs } from "../features/branches";
@@ -37,6 +38,7 @@ import { loadRebaseDialog, loadResetDialog, loadWorkflowDialog, useAdoptInProgre
 const TaskCenter = lazy(() => loadTaskCenter().then(({ TaskCenter }) => ({ default: TaskCenter })));
 const WorkflowDialog = lazy(() => loadWorkflowDialog().then(({ WorkflowDialog }) => ({ default: WorkflowDialog })));
 const RebaseDialog = lazy(() => loadRebaseDialog().then(({ RebaseDialog }) => ({ default: RebaseDialog })));
+const CompareDialog = lazy(() => loadCompareDialog().then(({ CompareDialog }) => ({ default: CompareDialog })));
 const ReflogDialog = lazy(() => loadReflogDialog().then(({ ReflogDialog }) => ({ default: ReflogDialog })));
 const ResetDialog = lazy(() => loadResetDialog().then(({ ResetDialog }) => ({ default: ResetDialog })));
 const RemoteBranchDeleteDialog = lazy(() => loadRemoteBranchDeleteDialog().then(({ RemoteBranchDeleteDialog }) => ({ default: RemoteBranchDeleteDialog })));
@@ -73,6 +75,7 @@ function App() {
   const [historyBranch, setHistoryBranch] = useState<{ repoId: string; fullName: string }>();
   const [worktreeForBranch, setWorktreeForBranch] = useState<{ name: string; fromRemote: boolean }>();
   const [reflogOpen, setReflogOpen] = useState(false);
+  const [compareRequest, setCompareRequest] = useState<{ base?: string; head?: string; workingTree?: boolean }>();
   const [ignoreRequest, setIgnoreRequest] = useState<{ repoId: string; path: string; mode: IgnoreMode }>();
   const [worktreeFrom, setWorktreeFrom] = useState<{ oid: string; label: string }>();
   const [removeWorktreePath, setRemoveWorktreePath] = useState<string>();
@@ -1006,6 +1009,7 @@ function App() {
       zoomOut,
       zoomReset: resetZoom,
       showReflog: () => setReflogOpen(true),
+      compare: setCompareRequest,
       openInEditor: () => { if (selectedRepository) void openExternally("editor", selectedRepository.repoId); },
       openInTerminal: () => { if (selectedRepository) void openExternally("terminal", selectedRepository.repoId); },
       manageRemotes: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); },
@@ -1100,6 +1104,7 @@ function App() {
       onCopySha={(target) => void copyCommitSha(target)}
       onCheckout={(target) => branchSwitcher.checkoutCommit(target)}
       onReset={(target) => workflowDialog.openReset(target)}
+      onCompare={(target, workingTree) => setCompareRequest({ base: target, workingTree })}
       resetDisabledReason={activeBranches?.branches.find((branch) => branch.isCurrent)?.oid === oid ? t("hv.resetIsHead") : undefined}
     />;
   }
@@ -1446,6 +1451,14 @@ function App() {
       {discardSelection && <DiscardChangesDialog repositoryPath={discardSelection.repositoryPath} path={discardSelection.path} selectionCount={discardSelection.selections.length} disabled={stagingBusy || hasActiveStagingTask || hasActiveDiscardRepositoryTask} error={tasksError || undefined} onCancel={clearDiscardSelection} onConfirm={() => void discardSelectedChanges()} />}
       {createBranchAt && selectedRepository && apiRef.current && <Suspense fallback={null}><CreateBranchDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} startOid={createBranchAt} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onClose={() => setCreateBranchAt(undefined)} onStarted={(task) => { prependTask(task); setCreateBranchAt(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
       {worktreeForBranch && selectedRepository && apiRef.current && <Suspense fallback={null}><NewWorktreeDialog api={apiRef.current} repoId={selectedRepository.repoId} repositoryPath={selectedRepository.path} branch={worktreeForBranch.name} fromRemote={worktreeForBranch.fromRemote} disabled={!connected || selectedRepository.availability !== "available" || hasActiveRepositoryTask} onChooseFolder={() => requireGitCrestBridge().chooseCloneParent()} onClose={() => setWorktreeForBranch(undefined)} onStarted={(task) => { prependTask(task); setWorktreeForBranch(undefined); setTasksError(""); setTasksOpen(true); }} /></Suspense>}
+      {compareRequest && selectedRepository && apiRef.current && <Suspense fallback={null}><CompareDialog
+        api={apiRef.current}
+        repoId={selectedRepository.repoId}
+        initial={compareRequest}
+        currentBranch={activeBranches?.branches.find((branch) => branch.isCurrent)?.name}
+        refNames={(activeBranches?.branches ?? []).map((branch) => branch.name)}
+        onClose={() => setCompareRequest(undefined)}
+      /></Suspense>}
       {reflogOpen && selectedRepository && apiRef.current && <Suspense fallback={null}><ReflogDialog
         api={apiRef.current}
         repoId={selectedRepository.repoId}

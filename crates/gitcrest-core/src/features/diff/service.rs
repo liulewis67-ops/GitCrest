@@ -2,7 +2,7 @@ mod read;
 use read::parse_hunk_header;
 #[cfg(test)]
 use read::{parse_diff, validate_repo_relative_path};
-pub use read::{read_commit_file, read_with_context, read_with_patch};
+pub use read::{read_commit_file, read_range_file, read_with_context, read_with_patch};
 #[cfg(test)]
 use std::path::Path;
 

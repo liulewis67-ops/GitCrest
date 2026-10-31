@@ -1394,6 +1394,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/compare": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Compare two revisions, or a revision with the working tree
+         * @description Read only. Lists the commits only on each side (git log head..base and git log base..head) and the changed files (git diff base...head, or git diff base head in two-dot mode). Leaving head out compares base with the working tree, which is always two-dot. Each list is paged separately by the same offset and limit. Dropping the request stops the Git processes.
+         */
+        get: operations["compareRepositoryRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/compare/diff": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Read one file of a comparison
+         * @description Read only. from and to are the object ids a comparison returned (fromOid and headOid); leaving to out compares with the working tree.
+         */
+        get: operations["getRepositoryCompareDiff"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/stashes": {
         parameters: {
             query?: never;
@@ -2522,6 +2570,45 @@ export interface components {
             entries: components["schemas"]["ReflogEntry"][];
             nextOffset: number | null;
             backups: components["schemas"]["ReflogBackup"][];
+        };
+        CompareCommit: {
+            oid: string;
+            shortOid: string;
+            subject: string;
+            authorName: string;
+            authoredAtMs: number;
+        };
+        CompareFile: {
+            path: string;
+            originalPath: string | null;
+            /** @enum {string} */
+            kind: "added" | "deleted" | "modified" | "renamed" | "copied" | "typeChanged";
+        };
+        CompareCommitList: {
+            items: components["schemas"]["CompareCommit"][];
+            hasMore: boolean;
+        };
+        CompareFileList: {
+            items: components["schemas"]["CompareFile"][];
+            hasMore: boolean;
+        };
+        CompareResult: {
+            repoId: components["schemas"]["RepoId"];
+            base: string;
+            head: string | null;
+            baseOid: string;
+            /** @description Null when the head side is the working tree. */
+            headOid: string | null;
+            /** @description The commit the changed files start from; pass it as "from" to the compare diff. */
+            fromOid: string;
+            mergeBaseOid: string | null;
+            /** @enum {string} */
+            mode: "threeDot" | "twoDot";
+            offset: number;
+            limit: number;
+            onlyInBase: components["schemas"]["CompareCommitList"];
+            onlyInHead: components["schemas"]["CompareCommitList"];
+            files: components["schemas"]["CompareFileList"];
         };
         StashEntry: {
             /** @description Position in the list, as in stash@{index}. */
@@ -7219,6 +7306,123 @@ export interface operations {
                     "application/json": components["schemas"]["ApiErrorResponse"];
                 };
             };
+        };
+    };
+    compareRepositoryRevisions: {
+        parameters: {
+            query: {
+                /** @description A branch */
+                base: string;
+                /** @description The other side; omitted for the working tree. */
+                head?: string;
+                mode?: "threeDot" | "twoDot";
+                offset?: number;
+                limit?: number;
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The commits and files that differ. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompareResult"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable or a side is not a commit. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description The two sides share no history */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description The comparison is too large to read in one request. */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            /** @description Git could not compare the two sides. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getRepositoryCompareDiff: {
+        parameters: {
+            query: {
+                from: string;
+                to?: string;
+                path: string;
+                /** @description `hunks` (default) returns changes with three lines of context; staging selections address these hunk and row indexes. `full` returns the whole file as one hunk for reading both sides in full; its revision and indexes are not accepted by staging, discard, or commit selections. */
+                context?: components["parameters"]["DiffContext"];
+            };
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Read-only file diff. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DiffDocument"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
         };
     };
     getRepositoryStashes: {

@@ -2619,6 +2619,68 @@ paths:
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "413": { description: The reflog is too large to read in one request., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "503": { description: Git could not read the reflog., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/compare:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: compareRepositoryRevisions
+      summary: Compare two revisions, or a revision with the working tree
+      description: >-
+        Read only. Lists the commits only on each side (git log head..base and git log base..head) and the changed files
+        (git diff base...head, or git diff base head in two-dot mode). Leaving head out compares base with the working
+        tree, which is always two-dot. Each list is paged separately by the same offset and limit. Dropping the request
+        stops the Git processes.
+      parameters:
+        - { name: base, in: query, required: true, description: A branch, tag, commit or relative name such as main~2., schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: head, in: query, required: false, description: The other side; omitted for the working tree., schema: { type: string, minLength: 1, maxLength: 255 } }
+        - { name: mode, in: query, required: false, schema: { type: string, enum: [threeDot, twoDot], default: threeDot } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        "200":
+          description: The commits and files that differ.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/CompareResult" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable or a side is not a commit., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409": { description: The two sides share no history, so only the two-dot view is possible., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "413": { description: The comparison is too large to read in one request., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Git could not compare the two sides., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/compare/diff:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: getRepositoryCompareDiff
+      summary: Read one file of a comparison
+      description: Read only. from and to are the object ids a comparison returned (fromOid and headOid); leaving to out compares with the working tree.
+      parameters:
+        - { name: from, in: query, required: true, schema: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" } }
+        - { name: to, in: query, required: false, schema: { type: string, pattern: "^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$" } }
+        - { name: path, in: query, required: true, schema: { type: string, minLength: 1, maxLength: 4096 } }
+        - $ref: "#/components/parameters/DiffContext"
+      responses:
+        "200":
+          description: Read-only file diff.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/DiffDocument" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
   /api/v1/repositories/{repoId}/stashes:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -4925,6 +4987,56 @@ components:
         entries: { type: array, items: { $ref: "#/components/schemas/ReflogEntry" } }
         nextOffset: { type: [integer, "null"] }
         backups: { type: array, items: { $ref: "#/components/schemas/ReflogBackup" } }
+    CompareCommit:
+      type: object
+      additionalProperties: false
+      required: [oid, shortOid, subject, authorName, authoredAtMs]
+      properties:
+        oid: { type: string }
+        shortOid: { type: string }
+        subject: { type: string }
+        authorName: { type: string }
+        authoredAtMs: { type: integer }
+    CompareFile:
+      type: object
+      additionalProperties: false
+      required: [path, originalPath, kind]
+      properties:
+        path: { type: string }
+        originalPath: { type: [string, "null"] }
+        kind: { type: string, enum: [added, deleted, modified, renamed, copied, typeChanged] }
+    CompareCommitList:
+      type: object
+      additionalProperties: false
+      required: [items, hasMore]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CompareCommit" } }
+        hasMore: { type: boolean }
+    CompareFileList:
+      type: object
+      additionalProperties: false
+      required: [items, hasMore]
+      properties:
+        items: { type: array, items: { $ref: "#/components/schemas/CompareFile" } }
+        hasMore: { type: boolean }
+    CompareResult:
+      type: object
+      additionalProperties: false
+      required: [repoId, base, head, baseOid, headOid, fromOid, mergeBaseOid, mode, offset, limit, onlyInBase, onlyInHead, files]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        base: { type: string }
+        head: { type: [string, "null"] }
+        baseOid: { type: string }
+        headOid: { type: [string, "null"], description: Null when the head side is the working tree. }
+        fromOid: { type: string, description: The commit the changed files start from; pass it as "from" to the compare diff. }
+        mergeBaseOid: { type: [string, "null"] }
+        mode: { type: string, enum: [threeDot, twoDot] }
+        offset: { type: integer, minimum: 0 }
+        limit: { type: integer, minimum: 1 }
+        onlyInBase: { $ref: "#/components/schemas/CompareCommitList" }
+        onlyInHead: { $ref: "#/components/schemas/CompareCommitList" }
+        files: { $ref: "#/components/schemas/CompareFileList" }
     StashEntry:
       type: object
       additionalProperties: false

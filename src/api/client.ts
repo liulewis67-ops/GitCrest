@@ -41,6 +41,7 @@ export type CredentialStatusResponse = components["schemas"]["CredentialStatus"]
 export type IgnoreRuleResponse = components["schemas"]["IgnoreRule"];
 export type StashPreviewResponse = components["schemas"]["StashPreview"];
 export type ReflogPageResponse = components["schemas"]["ReflogPage"];
+export type CompareResultResponse = components["schemas"]["CompareResult"];
 export type LfsStatusResponse = components["schemas"]["LfsStatus"];
 export type SigningConfigResponse = components["schemas"]["SigningConfig"];
 export type SigningTestResponse = components["schemas"]["SigningTestResult"];
@@ -382,6 +383,22 @@ export class GitCrestApiClient {
     if (options.offset) query.set("offset", String(options.offset));
     if (options.limit) query.set("limit", String(options.limit));
     return this.request<ReflogPageResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/reflog?${query}`);
+  }
+
+  compareRevisions(repoId: RepoId, options: { base: string; head?: string; mode?: "threeDot" | "twoDot"; offset?: number; limit?: number }): Promise<CompareResultResponse> {
+    const query = new URLSearchParams({ base: options.base });
+    if (options.head) query.set("head", options.head);
+    if (options.mode) query.set("mode", options.mode);
+    if (options.offset) query.set("offset", String(options.offset));
+    if (options.limit) query.set("limit", String(options.limit));
+    return this.request<CompareResultResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/compare?${query}`);
+  }
+
+  /** One file of a comparison; `to` is left out to compare with the working tree. */
+  getRepositoryCompareDiff(repoId: RepoId, request: { from: string; to?: string; path: string }): Promise<DiffDocumentResponse> {
+    const query = new URLSearchParams({ from: request.from, path: request.path });
+    if (request.to) query.set("to", request.to);
+    return this.request<DiffDocumentResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/compare/diff?${query}`);
   }
 
   /** One side of an image file: the image bytes, its media type and size. */

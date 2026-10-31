@@ -14,7 +14,7 @@ function runners(): PaletteInput["run"] {
     merge: noop, cherryPick: noop, revert: noop, createTag: noop, reset: noop, rebase: noop, fetch: noop, pull: noop, push: noop,
     commit: noop, commitAndPush: noop, stageAll: noop, undo: noop, refreshStatus: noop, openDiff: noop, searchCommits: noop,
     shelve: noop, openSettings: noop, openAiAssistant: noop, showView: noop, toggleSidebar: noop, toggleInspector: noop,
-    toggleFocusMode: noop, toggleDiffView: noop, showReflog: noop, openInEditor: noop, openInTerminal: noop, zoomIn: noop, zoomOut: noop, zoomReset: noop, manageRemotes: noop, closeTab: noop,
+    toggleFocusMode: noop, toggleDiffView: noop, showReflog: noop, compare: noop, openInEditor: noop, openInTerminal: noop, zoomIn: noop, zoomOut: noop, zoomReset: noop, manageRemotes: noop, closeTab: noop,
   };
 }
 
@@ -95,5 +95,19 @@ describe("command palette registry", () => {
     const run = runners();
     createPaletteCommands(input({ run })).find((command) => command.id === "revert")?.run();
     expect(run.revert).toHaveBeenCalledWith(OID);
+  });
+
+  it("opens the comparison for two refs, or for the selected commit against another side or the working tree", () => {
+    const run = runners();
+    const commands = createPaletteCommands(input({ run }));
+    commands.find((command) => command.id === "compare-refs")?.run();
+    commands.find((command) => command.id === "compare-commit")?.run();
+    commands.find((command) => command.id === "compare-commit-tree")?.run();
+    expect(run.compare).toHaveBeenNthCalledWith(1, {});
+    expect(run.compare).toHaveBeenNthCalledWith(2, { base: OID });
+    expect(run.compare).toHaveBeenNthCalledWith(3, { base: OID, workingTree: true });
+    const noCommit = createPaletteCommands(input({ selectedCommit: undefined }));
+    expect(noCommit.find((command) => command.id === "compare-commit")?.unavailableReason).toBeTruthy();
+    expect(noCommit.find((command) => command.id === "compare-refs")?.unavailableReason).toBeUndefined();
   });
 });

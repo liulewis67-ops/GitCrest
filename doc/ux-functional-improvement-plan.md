@@ -48,7 +48,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U6.2 | Drop a folder to open a repository | P1 | S | — | done |
 | U7.1 | Background fetch | P1 | M | D2 | done |
 | U7.2 | System notifications for long tasks | P1 | S | — | done |
-| U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | not started |
+| U8.1 | Compare two refs or a ref with the working tree | P1 | L | — | done |
 | U9.1 | Add to `.gitignore` from Changes | P1 | S | — | done |
 | U9.2 | Reflog view and lost-commit recovery | P1 | M | — | done |
 | U10.1 | Unified mode in the main Diff area | P1 | S | D4 | done |
@@ -473,3 +473,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/history/service/search_index.rs` (`refresh_index_quickly`, `old_tips_still_reachable`)
 - Limits / follow-up: when a message search misses the cache because refs changed and an index already exists, the search first tries to prepend only the new commits within a 150 ms budget, instead of waiting for a full rebuild. The "old commits still reachable" check runs in process (libgit2 revwalk). If the budget runs out, history was rewritten, or a build is running, it falls back to the old path. The 20-run P95 measurement on the 100k fixture with the S7.2 scripts was not done, so the 200 ms target is not claimed for large repositories and `doc/evidence/U12.1/` has no data.
 - Commit: see git log (`feat: complete U12.1 refresh the history search index incrementally after a refs change`)
+
+### U8.1 — Compare two refs, or a ref with the working tree
+- Status: done (file diffs open inside the compare dialog, not the Diff window; see limits)
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (231 tests; new `compare_api_matches_git_log_and_diff_pages_and_refuses_unsafe_names` builds diverged branches and checks both commit lists against `git log`, the three-dot and two-dot file lists, paging, one file's diff between commits and against the working tree, unrelated histories (409 for three dots, 200 for two), eight kinds of bad input, an unknown ref (404), 401 and an unknown repository), `tsc --noEmit`, `pnpm frontend:boundaries`, `vitest run` (627 tests; new `compare-dialog.test.tsx`), `pnpm build`, `pnpm test:e2e`. `doc/api/v1.yaml` and `src/api/schema.ts` updated.
+- Manual check: not run (app not started); the dialog's layout and the long-list scrolling were not looked at on screen.
+- Evidence: `crates/gitcrest-core/src/features/compare/`, `crates/gitcrest-core/src/features/diff/service/read.rs` (`read_range_file`), `src/features/compare/ui/CompareDialog.tsx`
+- Limits / follow-up: `GET /repositories/{repoId}/compare?base&head&mode&offset&limit` returns the commits only on each side (`git log head..base`, `git log base..head`) and the changed files (`git diff base...head`, or two-dot with `mode=twoDot`); leaving `head` out compares `base` with the working tree (always two-dot, untracked files excluded, said in the dialog). `GET /repositories/{repoId}/compare/diff` reads one file between the returned object ids. Names are checked (no leading dash, range, space, glob or pathspec characters) and resolved to commits before use. All lists page with one offset and limit; "Load more" refetches from the number of rows a list already shows. Dropping the request (the Cancel button aborts it) stops the Git processes. Entry points: the command palette (compare two refs; compare the selected commit with another or with the working tree) and the commit "⋯" menu. Not done: the per-branch and per-tag context menus have no "Compare with…" yet (branch names are suggestions in the dialog; tags can be typed); the file diff shows as a plain read-only table in the dialog rather than in the existing Diff window, since that window's tabs are keyed by working-tree, index or one commit; no 100k-commit timing was taken.
+- Commit: see git log (`feat: complete U8.1 compare two refs or a ref with the working tree`)
