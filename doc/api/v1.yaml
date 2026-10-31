@@ -6526,6 +6526,7 @@ components:
             - task.failed
             - pipeline.run.updated
             - pipeline.trigger.pending
+            - pipeline.conflict.aborted
             - connection.resyncRequired
         occurredAtMs:
           type: integer

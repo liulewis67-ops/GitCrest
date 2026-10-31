@@ -3651,7 +3651,7 @@ export interface components {
             protocolVersion: 1;
             repoId?: components["schemas"]["RepoId"];
             /** @enum {string} */
-            type: "repository.updated" | "status.changed" | "log.refsChanged" | "task.started" | "task.progress" | "task.completed" | "task.failed" | "pipeline.run.updated" | "pipeline.trigger.pending" | "connection.resyncRequired";
+            type: "repository.updated" | "status.changed" | "log.refsChanged" | "task.started" | "task.progress" | "task.completed" | "task.failed" | "pipeline.run.updated" | "pipeline.trigger.pending" | "pipeline.conflict.aborted" | "connection.resyncRequired";
             /**
              * Format: int64
              * @description Unix timestamp in milliseconds.
