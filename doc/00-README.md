@@ -31,6 +31,7 @@
 | [language-plugins.md](language-plugins.md) | 代码感知 Diff 的内置语言、语言插件的安装、清单与结构规则格式、安全限制与排查 |
 | [electron-performance-optimization-plan.md](electron-performance-optimization-plan.md) | Electron 性能优化方案：汇总 S7.2 实测结论与已否决方案，记录已决定的内存/帧率/冷启动判定口径，以及按小阶段执行的优化与测量工作；P1 与 P4.1 已实施，S7.2 已于 2026-10-25 判定完成 |
 | [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) | 用户体验与功能完整性改进方案：2026-10-31 评审发现的缺口（Git 身份、历史操作、标签、stash 互通、命令面板、比较、子模块等），拆分为带验收标准的 U 阶段、待决策项与建议顺序 |
+| [design-review-improvement-plan.md](design-review-improvement-plan.md) | 设计评审改进方案：2026-10-31 运行应用的设计评审（23/40）结论，文档冲突裁决，D0 可重复评估（夹具仓库、截图矩阵、DESIGN.md）与 D1 错误和反馈改进的验收标准，以及后续 D2–D4 |
 | [post-push-pipeline-plan.md](post-push-pipeline-plan.md) | 推送后流水线（自动合并到 uat/dev 等集成分支）方案：规则模型、临时工作树（默认）与原地切换两种执行模式、冲突与崩溃恢复、存储与 API、A 阶段拆分与测试矩阵 |
 
 ## 产品一句话
