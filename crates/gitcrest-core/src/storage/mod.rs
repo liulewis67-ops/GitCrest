@@ -159,7 +159,7 @@ mod tests {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(version, 18);
+        assert_eq!(version, 19);
         assert_eq!(index_table, 1);
         assert_eq!(undo_table, 1);
     }
