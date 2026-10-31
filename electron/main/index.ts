@@ -46,7 +46,7 @@ let coreGeneration = 0;
 let coreRestartTimer: ReturnType<typeof setTimeout> | undefined;
 const coreRestartPolicy = new CoreRestartPolicy();
 type WindowAccess = "readWrite" | "readOnly" | "conflictResolution";
-interface ConflictWindowRequest { repoId: string; taskId: string }
+interface ConflictWindowRequest { repoId: string; taskId: string; label?: string }
 const windowAccessByContentsId = new Map<number, WindowAccess>();
 // One Diff window per repository: a further Diff opens as a tab there rather than as another renderer process.
 // Its requests wait here until the window takes them, so none are lost while it is still loading.
@@ -596,6 +596,7 @@ function parseConflictWindowRequest(value: unknown): ConflictWindowRequest {
   const request = value as Partial<ConflictWindowRequest>;
   if (typeof request.repoId !== "string" || !/^repo_[a-f0-9]{64}$/.test(request.repoId)) throw new Error("Invalid repository ID for conflict window.");
   if (typeof request.taskId !== "string" || !/^task-[0-9]{1,20}-[0-9]{1,20}$/.test(request.taskId)) throw new Error("Invalid workflow task ID for conflict window.");
+  if (request.label !== undefined && (typeof request.label !== "string" || request.label.length > 120 || [...request.label].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127))) throw new Error("Invalid conflict window label.");
   return request as ConflictWindowRequest;
 }
 
@@ -623,7 +624,7 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     minHeight: secondaryWindow ? 520 : 640,
     // Packaged builds take the icon from the executable; development runs would otherwise show Electron's.
     ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), "build/icons/256x256.png") }),
-    title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? "Resolve conflicts · GitCrest" : "GitCrest",
+    title: diffRequest ? `Diff · ${diffRequest.path}` : conflictRequest ? (conflictRequest.label ? `Resolve conflicts · ${conflictRequest.label} · GitCrest` : "Resolve conflicts · GitCrest") : "GitCrest",
     show: false,
     // Windows and Linux windows are frameless: each in-app header is the drag region and draws its own window
     // controls. macOS keeps the traffic lights over the main and conflict headers, and a native frame on Diff windows.
@@ -697,7 +698,7 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     ...(diffRequest.commitOid ? { commitOid: diffRequest.commitOid } : {}),
     ...(diffRequest.fromOid ? { fromOid: diffRequest.fromOid } : {}),
     ...(diffRequest.toOid ? { toOid: diffRequest.toOid } : {}),
-  } : conflictRequest ? { view: "conflicts", repoId: conflictRequest.repoId, taskId: conflictRequest.taskId } : undefined;
+  } : conflictRequest ? { view: "conflicts", repoId: conflictRequest.repoId, taskId: conflictRequest.taskId, ...(conflictRequest.label ? { label: conflictRequest.label } : {}) } : undefined;
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     const rendererUrl = new URL(process.env.ELECTRON_RENDERER_URL);
     for (const [key, value] of Object.entries(query || {})) rendererUrl.searchParams.set(key, value);

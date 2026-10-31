@@ -74,7 +74,7 @@ export interface GitCrestBridge {
   openDiffWindow: (request: GitCrestDiffWindowRequest) => Promise<void>;
   /** Diff windows only: further Diffs opened for this window's repository. */
   subscribeToDiffWindowRequests?: (listener: (requests: GitCrestDiffWindowRequest[]) => void) => () => void;
-  openConflictWindow: (request: { repoId: string; taskId: string }) => Promise<void>;
+  openConflictWindow: (request: { repoId: string; taskId: string; label?: string }) => Promise<void>;
   /** Opens the system file manager with the file selected. */
   showItemInFolder?: (path: string) => Promise<void>;
   listLanguagePlugins?: () => Promise<GitCrestLanguagePluginListing>;

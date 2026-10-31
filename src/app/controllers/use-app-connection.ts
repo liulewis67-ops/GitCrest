@@ -9,6 +9,7 @@ import { useStagingNotices } from "../../features/changes";
 import { useOpenCreatedWorktree, useRemoteBranchDeleteSession } from "../../features/branches";
 import { supportsWorkflowRecovery, useTaskCenter, useTaskNotifications } from "../../features/tasks";
 import { useAutoOpenConflicts, useOpenConflictWindow, useWorkflowDialogSession, useWorkflowRecovery } from "../../features/workflows";
+import { applyPipelineEvent } from "../../features/pipelines";
 import type { Forward } from "./forward";
 import type { Shell } from "./use-app-shell";
 
@@ -42,6 +43,7 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
       if (reconnected) void refreshTasks();
     },
     onEvent: (api, event, sequenceGap, isActive) => {
+      applyPipelineEvent(event);
       // Read task state as soon as a task starts or ends. Waiting for the 1s poll left finished
       // tasks counted as running, which kept Commit and the remote actions blocked meanwhile.
       if (TASK_LIFECYCLE_EVENTS.has(event.type)) void refreshTasks();

@@ -1,0 +1,43 @@
+import { useState } from "react";
+import { GitCrestApiError, type GitCrestApiClient } from "../../../api/client";
+import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
+import { useI18n } from "../../../shared/i18n";
+import { dismissPipelineConflictPrompt, type PipelineConflictPrompt } from "../model/pipeline-store";
+
+/** Asked when the merge of a pipeline target was aborted: skip that target or stop the whole run. */
+export function PipelineConflictAbortedDialog({ api, prompt }: { api: GitCrestApiClient; prompt: PipelineConflictPrompt }) {
+  const { t } = useI18n();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const later = () => dismissPipelineConflictPrompt(prompt.runId);
+  const { dialogRef, onKeyDown } = useDialogFocus<HTMLElement>(later, busy);
+
+  async function choose(action: "skipTarget" | "stop") {
+    if (busy) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.actOnPipelineRun(prompt.repoId, prompt.runId, action);
+      dismissPipelineConflictPrompt(prompt.runId);
+    } catch (reason) {
+      setError(reason instanceof GitCrestApiError ? reason.body.error.message : reason instanceof Error ? reason.message : t("pl.actionFailed"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <div className="paletteBackdrop" role="presentation">
+    <section ref={dialogRef} className="taskCenter workflowDialog" role="dialog" aria-modal="true" aria-labelledby="pipeline-aborted-title" onKeyDown={onKeyDown}>
+      <div className="taskCenterHeader"><div><p className="sectionEyebrow">{t("pl.conflictAborted.eyebrow")}</p><h2 id="pipeline-aborted-title">{t("pl.conflictAborted.title", { target: prompt.targetBranch })}</h2></div></div>
+      <div className="workflowDialogBody">
+        <p className="cloneHelp">{t("pl.conflictAborted.body", { target: prompt.targetBranch })}</p>
+        {error && <p className="taskCenterError" role="alert">{error}</p>}
+        <div className="taskCenterActions">
+          <button className="quietButton compact" type="button" disabled={busy} onClick={later}>{t("pl.conflictAborted.later")}</button>
+          <button className="quietButton compact" type="button" disabled={busy} onClick={() => void choose("stop")}>{t("pl.conflictAborted.stop")}</button>
+          <button className="primaryButton" type="button" disabled={busy} onClick={() => void choose("skipTarget")}>{t("pl.conflictAborted.skip")}</button>
+        </div>
+      </div>
+    </section>
+  </div>;
+}

@@ -814,3 +814,38 @@ describe("GitCrestApiClient", () => {
       .rejects.toThrow("did not confirm API version 1");
   });
 });
+
+describe("GitCrestApiClient pipelines", () => {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json", "X-GitCrest-API-Version": "1" } });
+
+  it("reads and writes settings, rules and runs on the pipeline routes", async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => json({ rules: [], runs: [], executionMode: "temporaryWorktree", inPlaceDirtyPolicy: "shelve" }));
+    const client = new GitCrestApiClient(baseUrl, token, fetcher);
+
+    await client.getPipelineAppSettings();
+    await client.setPipelineAppSettings({ executionMode: "switchInPlace", inPlaceDirtyPolicy: "refuse" });
+    await client.getPipelineRepositorySettings("repo_a");
+    await client.setPipelineRepositorySettings("repo_a", { executionMode: null });
+    await client.listPipelineRules("repo_a");
+    await client.replacePipelineRules("repo_a", []);
+    await client.listPipelineRuns("repo_a", 5);
+    await client.startPipelineRun("repo_a", { runId: "run_1", targets: ["dev"] });
+    await client.actOnPipelineRun("repo_a", "run_1", "skipTarget");
+
+    const calls = fetcher.mock.calls.map(([input, init]) => `${init?.method ?? "GET"} ${String(input).replace(baseUrl, "")}`);
+    expect(calls).toEqual([
+      "GET /api/v1/settings/pipelines",
+      "PUT /api/v1/settings/pipelines",
+      "GET /api/v1/repositories/repo_a/pipelines/settings",
+      "PUT /api/v1/repositories/repo_a/pipelines/settings",
+      "GET /api/v1/repositories/repo_a/pipelines/rules",
+      "PUT /api/v1/repositories/repo_a/pipelines/rules",
+      "GET /api/v1/repositories/repo_a/pipelines/runs?limit=5",
+      "POST /api/v1/repositories/repo_a/pipelines/runs",
+      "POST /api/v1/repositories/repo_a/pipelines/runs/run_1/actions",
+    ]);
+    expect(JSON.parse(String(fetcher.mock.calls[3]?.[1]?.body))).toEqual({ executionMode: null });
+    expect(JSON.parse(String(fetcher.mock.calls[7]?.[1]?.body))).toEqual({ runId: "run_1", targets: ["dev"] });
+    expect(JSON.parse(String(fetcher.mock.calls[8]?.[1]?.body))).toEqual({ action: "skipTarget" });
+  });
+});

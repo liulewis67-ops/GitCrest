@@ -52,6 +52,14 @@ export type TagPageResponse = components["schemas"]["TagPage"];
 export type RemoteTagPreviewResponse = components["schemas"]["RemoteTagPreview"];
 export type TagEntryResponse = components["schemas"]["TagEntry"];
 export type GitIdentityResponse = components["schemas"]["GitIdentity"];
+export type PipelineAppSettingsResponse = components["schemas"]["PipelineAppSettings"];
+export type PipelineRepositorySettingsResponse = components["schemas"]["PipelineRepositorySettings"];
+export type PipelineRepositorySettingsRequest = components["schemas"]["PipelineRepositorySettingsRequest"];
+export type PipelineRule = components["schemas"]["PipelineRule"];
+export type PipelineRunResponse = components["schemas"]["PipelineRun"];
+export type PipelineRunStepResponse = components["schemas"]["PipelineRunStep"];
+export type PipelineRunActionKind = components["schemas"]["PipelineRunActionRequest"]["action"];
+export type StartPipelineRunRequest = components["schemas"]["StartPipelineRunRequest"];
 export type HostingProvider = components["schemas"]["HostingProvider"];
 export type AccountResponse = components["schemas"]["Account"];
 export type AccountListResponse = components["schemas"]["AccountList"];
@@ -489,6 +497,65 @@ export class GitCrestApiClient {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, email } satisfies components["schemas"]["SetIdentityRequest"]),
+    });
+  }
+
+  getPipelineAppSettings(): Promise<PipelineAppSettingsResponse> {
+    return this.request<PipelineAppSettingsResponse>("/api/v1/settings/pipelines");
+  }
+
+  setPipelineAppSettings(settings: PipelineAppSettingsResponse): Promise<PipelineAppSettingsResponse> {
+    return this.request<PipelineAppSettingsResponse>("/api/v1/settings/pipelines", true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  }
+
+  getPipelineRepositorySettings(repoId: RepoId): Promise<PipelineRepositorySettingsResponse> {
+    return this.request<PipelineRepositorySettingsResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/settings`);
+  }
+
+  setPipelineRepositorySettings(repoId: RepoId, settings: PipelineRepositorySettingsRequest): Promise<PipelineRepositorySettingsResponse> {
+    return this.request<PipelineRepositorySettingsResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/settings`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(settings),
+    });
+  }
+
+  async listPipelineRules(repoId: RepoId): Promise<PipelineRule[]> {
+    const body = await this.request<components["schemas"]["PipelineRules"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/rules`);
+    return body.rules;
+  }
+
+  async replacePipelineRules(repoId: RepoId, rules: PipelineRule[]): Promise<PipelineRule[]> {
+    const body = await this.request<components["schemas"]["PipelineRules"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/rules`, true, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rules } satisfies components["schemas"]["PipelineRules"]),
+    });
+    return body.rules;
+  }
+
+  async listPipelineRuns(repoId: RepoId, limit = 50): Promise<PipelineRunResponse[]> {
+    const body = await this.request<components["schemas"]["PipelineRuns"]>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/runs?limit=${limit}`);
+    return body.runs;
+  }
+
+  startPipelineRun(repoId: RepoId, request: StartPipelineRunRequest): Promise<PipelineRunResponse> {
+    return this.request<PipelineRunResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/runs`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+  }
+
+  actOnPipelineRun(repoId: RepoId, runId: string, action: PipelineRunActionKind): Promise<PipelineRunResponse> {
+    return this.request<PipelineRunResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/runs/${encodeURIComponent(runId)}/actions`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action } satisfies components["schemas"]["PipelineRunActionRequest"]),
     });
   }
 

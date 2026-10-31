@@ -23,6 +23,7 @@ export function ConflictWindow() {
   const params = new URLSearchParams(window.location.search);
   const repoId = params.get("repoId") || "";
   const taskId = params.get("taskId") || "";
+  const label = params.get("label") || "";
   const [api, setApi] = useState<GitCrestApiClient>();
   const [session, setSession] = useState<RequestState<WorkflowRecoveryPreflightResponse>>({ key: "", loading: false });
   const [selectedPath, setSelectedPath] = useState("");
@@ -360,7 +361,7 @@ export function ConflictWindow() {
     }
   }}>
     <header className="conflictWindowHeader">
-      <div><p className="sectionEyebrow">{t("cf.eyebrow", { op: currentSession.data?.operation || t("cf.workflow") })}</p><h1>{t("cf.title")}</h1></div>
+      <div><p className="sectionEyebrow">{t("cf.eyebrow", { op: currentSession.data?.operation || t("cf.workflow") })}</p><h1>{t("cf.title")}</h1>{label && <p className="conflictWindowLabel">{label}</p>}</div>
       <div className="conflictWindowProgress" role="status">{currentSession.data ? t("cf.unresolved", { count: currentSession.data.conflictedPaths.length }) : t("cf.waiting")}</div>
       <WindowControls controls={getGitCrestBridge()?.windowControls} />
     </header>
