@@ -4,6 +4,9 @@ pub(crate) mod engine;
 pub(crate) mod ephemeral;
 mod gitops;
 mod handlers;
+pub(crate) mod inplace;
+#[cfg(test)]
+mod inplace_tests;
 pub(crate) mod routes;
 pub(crate) mod service;
 #[cfg(test)]

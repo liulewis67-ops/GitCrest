@@ -13,6 +13,9 @@ struct Script {
     publishes: VecDeque<Result<PublishOutcome, PipelineStepError>>,
     prepare_failures: VecDeque<PipelineStepError>,
     abort_failure: Option<PipelineStepError>,
+    begin_failure: Option<PipelineStepError>,
+    shelf: Option<String>,
+    end_failure: Option<PipelineStepError>,
 }
 
 struct FakeWorkspace {
@@ -113,6 +116,23 @@ impl PipelineWorkspace for FakeWorkspace {
             .unwrap_or(Ok(PublishOutcome::Pushed))
     }
 
+    async fn begin_run(&self, _run: &PipelineRun) -> Result<Option<String>, PipelineStepError> {
+        self.record("begin".into());
+        let mut script = self.script.lock().unwrap();
+        match script.begin_failure.take() {
+            Some(error) => Err(error),
+            None => Ok(script.shelf.clone()),
+        }
+    }
+
+    async fn end_run(&self, _run: &PipelineRun) -> Result<(), PipelineStepError> {
+        self.record("end".into());
+        match self.script.lock().unwrap().end_failure.take() {
+            Some(error) => Err(error),
+            None => Ok(()),
+        }
+    }
+
     async fn finish(
         &self,
         _run: &PipelineRun,
@@ -178,6 +198,7 @@ async fn merges_and_pushes_every_target_in_order() {
     assert_eq!(
         workspace.calls(),
         [
+            "begin",
             "prepare uat",
             "merge uat 'Merge branch 'feature/1' into uat'",
             "publish uat",
@@ -186,6 +207,7 @@ async fn merges_and_pushes_every_target_in_order() {
             "merge dev 'Merge branch 'feature/1' into dev'",
             "publish dev",
             "finish dev Done",
+            "end",
         ]
     );
     let stored = store.pipeline_run("run").unwrap().unwrap();
@@ -553,4 +575,92 @@ fn pipeline_pushes_never_trigger_rules() {
     assert_eq!(matched[0].rule_id, "r_01");
     assert!(triggered_rules(&rules, "feature/1", PushOrigin::Pipeline).is_empty());
     assert!(triggered_rules(&rules, "uat", PushOrigin::User).is_empty());
+}
+
+#[tokio::test]
+async fn begin_and_end_hooks_bracket_the_run_and_the_shelf_id_is_persisted() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|s| s.shelf = Some("shelf-1".into()));
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+
+    assert_eq!(engine.drive("run").await, Ok(RunStatus::Succeeded));
+
+    let calls = workspace.calls();
+    assert_eq!(calls.first().map(String::as_str), Some("begin"));
+    assert_eq!(calls.last().map(String::as_str), Some("end"));
+    assert_eq!(calls.iter().filter(|c| *c == "begin").count(), 1);
+    assert_eq!(calls.iter().filter(|c| *c == "end").count(), 1);
+    let stored = store.pipeline_run("run").unwrap().unwrap();
+    assert_eq!(stored.shelf_id.as_deref(), Some("shelf-1"));
+}
+
+#[tokio::test]
+async fn a_failing_begin_hook_fails_the_run_before_any_target_is_touched() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|s| s.begin_failure = Some(PipelineStepError::new("working tree is dirty")));
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+
+    assert_eq!(engine.drive("run").await, Ok(RunStatus::Failed));
+
+    let stored = store.pipeline_run("run").unwrap().unwrap();
+    assert_eq!(
+        stored.steps[0].message.as_deref(),
+        Some("working tree is dirty")
+    );
+    assert_eq!(
+        states(&store, "run"),
+        [StepState::Failed, StepState::Skipped]
+    );
+    assert!(!workspace.calls().iter().any(|c| c.starts_with("prepare")));
+}
+
+#[tokio::test]
+async fn stopping_a_waiting_run_still_runs_the_end_hook_and_reports_its_failure() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|s| {
+        s.merges.push_back(Ok(MergeOutcome::Conflicts));
+        s.end_failure = Some(PipelineStepError::new("restoring your changes failed"));
+    });
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+    engine.drive("run").await.unwrap();
+
+    assert_eq!(
+        engine.resume("run", ResumeAction::Stop).await,
+        Ok(RunStatus::Cancelled)
+    );
+
+    assert_eq!(workspace.calls().last().map(String::as_str), Some("end"));
+    let stored = store.pipeline_run("run").unwrap().unwrap();
+    assert!(stored.steps[1]
+        .message
+        .as_deref()
+        .unwrap()
+        .contains("restoring your changes failed"));
+}
+
+#[tokio::test]
+async fn a_failing_end_hook_is_reported_on_the_last_step_of_a_finished_run() {
+    let (store, workspace, engine) = setup();
+    workspace.script(|s| s.end_failure = Some(PipelineStepError::new("stash pop conflicted")));
+    engine
+        .create_run(new_run("run", auto_rule()))
+        .await
+        .unwrap();
+
+    assert_eq!(engine.drive("run").await, Ok(RunStatus::Succeeded));
+
+    let stored = store.pipeline_run("run").unwrap().unwrap();
+    assert_eq!(
+        stored.steps[1].message.as_deref(),
+        Some("stash pop conflicted")
+    );
 }

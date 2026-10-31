@@ -230,8 +230,25 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
             if run.status != RunStatus::Running {
                 return Ok(run.status);
             }
+            if run.shelf_id.is_none() && run.steps.iter().all(|s| s.state == StepState::Pending) {
+                match self.workspace.begin_run(&run).await {
+                    Ok(shelf_id) => {
+                        run.shelf_id = shelf_id;
+                        self.store.update_pipeline_run(
+                            &run.run_id,
+                            run.status,
+                            run.shelf_id.as_deref(),
+                        )?;
+                    }
+                    Err(error) => {
+                        self.fail_step(&mut run, 0, error).await?;
+                        let run = self.load(run_id)?;
+                        return self.finalize(&run).await;
+                    }
+                }
+            }
             let Some(index) = run.steps.iter().position(|s| !s.state.is_terminal()) else {
-                return self.finalize(&run);
+                return self.finalize(&run).await;
             };
             if run.steps[index].state == StepState::WaitingForConflicts {
                 self.set_run_status(&mut run, RunStatus::WaitingForConflicts)?;
@@ -283,6 +300,7 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
                 self.abort_and_end(&mut run, index, StepState::Skipped, "Stopped by the user")
                     .await?;
                 self.skip_remaining(&mut run, "Not run: the pipeline was stopped")?;
+                self.end(&mut run).await?;
                 self.set_run_status(&mut run, RunStatus::Cancelled)?;
                 return Ok(run.status);
             }
@@ -346,7 +364,10 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         Ok(())
     }
 
-    fn finalize(&self, run: &PipelineRun) -> Result<RunStatus, EngineError> {
+    async fn finalize(&self, run: &PipelineRun) -> Result<RunStatus, EngineError> {
+        let mut run = run.clone();
+        self.end(&mut run).await?;
+        let run = &run;
         let status = run.final_status().unwrap_or(RunStatus::Failed);
         self.store
             .update_pipeline_run(&run.run_id, status, run.shelf_id.as_deref())?;
@@ -354,6 +375,20 @@ impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
         finished.status = status;
         self.notify(&finished);
         Ok(status)
+    }
+
+    /// Gives back what `begin_run` set aside; a failure is reported on the last step.
+    async fn end(&self, run: &mut PipelineRun) -> Result<(), EngineError> {
+        if let Err(error) = self.workspace.end_run(run).await {
+            let last = run.steps.len() - 1;
+            let message = match run.steps[last].message.take() {
+                Some(existing) => format!("{existing}; {}", error.message),
+                None => error.message,
+            };
+            let state = run.steps[last].state;
+            self.set_step(run, last, state, Some(message))?;
+        }
+        Ok(())
     }
 
     async fn run_step(

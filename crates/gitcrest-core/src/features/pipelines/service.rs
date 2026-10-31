@@ -21,6 +21,7 @@ use crate::{
 use super::{
     engine::{triggered_rules, EngineError, NewRun, PipelineEngine, PushOrigin, ResumeAction},
     ephemeral::EphemeralContexts,
+    inplace::InPlaceWorkspace,
     workspace::{
         MergeOutcome, PipelineStepError, PipelineWorkspace, PreparedStep, PublishOutcome,
         StepOutcome,
@@ -31,28 +32,46 @@ use super::{
 /// Picks the workspace by the execution mode the run started with.
 pub(crate) struct ModeWorkspace {
     worktree: WorktreeWorkspace,
-}
-
-fn unavailable() -> PipelineStepError {
-    PipelineStepError::new("Switching branches in place is not available yet")
+    in_place: InPlaceWorkspace,
 }
 
 impl ModeWorkspace {
+    pub(crate) async fn merge_in_progress(&self, run: &PipelineRun, step: &PipelineStep) -> bool {
+        match run.execution_mode {
+            ExecutionMode::TemporaryWorktree => self.worktree.merge_in_progress(run, step).await,
+            ExecutionMode::SwitchInPlace => self.in_place.merge_in_progress(run).await,
+        }
+    }
+
     pub(crate) fn worktree(&self) -> &WorktreeWorkspace {
         &self.worktree
     }
 }
 
+macro_rules! dispatch {
+    ($self:ident, $run:ident, $method:ident($($arg:expr),*)) => {
+        match $run.execution_mode {
+            ExecutionMode::TemporaryWorktree => $self.worktree.$method($($arg),*).await,
+            ExecutionMode::SwitchInPlace => $self.in_place.$method($($arg),*).await,
+        }
+    };
+}
+
 impl PipelineWorkspace for ModeWorkspace {
+    async fn begin_run(&self, run: &PipelineRun) -> Result<Option<String>, PipelineStepError> {
+        dispatch!(self, run, begin_run(run))
+    }
+
+    async fn end_run(&self, run: &PipelineRun) -> Result<(), PipelineStepError> {
+        dispatch!(self, run, end_run(run))
+    }
+
     async fn prepare(
         &self,
         run: &PipelineRun,
         step: &PipelineStep,
     ) -> Result<PreparedStep, PipelineStepError> {
-        match run.execution_mode {
-            ExecutionMode::TemporaryWorktree => self.worktree.prepare(run, step).await,
-            ExecutionMode::SwitchInPlace => Err(unavailable()),
-        }
+        dispatch!(self, run, prepare(run, step))
     }
 
     async fn merge(
@@ -61,10 +80,7 @@ impl PipelineWorkspace for ModeWorkspace {
         step: &PipelineStep,
         message: &str,
     ) -> Result<MergeOutcome, PipelineStepError> {
-        match run.execution_mode {
-            ExecutionMode::TemporaryWorktree => self.worktree.merge(run, step, message).await,
-            ExecutionMode::SwitchInPlace => Err(unavailable()),
-        }
+        dispatch!(self, run, merge(run, step, message))
     }
 
     async fn abort_merge(
@@ -72,10 +88,7 @@ impl PipelineWorkspace for ModeWorkspace {
         run: &PipelineRun,
         step: &PipelineStep,
     ) -> Result<(), PipelineStepError> {
-        match run.execution_mode {
-            ExecutionMode::TemporaryWorktree => self.worktree.abort_merge(run, step).await,
-            ExecutionMode::SwitchInPlace => Err(unavailable()),
-        }
+        dispatch!(self, run, abort_merge(run, step))
     }
 
     async fn publish(
@@ -83,10 +96,7 @@ impl PipelineWorkspace for ModeWorkspace {
         run: &PipelineRun,
         step: &PipelineStep,
     ) -> Result<PublishOutcome, PipelineStepError> {
-        match run.execution_mode {
-            ExecutionMode::TemporaryWorktree => self.worktree.publish(run, step).await,
-            ExecutionMode::SwitchInPlace => Err(unavailable()),
-        }
+        dispatch!(self, run, publish(run, step))
     }
 
     async fn finish(
@@ -95,10 +105,7 @@ impl PipelineWorkspace for ModeWorkspace {
         step: &PipelineStep,
         outcome: StepOutcome,
     ) -> Result<(), PipelineStepError> {
-        match run.execution_mode {
-            ExecutionMode::TemporaryWorktree => self.worktree.finish(run, step, outcome).await,
-            ExecutionMode::SwitchInPlace => Ok(()),
-        }
+        dispatch!(self, run, finish(run, step, outcome))
     }
 }
 
@@ -255,6 +262,8 @@ impl PipelineService {
         data_dir: PathBuf,
     ) -> Self {
         let paths_catalog = catalog;
+        let in_place_catalog = paths_catalog.clone();
+        let policy_store = store.clone();
         let workspace = ModeWorkspace {
             worktree: WorktreeWorkspace::new(
                 data_dir,
@@ -266,6 +275,22 @@ impl PipelineService {
                         .map(|record| PathBuf::from(record.path))
                 }),
                 contexts.clone(),
+            ),
+            in_place: InPlaceWorkspace::new(
+                Arc::new(move |repo_id| {
+                    in_place_catalog
+                        .get(repo_id)
+                        .ok()
+                        .flatten()
+                        .map(|record| PathBuf::from(record.path))
+                }),
+                Arc::new(move |repo_id| {
+                    let app = policy_store.pipeline_app_settings().unwrap_or_default();
+                    let repository = policy_store
+                        .pipeline_repository_settings(repo_id)
+                        .unwrap_or_default();
+                    app.resolve(repository).in_place_dirty_policy
+                }),
             ),
         };
         let observer_events = events.clone();
@@ -432,9 +457,7 @@ impl PipelineService {
                     .iter()
                     .find(|step| step.state == StepState::WaitingForConflicts);
                 if let Some(step) = waiting {
-                    if run.execution_mode == ExecutionMode::TemporaryWorktree
-                        && self.worktree().merge_in_progress(&run, step).await
-                    {
+                    if self.engine.workspace().merge_in_progress(&run, step).await {
                         return Err(PipelineServiceError::Conflict(
                             "The conflicts of this target are not resolved yet.".into(),
                         ));

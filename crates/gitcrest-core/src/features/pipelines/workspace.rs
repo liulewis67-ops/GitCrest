@@ -85,6 +85,24 @@ pub(crate) trait PipelineWorkspace: Send + Sync {
         step: &PipelineStep,
     ) -> impl Future<Output = Result<PublishOutcome, PipelineStepError>> + Send;
 
+    /// Called once before the first step. Returns the id of anything it set aside
+    /// for the run (the shelf that holds the user's uncommitted work).
+    fn begin_run(
+        &self,
+        _run: &PipelineRun,
+    ) -> impl Future<Output = Result<Option<String>, PipelineStepError>> + Send {
+        async { Ok(None) }
+    }
+
+    /// Called once after the last step, whatever the outcome: puts back what
+    /// `begin_run` set aside.
+    fn end_run(
+        &self,
+        _run: &PipelineRun,
+    ) -> impl Future<Output = Result<(), PipelineStepError>> + Send {
+        async { Ok(()) }
+    }
+
     /// Release the step: remove the worktree, or return to the source branch.
     fn finish(
         &self,
