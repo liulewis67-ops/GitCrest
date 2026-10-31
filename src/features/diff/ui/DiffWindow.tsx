@@ -18,9 +18,13 @@ type TabBlame = { document?: BlameDocumentResponse; error?: string };
 type DiffTab = {
   key: string;
   path: string;
-  scope: "workingTree" | "index" | "commit";
+  scope: "workingTree" | "index" | "commit" | "range";
   commitOid?: string;
+  /** A comparison's start, and its end (absent: the working tree), as the compare API returned them. */
+  fromOid?: string;
+  toOid?: string;
 };
+const OBJECT_ID = /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/;
 const MAX_DIFF_TABS = 100;
 const SplitDiff = lazy(() => import("./SplitDiff").then(({ SplitDiff }) => ({ default: SplitDiff })));
 
@@ -31,6 +35,8 @@ export function DiffWindow() {
   const initialPath = params.get("path") || "";
   const initialScope = params.get("scope");
   const initialCommitOid = params.get("commitOid") || undefined;
+  const initialFromOid = params.get("fromOid") || undefined;
+  const initialToOid = params.get("toOid") || undefined;
   const [api, setApi] = useState<GitCrestApiClient>();
   const [tabs, setTabs] = useState<DiffTab[]>([]);
   const [activeTabKey, setActiveTabKey] = useState("");
@@ -61,7 +67,7 @@ export function DiffWindow() {
   });
   const isMac = navigator.platform.toLowerCase().includes("mac");
   const activeTab = tabs.find((tab) => tab.key === activeTabKey);
-  const blameDisabled = document?.status !== "text" || ["added", "untracked", "deleted", "ignored", "conflicted"].includes(document.changeKind);
+  const blameDisabled = activeTab?.scope === "range" || document?.status !== "text" || ["added", "untracked", "deleted", "ignored", "conflicted"].includes(document.changeKind);
   const activeBlame = blameOn && activeTab && !blameDisabled ? blames[activeTab.key] : undefined;
   const blameLookup = useMemo(() => activeBlame?.document ? createBlameLookup(activeBlame.document) : undefined, [activeBlame?.document]);
 
@@ -88,7 +94,8 @@ export function DiffWindow() {
   useEffect(() => {
     let active = true;
     const controller = new AbortController();
-    if (!repoId || !initialPath || !["workingTree", "index", "commit"].includes(initialScope || "") || (initialScope === "commit" && !initialCommitOid)) {
+    const rangeInvalid = initialScope === "range" && (!initialFromOid || !OBJECT_ID.test(initialFromOid) || (initialToOid !== undefined && !OBJECT_ID.test(initialToOid)));
+    if (!repoId || !initialPath || !["workingTree", "index", "commit", "range"].includes(initialScope || "") || (initialScope === "commit" && !initialCommitOid) || rangeInvalid) {
       setError(t("dw.invalid"));
       return () => { active = false; };
     }
@@ -109,12 +116,16 @@ export function DiffWindow() {
         return;
       }
       const initial: DiffTab = {
-        key: tabKey(initialPath, initialScope as DiffTab["scope"], initialCommitOid),
+        key: tabKey(initialPath, initialScope as DiffTab["scope"], initialCommitOid, initialFromOid, initialToOid),
         path: initialPath,
         scope: initialScope as DiffTab["scope"],
         ...(initialCommitOid ? { commitOid: initialCommitOid } : {}),
+        ...(initialFromOid ? { fromOid: initialFromOid } : {}),
+        ...(initialToOid ? { toOid: initialToOid } : {}),
       };
-      const siblingTabs = initial.scope === "commit"
+      const siblingTabs = initial.scope === "range"
+        ? await rangeSiblingTabs(client, repoId, initialFromOid!, initialToOid)
+        : initial.scope === "commit"
         ? (await client.getRepositoryCommit(repoId, initial.commitOid!)).files.map((file) => ({
           key: tabKey(file.path, "commit", initial.commitOid), path: file.path, scope: "commit" as const, commitOid: initial.commitOid,
         }))
@@ -135,15 +146,17 @@ export function DiffWindow() {
       active = false;
       controller.abort();
     };
-  }, [initialCommitOid, initialPath, initialScope, repoId, coreRestarts]);
+  }, [initialCommitOid, initialFromOid, initialToOid, initialPath, initialScope, repoId, coreRestarts]);
 
   // The main window reuses this window for its repository: each further Diff opens as a tab, and the last one shows.
   useEffect(() => getGitCrestBridge()?.subscribeToDiffWindowRequests?.((requests) => {
     const requested = requests.filter((request) => request.repoId === repoId).map((request): DiffTab => ({
-      key: tabKey(request.path, request.scope, request.commitOid),
+      key: tabKey(request.path, request.scope, request.commitOid, request.fromOid, request.toOid),
       path: request.path,
       scope: request.scope,
       ...(request.commitOid ? { commitOid: request.commitOid } : {}),
+      ...(request.fromOid ? { fromOid: request.fromOid } : {}),
+      ...(request.toOid ? { toOid: request.toOid } : {}),
     }));
     if (requested.length === 0) return;
     setTabs((current) => addTabs(current, requested));
@@ -157,9 +170,11 @@ export function DiffWindow() {
     const requestClient = api.withSignal(controller.signal);
     setDocument(undefined);
     setError("");
-    const request = activeTab.scope === "commit" && activeTab.commitOid
-      ? requestClient.getRepositoryCommitDiff(repoId, activeTab.commitOid, activeTab.path)
-      : activeTab.scope === "workingTree" || activeTab.scope === "index"
+    const request = activeTab.scope === "range" && activeTab.fromOid
+      ? requestClient.getRepositoryCompareDiff(repoId, { from: activeTab.fromOid, ...(activeTab.toOid ? { to: activeTab.toOid } : {}), path: activeTab.path })
+      : activeTab.scope === "commit" && activeTab.commitOid
+        ? requestClient.getRepositoryCommitDiff(repoId, activeTab.commitOid, activeTab.path)
+        : activeTab.scope === "workingTree" || activeTab.scope === "index"
         ? requestClient.getFileDiff(repoId, activeTab.path, activeTab.scope)
         : Promise.reject(new Error(t("dw.noCommitId")));
     void request.then((result) => {
@@ -256,7 +271,7 @@ export function DiffWindow() {
         {document && activeBlame && !activeBlame.document && <div className="diffBlameNotice" role={activeBlame.error ? "alert" : "status"}>{activeBlame.error || t("dw.loadingBlame")}</div>}
         {error ? <div className="diffSpecialState" role="alert"><p>{error}</p></div>
           : !document ? <div className="diffSpecialState" role="status">{t("dw.loadingDiff")}</div>
-            : document.status === "binary" && isComparableImagePath(document.path) && api ? <ImageDiff key={document.revision} path={document.path} source={{ load: (side) => api.getRepositoryImage(document.repoId, { path: document.path, scope: document.scope, side, ...(document.scope === "commit" && activeTab?.commitOid ? { commitOid: activeTab.commitOid } : {}), ...(document.originalPath ? { originalPath: document.originalPath } : {}) }) }} />
+            : document.status === "binary" && activeTab?.scope !== "range" && isComparableImagePath(document.path) && api ? <ImageDiff key={document.revision} path={document.path} source={{ load: (side) => api.getRepositoryImage(document.repoId, { path: document.path, scope: document.scope, side, ...(document.scope === "commit" && activeTab?.commitOid ? { commitOid: activeTab.commitOid } : {}), ...(document.originalPath ? { originalPath: document.originalPath } : {}) }) }} />
             : lfsChange ? <LfsPointerNotice change={lfsChange} path={document.path} loadAvailability={api ? () => api.getGitLfsStatus() : undefined} />
             : view === "split"
               ? <Suspense fallback={<div className="diffSpecialState" role="status" aria-live="polite">{t("dw.loadingViewer")}</div>}><SplitDiff document={document} onStageSelection={() => undefined} disabled readOnly showFileMeta={false} blame={blameLookup} /></Suspense>
@@ -276,11 +291,19 @@ function directoryName(path: string) {
 }
 
 function scopeLabel(scope: DiffTab["scope"], t: ReturnType<typeof useI18n>["t"]) {
-  return scope === "commit" ? t("dw.tabCommit") : scope === "index" ? t("dw.tabStaged") : t("dw.tabWorktree");
+  return scope === "range" ? t("dw.tabCompare") : scope === "commit" ? t("dw.tabCommit") : scope === "index" ? t("dw.tabStaged") : t("dw.tabWorktree");
 }
 
-function tabKey(path: string, scope: DiffTab["scope"], commitOid?: string) {
-  return `${scope}:${commitOid || ""}:${path}`;
+function tabKey(path: string, scope: DiffTab["scope"], commitOid?: string, fromOid?: string, toOid?: string) {
+  return `${scope}:${commitOid || ""}:${fromOid || ""}:${toOid || ""}:${path}`;
+}
+
+/** The other files of the same comparison, read between the two ids it was opened with. */
+async function rangeSiblingTabs(client: GitCrestApiClient, repoId: string, fromOid: string, toOid: string | undefined): Promise<DiffTab[]> {
+  const result = await client.compareRevisions(repoId, { base: fromOid, ...(toOid ? { head: toOid } : {}), mode: "twoDot", limit: 500 });
+  return result.files.items.map((file) => ({
+    key: tabKey(file.path, "range", undefined, fromOid, toOid), path: file.path, scope: "range" as const, fromOid, ...(toOid ? { toOid } : {}),
+  }));
 }
 
 /** Appends the tabs that are not open yet. Past the tab limit the oldest other tabs make room for the added ones. */

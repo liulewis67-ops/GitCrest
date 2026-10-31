@@ -92,3 +92,68 @@ it("switches to a tab that is already open instead of adding it again, and ignor
   expect(tabTitles()).toHaveLength(2);
   expect(activeTabTitle()).toBe("Working tree · src/b.ts");
 });
+
+it("opens a file of a comparison as a tab, lists the comparison's other files, and reads each between the two commits", async () => {
+  const from = "c".repeat(40);
+  const to = "d".repeat(40);
+  window.history.replaceState(null, "", `/?view=diff&repoId=${repoId}&path=src/a.ts&scope=range&fromOid=${from}&toOid=${to}`);
+  const urls: URL[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: URL) => {
+    const url = new URL(input);
+    urls.push(url);
+    if (url.pathname.endsWith("/compare")) {
+      return apiResponse({ repoId, files: { items: [{ path: "src/a.ts", originalPath: null, kind: "modified" }, { path: "src/b.ts", originalPath: null, kind: "added" }], hasMore: false } });
+    }
+    return apiResponse({ repoId, path: url.searchParams.get("path"), revision: "r", originalPath: null, scope: "commit", changeKind: "modified", status: "empty", hunks: [] });
+  }));
+  window.gitcrest = {
+    getSidecarConnection: vi.fn(async () => ({ baseUrl: "http://127.0.0.1:41001", token: "read-only", windowAccess: "readOnly" as const })),
+    chooseRepository: vi.fn(), chooseCloneParent: vi.fn(), openDiffWindow: vi.fn(), openConflictWindow: vi.fn(),
+    subscribeToEvents: vi.fn(async () => () => undefined),
+    subscribeToDiffWindowRequests: () => () => undefined,
+  } as GitCrestBridge;
+  render(<DiffWindow />);
+
+  await waitFor(() => expect(tabTitles()).toEqual(["Compare · src/a.ts", "Compare · src/b.ts"]));
+  const compare = urls.find((url) => url.pathname.endsWith("/compare"))!;
+  expect(Object.fromEntries(compare.searchParams)).toMatchObject({ base: from, head: to, mode: "twoDot" });
+  await waitFor(() => expect(urls.some((url) => url.pathname.endsWith("/compare/diff"))).toBe(true));
+  const diff = urls.find((url) => url.pathname.endsWith("/compare/diff"))!;
+  expect(Object.fromEntries(diff.searchParams)).toMatchObject({ from, to, path: "src/a.ts" });
+  // Blame needs one commit, so it is off for a comparison.
+  expect((document.querySelector(".diffWindowBlameToggle button") as HTMLButtonElement).disabled).toBe(true);
+});
+
+it("opens a comparison with the working tree without an end commit", async () => {
+  const from = "c".repeat(40);
+  window.history.replaceState(null, "", `/?view=diff&repoId=${repoId}&path=src/a.ts&scope=range&fromOid=${from}`);
+  const urls: URL[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (input: URL) => {
+    const url = new URL(input);
+    urls.push(url);
+    if (url.pathname.endsWith("/compare")) return apiResponse({ repoId, files: { items: [{ path: "src/a.ts", originalPath: null, kind: "modified" }], hasMore: false } });
+    return apiResponse({ repoId, path: "src/a.ts", revision: "r", originalPath: null, scope: "commit", changeKind: "modified", status: "empty", hunks: [] });
+  }));
+  window.gitcrest = {
+    getSidecarConnection: vi.fn(async () => ({ baseUrl: "http://127.0.0.1:41001", token: "read-only", windowAccess: "readOnly" as const })),
+    chooseRepository: vi.fn(), chooseCloneParent: vi.fn(), openDiffWindow: vi.fn(), openConflictWindow: vi.fn(),
+    subscribeToEvents: vi.fn(async () => () => undefined),
+    subscribeToDiffWindowRequests: () => () => undefined,
+  } as GitCrestBridge;
+  render(<DiffWindow />);
+  await waitFor(() => expect(urls.some((url) => url.pathname.endsWith("/compare/diff"))).toBe(true));
+  const diff = urls.find((url) => url.pathname.endsWith("/compare/diff"))!;
+  expect(diff.searchParams.get("to")).toBeNull();
+  expect(urls.find((url) => url.pathname.endsWith("/compare"))!.searchParams.get("head")).toBeNull();
+});
+
+it("refuses a comparison window whose start is not a commit ID", async () => {
+  window.history.replaceState(null, "", `/?view=diff&repoId=${repoId}&path=src/a.ts&scope=range&fromOid=main`);
+  vi.stubGlobal("fetch", vi.fn());
+  window.gitcrest = {
+    getSidecarConnection: vi.fn(), chooseRepository: vi.fn(), chooseCloneParent: vi.fn(), openDiffWindow: vi.fn(), openConflictWindow: vi.fn(),
+    subscribeToEvents: vi.fn(async () => () => undefined),
+  } as unknown as GitCrestBridge;
+  render(<DiffWindow />);
+  await waitFor(() => expect(document.querySelector(".diffSpecialState[role=alert]")?.textContent).toContain("invalid"));
+});

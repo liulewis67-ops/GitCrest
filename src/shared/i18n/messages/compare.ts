@@ -26,6 +26,8 @@ export const compareMessages = {
   "compare.files": ["Changed files", "变更文件"],
   "compare.noFiles": ["No files differ.", "没有文件存在差异。"],
   "compare.loadMore": ["Load more", "加载更多"],
+  "compare.openedInWindow": ["{path} is open in the Diff window.", "{path} 已在差异窗口中打开。"],
+  "compare.openFailed": ["Could not open the Diff window.", "无法打开差异窗口。"],
   "compare.diffOf": ["Change in {path}", "{path} 中的改动"],
   "compare.binary": ["This is a binary file, so there is no line-by-line change to show.", "这是二进制文件，没有可显示的逐行改动。"],
   "compare.emptyDiff": ["Nothing differs in this file's content.", "此文件的内容没有差异。"],

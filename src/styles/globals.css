@@ -787,6 +787,7 @@ button:disabled { cursor: not-allowed; }
 .scope-workingTree { --scope-color: var(--amber); }
 .scope-index { --scope-color: var(--green); }
 .scope-commit { --scope-color: var(--accent-strong); }
+.scope-range { --scope-color: var(--accent-strong); }
 .diffWindowReadOnly { border: 1px solid var(--line-strong); color: var(--text-muted); }
 .diffWindowViewToggle .viewTab { height: 26px; padding: 0 10px 0 8px; font-size: var(--type-xs); }
 .diffWindowViewToggle .viewTab:disabled { opacity: .45; cursor: not-allowed; }

@@ -33,7 +33,7 @@ const document: DiffDocumentResponse = {
 
 function fakeApi(methods: Record<string, unknown>) {
   let api: Record<string, unknown>;
-  api = { ...methods, withSignal: vi.fn(() => api) };
+  api = { getRepositoryTags: vi.fn().mockResolvedValue({ tags: [{ name: "v1.0" }, { name: "main" }] }), ...methods, withSignal: vi.fn(() => api) };
   return api as unknown as GitCrestApiClient;
 }
 function renderDialog(api: GitCrestApiClient, initial: { base?: string; head?: string; workingTree?: boolean } = {}) {
@@ -95,6 +95,30 @@ describe("compare dialog", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
     expect(signalled?.aborted).toBe(true);
     expect(await screen.findByText("The comparison was cancelled.")).toBeTruthy();
+  });
+
+  it("opens a file in the Diff window, with the comparison's own commit IDs, instead of reading it here", async () => {
+    const onOpenFile = vi.fn().mockResolvedValue(undefined);
+    const getRepositoryCompareDiff = vi.fn();
+    render(<CompareDialog api={fakeApi({ compareRevisions: vi.fn().mockResolvedValue(result()), getRepositoryCompareDiff })} repoId="repo_a" initial={{ base: "main", head: "feature" }} refNames={[]} onOpenFile={onOpenFile} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "a.txt" }));
+    await waitFor(() => expect(onOpenFile).toHaveBeenCalledWith({ path: "a.txt", fromOid: ANCESTOR, toOid: HEAD }));
+    expect(await screen.findByText("a.txt is open in the Diff window.")).toBeTruthy();
+    expect(getRepositoryCompareDiff).not.toHaveBeenCalled();
+  });
+
+  it("leaves the end out when comparing with the working tree, and reports a window that would not open", async () => {
+    const onOpenFile = vi.fn().mockRejectedValue(new Error("window failed"));
+    render(<CompareDialog api={fakeApi({ compareRevisions: vi.fn().mockResolvedValue(result({ head: null, headOid: null, mode: "twoDot", fromOid: BASE })) })} repoId="repo_a" initial={{ base: BASE, workingTree: true }} refNames={[]} onOpenFile={onOpenFile} onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "a.txt" }));
+    await waitFor(() => expect(onOpenFile).toHaveBeenCalledWith({ path: "a.txt", fromOid: BASE }));
+    expect((await screen.findByRole("alert")).textContent).toContain("window failed");
+  });
+
+  it("suggests the repository's tags next to its branches", async () => {
+    renderDialog(fakeApi({ compareRevisions: vi.fn() }));
+    await waitFor(() => expect(window.document.querySelectorAll("datalist option").length).toBe(3));
+    expect([...window.document.querySelectorAll("datalist option")].map((option) => option.getAttribute("value"))).toEqual(["main", "feature", "v1.0"]);
   });
 
   it("shows why a comparison failed", async () => {

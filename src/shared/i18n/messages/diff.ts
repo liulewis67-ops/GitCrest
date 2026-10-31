@@ -122,6 +122,7 @@ export const diff = {
   "dw.blameShow": ["Show who last changed each line, beside the new side", "在新版本一侧显示每行最后的修改者"],
   "dw.blame": ["Blame", "追溯"],
   "dw.tabsAria": ["Open diff files", "已打开的差异文件"],
+  "dw.tabCompare": ["Compare", "比较"],
   "dw.tabCommit": ["Commit", "提交"],
   "dw.tabStaged": ["Staged", "已暂存"],
   "dw.tabWorktree": ["Working tree", "工作区"],

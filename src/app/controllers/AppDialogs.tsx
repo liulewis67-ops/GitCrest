@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { requireGitCrestBridge } from "../../api/bridge";
+import { getGitCrestBridge, requireGitCrestBridge } from "../../api/bridge";
 import { NoticeRegion } from "../../shared/ui/NoticeRegion";
 import { IgnoreRuleDialog } from "../../features/changes";
 import { PushDialog, PushTargetDialog, PullDialog, TaskCenter, DiscardChangesDialog, CreateBranchDialog, NewWorktreeDialog, SubmodulesDialog, CompareDialog, ReflogDialog, RemoveWorktreeDialog, LocalBranchDialog, WorkflowDialog, RebaseDialog, ResetDialog, RemoteBranchDeleteDialog, CloneDialog } from "./lazy-views";
@@ -29,6 +29,7 @@ export function AppDialogs({ ctx }: { ctx: AppContext }) {
             api={apiRef.current}
             repoId={selectedRepository.repoId}
             initial={compareRequest}
+        onOpenFile={getGitCrestBridge()?.openDiffWindow ? ({ path, fromOid, toOid }) => requireGitCrestBridge().openDiffWindow({ repoId: selectedRepository.repoId, path, scope: "range", fromOid, ...(toOid ? { toOid } : {}) }) : undefined}
             currentBranch={activeBranches?.branches.find((branch) => branch.isCurrent)?.name}
             refNames={(activeBranches?.branches ?? []).map((branch) => branch.name)}
             onClose={() => setCompareRequest(undefined)}

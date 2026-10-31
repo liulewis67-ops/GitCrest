@@ -15,8 +15,10 @@ export interface SidecarConnection {
 export interface DiffWindowRequest {
   repoId: string;
   path: string;
-  scope: "workingTree" | "index" | "commit";
+  scope: "workingTree" | "index" | "commit" | "range";
   commitOid?: string;
+  fromOid?: string;
+  toOid?: string;
 }
 
 export interface ConflictWindowRequest {

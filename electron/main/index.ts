@@ -1,3 +1,4 @@
+import { parseDiffWindowRequest, type DiffWindowRequest } from "./diff-window-request";
 import { spawn } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -45,12 +46,6 @@ let coreGeneration = 0;
 let coreRestartTimer: ReturnType<typeof setTimeout> | undefined;
 const coreRestartPolicy = new CoreRestartPolicy();
 type WindowAccess = "readWrite" | "readOnly" | "conflictResolution";
-interface DiffWindowRequest {
-  repoId: string;
-  path: string;
-  scope: "workingTree" | "index" | "commit";
-  commitOid?: string;
-}
 interface ConflictWindowRequest { repoId: string; taskId: string }
 const windowAccessByContentsId = new Map<number, WindowAccess>();
 // One Diff window per repository: a further Diff opens as a tab there rather than as another renderer process.
@@ -604,27 +599,6 @@ function parseConflictWindowRequest(value: unknown): ConflictWindowRequest {
   return request as ConflictWindowRequest;
 }
 
-function parseDiffWindowRequest(value: unknown): DiffWindowRequest {
-  if (!value || typeof value !== "object") throw new Error("Invalid Diff window request.");
-  const request = value as Partial<DiffWindowRequest>;
-  if (typeof request.repoId !== "string" || !/^repo_[a-f0-9]{64}$/.test(request.repoId)) {
-    throw new Error("Invalid repository ID for Diff window.");
-  }
-  if (typeof request.path !== "string" || request.path.trim().length === 0 || request.path.length > 4096) {
-    throw new Error("Invalid file path for Diff window.");
-  }
-  if (!["workingTree", "index", "commit"].includes(request.scope || "")) {
-    throw new Error("Invalid Diff scope.");
-  }
-  if (request.scope === "commit" && (typeof request.commitOid !== "string" || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(request.commitOid))) {
-    throw new Error("A full commit ID is required for a historical Diff window.");
-  }
-  if (request.scope !== "commit" && request.commitOid !== undefined) {
-    throw new Error("A commit ID is only valid for a historical Diff window.");
-  }
-  return request as DiffWindowRequest;
-}
-
 /**
  * Starts the first core. It runs beside the first window's renderer load rather than before it; the window
  * shows the starting status and connects when the core reports ready, as it does after a restart.
@@ -721,6 +695,8 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
     path: diffRequest.path,
     scope: diffRequest.scope,
     ...(diffRequest.commitOid ? { commitOid: diffRequest.commitOid } : {}),
+    ...(diffRequest.fromOid ? { fromOid: diffRequest.fromOid } : {}),
+    ...(diffRequest.toOid ? { toOid: diffRequest.toOid } : {}),
   } : conflictRequest ? { view: "conflicts", repoId: conflictRequest.repoId, taskId: conflictRequest.taskId } : undefined;
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
     const rendererUrl = new URL(process.env.ELECTRON_RENDERER_URL);

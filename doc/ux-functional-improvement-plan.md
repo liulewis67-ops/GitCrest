@@ -61,9 +61,9 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U13.2 | Interface zoom | P2 | S | — | done |
 | U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | done |
 | U14.2 | Repository hygiene | P2 | S | — | done |
-| U15.1 | "Compare with…" on branch and tag menus | P2 | S | U8.1 | not started |
-| U15.2 | Open compare diffs in the Diff window | P2 | M | U8.1 | not started |
-| U15.3 | Split `use-app-actions` further | P2 | M | U14.1 | not started |
+| U15.1 | "Compare with…" on branch and tag menus | P2 | S | U8.1 | done |
+| U15.2 | Open compare diffs in the Diff window | P2 | M | U8.1 | done |
+| U15.3 | Split `use-app-actions` further | P2 | M | U14.1 | done |
 
 Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each against real OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; S7.4 (signing and updates on three platforms) and S7.5 (full P0 E2E and release notes) are blocked on outside environments.
 
@@ -259,7 +259,7 @@ These close the limits recorded for U8.1 and U14.1. They add no new Git capabili
 
 **U15.3 Split `use-app-actions` further** (P2, M)
 - Problem: `use-app-actions.ts` is the largest controller (346 lines) and mixes commit actions, panel navigation, file helpers, effects and the shortcut table.
-- Deliver: five hooks under `src/app/controllers/`, each reading only what the hooks before it return: `use-app-navigation` (modes, sidebar, inspector, focus, tab and diff opening, shelf composer, tag editor, settings), `use-app-commit-actions`, `use-app-file-actions` (rollback, reveal, copy, credentials), `use-app-effects` (task refresh, repository change and selection effects) and `use-app-shortcuts` (the global shortcut table). `App.tsx` composes them in that order; no behavior changes.
+- Deliver: five hooks under `src/app/controllers/`, each reading only what the hooks before it return: `use-app-navigation` (modes, sidebar, inspector, focus, tab and diff opening, shelf composer, tag editor, settings), `use-app-commit-actions`, `use-app-file-actions` (rollback, reveal, copy, credentials), `use-app-effects` (task refresh, repository change and selection effects) and `use-app-shortcuts` (the global shortcut table). `use-app-actions` composes them in that order and `App.tsx` is unchanged; no behavior changes.
 - Accept: no controller file over 200 lines; `pnpm check` and all E2E pass unchanged; `pnpm frontend:boundaries` passes.
 
 ## 6. Suggested order
@@ -522,3 +522,27 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `src/app/App.tsx` (39 lines, was 1,506), `src/app/controllers/`
 - Limits / follow-up: `App` now only composes seven hooks in order and renders `AppView`. Each hook owns one area and reads only what the hooks above it return: `use-app-shell` (UI state, drafts, settings, dialog requests), `use-app-connection` (core connection, tasks, workflow sessions, notices, external programs), `use-app-repositories` (tabs, caches, status, refs, branch switcher, layout, derived active values), `use-app-diff` (selection and diff queries), `use-app-work` (commit, staging, fetch, pull, push, clone), `use-app-actions` (handlers, effects, global shortcuts) and `use-app-view-model` (palette commands and view helpers). The view is `AppView` plus `ChangesView`, `HistoryView` and `AppDialogs`; lazy dialogs sit in `lazy-views.ts`. The largest file is `use-app-actions.ts` (346 lines). The code was moved by script from the original statements and changed only where an earlier hook needs a later one: eight callbacks (refreshing repositories, status, branches and remotes, activating a repository, undo, and opening the shelf composer) read `forward.*`, which the app fills each render after every hook has run (`controllers/forward.ts`). Those callbacks now see the latest render's functions instead of the render that created them; nothing in the tests depends on the difference. The controllers live in `src/app/` rather than under each feature folder because they join several features, which the feature boundary rules do not allow a feature to do. Not done: no behavior was changed, and the hooks are still large (the areas share many values), so a later pass could split `use-app-actions` further.
 - Commit: see git log (`feat: complete U14.1 split App.tsx into per-area controllers`)
+
+### U15.3 — Split use-app-actions further
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (647 tests, with the earlier ones unchanged), `pnpm build`, `pnpm test:e2e` (after the build). No Rust or API change.
+- Manual check: not run (app not started).
+- Evidence: `src/app/controllers/use-app-actions.ts` (22 lines, was 346), `use-app-navigation.ts` (134), `use-app-commit-actions.ts` (40), `use-app-file-actions.ts` (67), `use-app-effects.ts` (74), `use-app-shortcuts.ts` (81)
+- Limits / follow-up: the hook bodies were cut from the old file by script and only their inputs were added, so behavior is the same. `use-app-actions` is now a composer: navigation first, then commit and file actions (which use it), then the effects, then the shortcut table (which uses navigation and commit actions); it returns the same names as before, so `App.tsx` and the view model did not change. The largest controller is now `use-app-work.ts` (218 lines), just over the 200-line goal; it was not part of this stage.
+- Commit: see git log (`refactor: complete U15.3 split use-app-actions into navigation, commit, file, effect and shortcut hooks`)
+
+### U15.1 — Compare with… on branch and tag menus
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (new cases: the item on a local and a remote branch, enabled while a Git task runs and absent when nothing handles it, on a tag, and tag names offered in the dialog's suggestions), `pnpm build`, `pnpm test:e2e`. No Rust or API change.
+- Manual check: not run (app not started); the menu position and the suggestion list on screen were not looked at.
+- Evidence: `src/pages/workspace/BranchesSidebar.tsx`, `src/features/history/ui/TagList.tsx`, `src/features/compare/ui/CompareDialog.tsx`
+- Limits / follow-up: "Compare with…" sits in every branch's context menu and in every tag's "⋯" menu and opens the dialog with that name as the base. The dialog reads the first 500 tags as suggestions next to the branch names; a failed read only leaves the list shorter, and a repository with more tags can still type any name. No new palette entry was needed.
+- Commit: see git log (`feat: complete U15.1 add Compare with… to branch and tag menus`)
+
+### U15.2 — Compare diffs in the Diff window
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `vitest run` (new `diff-window-request.test.ts` for the main process checks; new Diff window cases for a comparison with two commits, with the working tree and with a bad start; new dialog cases), `pnpm build`, `pnpm test:e2e` (new `compare-workflow.test.ts`: compares two real branches through the palette, opens a file in the Diff window, finds the other file as a tab and sees Blame off). `doc/api/v1.yaml` did not change; the window uses the compare endpoints from U8.1.
+- Manual check: not run by hand; the E2E test drove the real window once.
+- Evidence: `electron/main/diff-window-request.ts`, `src/features/diff/ui/DiffWindow.tsx`, `src/features/compare/ui/CompareDialog.tsx`, `tests/e2e/compare-workflow.test.ts`
+- Limits / follow-up: a `range` scope carries `fromOid` and an optional `toOid`. The request check moved out of `electron/main/index.ts` into `diff-window-request.ts` so it could be tested; it accepts a range only with a full start ID, an end that is a full ID or absent, and no commit ID, and refuses comparison IDs on any other scope. The window reads each tab with `GET /compare/diff` and finds the other files with `GET /compare` in two-dot mode between the same ids (up to 500 files). Blame is off and a changed picture shows the binary note, because the image API has no range scope. With no bridge the dialog still shows the change inline. Renamed files open under their new path only.
+- Commit: see git log (`feat: complete U15.2 open compare diffs in the Diff window`)

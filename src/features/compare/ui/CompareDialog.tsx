@@ -23,13 +23,15 @@ function formatDate(ms: number) {
  * Compares two branches, tags or commits, or a commit with the working tree. It only reads: it lists
  * the commits that are on one side only and the files that differ, and shows one file's change at a time.
  */
-export function CompareDialog({ api, repoId, initial, currentBranch, refNames, onClose }: {
+export function CompareDialog({ api, repoId, initial, currentBranch, refNames, onOpenFile, onClose }: {
   api: GitCrestApiClient;
   repoId: string;
   initial: { base?: string; head?: string; workingTree?: boolean };
   currentBranch?: string;
-  /** Branch names offered as suggestions; any tag, commit or relative name can be typed too. */
+  /** Branch names offered as suggestions next to the repository's tags; any commit or relative name can be typed too. */
   refNames: readonly string[];
+  /** Shows one file of the comparison in the read-only Diff window; without it the change is shown in the dialog. */
+  onOpenFile?: (request: { path: string; fromOid: string; toOid?: string }) => Promise<void>;
   onClose: () => void;
 }) {
   const { t } = useI18n();
@@ -43,6 +45,7 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [more, setMore] = useState<ListKey | "">("");
+  const [tagNames, setTagNames] = useState<string[]>([]);
   const [selected, setSelected] = useState<FileItem>();
   const [document, setDocument] = useState<DiffDocumentResponse>();
   const [diffError, setDiffError] = useState("");
@@ -84,6 +87,15 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
     setError(t("compare.cancelled"));
   }
 
+  // Tags are offered as suggestions too; a failed read only leaves the list shorter.
+  useEffect(() => {
+    const controller = new AbortController();
+    api.withSignal(controller.signal).getRepositoryTags(repoId, { limit: 500 })
+      .then((page) => setTagNames(page.tags.map((tag) => tag.name)))
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [api, repoId]);
+
   useEffect(() => {
     if (autoRan.current) return;
     autoRan.current = true;
@@ -117,8 +129,16 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
     }
   }
 
+  function selectFile(file: FileItem) {
+    setSelected(file);
+    if (!onOpenFile || !result) return;
+    setDiffError("");
+    onOpenFile({ path: file.path, fromOid: result.fromOid, ...(result.headOid ? { toOid: result.headOid } : {}) })
+      .catch((reason) => setDiffError(errorMessage(reason, t("compare.openFailed"))));
+  }
+
   useEffect(() => {
-    if (!result || !selected) return;
+    if (!result || !selected || onOpenFile) return;
     const controller = new AbortController();
     setDocument(undefined);
     setDiffError("");
@@ -157,7 +177,7 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
       </header>
       <form className="cloneFormBody" onSubmit={(event) => { event.preventDefault(); run(); }}>
         <p className="cloneHelp">{t("compare.help")}</p>
-        <datalist id={listId}>{refNames.map((name) => <option key={name} value={name} />)}</datalist>
+        <datalist id={listId}>{[...refNames, ...tagNames.filter((name) => !refNames.includes(name))].map((name) => <option key={name} value={name} />)}</datalist>
         <div className="compareFields">
           <label className="rebaseTargetField">{t("compare.base")}
             <input value={base} list={listId} spellCheck={false} autoComplete="off" data-dialog-initial-focus onChange={(event) => setBase(event.target.value)} />
@@ -195,12 +215,15 @@ export function CompareDialog({ api, repoId, initial, currentBranch, refNames, o
               ? <p className="cloneHelp">{t("compare.noFiles")}</p>
               : <ul className="compareList">{result.files.items.map((file) => <li key={`${file.originalPath ?? ""}>${file.path}`}>
                 <span className="commitRefBadge">{t(`compare.kind.${file.kind}`)}</span>
-                <button type="button" className="textButton reflogMessage" aria-pressed={selected?.path === file.path} title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path} onClick={() => setSelected(file)}>{file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}</button>
+                <button type="button" className="textButton reflogMessage" aria-pressed={selected?.path === file.path} title={file.originalPath ? `${file.originalPath} → ${file.path}` : file.path} onClick={() => selectFile(file)}>{file.originalPath ? `${file.originalPath} → ${file.path}` : file.path}</button>
               </li>)}</ul>}
             {result.files.hasMore && <button className="quietButton compact" type="button" disabled={Boolean(more)} onClick={() => void loadMore("files")}>{t("compare.loadMore")}</button>}
             {result.mode === "twoDot" && !result.headOid && <p className="cloneHelp">{t("compare.untrackedNote")}</p>}
           </section>
-          {selected && <section aria-label={t("compare.diffOf", { path: selected.path })} className="compareDiff">
+          {selected && onOpenFile && <section aria-label={t("compare.diffOf", { path: selected.path })} className="compareDiff">
+            {diffError ? <div className="statusLoadError" role="alert"><span>{diffError}</span></div> : <p className="cloneHelp" role="status">{t("compare.openedInWindow", { path: selected.path })}</p>}
+          </section>}
+          {selected && !onOpenFile && <section aria-label={t("compare.diffOf", { path: selected.path })} className="compareDiff">
             <h3>{selected.path}</h3>
             {diffLoading && <p role="status" className="cloneHelp">{t("compare.loading")}</p>}
             {diffError && <div className="statusLoadError" role="alert"><span>{diffError}</span></div>}

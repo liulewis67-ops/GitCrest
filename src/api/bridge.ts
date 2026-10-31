@@ -14,8 +14,11 @@ export type GitCrestEventEnvelope = components["schemas"]["EventEnvelope"];
 export interface GitCrestDiffWindowRequest {
   repoId: string;
   path: string;
-  scope: "workingTree" | "index" | "commit";
+  /** `range` is a file of a comparison: from `fromOid` to `toOid`, or to the working tree when `toOid` is absent. */
+  scope: "workingTree" | "index" | "commit" | "range";
   commitOid?: string;
+  fromOid?: string;
+  toOid?: string;
 }
 
 /** A language plugin folder as the main process read it: a checked manifest, or why it was rejected. */
