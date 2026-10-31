@@ -33,3 +33,45 @@ pub(super) struct PipelineRepositorySettingsResponse {
 pub(super) struct PipelineRulesBody {
     pub(super) rules: Vec<PipelineRule>,
 }
+
+/// Either confirms a run waiting for confirmation (`runId`) or starts a rule
+/// manually (`ruleId`, `sourceBranch`, `sourceOid`).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct StartPipelineRunRequest {
+    #[serde(default)]
+    pub(super) run_id: Option<String>,
+    #[serde(default)]
+    pub(super) rule_id: Option<String>,
+    #[serde(default)]
+    pub(super) source_branch: Option<String>,
+    #[serde(default)]
+    pub(super) source_oid: Option<String>,
+    #[serde(default)]
+    pub(super) targets: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct PipelineRunActionRequest {
+    pub(super) action: PipelineRunActionKind,
+}
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) enum PipelineRunActionKind {
+    Resume,
+    SkipTarget,
+    Stop,
+}
+
+#[derive(Deserialize)]
+pub(super) struct ListRunsQuery {
+    pub(super) limit: Option<u32>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct PipelineRunsBody {
+    pub(super) runs: Vec<super::service::PipelineRunDto>,
+}

@@ -93,6 +93,19 @@ fn load_runs(
 
 impl RepositoryStore {
     /// Registers a minimal repository row so pipeline tests satisfy the foreign keys.
+    /// Like `insert_test_repository`, with the real path of a repository on disk.
+    #[cfg(test)]
+    pub(crate) fn insert_test_repository_at(&self, repo_id: &str, path: &std::path::Path) {
+        self.connection
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO repositories (repo_id, path, branch, detached, state, is_favorite, \n                 last_accessed_at, availability) VALUES (?1, ?2, 'main', 0, 'normal', 0, 0, \n                 'available')",
+                params![repo_id, path.to_string_lossy()],
+            )
+            .unwrap();
+    }
+
     #[cfg(test)]
     pub(crate) fn insert_test_repository(&self, repo_id: &str) {
         self.connection

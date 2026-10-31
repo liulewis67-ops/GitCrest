@@ -1,5 +1,8 @@
 use axum::{
-    extract::{rejection::JsonRejection, Path, State},
+    extract::{
+        rejection::{JsonRejection, QueryRejection},
+        Path, Query, State,
+    },
     http::StatusCode,
     Json,
 };
@@ -15,9 +18,13 @@ use crate::{
     state::AppState,
 };
 
-use super::dto::{
-    PipelineAppSettingsBody, PipelineRepositorySettingsRequest, PipelineRepositorySettingsResponse,
-    PipelineRulesBody,
+use super::{
+    dto::{
+        ListRunsQuery, PipelineAppSettingsBody, PipelineRepositorySettingsRequest,
+        PipelineRepositorySettingsResponse, PipelineRulesBody, PipelineRunActionKind,
+        PipelineRunActionRequest, PipelineRunsBody, StartPipelineRunRequest,
+    },
+    service::{PipelineRunDto, PipelineServiceError, RunAction, StartRun},
 };
 
 fn invalid(message: impl Into<String>) -> ApiError {
@@ -178,4 +185,118 @@ pub(super) async fn put_rules(
     let rules = request.rules.clone();
     blocking(move || store.replace_pipeline_rules(&repo_id, &rules)).await?;
     Ok(Json(request))
+}
+
+fn service_error(error: PipelineServiceError) -> ApiError {
+    match error {
+        PipelineServiceError::Storage => storage_error(()),
+        PipelineServiceError::RunNotFound => ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::PipelineRunNotFound,
+            "The pipeline run was not found.",
+        ),
+        PipelineServiceError::RuleNotFound => ApiError::new(
+            StatusCode::NOT_FOUND,
+            ApiErrorCode::PipelineRuleNotFound,
+            "The pipeline rule was not found.",
+        ),
+        PipelineServiceError::Conflict(message) => ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::PipelineRunConflict,
+            message,
+        ),
+        PipelineServiceError::Invalid(message) => invalid(message),
+    }
+}
+
+pub(super) async fn start_run(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<StartPipelineRunRequest>, JsonRejection>,
+) -> Result<(StatusCode, Json<PipelineRunDto>), ApiError> {
+    let Json(request) = request.map_err(|_| {
+        invalid(
+            "Send a runId to confirm a run, or a ruleId, sourceBranch and sourceOid to start one.",
+        )
+    })?;
+    require_repository(&state, &repo_id).await?;
+    let start = match request {
+        StartPipelineRunRequest {
+            run_id: Some(run_id),
+            rule_id: None,
+            source_branch: None,
+            source_oid: None,
+            targets,
+        } => StartRun::Confirm { run_id, targets },
+        StartPipelineRunRequest {
+            run_id: None,
+            rule_id: Some(rule_id),
+            source_branch: Some(source_branch),
+            source_oid: Some(source_oid),
+            targets,
+        } => StartRun::Manual {
+            rule_id,
+            source_branch,
+            source_oid,
+            targets,
+        },
+        _ => {
+            return Err(invalid(
+                "Send either a runId, or a ruleId with sourceBranch and sourceOid.",
+            ))
+        }
+    };
+    let run = state
+        .pipelines
+        .start_run(&repo_id, start)
+        .await
+        .map_err(service_error)?;
+    Ok((StatusCode::ACCEPTED, Json(run)))
+}
+
+pub(super) async fn list_runs(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    query: Result<Query<ListRunsQuery>, QueryRejection>,
+) -> Result<Json<PipelineRunsBody>, ApiError> {
+    let Query(query) = query.map_err(|_| invalid("limit must be a positive integer."))?;
+    require_repository(&state, &repo_id).await?;
+    let limit = query.limit.unwrap_or(50).clamp(1, 200);
+    let runs = state
+        .pipelines
+        .list_runs(&repo_id, limit)
+        .map_err(service_error)?;
+    Ok(Json(PipelineRunsBody { runs }))
+}
+
+pub(super) async fn get_run(
+    State(state): State<AppState>,
+    Path((repo_id, run_id)): Path<(String, String)>,
+) -> Result<Json<PipelineRunDto>, ApiError> {
+    require_repository(&state, &repo_id).await?;
+    state
+        .pipelines
+        .run(&repo_id, &run_id)
+        .map(Json)
+        .map_err(service_error)
+}
+
+pub(super) async fn run_action(
+    State(state): State<AppState>,
+    Path((repo_id, run_id)): Path<(String, String)>,
+    request: Result<Json<PipelineRunActionRequest>, JsonRejection>,
+) -> Result<Json<PipelineRunDto>, ApiError> {
+    let Json(request) = request.map_err(|_| invalid("A known pipeline run action is required."))?;
+    require_repository(&state, &repo_id).await?;
+    let action = match request.action {
+        PipelineRunActionKind::Resume => RunAction::Resume,
+        PipelineRunActionKind::SkipTarget => RunAction::SkipTarget,
+        PipelineRunActionKind::Stop => RunAction::Stop,
+    };
+    state
+        .pipelines
+        .act(&repo_id, &run_id, action)
+        .await
+        .map(Json)
+        .map_err(service_error)
 }

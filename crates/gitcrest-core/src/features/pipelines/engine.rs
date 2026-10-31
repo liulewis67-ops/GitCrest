@@ -83,22 +83,45 @@ pub(crate) struct NewRun {
     pub source_branch: String,
     pub source_oid: String,
     pub execution_mode: ExecutionMode,
+    /// Create the run waiting for confirmation even when its rule would start at once
+    /// (a manual run that the caller begins itself).
+    pub hold: bool,
     pub now_ms: i64,
 }
 
-pub(crate) struct PipelineEngine<S, W> {
+pub(crate) type RunObserver = Arc<dyn Fn(&PipelineRun) + Send + Sync>;
+
+pub(crate) struct PipelineEngine<S: ?Sized, W> {
     store: Arc<S>,
     workspace: Arc<W>,
+    observer: Option<RunObserver>,
     /// Serializes "is a run active" checks with the writes that follow them.
     gate: Mutex<()>,
 }
 
-impl<S: PipelineStorePort, W: PipelineWorkspace> PipelineEngine<S, W> {
+impl<S: PipelineStorePort + ?Sized, W: PipelineWorkspace> PipelineEngine<S, W> {
     pub(crate) fn new(store: Arc<S>, workspace: Arc<W>) -> Self {
         Self {
             store,
             workspace,
+            observer: None,
             gate: Mutex::new(()),
+        }
+    }
+
+    pub(crate) fn workspace(&self) -> &W {
+        &self.workspace
+    }
+
+    /// Called after every persisted run or step change with the current run.
+    pub(crate) fn with_observer(mut self, observer: RunObserver) -> Self {
+        self.observer = Some(observer);
+        self
+    }
+
+    fn notify(&self, run: &PipelineRun) {
+        if let Some(observer) = &self.observer {
+            observer(run);
         }
     }
 
@@ -118,7 +141,7 @@ impl<S: PipelineStorePort, W: PipelineWorkspace> PipelineEngine<S, W> {
         }) {
             return Err(EngineError::LoopGuard(new.source_branch));
         }
-        let status = if rule.confirmation == Confirmation::Ask || !active.is_empty() {
+        let status = if new.hold || rule.confirmation == Confirmation::Ask || !active.is_empty() {
             RunStatus::PendingConfirmation
         } else {
             RunStatus::Running
@@ -154,14 +177,25 @@ impl<S: PipelineStorePort, W: PipelineWorkspace> PipelineEngine<S, W> {
             steps,
         };
         self.store.insert_pipeline_run(&run)?;
+        self.notify(&run);
         Ok(run)
     }
 
     /// Confirms a pending run and drives it until it finishes or waits for the user.
     pub(crate) async fn start_run(&self, run_id: &str) -> Result<RunStatus, EngineError> {
+        self.begin_run(run_id, None).await?;
+        self.drive(run_id).await
+    }
+
+    /// Moves a pending run to `Running`. Targets missing from `only` are skipped.
+    pub(crate) async fn begin_run(
+        &self,
+        run_id: &str,
+        only: Option<&[String]>,
+    ) -> Result<(), EngineError> {
+        let _gate = self.gate.lock().await;
+        let mut run = self.load(run_id)?;
         {
-            let _gate = self.gate.lock().await;
-            let run = self.load(run_id)?;
             if run.status != RunStatus::PendingConfirmation {
                 return Err(EngineError::InvalidState);
             }
@@ -172,10 +206,21 @@ impl<S: PipelineStorePort, W: PipelineWorkspace> PipelineEngine<S, W> {
             {
                 return Err(EngineError::Busy);
             }
-            self.store
-                .update_pipeline_run(run_id, RunStatus::Running, run.shelf_id.as_deref())?;
+            if let Some(only) = only {
+                for index in 0..run.steps.len() {
+                    if !only.contains(&run.steps[index].target_branch) {
+                        self.set_step(
+                            &mut run,
+                            index,
+                            StepState::Skipped,
+                            Some("Not selected".into()),
+                        )?;
+                    }
+                }
+            }
+            self.set_run_status(&mut run, RunStatus::Running)?;
         }
-        self.drive(run_id).await
+        Ok(())
     }
 
     /// Runs the remaining steps of a `Running` run.
@@ -270,6 +315,7 @@ impl<S: PipelineStorePort, W: PipelineWorkspace> PipelineEngine<S, W> {
         self.store
             .update_pipeline_run(&run.run_id, status, run.shelf_id.as_deref())?;
         run.status = status;
+        self.notify(run);
         Ok(())
     }
 
@@ -287,6 +333,7 @@ impl<S: PipelineStorePort, W: PipelineWorkspace> PipelineEngine<S, W> {
             step.message = message;
         }
         self.store.update_pipeline_step(step)?;
+        self.notify(run);
         Ok(())
     }
 
@@ -303,6 +350,9 @@ impl<S: PipelineStorePort, W: PipelineWorkspace> PipelineEngine<S, W> {
         let status = run.final_status().unwrap_or(RunStatus::Failed);
         self.store
             .update_pipeline_run(&run.run_id, status, run.shelf_id.as_deref())?;
+        let mut finished = run.clone();
+        finished.status = status;
+        self.notify(&finished);
         Ok(status)
     }
 

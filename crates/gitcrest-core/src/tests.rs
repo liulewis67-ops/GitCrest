@@ -116,6 +116,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         undo_store: Arc::new(repositories.store()),
         branch_favorites: Arc::new(repositories.store()),
         pipeline_store: Arc::new(repositories.store()),
+        pipelines: test_pipelines(&repositories),
         ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
         history_search_index: Arc::new(repositories.store()),
         clones: CloneService::new(
@@ -281,6 +282,7 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
             pipeline_store: Arc::new(repositories.store()),
+            pipelines: test_pipelines(&repositories),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
@@ -979,6 +981,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
             pipeline_store: Arc::new(repositories.store()),
+            pipelines: test_pipelines(&repositories),
             ai_providers,
             history_search_index: Arc::new(repositories.store()),
             repository_targets: repositories.target_reader(),
@@ -1959,6 +1962,7 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
             pipeline_store: Arc::new(repositories.store()),
+            pipelines: test_pipelines(&repositories),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             clones: CloneService::new(
@@ -2982,6 +2986,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
             pipeline_store: Arc::new(repositories.store()),
+            pipelines: test_pipelines(&repositories),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
@@ -3126,6 +3131,7 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
             pipeline_store: Arc::new(repositories.store()),
+            pipelines: test_pipelines(&repositories),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
@@ -9929,4 +9935,221 @@ async fn pipeline_settings_and_rules_api_validates_persists_and_resolves_overrid
     .await;
     assert_eq!(read_back, written);
     assert_eq!(read_back["rules"][0]["ruleId"], "r1");
+}
+
+fn test_pipelines(
+    repositories: &RepositoryManager,
+) -> Arc<features::pipelines::service::PipelineService> {
+    Arc::new(features::pipelines::service::PipelineService::new(
+        Arc::new(repositories.store()),
+        Arc::new(repositories.store()),
+        Arc::new(features::pipelines::ephemeral::EphemeralContexts::default()),
+        EventBus::default(),
+        std::env::temp_dir().join("gitcrest-test-pipelines"),
+    ))
+}
+
+#[tokio::test]
+async fn pipeline_run_api_validates_requests_and_reports_run_state() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("pipeline-run-repo");
+    std::fs::create_dir(&root).unwrap();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["init", "--quiet"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let repo_id = json_body(opened).await["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let runs_uri = format!("/api/v1/repositories/{repo_id}/pipelines/runs");
+    let rules_uri = format!("/api/v1/repositories/{repo_id}/pipelines/rules");
+    let oid = "a".repeat(40);
+
+    let unauthorized = app.clone().oneshot(request(&runs_uri, None)).await.unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    let forbidden = app
+        .clone()
+        .oneshot(json_request_with_token(
+            Method::POST,
+            &runs_uri,
+            "{}",
+            READ_ONLY_TOKEN,
+        ))
+        .await
+        .unwrap();
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    let missing_repo = app
+        .clone()
+        .oneshot(request(
+            "/api/v1/repositories/repo_missing/pipelines/runs",
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing_repo.status(), StatusCode::NOT_FOUND);
+
+    // 400: neither a runId nor a complete manual request, or both mixed.
+    for body in [
+        serde_json::json!({}),
+        serde_json::json!({ "ruleId": "r1" }),
+        serde_json::json!({ "runId": "x", "ruleId": "r1", "sourceBranch": "b", "sourceOid": oid }),
+        serde_json::json!({ "unknown": true }),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::POST, &runs_uri, &body.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+    }
+    let bad_limit = app
+        .clone()
+        .oneshot(request(
+            &format!("{runs_uri}?limit=abc"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(bad_limit.status(), StatusCode::BAD_REQUEST);
+
+    // 404: unknown rule and unknown run.
+    let manual = |rule_id: &str, oid: &str| serde_json::json!({ "ruleId": rule_id, "sourceBranch": "feature/1", "sourceOid": oid });
+    let no_rule = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &runs_uri,
+            &manual("r1", &oid).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(no_rule).await,
+        (StatusCode::NOT_FOUND, "PIPELINE_RULE_NOT_FOUND".into())
+    );
+    let no_run = app
+        .clone()
+        .oneshot(request(
+            &format!("{runs_uri}/missing"),
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(no_run).await,
+        (StatusCode::NOT_FOUND, "PIPELINE_RUN_NOT_FOUND".into())
+    );
+    let no_run_action = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("{runs_uri}/missing/actions"),
+            &serde_json::json!({ "action": "stop" }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(no_run_action.status(), StatusCode::NOT_FOUND);
+
+    // A manual run is accepted; with no remote it ends failed, and actions then conflict.
+    let rules = serde_json::json!({ "rules": [pipeline_rule_json("r1", &["uat"], "auto")] });
+    let saved = app
+        .clone()
+        .oneshot(json_request(Method::PUT, &rules_uri, &rules.to_string()))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+    let bad_oid = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &runs_uri,
+            &manual("r1", "short").to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(bad_oid.status(), StatusCode::BAD_REQUEST);
+    let accepted = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &runs_uri,
+            &manual("r1", &oid).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(accepted.status(), StatusCode::ACCEPTED);
+    let run = json_body(accepted).await;
+    let run_id = run["runId"].as_str().unwrap().to_owned();
+    assert_eq!(run["ruleId"], "r1");
+    assert_eq!(run["sourceBranch"], "feature/1");
+    assert_eq!(run["steps"][0]["targetBranch"], "uat");
+
+    let run_uri = format!("{runs_uri}/{run_id}");
+    let mut status = String::new();
+    for _ in 0..100 {
+        let current = json_body(
+            app.clone()
+                .oneshot(request(&run_uri, Some(READ_ONLY_TOKEN)))
+                .await
+                .unwrap(),
+        )
+        .await;
+        status = current["status"].as_str().unwrap().to_owned();
+        if status == "failed" {
+            assert_eq!(current["steps"][0]["state"], "failed");
+            assert!(current["steps"][0]["message"].is_string());
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    assert_eq!(status, "failed");
+    let listed = json_body(
+        app.clone()
+            .oneshot(request(&runs_uri, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(listed["runs"][0]["runId"], run_id);
+    for action in ["resume", "skipTarget", "stop"] {
+        let response = app
+            .clone()
+            .oneshot(json_request(
+                Method::POST,
+                &format!("{run_uri}/actions"),
+                &serde_json::json!({ "action": action }).to_string(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            error_code(response).await,
+            (StatusCode::CONFLICT, "PIPELINE_RUN_CONFLICT".into()),
+            "{action}"
+        );
+    }
+    let bad_action = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            &format!("{run_uri}/actions"),
+            &serde_json::json!({ "action": "explode" }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(bad_action.status(), StatusCode::BAD_REQUEST);
 }

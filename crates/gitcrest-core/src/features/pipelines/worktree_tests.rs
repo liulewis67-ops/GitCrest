@@ -14,7 +14,7 @@ use crate::{
 };
 use std::sync::Arc;
 
-fn git(directory: &Path, args: &[&str]) -> String {
+pub(super) fn git(directory: &Path, args: &[&str]) -> String {
     let output = Command::new("git")
         .args(args)
         .current_dir(directory)
@@ -32,23 +32,23 @@ fn git(directory: &Path, args: &[&str]) -> String {
     String::from_utf8_lossy(&output.stdout).trim().to_string()
 }
 
-fn commit_file(directory: &Path, file: &str, content: &str, message: &str) {
+pub(super) fn commit_file(directory: &Path, file: &str, content: &str, message: &str) {
     std::fs::write(directory.join(file), content).unwrap();
     git(directory, &["add", file]);
     git(directory, &["commit", "-q", "-m", message]);
 }
 
-struct Fixture {
-    _root: tempfile::TempDir,
-    remote: std::path::PathBuf,
-    repository: std::path::PathBuf,
-    data_dir: std::path::PathBuf,
-    source_oid: String,
+pub(super) struct Fixture {
+    pub(super) _root: tempfile::TempDir,
+    pub(super) remote: std::path::PathBuf,
+    pub(super) repository: std::path::PathBuf,
+    pub(super) data_dir: std::path::PathBuf,
+    pub(super) source_oid: String,
 }
 
 /// A bare remote with `main`, `uat`, `dev` and a pushed `feature/1`; the local
 /// clone sits on a dirty `feature/1`.
-fn fixture() -> Fixture {
+pub(super) fn fixture() -> Fixture {
     let root = tempfile::tempdir().unwrap();
     let remote = root.path().join("remote.git");
     let repository = root.path().join("work");
@@ -119,6 +119,7 @@ fn new_run(fixture: &Fixture, rule: PipelineRule) -> NewRun {
         source_branch: "feature/1".into(),
         source_oid: fixture.source_oid.clone(),
         execution_mode: ExecutionMode::TemporaryWorktree,
+        hold: false,
         now_ms: 1,
     }
 }

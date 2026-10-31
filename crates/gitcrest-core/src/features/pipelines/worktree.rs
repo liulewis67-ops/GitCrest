@@ -171,6 +171,19 @@ impl WorktreeWorkspace {
         .map(|_| ())
     }
 
+    /// True while the step's worktree still has a merge waiting to be concluded.
+    pub(crate) async fn merge_in_progress(&self, run: &PipelineRun, step: &PipelineStep) -> bool {
+        let directory = self.step_dir(run, step);
+        self.git(
+            &directory,
+            &["rev-parse", "-q", "--verify", "MERGE_HEAD"],
+            false,
+        )
+        .await
+        .map(|output| output.success)
+        .unwrap_or(false)
+    }
+
     /// Removes pipeline worktree directories that belong to no unfinished run,
     /// then prunes the stale registrations from each repository.
     pub(crate) async fn sweep_orphans(

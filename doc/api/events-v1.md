@@ -15,3 +15,7 @@ repository.updated signals that repository metadata needs refreshing. log.refsCh
 accounts.changed has no repoId and an empty payload. It signals that the signed-in accounts, the account selected for a host, or an account's state changed: after a sign-in, switch, sign-out, a validation that changed the state, or a background token refresh that failed and marked the account needsReauth. Clients showing accounts re-read GET /api/v1/accounts; it does not require a repository resync.
 
 accounts.deviceFlow.updated has no repoId and a payload with flowId and status (completed, denied, expired or failed) when a browser sign-in finishes. Read GET /api/v1/accounts/device-flows/{flowId} for the account or the error. Clients may poll that route instead of listening.
+
+pipeline.run.updated carries the repoId of the repository that owns the run and a payload shaped like PipelineRun (run status and every step). It is published after each persisted run or step change, so a client can render the grouped Task Center row from the latest event and re-read GET /api/v1/repositories/{repoId}/pipelines/runs after a reconnect. A step that waits for conflicts exposes the hidden worktree's RepoId as repoContext; the conflict window opens on that id.
+
+pipeline.trigger.pending carries the repoId and a payload with runId, ruleId, ruleName, sourceBranch, targets (branch names in run order) and protectedTarget. A rule with confirmation "ask" fired after a push; the client shows the confirmation dialog and answers with POST /api/v1/repositories/{repoId}/pipelines/runs.

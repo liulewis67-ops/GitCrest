@@ -1,10 +1,13 @@
-use axum::{routing::get, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 
 use crate::state::AppState;
 
 use super::handlers::{
-    get_app_settings, get_repository_settings, get_rules, put_app_settings,
-    put_repository_settings, put_rules,
+    get_app_settings, get_repository_settings, get_rules, get_run, list_runs, put_app_settings,
+    put_repository_settings, put_rules, run_action, start_run,
 };
 
 pub(crate) fn router() -> Router<AppState> {
@@ -20,5 +23,17 @@ pub(crate) fn router() -> Router<AppState> {
         .route(
             "/v1/repositories/:repo_id/pipelines/rules",
             get(get_rules).put(put_rules),
+        )
+        .route(
+            "/v1/repositories/:repo_id/pipelines/runs",
+            get(list_runs).post(start_run),
+        )
+        .route(
+            "/v1/repositories/:repo_id/pipelines/runs/:run_id",
+            get(get_run),
+        )
+        .route(
+            "/v1/repositories/:repo_id/pipelines/runs/:run_id/actions",
+            post(run_action),
         )
 }

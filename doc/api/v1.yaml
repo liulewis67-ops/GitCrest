@@ -1014,6 +1014,105 @@ paths:
         "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "503": { description: Pipeline rules are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/pipelines/runs:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: listPipelineRuns
+      summary: List recent pipeline runs of this repository, newest first
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        "200":
+          description: The runs with their steps.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRuns" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Pipeline runs are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+    post:
+      operationId: startPipelineRun
+      summary: Confirm a run that waits for confirmation, or start a rule manually
+      description: Send runId (optionally with targets) to confirm a pending run, or ruleId, sourceBranch and sourceOid to run a rule for a commit without pushing. The run continues in the background; follow it with pipeline.run.updated events or GET.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/StartPipelineRunRequest" } } }
+      responses:
+        "202":
+          description: The run, now running or queued behind another run of this repository.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRun" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository, rule or run is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409": { description: Another run holds the repository, the run is not waiting for confirmation, or the source branch is a target of a run in progress., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Pipeline runs are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/pipelines/runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getPipelineRun
+      summary: Read one pipeline run with its steps
+      responses:
+        "200":
+          description: The run.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRun" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or run is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Pipeline runs are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/pipelines/runs/{runId}/actions:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+      - name: runId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: actOnPipelineRun
+      summary: Resume, skip the waiting target, or stop a run
+      description: resume starts a run that waits for confirmation or continues one whose conflicts were resolved; skipTarget and stop apply to a run waiting for conflicts.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRunActionRequest" } } }
+      responses:
+        "200":
+          description: The run after the action.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRun" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or run is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409": { description: The run is not in a state that allows the action., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "503": { description: Pipeline runs are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/credentials:
     parameters:
       - name: X-GitCrest-API-Version
@@ -5359,6 +5458,71 @@ components:
         rules:
           type: array
           items: { $ref: "#/components/schemas/PipelineRule" }
+    StartPipelineRunRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        runId: { type: string, description: Confirms this run; do not combine with the manual fields. }
+        ruleId: { type: string }
+        sourceBranch: { type: string }
+        sourceOid: { type: string, minLength: 40, maxLength: 40 }
+        targets:
+          type: array
+          minItems: 1
+          items: { type: string }
+          description: Run only these target branches; the others are skipped.
+    PipelineRunActionRequest:
+      type: object
+      additionalProperties: false
+      required: [action]
+      properties:
+        action: { type: string, enum: [resume, skipTarget, stop] }
+    PipelineRunStep:
+      type: object
+      additionalProperties: false
+      required: [position, targetBranch, remote, state, leaseOid, mergeOid, repoContext, message]
+      properties:
+        position: { type: integer, minimum: 0 }
+        targetBranch: { type: string }
+        remote: { type: string }
+        state:
+          type: string
+          enum: [pending, preparing, merging, waitingForConflicts, pushing, finishing, done, upToDate, skipped, failed]
+        leaseOid: { type: [string, "null"] }
+        mergeOid: { type: [string, "null"] }
+        repoContext:
+          type: [string, "null"]
+          description: RepoId of the hidden pipeline worktree; the conflict window and recovery routes serve this id while the step waits for conflicts.
+        message: { type: [string, "null"] }
+    PipelineRun:
+      type: object
+      additionalProperties: false
+      required: [runId, repoId, ruleId, ruleName, sourceBranch, sourceOid, executionMode, status, shelfId, createdAtMs, updatedAtMs, steps]
+      properties:
+        runId: { type: string }
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        ruleId: { type: string }
+        ruleName: { type: string }
+        sourceBranch: { type: string }
+        sourceOid: { type: string }
+        executionMode: { $ref: "#/components/schemas/PipelineExecutionMode" }
+        status:
+          type: string
+          enum: [pendingConfirmation, running, waitingForConflicts, succeeded, partiallySucceeded, failed, cancelled]
+        shelfId: { type: [string, "null"] }
+        createdAtMs: { type: integer }
+        updatedAtMs: { type: integer }
+        steps:
+          type: array
+          items: { $ref: "#/components/schemas/PipelineRunStep" }
+    PipelineRuns:
+      type: object
+      additionalProperties: false
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items: { $ref: "#/components/schemas/PipelineRun" }
     BranchSwitchRequest:
       type: object
       additionalProperties: false
@@ -6360,6 +6524,8 @@ components:
             - task.progress
             - task.completed
             - task.failed
+            - pipeline.run.updated
+            - pipeline.trigger.pending
             - connection.resyncRequired
         occurredAtMs:
           type: integer
@@ -6438,6 +6604,9 @@ components:
         - WORKFLOW_RECOVERY_STALE
         - WORKFLOW_RECOVERY_NOT_ALLOWED
         - WORKFLOW_NO_ACTIVE_OPERATION
+        - PIPELINE_RUN_NOT_FOUND
+        - PIPELINE_RULE_NOT_FOUND
+        - PIPELINE_RUN_CONFLICT
         - TAG_ALREADY_EXISTS
         - INTERNAL_ERROR
     ApiError:

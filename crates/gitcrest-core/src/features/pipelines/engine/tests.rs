@@ -148,6 +148,7 @@ fn new_run(run_id: &str, rule: PipelineRule) -> NewRun {
         source_branch: "feature/1".into(),
         source_oid: "a".repeat(40),
         execution_mode: ExecutionMode::TemporaryWorktree,
+        hold: false,
         now_ms: 1,
     }
 }

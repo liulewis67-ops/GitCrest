@@ -335,6 +335,12 @@ pub(super) async fn push_repository(
     let branch_git = state.branch_git.clone();
     let remote_git = state.remote_git.clone();
     let task_repo_id = repo_id.clone();
+    let pipelines = state.pipelines.clone();
+    let pushed = crate::features::pipelines::service::PushedBranch {
+        repo_id: repo_id.clone(),
+        branch: operation_command.local_branch.clone(),
+        oid: operation_command.local_oid.clone(),
+    };
     let force_with_lease = request.force_with_lease;
     let operation = if force_with_lease {
         "pushForceWithLease"
@@ -386,8 +392,11 @@ pub(super) async fn push_repository(
                 }
                 command
                     .push(&path, operation_command, force_with_lease, context)
-                    .await
-                    .map(|()| None)
+                    .await?;
+                pipelines
+                    .on_push_succeeded(pushed, crate::features::pipelines::engine::PushOrigin::User)
+                    .await;
+                Ok(None)
             },
         )
         .await
