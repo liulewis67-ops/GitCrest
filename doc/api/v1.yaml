@@ -5471,6 +5471,9 @@ components:
           minItems: 1
           items: { type: string }
           description: Run only these target branches; the others are skipped.
+        executionMode:
+          $ref: "#/components/schemas/PipelineExecutionMode"
+          description: Manual runs only. Run in this mode this once; the repository setting stays as it is.
     PipelineRunActionRequest:
       type: object
       additionalProperties: false
@@ -5480,7 +5483,7 @@ components:
     PipelineRunStep:
       type: object
       additionalProperties: false
-      required: [position, targetBranch, remote, state, leaseOid, mergeOid, repoContext, message]
+      required: [position, targetBranch, remote, state, leaseOid, mergeOid, repoContext, message, workspaceFailed]
       properties:
         position: { type: integer, minimum: 0 }
         targetBranch: { type: string }
@@ -5494,6 +5497,9 @@ components:
           type: [string, "null"]
           description: RepoId of the hidden pipeline worktree; the conflict window and recovery routes serve this id while the step waits for conflicts.
         message: { type: [string, "null"] }
+        workspaceFailed:
+          type: boolean
+          description: The temporary worktree could not be created or used. GitCrest does not switch to another mode on its own; offer to run the target in place instead, with a manual run that names executionMode.
     PipelineRun:
       type: object
       additionalProperties: false

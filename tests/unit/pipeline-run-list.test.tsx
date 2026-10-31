@@ -13,8 +13,8 @@ function run(overrides: Partial<PipelineRunResponse> = {}): PipelineRunResponse 
     runId: "run_1", repoId: "repo_a", ruleId: "r_01", ruleName: "Promote", sourceBranch: "feature/1", sourceOid: "a".repeat(40),
     executionMode: "temporaryWorktree", status: "running", shelfId: null, createdAtMs: 1, updatedAtMs: 2, recovery: null,
     steps: [
-      { position: 0, targetBranch: "uat", remote: "origin", state: "done", leaseOid: null, mergeOid: null, repoContext: null, message: null },
-      { position: 1, targetBranch: "dev", remote: "origin", state: "merging", leaseOid: null, mergeOid: null, repoContext: null, message: null },
+      { position: 0, targetBranch: "uat", remote: "origin", state: "done", leaseOid: null, mergeOid: null, repoContext: null, message: null, workspaceFailed: false },
+      { position: 1, targetBranch: "dev", remote: "origin", state: "merging", leaseOid: null, mergeOid: null, repoContext: null, message: null, workspaceFailed: false },
     ],
     ...overrides,
   };
@@ -57,7 +57,7 @@ it("follows run updates from events", async () => {
 it("offers to resolve, skip or stop a run waiting for conflicts", async () => {
   const client = api([run({
     status: "waitingForConflicts",
-    steps: [{ position: 0, targetBranch: "uat", remote: "origin", state: "waitingForConflicts", leaseOid: null, mergeOid: null, repoContext: "repo_hidden", message: null }],
+    steps: [{ position: 0, targetBranch: "uat", remote: "origin", state: "waitingForConflicts", leaseOid: null, mergeOid: null, repoContext: "repo_hidden", message: null, workspaceFailed: false }],
   })]);
   const onOpenConflicts = vi.fn();
   show(client, onOpenConflicts);

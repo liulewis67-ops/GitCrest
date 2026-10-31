@@ -32,7 +32,7 @@ use super::{
     inplace::InPlaceWorkspace,
     workspace::{
         MergeOutcome, PipelineStepError, PipelineWorkspace, PreparedStep, PublishOutcome,
-        RecoveryFinding, StepOutcome,
+        RecoveryFinding, StepOutcome, WORKSPACE_FAILURE_PREFIX,
     },
     worktree::WorktreeWorkspace,
 };
@@ -180,6 +180,8 @@ pub(crate) enum StartRun {
         source_branch: String,
         source_oid: String,
         targets: Option<Vec<String>>,
+        /// For this run only; the repository setting stays as it is.
+        execution_mode: Option<ExecutionMode>,
     },
 }
 
@@ -210,6 +212,8 @@ pub(crate) struct PipelineStepDto {
     merge_oid: Option<String>,
     repo_context: Option<String>,
     message: Option<String>,
+    /// The temporary worktree could not be created or used; running in place is an option.
+    workspace_failed: bool,
 }
 
 #[derive(Serialize)]
@@ -257,6 +261,11 @@ impl From<&PipelineRun> for PipelineRunDto {
                     merge_oid: step.merge_oid.clone(),
                     repo_context: step.ephemeral_repo_id.clone(),
                     message: step.message.clone(),
+                    workspace_failed: step.state == StepState::Failed
+                        && step
+                            .message
+                            .as_deref()
+                            .is_some_and(|message| message.starts_with(WORKSPACE_FAILURE_PREFIX)),
                 })
                 .collect(),
             recovery: None,
@@ -502,6 +511,7 @@ impl PipelineService {
                 source_branch,
                 source_oid,
                 targets,
+                execution_mode,
             } => {
                 let rule = self
                     .store
@@ -522,7 +532,10 @@ impl PipelineService {
                         rule,
                         source_branch,
                         source_oid,
-                        execution_mode: self.settings_for(repo_id)?,
+                        execution_mode: match execution_mode {
+                            Some(mode) => mode,
+                            None => self.settings_for(repo_id)?,
+                        },
                         hold: true,
                         now_ms: now_ms(),
                     })

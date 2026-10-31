@@ -49,6 +49,9 @@ pub(super) struct StartPipelineRunRequest {
     pub(super) source_oid: Option<String>,
     #[serde(default)]
     pub(super) targets: Option<Vec<String>>,
+    /// Manual runs only: run in this mode this once.
+    #[serde(default)]
+    pub(super) execution_mode: Option<ExecutionMode>,
 }
 
 #[derive(Deserialize)]

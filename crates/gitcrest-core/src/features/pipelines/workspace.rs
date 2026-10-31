@@ -2,6 +2,10 @@ use std::future::Future;
 
 use crate::domain::pipeline::{PipelineRun, PipelineStep};
 
+/// Starts the message of a step that failed because its temporary worktree could not be
+/// created or used. The UI then offers to run the target in place instead.
+pub(crate) const WORKSPACE_FAILURE_PREFIX: &str = "Pipeline worktree unavailable: ";
+
 /// Why a step could not make progress. The message is shown in the Task Center.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct PipelineStepError {
@@ -9,6 +13,11 @@ pub(crate) struct PipelineStepError {
 }
 
 impl PipelineStepError {
+    /// The worktree could not be created or used; never falls back silently to another mode.
+    pub(crate) fn workspace(message: impl std::fmt::Display) -> Self {
+        Self::new(format!("{WORKSPACE_FAILURE_PREFIX}{message}"))
+    }
+
     pub(crate) fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),

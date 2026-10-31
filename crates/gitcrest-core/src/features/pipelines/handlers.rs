@@ -227,6 +227,7 @@ pub(super) async fn start_run(
             source_branch: None,
             source_oid: None,
             targets,
+            execution_mode: None,
         } => StartRun::Confirm { run_id, targets },
         StartPipelineRunRequest {
             run_id: None,
@@ -234,11 +235,13 @@ pub(super) async fn start_run(
             source_branch: Some(source_branch),
             source_oid: Some(source_oid),
             targets,
+            execution_mode,
         } => StartRun::Manual {
             rule_id,
             source_branch,
             source_oid,
             targets,
+            execution_mode,
         },
         _ => {
             return Err(invalid(

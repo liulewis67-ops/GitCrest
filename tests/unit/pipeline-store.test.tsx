@@ -20,7 +20,7 @@ function run(overrides: Partial<PipelineRunResponse> = {}): PipelineRunResponse 
   return {
     runId: "run_1", repoId: "repo_a", ruleId: "r1", ruleName: "Promote", sourceBranch: "feature/1", sourceOid: "a".repeat(40),
     executionMode: "temporaryWorktree", status: "running", shelfId: null, createdAtMs: 1, updatedAtMs: 2, recovery: null,
-    steps: [{ position: 0, targetBranch: "uat", remote: "origin", state: "preparing", leaseOid: null, mergeOid: null, repoContext: null, message: null }],
+    steps: [{ position: 0, targetBranch: "uat", remote: "origin", state: "preparing", leaseOid: null, mergeOid: null, repoContext: null, message: null, workspaceFailed: false }],
     ...overrides,
   };
 }

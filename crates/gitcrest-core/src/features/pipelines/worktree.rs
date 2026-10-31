@@ -163,9 +163,9 @@ impl PipelineWorkspace for WorktreeWorkspace {
                 .await;
         }
         if let Some(parent) = directory.parent() {
-            tokio::fs::create_dir_all(parent).await.map_err(|_| {
-                PipelineStepError::new("The pipeline worktree folder could not be created")
-            })?;
+            tokio::fs::create_dir_all(parent)
+                .await
+                .map_err(|_| PipelineStepError::workspace("the folder could not be created"))?;
         }
         let path = directory.to_string_lossy().into_owned();
         self.git
@@ -175,7 +175,8 @@ impl PipelineWorkspace for WorktreeWorkspace {
                 false,
                 "Creating the pipeline worktree",
             )
-            .await?;
+            .await
+            .map_err(|error| PipelineStepError::workspace(error.message))?;
 
         let repo_context = context_id(&run.run_id, step.position);
         self.contexts.register(&repo_context, &directory);

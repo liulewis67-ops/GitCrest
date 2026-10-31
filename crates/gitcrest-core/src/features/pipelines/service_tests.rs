@@ -226,6 +226,7 @@ async fn manual_runs_validate_their_input_and_use_the_given_commit() {
         source_branch: "feature/1".into(),
         source_oid: oid.into(),
         targets: None,
+        execution_mode: None,
     };
 
     assert_eq!(
@@ -526,4 +527,102 @@ async fn a_conflicting_step_is_mirrored_by_a_waiting_task_that_ends_with_the_ste
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     assert_eq!(status, TaskStatus::Cancelled);
+}
+
+#[tokio::test]
+async fn a_manual_run_can_use_another_execution_mode_for_that_run_only() {
+    use crate::domain::pipeline::ExecutionMode;
+    let harness = harness(auto_rule());
+    let started = harness
+        .service
+        .start_run(
+            "repo",
+            StartRun::Manual {
+                rule_id: "r_01".into(),
+                source_branch: "feature/1".into(),
+                source_oid: harness.fixture.source_oid.clone(),
+                targets: None,
+                execution_mode: Some(ExecutionMode::SwitchInPlace),
+            },
+        )
+        .await
+        .unwrap();
+    let dto = serde_json::to_value(&started).unwrap();
+    assert_eq!(dto["executionMode"], "switchInPlace");
+
+    let finished = wait_for_terminal(&harness.store, "repo").await;
+    assert_eq!(finished.status, RunStatus::Succeeded);
+    assert_eq!(finished.execution_mode, ExecutionMode::SwitchInPlace);
+    // The repository setting did not change.
+    let repository = harness.store.pipeline_repository_settings("repo").unwrap();
+    assert_eq!(repository.execution_mode, None);
+    assert_eq!(
+        git(
+            &harness.fixture.repository,
+            &["rev-parse", "--abbrev-ref", "HEAD"]
+        ),
+        "feature/1"
+    );
+}
+
+#[tokio::test]
+async fn a_worktree_that_cannot_be_created_fails_the_step_without_falling_back_to_in_place() {
+    let fixture = fixture();
+    // A file where the pipeline folder should go makes creating the worktree folder fail.
+    std::fs::create_dir_all(&fixture.data_dir).unwrap();
+    std::fs::write(fixture.data_dir.join("pipelines"), "not a folder").unwrap();
+    let store = Arc::new(RepositoryStore::default());
+    store.insert_test_repository_at("repo", &fixture.repository);
+    store
+        .replace_pipeline_rules("repo", &[auto_rule()])
+        .unwrap();
+    let contexts = Arc::new(EphemeralContexts::default());
+    let catalog: Arc<dyn RepositoryCatalogPort> =
+        Arc::new(EphemeralAwareCatalog::new(store.clone(), contexts.clone()));
+    let targets = RepositoryTargetReader::new(
+        catalog.clone(),
+        Arc::new(GitRepositoryAdapter),
+        Arc::new(RepositoryFilesystemAdapter),
+    )
+    .with_ephemeral_contexts(contexts.clone());
+    let service = PipelineService::new(
+        store.clone(),
+        catalog,
+        contexts,
+        EventBus::default(),
+        fixture.data_dir.clone(),
+        TaskService::default(),
+        targets,
+    );
+
+    service
+        .on_push_succeeded(
+            PushedBranch {
+                repo_id: "repo".into(),
+                branch: "feature/1".into(),
+                oid: fixture.source_oid.clone(),
+            },
+            PushOrigin::User,
+        )
+        .await;
+    let run = wait_for_terminal(&store, "repo").await;
+
+    assert_eq!(run.status, RunStatus::Failed);
+    assert_eq!(
+        run.execution_mode,
+        crate::domain::pipeline::ExecutionMode::TemporaryWorktree
+    );
+    let dto = serde_json::to_value(service.run("repo", &run.run_id).unwrap()).unwrap();
+    assert_eq!(dto["steps"][0]["workspaceFailed"], true);
+    assert_eq!(dto["steps"][1]["workspaceFailed"], false);
+    assert!(dto["steps"][0]["message"]
+        .as_str()
+        .unwrap()
+        .starts_with("Pipeline worktree unavailable"));
+    // Nothing in the user's tree changed and no other mode was tried.
+    assert_eq!(
+        git(&fixture.repository, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "feature/1"
+    );
+    assert_eq!(git(&fixture.repository, &["stash", "list"]), "");
 }
