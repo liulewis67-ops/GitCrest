@@ -60,6 +60,9 @@ export type PipelineRunResponse = components["schemas"]["PipelineRun"];
 export type PipelineRunStepResponse = components["schemas"]["PipelineRunStep"];
 export type PipelineRunActionKind = components["schemas"]["PipelineRunActionRequest"]["action"];
 export type StartPipelineRunRequest = components["schemas"]["StartPipelineRunRequest"];
+export type PipelineRulesDocument = components["schemas"]["PipelineRulesDocument"];
+export type PipelineRulesExportResponse = components["schemas"]["PipelineRulesExport"];
+export type ImportPipelineRulesResponse = components["schemas"]["ImportPipelineRulesResult"];
 export type HostingProvider = components["schemas"]["HostingProvider"];
 export type AccountResponse = components["schemas"]["Account"];
 export type AccountListResponse = components["schemas"]["AccountList"];
@@ -536,6 +539,23 @@ export class GitCrestApiClient {
       body: JSON.stringify({ rules } satisfies components["schemas"]["PipelineRules"]),
     });
     return body.rules;
+  }
+
+  exportPipelineRules(repoId: RepoId): Promise<PipelineRulesDocument> {
+    return this.request<PipelineRulesDocument>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/rules/export`);
+  }
+
+  writePipelineRulesFile(repoId: RepoId): Promise<PipelineRulesExportResponse> {
+    return this.request<PipelineRulesExportResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/rules/export`, true, { method: "POST" });
+  }
+
+  /** Reads `.gitcrest/pipelines.json` (or the given document); nothing is saved unless `apply` is set. */
+  importPipelineRules(repoId: RepoId, options: { apply: boolean; document?: PipelineRulesDocument }): Promise<ImportPipelineRulesResponse> {
+    return this.request<ImportPipelineRulesResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/pipelines/rules/import`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(options),
+    });
   }
 
   async listPipelineRuns(repoId: RepoId, limit = 50): Promise<PipelineRunResponse[]> {

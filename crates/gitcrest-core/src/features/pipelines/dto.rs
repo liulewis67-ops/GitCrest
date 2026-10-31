@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use super::sharing::RulesDocument;
 use crate::domain::pipeline::{ExecutionMode, InPlaceDirtyPolicy, PipelineRule};
 
 #[derive(Serialize, Deserialize)]
@@ -79,4 +80,32 @@ pub(super) struct ListRunsQuery {
 #[serde(rename_all = "camelCase")]
 pub(super) struct PipelineRunsBody {
     pub(super) runs: Vec<super::service::PipelineRunDto>,
+}
+
+/// Reviews or applies imported rules. Without a `document` the repository's
+/// `.gitcrest/pipelines.json` is read.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct ImportRulesRequest {
+    #[serde(default)]
+    pub(super) document: Option<RulesDocument>,
+    #[serde(default)]
+    pub(super) apply: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ImportRulesResponse {
+    /// The rules of the file as they would be saved: every one asks before it runs.
+    pub(super) imported: Vec<PipelineRule>,
+    /// The repository's rules after the import (or what they would be, when not applied).
+    pub(super) rules: Vec<PipelineRule>,
+    pub(super) applied: bool,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct ExportRulesResponse {
+    pub(super) path: String,
+    pub(super) document: RulesDocument,
 }

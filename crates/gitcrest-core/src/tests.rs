@@ -10155,3 +10155,208 @@ async fn pipeline_run_api_validates_requests_and_reports_run_state() {
         .unwrap();
     assert_eq!(bad_action.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn pipeline_rules_sharing_api_exports_reviews_and_applies_imports() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("pipeline-share-repo");
+    std::fs::create_dir(&root).unwrap();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["init", "--quiet"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let repo_id = json_body(opened).await["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let base = format!("/api/v1/repositories/{repo_id}/pipelines/rules");
+    let export_uri = format!("{base}/export");
+    let import_uri = format!("{base}/import");
+
+    // 401, 403 and 404.
+    let unauthorized = app
+        .clone()
+        .oneshot(request(&export_uri, None))
+        .await
+        .unwrap();
+    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    for (method, uri) in [(Method::POST, &export_uri), (Method::POST, &import_uri)] {
+        let forbidden = app
+            .clone()
+            .oneshot(json_request_with_token(method, uri, "{}", READ_ONLY_TOKEN))
+            .await
+            .unwrap();
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN, "{uri}");
+    }
+    let missing = app
+        .clone()
+        .oneshot(request(
+            "/api/v1/repositories/repo_missing/pipelines/rules/export",
+            Some(READ_ONLY_TOKEN),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
+    let missing_import = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories/repo_missing/pipelines/rules/import",
+            "{}",
+        ))
+        .await
+        .unwrap();
+    assert_eq!(missing_import.status(), StatusCode::NOT_FOUND);
+
+    // Nothing to import yet: the repository has no rules file.
+    let no_file = app
+        .clone()
+        .oneshot(json_request(Method::POST, &import_uri, "{}"))
+        .await
+        .unwrap();
+    assert_eq!(
+        error_code(no_file).await,
+        (StatusCode::NOT_FOUND, "REPOSITORY_FILE_NOT_FOUND".into())
+    );
+
+    // An empty export, then export real rules to the file.
+    let empty = json_body(
+        app.clone()
+            .oneshot(request(&export_uri, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(
+        empty,
+        serde_json::json!({ "schemaVersion": 1, "rules": [] })
+    );
+    let rules = serde_json::json!({ "rules": [
+        pipeline_rule_json("r1", &["uat", "dev"], "auto"),
+        pipeline_rule_json("r2", &["main"], "auto"),
+    ] });
+    app.clone()
+        .oneshot(json_request(Method::PUT, &base, &rules.to_string()))
+        .await
+        .unwrap();
+    let written = app
+        .clone()
+        .oneshot(json_request(Method::POST, &export_uri, "{}"))
+        .await
+        .unwrap();
+    assert_eq!(written.status(), StatusCode::OK);
+    let written = json_body(written).await;
+    assert_eq!(written["path"], ".gitcrest/pipelines.json");
+    assert_eq!(written["document"]["rules"].as_array().unwrap().len(), 2);
+    let file = root.join(".gitcrest/pipelines.json");
+    let on_disk: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&file).unwrap()).unwrap();
+    assert_eq!(on_disk, written["document"]);
+    assert!(!root.join(".gitcrest/pipelines.json.tmp").exists());
+
+    // Reviewing an import changes nothing; every imported rule asks and clashing ids are renumbered.
+    let review = json_body(
+        app.clone()
+            .oneshot(json_request(Method::POST, &import_uri, "{}"))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(review["applied"], false);
+    assert_eq!(review["imported"].as_array().unwrap().len(), 2);
+    assert!(review["imported"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|rule| rule["confirmation"] == "ask"));
+    let imported_ids: Vec<_> = review["imported"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|r| r["ruleId"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(imported_ids, ["r_03", "r_04"]);
+    assert_eq!(review["rules"].as_array().unwrap().len(), 4);
+    let unchanged = json_body(
+        app.clone()
+            .oneshot(request(&base, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(unchanged["rules"].as_array().unwrap().len(), 2);
+    assert_eq!(unchanged["rules"][0]["confirmation"], "auto");
+
+    // Applying saves them after the existing rules.
+    let applied = json_body(
+        app.clone()
+            .oneshot(json_request(
+                Method::POST,
+                &import_uri,
+                &serde_json::json!({ "apply": true }).to_string(),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(applied["applied"], true);
+    let saved = json_body(
+        app.clone()
+            .oneshot(request(&base, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(saved["rules"].as_array().unwrap().len(), 4);
+    assert_eq!(saved["rules"][0]["confirmation"], "auto");
+    assert_eq!(saved["rules"][2]["confirmation"], "ask");
+    assert_eq!(saved["rules"][3]["targets"][0]["branch"], "main");
+
+    // A malformed file and an invalid inline document are 400s.
+    std::fs::write(&file, "{ definitely not json").unwrap();
+    let malformed = app
+        .clone()
+        .oneshot(json_request(Method::POST, &import_uri, "{}"))
+        .await
+        .unwrap();
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    let mut bad_rule = pipeline_rule_json("bad", &["uat"], "ask");
+    bad_rule["targets"] = serde_json::json!([]);
+    for body in [
+        serde_json::json!({ "document": { "schemaVersion": 1, "rules": [bad_rule] } }),
+        serde_json::json!({ "document": { "schemaVersion": 7, "rules": [] } }),
+        serde_json::json!({ "document": { "rules": [] } }),
+        serde_json::json!({ "unknown": true }),
+    ] {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::POST, &import_uri, &body.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+    }
+
+    // Writing the file fails with 409 when .gitcrest is not a plain folder.
+    std::fs::remove_dir_all(root.join(".gitcrest")).unwrap();
+    std::fs::write(root.join(".gitcrest"), "a file in the way").unwrap();
+    let blocked = app
+        .clone()
+        .oneshot(json_request(Method::POST, &export_uri, "{}"))
+        .await
+        .unwrap();
+    assert_eq!(blocked.status(), StatusCode::CONFLICT);
+}

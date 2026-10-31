@@ -1014,6 +1014,65 @@ paths:
         "404": { description: Repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
         "503": { description: Pipeline rules are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/pipelines/rules/export:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: exportPipelineRules
+      summary: Read the rules as a shareable pipelines document, without writing a file
+      responses:
+        "200":
+          description: The rules document.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRulesDocument" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or rules file is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Pipeline rules are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+    post:
+      operationId: writePipelineRulesFile
+      summary: Write the rules to .gitcrest/pipelines.json in the working tree so they can be committed
+      responses:
+        "200":
+          description: The written file and its content.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/PipelineRulesExport" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or rules file is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "409": { description: The .gitcrest entry is not a plain folder or the file could not be written., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Pipeline rules are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/pipelines/rules/import:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: importPipelineRules
+      summary: Review or apply rules from .gitcrest/pipelines.json or a document
+      description: Rules from a repository file are never applied automatically. Without apply the response only shows what would be saved. Every imported rule asks before it runs, and rules whose id is already taken get a new one.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ImportPipelineRulesRequest" } } }
+      responses:
+        "200":
+          description: The imported rules and the repository's rules after the import.
+          headers: { X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" } }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ImportPipelineRulesResult" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Repository or rules file is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Pipeline rules are unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/pipelines/runs:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -5533,6 +5592,43 @@ components:
         runs:
           type: array
           items: { $ref: "#/components/schemas/PipelineRun" }
+    PipelineRulesDocument:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, rules]
+      properties:
+        schemaVersion: { type: integer, const: 1 }
+        rules:
+          type: array
+          maxItems: 50
+          items: { $ref: "#/components/schemas/PipelineRule" }
+    PipelineRulesExport:
+      type: object
+      additionalProperties: false
+      required: [path, document]
+      properties:
+        path: { type: string, description: Path of the written file inside the working tree. }
+        document: { $ref: "#/components/schemas/PipelineRulesDocument" }
+    ImportPipelineRulesRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        document:
+          $ref: "#/components/schemas/PipelineRulesDocument"
+          description: Import this document instead of reading .gitcrest/pipelines.json.
+        apply: { type: boolean, default: false }
+    ImportPipelineRulesResult:
+      type: object
+      additionalProperties: false
+      required: [imported, rules, applied]
+      properties:
+        imported:
+          type: array
+          items: { $ref: "#/components/schemas/PipelineRule" }
+        rules:
+          type: array
+          items: { $ref: "#/components/schemas/PipelineRule" }
+        applied: { type: boolean }
     BranchSwitchRequest:
       type: object
       additionalProperties: false

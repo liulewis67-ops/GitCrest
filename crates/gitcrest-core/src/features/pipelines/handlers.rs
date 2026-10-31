@@ -20,11 +20,16 @@ use crate::{
 
 use super::{
     dto::{
-        ListRunsQuery, PipelineAppSettingsBody, PipelineRepositorySettingsRequest,
+        ExportRulesResponse, ImportRulesRequest, ImportRulesResponse, ListRunsQuery,
+        PipelineAppSettingsBody, PipelineRepositorySettingsRequest,
         PipelineRepositorySettingsResponse, PipelineRulesBody, PipelineRunActionKind,
         PipelineRunActionRequest, PipelineRunsBody, StartPipelineRunRequest,
     },
     service::{PipelineRunDto, PipelineServiceError, RunAction, StartRun},
+    sharing::{
+        export_document, merge_imported, parse_document, render_document, SharingError,
+        MAX_FILE_BYTES, RULES_FILE_DIRECTORY, RULES_FILE_NAME,
+    },
 };
 
 fn invalid(message: impl Into<String>) -> ApiError {
@@ -304,4 +309,142 @@ pub(super) async fn run_action(
         .await
         .map(Json)
         .map_err(service_error)
+}
+
+fn sharing_error(error: SharingError) -> ApiError {
+    invalid(match error {
+        SharingError::TooLarge => "The rules file is larger than 256 KiB.".to_string(),
+        SharingError::Malformed => {
+            "The rules file is not a valid GitCrest pipelines file.".to_string()
+        }
+        SharingError::UnsupportedVersion(version) => {
+            format!(
+                "The rules file uses schema version {version}, which this GitCrest does not read."
+            )
+        }
+        SharingError::TooManyRules => {
+            "A repository can have at most 50 pipeline rules.".to_string()
+        }
+        SharingError::InvalidRule(position, error) => {
+            format!(
+                "Rule {position} of the file is not valid: {}",
+                rule_message(error)
+            )
+        }
+    })
+}
+
+async fn repository_directory(
+    state: &AppState,
+    repo_id: &str,
+) -> Result<std::path::PathBuf, ApiError> {
+    state
+        .repository_targets
+        .read_target(repo_id)
+        .await
+        .map_err(ApiError::from_repository_error)
+}
+
+pub(super) async fn export_rules(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<super::sharing::RulesDocument>, ApiError> {
+    require_repository(&state, &repo_id).await?;
+    let store = state.pipeline_store.clone();
+    let rules = blocking(move || store.list_pipeline_rules(&repo_id)).await?;
+    Ok(Json(export_document(&rules)))
+}
+
+/// Writes the rules to `.gitcrest/pipelines.json` in the working tree so they can be committed and shared.
+pub(super) async fn write_rules_file(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+) -> Result<Json<ExportRulesResponse>, ApiError> {
+    let directory = repository_directory(&state, &repo_id).await?;
+    let store = state.pipeline_store.clone();
+    let rules = blocking(move || store.list_pipeline_rules(&repo_id)).await?;
+    let document = export_document(&rules);
+    let folder = directory.join(RULES_FILE_DIRECTORY);
+    let target = folder.join(RULES_FILE_NAME);
+    let text = render_document(&document);
+    let written = tokio::task::spawn_blocking(move || -> std::io::Result<()> {
+        if let Ok(metadata) = std::fs::symlink_metadata(&folder) {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(std::io::Error::other(
+                    "the .gitcrest entry is not a plain folder",
+                ));
+            }
+        } else {
+            std::fs::create_dir(&folder)?;
+        }
+        let temporary = folder.join(format!("{RULES_FILE_NAME}.tmp"));
+        std::fs::write(&temporary, text)?;
+        std::fs::rename(&temporary, &target)
+    })
+    .await;
+    match written {
+        Ok(Ok(())) => Ok(Json(ExportRulesResponse {
+            path: format!("{RULES_FILE_DIRECTORY}/{RULES_FILE_NAME}"),
+            document,
+        })),
+        _ => Err(ApiError::new(
+            StatusCode::CONFLICT,
+            ApiErrorCode::RepositoryStateConflict,
+            "The rules file could not be written to .gitcrest/pipelines.json.",
+        )),
+    }
+}
+
+pub(super) async fn import_rules(
+    State(state): State<AppState>,
+    Path(repo_id): Path<String>,
+    request: Result<Json<ImportRulesRequest>, JsonRejection>,
+) -> Result<Json<ImportRulesResponse>, ApiError> {
+    let Json(request) = request.map_err(|_| invalid("The import request is not valid."))?;
+    let directory = repository_directory(&state, &repo_id).await?;
+    let document = match request.document {
+        Some(document) => {
+            super::sharing::validate_document(&document).map_err(sharing_error)?;
+            document
+        }
+        None => {
+            let path = directory.join(RULES_FILE_DIRECTORY).join(RULES_FILE_NAME);
+            let metadata = tokio::fs::symlink_metadata(&path).await.map_err(|_| {
+                ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    ApiErrorCode::RepositoryFileNotFound,
+                    "This repository has no .gitcrest/pipelines.json.",
+                )
+            })?;
+            if !metadata.is_file() {
+                return Err(invalid(".gitcrest/pipelines.json is not a regular file."));
+            }
+            if metadata.len() > MAX_FILE_BYTES as u64 {
+                return Err(sharing_error(SharingError::TooLarge));
+            }
+            let bytes = tokio::fs::read(&path).await.map_err(|_| {
+                ApiError::new(
+                    StatusCode::NOT_FOUND,
+                    ApiErrorCode::RepositoryFileNotFound,
+                    "The rules file could not be read.",
+                )
+            })?;
+            parse_document(&bytes).map_err(sharing_error)?
+        }
+    };
+    let store = state.pipeline_store.clone();
+    let id = repo_id.clone();
+    let existing = blocking(move || store.list_pipeline_rules(&id)).await?;
+    let merged = merge_imported(&existing, &document.rules).map_err(sharing_error)?;
+    let imported = merged[existing.len()..].to_vec();
+    if request.apply {
+        let store = state.pipeline_store.clone();
+        let to_save = merged.clone();
+        blocking(move || store.replace_pipeline_rules(&repo_id, &to_save)).await?;
+    }
+    Ok(Json(ImportRulesResponse {
+        imported,
+        rules: merged,
+        applied: request.apply,
+    }))
 }
