@@ -77,8 +77,14 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         .map_err(|error| {
             format!("Could not initialize the repository database at {display_path}: {error}")
         })?;
-    let repository_catalog: Arc<dyn crate::ports::repository::RepositoryCatalogPort> =
-        Arc::new(store.clone());
+    let ephemeral_contexts =
+        Arc::new(crate::features::pipelines::ephemeral::EphemeralContexts::default());
+    let repository_catalog: Arc<dyn crate::ports::repository::RepositoryCatalogPort> = Arc::new(
+        crate::features::pipelines::ephemeral::EphemeralAwareCatalog::new(
+            Arc::new(store.clone()),
+            ephemeral_contexts.clone(),
+        ),
+    );
     let repository_git: Arc<dyn RepositoryGitPort> = Arc::new(GitRepositoryAdapter);
     let repository_filesystem: Arc<dyn crate::ports::repository::RepositoryFilesystemPort> =
         Arc::new(crate::storage::repository_paths::RepositoryFilesystemAdapter);
@@ -95,7 +101,8 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         repository_catalog,
         repository_git,
         repository_filesystem.clone(),
-    );
+    )
+    .with_ephemeral_contexts(ephemeral_contexts);
     let account_selections = crate::credentials::AccountSelections::default();
     let git_commands =
         GitCommandService::default().with_account_selections(account_selections.clone());

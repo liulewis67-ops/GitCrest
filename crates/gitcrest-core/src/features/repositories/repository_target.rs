@@ -27,6 +27,7 @@ pub(crate) struct RepositoryTargetReader {
     catalog: std::sync::Arc<dyn RepositoryCatalogPort>,
     git: std::sync::Arc<dyn RepositoryGitPort>,
     filesystem: std::sync::Arc<dyn RepositoryFilesystemPort>,
+    ephemeral: Option<std::sync::Arc<crate::features::pipelines::ephemeral::EphemeralContexts>>,
 }
 
 impl RepositoryTargetReader {
@@ -39,12 +40,31 @@ impl RepositoryTargetReader {
             catalog,
             git,
             filesystem,
+            ephemeral: None,
         }
+    }
+
+    pub(crate) fn with_ephemeral_contexts(
+        mut self,
+        contexts: std::sync::Arc<crate::features::pipelines::ephemeral::EphemeralContexts>,
+    ) -> Self {
+        self.ephemeral = Some(contexts);
+        self
     }
 
     pub(crate) async fn task_target(&self, repo_id: &str) -> Result<TaskTarget, RepositoryError> {
         let repository = self.registered_repository(repo_id).await?;
         let repository_path = self.existing_path(&repository).await?;
+        if let Some(resource_key) = self
+            .ephemeral
+            .as_ref()
+            .and_then(|contexts| contexts.resource_key(repo_id))
+        {
+            return Ok(TaskTarget {
+                repository_path,
+                resource_key,
+            });
+        }
         let common_dir = self.git.common_dir(&repository_path).await?;
         let common_dir = if common_dir.is_absolute() {
             common_dir
