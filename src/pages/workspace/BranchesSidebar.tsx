@@ -74,6 +74,8 @@ interface BranchesSidebarProps {
   onRebaseOnto: (oid: string) => void;
   onCreateBranchFrom: (oid: string) => void;
   onCopyBranchName: (name: string) => void;
+  /** Opens the comparison with this branch or tag as its base. Comparing only reads, so it stays available while a task runs. */
+  onCompareRef?: (name: string) => void;
   onOpenWorktree: (path: string) => void;
   onNewWorktreeForBranch: (name: string, fromRemote: boolean) => void;
   /** Starts a new branch at `oid` checked out in a new worktree, for a branch that is already checked out somewhere. */
@@ -100,7 +102,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
     repository, api, branches, orderedBranches, branchError, branchesLoading, remotes, remoteError, remotesLoading,
     remoteActionBusy, remoteDisabledReason, connected, hasActiveRepositoryTask, historyRefreshKey, shortcuts, isMacPlatform,
     selectedBranch, selectedCommit, onSelectCommit, onCreateTag, onTagTaskStarted, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
-    onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onOpenWorktree,
+    onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onCompareRef, onOpenWorktree,
     onNewWorktreeForBranch, onNewWorktreeFrom, onRemoveWorktree, onRevealPath, onWorktreePruneStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
     onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream, onOpenWebUrl,
   } = props;
@@ -194,6 +196,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
     } else {
       items.push({ id: "delete-remote", label: t("bs.menuDeleteRemote"), icon: <MenuIcon name="delete" />, danger: true, separatorBefore: true, disabled: blocked, onSelect: () => onDeleteRemoteBranch(branch.fullName) });
     }
+    if (onCompareRef) items.push({ id: "compare", label: t("bs.menuCompare"), separatorBefore: true, onSelect: () => onCompareRef(branch.name) });
     items.push({ id: "copy", label: t("bs.menuCopyName"), icon: <MenuIcon name="copy" />, separatorBefore: true, onSelect: () => onCopyBranchName(branch.name) });
     return items;
   }
@@ -246,7 +249,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
           {remoteBranches.length > 0 && groupLabel(t("bs.remote"), remoteBranches.length, showRemote, showRemote ? t("bs.hideRemote") : t("bs.showRemote"), () => setRemoteGroupOpen((open) => !open))}
           {showRemote && remoteBranches.map(branchRow)}
         </ul>}
-        {api && onSelectCommit && <TagList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} selectedOid={selectedCommit} remoteNames={remotes?.remotes.map((remote) => remote.name)} disabled={blocked} onSelectCommit={onSelectCommit} onCreateTag={onCreateTag} onTaskStarted={onTagTaskStarted} />}
+        {api && onSelectCommit && <TagList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} selectedOid={selectedCommit} remoteNames={remotes?.remotes.map((remote) => remote.name)} disabled={blocked} onSelectCommit={onSelectCommit} onCreateTag={onCreateTag} onCompare={onCompareRef} onTaskStarted={onTagTaskStarted} />}
         {api && <WorktreeList api={api} repoId={repository.repoId} refreshKey={historyRefreshKey} disabled={!connected || hasActiveRepositoryTask} onOpen={onOpenWorktree} onNewWorktreeFrom={onNewWorktreeFrom} onRemove={onRemoveWorktree} onReveal={onRevealPath} onPruneStarted={onWorktreePruneStarted} />}
         <Suspense fallback={<div className="navEmpty" role="status" aria-live="polite">{t("nav.loadingRemotes")}</div>}><RemoteManager
           snapshot={remotes}

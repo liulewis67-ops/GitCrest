@@ -12,7 +12,7 @@ const FILTER_DELAY_MS = 250;
  * The repository tags, newest version first, a page at a time so a repository with thousands of tags
  * costs nothing until the section is used. Selecting a tag selects the commit it points at.
  */
-export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = [], disabled = false, onSelectCommit, onCreateTag, onTaskStarted }: {
+export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = [], disabled = false, onSelectCommit, onCreateTag, onCompare, onTaskStarted }: {
   api: GitCrestApiClient;
   repoId: string;
   refreshKey: number;
@@ -24,6 +24,8 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
   onSelectCommit: (oid: string) => void;
   /** Starts a tag on the selected commit or HEAD; the empty list offers it as its next step. */
   onCreateTag?: () => void;
+  /** Opens the comparison with this tag as its base. */
+  onCompare?: (name: string) => void;
   /** A push or remote delete started as a background task. */
   onTaskStarted?: (task: TaskSnapshotResponse) => void;
 }) {
@@ -108,6 +110,7 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
           menuLabel={t("tags.actionsFor", { name: tag.name })}
           disabled={disabled}
           items={[
+            ...(onCompare ? [{ id: "compare", label: t("tags.compare"), onSelect: () => onCompare(tag.name) }] : []),
             { id: "push", label: t("tags.push"), disabled: remoteNames.length === 0, title: remoteNames.length === 0 ? t("tags.noRemotes") : undefined, onSelect: () => setAction({ kind: "push", tag }) },
             { id: "delete", label: t("tags.delete"), separatorBefore: true, danger: true, onSelect: () => setAction({ kind: "delete", tag }) },
             { id: "remoteDelete", label: t("tags.deleteRemote"), danger: true, disabled: remoteNames.length === 0, title: remoteNames.length === 0 ? t("tags.noRemotes") : undefined, onSelect: () => setAction({ kind: "remoteDelete", tag }) },

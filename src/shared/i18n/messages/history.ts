@@ -35,6 +35,7 @@ export const history = {
   "tags.actions": ["Tag actions", "标签操作"],
   "tags.actionsFor": ["Actions for tag {name}", "标签 {name} 的操作"],
   "tags.push": ["Push tag…", "推送标签…"],
+  "tags.compare": ["Compare with…", "与…比较"],
   "tags.delete": ["Delete tag…", "删除标签…"],
   "tags.deleteRemote": ["Delete tag from remote…", "从远程删除标签…"],
   "tags.noRemotes": ["This repository has no remotes.", "此仓库没有远程。"],

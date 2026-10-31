@@ -52,6 +52,14 @@ describe("tag list", () => {
     expect(getRepositoryTags).toHaveBeenLastCalledWith("repo_a", { limit: 100, filter: "zzz" });
   });
 
+  it("offers Compare with… for a tag and passes its name", async () => {
+    const onCompare = vi.fn();
+    render(<TagList api={fakeApi(vi.fn().mockResolvedValue(page([tag("v1", A)])))} repoId="repo_a" refreshKey={0} onSelectCommit={vi.fn()} onCompare={onCompare} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Actions for tag v1" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Compare with…" }));
+    expect(onCompare).toHaveBeenCalledWith("v1");
+  });
+
   it("shows an empty state and a retry on failure", async () => {
     const getRepositoryTags = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValue(page([]));
     render(<TagList api={fakeApi(getRepositoryTags)} repoId="repo_a" refreshKey={0} onSelectCommit={vi.fn()} />);

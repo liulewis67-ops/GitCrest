@@ -150,3 +150,19 @@ it("disables changing actions while a repository task runs but still copies the 
     "Rebase current branch onto feature/x…", "Rename…", "Delete…",
   ]);
 });
+
+it("offers Compare with… on local and remote branches, also while a Git task runs", () => {
+  const onCompareRef = vi.fn();
+  renderSidebar({ onCompareRef, hasActiveRepositoryTask: true });
+  for (const [name, expected] of [["feature/x", "feature/x"], ["origin/bootbase", "origin/bootbase"]] as const) {
+    const item = within(openMenu(name)).getByRole("menuitem", { name: "Compare with…" }) as HTMLButtonElement;
+    expect(item.disabled).toBe(false);
+    fireEvent.click(item);
+    expect(onCompareRef).toHaveBeenLastCalledWith(expected);
+  }
+});
+
+it("leaves Compare with… out when nothing handles it", () => {
+  renderSidebar();
+  expect(within(openMenu("feature/x")).queryByRole("menuitem", { name: "Compare with…" })).toBeNull();
+});

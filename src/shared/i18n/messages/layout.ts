@@ -168,6 +168,7 @@ export const layout = {
   "bs.menuMerge": ["Merge {name} into current branch…", "将 {name} 合并到当前分支…"],
   "bs.menuRebase": ["Rebase current branch onto {name}…", "将当前分支变基到 {name}…"],
   "bs.menuDeleteRemote": ["Delete from remote…", "从远程删除…"],
+  "bs.menuCompare": ["Compare with…", "与…比较"],
   "bs.menuCopyName": ["Copy branch name", "复制分支名称"],
   "bs.copiedName": ["Copied {name}", "已复制 {name}"],
   "bs.copyNameFailed": ["Could not copy the branch name.", "无法复制分支名称。"],
