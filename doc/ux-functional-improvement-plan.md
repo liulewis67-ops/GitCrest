@@ -64,6 +64,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U15.1 | "Compare with…" on branch and tag menus | P2 | S | U8.1 | done |
 | U15.2 | Open compare diffs in the Diff window | P2 | M | U8.1 | done |
 | U15.3 | Split `use-app-actions` further | P2 | M | U14.1 | done |
+| U16.1 | Sync arrows on branches that click through to push and pull | P2 | S | — | not started |
 
 Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each against real OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; S7.4 (signing and updates on three platforms) and S7.5 (full P0 E2E and release notes) are blocked on outside environments.
 
@@ -262,6 +263,14 @@ These close the limits recorded for U8.1 and U14.1. They add no new Git capabili
 - Deliver: five hooks under `src/app/controllers/`, each reading only what the hooks before it return: `use-app-navigation` (modes, sidebar, inspector, focus, tab and diff opening, shelf composer, tag editor, settings), `use-app-commit-actions`, `use-app-file-actions` (rollback, reveal, copy, credentials), `use-app-effects` (task refresh, repository change and selection effects) and `use-app-shortcuts` (the global shortcut table). `use-app-actions` composes them in that order and `App.tsx` is unchanged; no behavior changes.
 - Accept: no controller file over 200 lines; `pnpm check` and all E2E pass unchanged; `pnpm frontend:boundaries` passes.
 
+### W16 — Branch sync at a glance
+
+**U16.1 Sync arrows on branches** (P2, S)
+- Problem: the branch list already prints `↑2 ↓1` for commits ahead of or behind the upstream, but in one muted color, as plain text, and a local branch that was never pushed shows nothing.
+- Deliver: on local branches, an up arrow with the count of commits not yet pushed (green) and a down arrow with the count not yet pulled (amber), both visible when the branch has diverged; a branch with no upstream gets a dashed "not published" up arrow. On the current branch the arrows are buttons: the up arrow opens the Push dialog and the down arrow opens the Pull dialog, so the usual review step stays between the click and any change. Other branches show the same colors but cannot be clicked, and their tooltip says to check the branch out first.
+- Design: `BranchSyncBadge` takes optional `onPush`, `onPull` and a disabled reason and renders buttons when it is given a handler, spans otherwise (the branch switcher keeps the spans). `BranchesSidebar` passes the handlers only for the current branch and disables them with the reason that already blocks Push and Pull while a task runs or the core is not connected. Each arrow has a text label for screen readers that names the count and the upstream; color is never the only signal, since the arrow direction and count are always printed. The counts come from local refs, so they are as fresh as the last fetch (the background fetch keeps them current). Push and Pull in GitCrest act on the current branch only, so other branches cannot be pushed or pulled from their row.
+- Accept: unit tests cover ahead, behind, diverged, in sync, no upstream and a gone upstream; the arrows on the current branch call the push and pull handlers, are disabled with a reason while a task runs, and are not buttons on other branches; `pnpm check` and E2E pass.
+
 ## 6. Suggested order
 
 1. **New-user blockers:** U1.1, U2.3, U2.2, U2.1.
@@ -271,6 +280,7 @@ These close the limits recorded for U8.1 and U14.1. They add no new Git capabili
 5. **Daily comfort:** D3 → U6.1, U6.2, U9.1, D4 → U10.1.
 6. **Depth:** U8.1, U9.2, U11.1, U12.1, U10.3.
 7. **Polish:** U1.2, U5.2, U10.2, U10.4, U13.1, U13.2, U14.2.
+9. **Branch sync:** U16.1.
 8. **Follow-ups:** U15.3 first (it touches the files the others wire into), then U15.1, then U15.2.
 
 Run the S6 real-provider checks whenever API keys are available; they do not depend on anything here.
