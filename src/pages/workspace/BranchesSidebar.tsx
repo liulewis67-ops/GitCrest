@@ -3,6 +3,7 @@ import type { BranchSnapshotResponse, GitCrestApiClient, RemoteSnapshotResponse,
 import { loadRemoteManager } from "../../features/remotes";
 import { BranchRowMenu, BranchSyncBadge, WorktreeList } from "../../features/branches";
 import { TagList } from "../../features/history";
+import { pipelineRunBlocker } from "../../features/pipelines";
 import { displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n } from "../../shared/i18n";
 import { ContextMenu, type ContextMenuItem } from "../../shared/ui/ContextMenu";
@@ -76,6 +77,8 @@ interface BranchesSidebarProps {
   onCopyBranchName: (name: string) => void;
   /** Opens the comparison with this branch or tag as its base. Comparing only reads, so it stays available while a task runs. */
   onCompareRef?: (name: string) => void;
+  /** Runs a pipeline rule for the branch's pushed commit; offered for local branches. */
+  onRunPipeline?: (branch: { name: string; oid: string }) => void;
   /** Open the Push and Pull dialogs for the current branch; the arrows on its row call them. */
   onOpenPushDialog?: () => void;
   onOpenPullDialog?: () => void;
@@ -107,7 +110,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
     repository, api, branches, orderedBranches, branchError, branchesLoading, remotes, remoteError, remotesLoading,
     remoteActionBusy, remoteDisabledReason, connected, hasActiveRepositoryTask, historyRefreshKey, shortcuts, isMacPlatform,
     selectedBranch, selectedCommit, onSelectCommit, onCreateTag, onTagTaskStarted, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
-    onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onCompareRef, onOpenPushDialog, onOpenPullDialog, pushDisabledReason, pullDisabledReason, onOpenWorktree,
+    onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onCompareRef, onRunPipeline, onOpenPushDialog, onOpenPullDialog, pushDisabledReason, pullDisabledReason, onOpenWorktree,
     onNewWorktreeForBranch, onNewWorktreeFrom, onRemoveWorktree, onRevealPath, onWorktreePruneStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
     onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream, onOpenWebUrl,
   } = props;
@@ -200,6 +203,10 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
       }
     } else {
       items.push({ id: "delete-remote", label: t("bs.menuDeleteRemote"), icon: <MenuIcon name="delete" />, danger: true, separatorBefore: true, disabled: blocked, onSelect: () => onDeleteRemoteBranch(branch.fullName) });
+    }
+    if (onRunPipeline && local) {
+      const blocker = pipelineRunBlocker(branch);
+      items.push({ id: "run-pipeline", label: t("pl.run.menu"), separatorBefore: true, disabled: Boolean(blocker), title: blocker === "noUpstream" ? t("pl.run.noUpstream") : blocker === "unpushed" ? t("pl.run.unpushed") : undefined, onSelect: () => onRunPipeline({ name: branch.name, oid: branch.oid }) });
     }
     if (onCompareRef) items.push({ id: "compare", label: t("bs.menuCompare"), separatorBefore: true, onSelect: () => onCompareRef(branch.name) });
     items.push({ id: "copy", label: t("bs.menuCopyName"), icon: <MenuIcon name="copy" />, separatorBefore: true, onSelect: () => onCopyBranchName(branch.name) });

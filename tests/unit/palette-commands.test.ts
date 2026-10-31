@@ -14,7 +14,7 @@ function runners(): PaletteInput["run"] {
     merge: noop, cherryPick: noop, revert: noop, createTag: noop, reset: noop, rebase: noop, fetch: noop, pull: noop, push: noop,
     commit: noop, commitAndPush: noop, stageAll: noop, undo: noop, refreshStatus: noop, openDiff: noop, searchCommits: noop,
     shelve: noop, openSettings: noop, openAiAssistant: noop, showView: noop, toggleSidebar: noop, toggleInspector: noop,
-    toggleFocusMode: noop, toggleDiffView: noop, showReflog: noop, showSubmodules: noop, compare: noop, openInEditor: noop, openInTerminal: noop, zoomIn: noop, zoomOut: noop, zoomReset: noop, manageRemotes: noop, closeTab: noop,
+    toggleFocusMode: noop, toggleDiffView: noop, showReflog: noop, showSubmodules: noop, compare: noop, runPipeline: noop, openInEditor: noop, openInTerminal: noop, zoomIn: noop, zoomOut: noop, zoomReset: noop, manageRemotes: noop, closeTab: noop,
   };
 }
 
@@ -110,4 +110,19 @@ describe("command palette registry", () => {
     expect(noCommit.find((command) => command.id === "compare-commit")?.unavailableReason).toBeTruthy();
     expect(noCommit.find((command) => command.id === "compare-refs")?.unavailableReason).toBeUndefined();
   });
+
+  it("runs a pipeline for the current branch only when it has a pushed commit", () => {
+    const run = runners();
+    const source = { branch: "feature/1", oid: OID };
+    const ready = createPaletteCommands(input({ run, pipelineSource: source })).find((command) => command.id === "run-pipeline");
+    expect(ready?.unavailableReason).toBeUndefined();
+    ready?.run();
+    expect(run.runPipeline).toHaveBeenCalledWith(source);
+
+    const reason = (pipelineSource: PaletteInput["pipelineSource"]) => createPaletteCommands(input({ pipelineSource })).find((command) => command.id === "run-pipeline")?.unavailableReason;
+    expect(reason({ ...source, blocker: "noUpstream" })).toBe(t("pl.run.noUpstream"));
+    expect(reason({ ...source, blocker: "unpushed" })).toBe(t("pl.run.unpushed"));
+    expect(reason(undefined)).toBeTruthy();
+  });
+
 });

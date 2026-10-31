@@ -7,6 +7,7 @@ import { getRepositoryDisplayName } from "../../shared/lib/repository-display-na
 import { isComposerVisible } from "../../features/commits";
 import { DETAILS_WIDTH } from "../../features/repositories";
 import { CommitActionsMenu, isFullGitObjectId, type CommitFileNavigation, type CommitWorkflowAction } from "../../features/history";
+import { currentPipelineSource } from "../../features/pipelines";
 import { CommitGraph } from "./lazy-views";
 
 import type { Shell } from "./use-app-shell";
@@ -17,7 +18,7 @@ import type { Work } from "./use-app-work";
 import type { Actions } from "./use-app-actions";
 
 export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffArea & Work & Actions) {
-  const { activeBranches, activeDiffKey, activeStatus, activeStatusLoading, addDiffSelectionToCommit, amendCommit, apiRef, branchSwitcher, canCommit, changeWorkspaceMode, cloneSubmission, closeInspector, closeRepositoryTab, commitBusy, commitChanges, commitDescription, commitMessage, commitSummary, connected, copyCommitSha, detailsWidth, diffQuery, diffState, diffTarget, diffViewPreferences, fetchRepository, focusMode, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyFileOid, historyFilePath, historyRequests, inspectorOverlay, isMacPlatform, mode, nextTheme, openCommitFileDiff, openDiffWindow, openExternally, openFileDiff, openPullDialog, openPushDialog, openTagEditor, page, refreshRepositoryStatus, rememberGraphScroll, repositoryOpening, requestDiscard, requestShelfComposer, reviewableFiles, selectCommit, selectedCommit, selectedFilePath, selectedRepository, setCommitAssistantOpen, setCommitMessage, setCompareRequest, setCreateBranchAt, setDetailsWidth, setFocusMode, setHistoryBranch, setLocalBranchAction, setPage, setReflogOpen, setSettingsView, setSidebarHidden, setSubmodulesOpen, setWorktreeFrom, shortcuts, shownHistoryBranch, stageChanges, stageSelectedChanges, stagedCount, stagingBusy, structureQuery, t, theme, toggleFocusMode, toggleInspector, toggleSidebar, undoRecentOperation, updateDiffViewPreferences, workflowDialog, workingCount, workspaceSession } = ctx;
+  const { setPipelineRunSource, activeBranches, activeDiffKey, activeStatus, activeStatusLoading, addDiffSelectionToCommit, amendCommit, apiRef, branchSwitcher, canCommit, changeWorkspaceMode, cloneSubmission, closeInspector, closeRepositoryTab, commitBusy, commitChanges, commitDescription, commitMessage, commitSummary, connected, copyCommitSha, detailsWidth, diffQuery, diffState, diffTarget, diffViewPreferences, fetchRepository, focusMode, hasActiveRepositoryTask, hasActiveStagingTask, hasConflicts, historyFileOid, historyFilePath, historyRequests, inspectorOverlay, isMacPlatform, mode, nextTheme, openCommitFileDiff, openDiffWindow, openExternally, openFileDiff, openPullDialog, openPushDialog, openTagEditor, page, refreshRepositoryStatus, rememberGraphScroll, repositoryOpening, requestDiscard, requestShelfComposer, reviewableFiles, selectCommit, selectedCommit, selectedFilePath, selectedRepository, setCommitAssistantOpen, setCommitMessage, setCompareRequest, setCreateBranchAt, setDetailsWidth, setFocusMode, setHistoryBranch, setLocalBranchAction, setPage, setReflogOpen, setSettingsView, setSidebarHidden, setSubmodulesOpen, setWorktreeFrom, shortcuts, shownHistoryBranch, stageChanges, stageSelectedChanges, stagedCount, stagingBusy, structureQuery, t, theme, toggleFocusMode, toggleInspector, toggleSidebar, undoRecentOperation, updateDiffViewPreferences, workflowDialog, workingCount, workspaceSession } = ctx;
 
   const commands = createPaletteCommands({
     t,
@@ -31,6 +32,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
       : undefined,
     hasActiveRepositoryTask,
     hasBranches: Boolean(activeBranches),
+    pipelineSource: currentPipelineSource(activeBranches),
     stagedCount,
     workingCount,
     hasConflicts,
@@ -90,6 +92,7 @@ export function useAppViewModel(ctx: Shell & Connection & Repositories & DiffAre
       showReflog: () => setReflogOpen(true),
       showSubmodules: () => setSubmodulesOpen(true),
       compare: setCompareRequest,
+      runPipeline: (source) => setPipelineRunSource(source),
       openInEditor: () => { if (selectedRepository) void openExternally("editor", selectedRepository.repoId); },
       openInTerminal: () => { if (selectedRepository) void openExternally("terminal", selectedRepository.repoId); },
       manageRemotes: () => { changeWorkspaceMode("history"); setSidebarHidden("history", false); setFocusMode(false); },

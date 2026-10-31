@@ -21,14 +21,27 @@ export interface PipelineConflictPrompt {
   targetBranch: string;
 }
 
+/** A target could not run because its temporary worktree was unusable; nothing fell back silently. */
+export interface PipelineWorkspaceFailure {
+  runId: string;
+  repoId: string;
+  ruleId: string;
+  sourceBranch: string;
+  sourceOid: string;
+  message: string;
+}
+
 export interface PipelineState {
   /** Newest known snapshot of each run, by run id. */
   runs: Readonly<Record<string, PipelineRunResponse>>;
   triggers: readonly PipelineTriggerPrompt[];
   aborted: readonly PipelineConflictPrompt[];
+  workspaceFailures: readonly PipelineWorkspaceFailure[];
+  /** Failures the user already answered, so later updates of the same run do not ask again. */
+  answeredFailures: readonly string[];
 }
 
-export const EMPTY_PIPELINE_STATE: PipelineState = { runs: {}, triggers: [], aborted: [] };
+export const EMPTY_PIPELINE_STATE: PipelineState = { runs: {}, triggers: [], aborted: [], workspaceFailures: [], answeredFailures: [] };
 const MAX_RUNS = 100;
 
 function text(value: unknown): string | undefined {
@@ -50,8 +63,14 @@ export function reducePipelineEvent(state: PipelineState, event: Pick<GitCrestEv
       const oldest = ids.sort((a, b) => runs[a].createdAtMs - runs[b].createdAtMs).slice(0, ids.length - MAX_RUNS);
       for (const id of oldest) delete runs[id];
     }
+    const failedStep = run.steps.find((step) => step.workspaceFailed);
+    const workspaceFailures = failedStep && run.executionMode === "temporaryWorktree" && !state.answeredFailures.includes(run.runId) && !state.workspaceFailures.some((failure) => failure.runId === run.runId)
+      ? [...state.workspaceFailures, { runId: run.runId, repoId: run.repoId, ruleId: run.ruleId, sourceBranch: run.sourceBranch, sourceOid: run.sourceOid, message: failedStep.message ?? "" }]
+      : state.workspaceFailures;
     return {
+      ...state,
       runs,
+      workspaceFailures,
       triggers: run.status === "pendingConfirmation" ? state.triggers : state.triggers.filter((prompt) => prompt.runId !== run.runId),
       aborted: run.status === "waitingForConflicts" ? state.aborted : state.aborted.filter((prompt) => prompt.runId !== run.runId),
     };
@@ -119,6 +138,14 @@ export function replacePipelineRuns(repoId: string, runs: readonly PipelineRunRe
 
 export function dismissPipelineTrigger(runId: string) {
   set({ ...current, triggers: current.triggers.filter((prompt) => prompt.runId !== runId) });
+}
+
+export function dismissPipelineWorkspaceFailure(runId: string) {
+  set({
+    ...current,
+    workspaceFailures: current.workspaceFailures.filter((failure) => failure.runId !== runId),
+    answeredFailures: [...current.answeredFailures, runId].slice(-MAX_RUNS),
+  });
 }
 
 export function dismissPipelineConflictPrompt(runId: string) {

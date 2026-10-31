@@ -41,7 +41,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
 
   useEffect(() => {
     let cancelled = false;
-    void api.listPipelineRuns(repoId).then((loaded) => { if (!cancelled) replacePipelineRuns(repoId, loaded); }, () => {});
+    void api.listPipelineRuns(repoId).then((loaded) => { if (!cancelled && Array.isArray(loaded)) replacePipelineRuns(repoId, loaded); }, () => {});
     return () => { cancelled = true; };
   }, [api, repoId]);
 

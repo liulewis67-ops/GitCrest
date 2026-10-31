@@ -1,6 +1,6 @@
 # Post-Push Pipeline Plan
 
-Status: in progress (A0.1 to A4.1 done; A4.2 and A4.3 remain). Date: 2026-10-31.
+Status: in progress (A0.1 to A4.2 done; A4.3 remains). Date: 2026-10-31.
 Scope: user-defined automations that run after a successful push, starting with "merge the pushed branch into one or more integration branches and push them" (`crates/gitcrest-core/`, `src/`, `doc/api/v1.yaml`).
 Related: [12-git-engine-architecture.md](12-git-engine-architecture.md) (tasks and locks), [conflict-resolver-enhancement-plan.md](conflict-resolver-enhancement-plan.md) (conflict window), [07-interaction-accessibility.md](07-interaction-accessibility.md) (safety rules), [13-implementation-plan.md](13-implementation-plan.md) (ledger and commit rules).
 
@@ -273,7 +273,7 @@ Same rules as [13-implementation-plan.md](13-implementation-plan.md) §2 and [ux
 | A3.2 | Conflict integration | M | A3.1, A2.3 | Conflict policies (§7), recovery hook, conflict window and auto-open for ephemeral contexts, abort dialog. E2E: a conflict on `uat` opens the window, resolving continues to `dev`, and both are pushed. | done (the E2E is covered by service-level tests that drive real repositories; no Electron window is automated) |
 | A3.3 | Restart recovery | M | A3.2 | Startup proposals for every row in §8, orphan sweep. Tests kill the engine at each persisted step and check the proposal. | done (the engine is "killed" by building a second service over the same database and folders; leftover stashes of finished in-place runs are not surfaced yet) |
 | A4.1 | Settings UI | M | A1.2 | Automations section, mode setting with override, rule list and editor with pattern and message previews, validation messages, i18n. Component tests for the editor. | done |
-| A4.2 | Run UI | M | A3.2, A4.1 | Trigger confirmation dialog, grouped Task Center row with actions, in-place banner with disabled actions, **Run pipeline…** in the branch menu and command palette, worktree-failure dialog (§5.5). E2E for the main path in both modes. | not started |
+| A4.2 | Run UI | M | A3.2, A4.1 | Trigger confirmation dialog, grouped Task Center row with actions, in-place banner with disabled actions, **Run pipeline…** in the branch menu and command palette, worktree-failure dialog (§5.5). E2E for the main path in both modes. | done |
 | A4.3 | Import and export | S | A4.1 | `.gitcrest/pipelines.json` schema, export, import with review and forced `ask`. Tests cover a malformed file and a protected target. | not started |
 
 Suggested order: A1.1 → A2.1 → A2.2 (default mode first) → A1.2 → A3.1 → A2.3 → A3.2 → A3.3 → A4.1 → A4.2 → A4.3.

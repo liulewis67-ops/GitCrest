@@ -67,6 +67,8 @@ export interface PaletteInput {
   repository?: { repoId: string; availability: string; head: string | null; branch: string | null; detached: boolean };
   hasActiveRepositoryTask: boolean;
   hasBranches: boolean;
+  /** The current local branch as a pipeline source: its pushed commit, and why it cannot run if so. */
+  pipelineSource?: { branch: string; oid: string; blocker?: "noUpstream" | "unpushed" };
   stagedCount: number;
   workingCount: number;
   hasConflicts: boolean;
@@ -121,6 +123,7 @@ export interface PaletteInput {
     showReflog: () => void;
     showSubmodules: () => void;
     compare: (request: { base?: string; head?: string; workingTree?: boolean }) => void;
+    runPipeline: (source: { branch: string; oid: string }) => void;
     openInEditor: () => void;
     openInTerminal: () => void;
     zoomIn: () => void;
@@ -212,6 +215,12 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
     ), run.openAiAssistant, "aiCommitMessage"),
     command("branch-switcher", "branches", "cmd.branchSwitcher", shortcutDetail("cmd.branchSwitcherDetail", "branchSwitcher"), repositoryReady, run.openBranchSwitcher, "branchSwitcher"),
     command("show-submodules", "branches", "cmd.showSubmodules", t("cmd.showSubmodulesDetail"), repositoryReady, run.showSubmodules),
+    command("run-pipeline", "branches", "cmd.runPipeline", t("cmd.runPipelineDetail"), firstReason(
+      repositoryReady,
+      !input.pipelineSource && t("cmd.why.noBranches"),
+      input.pipelineSource?.blocker === "noUpstream" && t("pl.run.noUpstream"),
+      input.pipelineSource?.blocker === "unpushed" && t("pl.run.unpushed"),
+    ), () => { if (input.pipelineSource) run.runPipeline(input.pipelineSource); }),
     command("compare-refs", "branches", "cmd.compareRefs", t("cmd.compareRefsDetail"), repositoryReady, () => run.compare({})),
     command("compare-commit", "commits", "cmd.compareCommit", t("cmd.compareCommitDetail"), commitReady, () => run.compare({ base: commitOid })),
     command("compare-commit-tree", "commits", "cmd.compareCommitTree", t("cmd.compareCommitTreeDetail"), commitReady, () => run.compare({ base: commitOid, workingTree: true })),
