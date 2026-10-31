@@ -44,21 +44,45 @@ pub async fn read_page_indexed(
         && filters.path.is_none()
         && filters.since.is_none()
         && filters.until.is_none();
-    let (fingerprint, cached_page, stale_cached_index, index_miss) = if indexable_message_search {
-        let message = filters.message.as_deref().unwrap_or_default();
-        cached_message_page(
-            repo_id.clone(),
-            repository_path,
-            head,
-            message.to_owned(),
-            offset,
-            limit,
-            store.clone(),
-        )
-        .await
-    } else {
-        (None, None, false, false)
-    };
+    let (mut fingerprint, mut cached_page, mut stale_cached_index, mut index_miss) =
+        if indexable_message_search {
+            let message = filters.message.as_deref().unwrap_or_default();
+            cached_message_page(
+                repo_id.clone(),
+                repository_path,
+                head,
+                message.to_owned(),
+                offset,
+                limit,
+                store.clone(),
+            )
+            .await
+        } else {
+            (None, None, false, false)
+        };
+    // The refs moved since the index was built (a fetch brought commits, or a commit was made).
+    // Adding just those commits is quick, so try it here and answer from the index instead of
+    // walking all of history; if it cannot be done in time, the search falls back to Git as before.
+    if cached_page.is_none() && indexable_message_search && index_miss && store.has_index(&repo_id)
+    {
+        if let Some(current) = fingerprint.clone() {
+            if refresh_index_quickly(&repo_id, repository_path, head, &current, store.clone()).await
+            {
+                let message = filters.message.as_deref().unwrap_or_default();
+                let retried = cached_message_page(
+                    repo_id.clone(),
+                    repository_path,
+                    head,
+                    message.to_owned(),
+                    offset,
+                    limit,
+                    store.clone(),
+                )
+                .await;
+                (fingerprint, cached_page, stale_cached_index, index_miss) = retried;
+            }
+        }
+    }
     if let Some(page) = cached_page {
         return Ok(page);
     }
@@ -477,6 +501,80 @@ async fn history_index_tips(repository_path: &Path) -> Result<Vec<String>, Histo
     .map_err(|_| HistoryError::GitFailed)?
 }
 
+/// How long a search may spend bringing the index up to date before it answers from Git instead.
+/// Short, because the search itself still has to run afterwards.
+const QUICK_REFRESH_BUDGET: std::time::Duration = std::time::Duration::from_millis(150);
+
+/// Adds the commits that appeared since the index was built, within a short budget. True when the
+/// index now matches `fingerprint`; false when nothing could be added in time or the change was one
+/// an incremental update cannot express (history rewritten, older commits added), which a full
+/// rebuild in the background handles.
+pub(super) async fn refresh_index_quickly(
+    repo_id: &str,
+    repository_path: &Path,
+    head: Option<&str>,
+    fingerprint: &str,
+    store: Arc<dyn HistorySearchIndexPort>,
+) -> bool {
+    if store.is_index_building(repo_id) {
+        return false;
+    }
+    let Some(old_basis) = store.index_basis(repo_id) else {
+        return false;
+    };
+    let attempt = async {
+        let tips = history_index_tips(repository_path).await?;
+        try_prepend_new_commits(
+            repo_id,
+            repository_path,
+            head,
+            fingerprint,
+            &tips,
+            &old_basis,
+            store.clone(),
+        )
+        .await
+    };
+    matches!(
+        tokio::time::timeout(QUICK_REFRESH_BUDGET, attempt).await,
+        Ok(Ok(true))
+    )
+}
+
+/// Every commit reachable from the old tips is still reachable from the new ones. Asked of the
+/// repository in process, since starting a Git process for it costs more than the answer takes. An
+/// old tip that no longer exists answers false, which leads to a full rebuild.
+async fn old_tips_still_reachable(
+    repository_path: &Path,
+    old_tips: &[String],
+    new_tips: &[String],
+) -> Result<bool, HistoryError> {
+    let repository_path = repository_path.to_owned();
+    let old_tips = old_tips.to_vec();
+    let new_tips = new_tips.to_vec();
+    tokio::task::spawn_blocking(move || {
+        let repository = Repository::open(repository_path).map_err(|_| HistoryError::GitFailed)?;
+        let mut walk = repository.revwalk().map_err(|_| HistoryError::GitFailed)?;
+        for tip in &old_tips {
+            let Ok(oid) = git2::Oid::from_str(tip) else {
+                return Ok(false);
+            };
+            if walk.push(oid).is_err() {
+                return Ok(false);
+            }
+        }
+        for tip in &new_tips {
+            let Ok(oid) = git2::Oid::from_str(tip) else {
+                return Ok(false);
+            };
+            walk.hide(oid).map_err(|_| HistoryError::GitFailed)?;
+        }
+        Ok(walk.next().is_none())
+    })
+    .await
+    .map_err(|_| HistoryError::GitFailed)?
+}
+
 /// Adds only the commits that appeared since the last build. Correct only when
 /// every previously indexed commit is still reachable and every new commit is
 /// strictly newer than the newest indexed one, so that `git log` would list the
@@ -494,20 +592,7 @@ async fn try_prepend_new_commits(
     if tips.is_empty() {
         return Ok(false);
     }
-    let mut lost_arguments: Vec<std::ffi::OsString> =
-        vec!["rev-list".into(), "-n".into(), "1".into()];
-    lost_arguments.extend(old_basis.tips.iter().map(std::ffi::OsString::from));
-    lost_arguments.push("--not".into());
-    lost_arguments.extend(tips.iter().map(std::ffi::OsString::from));
-    lost_arguments.push("--".into());
-    let lost = run_git_bulk_with_deadline(
-        repository_path,
-        &lost_arguments,
-        1024,
-        HISTORY_INDEX_DEADLINE,
-    )
-    .await?;
-    if !lost.is_empty() {
+    if !old_tips_still_reachable(repository_path, &old_basis.tips, tips).await? {
         return Ok(false);
     }
     let output = run_git_bulk_with_deadline(

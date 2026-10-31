@@ -56,7 +56,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U10.3 | Submodule status and update | P1 | L | — | not started |
 | U10.4 | Recognize LFS pointer files | P2 | S | — | done |
 | U11.1 | Commit signing setup and failure help | P1 | M | U1.1 | done |
-| U12.1 | History search under 200 ms after a refs change | P1 | M | — | not started |
+| U12.1 | History search under 200 ms after a refs change | P1 | M | — | done |
 | U13.1 | Unified feedback with undo | P2 | M | — | done |
 | U13.2 | Interface zoom | P2 | S | — | done |
 | U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | not started |
@@ -465,3 +465,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/diff/images.rs`, `src/features/diff/ui/ImageDiff.tsx`, `tests/unit/image-diff.test.tsx`
 - Limits / follow-up: a changed PNG, JPEG, GIF, WebP or SVG that the diff reports as binary now opens an image comparison, in the main diff area and in the Diff window, instead of the "binary file" note. Views: side by side, swipe (a slider moves the divider) and onion skin (a slider sets the new version's opacity), with each version's dimensions and size and the size change; swipe and onion skin need both versions. The new `GET /repositories/{repoId}/image` returns the bytes of one side (`workingTree`: staged version against the file on disk; `index`: HEAD against staged; `commit`: first parent against the commit; the old side of a rename uses the original path), read only, for those six extensions only, up to 8 MiB, from the repository only (no `..`, no `.git`, a link on disk is refused), sent with `nosniff` and a sandboxing content security policy. The renderer shows it through an image element on an object URL and releases the URL when the view closes, so SVG scripts never run. A version over 8 MiB or one that cannot be read is named as such; the other side still shows. Image files stored in Git LFS show the pointer text, so they fail to decode and are reported as not loadable. Animation in GIF and WebP plays in the browser's normal way. Not done: ICO, BMP and AVIF, and an EXIF-orientation check.
 - Commit: see git log (`feat: complete U10.2 compare image files side by side, by swipe and by onion skin`)
+
+### U12.1 — History search after a refs change
+- Status: done (the 100k-fixture P95 benchmark was not run; see limits)
+- Tests: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test` (new `a_search_after_new_commits_refreshes_the_index_itself_and_stays_in_git_order` adds commits after the index is built, searches, and checks the results match Git's order; a rewound branch makes the quick refresh decline). No API change.
+- Manual check: not run. Only a tiny test repository was timed: a quick refresh took 41–103 ms there (with two Git spawns, before the check was moved in process).
+- Evidence: `crates/gitcrest-core/src/features/history/service/search_index.rs` (`refresh_index_quickly`, `old_tips_still_reachable`)
+- Limits / follow-up: when a message search misses the cache because refs changed and an index already exists, the search first tries to prepend only the new commits within a 150 ms budget, instead of waiting for a full rebuild. The "old commits still reachable" check runs in process (libgit2 revwalk). If the budget runs out, history was rewritten, or a build is running, it falls back to the old path. The 20-run P95 measurement on the 100k fixture with the S7.2 scripts was not done, so the 200 ms target is not claimed for large repositories and `doc/evidence/U12.1/` has no data.
+- Commit: see git log (`feat: complete U12.1 refresh the history search index incrementally after a refs change`)

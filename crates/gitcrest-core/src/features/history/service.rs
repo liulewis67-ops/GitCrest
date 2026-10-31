@@ -513,6 +513,105 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_search_after_new_commits_refreshes_the_index_itself_and_stays_in_git_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path();
+        git(path, &["init", "--quiet", "-b", "main"]);
+        git(path, &["config", "user.name", "GitCrest History"]);
+        git(path, &["config", "user.email", "history@example.invalid"]);
+        let base = 1_700_000_000_i64;
+        for (index, text) in ["one", "two", "three"].iter().enumerate() {
+            std::fs::write(path.join("history.txt"), format!("{text}\n")).unwrap();
+            commit_at(path, &format!("needle {text}"), base + 100 * index as i64);
+        }
+        let manager = RepositoryManager::default();
+        let store: Arc<dyn HistorySearchIndexPort> = Arc::new(manager.store());
+        build_and_expect_git_order(&manager, path, &store).await;
+        let repository = manager.open_path(path.to_str().unwrap()).await.unwrap();
+
+        // A newer commit arrives, as a fetch or a commit from another tool would bring it.
+        std::fs::write(path.join("history.txt"), "four\n").unwrap();
+        commit_at(path, "needle four", base + 500);
+        let head = git(path, &["rev-parse", "HEAD"]);
+        let current = refs_fingerprint(path, Some(&head)).await.unwrap();
+        assert!(
+            store
+                .search_messages(&repository.repo_id, &current, "needle", 0, 10)
+                .unwrap()
+                .is_none(),
+            "the index is stale before the refresh"
+        );
+
+        // The quick refresh adds just that commit, so the index matches without a full rebuild.
+        assert!(
+            search_index::refresh_index_quickly(
+                &repository.repo_id,
+                path,
+                Some(&head),
+                &current,
+                store.clone()
+            )
+            .await
+        );
+        let indexed: Vec<String> = store
+            .search_messages(&repository.repo_id, &current, "needle", 0, 10)
+            .unwrap()
+            .expect("the index matches the new refs")
+            .into_iter()
+            .map(|entry| entry.oid)
+            .collect();
+        assert_eq!(indexed.len(), 4);
+        assert_eq!(indexed[0], head);
+
+        // And the search itself returns Git's order with the new commit first.
+        let filters = HistoryFilters {
+            message: Some("needle".into()),
+            ..Default::default()
+        };
+        let page = read_page_indexed(
+            repository.repo_id.clone(),
+            path,
+            0,
+            10,
+            Some(&head),
+            &filters,
+            store.clone(),
+        )
+        .await
+        .unwrap();
+        let expected: Vec<String> = git(
+            path,
+            &["log", "--format=%H", "HEAD", "--branches", "--remotes"],
+        )
+        .lines()
+        .map(str::to_owned)
+        .collect();
+        assert_eq!(
+            page.commits
+                .iter()
+                .map(|commit| commit.oid.clone())
+                .collect::<Vec<_>>(),
+            expected
+        );
+        assert!(!page.search_pending);
+
+        // A rewrite the incremental path cannot express is declined, not guessed.
+        git(path, &["reset", "--hard", "--quiet", "HEAD~2"]);
+        let rewound = git(path, &["rev-parse", "HEAD"]);
+        let rewound_fingerprint = refs_fingerprint(path, Some(&rewound)).await.unwrap();
+        assert!(
+            !search_index::refresh_index_quickly(
+                &repository.repo_id,
+                path,
+                Some(&rewound),
+                &rewound_fingerprint,
+                store.clone()
+            )
+            .await
+        );
+    }
+
+    #[tokio::test]
     async fn indexed_message_search_matches_git_order_and_invalidates_after_ref_changes() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path();
