@@ -1201,6 +1201,45 @@ impl GitCommandService {
         .await
     }
 
+    /// Checks out the commits the superproject records for some submodules, cloning those that were
+    /// never cloned when `init` is set. Progress and output reach the task log.
+    pub async fn execute_submodule_update(
+        &self,
+        repository_path: &Path,
+        paths: &[String],
+        init: bool,
+        task: TaskContext,
+    ) -> Result<(), TaskFailure> {
+        let mut arguments: Vec<OsString> =
+            vec!["submodule".into(), "update".into(), "--progress".into()];
+        if init {
+            arguments.push("--init".into());
+        }
+        arguments.push("--recursive".into());
+        arguments.push("--".into());
+        arguments.extend(paths.iter().map(OsString::from));
+        run_command(
+            &self.git_program,
+            arguments,
+            Some(format!(
+                "submodule update{} ({} paths)",
+                if init { " --init" } else { "" },
+                paths.len()
+            )),
+            None,
+            Vec::new(),
+            self.network_environment().await?,
+            Some(repository_path),
+            if init {
+                "Initialize and update submodules"
+            } else {
+                "Update submodules"
+            },
+            task,
+        )
+        .await
+    }
+
     /// Applies a stash entry to the working tree; `pop` also drops it, but only when it applied cleanly.
     pub async fn execute_stash_apply(
         &self,

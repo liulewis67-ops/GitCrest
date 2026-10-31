@@ -1442,6 +1442,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/repositories/{repoId}/submodules": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List the submodules the repository declares and where each one stands
+         * @description Read only. A submodule shows the commit the index records, the commit the last commit records and the commit that is checked out. A submodule is opened as its own repository by opening its folder like any other.
+         */
+        get: operations["listSubmodules"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/submodules/update": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue checking out the recorded commit of some or all submodules
+         * @description Runs git submodule update --recursive as a task with progress; init also clones submodules that were never cloned. Only paths from the submodule list are accepted. The task can be cancelled.
+         */
+        post: operations["updateSubmodules"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/repositories/{repoId}/stashes": {
         parameters: {
             query?: never;
@@ -2609,6 +2657,29 @@ export interface components {
             onlyInBase: components["schemas"]["CompareCommitList"];
             onlyInHead: components["schemas"]["CompareCommitList"];
             files: components["schemas"]["CompareFileList"];
+        };
+        SubmoduleEntry: {
+            name: string;
+            path: string;
+            url: string | null;
+            /** @description The commit the index records for the path. */
+            recordedOid: string | null;
+            /** @description The commit the last commit records for the path. */
+            committedOid: string | null;
+            /** @description The commit checked out in the submodule; null until it is initialized. */
+            checkedOutOid: string | null;
+            /** @enum {string} */
+            state: "uninitialized" | "upToDate" | "outOfDate" | "conflicted";
+        };
+        SubmoduleList: {
+            repoId: components["schemas"]["RepoId"];
+            items: components["schemas"]["SubmoduleEntry"][];
+        };
+        SubmoduleUpdateRequest: {
+            /** @description Submodule paths from the list; empty means all that can be updated. */
+            paths?: string[];
+            /** @default false */
+            init: boolean;
         };
         StashEntry: {
             /** @description Position in the list, as in stash@{index}. */
@@ -7423,6 +7494,103 @@ export interface operations {
                 };
             };
             406: components["responses"]["UnsupportedVersion"];
+        };
+    };
+    listSubmodules: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The submodules, by path. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SubmoduleList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Git could not read the submodules. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    updateSubmodules: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SubmoduleUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Task accepted. */
+            202: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TaskSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description The repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description A merge */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
         };
     };
     getRepositoryStashes: {

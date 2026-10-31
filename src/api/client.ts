@@ -42,6 +42,7 @@ export type IgnoreRuleResponse = components["schemas"]["IgnoreRule"];
 export type StashPreviewResponse = components["schemas"]["StashPreview"];
 export type ReflogPageResponse = components["schemas"]["ReflogPage"];
 export type CompareResultResponse = components["schemas"]["CompareResult"];
+export type SubmoduleListResponse = components["schemas"]["SubmoduleList"];
 export type LfsStatusResponse = components["schemas"]["LfsStatus"];
 export type SigningConfigResponse = components["schemas"]["SigningConfig"];
 export type SigningTestResponse = components["schemas"]["SigningTestResult"];
@@ -358,6 +359,19 @@ export class GitCrestApiClient {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ oid, pop, expectedHeadOid } satisfies components["schemas"]["StashApplyRequest"]),
+    });
+  }
+
+  listSubmodules(repoId: RepoId): Promise<SubmoduleListResponse> {
+    return this.request<SubmoduleListResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/submodules`);
+  }
+
+  /** Queues checking out the recorded commits; an empty `paths` means every submodule that can be updated. */
+  updateSubmodules(repoId: RepoId, request: { paths: string[]; init: boolean }): Promise<TaskSnapshotResponse> {
+    return this.request<TaskSnapshotResponse>(`/api/v1/repositories/${encodeURIComponent(repoId)}/submodules/update`, true, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request satisfies components["schemas"]["SubmoduleUpdateRequest"]),
     });
   }
 

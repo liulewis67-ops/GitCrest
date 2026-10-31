@@ -2681,6 +2681,58 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { description: The repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
         "406": { $ref: "#/components/responses/UnsupportedVersion" }
+  /api/v1/repositories/{repoId}/submodules:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    get:
+      operationId: listSubmodules
+      summary: List the submodules the repository declares and where each one stands
+      description: >-
+        Read only. A submodule shows the commit the index records, the commit the last commit records and the commit
+        that is checked out. A submodule is opened as its own repository by opening its folder like any other.
+      responses:
+        "200":
+          description: The submodules, by path.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/SubmoduleList" } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "503": { description: Git could not read the submodules., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+  /api/v1/repositories/{repoId}/submodules/update:
+    parameters:
+      - $ref: "#/components/parameters/ApiVersion"
+      - name: repoId
+        in: path
+        required: true
+        schema: { $ref: "#/components/schemas/RepoId" }
+    post:
+      operationId: updateSubmodules
+      summary: Queue checking out the recorded commit of some or all submodules
+      description: >-
+        Runs git submodule update --recursive as a task with progress; init also clones submodules that were never
+        cloned. Only paths from the submodule list are accepted. The task can be cancelled.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/SubmoduleUpdateRequest" } } }
+      responses:
+        "202":
+          description: Task accepted.
+          headers:
+            X-GitCrest-API-Version: { $ref: "#/components/headers/ApiVersion" }
+          content: { application/json: { schema: { $ref: "#/components/schemas/TaskSnapshot" } } }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: The repository is unavailable., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
+        "406": { $ref: "#/components/responses/UnsupportedVersion" }
+        "409": { description: A merge, rebase or similar Git operation is in progress., content: { application/json: { schema: { $ref: "#/components/schemas/ApiErrorResponse" } } } }
   /api/v1/repositories/{repoId}/stashes:
     parameters:
       - $ref: "#/components/parameters/ApiVersion"
@@ -5037,6 +5089,31 @@ components:
         onlyInBase: { $ref: "#/components/schemas/CompareCommitList" }
         onlyInHead: { $ref: "#/components/schemas/CompareCommitList" }
         files: { $ref: "#/components/schemas/CompareFileList" }
+    SubmoduleEntry:
+      type: object
+      additionalProperties: false
+      required: [name, path, url, recordedOid, committedOid, checkedOutOid, state]
+      properties:
+        name: { type: string }
+        path: { type: string }
+        url: { type: [string, "null"] }
+        recordedOid: { type: [string, "null"], description: The commit the index records for the path. }
+        committedOid: { type: [string, "null"], description: The commit the last commit records for the path. }
+        checkedOutOid: { type: [string, "null"], description: The commit checked out in the submodule; null until it is initialized. }
+        state: { type: string, enum: [uninitialized, upToDate, outOfDate, conflicted] }
+    SubmoduleList:
+      type: object
+      additionalProperties: false
+      required: [repoId, items]
+      properties:
+        repoId: { $ref: "#/components/schemas/RepoId" }
+        items: { type: array, items: { $ref: "#/components/schemas/SubmoduleEntry" } }
+    SubmoduleUpdateRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        paths: { type: array, maxItems: 500, items: { type: string, minLength: 1, maxLength: 4096 }, description: Submodule paths from the list; empty means all that can be updated. }
+        init: { type: boolean, default: false }
     StashEntry:
       type: object
       additionalProperties: false

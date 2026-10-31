@@ -119,6 +119,7 @@ export interface PaletteInput {
     toggleFocusMode: () => void;
     toggleDiffView: () => void;
     showReflog: () => void;
+    showSubmodules: () => void;
     compare: (request: { base?: string; head?: string; workingTree?: boolean }) => void;
     openInEditor: () => void;
     openInTerminal: () => void;
@@ -210,6 +211,7 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
       input.commitBusy && why.busy,
     ), run.openAiAssistant, "aiCommitMessage"),
     command("branch-switcher", "branches", "cmd.branchSwitcher", shortcutDetail("cmd.branchSwitcherDetail", "branchSwitcher"), repositoryReady, run.openBranchSwitcher, "branchSwitcher"),
+    command("show-submodules", "branches", "cmd.showSubmodules", t("cmd.showSubmodulesDetail"), repositoryReady, run.showSubmodules),
     command("compare-refs", "branches", "cmd.compareRefs", t("cmd.compareRefsDetail"), repositoryReady, () => run.compare({})),
     command("compare-commit", "commits", "cmd.compareCommit", t("cmd.compareCommitDetail"), commitReady, () => run.compare({ base: commitOid })),
     command("compare-commit-tree", "commits", "cmd.compareCommitTree", t("cmd.compareCommitTreeDetail"), commitReady, () => run.compare({ base: commitOid, workingTree: true })),

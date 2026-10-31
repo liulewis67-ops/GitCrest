@@ -34,6 +34,7 @@ export const COMMAND_SYNONYMS: Record<string, string> = {
   "close-tab": "close repository 关闭",
   "new-worktree": "second checkout folder 工作树",
   "toggle-diff-view": "split unified side by side inline layout 并排 统一 分栏",
+  "show-submodules": "submodule nested repository update init clone gitlink 子模块 嵌套 更新 初始化",
   "compare-refs": "compare diff branches tags between two refs 比较 对比 分支 差异",
   "compare-commit": "compare diff commit other branch tag 比较 对比 提交 差异",
   "compare-commit-tree": "compare diff commit working tree local changes 比较 对比 工作区 差异",

@@ -25,7 +25,7 @@ export const diff = {
   "sd.conflicted": ["This file is conflicted. Three way conflict review is available in a later workflow stage.", "此文件存在冲突。三方冲突检查将在后续工作流阶段提供。"],
   "sd.ignored": ["This path is ignored by Git and has no tracked diff.", "此路径被 Git 忽略，没有被跟踪的差异。"],
   "sd.symlink": ["This path is a symbolic link. GitCrest shows its status without following its target.", "此路径是符号链接。GitCrest 只显示其状态，不会跟随其目标。"],
-  "sd.submodule": ["This path is a submodule. Its nested repository diff is not available yet.", "此路径是子模块，暂不支持查看其嵌套仓库的差异。"],
+  "sd.submodule": ["This path is a submodule. Use “Show submodules” in the command palette to see its recorded and checked-out commits, open it as a repository, or update it.", "此路径是子模块。可在命令面板中使用“查看子模块”，查看其记录的和已检出的提交、把它作为仓库打开或更新它。"],
   "sd.diffAria": ["{scope} diff for {path}", "{path} 的{scope}差异"],
   "sd.scopeCommit": ["COMMIT ↔ FIRST PARENT", "提交 ↔ 第一个父提交"],
   "sd.scopeIndex": ["INDEX ↔ HEAD", "暂存区 ↔ HEAD"],

@@ -16,6 +16,7 @@ pub(crate) mod signing;
 pub(crate) mod staging;
 pub(crate) mod stash;
 pub(crate) mod status;
+pub(crate) mod submodules;
 pub(crate) mod system;
 pub(crate) mod tags;
 pub(crate) mod tasks;

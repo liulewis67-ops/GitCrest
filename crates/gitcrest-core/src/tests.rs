@@ -9488,3 +9488,231 @@ async fn compare_api_matches_git_log_and_diff_pages_and_refuses_unsafe_names() {
         StatusCode::NOT_FOUND
     );
 }
+
+#[tokio::test]
+async fn submodule_api_lists_where_each_stands_and_updates_them_as_tasks() {
+    // Recent Git refuses to clone a local path for a submodule unless told it is fine.
+    std::env::set_var("GIT_CONFIG_COUNT", "1");
+    std::env::set_var("GIT_CONFIG_KEY_0", "protocol.file.allow");
+    std::env::set_var("GIT_CONFIG_VALUE_0", "always");
+    let directory = tempfile::tempdir().unwrap();
+    let run = |root: &std::path::Path, args: &[&str]| {
+        let output = std::process::Command::new("git")
+            .arg("-C")
+            .arg(root)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{args:?}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    };
+    let configure = |root: &std::path::Path| {
+        run(root, &["config", "user.name", "GitCrest Test"]);
+        run(
+            root,
+            &["config", "user.email", "gitcrest-test@example.invalid"],
+        );
+    };
+    let inner = directory.path().join("inner");
+    std::fs::create_dir(&inner).unwrap();
+    run(&inner, &["init", "--quiet", "--initial-branch=main"]);
+    configure(&inner);
+    std::fs::write(inner.join("lib.txt"), "one\n").unwrap();
+    run(&inner, &["add", "."]);
+    run(&inner, &["commit", "--quiet", "-m", "inner one"]);
+    let first = run(&inner, &["rev-parse", "HEAD"]);
+    std::fs::write(inner.join("lib.txt"), "two\n").unwrap();
+    run(&inner, &["commit", "--quiet", "-am", "inner two"]);
+    let second = run(&inner, &["rev-parse", "HEAD"]);
+
+    let outer = directory.path().join("outer");
+    std::fs::create_dir(&outer).unwrap();
+    run(&outer, &["init", "--quiet", "--initial-branch=main"]);
+    configure(&outer);
+    std::fs::write(outer.join("readme.txt"), "outer\n").unwrap();
+    run(&outer, &["add", "."]);
+    run(&outer, &["commit", "--quiet", "-m", "outer"]);
+    run(
+        &outer,
+        &[
+            "submodule",
+            "add",
+            "--quiet",
+            inner.to_str().unwrap(),
+            "libs/inner",
+        ],
+    );
+    run(&outer, &["commit", "--quiet", "-m", "add the submodule"]);
+    let clone = directory.path().join("clone");
+    run(
+        directory.path(),
+        &[
+            "clone",
+            "--quiet",
+            outer.to_str().unwrap(),
+            clone.to_str().unwrap(),
+        ],
+    );
+
+    let app = test_app(None);
+    let open = |path: std::path::PathBuf| {
+        let app = app.clone();
+        async move {
+            let opened = app
+                .oneshot(json_request(
+                    Method::POST,
+                    "/api/v1/repositories",
+                    &serde_json::json!({ "path": path }).to_string(),
+                ))
+                .await
+                .unwrap();
+            let body = to_bytes(opened.into_body(), usize::MAX).await.unwrap();
+            serde_json::from_slice::<serde_json::Value>(&body).unwrap()["repoId"]
+                .as_str()
+                .unwrap()
+                .to_owned()
+        }
+    };
+    let outer_id = open(outer.clone()).await;
+    let clone_id = open(clone.clone()).await;
+    let list = |repo_id: String| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(request(
+                    &format!("/api/v1/repositories/{repo_id}/submodules"),
+                    Some(READ_ONLY_TOKEN),
+                ))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+    let update = |repo_id: String, body: serde_json::Value| {
+        let app = app.clone();
+        async move {
+            let response = app
+                .oneshot(json_request(
+                    Method::POST,
+                    &format!("/api/v1/repositories/{repo_id}/submodules/update"),
+                    &body.to_string(),
+                ))
+                .await
+                .unwrap();
+            let status = response.status();
+            let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+            (
+                status,
+                serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default(),
+            )
+        }
+    };
+
+    // The recorded, committed and checked-out commits of a submodule that is where it should be.
+    let (status, listed) = list(outer_id.clone()).await;
+    assert_eq!(status, StatusCode::OK);
+    let item = &listed["items"][0];
+    assert_eq!(listed["items"].as_array().unwrap().len(), 1);
+    assert_eq!(item["path"], "libs/inner");
+    assert_eq!(item["recordedOid"], second);
+    assert_eq!(item["committedOid"], second);
+    assert_eq!(item["checkedOutOid"], second);
+    assert_eq!(item["state"], "upToDate");
+    assert!(item["url"].as_str().unwrap().contains("inner"));
+
+    // A checkout that moved away from the recorded commit is out of date, and an update restores it.
+    run(&outer.join("libs/inner"), &["checkout", "--quiet", &first]);
+    let (_, moved) = list(outer_id.clone()).await;
+    assert_eq!(moved["items"][0]["state"], "outOfDate");
+    assert_eq!(moved["items"][0]["checkedOutOid"], first);
+    assert_eq!(moved["items"][0]["recordedOid"], second);
+    let (status, task) = update(
+        outer_id.clone(),
+        serde_json::json!({ "paths": ["libs/inner"] }),
+    )
+    .await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let finished = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+    assert_eq!(finished["status"], "succeeded", "{finished}");
+    let (_, restored) = list(outer_id.clone()).await;
+    assert_eq!(restored["items"][0]["state"], "upToDate");
+    assert_eq!(restored["items"][0]["checkedOutOid"], second);
+
+    // A fresh clone has not initialized it: only an initializing update clones it.
+    let (_, fresh) = list(clone_id.clone()).await;
+    assert_eq!(fresh["items"][0]["state"], "uninitialized");
+    assert!(fresh["items"][0]["checkedOutOid"].is_null());
+    assert_eq!(
+        update(clone_id.clone(), serde_json::json!({})).await.0,
+        StatusCode::BAD_REQUEST
+    );
+    let (status, task) = update(clone_id.clone(), serde_json::json!({ "init": true })).await;
+    assert_eq!(status, StatusCode::ACCEPTED);
+    let finished = wait_for_task(&app, task["taskId"].as_str().unwrap()).await;
+    assert_eq!(finished["status"], "succeeded", "{finished}");
+    let (_, initialized) = list(clone_id.clone()).await;
+    assert_eq!(initialized["items"][0]["state"], "upToDate");
+    assert_eq!(initialized["items"][0]["checkedOutOid"], second);
+    // The checkout is a repository of its own that can be opened with its own id.
+    let nested_id = open(clone.join("libs/inner")).await;
+    assert_ne!(nested_id, clone_id);
+
+    // Only declared submodule paths reach Git; unknown repositories, missing rights and bad bodies fail.
+    for body in [
+        serde_json::json!({ "paths": ["readme.txt"] }),
+        serde_json::json!({ "paths": ["../outside"] }),
+        serde_json::json!({ "paths": ["--help"] }),
+        serde_json::json!({ "bogus": true }),
+    ] {
+        assert_eq!(
+            update(outer_id.clone(), body.clone()).await.0,
+            StatusCode::BAD_REQUEST,
+            "{body}"
+        );
+    }
+    assert_eq!(
+        update("repo_missing".into(), serde_json::json!({ "init": true }))
+            .await
+            .0,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(list("repo_missing".into()).await.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        app.clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/{outer_id}/submodules"),
+                None
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        app.clone()
+            .oneshot(json_request_with_token(
+                Method::POST,
+                &format!("/api/v1/repositories/{outer_id}/submodules/update"),
+                "{}",
+                READ_ONLY_TOKEN
+            ))
+            .await
+            .unwrap()
+            .status(),
+        StatusCode::FORBIDDEN
+    );
+    // A repository with no submodules lists none.
+    assert_eq!(
+        list(open(inner.clone()).await).await.1["items"],
+        serde_json::json!([])
+    );
+}
