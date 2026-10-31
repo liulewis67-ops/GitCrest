@@ -115,6 +115,7 @@ fn test_app(cors_origin: Option<&str>) -> Router {
         diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
         undo_store: Arc::new(repositories.store()),
         branch_favorites: Arc::new(repositories.store()),
+        pipeline_store: Arc::new(repositories.store()),
         ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
         history_search_index: Arc::new(repositories.store()),
         clones: CloneService::new(
@@ -279,6 +280,7 @@ async fn remote_api_manages_remotes_defaults_and_branch_upstream_without_logging
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
+            pipeline_store: Arc::new(repositories.store()),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
@@ -976,6 +978,7 @@ async fn ai_request_sends_only_reviewed_current_file_scopes_and_rejects_stale_re
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
+            pipeline_store: Arc::new(repositories.store()),
             ai_providers,
             history_search_index: Arc::new(repositories.store()),
             repository_targets: repositories.target_reader(),
@@ -1955,6 +1958,7 @@ async fn queued_discard_cancellation_does_not_change_the_working_tree() {
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
+            pipeline_store: Arc::new(repositories.store()),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             clones: CloneService::new(
@@ -2977,6 +2981,7 @@ async fn task_api_lists_progress_and_cancels_with_write_capability() {
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
+            pipeline_store: Arc::new(repositories.store()),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
@@ -3120,6 +3125,7 @@ async fn fetch_api_accepts_a_task_and_runs_git_against_the_registered_repository
             diff_worktree: Arc::new(crate::storage::diff::DiffWorktreeAdapter),
             undo_store: Arc::new(repositories.store()),
             branch_favorites: Arc::new(repositories.store()),
+            pipeline_store: Arc::new(repositories.store()),
             ai_providers: Arc::new(crate::storage::settings::MemoryAiProviderStore::default()),
             history_search_index: Arc::new(repositories.store()),
             repositories: repositories.clone(),
@@ -9715,4 +9721,212 @@ async fn submodule_api_lists_where_each_stands_and_updates_them_as_tasks() {
         list(open(inner.clone()).await).await.1["items"],
         serde_json::json!([])
     );
+}
+
+async fn json_body(response: Response) -> serde_json::Value {
+    let bytes = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+    serde_json::from_slice(&bytes).unwrap()
+}
+
+fn pipeline_rule_json(rule_id: &str, targets: &[&str], confirmation: &str) -> serde_json::Value {
+    serde_json::json!({
+        "ruleId": rule_id,
+        "name": "Promote feature",
+        "enabled": true,
+        "trigger": { "kind": "afterPush", "branchPattern": "feature/*" },
+        "targets": targets
+            .iter()
+            .map(|branch| serde_json::json!({ "branch": branch, "remote": "origin" }))
+            .collect::<Vec<_>>(),
+        "mergeMode": "noFastForward",
+        "commitMessageTemplate": "Merge branch '{source}' into {target}",
+        "pushAfterMerge": true,
+        "onConflict": "openResolver",
+        "afterConflictResolved": "continue",
+        "confirmation": confirmation,
+    })
+}
+
+#[tokio::test]
+async fn pipeline_settings_and_rules_api_validates_persists_and_resolves_overrides() {
+    let directory = tempfile::tempdir().unwrap();
+    let root = directory.path().join("pipeline-repo");
+    std::fs::create_dir(&root).unwrap();
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(&root)
+        .args(["init", "--quiet"])
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+
+    let app = test_app(None);
+    let opened = app
+        .clone()
+        .oneshot(json_request(
+            Method::POST,
+            "/api/v1/repositories",
+            &serde_json::json!({ "path": root }).to_string(),
+        ))
+        .await
+        .unwrap();
+    let repo_id = json_body(opened).await["repoId"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let app_uri = "/api/v1/settings/pipelines";
+    let settings_uri = format!("/api/v1/repositories/{repo_id}/pipelines/settings");
+    let rules_uri = format!("/api/v1/repositories/{repo_id}/pipelines/rules");
+
+    // 401 without a token, 403 for a read-only token on writes.
+    for uri in [app_uri, settings_uri.as_str(), rules_uri.as_str()] {
+        let unauthorized = app.clone().oneshot(request(uri, None)).await.unwrap();
+        assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED, "{uri}");
+        let forbidden = app
+            .clone()
+            .oneshot(json_request_with_token(
+                Method::PUT,
+                uri,
+                "{}",
+                READ_ONLY_TOKEN,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(forbidden.status(), StatusCode::FORBIDDEN, "{uri}");
+    }
+
+    // 404 for an unknown repository.
+    for suffix in ["settings", "rules"] {
+        let missing = app
+            .clone()
+            .oneshot(request(
+                &format!("/api/v1/repositories/repo_missing/pipelines/{suffix}"),
+                Some(READ_ONLY_TOKEN),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(missing.status(), StatusCode::NOT_FOUND, "{suffix}");
+    }
+
+    // App defaults, then overrides win in the effective values.
+    let defaults = json_body(
+        app.clone()
+            .oneshot(request(app_uri, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(defaults["executionMode"], "temporaryWorktree");
+    assert_eq!(defaults["inPlaceDirtyPolicy"], "shelve");
+    let invalid_mode = app
+        .clone()
+        .oneshot(json_request(
+            Method::PUT,
+            app_uri,
+            &serde_json::json!({ "executionMode": "rebase", "inPlaceDirtyPolicy": "shelve" })
+                .to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(invalid_mode.status(), StatusCode::BAD_REQUEST);
+    let saved = app
+        .clone()
+        .oneshot(json_request(
+            Method::PUT,
+            app_uri,
+            &serde_json::json!({ "executionMode": "switchInPlace", "inPlaceDirtyPolicy": "refuse" })
+                .to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), StatusCode::OK);
+
+    let inherited = json_body(
+        app.clone()
+            .oneshot(request(&settings_uri, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert!(inherited["executionMode"].is_null());
+    assert_eq!(inherited["effectiveExecutionMode"], "switchInPlace");
+    let overridden = json_body(
+        app.clone()
+            .oneshot(json_request(
+                Method::PUT,
+                &settings_uri,
+                &serde_json::json!({ "executionMode": "temporaryWorktree" }).to_string(),
+            ))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(overridden["executionMode"], "temporaryWorktree");
+    assert_eq!(overridden["effectiveExecutionMode"], "temporaryWorktree");
+    assert_eq!(overridden["effectiveInPlaceDirtyPolicy"], "refuse");
+    let unknown_field = app
+        .clone()
+        .oneshot(json_request(
+            Method::PUT,
+            &settings_uri,
+            &serde_json::json!({ "executionMode": null, "other": 1 }).to_string(),
+        ))
+        .await
+        .unwrap();
+    assert_eq!(unknown_field.status(), StatusCode::BAD_REQUEST);
+
+    // Rules: validation failures are 400 and change nothing.
+    let mut invalid_bodies = vec![
+        serde_json::json!({ "rules": [pipeline_rule_json("r1", &[], "ask")] }),
+        serde_json::json!({ "rules": [pipeline_rule_json("r1", &["uat", "uat"], "ask")] }),
+        serde_json::json!({ "rules": [pipeline_rule_json("r1", &["feature/x"], "ask")] }),
+        serde_json::json!({ "rules": [
+            pipeline_rule_json("r1", &["uat"], "ask"),
+            pipeline_rule_json("r1", &["dev"], "ask"),
+        ] }),
+        serde_json::json!({ "rules": "nope" }),
+    ];
+    let mut bad_template = pipeline_rule_json("r1", &["uat"], "ask");
+    bad_template["commitMessageTemplate"] = serde_json::json!("Merge {branch}");
+    invalid_bodies.push(serde_json::json!({ "rules": [bad_template] }));
+    for body in invalid_bodies {
+        let response = app
+            .clone()
+            .oneshot(json_request(Method::PUT, &rules_uri, &body.to_string()))
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{body}");
+    }
+    let empty = json_body(
+        app.clone()
+            .oneshot(request(&rules_uri, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(empty["rules"], serde_json::json!([]));
+
+    // A valid list round-trips in order, and a protected target is forced to ask.
+    let body = serde_json::json!({ "rules": [
+        pipeline_rule_json("r1", &["uat", "dev"], "auto"),
+        pipeline_rule_json("r2", &["main"], "auto"),
+    ] });
+    let written = app
+        .clone()
+        .oneshot(json_request(Method::PUT, &rules_uri, &body.to_string()))
+        .await
+        .unwrap();
+    assert_eq!(written.status(), StatusCode::OK);
+    let written = json_body(written).await;
+    assert_eq!(written["rules"][0]["confirmation"], "auto");
+    assert_eq!(written["rules"][1]["confirmation"], "ask");
+    let read_back = json_body(
+        app.clone()
+            .oneshot(request(&rules_uri, Some(READ_ONLY_TOKEN)))
+            .await
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(read_back, written);
+    assert_eq!(read_back["rules"][0]["ruleId"], "r1");
 }

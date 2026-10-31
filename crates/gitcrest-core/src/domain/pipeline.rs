@@ -287,6 +287,34 @@ impl InPlaceDirtyPolicy {
     }
 }
 
+/// App-wide defaults used when a repository has no override.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct PipelineAppSettings {
+    pub execution_mode: ExecutionMode,
+    pub in_place_dirty_policy: InPlaceDirtyPolicy,
+}
+
+impl Default for PipelineAppSettings {
+    fn default() -> Self {
+        Self {
+            execution_mode: ExecutionMode::TemporaryWorktree,
+            in_place_dirty_policy: InPlaceDirtyPolicy::Shelve,
+        }
+    }
+}
+
+impl PipelineAppSettings {
+    /// Repository override first, then the app default.
+    pub(crate) fn resolve(self, repository: PipelineRepositorySettings) -> Self {
+        Self {
+            execution_mode: repository.execution_mode.unwrap_or(self.execution_mode),
+            in_place_dirty_policy: repository
+                .in_place_dirty_policy
+                .unwrap_or(self.in_place_dirty_policy),
+        }
+    }
+}
+
 /// Per-repository overrides; `None` means "use the app default".
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct PipelineRepositorySettings {
@@ -670,6 +698,20 @@ pub(crate) mod tests {
         assert_eq!(StepState::parse("nope"), None);
         assert_eq!(ExecutionMode::parse("nope"), None);
         assert_eq!(InPlaceDirtyPolicy::parse("nope"), None);
+    }
+
+    #[test]
+    fn repository_overrides_win_over_app_defaults() {
+        let app = PipelineAppSettings::default();
+        assert_eq!(app.execution_mode, ExecutionMode::TemporaryWorktree);
+        assert_eq!(app.in_place_dirty_policy, InPlaceDirtyPolicy::Shelve);
+        assert_eq!(app.resolve(PipelineRepositorySettings::default()), app);
+        let resolved = app.resolve(PipelineRepositorySettings {
+            execution_mode: Some(ExecutionMode::SwitchInPlace),
+            in_place_dirty_policy: None,
+        });
+        assert_eq!(resolved.execution_mode, ExecutionMode::SwitchInPlace);
+        assert_eq!(resolved.in_place_dirty_policy, InPlaceDirtyPolicy::Shelve);
     }
 
     #[test]

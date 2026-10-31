@@ -448,6 +448,73 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/pipelines": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        /** Read the app-wide defaults for post-push pipelines */
+        get: operations["getPipelineAppSettings"];
+        /** Replace the app-wide defaults for post-push pipelines */
+        put: operations["setPipelineAppSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/pipelines/settings": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** Read this repository's pipeline overrides and the effective settings */
+        get: operations["getPipelineRepositorySettings"];
+        /** Replace this repository's pipeline overrides; a missing or null field clears it */
+        put: operations["setPipelineRepositorySettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/repositories/{repoId}/pipelines/rules": {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        /** List this repository's pipeline rules in execution order */
+        get: operations["listPipelineRules"];
+        /**
+         * Replace the whole ordered rule list, validated as a unit
+         * @description A rule with a protected-looking target (main, master, release/*, prod*) is saved with confirmation set to ask.
+         */
+        put: operations["replacePipelineRules"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/credentials": {
         parameters: {
             query?: never;
@@ -2726,6 +2793,55 @@ export interface components {
             name: string;
             email: string;
         };
+        /** @enum {string} */
+        PipelineExecutionMode: "temporaryWorktree" | "switchInPlace";
+        /** @enum {string} */
+        PipelineInPlaceDirtyPolicy: "shelve" | "refuse";
+        PipelineAppSettings: {
+            executionMode: components["schemas"]["PipelineExecutionMode"];
+            inPlaceDirtyPolicy: components["schemas"]["PipelineInPlaceDirtyPolicy"];
+        };
+        PipelineRepositorySettingsRequest: {
+            executionMode?: components["schemas"]["PipelineExecutionMode"] | null;
+            inPlaceDirtyPolicy?: components["schemas"]["PipelineInPlaceDirtyPolicy"] | null;
+        };
+        PipelineRepositorySettings: {
+            executionMode: components["schemas"]["PipelineExecutionMode"] | null;
+            inPlaceDirtyPolicy: components["schemas"]["PipelineInPlaceDirtyPolicy"] | null;
+            effectiveExecutionMode: components["schemas"]["PipelineExecutionMode"];
+            effectiveInPlaceDirtyPolicy: components["schemas"]["PipelineInPlaceDirtyPolicy"];
+        };
+        PipelineTrigger: {
+            /** @enum {string} */
+            kind: "afterPush";
+            /** @description Glob over the short local branch name. * stays inside one path segment, ** crosses segments. */
+            branchPattern: string;
+        };
+        PipelineTarget: {
+            branch: string;
+            remote: string;
+        };
+        PipelineRule: {
+            ruleId: string;
+            name: string;
+            enabled: boolean;
+            trigger: components["schemas"]["PipelineTrigger"];
+            targets: components["schemas"]["PipelineTarget"][];
+            /** @enum {string} */
+            mergeMode: "noFastForward" | "fastForwardIfPossible";
+            /** @description Placeholders are {source}, {target} and {sourceShortOid}. */
+            commitMessageTemplate: string;
+            pushAfterMerge: boolean;
+            /** @enum {string} */
+            onConflict: "openResolver" | "skipTarget" | "stopRun";
+            /** @enum {string} */
+            afterConflictResolved: "continue" | "ask";
+            /** @enum {string} */
+            confirmation: "ask" | "auto";
+        };
+        PipelineRules: {
+            rules: components["schemas"]["PipelineRule"][];
+        };
         BranchSwitchRequest: {
             name: string;
             /**
@@ -4892,6 +5008,275 @@ export interface operations {
             };
             406: components["responses"]["UnsupportedVersion"];
             /** @description Git could not read or change the identity. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getPipelineAppSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The app-wide execution mode and in-place dirty policy. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineAppSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Pipeline settings are unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    setPipelineAppSettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineAppSettings"];
+            };
+        };
+        responses: {
+            /** @description The saved defaults. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineAppSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Pipeline settings are unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    getPipelineRepositorySettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Overrides (null means use the app default) and the effective values. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRepositorySettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Pipeline settings are unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    setPipelineRepositorySettings: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineRepositorySettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description Overrides and the effective values after saving. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRepositorySettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Pipeline settings are unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    listPipelineRules: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The ordered rules. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRules"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Pipeline rules are unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+        };
+    };
+    replacePipelineRules: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-GitCrest-API-Version": components["parameters"]["ApiVersion"];
+            };
+            path: {
+                repoId: components["schemas"]["RepoId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PipelineRules"];
+            };
+        };
+        responses: {
+            /** @description The saved rules after normalization. */
+            200: {
+                headers: {
+                    "X-GitCrest-API-Version": components["headers"]["ApiVersion"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PipelineRules"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            /** @description Repository is unavailable. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiErrorResponse"];
+                };
+            };
+            406: components["responses"]["UnsupportedVersion"];
+            /** @description Pipeline rules are unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

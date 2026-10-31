@@ -4,8 +4,8 @@ use crate::{
     domain::{
         error::RepositoryError,
         pipeline::{
-            ExecutionMode, InPlaceDirtyPolicy, PipelineRepositorySettings, PipelineRule,
-            PipelineRun, PipelineStep, RunStatus, StepState,
+            ExecutionMode, InPlaceDirtyPolicy, PipelineAppSettings, PipelineRepositorySettings,
+            PipelineRule, PipelineRun, PipelineStep, RunStatus, StepState,
         },
     },
     ports::pipelines::PipelineStorePort,
@@ -146,6 +146,44 @@ impl PipelineStorePort for RepositoryStore {
                 .map_err(storage)?;
         }
         transaction.commit().map_err(storage)
+    }
+
+    fn pipeline_app_settings(&self) -> Result<PipelineAppSettings, RepositoryError> {
+        let connection = self.connection.lock().map_err(storage)?;
+        let row: Option<(String, String)> = connection
+            .query_row(
+                "SELECT execution_mode, in_place_dirty_policy FROM pipeline_app_settings WHERE id=1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(storage)?;
+        let defaults = PipelineAppSettings::default();
+        Ok(match row {
+            Some((mode, policy)) => PipelineAppSettings {
+                execution_mode: ExecutionMode::parse(&mode).unwrap_or(defaults.execution_mode),
+                in_place_dirty_policy: InPlaceDirtyPolicy::parse(&policy)
+                    .unwrap_or(defaults.in_place_dirty_policy),
+            },
+            None => defaults,
+        })
+    }
+
+    fn set_pipeline_app_settings(
+        &self,
+        settings: PipelineAppSettings,
+    ) -> Result<(), RepositoryError> {
+        let connection = self.connection.lock().map_err(storage)?;
+        connection
+            .execute(
+                "INSERT INTO pipeline_app_settings (id, execution_mode, in_place_dirty_policy) \n                 VALUES (1, ?1, ?2) ON CONFLICT(id) DO UPDATE SET \n                 execution_mode=excluded.execution_mode, \n                 in_place_dirty_policy=excluded.in_place_dirty_policy",
+                params![
+                    settings.execution_mode.as_str(),
+                    settings.in_place_dirty_policy.as_str()
+                ],
+            )
+            .map_err(storage)?;
+        Ok(())
     }
 
     fn pipeline_repository_settings(
@@ -363,6 +401,21 @@ mod tests {
         store.replace_pipeline_rules("repo", &[rule()]).unwrap();
         assert_eq!(store.list_pipeline_rules("repo").unwrap(), vec![rule()]);
         assert!(store.list_pipeline_rules("other").unwrap().is_empty());
+    }
+
+    #[test]
+    fn app_settings_default_then_persist() {
+        let store = RepositoryStore::default();
+        assert_eq!(
+            store.pipeline_app_settings().unwrap(),
+            PipelineAppSettings::default()
+        );
+        let settings = PipelineAppSettings {
+            execution_mode: ExecutionMode::SwitchInPlace,
+            in_place_dirty_policy: InPlaceDirtyPolicy::Refuse,
+        };
+        store.set_pipeline_app_settings(settings).unwrap();
+        assert_eq!(store.pipeline_app_settings().unwrap(), settings);
     }
 
     #[test]

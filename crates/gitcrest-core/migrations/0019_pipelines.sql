@@ -43,3 +43,9 @@ CREATE TABLE pipeline_steps (
     message TEXT,
     PRIMARY KEY (run_id, position)
 );
+
+CREATE TABLE pipeline_app_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    execution_mode TEXT NOT NULL,
+    in_place_dirty_policy TEXT NOT NULL
+);

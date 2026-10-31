@@ -1,6 +1,6 @@
 # Post-Push Pipeline Plan
 
-Status: in progress (A0.1, A1.1, A2.1, A2.2 done). Date: 2026-10-31.
+Status: in progress (A0.1, A1.1, A1.2, A2.1, A2.2 done). Date: 2026-10-31.
 Scope: user-defined automations that run after a successful push, starting with "merge the pushed branch into one or more integration branches and push them" (`crates/gitcrest-core/`, `src/`, `doc/api/v1.yaml`).
 Related: [12-git-engine-architecture.md](12-git-engine-architecture.md) (tasks and locks), [conflict-resolver-enhancement-plan.md](conflict-resolver-enhancement-plan.md) (conflict window), [07-interaction-accessibility.md](07-interaction-accessibility.md) (safety rules), [13-implementation-plan.md](13-implementation-plan.md) (ledger and commit rules).
 
@@ -199,6 +199,7 @@ Orphan sweep: pipeline worktree directories under the app data directory with no
 
 - `pipeline_rules(repo_id, rule_id, position, definition_json, updated_at_ms)`
 - `pipeline_repository_settings(repo_id, execution_mode NULL, in_place_dirty_policy NULL)`; `NULL` means "use the app default"
+- `pipeline_app_settings(id = 1, execution_mode, in_place_dirty_policy)`: the app-wide defaults, read by the engine
 - `pipeline_runs(run_id, repo_id, rule_snapshot_json, source_branch, source_oid, execution_mode, status, shelf_id NULL, created_at_ms, updated_at_ms)`
 - `pipeline_steps(run_id, position, target_branch, remote, state, lease_oid NULL, merge_oid NULL, workspace_path NULL, ephemeral_repo_id NULL, message NULL)`
 
@@ -264,7 +265,7 @@ Same rules as [13-implementation-plan.md](13-implementation-plan.md) §2 and [ux
 | --- | --- | --- | --- | --- | --- |
 | A0.1 | Plan | S | — | This document reviewed; D2–D6 confirmed or changed. | done |
 | A1.1 | Domain model and storage | M | A0.1 | `domain/pipeline.rs` (rule, target, run, step, states, validation), `0019_pipelines.sql`, storage port and SQLite adapter. Unit tests cover every validation rule in §4 and round-trip every table. | done |
-| A1.2 | Settings and rules API | M | A1.1 | Endpoints for settings and rules (§9.2), effective-mode resolution (repository override → app default), contract tests. | not started |
+| A1.2 | Settings and rules API | M | A1.1 | Endpoints for settings and rules (§9.2), effective-mode resolution (repository override → app default), contract tests. | done (409 does not apply: these endpoints have no conflicting state) |
 | A2.1 | Run engine with a fake workspace | L | A1.1 | `PipelineWorkspace` port, state machine (§6.1), persistence before each step, remote-moved retry (§6.3), loop guard (§6.4), optional merge message added to `execute_workflow`. Engine tests with a fake workspace cover success, `upToDate`, skip, stop, lease rejection once and twice, and a queued second trigger. | done |
 | A2.2 | Temporary worktree workspace | L | A2.1 | Worktree creation under the app data directory, ephemeral hidden repository context with its own resource key, lease push, local target fast-forward-only update, cleanup and orphan sweep. Integration tests against real repositories with a bare remote: two targets succeed, the user's dirty working tree and branch are unchanged afterwards, and no worktree is left behind. | done (steps run as plain Git processes here; Task Center tasks and credential environment are wired in A3.1) |
 | A2.3 | Switch-in-place workspace | M | A2.1 | Preconditions, auto-shelve or refuse (D2), tracking-branch creation, fast-forward-only pull, divergence failure, guaranteed return to source and shelf restore on every outcome, repository lock held for the run. Integration tests cover each outcome and confirm the user ends on the source branch with their changes restored. | not started |

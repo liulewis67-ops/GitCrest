@@ -149,6 +149,7 @@ async fn run_server() -> Result<(), Box<dyn std::error::Error>> {
         diff_worktree,
         undo_store: Arc::new(store.clone()),
         branch_favorites: Arc::new(store.clone()),
+        pipeline_store: Arc::new(store.clone()),
         ai_providers: Arc::new(ai_providers),
         history_search_index: Arc::new(store),
         repositories: repositories.clone(),

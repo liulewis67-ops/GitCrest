@@ -1,6 +1,9 @@
 use crate::domain::{
     error::RepositoryError,
-    pipeline::{PipelineRepositorySettings, PipelineRule, PipelineRun, PipelineStep, RunStatus},
+    pipeline::{
+        PipelineAppSettings, PipelineRepositorySettings, PipelineRule, PipelineRun, PipelineStep,
+        RunStatus,
+    },
 };
 
 pub(crate) trait PipelineStorePort: Send + Sync {
@@ -11,6 +14,13 @@ pub(crate) trait PipelineStorePort: Send + Sync {
         &self,
         repo_id: &str,
         rules: &[PipelineRule],
+    ) -> Result<(), RepositoryError>;
+
+    fn pipeline_app_settings(&self) -> Result<PipelineAppSettings, RepositoryError>;
+
+    fn set_pipeline_app_settings(
+        &self,
+        settings: PipelineAppSettings,
     ) -> Result<(), RepositoryError>;
 
     fn pipeline_repository_settings(

@@ -14,6 +14,7 @@ use crate::{
     ports::branch_favorites::BranchFavoriteStorePort,
     ports::branches::BranchGitPort,
     ports::history::HistorySearchIndexPort,
+    ports::pipelines::PipelineStorePort,
     ports::remotes::{
         RemoteCommandPort, RemoteGitPort, RemotePreflightReadPort, RemotePullRecoveryPort,
     },
@@ -34,6 +35,7 @@ pub(crate) struct AppState {
     pub(crate) conflict_token: Option<Arc<String>>,
     pub(crate) repositories: RepositoryManager,
     pub(crate) branch_favorites: Arc<dyn BranchFavoriteStorePort>,
+    pub(crate) pipeline_store: Arc<dyn PipelineStorePort>,
     pub(crate) branch_git: Arc<dyn BranchGitPort>,
     pub(crate) remote_git: Arc<dyn RemoteGitPort>,
     pub(crate) remote_commands: Arc<dyn RemoteCommandPort>,
