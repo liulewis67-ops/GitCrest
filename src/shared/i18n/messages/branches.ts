@@ -3,6 +3,13 @@ export const branches = {
   "br.upstreamGoneTitle": ["Upstream {upstream} no longer exists", "上游 {upstream} 已不存在"],
   "br.ahead": ["{count} ahead", "领先 {count}"],
   "br.behind": ["{count} behind", "落后 {count}"],
+  "br.pushAhead": ["Push {count} commits to {upstream}", "推送 {count} 个提交到 {upstream}"],
+  "br.pushAheadTitle": ["{count} commits not pushed to {upstream}. Review and push…", "有 {count} 个提交尚未推送到 {upstream}。预览并推送…"],
+  "br.pullBehind": ["Pull {count} commits from {upstream}", "从 {upstream} 拉取 {count} 个提交"],
+  "br.pullBehindTitle": ["{count} commits not pulled from {upstream}. Review and pull…", "有 {count} 个提交尚未从 {upstream} 拉取。预览并拉取…"],
+  "br.unpublished": ["Not published: this branch has no upstream", "尚未发布：此分支没有上游"],
+  "br.unpublishedPush": ["Not published. Review and push…", "尚未发布。预览并推送…"],
+  "br.checkoutToSync": ["Check this branch out to push or pull it.", "检出此分支后才能推送或拉取。"],
   "br.syncOf": ["{parts} of {upstream}", "相对 {upstream}：{parts}"],
 
   "br.moreActionsFor": ["More actions for {branch}", "{branch} 的更多操作"],

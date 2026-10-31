@@ -166,3 +166,48 @@ it("leaves Compare with… out when nothing handles it", () => {
   renderSidebar();
   expect(within(openMenu("feature/x")).queryByRole("menuitem", { name: "Compare with…" })).toBeNull();
 });
+
+it("turns the current branch's arrows into Push and Pull buttons, and leaves other branches' arrows as plain marks", () => {
+  const current = branch("master", "local", "a", { isCurrent: true, upstream: "origin/master", ahead: 2, behind: 1 });
+  const other = branch("feature/x", "local", "b", { upstream: "origin/feature/x", ahead: 3, behind: 0 });
+  const unpublished = branch("draft", "local", "d");
+  const onOpenPushDialog = vi.fn();
+  const onOpenPullDialog = vi.fn();
+  renderSidebar({
+    branches: { repoId: "repo", current: "master", detached: false, branches: [current, other, unpublished] },
+    orderedBranches: [current, other, unpublished],
+    onOpenPushDialog, onOpenPullDialog,
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Push 2 commits to origin/master" }));
+  expect(onOpenPushDialog).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole("button", { name: "Pull 1 commits from origin/master" }));
+  expect(onOpenPullDialog).toHaveBeenCalledTimes(1);
+  // Another branch cannot be pushed from its row: its arrow is a mark that says how to push it.
+  expect(screen.queryByRole("button", { name: /origin\/feature\/x/ })).toBeNull();
+  const mark = screen.getByLabelText("3 ahead of origin/feature/x");
+  expect(mark.getAttribute("title")).toContain("Check this branch out to push or pull it.");
+  expect(screen.getByLabelText("Not published: this branch has no upstream")).toBeTruthy();
+});
+
+it("turns the arrows off, with the reason, while a task blocks Push and Pull", () => {
+  const current = branch("master", "local", "a", { isCurrent: true, upstream: "origin/master", ahead: 1, behind: 1 });
+  renderSidebar({
+    branches: { repoId: "repo", current: "master", detached: false, branches: [current] },
+    orderedBranches: [current],
+    onOpenPushDialog: vi.fn(), onOpenPullDialog: vi.fn(),
+    pushDisabledReason: "Wait for the running Git task to finish.", pullDisabledReason: "Wait for the running Git task to finish.",
+  });
+  for (const name of ["Push 1 commits to origin/master", "Pull 1 commits from origin/master"]) {
+    const arrow = screen.getByRole("button", { name }) as HTMLButtonElement;
+    expect(arrow.disabled).toBe(true);
+    expect(arrow.title).toBe("Wait for the running Git task to finish.");
+  }
+});
+
+it("lets the current branch push when it was never published", () => {
+  const draft = branch("draft", "local", "a", { isCurrent: true });
+  const onOpenPushDialog = vi.fn();
+  renderSidebar({ branches: { repoId: "repo", current: "draft", detached: false, branches: [draft] }, orderedBranches: [draft], onOpenPushDialog, onOpenPullDialog: vi.fn() });
+  fireEvent.click(screen.getByRole("button", { name: "Not published: this branch has no upstream" }));
+  expect(onOpenPushDialog).toHaveBeenCalledTimes(1);
+});

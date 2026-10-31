@@ -521,6 +521,14 @@ button:disabled { cursor: not-allowed; }
 .branchItemName { overflow: hidden; flex: 1; min-width: 0; text-overflow: ellipsis; white-space: nowrap; font-size: var(--type-sm); }
 .branchSync { display: inline-flex; flex: 0 0 auto; gap: 4px; color: var(--text-muted); font-size: var(--type-xs); font-variant-numeric: tabular-nums; }
 .branchSync.gone { color: var(--danger); }
+.branchSyncArrow, .branchSyncButton { font: inherit; font-weight: 650; }
+.branchSyncArrow.ahead, .branchSyncButton.ahead { color: var(--green); }
+.branchSyncArrow.behind, .branchSyncButton.behind { color: var(--amber); }
+.branchSyncArrow.unpublished, .branchSyncButton.unpublished { color: var(--accent-strong); }
+.branchSyncButton { padding: 0 3px; border: 1px solid transparent; border-radius: var(--radius-4); background: transparent; cursor: pointer; }
+.branchSyncButton:hover:not(:disabled) { border-color: currentColor; background: var(--surface-raised); }
+.branchSyncButton:disabled { cursor: not-allowed; opacity: .55; }
+.branchSyncButton.unpublished, .branchSyncArrow.unpublished { border: 1px dashed currentColor; border-radius: var(--radius-4); padding: 0 3px; }
 .branchCurrentLabel { color: var(--accent-strong); font-size: var(--type-2xs); font-weight: 750; }
 .branchFavorite { width: 22px; height: 22px; flex: 0 0 22px; border: 0; border-radius: var(--radius-4); background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: var(--type-sm); }
 .branchFavorite:hover, .branchFavorite.active { background: var(--surface-raised); color: var(--amber); }

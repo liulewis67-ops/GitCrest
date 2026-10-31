@@ -9,7 +9,7 @@ import { CommitChanges } from "./lazy-views";
 import type { AppContext } from "./app-context";
 
 export function HistoryView({ ctx }: { ctx: AppContext }) {
-  const { setCompareRequest, activeBranchError, activeBranches, activeBranchesLoading, activeRemoteError, activeRemotes, activeRemotesLoading, apiRef, branchSwitcher, commitFilesWidth, connected, copyBranchName, diffTarget, focusMode, hasActiveRepositoryTask, historyFileOid, historyFilePath, historyGraphHeight, historyRequests, inspectorOverlay, inspectorSize, inspectorVisible, isMacPlatform, mode, openAccountSettings, openCommitFileDiff, openDiffWindow, openTagEditor, openWebUrl, orderedBranches, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, remoteBranchDelete, remoteDisabledReason, remoteMutations, renderCommitActions, renderCommitGraph, renderDiffPanel, renderInspector, repositoryOpening, revealFile, selectCommit, selectedCommit, selectedRepository, setCommitFilesWidth, setCreateBranchAt, setHistoryBranch, setHistoryGraphHeight, setLocalBranchAction, setRemoveWorktreePath, setSidebarWidth, setTasksError, setTasksOpen, setWorktreeForBranch, setWorktreeFrom, shortcuts, shownHistoryBranch, sidebarVisible, sidebarWidth, t, toggleBranchFavorite, workflowDialog } = ctx;
+  const { openPullDialog, openPushDialog, pullDisabledReason, pushDisabledReason, setCompareRequest, activeBranchError, activeBranches, activeBranchesLoading, activeRemoteError, activeRemotes, activeRemotesLoading, apiRef, branchSwitcher, commitFilesWidth, connected, copyBranchName, diffTarget, focusMode, hasActiveRepositoryTask, historyFileOid, historyFilePath, historyGraphHeight, historyRequests, inspectorOverlay, inspectorSize, inspectorVisible, isMacPlatform, mode, openAccountSettings, openCommitFileDiff, openDiffWindow, openTagEditor, openWebUrl, orderedBranches, prependTask, refreshRepositoryBranches, refreshRepositoryRemotes, remoteBranchDelete, remoteDisabledReason, remoteMutations, renderCommitActions, renderCommitGraph, renderDiffPanel, renderInspector, repositoryOpening, revealFile, selectCommit, selectedCommit, selectedRepository, setCommitFilesWidth, setCreateBranchAt, setHistoryBranch, setHistoryGraphHeight, setLocalBranchAction, setRemoveWorktreePath, setSidebarWidth, setTasksError, setTasksOpen, setWorktreeForBranch, setWorktreeFrom, shortcuts, shownHistoryBranch, sidebarVisible, sidebarWidth, t, toggleBranchFavorite, workflowDialog } = ctx;
   return (
     <>
             {selectedRepository && mode === "history" && <ViewLayout
@@ -51,6 +51,10 @@ export function HistoryView({ ctx }: { ctx: AppContext }) {
                 onCreateBranchFrom={setCreateBranchAt}
                 onCopyBranchName={(name) => void copyBranchName(name)}
                 onCompareRef={(name) => setCompareRequest({ base: name })}
+                onOpenPushDialog={() => openPushDialog()}
+                onOpenPullDialog={() => openPullDialog()}
+                pushDisabledReason={pushDisabledReason}
+                pullDisabledReason={pullDisabledReason}
                 onOpenWorktree={(path) => void repositoryOpening.openAtPath(path)}
                 onNewWorktreeForBranch={(name, fromRemote) => setWorktreeForBranch({ name, fromRemote })}
                 onNewWorktreeFrom={(oid, label) => setWorktreeFrom({ oid, label })}

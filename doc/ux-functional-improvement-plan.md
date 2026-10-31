@@ -64,7 +64,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U15.1 | "Compare with…" on branch and tag menus | P2 | S | U8.1 | done |
 | U15.2 | Open compare diffs in the Diff window | P2 | M | U8.1 | done |
 | U15.3 | Split `use-app-actions` further | P2 | M | U14.1 | done |
-| U16.1 | Sync arrows on branches that click through to push and pull | P2 | S | — | not started |
+| U16.1 | Sync arrows on branches that click through to push and pull | P2 | S | — | done |
 
 Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each against real OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; S7.4 (signing and updates on three platforms) and S7.5 (full P0 E2E and release notes) are blocked on outside environments.
 
@@ -280,8 +280,8 @@ These close the limits recorded for U8.1 and U14.1. They add no new Git capabili
 5. **Daily comfort:** D3 → U6.1, U6.2, U9.1, D4 → U10.1.
 6. **Depth:** U8.1, U9.2, U11.1, U12.1, U10.3.
 7. **Polish:** U1.2, U5.2, U10.2, U10.4, U13.1, U13.2, U14.2.
-9. **Branch sync:** U16.1.
 8. **Follow-ups:** U15.3 first (it touches the files the others wire into), then U15.1, then U15.2.
+9. **Branch sync:** U16.1.
 
 Run the S6 real-provider checks whenever API keys are available; they do not depend on anything here.
 
@@ -556,3 +556,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `electron/main/diff-window-request.ts`, `src/features/diff/ui/DiffWindow.tsx`, `src/features/compare/ui/CompareDialog.tsx`, `tests/e2e/compare-workflow.test.ts`
 - Limits / follow-up: a `range` scope carries `fromOid` and an optional `toOid`. The request check moved out of `electron/main/index.ts` into `diff-window-request.ts` so it could be tested; it accepts a range only with a full start ID, an end that is a full ID or absent, and no commit ID, and refuses comparison IDs on any other scope. The window reads each tab with `GET /compare/diff` and finds the other files with `GET /compare` in two-dot mode between the same ids (up to 500 files). Blame is off and a changed picture shows the binary note, because the image API has no range scope. With no bridge the dialog still shows the change inline. Renamed files open under their new path only.
 - Commit: see git log (`feat: complete U15.2 open compare diffs in the Diff window`)
+
+### U16.1 — Sync arrows on branches
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (new cases for the badge: two colors with direction and count printed, the unpublished mark, buttons only for directions that have commits; for the sidebar: the current branch's arrows call Push and Pull, other branches' arrows are plain marks with a hint, both arrows are off with the reason while a task runs, and a never-published current branch can push), `pnpm build`, `pnpm test:e2e` (39 tests, after the build). No Rust or API change.
+- Manual check: not run (app not started); the colors against each theme and the arrow size at 80–150% zoom were not looked at.
+- Evidence: `src/features/branches/ui/BranchSyncBadge.tsx`, `src/pages/workspace/BranchesSidebar.tsx`, `tests/unit/branch-sync-badge.test.tsx`
+- Limits / follow-up: on local branches ↑N is green (commits to push) and ↓N is amber (commits to pull), both shown when diverged, and a branch with no upstream gets a dashed ↑ ("not published"). On the current branch the arrows are buttons that open the existing Push or Pull dialog, so the review step stays; they are off, with the reason, while a task runs or the core is not connected. Push and Pull act on the current branch only, so on any other branch the arrows are plain marks whose tooltip says to check the branch out first; pushing or pulling a branch from its own row would need a push and pull preflight for an arbitrary branch, which was not built. The counts come from local refs, so they are as new as the last fetch. For the current branch without an upstream, the Push dialog decides what happens (this was not exercised against a real remote here).
+- Commit: see git log (`feat: complete U16.1 colored sync arrows on branches that open push and pull`)

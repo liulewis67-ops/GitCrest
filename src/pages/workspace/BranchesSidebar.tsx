@@ -76,6 +76,11 @@ interface BranchesSidebarProps {
   onCopyBranchName: (name: string) => void;
   /** Opens the comparison with this branch or tag as its base. Comparing only reads, so it stays available while a task runs. */
   onCompareRef?: (name: string) => void;
+  /** Open the Push and Pull dialogs for the current branch; the arrows on its row call them. */
+  onOpenPushDialog?: () => void;
+  onOpenPullDialog?: () => void;
+  pushDisabledReason?: string;
+  pullDisabledReason?: string;
   onOpenWorktree: (path: string) => void;
   onNewWorktreeForBranch: (name: string, fromRemote: boolean) => void;
   /** Starts a new branch at `oid` checked out in a new worktree, for a branch that is already checked out somewhere. */
@@ -102,7 +107,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
     repository, api, branches, orderedBranches, branchError, branchesLoading, remotes, remoteError, remotesLoading,
     remoteActionBusy, remoteDisabledReason, connected, hasActiveRepositoryTask, historyRefreshKey, shortcuts, isMacPlatform,
     selectedBranch, selectedCommit, onSelectCommit, onCreateTag, onTagTaskStarted, onSelectBranch, onManageAccounts, onRefreshBranches, onOpenBranchSwitcher, onDeleteRemoteBranch, onSwitchBranch,
-    onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onCompareRef, onOpenWorktree,
+    onCheckoutRemoteBranch, onMergeBranch, onRebaseOnto, onCreateBranchFrom, onCopyBranchName, onCompareRef, onOpenPushDialog, onOpenPullDialog, pushDisabledReason, pullDisabledReason, onOpenWorktree,
     onNewWorktreeForBranch, onNewWorktreeFrom, onRemoveWorktree, onRevealPath, onWorktreePruneStarted, onManageBranch, onToggleBranchFavorite, onRefreshRemotes, onAddRemote,
     onSetRemoteUrl, onDeleteRemote, onSetDefaultRemote, onSetBranchUpstream, onOpenWebUrl,
   } = props;
@@ -213,7 +218,13 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
         </button>
         {branch.isCurrent && <span className="branchCurrentLabel">HEAD</span>}
         {branch.worktreePath && <span className="branchWorktreeMark" title={t("nav.checkedOutIn", { path: branch.worktreePath })} aria-label={t("nav.checkedOutElsewhere", { path: branch.worktreePath })}>⧉</span>}
-        <BranchSyncBadge branch={branch} />
+        <BranchSyncBadge
+          branch={branch}
+          showUnpublished
+          {...(branch.isCurrent
+            ? { onPush: onOpenPushDialog, onPull: onOpenPullDialog, pushDisabledReason, pullDisabledReason }
+            : { staticHint: t("br.checkoutToSync") })}
+        />
         {!branch.isCurrent && !branch.fullName.endsWith("/HEAD") && <span className="branchActions">
           {branch.kind === "local" && !branch.worktreePath && <button className="branchAction" type="button" aria-label={t("nav.switchTo", { name: branch.name })} title={t("nav.switchTo", { name: branch.name })} disabled={blocked} onClick={() => onSwitchBranch(branch.name)}>↪</button>}
           {branch.kind === "local" && branch.worktreePath && <button className="branchAction" type="button" aria-label={t("nav.openWorktreeOf", { name: branch.name })} title={t("nav.openWorktreeTitle", { name: branch.name, path: branch.worktreePath })} disabled={!connected || hasActiveRepositoryTask} onClick={() => onOpenWorktree(branch.worktreePath!)}>⧉</button>}
