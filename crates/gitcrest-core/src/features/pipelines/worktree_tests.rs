@@ -369,7 +369,7 @@ async fn orphaned_worktree_folders_are_swept_and_active_runs_are_kept() {
     let alive: HashSet<String> = ["alive".to_string()].into();
 
     workspace
-        .sweep_orphans(&alive, &[fixture.repository.clone()])
+        .sweep_orphans(&alive, std::slice::from_ref(&fixture.repository))
         .await;
 
     assert!(!fixture.data_dir.join("pipelines/orphan").exists());
