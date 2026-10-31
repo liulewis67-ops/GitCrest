@@ -1,6 +1,6 @@
 # Post-Push Pipeline Plan
 
-Status: proposed, nothing started. Date: 2026-10-31.
+Status: in progress (A0.1 done). Date: 2026-10-31.
 Scope: user-defined automations that run after a successful push, starting with "merge the pushed branch into one or more integration branches and push them" (`crates/gitcrest-core/`, `src/`, `doc/api/v1.yaml`).
 Related: [12-git-engine-architecture.md](12-git-engine-architecture.md) (tasks and locks), [conflict-resolver-enhancement-plan.md](conflict-resolver-enhancement-plan.md) (conflict window), [07-interaction-accessibility.md](07-interaction-accessibility.md) (safety rules), [13-implementation-plan.md](13-implementation-plan.md) (ledger and commit rules).
 
@@ -249,11 +249,11 @@ Rules can be exported to and imported from `.gitcrest/pipelines.json`. GitCrest 
 | # | Question | Decision | Status |
 | --- | --- | --- | --- |
 | D1 | Execution model | Both. Temporary worktree is the default; switch in place is selectable in settings (app default and per-repository override). | decided 2026-10-31 |
-| D2 | Dirty working tree in in-place mode | Auto-shelve by default; "refuse" selectable. | proposed default, confirm before A2.3 |
-| D3 | After a conflict on one target is resolved | Continue to the next target automatically (`afterConflictResolved: "continue"`); "ask" selectable per rule. | proposed default, confirm before A3.2 |
-| D4 | Default merge mode | `noFastForward`, so every promotion is visible as a merge commit. | proposed default, confirm before A1.1 |
-| D5 | Merge commit message | Configurable per rule, default `Merge branch '{source}' into {target}`. | proposed default, confirm before A2.1 |
-| D6 | Triggers in v1 | After push, plus manual **Run pipeline…**. Other triggers are out of scope. | proposed default, confirm before A3.1 |
+| D2 | Dirty working tree in in-place mode | Auto-shelve by default; "refuse" selectable. | default adopted 2026-10-31 (A2.3) |
+| D3 | After a conflict on one target is resolved | Continue to the next target automatically (`afterConflictResolved: "continue"`); "ask" selectable per rule. | default adopted 2026-10-31 (A3.2) |
+| D4 | Default merge mode | `noFastForward`, so every promotion is visible as a merge commit. | default adopted 2026-10-31 (A1.1) |
+| D5 | Merge commit message | Configurable per rule, default `Merge branch '{source}' into {target}`. | default adopted 2026-10-31 (A2.1) |
+| D6 | Triggers in v1 | After push, plus manual **Run pipeline…**. Other triggers are out of scope. | default adopted 2026-10-31 (A3.1) |
 
 ## 13. Stages
 
@@ -261,7 +261,7 @@ Same rules as [13-implementation-plan.md](13-implementation-plan.md) §2 and [ux
 
 | ID | Stage | Size | Depends on | Pass rule | Status |
 | --- | --- | --- | --- | --- | --- |
-| A0.1 | Plan | S | — | This document reviewed; D2–D6 confirmed or changed. | in progress |
+| A0.1 | Plan | S | — | This document reviewed; D2–D6 confirmed or changed. | done |
 | A1.1 | Domain model and storage | M | A0.1 | `domain/pipeline.rs` (rule, target, run, step, states, validation), `0019_pipelines.sql`, storage port and SQLite adapter. Unit tests cover every validation rule in §4 and round-trip every table. | not started |
 | A1.2 | Settings and rules API | M | A1.1 | Endpoints for settings and rules (§9.2), effective-mode resolution (repository override → app default), contract tests. | not started |
 | A2.1 | Run engine with a fake workspace | L | A1.1 | `PipelineWorkspace` port, state machine (§6.1), persistence before each step, remote-moved retry (§6.3), loop guard (§6.4), optional merge message added to `execute_workflow`. Engine tests with a fake workspace cover success, `upToDate`, skip, stop, lease rejection once and twice, and a queued second trigger. | not started |
