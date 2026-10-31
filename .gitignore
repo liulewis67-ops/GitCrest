@@ -35,3 +35,6 @@ crates/**/target/
 
 # Local experimental build output folders
 dist-*/
+
+# Local design review captures
+.review/

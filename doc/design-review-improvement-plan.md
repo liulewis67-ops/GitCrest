@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 in progress; D0.1 complete, D0.2–D0.3 under verification. D1 not started. Updated: 2026-11-01.
+Status: D0 in progress; D0.1–D0.2 complete, D0.3 under verification. D1 not started. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the error text the core returns (`crates/gitcrest-core/src/api/error.rs`), and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -61,7 +61,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | ID | Stage | Priority | Size | Depends on | Status |
 |---|---|---|---|---|---|
 | D0.1 | Seeded review fixture repository | P1 | S | — | done |
-| D0.2 | Screenshot matrix script | P1 | M | D0.1 | not started |
+| D0.2 | Screenshot matrix script | P1 | M | D0.1 | done |
 | D0.3 | `DESIGN.md` and document precedence | P1 | M | — | not started |
 | D1.1 | Translated error messages from API codes | P1 | M | — | not started |
 | D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | not started |
@@ -99,6 +99,8 @@ Both throwaway repositories used during the review had been deleted from disk, s
 - The script restores the window it found: route, theme and size.
 
 **Pass rule:** one command produces the full matrix (14 states × 2 sizes × 2 themes) from a fresh fixture without manual steps.
+
+**Done 2026-11-01.** Start `pnpm debug`, then run `node scripts/review-screenshots.mjs` (`--cdp URL` and `--output folder` are optional). The runner creates local fixtures, registers only its own repositories, waits for rendered diff/history content, and writes stable state/size/theme names plus `manifest.json` beneath ignored `.review/screens/`. It captures in English and restores the original locale and local preferences. Electron lacks native window sizing over renderer CDP, so exact CSS viewports are emulated without moving the native window. Cleanup forgets only the runner's repositories, closes its conflict window and restores route, theme and viewport; the final run verified the restored theme and dimensions. Windows folder moves retry brief sharing violations. The final baseline in `.review/screens/d0-baseline/` contains 56 unique PNGs, all dimension-checked. `pnpm check` passed (703 frontend, 334 Rust, 42 E2E).
 
 ### D0.3 `DESIGN.md` and document precedence
 
