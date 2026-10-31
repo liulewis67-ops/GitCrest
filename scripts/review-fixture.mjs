@@ -86,6 +86,9 @@ export async function createReviewFixture(destination, { conflict = false } = {}
     try { git(path, "merge", "feature/conflict"); } catch (error) {
       if (git(path, "diff", "--name-only", "--diff-filter=U").split("\n").length !== 2) throw error;
     }
+    // Keep unrelated edits out of this mode, so the core can safely abort the
+    // adopted merge after review. The normal fixture supplies all change kinds.
+    return { path, root, remote, conflict };
   }
   git(path, "mv", "notes.txt", "review-notes.txt");
   await write("staged.md", "A staged addition ready to commit.\n");

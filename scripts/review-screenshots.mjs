@@ -12,9 +12,11 @@ const output = resolve(option("--output", `.review/screens/${new Date().toISOStr
 await mkdir(output, { recursive: true });
 const browser = await chromium.connectOverCDP(option("--cdp", "http://127.0.0.1:9222"));
 const context = browser.contexts()[0];
+const originalPages = new Set(context.pages());
 const page = context.pages().find((candidate) => !/[?&]view=/.test(candidate.url()) && /localhost|127\.0\.0\.1|index\.html/.test(candidate.url()));
 if (!page) throw new Error("No GitCrest main renderer found. Start pnpm debug first.");
 page.setDefaultTimeout(20_000);
+await page.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
 const cdp = await context.newCDPSession(page);
 const original = await page.evaluate(() => ({
   storage: { ...localStorage }, welcome: !document.querySelector(".workspaceCrumb"), url: location.href,
@@ -141,26 +143,14 @@ try {
       await page.getByRole("menuitem", { name: /Create branch/ }).click();
       await page.getByRole("dialog").waitFor();
       await capture(`${prefix}-create-branch`);
-      await load(conflictRepository);
-      const adoption = await api(`/repositories/${conflictRepository.repoId}/workflows/adopt`, "POST");
-      const conflictTask = adoption.task ?? (await api("/tasks")).find((task) => task.repoId === conflictRepository.repoId && task.status === "waitingForInput");
-      if (!conflictTask) throw new Error("The conflicted fixture has no recoverable workflow task.");
-      await page.evaluate(async ({ repoId, taskId }) => window.gitcrest.openConflictWindow({ repoId, taskId }), {
-        repoId: conflictRepository.repoId, taskId: conflictTask.taskId,
-      });
-      conflictPage = context.pages().find((candidate) => candidate.url().includes("view=conflicts") && candidate.url().includes(conflictRepository.repoId));
-      if (!conflictPage) {
-        conflictPage = await context.waitForEvent("page");
-        await conflictPage.waitForURL((url) => url.searchParams.get("repoId") === conflictRepository.repoId);
-      }
-      const conflictCdp = await context.newCDPSession(conflictPage);
-      await conflictCdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
-      await conflictPage.locator(".conflictLine").first().waitFor();
-      await capture(`${prefix}-conflict`, conflictPage);
-      await conflictPage.close();
-      conflictPage = undefined;
+      // Reopen after the previous move-back to refresh cached availability/HEAD.
+      await api("/repositories", "POST", { path: missing.path });
       await load(missingRepository, "history");
-      await page.locator(".commitGraphRow").first().waitFor();
+      await page.locator(".commitGraphRow").first().waitFor().catch(async (error) => {
+        await page.screenshot({ path: join(output, `${prefix}-error-setup-failed.png`), scale: "css" });
+        console.error(await page.locator("body").innerText());
+        throw error;
+      });
       await moveFixture(missing.path, join(missing.root, "moved-repository"));
       try {
         await page.locator(".historyMessageSearch input").fill("missing repository");
@@ -172,11 +162,71 @@ try {
       }
     }
   }
+  // Capture the resolver last and reuse it. Reloading the main renderer while a
+  // task waits can auto-open another resolver; no waiting task spans the main matrix.
+  await load(conflictRepository);
+  const adoption = await api(`/repositories/${conflictRepository.repoId}/workflows/adopt`, "POST");
+  const conflictTask = adoption.task ?? (await api("/tasks")).find((task) => task.repoId === conflictRepository.repoId && task.status === "waitingForInput");
+  if (!conflictTask) throw new Error("The conflicted fixture has no recoverable workflow task.");
+  const findResolver = () => context.pages().find((candidate) => candidate.url().includes("view=conflicts") && candidate.url().includes(conflictRepository.repoId));
+  for (let attempt = 0; attempt < 10 && !findResolver(); attempt++) await delay(100);
+  if (!findResolver()) await page.evaluate(async ({ repoId, taskId }) => window.gitcrest.openConflictWindow({ repoId, taskId }), {
+    repoId: conflictRepository.repoId, taskId: conflictTask.taskId,
+  });
+  conflictPage = findResolver();
+  if (!conflictPage) throw new Error("The fixture's conflict window did not open.");
+  const conflictCdp = await context.newCDPSession(conflictPage);
+  await conflictPage.locator(".conflictLine").first().waitFor();
+  for (const theme of ["light", "dark"]) {
+    await page.evaluate((theme) => {
+      const appearance = JSON.parse(localStorage.getItem("gitcrest-appearance-v1") || "{}");
+      localStorage.setItem("gitcrest-appearance-v1", JSON.stringify({ ...appearance, mode: theme }));
+    }, theme);
+    await conflictPage.waitForFunction((theme) => document.documentElement.dataset.theme === theme, theme);
+    for (const [width, height] of [[1280, 816], [960, 700]]) {
+      await conflictCdp.send("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false });
+      await capture(`${width}x${height}-${theme}-conflict`, conflictPage);
+    }
+  }
   if (captures.length !== 56) throw new Error(`Expected 56 captures; got ${captures.length}`);
   await writeFile(join(output, "manifest.json"), JSON.stringify({ createdAt: new Date().toISOString(), captures, fixture: fixture.path, conflict: conflicting.path }, null, 2));
 } finally {
   await conflictPage?.close();
-  for (const repoId of registered) await api(`/repositories/${repoId}`, "DELETE").catch((error) => console.error(error.message));
+  let cleanupError;
+  // Adoption creates a persisted waiting task. Abort only our own fixture workflows
+  // before forgetting their repositories, so later reloads cannot reopen them.
+  try {
+    const tasks = await api("/tasks");
+    for (const task of tasks.filter((task) => registered.includes(task.repoId) && task.status === "waitingForInput")) {
+      const preview = await api(`/repositories/${task.repoId}/workflows/recovery-preflight?taskId=${encodeURIComponent(task.taskId)}`);
+      const recoveryTask = await api(`/repositories/${task.repoId}/workflows/recovery`, "POST", {
+        taskId: task.taskId, action: "abort", expectedOperation: preview.operation,
+        expectedHeadOid: preview.headOid, expectedConflictedPaths: preview.conflictedPaths,
+      });
+      for (let attempt = 0; ; attempt++) {
+        const current = await Promise.all([...new Set([task.taskId, recoveryTask.taskId])].map((taskId) => api(`/tasks/${taskId}`)));
+        if (current.every((entry) => ["succeeded", "failed", "cancelled"].includes(entry.status))) break;
+        if (attempt >= 39) throw new Error(`Review task ${task.taskId} did not finish cleanup.`);
+        await delay(250);
+      }
+    }
+  } catch (error) {
+    cleanupError = error;
+  }
+  // Keep a fixture registered when recovery fails, so the user can still recover it.
+  try {
+    if (!cleanupError) {
+      // Recovery completion refreshes repository metadata. Let those renderer reads
+      // finish before forgetting the entries, so a late refresh cannot recreate one.
+      await page.waitForLoadState("networkidle", { timeout: 10_000 });
+      for (const repoId of registered) await api(`/repositories/${repoId}`, "DELETE");
+      await page.waitForLoadState("networkidle", { timeout: 10_000 });
+      const remaining = (await api("/repositories")).filter((entry) => registered.includes(entry.repoId));
+      if (remaining.length) throw new Error("Review repository cleanup did not finish.");
+    }
+  } catch (error) {
+    cleanupError = error;
+  }
   await page.evaluate(({ storage }) => {
     localStorage.clear();
     for (const [key, value] of Object.entries(storage)) localStorage.setItem(key, value);
@@ -185,6 +235,12 @@ try {
   await page.goto(original.url);
   if (original.welcome) await page.locator(".brandButton").click();
   await page.waitForFunction(({ width, height, theme }) => innerWidth === width && innerHeight === height && document.documentElement.dataset.theme === theme, original);
+  // A waiting task may auto-open a resolver alongside the explicitly requested one.
+  // Preserve windows present on attachment and close every secondary window we caused.
+  for (const candidate of context.pages()) {
+    if (!originalPages.has(candidate)) await candidate.close();
+  }
   await cdp.detach();
   await browser.close();
+  if (cleanupError) throw cleanupError;
 }
