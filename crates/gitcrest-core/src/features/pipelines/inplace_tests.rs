@@ -271,3 +271,50 @@ async fn stopping_a_waiting_run_restores_the_user_too() {
 
     assert_back_on_source_with_changes(&fixture);
 }
+
+#[tokio::test]
+async fn a_target_that_moves_between_fetch_and_push_is_not_overwritten_in_place() {
+    use super::workspace::{PipelineWorkspace, PublishOutcome, StepOutcome};
+    let fixture = fixture();
+    let (engine, _store) = engine(&fixture, InPlaceDirtyPolicy::Shelve);
+    let run = engine.create_run(new_run(&fixture)).await.unwrap();
+    let repository = fixture.repository.clone();
+    let workspace = InPlaceWorkspace::new(
+        Arc::new(move |_| Some(repository.clone())),
+        Arc::new(|_| InPlaceDirtyPolicy::Shelve),
+    );
+    let mut step = run.steps[0].clone();
+    git(&fixture.repository, &["stash", "-u", "-q"]);
+    let prepared = workspace.prepare(&run, &step).await.unwrap();
+    step.lease_oid = Some(prepared.lease_oid);
+    workspace.merge(&run, &step, "merge").await.unwrap();
+
+    let other = fixture.data_dir.parent().unwrap().join("other-inplace");
+    git(
+        fixture.data_dir.parent().unwrap(),
+        &[
+            "clone",
+            "-q",
+            fixture.remote.to_str().unwrap(),
+            "other-inplace",
+        ],
+    );
+    git(&other, &["checkout", "-q", "uat"]);
+    commit_file(&other, "other.txt", "other\n", "someone else");
+    git(&other, &["push", "-q", "origin", "uat"]);
+    let moved = git(&fixture.remote, &["rev-parse", "uat"]);
+
+    assert_eq!(
+        workspace.publish(&run, &step).await,
+        Ok(PublishOutcome::LeaseRejected)
+    );
+    assert_eq!(git(&fixture.remote, &["rev-parse", "uat"]), moved);
+    workspace
+        .finish(&run, &step, StepOutcome::Failed)
+        .await
+        .unwrap();
+    assert_eq!(
+        git(&fixture.repository, &["rev-parse", "--abbrev-ref", "HEAD"]),
+        "feature/1"
+    );
+}
