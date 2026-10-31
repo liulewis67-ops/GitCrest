@@ -7,6 +7,17 @@ export const pipelinesMessages = {
   "pl.conflictAborted.later": ["Decide later", "稍后决定"],
   "pl.actionFailed": ["The pipeline could not apply that choice.", "流水线无法应用该选择。"],
 
+  "pl.trigger.title": ["Merge {branch} into integration branches?", "要把 {branch} 合并到集成分支吗？"],
+  "pl.trigger.body": ["The push matched the rule \"{rule}\". Choose where to merge it.", "此次推送匹配了规则“{rule}”。请选择要合并到哪里。"],
+  "pl.trigger.targets": ["Targets, in this order", "目标（按此顺序）"],
+  "pl.trigger.protected": ["protected branch", "受保护分支"],
+  "pl.trigger.modeWorktree": ["Runs in a temporary worktree; your working tree stays as it is.", "在临时工作树中运行，你的工作区保持不变。"],
+  "pl.trigger.modeInPlace": ["Switches your working tree to each target and returns afterwards.", "会把你的工作区依次切换到各目标，结束后切回。"],
+  "pl.trigger.dontAsk": ["Don't ask again for this rule", "此规则以后不再询问"],
+  "pl.trigger.notNow": ["Not now", "暂不运行"],
+  "pl.trigger.run": ["Run", "运行"],
+  "pl.trigger.starting": ["Starting…", "正在启动…"],
+
   "settings.section.automations": ["Automations", "自动化"],
   "pl.settings.description": ["After you push a branch, GitCrest can merge it into integration branches such as uat and dev, and push them.", "推送分支后，GitCrest 可以把它合并到 uat、dev 等集成分支并推送。"],
   "pl.loadFailed": ["Could not load the automation settings.", "无法加载自动化设置。"],
