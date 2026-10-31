@@ -140,7 +140,7 @@ pub(in crate::features::workflows) async fn start_repository_workflow(
                 }
                 let task_context = context.clone();
                 let result = command
-                    .execute_workflow(&path, action, &target_oid, no_fast_forward, context)
+                    .execute_workflow(&path, action, &target_oid, no_fast_forward, None, context)
                     .await;
                 if result.is_ok() && repositories.refresh_metadata(&task_repo_id).await.is_err() {
                     task_context

@@ -91,6 +91,21 @@ fn load_runs(
     Ok(runs)
 }
 
+impl RepositoryStore {
+    /// Registers a minimal repository row so pipeline tests satisfy the foreign keys.
+    #[cfg(test)]
+    pub(crate) fn insert_test_repository(&self, repo_id: &str) {
+        self.connection
+            .lock()
+            .unwrap()
+            .execute(
+                "INSERT INTO repositories (repo_id, path, branch, detached, state, is_favorite, \n                 last_accessed_at, availability) VALUES (?1, ?2, 'main', 0, 'normal', 0, 0, \n                 'available')",
+                params![repo_id, format!("/tmp/{repo_id}")],
+            )
+            .unwrap();
+    }
+}
+
 impl PipelineStorePort for RepositoryStore {
     fn list_pipeline_rules(&self, repo_id: &str) -> Result<Vec<PipelineRule>, RepositoryError> {
         let connection = self.connection.lock().map_err(storage)?;
@@ -327,17 +342,7 @@ mod tests {
 
     fn store_with_repository(repo_id: &str) -> RepositoryStore {
         let store = RepositoryStore::default();
-        store
-            .connection
-            .lock()
-            .unwrap()
-            .execute(
-                "INSERT INTO repositories (repo_id, path, branch, detached, state, is_favorite, \
-                 last_accessed_at, availability) VALUES (?1, ?2, 'main', 0, 'normal', 0, 0, \
-                 'available')",
-                params![repo_id, format!("/tmp/{repo_id}")],
-            )
-            .unwrap();
+        store.insert_test_repository(repo_id);
         store
     }
 

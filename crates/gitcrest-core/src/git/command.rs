@@ -550,11 +550,16 @@ impl GitCommandService {
         action: crate::domain::workflow::WorkflowAction,
         target_oid: &str,
         no_fast_forward: bool,
+        message: Option<&str>,
         task: TaskContext,
     ) -> Result<(), TaskFailure> {
         let (arguments, label) = match action {
             crate::domain::workflow::WorkflowAction::Merge => {
-                let mut arguments: Vec<OsString> = vec!["merge".into(), "--no-edit".into()];
+                let mut arguments: Vec<OsString> = vec!["merge".into()];
+                match message {
+                    Some(message) => arguments.extend(["-m".into(), message.into()]),
+                    None => arguments.push("--no-edit".into()),
+                }
                 if no_fast_forward {
                     arguments.push("--no-ff".into());
                 }
