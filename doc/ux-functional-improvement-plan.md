@@ -61,6 +61,9 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U13.2 | Interface zoom | P2 | S | — | done |
 | U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | done |
 | U14.2 | Repository hygiene | P2 | S | — | done |
+| U15.1 | "Compare with…" on branch and tag menus | P2 | S | U8.1 | not started |
+| U15.2 | Open compare diffs in the Diff window | P2 | M | U8.1 | not started |
+| U15.3 | Split `use-app-actions` further | P2 | M | U14.1 | not started |
 
 Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each against real OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; S7.4 (signing and updates on three platforms) and S7.5 (full P0 E2E and release notes) are blocked on outside environments.
 
@@ -238,6 +241,27 @@ The core has no stash code, so stashes made in the CLI or another IDE are invisi
 **U14.2 Repository hygiene** (P2, S)
 - Deliver: ignore or delete the local build folders `dist-nosb/`, `dist-nosb2/` and `dist-p15/`, and add a `dist-*/` rule to `.gitignore`.
 
+### W15 — Follow-ups to finished stages
+
+These close the limits recorded for U8.1 and U14.1. They add no new Git capability.
+
+**U15.1 "Compare with…" on branch and tag menus** (P2, S)
+- Problem: U8.1 can only be started from the palette and the commit menu; its plan text promised branches, tags and commits.
+- Deliver: a "Compare with…" item in each branch's context menu (local and remote) and in each tag's menu, opening the compare dialog with that name as the base and the head left to choose. Tag names are also offered as suggestions in the dialog next to branch names. Names are passed as typed refs, so nothing is resolved in the renderer.
+- Design: `BranchesSidebar` gets `onCompareBranch(name)`; `TagList` gets `onCompare(name)`; the app wires both to the existing `compareRequest` state. The menu entry is available while a Git task runs, because comparing only reads. A new palette entry is not needed: "Compare two branches, tags or commits" already covers the action.
+- Accept: unit tests show the item on a local branch, a remote branch and a tag and that it calls back with the name; the dialog test shows tag suggestions; `pnpm check` and E2E pass.
+
+**U15.2 Open compare diffs in the Diff window** (P2, M)
+- Problem: U8.1 shows a file's change as a plain table inside the dialog, so it has no split view, syntax highlighting, tabs or shortcuts.
+- Deliver: selecting a file in the compare dialog opens it in the existing read-only Diff window as a tab, and the window shows the other files of the same comparison as sibling tabs.
+- Design: a fourth Diff scope, `range`, carries `fromOid` and an optional `toOid` (absent means the working tree), the same ids the compare API returns. The main process validates them as full object ids, passes them in the window's query and in later requests; the Diff window keys tabs by scope, both ids and path, reads each tab through `GET /compare/diff`, and lists sibling files with `GET /compare` in two-dot mode between the two ids. Blame is disabled for `range` tabs (no single commit), image comparison is not offered (the image API has no range scope; the binary note shows), and the tab label reads "Compare". The dialog keeps a "Show here" fallback only if the bridge is missing.
+- Accept: a main-process request test rejects a `range` request without a valid `fromOid` or with a `toOid` for another scope; a Diff window test shows a range tab and its siblings; an E2E check opens a comparison file in the Diff window; `pnpm check` passes.
+
+**U15.3 Split `use-app-actions` further** (P2, M)
+- Problem: `use-app-actions.ts` is the largest controller (346 lines) and mixes commit actions, panel navigation, file helpers, effects and the shortcut table.
+- Deliver: five hooks under `src/app/controllers/`, each reading only what the hooks before it return: `use-app-navigation` (modes, sidebar, inspector, focus, tab and diff opening, shelf composer, tag editor, settings), `use-app-commit-actions`, `use-app-file-actions` (rollback, reveal, copy, credentials), `use-app-effects` (task refresh, repository change and selection effects) and `use-app-shortcuts` (the global shortcut table). `App.tsx` composes them in that order; no behavior changes.
+- Accept: no controller file over 200 lines; `pnpm check` and all E2E pass unchanged; `pnpm frontend:boundaries` passes.
+
 ## 6. Suggested order
 
 1. **New-user blockers:** U1.1, U2.3, U2.2, U2.1.
@@ -247,6 +271,7 @@ The core has no stash code, so stashes made in the CLI or another IDE are invisi
 5. **Daily comfort:** D3 → U6.1, U6.2, U9.1, D4 → U10.1.
 6. **Depth:** U8.1, U9.2, U11.1, U12.1, U10.3.
 7. **Polish:** U1.2, U5.2, U10.2, U10.4, U13.1, U13.2, U14.2.
+8. **Follow-ups:** U15.3 first (it touches the files the others wire into), then U15.1, then U15.2.
 
 Run the S6 real-provider checks whenever API keys are available; they do not depend on anything here.
 
