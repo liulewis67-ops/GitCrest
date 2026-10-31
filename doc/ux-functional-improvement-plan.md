@@ -59,7 +59,7 @@ Two concerns raised in the first review turned out to be already handled. They a
 | U12.1 | History search under 200 ms after a refs change | P1 | M | — | done |
 | U13.1 | Unified feedback with undo | P2 | M | — | done |
 | U13.2 | Interface zoom | P2 | S | — | done |
-| U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | not started |
+| U14.1 | Split `App.tsx` into per-area controllers | P1 | L | — | done |
 | U14.2 | Repository hygiene | P2 | S | — | done |
 
 Release blockers from `13`, not repeated here: S6.1–S6.5 need one run each against real OpenAI Chat Completions, OpenAI Responses and Anthropic Messages; S7.4 (signing and updates on three platforms) and S7.5 (full P0 E2E and release notes) are blocked on outside environments.
@@ -256,7 +256,7 @@ Run the S6 real-provider checks whenever API keys are available; they do not dep
 - [x] D1–D4 are decided and recorded in §4 with a date (all four adopted the recommended option on 2026-10-31).
 - [x] `02-prd.md` §7 notes are updated where a stage changes a stated limit (D4 done in U10.1; re-check as later stages land).
 - [x] `release-notes-alpha-draft.md` lists what this plan added and what remains (section dated 2026-10-31; refresh it when more stages land).
-- [ ] The palette coverage test from U5.1 passes for all actions added by later stages.
+- [x] The palette coverage test from U5.1 passes for all actions added by later stages (`tests/unit/palette-commands.test.ts`; U8.1 and U10.3 added three entries, and the test checks that each is listed and that every shortcut still maps to an entry).
 
 ## 8. Progress log
 
@@ -489,3 +489,11 @@ Add one entry per finished or blocked stage, in this format:
 - Evidence: `crates/gitcrest-core/src/features/submodules/`, `crates/gitcrest-core/src/git/command.rs` (`execute_submodule_update`), `src/features/submodules/ui/SubmodulesDialog.tsx`
 - Limits / follow-up: `GET /repositories/{repoId}/submodules` lists the submodules `.gitmodules` declares that the index also holds as gitlinks, with their URL, the commit the index records, the commit the last commit records, the commit checked out, and a state (not cloned, up to date, differs from the recorded commit, conflicted). `POST /repositories/{repoId}/submodules/update` queues `git submodule update --progress --recursive` (with `--init` on request) for paths from that list only, as a task with log and progress that the task center can cancel; it is refused while a merge or rebase is running. The palette command "Show submodules" opens the dialog; each row can be opened as a repository (the folder opens through the normal open path, so it gets its own RepoId and tab) or updated, and the diff note for a submodule path now points to it. Not done: the old and new commit are shown in the dialog rather than inside the file diff (a submodule path still has no patch); there is no list in the Changes panel, no "dirty inside" state and no fetch of a newer commit from the submodule's remote (update only checks out the recorded one); a submodule path with a different name than `.gitmodules` declares is ignored.
 - Commit: see git log (`feat: complete U10.3 show submodule status and update submodules`)
+
+### U14.1 — Split App.tsx into per-area controllers
+- Status: done
+- Tests: `tsc --noEmit` (both configs), `pnpm frontend:boundaries`, `vitest run` (633 tests, unchanged), `pnpm build`, `pnpm test:e2e` (38 tests, unchanged, after the build). No Rust or API change.
+- Manual check: not run (app not started); the E2E run covers opening a repository, staging, committing, history, branches, the Diff window and the palette, but a person did not click through every dialog.
+- Evidence: `src/app/App.tsx` (39 lines, was 1,506), `src/app/controllers/`
+- Limits / follow-up: `App` now only composes seven hooks in order and renders `AppView`. Each hook owns one area and reads only what the hooks above it return: `use-app-shell` (UI state, drafts, settings, dialog requests), `use-app-connection` (core connection, tasks, workflow sessions, notices, external programs), `use-app-repositories` (tabs, caches, status, refs, branch switcher, layout, derived active values), `use-app-diff` (selection and diff queries), `use-app-work` (commit, staging, fetch, pull, push, clone), `use-app-actions` (handlers, effects, global shortcuts) and `use-app-view-model` (palette commands and view helpers). The view is `AppView` plus `ChangesView`, `HistoryView` and `AppDialogs`; lazy dialogs sit in `lazy-views.ts`. The largest file is `use-app-actions.ts` (346 lines). The code was moved by script from the original statements and changed only where an earlier hook needs a later one: eight callbacks (refreshing repositories, status, branches and remotes, activating a repository, undo, and opening the shelf composer) read `forward.*`, which the app fills each render after every hook has run (`controllers/forward.ts`). Those callbacks now see the latest render's functions instead of the render that created them; nothing in the tests depends on the difference. The controllers live in `src/app/` rather than under each feature folder because they join several features, which the feature boundary rules do not allow a feature to do. Not done: no behavior was changed, and the hooks are still large (the areas share many values), so a later pass could split `use-app-actions` further.
+- Commit: see git log (`feat: complete U14.1 split App.tsx into per-area controllers`)
