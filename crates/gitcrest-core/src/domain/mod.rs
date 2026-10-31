@@ -4,6 +4,8 @@ pub(crate) mod branch;
 pub(crate) mod commit;
 pub(crate) mod diff;
 pub(crate) mod error;
+#[allow(dead_code)] // consumed by the run engine in A2.1
+pub(crate) mod pipeline;
 pub(crate) mod remote;
 pub(crate) mod repository;
 pub(crate) mod shelf;

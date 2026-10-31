@@ -16,6 +16,8 @@ mod database;
 pub(crate) mod diff;
 mod history_index;
 mod migrations;
+#[allow(dead_code)] // consumed by the run engine in A2.1
+mod pipelines;
 mod repositories;
 pub(crate) mod repository_paths;
 pub(crate) mod settings;
@@ -114,7 +116,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let database = directory.path().join("gitcrest.sqlite");
         let connection = Connection::open(&database).unwrap();
-        connection.pragma_update(None, "user_version", 19).unwrap();
+        connection.pragma_update(None, "user_version", 20).unwrap();
         drop(connection);
 
         assert!(RepositoryStore::open(&database).is_err());

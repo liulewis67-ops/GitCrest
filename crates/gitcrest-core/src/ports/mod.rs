@@ -6,6 +6,8 @@ pub(crate) mod conflicts;
 pub(crate) mod diff;
 pub(crate) mod git;
 pub(crate) mod history;
+#[allow(dead_code)] // consumed by the run engine in A2.1
+pub(crate) mod pipelines;
 pub(crate) mod remotes;
 pub(crate) mod repository;
 pub(crate) mod settings;

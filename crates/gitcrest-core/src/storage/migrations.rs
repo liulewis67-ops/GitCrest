@@ -2,7 +2,7 @@ use rusqlite::Connection;
 
 pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
     let version: u32 = connection.pragma_query_value(None, "user_version", |row| row.get(0))?;
-    if version > 18 {
+    if version > 19 {
         return Err(rusqlite::Error::InvalidQuery);
     }
     if version < 1 {
@@ -90,6 +90,10 @@ pub(super) fn migrate(connection: &Connection) -> rusqlite::Result<()> {
             "../../migrations/0018_drop_ai_provider_settings.sql"
         ))?;
         connection.pragma_update(None, "user_version", 18)?;
+    }
+    if version < 19 {
+        connection.execute_batch(include_str!("../../migrations/0019_pipelines.sql"))?;
+        connection.pragma_update(None, "user_version", 19)?;
     }
     Ok(())
 }
