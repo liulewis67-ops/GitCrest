@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient, PipelineRunResponse } from "../../src/api/client";
-import { PipelineConflictAbortedDialog } from "../../src/features/pipelines";
+import { InPlacePipelineBanner, PipelineConflictAbortedDialog } from "../../src/features/pipelines";
 import {
   EMPTY_PIPELINE_STATE,
   applyPipelineEvent,
+  inPlacePipelineState,
   reducePipelineEvent,
   replacePipelineRuns,
   resetPipelineState,
@@ -95,4 +96,32 @@ it("keeps the dialog open and shows the error when the choice fails", async () =
   expect(screen.getByRole("dialog")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Decide later" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+});
+
+it("reports what a switch-in-place run does to the working tree, strongest state first", () => {
+  const inPlace = (status: PipelineRunResponse["status"], runId: string, repoId = "repo_a") =>
+    run({ runId, repoId, status, executionMode: "switchInPlace" });
+  const stateWith = (...runs: PipelineRunResponse[]) => ({ ...EMPTY_PIPELINE_STATE, runs: Object.fromEntries(runs.map((r) => [r.runId, r])) });
+
+  expect(inPlacePipelineState(EMPTY_PIPELINE_STATE, "repo_a")).toBeUndefined();
+  expect(inPlacePipelineState(stateWith(inPlace("running", "a")), undefined)).toBeUndefined();
+  expect(inPlacePipelineState(stateWith(inPlace("running", "a")), "repo_a")).toBe("running");
+  expect(inPlacePipelineState(stateWith(inPlace("interrupted", "a"), inPlace("waitingForConflicts", "b")), "repo_a")).toBe("waitingForConflicts");
+  expect(inPlacePipelineState(stateWith(inPlace("interrupted", "a")), "repo_a")).toBe("interrupted");
+  expect(inPlacePipelineState(stateWith(inPlace("succeeded", "a"), inPlace("pendingConfirmation", "b")), "repo_a")).toBeUndefined();
+  expect(inPlacePipelineState(stateWith(inPlace("running", "a", "repo_b")), "repo_a")).toBeUndefined();
+  expect(inPlacePipelineState(stateWith(run({ status: "running", executionMode: "temporaryWorktree" })), "repo_a")).toBeUndefined();
+});
+
+it("shows a banner only while a switch-in-place run holds or waits on the working tree", () => {
+  render(<InPlacePipelineBanner repoId="repo_a" />);
+  expect(screen.queryByRole("status")).toBeNull();
+  act(() => { applyPipelineEvent(event("pipeline.run.updated", run({ executionMode: "switchInPlace", status: "running" }))); });
+  expect(screen.getByRole("status").textContent).toContain("branch operations are paused");
+  cleanup();
+  render(<InPlacePipelineBanner repoId="repo_a" />);
+  act(() => { applyPipelineEvent(event("pipeline.run.updated", run({ executionMode: "switchInPlace", status: "waitingForConflicts" }))); });
+  expect(screen.getByRole("status").textContent).toContain("resolve the conflicts");
+  act(() => { applyPipelineEvent(event("pipeline.run.updated", run({ executionMode: "switchInPlace", status: "succeeded" }))); });
+  expect(screen.queryByRole("status")).toBeNull();
 });

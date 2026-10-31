@@ -4,6 +4,7 @@ import { useCommitSubmission } from "../../features/commits";
 import { useCloneSubmission } from "../../features/cloning";
 import { useStagingOperations } from "../../features/changes";
 import { useTaskRefreshLifecycle } from "../../features/tasks";
+import { inPlacePipelineState, usePipelineState } from "../../features/pipelines";
 import { getRemoteActionDisabledReasons, useBackgroundFetch, useRemoteMutations, useRepositoryFetch, useRepositoryPull, useRepositoryPush } from "../../features/remotes";
 
 import type { Shell } from "./use-app-shell";
@@ -16,7 +17,9 @@ export function useAppWork(ctx: Shell & Connection & Repositories & DiffArea) {
 
   const hasActiveTasks = tasks.some((task) => task.status === "queued" || task.status === "running");
 
-  const hasActiveRepositoryTask = tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
+  // A switch-in-place pipeline that is running owns the working tree, so it counts as a repository task.
+  const pipelineOwnsTree = inPlacePipelineState(usePipelineState(), selectedRepository?.repoId) === "running";
+  const hasActiveRepositoryTask = pipelineOwnsTree || tasks.some((task) => task.repoId === selectedRepository?.repoId && (task.status === "queued" || task.status === "running"));
 
   useBackgroundFetch({
     getApi: () => apiRef.current,

@@ -1668,3 +1668,4 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .pipelineRuns { display: grid; gap: 8px; margin-bottom: 12px; }
 .pipelineRuns h3 { margin: 0; font-size: 13px; color: var(--text-secondary); }
 .pipelineRunSteps { margin: 6px 0 0; padding-left: 18px; }
+.pipelineBanner { padding: 6px 14px; font-size: 12px; color: var(--text); background: var(--surface-2, var(--surface)); border-bottom: 1px solid var(--line); }

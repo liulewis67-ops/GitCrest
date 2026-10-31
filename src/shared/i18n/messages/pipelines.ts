@@ -51,6 +51,10 @@ export const pipelinesMessages = {
   "pl.runs.step.skipped": ["skipped", "已跳过"],
   "pl.runs.step.failed": ["failed", "失败"],
 
+  "pl.banner.running": ["Pipeline running: branch operations are paused until it finishes.", "流水线运行中：在它结束之前，分支相关操作已暂停。"],
+  "pl.banner.conflicts": ["Pipeline waiting: resolve the conflicts of the target branch in your working tree.", "流水线等待中：请在你的工作区解决目标分支的冲突。"],
+  "pl.banner.interrupted": ["Pipeline interrupted: open the Task Center to choose how to go on.", "流水线已中断：请打开任务中心选择如何继续。"],
+
   "settings.section.automations": ["Automations", "自动化"],
   "pl.settings.description": ["After you push a branch, GitCrest can merge it into integration branches such as uat and dev, and push them.", "推送分支后，GitCrest 可以把它合并到 uat、dev 等集成分支并推送。"],
   "pl.loadFailed": ["Could not load the automation settings.", "无法加载自动化设置。"],

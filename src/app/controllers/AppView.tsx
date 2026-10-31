@@ -12,6 +12,7 @@ import type { AppContext } from "./app-context";
 import { AppDialogs } from "./AppDialogs";
 import { ChangesView } from "./ChangesView";
 import { HistoryView } from "./HistoryView";
+import { InPlacePipelineBanner } from "../../features/pipelines";
 
 export function AppView({ ctx }: { ctx: AppContext }) {
   const { activeBranchError, activeBranchesLoading, activeRemotes, activeStatus, apiRef, branchSwitchShelfFlow, branchSwitcher, changeWorkspaceMode, checkForUpdates, cloneSubmission, closeRepositoryTab, closeSettings, commandKey, commands, conflictCount, connected, connectionState, currentBranch, fetchRepository, focusMode, forgetRepository, hasActiveRepositoryTask, hasBranchSnapshot, historyRequests, inspectorVisible, installUpdate, isMacPlatform, mode, openError, openPullDialog, openPushDialog, orderedBranches, page, paletteContext, paletteOpen, paletteQuery, pullDisabledReason, pushDisabledReason, repositories, repositoryOpening, restartCore, reviewableFiles, selectedRepository, setCreateBranchAt, setPage, setPaletteOpen, setPaletteQuery, setSettingsView, setShortcuts, setTasksOpen, settingsView, shortcuts, showCommitComposer, sidebarVisible, status, t, tasks, toggleFavorite, toggleInspector, toggleSidebar, updateStatus, version, workspaceSession } = ctx;
@@ -40,6 +41,8 @@ export function AppView({ ctx }: { ctx: AppContext }) {
         onOpenTasks={() => setTasksOpen(true)}
         onOpenSettings={() => setSettingsView((open) => open ? undefined : {})}
       />
+
+      <InPlacePipelineBanner repoId={selectedRepository?.repoId} />
 
       {page === "welcome" ? (
         <WelcomePage

@@ -83,6 +83,20 @@ export function reducePipelineEvent(state: PipelineState, event: Pick<GitCrestEv
   return state;
 }
 
+/**
+ * What a switch-in-place run is doing to the repository's own working tree, if anything.
+ * Only a running one blocks branch operations; a run waiting for conflicts or interrupted
+ * has handed the tree back to the user.
+ */
+export function inPlacePipelineState(state: PipelineState, repoId: string | undefined): "running" | "waitingForConflicts" | "interrupted" | undefined {
+  if (!repoId) return undefined;
+  const active = Object.values(state.runs).filter((run) => run.repoId === repoId && run.executionMode === "switchInPlace");
+  for (const status of ["running", "waitingForConflicts", "interrupted"] as const) {
+    if (active.some((run) => run.status === status)) return status;
+  }
+  return undefined;
+}
+
 const listeners = new Set<() => void>();
 let current: PipelineState = EMPTY_PIPELINE_STATE;
 
