@@ -69,6 +69,17 @@ export const pipelinesMessages = {
   "pl.run.noUpstream": ["The branch has no upstream yet, so there is no pushed commit to merge.", "该分支还没有上游，没有已推送的提交可合并。"],
   "pl.run.unpushed": ["The branch has commits that are not pushed yet. Push first.", "该分支有尚未推送的提交，请先推送。"],
 
+  "pl.share.export": ["Export to repository", "导出到仓库"],
+  "pl.share.import": ["Import from repository", "从仓库导入"],
+  "pl.share.exported": ["Saved the rules to {path}. Commit it to share them.", "已把规则保存到 {path}。提交它即可共享。"],
+  "pl.share.imported": ["Imported {count} rules. They ask before they run.", "已导入 {count} 条规则，它们运行前会先询问。"],
+  "pl.share.exportFailed": ["Could not write the rules file.", "无法写入规则文件。"],
+  "pl.share.importFailed": ["Could not import the rules file.", "无法导入规则文件。"],
+  "pl.share.reviewTitle": ["Review imported rules", "检查要导入的规则"],
+  "pl.share.reviewHelp": ["GitCrest never runs rules from a repository file by itself. Imported rules ask before every run.", "GitCrest 不会自动运行仓库文件里的规则。导入的规则每次运行前都会询问。"],
+  "pl.share.reviewEmpty": ["The file has no rules.", "该文件中没有规则。"],
+  "pl.share.confirm": ["Import {count} rules", "导入 {count} 条规则"],
+
   "settings.section.automations": ["Automations", "自动化"],
   "pl.settings.description": ["After you push a branch, GitCrest can merge it into integration branches such as uat and dev, and push them.", "推送分支后，GitCrest 可以把它合并到 uat、dev 等集成分支并推送。"],
   "pl.loadFailed": ["Could not load the automation settings.", "无法加载自动化设置。"],

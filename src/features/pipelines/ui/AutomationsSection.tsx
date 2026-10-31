@@ -29,6 +29,8 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
   const [error, setError] = useState("");
   const [editorError, setEditorError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [review, setReview] = useState<PipelineRule[]>();
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -110,6 +112,45 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
     if (await saveRules(next, true)) setEditing(undefined);
   }
 
+  async function exportToRepository() {
+    if (!repoId) return;
+    setError("");
+    setNotice("");
+    try {
+      const written = await api.writePipelineRulesFile(repoId);
+      setNotice(t("pl.share.exported", { path: written.path }));
+    } catch (reason) {
+      setError(message(reason, t("pl.share.exportFailed")));
+    }
+  }
+
+  async function reviewImport() {
+    if (!repoId) return;
+    setError("");
+    setNotice("");
+    try {
+      setReview((await api.importPipelineRules(repoId, { apply: false })).imported);
+    } catch (reason) {
+      setError(message(reason, t("pl.share.importFailed")));
+    }
+  }
+
+  async function confirmImport() {
+    if (!repoId) return;
+    setSaving(true);
+    setError("");
+    try {
+      const result = await api.importPipelineRules(repoId, { apply: true });
+      setRules(result.rules);
+      setNotice(t("pl.share.imported", { count: result.imported.length }));
+      setReview(undefined);
+    } catch (reason) {
+      setError(message(reason, t("pl.share.importFailed")));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const effectiveMode = repository?.effectiveExecutionMode ?? app?.executionMode;
   return <section className="settingsSection" id="settings-section-automations" aria-labelledby="settings-automations-title">
     <h3 id="settings-automations-title" tabIndex={-1}>{t("settings.section.automations")}</h3>
@@ -148,8 +189,28 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
     <div className="settingsCard">
       <div className="settingsRow">
         <div className="settingsRowText"><span>{t("pl.rules.title")}</span></div>
-        <button className="secondaryButton" type="button" disabled={!rules || Boolean(editing)} onClick={() => { setEditorError(""); setEditing({ rule: newPipelineRule(nextRuleId(rules ?? [])), isNew: true }); }}>{t("pl.rules.add")}</button>
+        <div className="pipelineRuleActions">
+          <button className="quietButton compact" type="button" disabled={!rules || Boolean(editing) || Boolean(review)} onClick={() => void exportToRepository()}>{t("pl.share.export")}</button>
+          <button className="quietButton compact" type="button" disabled={!rules || Boolean(editing) || Boolean(review)} onClick={() => void reviewImport()}>{t("pl.share.import")}</button>
+          <button className="secondaryButton" type="button" disabled={!rules || Boolean(editing) || Boolean(review)} onClick={() => { setEditorError(""); setEditing({ rule: newPipelineRule(nextRuleId(rules ?? [])), isNew: true }); }}>{t("pl.rules.add")}</button>
+        </div>
       </div>
+      {notice && <p className="settingsHint" role="status">{notice}</p>}
+      {review && <section className="pipelineImportReview" aria-label={t("pl.share.reviewTitle")}>
+        <h4>{t("pl.share.reviewTitle")}</h4>
+        <p className="cloneHelp">{t("pl.share.reviewHelp")}</p>
+        {review.length === 0 ? <p className="cloneHelp">{t("pl.share.reviewEmpty")}</p> : <ul className="pipelineRuleList">
+          {review.map((rule) => <li key={rule.ruleId}>
+            <span aria-hidden="true">+</span>
+            <div><strong>{rule.name}</strong><p className="cloneHelp monoText">{t("pl.rules.summary", { pattern: rule.trigger.branchPattern, targets: rule.targets.map((target) => target.branch).join(", ") })}</p></div>
+            <span />
+          </li>)}
+        </ul>}
+        <div className="settingsActions">
+          <button className="quietButton" type="button" disabled={saving} onClick={() => setReview(undefined)}>{t("pl.editor.cancel")}</button>
+          <button className="primaryButton" type="button" disabled={saving || review.length === 0} onClick={() => void confirmImport()}>{t("pl.share.confirm", { count: review.length })}</button>
+        </div>
+      </section>}
       {!repoId && <p className="settingsHint">{t("pl.rules.needRepository")}</p>}
       {rules && rules.length === 0 && !editing && <p className="settingsHint">{t("pl.rules.empty")}</p>}
       {rules && <ul className="pipelineRuleList">
