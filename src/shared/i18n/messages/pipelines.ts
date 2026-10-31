@@ -22,6 +22,7 @@ export const pipelinesMessages = {
   "pl.runs.worktree": ["temporary worktree", "临时工作树"],
   "pl.runs.inPlace": ["switch in place", "原地切换"],
   "pl.runs.steps": ["{count} targets", "{count} 个目标"],
+  "pl.runs.shelfPending": ["Your changes set aside for this run are still in the stash list. Restore them with git stash pop.", "为此次运行暂存的更改仍在 stash 列表中。请用 git stash pop 恢复。"],
   "pl.runs.run": ["Run", "运行"],
   "pl.runs.resolve": ["Resolve conflicts", "解决冲突"],
   "pl.runs.skipTarget": ["Skip target", "跳过目标"],

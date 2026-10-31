@@ -341,3 +341,33 @@ async fn staying_on_the_target_keeps_the_shelf_in_the_stash_list() {
         git(repository, &["stash", "list"]).contains(&format!("gitcrest-pipeline-{}", run.run_id))
     );
 }
+
+#[tokio::test]
+async fn a_shelf_that_was_never_restored_stays_visible_after_a_restart() {
+    let harness = harness(auto_rule());
+    use_in_place(&harness);
+    let waiting = start_waiting_run(&harness).await;
+    let repository = &harness.fixture.repository;
+    git(repository, &["merge", "--abort"]);
+    let after = restart(&harness);
+    after.service.recover_on_startup().await;
+    after
+        .service
+        .act("repo", &waiting.run_id, RunAction::Discard)
+        .await
+        .unwrap();
+
+    let shown = |service: &PipelineService| {
+        serde_json::to_value(service.run("repo", &waiting.run_id).unwrap()).unwrap()["shelfPending"]
+            .clone()
+    };
+    let again = restart(&harness);
+    again.service.recover_on_startup().await;
+    assert_eq!(shown(&again.service), true);
+
+    // Once the user restores the changes themselves, nothing is pending any more.
+    git(repository, &["stash", "pop", "-q"]);
+    let last = restart(&harness);
+    last.service.recover_on_startup().await;
+    assert_eq!(shown(&last.service), false);
+}

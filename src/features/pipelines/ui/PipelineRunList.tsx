@@ -85,6 +85,7 @@ export function PipelineRunList({ api, repoId, onOpenConflicts }: {
           <span className={`taskStatus task-${run.status}`} role="status">{t(`pl.runs.status.${run.status}`)}</span>
         </div>
         <div className="taskCardMeta"><span>{run.ruleName}</span><span>{run.executionMode === "temporaryWorktree" ? t("pl.runs.worktree") : t("pl.runs.inPlace")}</span></div>
+        {run.shelfPending && <p className="taskCenterError" role="note">{t("pl.runs.shelfPending")}</p>}
         <details>
           <summary>{t("pl.runs.steps", { count: run.steps.length })}</summary>
           <ul className="pipelineRunSteps">

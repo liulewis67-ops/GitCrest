@@ -5562,7 +5562,7 @@ components:
     PipelineRun:
       type: object
       additionalProperties: false
-      required: [runId, repoId, ruleId, ruleName, sourceBranch, sourceOid, executionMode, status, shelfId, createdAtMs, updatedAtMs, steps, recovery]
+      required: [runId, repoId, ruleId, ruleName, sourceBranch, sourceOid, executionMode, status, shelfId, createdAtMs, updatedAtMs, steps, recovery, shelfPending]
       properties:
         runId: { type: string }
         repoId: { $ref: "#/components/schemas/RepoId" }
@@ -5575,6 +5575,9 @@ components:
           type: string
           enum: [pendingConfirmation, running, waitingForConflicts, interrupted, succeeded, partiallySucceeded, failed, cancelled]
         shelfId: { type: [string, "null"] }
+        shelfPending:
+          type: boolean
+          description: A switch-in-place run set the user's changes aside and they are still in the stash list; the user restores them with git stash pop.
         recovery:
           type: [string, "null"]
           enum: [resumePush, restartStep, returnToSource, null]

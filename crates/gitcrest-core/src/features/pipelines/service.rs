@@ -54,6 +54,10 @@ impl ModeWorkspace {
     pub(crate) fn worktree(&self) -> &WorktreeWorkspace {
         &self.worktree
     }
+
+    pub(crate) fn in_place(&self) -> &InPlaceWorkspace {
+        &self.in_place
+    }
 }
 
 macro_rules! dispatch {
@@ -233,6 +237,8 @@ pub(crate) struct PipelineRunDto {
     steps: Vec<PipelineStepDto>,
     /// What the user can choose for an interrupted run (resumePush, restartStep, returnToSource).
     recovery: Option<&'static str>,
+    /// The changes set aside for this run are still in the stash list; restore them with `git stash pop`.
+    shelf_pending: bool,
 }
 
 impl From<&PipelineRun> for PipelineRunDto {
@@ -269,14 +275,28 @@ impl From<&PipelineRun> for PipelineRunDto {
                 })
                 .collect(),
             recovery: None,
+            shelf_pending: false,
         }
     }
 }
 
 type Proposals = Arc<std::sync::Mutex<std::collections::HashMap<String, RecoveryProposal>>>;
+type Shelves = Arc<std::sync::Mutex<std::collections::HashSet<String>>>;
 
-fn dto_for(proposals: &Proposals, run: &PipelineRun) -> PipelineRunDto {
+/// What the service knows about runs beyond what is stored.
+#[derive(Clone, Default)]
+struct Views {
+    proposals: Proposals,
+    shelves: Shelves,
+}
+
+fn dto_for(views: &Views, run: &PipelineRun) -> PipelineRunDto {
+    let proposals = &views.proposals;
     let mut dto = PipelineRunDto::from(run);
+    dto.shelf_pending = views
+        .shelves
+        .lock()
+        .is_ok_and(|set| set.contains(&run.run_id));
     if run.status == RunStatus::Interrupted {
         dto.recovery = proposals
             .lock()
@@ -300,7 +320,7 @@ pub(crate) struct PipelineService {
     engine: Arc<Engine>,
     events: EventBus,
     contexts: Arc<EphemeralContexts>,
-    proposals: Proposals,
+    views: Views,
     data_dir: PathBuf,
     catalog: Arc<dyn RepositoryCatalogPort>,
     counter: AtomicU64,
@@ -319,8 +339,8 @@ impl PipelineService {
         git: crate::git::command::GitCommandService,
     ) -> Self {
         let paths_catalog = catalog.clone();
-        let proposals = Proposals::default();
-        let observer_proposals = proposals.clone();
+        let views = Views::default();
+        let observer_views = views.clone();
         let data_dir_copy = data_dir.clone();
         let in_place_catalog = paths_catalog.clone();
         let policy_store = store.clone();
@@ -375,7 +395,7 @@ impl PipelineService {
                 observer_events.publish(
                     Some(run.repo_id.clone()),
                     "pipeline.run.updated",
-                    serde_json::to_value(dto_for(&observer_proposals, run)).unwrap_or_default(),
+                    serde_json::to_value(dto_for(&observer_views, run)).unwrap_or_default(),
                 );
                 waiting_tasks.sync(run);
             }),
@@ -385,7 +405,7 @@ impl PipelineService {
             engine: Arc::new(engine),
             events,
             contexts,
-            proposals,
+            views,
             data_dir: data_dir_copy,
             catalog,
             counter: AtomicU64::new(0),
@@ -393,7 +413,7 @@ impl PipelineService {
     }
 
     fn proposal_of(&self, run_id: &str) -> Option<RecoveryProposal> {
-        self.proposals.lock().ok()?.get(run_id).copied()
+        self.views.proposals.lock().ok()?.get(run_id).copied()
     }
 
     /// Looks at every unfinished run after a start of GitCrest: waiting conflicts are picked up
@@ -408,7 +428,7 @@ impl PipelineService {
                 continue;
             };
             let Some(proposal) = proposal else { continue };
-            if let Ok(mut proposals) = self.proposals.lock() {
+            if let Ok(mut proposals) = self.views.proposals.lock() {
                 proposals.insert(run.run_id.clone(), proposal);
             }
             // The proposal is known only now; tell open windows about the run again.
@@ -416,8 +436,20 @@ impl PipelineService {
                 self.events.publish(
                     Some(current.repo_id.clone()),
                     "pipeline.run.updated",
-                    serde_json::to_value(dto_for(&self.proposals, &current)).unwrap_or_default(),
+                    serde_json::to_value(dto_for(&self.views, &current)).unwrap_or_default(),
                 );
+            }
+        }
+        // Finished in-place runs whose set-aside changes were never restored stay visible.
+        let finished: Vec<PipelineRun> = repositories_runs(&*self.store, &*self.catalog);
+        for run in finished {
+            if run.status.is_terminal()
+                && run.execution_mode == ExecutionMode::SwitchInPlace
+                && self.engine.workspace().in_place().shelf_pending(&run).await
+            {
+                if let Ok(mut shelves) = self.views.shelves.lock() {
+                    shelves.insert(run.run_id.clone());
+                }
             }
         }
         let still_active: std::collections::HashSet<String> = self
@@ -572,7 +604,7 @@ impl PipelineService {
         self.engine.begin_run(&run_id, targets.as_deref()).await?;
         self.drive_in_background(run_id.clone());
         self.owned_run(repo_id, &run_id)
-            .map(|run| dto_for(&self.proposals, &run))
+            .map(|run| dto_for(&self.views, &run))
     }
 
     pub(crate) async fn act(
@@ -632,7 +664,7 @@ impl PipelineService {
             _ => return Err(EngineError::InvalidState.into()),
         }
         self.owned_run(repo_id, run_id)
-            .map(|run| dto_for(&self.proposals, &run))
+            .map(|run| dto_for(&self.views, &run))
     }
 
     /// Called when a workflow recovery (continue or abort) succeeded on a repository
@@ -688,7 +720,7 @@ impl PipelineService {
             .store
             .list_pipeline_runs(repo_id, limit)?
             .iter()
-            .map(|run| dto_for(&self.proposals, run))
+            .map(|run| dto_for(&self.views, run))
             .collect())
     }
 
@@ -698,7 +730,7 @@ impl PipelineService {
         run_id: &str,
     ) -> Result<PipelineRunDto, PipelineServiceError> {
         self.owned_run(repo_id, run_id)
-            .map(|run| dto_for(&self.proposals, &run))
+            .map(|run| dto_for(&self.views, &run))
     }
 
     fn owned_run(&self, repo_id: &str, run_id: &str) -> Result<PipelineRun, PipelineServiceError> {
@@ -843,4 +875,20 @@ impl WaitingTasks {
             }
         });
     }
+}
+
+fn repositories_runs(
+    store: &dyn PipelineStorePort,
+    catalog: &dyn RepositoryCatalogPort,
+) -> Vec<PipelineRun> {
+    catalog
+        .list()
+        .unwrap_or_default()
+        .iter()
+        .flat_map(|record| {
+            store
+                .list_pipeline_runs(&record.repo_id, 20)
+                .unwrap_or_default()
+        })
+        .collect()
 }

@@ -62,6 +62,14 @@ impl InPlaceWorkspace {
             .ok_or_else(|| PipelineStepError::new("The repository is no longer available"))
     }
 
+    /// True when the run's set-aside changes are still in the stash list.
+    pub(crate) async fn shelf_pending(&self, run: &PipelineRun) -> bool {
+        let (Some(oid), Ok(repository)) = (run.shelf_id.as_deref(), self.repository(run)) else {
+            return false;
+        };
+        matches!(self.stash_ref_for(&repository, oid).await, Ok(Some(_)))
+    }
+
     /// True while the user's tree still has a merge waiting to be concluded.
     pub(crate) async fn merge_in_progress(&self, run: &PipelineRun) -> bool {
         match self.repository(run) {

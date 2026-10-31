@@ -92,7 +92,7 @@ it("says so when there is no enabled rule and shows the core's message when star
 function failedRun(overrides: Partial<PipelineRunResponse> = {}): PipelineRunResponse {
   return {
     runId: "run_1", repoId: "repo_a", ruleId: "r_01", ruleName: "Promote", sourceBranch: "feature/1", sourceOid: "a".repeat(40),
-    executionMode: "temporaryWorktree", status: "failed", shelfId: null, createdAtMs: 1, updatedAtMs: 2, recovery: null,
+    executionMode: "temporaryWorktree", status: "failed", shelfId: null, createdAtMs: 1, updatedAtMs: 2, recovery: null, shelfPending: false,
     steps: [{ position: 0, targetBranch: "uat", remote: "origin", state: "failed", leaseOid: null, mergeOid: null, repoContext: null, message: "Pipeline worktree unavailable: the folder could not be created", workspaceFailed: true }],
     ...overrides,
   };

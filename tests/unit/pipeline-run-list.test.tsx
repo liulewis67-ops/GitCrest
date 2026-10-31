@@ -11,7 +11,7 @@ afterEach(cleanup);
 function run(overrides: Partial<PipelineRunResponse> = {}): PipelineRunResponse {
   return {
     runId: "run_1", repoId: "repo_a", ruleId: "r_01", ruleName: "Promote", sourceBranch: "feature/1", sourceOid: "a".repeat(40),
-    executionMode: "temporaryWorktree", status: "running", shelfId: null, createdAtMs: 1, updatedAtMs: 2, recovery: null,
+    executionMode: "temporaryWorktree", status: "running", shelfId: null, createdAtMs: 1, updatedAtMs: 2, recovery: null, shelfPending: false,
     steps: [
       { position: 0, targetBranch: "uat", remote: "origin", state: "done", leaseOid: null, mergeOid: null, repoContext: null, message: null, workspaceFailed: false },
       { position: 1, targetBranch: "dev", remote: "origin", state: "merging", leaseOid: null, mergeOid: null, repoContext: null, message: null, workspaceFailed: false },
@@ -105,4 +105,9 @@ it("does not offer Run again for a finished-successfully or active run", async (
   show(api([run({ status: "succeeded" })]));
   await screen.findByRole("article", { name: "Promote" });
   expect(screen.queryByRole("button", { name: "Run again" })).toBeNull();
+});
+
+it("warns when the changes set aside for a run are still in the stash list", async () => {
+  show(api([run({ status: "cancelled", shelfPending: true })]));
+  expect((await screen.findByRole("note")).textContent).toContain("git stash pop");
 });

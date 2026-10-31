@@ -3000,6 +3000,8 @@ export interface components {
             /** @enum {string} */
             status: "pendingConfirmation" | "running" | "waitingForConflicts" | "interrupted" | "succeeded" | "partiallySucceeded" | "failed" | "cancelled";
             shelfId: string | null;
+            /** @description A switch-in-place run set the user's changes aside and they are still in the stash list; the user restores them with git stash pop. */
+            shelfPending: boolean;
             /**
              * @description What the user can choose for an interrupted run (status interrupted); null otherwise. resumePush and restartStep are answered with the resume action, returnToSource with the returnToSource or discard action.
              * @enum {string|null}
