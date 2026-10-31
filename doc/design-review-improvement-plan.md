@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: proposed, nothing started. Date: 2026-10-31.
+Status: D0 in progress; D0.1 complete, D0.2–D0.3 under verification. D1 not started. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the error text the core returns (`crates/gitcrest-core/src/api/error.rs`), and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -60,7 +60,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 
 | ID | Stage | Priority | Size | Depends on | Status |
 |---|---|---|---|---|---|
-| D0.1 | Seeded review fixture repository | P1 | S | — | not started |
+| D0.1 | Seeded review fixture repository | P1 | S | — | done |
 | D0.2 | Screenshot matrix script | P1 | M | D0.1 | not started |
 | D0.3 | `DESIGN.md` and document precedence | P1 | M | — | not started |
 | D1.1 | Translated error messages from API codes | P1 | M | — | not started |
@@ -87,6 +87,8 @@ Both throwaway repositories used during the review had been deleted from disk, s
 - Print the created path so it can be opened in the app.
 
 **Pass rule:** running the script twice gives two valid repositories; `git status` and `git log --graph` work in both; the app opens them and shows graph, diff and composer content.
+
+**Done 2026-11-01.** `node scripts/review-fixture.mjs [new-folder] [--conflict]` prints the repository path. Each run creates a new isolated folder with 26 commits across the requested branches, two tags, a local bare origin, a 1-ahead/1-behind main branch, staged/unstaged/untracked/renamed/binary changes and a long TypeScript file. Conflict mode leaves exactly two unmerged paths. Existing destinations are refused. Both modes were checked with Git; `tests/e2e/review-fixture.test.ts` opens fresh data in an isolated Electron profile and verifies changes, Monaco diff, composer and graph. `pnpm check` passed (703 frontend, 334 Rust and 42 desktop E2E tests).
 
 ### D0.2 Screenshot matrix script
 
