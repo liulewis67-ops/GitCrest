@@ -1,5 +1,5 @@
 import { useI18n } from "../../../shared/i18n";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { GitCrestApiClient, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { useDialogFocus } from "../../../shared/hooks/use-dialog-focus";
 import { isAuthenticationFailure, isFailedPush, isSigningFailure, signingFailureOutput, supportsWorkflowRecovery } from "../model/task-operations";
@@ -20,9 +20,11 @@ interface TaskCenterProps {
   api?: GitCrestApiClient;
   onRecoverWorkflow: (task: TaskSnapshotResponse, preflight: WorkflowRecoveryPreflightResponse, action: "continue" | "skip" | "abort") => void;
   onOpenConflictWindow: (task: TaskSnapshotResponse) => void;
+  /** Extra content shown above the task list, such as pipeline runs. */
+  extra?: ReactNode;
 }
 
-export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow }: TaskCenterProps) {
+export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow, extra }: TaskCenterProps) {
   const { t } = useI18n();
   const [recovery, setRecovery] = useState<Record<string, { loading: boolean; snapshot?: WorkflowRecoveryPreflightResponse; error?: string }>>({});
   const [confirmAbortId, setConfirmAbortId] = useState("");
@@ -81,6 +83,7 @@ export function TaskCenter({ tasks, error, actionId, onClose, onRefresh, onCance
           </div>
         </div>
         {error && <p role="alert" className="taskCenterError">{error}</p>}
+        {extra}
         {tasks.length === 0 ? <p className="taskCenterEmpty">{t("tk.empty")}</p> : (
           <div className="taskList">
             {[...tasks].reverse().map((task) => (

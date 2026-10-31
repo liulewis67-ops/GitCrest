@@ -1665,3 +1665,6 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .pipelineTargets li > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .pipelineAddTarget { display: flex; gap: 8px; }
 .pipelineAddTarget select { flex: 1; min-width: 0; }
+.pipelineRuns { display: grid; gap: 8px; margin-bottom: 12px; }
+.pipelineRuns h3 { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.pipelineRunSteps { margin: 6px 0 0; padding-left: 18px; }
