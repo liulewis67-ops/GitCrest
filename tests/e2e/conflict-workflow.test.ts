@@ -65,9 +65,29 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
 
     const conflictWindow: Page = await conflictWindowPromise;
     await conflictWindow.getByRole("main", { name: "Conflict resolution window" }).waitFor();
-    await conflictWindow.locator(".conflictLine").first().waitFor({ state: "visible" });
+    await conflictWindow.locator(".resolverResult .view-lines").waitFor({ state: "visible" });
     await expectReadableText(conflictWindow, "Conflict window");
-    await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
+    const resultText = conflictWindow.locator(".resolverResult .view-lines");
+    expect(await resultText.innerText()).not.toContain("<<<<<<<");
+    const currentArrow = conflictWindow.getByRole("button", { name: "Use current · 1", exact: true });
+    const incomingArrow = conflictWindow.getByRole("button", { name: "Use incoming · 1", exact: true });
+    await currentArrow.click();
+    await expect.poll(() => conflictWindow.locator(".resolverMergeArrow").count()).toBe(0);
+    await conflictWindow.getByRole("button", { name: "Undo", exact: true }).click();
+    await currentArrow.waitFor();
+    expect(await resultText.innerText()).not.toContain("<<<<<<<");
+    // Manually combine both sides in the actual clean result, then undo back to a pending choice.
+    const editor = conflictWindow.locator(".resolverResult textarea");
+    await editor.press("Control+A");
+    await conflictWindow.keyboard.insertText("from current and other\n");
+    await expect.poll(() => conflictWindow.locator(".resolverMergeArrow").count()).toBe(0);
+    await conflictWindow.getByRole("button", { name: "Save result", exact: true }).click();
+    await conflictWindow.getByText(/Saved to the working tree/).waitFor();
+    expect((await readFile(file, "utf8")).replace(/\r\n/g, "\n")).toBe("from current and other\n");
+    await conflictWindow.getByRole("button", { name: "Undo", exact: true }).click();
+    await incomingArrow.waitFor();
+    await incomingArrow.click();
+    await expect.poll(() => conflictWindow.locator(".resolverMergeArrow").count()).toBe(0);
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
     try {
       await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
@@ -85,6 +105,68 @@ it("opens the conflict resolver by itself when a merge conflicts and stages the 
     app = undefined;
     await fixture.cleanup();
     await rm(appDataPath, { recursive: true, force: true });
+  }
+}, 120_000);
+
+it("preserves CRLF and missing final newlines through editor choices, saving and staging", async () => {
+  const fixture = await createTempGitRepository();
+  const appDataPath = await mkdtemp(resolve(tmpdir(), "gitcrest-conflict-eol-"));
+  try {
+    await git(fixture.path, "config", "core.autocrlf", "false");
+    for (const [path, content] of [["context.txt", "top\r\nbase\r\nbottom"], ["eof.txt", "top\r\nbase"], ["mixed.txt", "top\r\nbase\nbottom\r\nend"]]) await writeFile(resolve(fixture.path, path), content);
+    await git(fixture.path, "add", "."); await git(fixture.path, "commit", "-qm", "base EOL files");
+    const branch = await git(fixture.path, "branch", "--show-current");
+    await git(fixture.path, "switch", "-qc", "eol-incoming");
+    for (const [path, content] of [["context.txt", "top\r\nincoming\r\nbottom"], ["eof.txt", "top\r\nincoming"], ["mixed.txt", "top\r\nincoming\nbottom\r\nend"]]) await writeFile(resolve(fixture.path, path), content);
+    await git(fixture.path, "commit", "-qam", "incoming EOL files");
+    await git(fixture.path, "switch", "-q", branch);
+    for (const [path, content] of [["context.txt", "top\r\ncurrent\r\nbottom"], ["eof.txt", "top\r\ncurrent"], ["mixed.txt", "top\r\ncurrent\nbottom\r\nend"]]) await writeFile(resolve(fixture.path, path), content);
+    await git(fixture.path, "commit", "-qam", "current EOL files");
+    await git(fixture.path, "merge", "eol-incoming").catch(() => {});
+    app = await electron.launch({ args: [".", "--lang=en-US", "--disable-gpu", `--user-data-dir=${resolve(appDataPath, "profile")}`], env: { ...process.env, ELECTRON_RENDERER_URL: "", GITCREST_DATABASE_PATH: resolve(appDataPath, "test.sqlite") } });
+    const main = await app.firstWindow(); await main.getByText("Core connected").waitFor({ timeout: 40_000 });
+    const target = await main.evaluate(async (path) => {
+      const c = await window.gitcrest!.getSidecarConnection();
+      const post = async (url: string, body?: unknown) => {
+        const response = await fetch(new URL(`/api/v1${url}`, c.baseUrl), { method: "POST", headers: { Authorization: `Bearer ${c.token}`, "X-GitCrest-API-Version": "1", "Content-Type": "application/json" }, body: body === undefined ? undefined : JSON.stringify(body) });
+        if (!response.ok) throw new Error(await response.text());
+        return response.json();
+      };
+      const repo = await post("/repositories", { path });
+      const adoption = await post(`/repositories/${repo.repoId}/workflows/adopt`);
+      return { repoId: repo.repoId as string, taskId: adoption.task.taskId as string };
+    }, fixture.path);
+    const opened = app.waitForEvent("window");
+    await main.evaluate((target) => window.gitcrest!.openConflictWindow(target), target);
+    const resolver = await opened;
+    await resolver.locator(".resolverResult .view-lines").waitFor();
+    await resolver.getByRole("button", { name: "Use current", exact: true }).click();
+    await resolver.getByRole("button", { name: "Save result", exact: true }).click();
+    await resolver.getByText(/Saved to the working tree/).waitFor();
+    expect(await readFile(resolve(fixture.path, "context.txt"), "utf8")).toBe("top\r\ncurrent\r\nbottom");
+    await resolver.getByRole("button", { name: "Undo", exact: true }).click();
+    await resolver.getByRole("button", { name: "Use incoming", exact: true }).click();
+    await resolver.getByRole("button", { name: "Save & mark resolved", exact: true }).click();
+    await resolver.getByText("2 unresolved", { exact: true }).waitFor();
+    expect(await readFile(resolve(fixture.path, "context.txt"), "utf8")).toBe("top\r\nincoming\r\nbottom");
+    await resolver.getByRole("button", { name: "Use current", exact: true }).click();
+    await resolver.getByRole("button", { name: "Save & mark resolved", exact: true }).click();
+    await resolver.getByText("1 unresolved", { exact: true }).waitFor();
+    expect(await readFile(resolve(fixture.path, "eof.txt"), "utf8")).toBe("top\r\ncurrent");
+    await resolver.getByRole("button", { name: "Use current", exact: true }).click();
+    await resolver.getByRole("button", { name: "Save result", exact: true }).click();
+    await resolver.getByText(/Saved to the working tree/).waitFor();
+    expect(await readFile(resolve(fixture.path, "mixed.txt"), "utf8")).toBe("top\r\ncurrent\nbottom\r\nend");
+    await resolver.getByRole("button", { name: "Undo", exact: true }).click();
+    await resolver.getByRole("button", { name: "Use incoming", exact: true }).click();
+    await resolver.getByRole("button", { name: "Save & mark resolved", exact: true }).click();
+    await resolver.getByRole("heading", { name: "All conflicts resolved", exact: true }).waitFor();
+    expect(await readFile(resolve(fixture.path, "mixed.txt"), "utf8")).toBe("top\r\nincoming\nbottom\r\nend");
+    expect(await git(fixture.path, "ls-files", "--unmerged")).toBe("");
+  } finally {
+    await app?.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().forEach((window) => window.destroy()));
+    await app?.close(); app = undefined;
+    await fixture.cleanup(); await rm(appDataPath, { recursive: true, force: true });
   }
 }, 120_000);
 
@@ -190,7 +272,7 @@ it("adopts a merge started outside GitCrest so it can be resolved and continued"
     await window.locator(".repositoryRowOpen").click();
 
     const conflictWindow: Page = await conflictWindowPromise;
-    await conflictWindow.getByRole("button", { name: "Use theirs for conflict 1" }).click();
+    await conflictWindow.getByRole("button", { name: "Use incoming", exact: true }).click();
     await conflictWindow.getByRole("button", { name: "Save & mark resolved" }).click();
     await conflictWindow.getByText("0 unresolved").waitFor({ timeout: 45_000 });
 

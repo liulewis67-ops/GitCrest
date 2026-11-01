@@ -157,6 +157,25 @@ export function useAppConnection(ctx: Shell, fwd: Forward) {
     notify: getGitCrestBridge()?.showNotification ? (request) => { void getGitCrestBridge()?.showNotification?.(request); } : undefined,
   });
 
+  // Subscribe after core connection; preload takes queued requests so startup cannot drop a handoff.
+  useEffect(() => { if (!ctx.tasksOpen) ctx.setTaskCenterTarget(undefined); }, [ctx.tasksOpen]);
+  useEffect(() => {
+    if (connectionState !== "connected") return;
+    let active = true;
+    const unsubscribe = getGitCrestBridge()?.subscribeToTaskCenterRequests?.((target) => {
+      void apiRef.current?.listTasks().then((current) => {
+        if (!active) return;
+        const task = current.find((entry) => entry.taskId === target.taskId && entry.repoId === target.repoId);
+        if (task) prependTask(task);
+        const repository = repositories.find((entry) => entry.repoId === target.repoId);
+        if (repository) fwd.activateRepository(repository);
+        setSettingsView(undefined); setPage("workspace"); setTasksOpen(true);
+        ctx.setTaskCenterTarget({ ...target, missing: !task });
+      }).catch(() => { /* No acknowledgement: the conflict window keeps a retryable handoff. */ });
+    });
+    return () => { active = false; unsubscribe?.(); };
+  }, [connectionState, repositories]);
+
   // Clicking a notification shows the repository and the task list.
   useEffect(() => {
     return getGitCrestBridge()?.subscribeToNotificationClicks?.((target) => {

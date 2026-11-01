@@ -75,6 +75,21 @@ const api = {
   },
   openDiffWindow: (request: DiffWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-diff-window", request),
   openConflictWindow: (request: ConflictWindowRequest): Promise<void> => ipcRenderer.invoke("gitcrest:open-conflict-window", request),
+  returnToTaskCenter: (): Promise<{ ok: true } | { ok: false; reason: string }> => ipcRenderer.invoke("gitcrest:return-to-task-center"),
+  subscribeToTaskCenterRequests: (listener: (target: { requestId: string; repoId: string; taskId: string }) => void): (() => void) => {
+    let active = true;
+    const received = new Set<string>();
+    const take = () => {
+      void ipcRenderer.invoke("gitcrest:take-task-center-requests").then((targets: Array<{ requestId: string; repoId: string; taskId: string }>) => {
+        if (!active) return;
+        for (const target of targets) if (!received.has(target.requestId)) { received.add(target.requestId); listener(target); }
+      }, () => undefined);
+    };
+    ipcRenderer.on("gitcrest:task-center-requests-pending", take);
+    take();
+    return () => { active = false; ipcRenderer.removeListener("gitcrest:task-center-requests-pending", take); };
+  },
+  acknowledgeTaskCenter: (requestId: string): Promise<boolean> => ipcRenderer.invoke("gitcrest:acknowledge-task-center", requestId),
   /** Diff windows only: further Diffs the main window opened for this repository, including any sent before this subscribed. */
   subscribeToDiffWindowRequests: (listener: (requests: DiffWindowRequest[]) => void): (() => void) => {
     const takeRequests = (): void => {

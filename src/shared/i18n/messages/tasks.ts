@@ -1,4 +1,5 @@
 export const tasks = {
+  "tk.targetMissing": ["This operation is no longer in the task list. Review the current tasks below.", "此操作已不在任务列表中，请查看下方的当前任务。"],
   "tk.op.fetch": ["Fetch", "获取"],
   "tk.op.fetchBackground": ["Background fetch", "后台获取"],
   "tk.op.fetchPrune": ["Fetch and prune", "获取并清理"],

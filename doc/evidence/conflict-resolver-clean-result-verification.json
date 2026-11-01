@@ -1,0 +1,19 @@
+{
+  "matrix": "1280/960/800 × en/zh × light/dark",
+  "markersHidden": true,
+  "arrowsDisappearOnAccept": true,
+  "undoRestoresPendingArrow": true,
+  "redoResolvesAgain": true,
+  "manualComposition": true,
+  "unchangedTextDecisionUndo": true,
+  "errors": [],
+  "validationDate": "2026-11-01",
+  "sourceFingerprints": {
+    "src/features/workflows/model/conflict-presentation.ts": "fc5fac4a09b609a5413953a3ad6e17a3aa1de1eaa27034120625633ad9f5b5a2",
+    "src/features/workflows/ui/ConflictResultEditor.tsx": "fd5cb85a2753cdbc7e87e420115bd430a397a09ac2e9fec647f1d785d89a9ad5",
+    "src/features/workflows/ui/ConflictEditor.tsx": "8830b2b75374da6275fbae3f0ac5e74f55089c8faf0bf2493598404001e71c28",
+    "src/features/workflows/ui/ConflictWorkspace.tsx": "bcfb00b63671cb2a1759a44fdcb812f7e22d807e50ee0d5cdc92f2df3007bbdb",
+    "src/features/workflows/ui/ConflictWindow.tsx": "8210468c3af10e9e9dd081ac1878f39898f24b58c4abcd6890197ebf55272610",
+    "src/styles/globals.css": "2967c7bb6507355ea34b57b2b6b8832a0c69a93f422aa5c63f88a3f0bfe1ba89"
+  }
+}

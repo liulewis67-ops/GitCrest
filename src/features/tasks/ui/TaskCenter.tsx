@@ -3,12 +3,14 @@ import { Dialog, DialogHeader } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
+import { getGitCrestBridge } from "../../../api/bridge";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { GitCrestApiClient, RepositoryResponse, TaskSnapshotResponse, WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { isAuthenticationFailure, isFailedPush, isSigningFailure, supportsWorkflowRecovery } from "../model/task-operations";
 import { groupTasksByRepository, taskOperationLabel, taskOutcome, taskPhaseLabel, taskRelativeTime } from "../model/task-presentation";
 
 interface TaskCenterProps {
+  target?: { requestId: string; repoId: string; taskId: string; missing: boolean };
   tasks: TaskSnapshotResponse[];
   repositories?: RepositoryResponse[];
   error: DisplayError;
@@ -29,9 +31,21 @@ interface TaskCenterProps {
   extra?: ReactNode;
 }
 
-export function TaskCenter({ tasks, repositories = [], error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow, extra }: TaskCenterProps) {
+export function TaskCenter({ target, tasks, repositories = [], error, actionId, onClose, onRefresh, onCancel, onCopy, onRetryClone, onConfigureCredentials, onOpenSigningSettings, onReviewPush, api, onRecoverWorkflow, onOpenConflictWindow, extra }: TaskCenterProps) {
   const { t } = useI18n();
   const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!target) return;
+    const frame = requestAnimationFrame(() => {
+      const card = [...document.querySelectorAll<HTMLElement>('.taskCard[data-task-id]')].find((element) => element.dataset.taskId === target.taskId);
+      const node = target.missing ? document.getElementById("task-center-title") : card;
+      if (!node) return;
+      node.tabIndex = -1;
+      node.focus(); node.scrollIntoView?.({ block: "nearest" });
+      void getGitCrestBridge()?.acknowledgeTaskCenter?.(target.requestId);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 30_000);
     return () => window.clearInterval(timer);
@@ -92,13 +106,14 @@ export function TaskCenter({ tasks, repositories = [], error, actionId, onClose,
           </div>
         </DialogHeader>
         {error && <p role="alert" className="taskCenterError"><ErrorMessage error={error} /></p>}
+        {target?.missing && <p role="status" className="taskCenterEmpty">{t("tk.targetMissing")}</p>}
         {extra}
         {tasks.length === 0 ? <p className="taskCenterEmpty">{t("tk.empty")}</p> : (
           <div className="taskList">
             {groupTasksByRepository(tasks, repositories).map((group) => <section className="taskRepositoryGroup" key={group.key} aria-label={group.name}>
               <h3>{group.name}</h3>
               {group.tasks.map((task) => (
-              <article className="taskCard" key={task.taskId}>
+              <article className="taskCard" key={task.taskId} data-task-id={task.taskId}>
                 <div className="taskCardHeading"><strong data-operation={task.operation}>{taskOperationLabel(task.operation)}</strong><span className={`taskStatus task-${task.status}`} data-status={task.status} role={task.status === "running" ? "status" : undefined}>{t(`tk.status.${task.status}`)}</span></div>
                 <p className="taskOutcome">{taskOutcome(task)}</p>
                 <div className="taskCardMeta">{(task.status === "running" || task.status === "queued" || task.status === "waitingForInput") && <span>{taskPhaseLabel(task.phase)}</span>}{(task.status === "running" || task.status === "queued") && task.progress !== null && <span>{task.progress}%</span>}<time dateTime={new Date(task.updatedAtMs).toISOString()} title={new Date(task.updatedAtMs).toLocaleString()}>{taskRelativeTime(task.updatedAtMs, now)}</time></div>

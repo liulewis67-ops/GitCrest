@@ -9,5 +9,7 @@ export { splitInlineDiff } from "./model/inline-diff";
 export const loadFileDiffViewer = () => import("./ui/FileDiffViewer");
 export { useDiffViewPreferences, type DiffViewPreferences } from "./model/use-diff-view-preferences";
 export { hasCodeStructureSupport } from "./model/monaco-language";
+export { monacoHighlightLanguageForPath } from "./model/monaco-language";
+export { ensureMonacoTheme, loadMonacoLanguage } from "./ui/monaco-setup";
 export type { CodeReviewSource } from "./ui/SplitDiff";
 export type { ReviewStructure } from "./model/code-review-analysis";

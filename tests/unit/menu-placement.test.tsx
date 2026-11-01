@@ -6,6 +6,19 @@ import { ContextMenu } from "../../src/shared/ui/ContextMenu";
 
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
+it("lets keyboard users inspect unavailable reasons without executing an action", () => {
+  const run = vi.fn();
+  render(<MenuButton label="File actions" menuLabel="File actions" explainUnavailable items={[{ id: "none", label: "Apply changes", disabled: true, title: "No changes are available", onSelect: run }]}>File actions</MenuButton>);
+  fireEvent.click(screen.getByRole("button", { name: "File actions" }));
+  const item = screen.getByRole("menuitem");
+  expect(document.activeElement).toBe(item);
+  expect(item.getAttribute("aria-disabled")).toBe("true");
+  expect(document.getElementById(item.getAttribute("aria-describedby")!)?.textContent).toBe("No changes are available");
+  fireEvent.click(item);
+  expect(run).not.toHaveBeenCalled();
+  expect(screen.getByRole("menu")).toBeTruthy();
+});
+
 it("flips a bottom-edge menu above its trigger and navigates enabled choices", () => {
   vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     return this.classList.contains("actionMenu") ? new DOMRect(0, 0, 240, 200) : new DOMRect(900, 740, 40, 20);

@@ -2,18 +2,24 @@ import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
-import { useEffect, useMemo, useRef, useState, type UIEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { GitCrestApiClient, type WorkflowConflictFileResponse, type WorkflowRecoveryPreflightResponse } from "../../../api/client";
 import { getGitCrestBridge } from "../../../api/bridge";
 import { useCoreRestartCount } from "../../../shared/hooks/use-core-restart-count";
 import { WindowControls } from "../../../shared/ui/WindowControls";
-import { baseForBlock, choiceText, findConflictBlocks, replaceConflictBlock, type ConflictBlock } from "../model/conflict-blocks";
+import { baseForBlock, findConflictBlocks, replaceConflictBlock, type ConflictBlock } from "../model/conflict-blocks";
 import { splitLines } from "../model/line-diff";
 import { countConflicts, merge3, renderMerge3, type NonConflictingMode } from "../model/merge3";
 import { applySmartMerge, smartMergeBlock, type SmartMergeOutcome } from "../model/smart-merge";
-import { useDraftHistory } from "../model/use-draft-history";
-import { ConflictBlockRow, type IgnoredSides } from "./ConflictBlockRow";
+import { analyzeConflictDraft, preserveFinalNewline, reviewChoiceText } from "../model/conflict-review";
+import { Button } from "../../../shared/ui/Button";
+import { MenuButton } from "../../../shared/ui/MenuButton";
+import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
+import { ConflictWorkspace } from "./ConflictWorkspace";
+import type { ConflictEditorHandle } from "./ConflictEditor";
 import { ConflictSuggestionPanel } from "./ConflictSuggestionPanel";
+
+type IgnoredSides = { ours?: boolean; theirs?: boolean };
 
 type RequestState<T> = { key: string; loading: boolean; data?: T; error?: DisplayError };
 type ActionState = { busy?: "save" | "resolve"; message?: string; error?: DisplayError };
@@ -38,16 +44,25 @@ export function ConflictWindow() {
   const [totalBlocks, setTotalBlocks] = useState(0);
   const [activeBlock, setActiveBlock] = useState(0);
   const [ignored, setIgnored] = useState<Record<string, IgnoredSides>>({});
-  const [pendingApply, setPendingApply] = useState<NonConflictingMode | null>(null);
-  const blockRefs = useRef<(HTMLElement | null)[]>([]);
-  const typingRecorded = useRef(false);
-  const history = useDraftHistory();
-  const { reset: resetHistory } = history;
+  const [pendingApply, setPendingApply] = useState<{ label: string; title?: string; description?: string; confirmLabel?: string; apply: () => void }>();
+  const resultRef = useRef<ConflictEditorHandle>(null);
+  const completionRef = useRef<HTMLHeadingElement>(null);
+  const [history, setHistory] = useState({ canUndo: false, canRedo: false });
+  const [focusRequest, setFocusRequest] = useState(0);
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const dialogAppliedRef = useRef(false);
+  const mutationBusy = useRef(false);
+  const [handoffBusy, setHandoffBusy] = useState(false);
+  const [handoffError, setHandoffError] = useState(false);
+  const [reload, setReload] = useState(0);
+  const [editorReady, setEditorReady] = useState(false);
+  const [recoveredDraft, setRecoveredDraft] = useState(false);
   const selectedPathRef = useRef(selectedPath);
   const actionControllerRef = useRef<AbortController | null>(null);
   const coreRestarts = useCoreRestartCount();
   // Unsaved edits survive reconnecting to a restarted core: the reloaded file takes them back.
-  const carriedDraftRef = useRef<{ path: string; draft: string }>();
+  const carriedDraftRef = useRef<{ path: string; draft: string; file: WorkflowConflictFileResponse }>();
   selectedPathRef.current = selectedPath;
   const sessionKey = `${repoId}:${taskId}`;
   const fileKey = `${sessionKey}:${selectedPath}`;
@@ -55,7 +70,7 @@ export function ConflictWindow() {
   useEffect(() => () => actionControllerRef.current?.abort(), []);
 
   useEffect(() => {
-    if (coreRestarts > 0 && hasUnsavedChanges && selectedPathRef.current) carriedDraftRef.current = { path: selectedPathRef.current, draft };
+    if (coreRestarts > 0 && hasUnsavedChanges && selectedPathRef.current && file.data) carriedDraftRef.current = { path: selectedPathRef.current, draft, file: file.data };
   }, [coreRestarts]);
 
   useEffect(() => {
@@ -83,12 +98,12 @@ export function ConflictWindow() {
       if (controller.signal.aborted) return;
       setApi(client);
       setSession({ key: sessionKey, loading: false, data: preview });
-      setSelectedPath((current) => preview.conflictedPaths.includes(current) ? current : preview.conflictedPaths[0] || "");
+      setSelectedPath((current) => carriedDraftRef.current?.path ?? (preview.conflictedPaths.includes(current) ? current : preview.conflictedPaths[0] || ""));
     }).catch((reason: unknown) => {
       if (!controller.signal.aborted) setSession({ key: sessionKey, loading: false, error: describeApiError(reason, t("cf.loadTask")) });
     });
     return () => controller.abort();
-  }, [repoId, taskId, sessionKey, coreRestarts]);
+  }, [repoId, taskId, sessionKey, coreRestarts, reload]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -96,14 +111,27 @@ export function ConflictWindow() {
       setFile({ key: fileKey, loading: false });
       return () => controller.abort();
     }
+    const recovered = carriedDraftRef.current;
+    if (recovered?.path === selectedPath) {
+      carriedDraftRef.current = undefined;
+      setFile({ key: fileKey, loading: false, data: recovered.file });
+      setDraft(recovered.draft);
+      setHasUnsavedChanges(true);
+      setRecoveredDraft(true);
+      setEditorReady(false);
+      setAction({ message: t("resolver.recovered") });
+      return () => controller.abort();
+    }
     setFile({ key: fileKey, loading: true });
+    setEditorReady(false);
     setAction({});
     setSuggestionOpen(false);
     setHasUnsavedChanges(false);
+    setRecoveredDraft(false);
     setIgnored({});
-    setPendingApply(null);
-    resetHistory();
-    typingRecorded.current = false;
+    setPendingApply(undefined);
+    setDetailsOpen(false);
+    setHistory({ canUndo: false, canRedo: false });
     void api.withSignal(controller.signal).getRepositoryWorkflowConflictFile(repoId, taskId, selectedPath).then((response) => {
       if (!controller.signal.aborted && selectedPathRef.current === selectedPath) {
         setFile({ key: fileKey, loading: false, data: response });
@@ -119,7 +147,7 @@ export function ConflictWindow() {
       if (!controller.signal.aborted && selectedPathRef.current === selectedPath) setFile({ key: fileKey, loading: false, error: describeApiError(reason, t("cf.loadStages")) });
     });
     return () => controller.abort();
-  }, [api, repoId, taskId, selectedPath, fileKey, resetHistory]);
+  }, [api, repoId, taskId, selectedPath, fileKey]);
 
   useEffect(() => {
     if (!hasUnsavedChanges) return;
@@ -135,6 +163,8 @@ export function ConflictWindow() {
     if (!api || signal.aborted) return undefined;
     const preview = await api.withSignal(signal).preflightRepositoryWorkflowRecovery(repoId, taskId);
     if (signal.aborted) return undefined;
+    // A failed mutation may race with external resolution. Keep a dirty draft reviewable.
+    if (hasUnsavedChanges && !preview.conflictedPaths.includes(selectedPathRef.current)) return preview;
     setSession({ key: sessionKey, loading: false, data: preview });
     setSelectedPath((current) => preview.conflictedPaths.includes(current) ? current : preview.conflictedPaths[0] || "");
     return preview;
@@ -142,7 +172,8 @@ export function ConflictWindow() {
 
   const saveDraft = async (): Promise<WorkflowConflictFileResponse | undefined> => {
     const currentFile = file.data;
-    if (!api || !currentFile || !currentFile.isText || action.busy) return undefined;
+    if (!api || !currentFile || !currentFile.isText || !editorReady || mutationBusy.current) return undefined;
+    mutationBusy.current = true;
     const controller = new AbortController();
     actionControllerRef.current = controller;
     setAction({ busy: "save", message: t("cf.saving") });
@@ -164,6 +195,7 @@ export function ConflictWindow() {
           if (selectedPathRef.current === currentFile.path) {
             setFile({ key: `${sessionKey}:${currentFile.path}`, loading: false, data: refreshed });
             setHasUnsavedChanges(false);
+            setRecoveredDraft(false);
             setAction({ message: t("cf.saved") });
           }
           return refreshed;
@@ -175,13 +207,16 @@ export function ConflictWindow() {
       setAction({ error: describeApiError(reason, t("cf.saveFailed")) });
       try { await refreshSession(controller.signal); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
     } finally {
-      if (actionControllerRef.current === controller) actionControllerRef.current = null;
+      if (actionControllerRef.current === controller) { actionControllerRef.current = null; mutationBusy.current = false; }
     }
   };
 
   const markResolved = async (fileOverride?: WorkflowConflictFileResponse, side?: "ours" | "theirs") => {
     const currentFile = fileOverride ?? file.data;
-    if (!api || !currentFile || (!currentFile.isText && !side) || (hasUnsavedChanges && !fileOverride) || action.busy) return;
+    if (!api || !currentFile || (!currentFile.isText && !side) || (hasUnsavedChanges && !fileOverride) || mutationBusy.current) return;
+    if (!side && !editorReady) return;
+    if (!side && analyzeConflictDraft(fileOverride?.resultContent ?? draft).hasMarkers) return;
+    mutationBusy.current = true;
     const controller = new AbortController();
     actionControllerRef.current = controller;
     setAction({ busy: "resolve", message: side ? t("cf.applyingSide") : t("cf.staging") });
@@ -213,13 +248,14 @@ export function ConflictWindow() {
       setAction({ error: describeApiError(reason, t("cf.resolveFailed")) });
       try { await refreshSession(controller.signal); } catch { /* Keep the reviewed content visible when refresh is unavailable. */ }
     } finally {
-      if (actionControllerRef.current === controller) actionControllerRef.current = null;
+      if (actionControllerRef.current === controller) { actionControllerRef.current = null; mutationBusy.current = false; }
     }
   };
 
   const currentSession = session.key === sessionKey ? session : { key: sessionKey, loading: true };
   const currentFile = file.key === fileKey ? file : { key: fileKey, loading: Boolean(selectedPath) };
-  const conflictBlocks = currentFile.data?.isText ? findConflictBlocks(draft) : [];
+  const analysis = useMemo(() => analyzeConflictDraft(currentFile.data?.isText ? draft : ""), [draft, currentFile.data?.isText]);
+  const conflictBlocks = analysis.blocks;
   const stages = currentFile.data?.isText ? currentFile.data : undefined;
   const regions = useMemo(
     () => stages ? merge3(splitLines(stages.baseContent), splitLines(stages.oursContent), splitLines(stages.theirsContent)) : null,
@@ -241,7 +277,7 @@ export function ConflictWindow() {
     theirs: Boolean(regions?.some((region) => region.kind === "theirs")),
   };
   const totalConflicts = Math.max(totalBlocks, conflictBlocks.length);
-  const resolvedBlocks = totalConflicts - conflictBlocks.length;
+  useEffect(() => { setTotalBlocks((previous) => Math.max(previous, conflictBlocks.length)); }, [conflictBlocks.length]);
   const savedResult = currentFile.data?.resultContent ?? "";
   const busy = Boolean(action.busy);
 
@@ -249,24 +285,34 @@ export function ConflictWindow() {
     if (conflictBlocks.length === 0) return;
     const next = (position + conflictBlocks.length) % conflictBlocks.length;
     setActiveBlock(next);
-    blockRefs.current[next]?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    setFocusRequest((value) => value + 1);
   };
   /** Programmatic draft change: recorded for undo and ends the current typing session. */
   const changeDraft = (content: string) => {
     if (content === draft) return;
-    history.record(draft);
-    typingRecorded.current = false;
-    updateDraft(content, savedResult, setDraft, setHasUnsavedChanges);
+    // Execute synchronously against the current model. Prop echoes must never overwrite newer typing.
+    const applied = resultRef.current?.replace?.(content) ?? content;
+    updateDraft(applied, savedResult, setDraft, setHasUnsavedChanges);
   };
-  const resolveBlock = (block: ConflictBlock, replacement: string) => {
-    changeDraft(replaceConflictBlock(draft, block, replacement));
+  const resolveBlock = (block: ConflictBlock, replacement: string, side?: "ours" | "theirs" | "base") => {
+    const actual = resultRef.current?.value() ?? draft;
+    const current = findConflictBlocks(actual).find((item) => item.start === block.start && item.end === block.end && item.ours === block.ours && item.theirs === block.theirs && item.base === block.base);
+    if (!current || actual !== draft) return;
+    const source = side === "ours" ? stages?.oursContent : side === "theirs" ? stages?.theirsContent : side === "base" ? stages?.baseContent : stages?.oursContent?.endsWith("\n") === false && stages?.theirsContent?.endsWith("\n") === false ? stages.theirsContent : undefined;
+    const next = replaceConflictBlock(actual, current, preserveFinalNewline(actual, current, replacement, source));
+    const remaining = findConflictBlocks(next);
+    const nextIndex = remaining.findIndex((item) => item.start >= current.start);
+    setActiveBlock(nextIndex >= 0 ? nextIndex : 0);
+    dialogAppliedRef.current = true;
+    changeDraft(next);
+    setFocusRequest((value) => value + 1);
     setIgnored(({ [block.id]: _resolved, ...rest }) => rest);
   };
   const ignoreSide = (block: ConflictBlock, side: "ours" | "theirs") => {
     const state = ignored[block.id] ?? {};
     const other = side === "ours" ? "theirs" : "ours";
     if (!state[side] && state[other]) {
-      resolveBlock(block, baseForBlock(block, regions) ?? "");
+      resolveBlock(block, baseForBlock(block, regions) ?? "", "base");
       return;
     }
     setIgnored((current) => ({ ...current, [block.id]: { ...state, [side]: !state[side] } }));
@@ -281,10 +327,14 @@ export function ConflictWindow() {
     setIgnored({});
     setActiveBlock(0);
     setSuggestionOpen(false);
+    dialogAppliedRef.current = true;
+    setFocusRequest((value) => value + 1);
     setAction({ message: t("cs.applied") });
   };
   const smartMergeAll = () => {
-    const { content, merged } = applySmartMerge(draft, conflictBlocks, smartOutcomes);
+    const preserveEnding = stages?.oursContent?.endsWith("\n") === false && stages?.theirsContent?.endsWith("\n") === false ? stages.theirsContent : undefined;
+    const outcomes = smartOutcomes.map((outcome, index) => outcome.kind === "merged" ? { ...outcome, text: preserveFinalNewline(draft, conflictBlocks[index], outcome.text, preserveEnding) } : outcome);
+    const { content, merged } = applySmartMerge(draft, conflictBlocks, outcomes);
     if (merged === 0) return;
     const remaining = conflictBlocks.length - merged;
     const mergedIds = new Set(conflictBlocks.filter((_block, index) => smartOutcomes[index].kind === "merged").map((block) => block.id));
@@ -292,12 +342,12 @@ export function ConflictWindow() {
     setIgnored((current) => Object.fromEntries(Object.entries(current).filter(([id]) => !mergedIds.has(id))));
     setActiveBlock(0);
     // The first block left is the first one that needs a decision; bring it into view once it has rendered.
-    window.requestAnimationFrame(() => blockRefs.current[0]?.scrollIntoView?.({ block: "center", behavior: "smooth" }));
+    setFocusRequest((value) => value + 1);
     const left = remaining === 0 ? t("cf.smartLeftNone") : t(remaining === 1 ? "cf.smartDecideOne" : "cf.smartDecideMany", { count: remaining });
     setAction({ message: t(merged === 1 ? "cf.smartMergedOne" : "cf.smartMergedMany", { count: merged, left }) });
   };
   const applyNonConflicting = (mode: NonConflictingMode) => {
-    setPendingApply(null);
+    setPendingApply(undefined);
     if (!regions) return;
     const lineEnding = stages?.oursContent?.includes("\r\n") ? "\r\n" : "\n";
     const next = renderMerge3(regions, mode, lineEnding);
@@ -308,180 +358,142 @@ export function ConflictWindow() {
     setActiveBlock(0);
     setAction({ message: t("cf.appliedNonConflicting", { mode: mode === "all" ? t("cf.bothSides") : mode, left: remaining === 0 ? t("cf.noneRemain") : t(remaining === 1 ? "cf.leftOne" : "cf.leftMany", { count: remaining }) }) });
   };
-  const requestApply = (mode: NonConflictingMode) => {
-    if (hasUnsavedChanges) setPendingApply(mode);
-    else applyNonConflicting(mode);
+  const requestReplacement = (label: string, apply: () => void) => {
+    dialogAppliedRef.current = false;
+    if (hasUnsavedChanges) setPendingApply({ label, apply });
+    else apply();
   };
-  const undo = () => {
-    const previous = history.undo(draft);
-    if (previous === undefined) return;
-    typingRecorded.current = false;
-    updateDraft(previous, savedResult, setDraft, setHasUnsavedChanges);
+  const requestApply = (mode: NonConflictingMode) => requestReplacement(t("cf.applyGroup"), () => applyNonConflicting(mode));
+  const undo = () => resultRef.current?.undo();
+  const redo = () => resultRef.current?.redo();
+  const selectedBlock = conflictBlocks[Math.min(activeBlock, conflictBlocks.length - 1)];
+  const selectedSmart = smartOutcomes[Math.min(activeBlock, conflictBlocks.length - 1)];
+  const selectedIgnored = ignored[selectedBlock?.id ?? ""] ?? {};
+  const isTextReview = Boolean(stages?.oursPresent && stages?.theirsPresent);
+  const complete = Boolean(!hasUnsavedChanges && currentSession.data && currentSession.data.conflictedPaths.length === 0 && currentSession.data.omittedConflictedPathCount === 0);
+  useEffect(() => { if (complete) completionRef.current?.focus(); }, [complete]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => { if (!hasUnsavedChanges && !mutationBusy.current) void refreshSession(controller.signal).catch(() => {}); };
+    window.addEventListener("focus", refresh);
+    return () => { window.removeEventListener("focus", refresh); controller.abort(); };
+  }, [api, hasUnsavedChanges]);
+  const returnToTasks = async () => {
+    setHandoffBusy(true); setHandoffError(false);
+    try { const result = await getGitCrestBridge()?.returnToTaskCenter?.(); if (!result?.ok) setHandoffError(true); }
+    catch { setHandoffError(true); }
+    finally { setHandoffBusy(false); }
   };
-  const redo = () => {
-    const next = history.redo(draft);
-    if (next === undefined) return;
-    typingRecorded.current = false;
-    updateDraft(next, savedResult, setDraft, setHasUnsavedChanges);
-  };
-  return <main className="conflictWindow" aria-label={t("cf.aria")} onKeyDown={(event) => {
-    // event.code keeps Alt+digit working on layouts where Alt changes the produced character.
-    const digit = /^(?:Digit|Numpad)([123])$/.exec(event.code)?.[1] ?? event.key;
-    const quickChoice = ({ "1": "ours", "2": "theirs", "3": "both", "4": "smart" } as Record<string, "ours" | "theirs" | "both" | "smart">)[digit];
-    if (event.altKey && !event.ctrlKey && !event.metaKey && quickChoice && !busy) {
-      const position = Math.min(activeBlock, conflictBlocks.length - 1);
-      const block = conflictBlocks[position];
-      const skipped = ignored[block?.id ?? ""] ?? {};
+  const handleKeys = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.nativeEvent.isComposing || event.getModifierState("AltGraph") || event.target instanceof HTMLElement && event.target.closest('[role="dialog"], [role="menu"]')) return;
+    if (event.key === "Escape" && filesOpen) { event.preventDefault(); setFilesOpen(false); document.querySelector<HTMLButtonElement>(".resolverFilesToggle")?.focus(); return; }
+    const digit = /^(?:Digit|Numpad)([1234])$/.exec(event.code)?.[1] ?? event.key;
+    const quickChoice = ({ "1": "ours", "2": "theirs", "3": "both", "4": "smart" } as const)[digit as "1" | "2" | "3" | "4"];
+    if (event.altKey && !event.ctrlKey && !event.metaKey && quickChoice && !busy && editorReady && selectedBlock && !analysis.malformed) {
       if (quickChoice === "smart") {
-        const outcome = smartOutcomes[position];
-        if (block && outcome?.kind === "merged" && !skipped.ours && !skipped.theirs) {
-          event.preventDefault();
-          resolveBlock(block, outcome.text);
-        }
-        return;
-      }
-      if (block && !(quickChoice !== "theirs" && skipped.ours) && !(quickChoice !== "ours" && skipped.theirs)) {
-        event.preventDefault();
-        resolveBlock(block, choiceText(block, quickChoice));
+        if (selectedSmart?.kind === "merged" && !selectedIgnored.ours && !selectedIgnored.theirs) { event.preventDefault(); resolveBlock(selectedBlock, selectedSmart.text); }
+      } else if (!(quickChoice !== "theirs" && selectedIgnored.ours) && !(quickChoice !== "ours" && selectedIgnored.theirs)) {
+        event.preventDefault(); resolveBlock(selectedBlock, reviewChoiceText(selectedBlock, quickChoice, stages?.oursContent, stages?.theirsContent), quickChoice === "both" ? selectedBlock.theirs ? "theirs" : "ours" : quickChoice);
       }
       return;
     }
-    if (event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
-      event.preventDefault();
-      focusBlock(activeBlock + (event.key === "ArrowDown" ? 1 : -1));
-      return;
+    if (event.altKey && !event.ctrlKey && !event.metaKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      event.preventDefault(); focusBlock(activeBlock + (event.key === "ArrowDown" ? 1 : -1)); return;
     }
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
-      event.preventDefault();
-      if (hasUnsavedChanges && !busy) void saveDraft();
-      return;
+      event.preventDefault(); if (hasUnsavedChanges && !busy) void saveDraft(); return;
     }
-    // The textarea keeps its native undo for typing; everywhere else Ctrl+Z walks the gutter-action history.
-    if ((event.ctrlKey || event.metaKey) && !(event.target instanceof HTMLTextAreaElement) && stages && !busy) {
+    if ((event.ctrlKey || event.metaKey) && !(event.target instanceof HTMLElement && event.target.closest(".resolverResult .monaco-editor")) && !busy) {
       const key = event.key.toLowerCase();
       if (key === "z" && !event.shiftKey) { event.preventDefault(); undo(); }
-      else if ((key === "z" && event.shiftKey) || key === "y") { event.preventDefault(); redo(); }
+      else if (key === "z" && event.shiftKey || key === "y") { event.preventDefault(); redo(); }
     }
-  }}>
+  };
+  return <main className="conflictWindow resolverWindow" aria-label={t("cf.aria")} onKeyDownCapture={handleKeys}>
     <header className="conflictWindowHeader">
-      <div><p className="sectionEyebrow">{t("cf.eyebrow", { op: currentSession.data?.operation || t("cf.workflow") })}</p><h1>{t("cf.title")}</h1>{label && <p className="conflictWindowLabel">{label}</p>}</div>
-      <div className="conflictWindowProgress" role="status">{currentSession.data ? t("cf.unresolved", { count: currentSession.data.conflictedPaths.length }) : t("cf.waiting")}</div>
+      <div><h1>{t("cf.title")}</h1><span className="resolverOperation">{currentSession.data?.operation}{label ? ` · ${label}` : ""}</span></div>
+      <div className="conflictWindowProgress" role="status">{currentSession.data ? t("cf.unresolved", { count: currentSession.data.conflictedPaths.length + currentSession.data.omittedConflictedPathCount }) : t("cf.waiting")}</div>
       <WindowControls controls={getGitCrestBridge()?.windowControls} />
     </header>
-    {currentSession.error && <p className="taskCenterError" role="alert"><ErrorMessage error={currentSession.error} /></p>}
+    {currentSession.error && <div className="taskCenterError" role="alert"><ErrorMessage error={currentSession.error} /><Button onClick={() => setReload((value) => value + 1)}>{t("resolver.retry")}</Button></div>}
     {currentSession.loading && <p className="diffSpecialState" role="status">{t("cf.loadingTask")}</p>}
-    {!currentSession.loading && currentSession.data && <div className="conflictWindowLayout">
-      <nav className="conflictFileList" aria-label={t("cf.filesAria")}>
-        {currentSession.data.conflictedPaths.map((path) => <button className={path === selectedPath ? "selected" : ""} type="button" key={path} aria-current={path === selectedPath ? "page" : undefined} onClick={() => setSelectedPath(path)} disabled={Boolean(action.busy) || hasUnsavedChanges && path !== selectedPath} title={hasUnsavedChanges && path !== selectedPath ? t("cf.saveBeforeSwitchTitle") : path}><span aria-hidden="true">U</span>{path}</button>)}
-        {hasUnsavedChanges && <p role="status">{t("cf.saveBeforeSwitch")}</p>}
-        {currentSession.data.omittedConflictedPathCount > 0 && <p role="status">{t("cf.outsideLimit", { count: currentSession.data.omittedConflictedPathCount })}</p>}
-        {currentSession.data.conflictedPaths.length === 0 && <p className="diffSpecialState">{t("cf.noneLeft")}</p>}
+    {!currentSession.loading && currentSession.data && (complete ? <section className="resolverComplete">
+      <h2 ref={completionRef} tabIndex={-1}>{t("resolver.complete")}</h2><p>{t("cf.noneLeft")}</p>
+      <Button variant="primary" disabled={handoffBusy} onClick={() => void returnToTasks()}>{t(handoffBusy ? "resolver.returning" : "resolver.returnTasks")}</Button>
+      <Button variant="quiet" disabled={handoffBusy} onClick={() => setReload((value) => value + 1)}>{t("resolver.refresh")}</Button>
+      {handoffError && <p role="alert">{t("resolver.handoffFailed")}</p>}
+    </section> : <div className="conflictWindowLayout resolverLayout">
+      <nav className={`conflictFileList resolverFiles${filesOpen ? " open" : ""}`} aria-label={t("cf.filesAria")}>
+        <Button size="compact" className="resolverFilesClose" onClick={() => { setFilesOpen(false); document.querySelector<HTMLButtonElement>(".resolverFilesToggle")?.focus(); }}>{t("common.close")}</Button>
+        {currentSession.data.conflictedPaths.map((path) => <Button variant="quiet" className={path === selectedPath ? "selected" : ""} key={path} aria-current={path === selectedPath ? "page" : undefined} onClick={() => { setSelectedPath(path); setFilesOpen(false); }} disabled={busy || hasUnsavedChanges && path !== selectedPath} title={hasUnsavedChanges && path !== selectedPath ? t("cf.saveBeforeSwitchTitle") : path}><span aria-hidden="true">U</span>{path}</Button>)}
+        {hasUnsavedChanges && <p>{t("cf.saveBeforeSwitch")}</p>}
+        {currentSession.data.omittedConflictedPathCount > 0 && <p>{t("cf.outsideLimit", { count: currentSession.data.omittedConflictedPathCount })}</p>}
       </nav>
-      <section className="conflictFileReview" aria-label={t("cf.reviewAria")}>
-        {currentFile.error && <p className="taskCenterError" role="alert"><ErrorMessage error={currentFile.error} /></p>}
+      <section className="resolverReview" aria-label={t("cf.reviewAria")}>
+        <div className="resolverFileHeading"><Button size="compact" className="resolverFilesToggle" aria-expanded={filesOpen} onClick={() => setFilesOpen((open) => !open)}>{t("resolver.files", { count: currentSession.data.conflictedPaths.length })}</Button><strong title={selectedPath}>{selectedPath}</strong>{recoveredDraft && <span>{t("resolver.recoveredLabel")}</span>}</div>
+        {currentFile.error && <div className="taskCenterError" role="alert"><ErrorMessage error={currentFile.error} /><Button disabled={hasUnsavedChanges} onClick={() => setReload((value) => value + 1)}>{t("resolver.retry")}</Button></div>}
         {currentFile.loading && <p className="diffSpecialState" role="status">{t("cf.loadingStages")}</p>}
-        {currentFile.data && <>
-          <div className="conflictFileHeading"><strong title={currentFile.data.path}>{currentFile.data.path}</strong><span className="monoText" title={currentFile.data.headOid || t("cf.unbornHead")}>{t("cf.headLabel", { oid: currentFile.data.headOid?.slice(0, 12) || "—" })}</span></div>
-          {(!currentFile.data.isText || !currentFile.data.oursPresent || !currentFile.data.theirsPresent) && <section className="conflictChooseSide" aria-label={t("cf.takeWhole")}>
-            <p role="status">{!currentFile.data.isText ? t("cf.binary") : !currentFile.data.oursPresent ? t("cf.oursDeleted") : t("cf.theirsDeleted")}</p>
-            <div className="conflictToolbarGroup" role="group" aria-label={t("cf.takeWhole")}>
-              <button type="button" disabled={busy || hasUnsavedChanges} onClick={() => void markResolved(undefined, "ours")}>{currentFile.data.oursPresent ? t("cf.useOurs") : t("cf.acceptDelOurs")}</button>
-              <button type="button" disabled={busy || hasUnsavedChanges} onClick={() => void markResolved(undefined, "theirs")}>{currentFile.data.theirsPresent ? t("cf.useTheirs") : t("cf.acceptDelTheirs")}</button>
-            </div>
-          </section>}
-          {!currentFile.data.isText || !currentFile.data.oursPresent || !currentFile.data.theirsPresent ? null : <>
-            <div className="conflictToolbar" role="toolbar" aria-label={t("cf.navAria")}>
-              <div className="conflictToolbarGroup">
-                <button type="button" aria-label={t("cf.prevAria")} title={t("cf.prevTitle")} disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock - 1)}><UiIcon name="arrowUp" /></button>
-                <button type="button" aria-label={t("cf.nextAria")} title={t("cf.nextTitle")} disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock + 1)}><UiIcon name="arrowDown" /></button>
-              </div>
-              <div className="conflictToolbarGroup">
-                <button type="button" aria-label={t("cf.undo")} title={t("cf.undoTitle")} disabled={busy || !history.canUndo} onClick={undo}>{t("cf.undo")}</button>
-                <button type="button" aria-label={t("cf.redo")} title={t("cf.redoTitle")} disabled={busy || !history.canRedo} onClick={redo}>{t("cf.redo")}</button>
-              </div>
-              <span className="conflictCounter" role="status">{conflictBlocks.length === 0 ? (totalConflicts > 0 ? t("cf.allResolved", { count: totalConflicts }) : t("cf.noMarkers")) : t("cf.progress", { done: resolvedBlocks, total: totalConflicts, left: conflictBlocks.length })}</span>
-              <div className="conflictToolbarGroup" role="group" aria-label={t("cf.applyGroup")}>
-                <span className="conflictToolbarLabel">{t("cf.applyLabel")}</span>
-                <button type="button" aria-label={t("cf.applyAllAria")} title={canRebuild ? t("cf.applyAllTitle") : t("cf.applyUnavailable")} disabled={busy || !canRebuild || !availableModes.all} onClick={() => requestApply("all")}>{t("cf.all")}</button>
-                <button type="button" aria-label={t("cf.applyOursAria")} disabled={busy || !canRebuild || !availableModes.ours} onClick={() => requestApply("ours")}>{t("cf.ours")}</button>
-                <button type="button" aria-label={t("cf.applyTheirsAria")} disabled={busy || !canRebuild || !availableModes.theirs} onClick={() => requestApply("theirs")}>{t("cf.theirs")}</button>
-              </div>
-              <div className="conflictToolbarGroup">
-                <button type="button" disabled={busy} onClick={() => useEntire(currentFile.data?.oursContent ?? null)}>{t("cf.entireOurs")}</button>
-                <button type="button" disabled={busy} onClick={() => useEntire(currentFile.data?.theirsContent ?? null)}>{t("cf.entireTheirs")}</button>
-              </div>
-            </div>
-            {conflictBlocks.length > 0 && <div className={`conflictSmartBar${mergeableBlocks > 0 ? " ready" : ""}`} role="group" aria-label={t("cf.smartAria")}>
-              <p role="status">{smartSummary(t, mergeableBlocks, conflictBlocks.length)}</p>
-              <button type="button" className="conflictSmartButton" title={mergeableBlocks > 0 ? t("cf.smartMergeTitle") : t("cf.smartMergeNoneTitle")} disabled={busy || mergeableBlocks === 0} onClick={smartMergeAll}>{t("cf.smartMerge")}{mergeableBlocks > 0 && <span className="conflictSmartCount" aria-hidden="true">{mergeableBlocks}</span>}</button>
-            </div>}
-            {pendingApply && <div className="conflictConfirm" role="group" aria-label={t("cf.confirmApplyAria")}>
-              <span>{t("cf.confirmApply")}</span>
-              <div className="conflictToolbarGroup">
-                <button type="button" onClick={() => applyNonConflicting(pendingApply)}>{t("cf.replaceResult")}</button>
-                <button type="button" onClick={() => setPendingApply(null)}>{t("cf.keepEdits")}</button>
-              </div>
-            </div>}
-            {conflictBlocks.length > 0 && <section className="conflictMerge" aria-label={t("cf.blocksAria")}>
-              <div className="conflictMergeColumns" aria-hidden="true"><span>{t("cf.colOurs")}</span><span /><span>{t("cf.colResult")}</span><span /><span>{t("cf.colTheirs")}</span></div>
-              {conflictBlocks.map((block, position) => <ConflictBlockRow
-                key={block.id}
-                block={block}
-                base={baseForBlock(block, regions)}
-                smart={smartOutcomes[position]}
-                ignored={ignored[block.id] ?? {}}
-                busy={busy}
-                active={position === activeBlock}
-                rowRef={(node) => { blockRefs.current[position] = node; }}
-                onActivate={() => setActiveBlock(position)}
-                onApply={(choice) => resolveBlock(block, choiceText(block, choice))}
-                onIgnore={(side) => ignoreSide(block, side)}
-                onSmartMerge={() => { const outcome = smartOutcomes[position]; if (outcome.kind === "merged") resolveBlock(block, outcome.text); }}
-              />)}
-            </section>}
-            <details className="conflictStageDetails">
-              <summary>{t("cf.fullVersions")}</summary>
-              <div className="conflictStages">
-                <ConflictStage label={t("cf.stageOurs")} content={currentFile.data.oursContent} />
-                <ConflictStage label={t("cf.stageBase")} content={currentFile.data.baseContent} />
-                <ConflictStage label={t("cf.stageTheirs")} content={currentFile.data.theirsContent} />
-              </div>
-            </details>
-            <details className="conflictResultPreview">
-              <summary>{t("cf.resultPreview")}</summary>
-              <pre>{draft || t("cf.emptyResult")}</pre>
-            </details>
-            <section className="conflictResultEditor" aria-label={t("cf.editorAria")}>
-              <div><label htmlFor="conflict-result">{t("cf.editResult")}</label><small>{t("cf.editsLocal", { rev: currentFile.data.resultRevision.slice(0, 12) })}</small></div>
-              <textarea id="conflict-result" aria-label={t("cf.resultTextarea")} spellCheck={false} value={draft} disabled={Boolean(action.busy)} onBlur={() => { typingRecorded.current = false; }} onChange={(event) => {
-                if (!typingRecorded.current) { history.record(draft); typingRecorded.current = true; }
-                updateDraft(event.currentTarget.value, savedResult, setDraft, setHasUnsavedChanges);
-              }} />
-              <footer>
-                <div className="conflictResultActions" role="group" aria-label={t("cf.actionsAria")}>
-                  <button type="button" onClick={() => void saveDraft()} disabled={Boolean(action.busy) || !hasUnsavedChanges}>{action.busy === "save" ? t("cf.saving2") : t("cf.saveResult")}</button>
-                  <button type="button" onClick={() => void markResolved()} disabled={Boolean(action.busy) || hasUnsavedChanges}>{action.busy === "resolve" ? t("cf.marking") : t("cf.markResolved")}</button>
-                  {hasUnsavedChanges && conflictBlocks.length === 0 && <button type="button" onClick={() => void saveDraft().then((saved) => saved && markResolved(saved))} disabled={Boolean(action.busy)}>{t("cf.saveAndMark")}</button>}
-                </div>
-                {hasUnsavedChanges ? <span>{t("cf.unsaved")}</span> : conflictBlocks.length > 0 && <span role="status">{t(conflictBlocks.length === 1 ? "cf.markerOne" : "cf.markerMany", { count: conflictBlocks.length })}</span>}
-              </footer>
-            </section>
-          </>}
-        </>}
-        {action.message && <p className="conflictActionStatus" role="status">{action.message}</p>}
-        {action.error && <p className="taskCenterError" role="alert"><ErrorMessage error={action.error} /></p>}
-        {currentFile.data?.isText && <button type="button" className="secondaryButton" disabled={Boolean(action.busy) || hasUnsavedChanges} title={hasUnsavedChanges ? t("cf.aiSaveFirst") : t("cf.aiPreview")} onClick={() => setSuggestionOpen((open) => !open)}>{t("cf.aiButton")}</button>}
-        {suggestionOpen && api && currentFile.data?.isText && <ConflictSuggestionPanel key={`${currentFile.data.path}:${currentFile.data.resultRevision}`} api={api} file={currentFile.data} hasUnsavedChanges={hasUnsavedChanges} onUseSuggestion={applyAiMerge} onClose={() => setSuggestionOpen(false)} />}
+        {currentFile.data && (!isTextReview ? <section className="conflictChooseSide" aria-label={t("cf.takeWhole")}>
+          <p>{!currentFile.data.isText ? t("cf.binary") : !currentFile.data.oursPresent ? t("cf.oursDeleted") : t("cf.theirsDeleted")}</p>
+          <div className="resolverControlGroup"><Button disabled={busy} onClick={() => void markResolved(undefined, "ours")}>{currentFile.data.oursPresent ? t("cf.useOurs") : t("cf.acceptDelOurs")}</Button><Button disabled={busy} onClick={() => void markResolved(undefined, "theirs")}>{currentFile.data.theirsPresent ? t("cf.useTheirs") : t("cf.acceptDelTheirs")}</Button></div>
+        </section> : <>
+          <div className="resolverToolbar" role="group" aria-label={t("cf.navAria")}>
+            <div className="resolverControlGroup"><Button size="compact" aria-label={t("cf.prevAria")} title={t("cf.prevTitle")} disabled={busy || conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock - 1)}><UiIcon name="arrowUp" /></Button><Button size="compact" aria-label={t("cf.nextAria")} title={t("cf.nextTitle")} disabled={busy || conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock + 1)}><UiIcon name="arrowDown" /></Button></div>
+            <span className="resolverProgress" role="status">{analysis.malformed ? t("resolver.malformed") : conflictBlocks.length ? t("resolver.position", { current: Math.min(activeBlock + 1, conflictBlocks.length), total: conflictBlocks.length }) : t("cf.allResolved", { count: totalConflicts })}</span>
+            <div className="resolverControlGroup"><Button size="compact" title={t("cf.undoTitle")} disabled={busy || !history.canUndo} onClick={undo}>{t("cf.undo")}</Button><Button size="compact" title={t("cf.redoTitle")} disabled={busy || !history.canRedo} onClick={redo}>{t("cf.redo")}</Button></div>
+            <Button size="compact" variant="quiet" disabled={busy || hasUnsavedChanges} title={hasUnsavedChanges ? t("cf.saveBeforeSwitchTitle") : t("resolver.refresh")} aria-label={t("resolver.refresh")} onClick={() => setReload((value) => value + 1)}><UiIcon name="refresh" /></Button>
+            <MenuButton label={t("resolver.fileActions")} menuLabel={t("resolver.fileActions")} disabled={busy || !editorReady} explainUnavailable className="gcButton gcButton-secondary gcButton-compact" items={[
+              { id: "all", label: t("cf.applyAllAria"), disabled: !canRebuild || !availableModes.all, title: t(canRebuild ? "resolver.noNonConflicting" : "cf.applyUnavailable"), onSelect: () => requestApply("all") },
+              { id: "ours", label: t("cf.applyOursAria"), disabled: !canRebuild || !availableModes.ours, title: t(canRebuild ? "resolver.noNonConflicting" : "cf.applyUnavailable"), onSelect: () => requestApply("ours") },
+              { id: "theirs", label: t("cf.applyTheirsAria"), disabled: !canRebuild || !availableModes.theirs, title: t(canRebuild ? "resolver.noNonConflicting" : "cf.applyUnavailable"), onSelect: () => requestApply("theirs") },
+              { id: "entireOurs", label: t("cf.entireOurs"), separatorBefore: true, onSelect: () => requestReplacement(t("cf.entireOurs"), () => useEntire(stages?.oursContent ?? null)) },
+              { id: "entireTheirs", label: t("cf.entireTheirs"), onSelect: () => requestReplacement(t("cf.entireTheirs"), () => useEntire(stages?.theirsContent ?? null)) },
+              { id: "smart", label: t("resolver.smartAll", { count: mergeableBlocks }), separatorBefore: true, disabled: !mergeableBlocks || analysis.malformed, title: t("cf.smartMergeNoneTitle"), onSelect: smartMergeAll },
+              { id: "ai", label: t("cf.aiButton"), disabled: hasUnsavedChanges, title: t("cf.aiSaveFirst"), onSelect: () => { dialogAppliedRef.current = false; setSuggestionOpen(true); } },
+            ]}>{t("resolver.fileActions")}</MenuButton>
+          </div>
+          <ConflictWorkspace key={fileKey} identity={fileKey} path={selectedPath} ours={stages?.oursContent ?? ""} theirs={stages?.theirsContent ?? ""} base={stages?.baseContent ?? null} draft={draft} dirty={hasUnsavedChanges} busy={busy} blocks={conflictBlocks} onReady={() => setEditorReady(true)} active={activeBlock} focusRequest={focusRequest} resultRef={resultRef}
+            onAccept={(block, side) => resolveBlock(block, reviewChoiceText(block, side, stages?.oursContent, stages?.theirsContent), side)}
+            onChange={(content) => updateDraft(content, savedResult, setDraft, setHasUnsavedChanges)} onHistory={(canUndo, canRedo) => setHistory({ canUndo, canRedo })} onActive={setActiveBlock} />
+          <div className="resolverDecisions" role="group" aria-label={t("resolver.currentConflict")}>
+            {selectedBlock ? <>
+              <span>{t("cb.conflictN", { n: selectedBlock.index })}</span>
+              <Button size="compact" disabled={busy || !editorReady || analysis.malformed || selectedIgnored.ours} title={t("cb.acceptOurs")} onClick={() => resolveBlock(selectedBlock, reviewChoiceText(selectedBlock, "ours", stages?.oursContent, stages?.theirsContent), "ours")}>{t("resolver.useCurrent")}</Button>
+              <Button size="compact" disabled={busy || !editorReady || analysis.malformed || selectedIgnored.theirs} title={t("cb.acceptTheirs")} onClick={() => resolveBlock(selectedBlock, reviewChoiceText(selectedBlock, "theirs", stages?.oursContent, stages?.theirsContent), "theirs")}>{t("resolver.useIncoming")}</Button>
+              <Button size="compact" disabled={busy || !editorReady || analysis.malformed || selectedIgnored.ours || selectedIgnored.theirs} title={t("cb.acceptBothTitle")} onClick={() => resolveBlock(selectedBlock, reviewChoiceText(selectedBlock, "both", stages?.oursContent, stages?.theirsContent), selectedBlock.theirs ? "theirs" : "ours")}>{t("cb.acceptBoth")}</Button>
+              <Button size="compact" variant="quiet" aria-expanded={detailsOpen} onClick={() => { dialogAppliedRef.current = false; setDetailsOpen((open) => !open); }}>{t("resolver.details")}</Button>
+            </> : !analysis.malformed && <span>{t("resolver.reviewSave")}</span>}
+          </div>
+        </>)}
       </section>
-    </div>}
+    </div>)}
+    {!complete && <footer className="resolverFooter">
+      <div className="resolverFeedback">
+        {action.error ? <div role="alert"><ErrorMessage error={action.error} /></div> : <span role="status">{action.message || (currentSession.loading ? t("cf.loadingTask") : currentFile.loading ? t("cf.loadingStages") : !currentFile.data ? t("cf.waiting") : hasUnsavedChanges ? t("cf.unsaved") : analysis.hasMarkers ? t("resolver.markersRemain") : t("resolver.reviewSave"))}</span>}
+      </div>
+      {isTextReview && currentFile.data && <div className="resolverControlGroup" role="group" aria-label={t("cf.actionsAria")}>
+        {recoveredDraft && <Button disabled={busy} onClick={() => { dialogAppliedRef.current = false; setPendingApply({ label: selectedPath, title: t("resolver.discardRecovered"), description: t("resolver.discardRecoveredNote"), confirmLabel: t("resolver.discardRecovered"), apply: () => { setHasUnsavedChanges(false); setRecoveredDraft(false); setReload((value) => value + 1); } }); }}>{t("resolver.discardRecovered")}</Button>}
+        <Button disabled={busy || !editorReady || !hasUnsavedChanges} onClick={() => void saveDraft()}>{t(action.busy === "save" ? "cf.saving2" : "cf.saveResult")}</Button>
+        <Button variant="primary" disabled={busy || !editorReady || analysis.hasMarkers} title={analysis.hasMarkers ? t("resolver.markersRemain") : undefined} onClick={() => { if (hasUnsavedChanges) void saveDraft().then((saved) => saved && markResolved(saved)); else void markResolved(); }}>{t(action.busy === "resolve" ? "cf.marking" : hasUnsavedChanges ? "cf.saveAndMark" : "cf.markResolved")}</Button>
+      </div>}
+    </footer>}
+    {pendingApply && <Dialog aria-labelledby="resolver-replace-title" onClose={() => setPendingApply(undefined)} returnFocus={() => resolverFocusTarget(dialogAppliedRef.current, ".resolverToolbar [aria-haspopup=menu]")}>
+      <DialogHeader><h2 id="resolver-replace-title">{pendingApply.title ?? t("cf.replaceResult")}</h2></DialogHeader>
+      <div className="resolverDialogBody"><strong>{selectedPath}</strong><p>{pendingApply.label}</p><p>{pendingApply.description ?? t("cf.confirmApply")}</p></div>
+      <DialogFooter><Button data-dialog-initial-focus onClick={() => setPendingApply(undefined)}>{t("cf.keepEdits")}</Button><Button variant={pendingApply.confirmLabel ? "danger" : "primary"} onClick={() => { const apply = pendingApply.apply; dialogAppliedRef.current = true; setPendingApply(undefined); apply(); setFocusRequest((value) => value + 1); }}>{pendingApply.confirmLabel ?? t("cf.replaceResult")}</Button></DialogFooter>
+    </Dialog>}
+    {detailsOpen && selectedBlock && <Dialog aria-labelledby="resolver-detail-title" onClose={() => setDetailsOpen(false)} returnFocus={() => resolverFocusTarget(dialogAppliedRef.current, ".resolverDecisions [aria-expanded]")}>
+      <DialogHeader><h2 id="resolver-detail-title">{t("cb.conflictN", { n: selectedBlock.index })}</h2></DialogHeader>
+      <div className="resolverDialogBody">
+        <p>{t(selectedSmart?.kind === "merged" ? "cb.nonOverlappingTitle" : "cb.overlappingTitle")}</p>
+        {selectedSmart?.kind === "merged" && <><h3>{t("resolver.suggested")}</h3><pre>{selectedSmart.text}</pre><Button disabled={busy || selectedIgnored.ours || selectedIgnored.theirs || analysis.malformed} onClick={() => { resolveBlock(selectedBlock, selectedSmart.text); setDetailsOpen(false); }}>{t("cb.smartMerge")}</Button></>}
+        <details><summary>{t("resolver.base")}</summary><pre>{baseForBlock(selectedBlock, regions) ?? t("resolver.baseUnavailable")}</pre></details>
+        <p>{t(baseForBlock(selectedBlock, regions) === null ? "resolver.ignoreEmpty" : "cb.ignoreBoth")}</p>
+        <div className="resolverControlGroup"><Button aria-pressed={Boolean(selectedIgnored.ours)} disabled={busy || analysis.malformed} onClick={() => { ignoreSide(selectedBlock, "ours"); if (selectedIgnored.theirs && !selectedIgnored.ours) setDetailsOpen(false); }}>{t("cb.ignoreOurs")}</Button><Button aria-pressed={Boolean(selectedIgnored.theirs)} disabled={busy || analysis.malformed} onClick={() => { ignoreSide(selectedBlock, "theirs"); if (selectedIgnored.ours && !selectedIgnored.theirs) setDetailsOpen(false); }}>{t("cb.ignoreTheirs")}</Button></div>
+      </div>
+    </Dialog>}
+    {suggestionOpen && api && currentFile.data?.isText && <Dialog aria-label={t("cf.aiButton")} onClose={() => setSuggestionOpen(false)} returnFocus={() => resolverFocusTarget(dialogAppliedRef.current, ".resolverToolbar [aria-haspopup=menu]")}><ConflictSuggestionPanel key={`${currentFile.data.path}:${currentFile.data.resultRevision}`} api={api} file={currentFile.data} hasUnsavedChanges={hasUnsavedChanges} onUseSuggestion={applyAiMerge} onClose={() => setSuggestionOpen(false)} /></Dialog>}
   </main>;
-}
-
-function smartSummary(t: ReturnType<typeof useI18n>["t"], mergeable: number, total: number) {
-  const overlapping = total - mergeable;
-  if (mergeable === 0) return total === 1 ? t("cf.smartNoneOne") : t("cf.smartNoneMany", { count: total });
-  if (overlapping === 0) return total === 1 ? t("cf.smartOneReady") : t("cf.smartAllReady", { total });
-  return `${t("cf.smartReady", { mergeable, total })} ${t(overlapping === 1 ? "cf.smartDecideOne" : "cf.smartDecideMany", { count: overlapping })}`;
 }
 
 function updateDraft(content: string, savedContent: string, setDraft: (content: string) => void, setHasUnsavedChanges: (dirty: boolean) => void) {
@@ -491,32 +503,14 @@ function updateDraft(content: string, savedContent: string, setDraft: (content: 
 
 function delay(milliseconds: number, signal: AbortSignal) {
   return new Promise<void>((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("The operation was aborted.", "AbortError"));
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      signal.removeEventListener("abort", abort);
-      resolve();
-    }, milliseconds);
-    const abort = () => {
-      window.clearTimeout(timer);
-      reject(new DOMException("The operation was aborted.", "AbortError"));
-    };
+    const abort = () => { window.clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); };
+    const timer = window.setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, milliseconds);
     signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
   });
 }
 
-function ConflictStage({ label, content }: { label: string; content: string | null }) {
-  const { t } = useI18n();
-  return <section className="conflictStage"><div><h2>{label}</h2></div><pre onScroll={syncStageScroll}>{content ?? t("cf.absentStage")}</pre></section>;
-}
-
-function syncStageScroll(event: UIEvent<HTMLPreElement>) {
-  const source = event.currentTarget;
-  for (const pane of source.closest(".conflictStages")?.querySelectorAll("pre") ?? []) {
-    if (pane === source) continue;
-    pane.scrollTop = source.scrollTop;
-    pane.scrollLeft = source.scrollLeft;
-  }
+function resolverFocusTarget(applied: boolean, trigger: string) {
+  return (!applied ? document.querySelector<HTMLElement>(trigger) : null)
+    ?? document.querySelector<HTMLElement>(".resolverResult textarea, .resolverComplete h2");
 }

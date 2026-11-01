@@ -3,6 +3,17 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, expect, it, vi } from "vitest";
 import { ConflictWindow } from "../../src/features/workflows/ui/ConflictWindow";
 
+// API/state tests isolate the browser editor; real editor history/focus is exercised in Electron E2E.
+vi.mock("../../src/features/workflows/ui/ConflictWorkspace", async () => {
+  const React = await import("react");
+  return { ConflictWorkspace: (props: { ours: string; theirs: string; draft: string; resultRef: React.Ref<{ focus: () => void; value: () => string }>; onChange: (value: string) => void; onReady: () => void }) => {
+    const input = React.useRef<HTMLTextAreaElement>(null);
+    React.useEffect(() => { props.onReady(); }, []);
+    React.useImperativeHandle(props.resultRef, () => ({ focus: () => input.current?.focus(), value: () => input.current?.value ?? props.draft }));
+    return <><textarea aria-label="Current version" value={props.ours} readOnly /><textarea ref={input} aria-label="Working result" value={props.draft} onChange={(event) => props.onChange(event.target.value)} /><textarea aria-label="Incoming version" value={props.theirs} readOnly /></>;
+  } };
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -116,21 +127,20 @@ it("edits, saves, and marks a conflict resolved using conflict-scoped window acc
     return new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
   }));
   const view = render(<ConflictWindow />);
-  expect(await screen.findByText("base value")).toBeTruthy();
-  expect(screen.getByText("ours value")).toBeTruthy();
-  expect(screen.getByText("theirs value")).toBeTruthy();
+  await screen.findByRole("textbox", { name: "Working result" });
+  expect((screen.getByRole("textbox", { name: "Current version" }) as HTMLTextAreaElement).value).toBe("ours value");
+  expect((screen.getByRole("textbox", { name: "Incoming version" }) as HTMLTextAreaElement).value).toBe("theirs value");
   const editor = screen.getByRole("textbox", { name: "Working result" }) as HTMLTextAreaElement;
   expect(editor.value).toContain("<<<<<<< ours");
-  fireEvent.click(screen.getByRole("button", { name: "Use theirs for conflict 1" }));
+  fireEvent.click(screen.getByRole("button", { name: "Use incoming" }));
   expect(editor.value).toContain("theirs first");
   expect(editor.value).toContain("<<<<<<< ours\nours second");
   expect(editor.value).not.toContain("<<<<<<< ours\nours first");
-  fireEvent.click(screen.getByRole("button", { name: "Use ours for conflict 1" }));
+  fireEvent.click(screen.getByRole("button", { name: "Use current" }));
   expect(editor.value).toContain("ours second");
   fireEvent.change(editor, { target: { value: "resolved through editor\n" } });
-  fireEvent.click(screen.getByText("RESULT PREVIEW"));
-  expect(screen.getByText("RESULT PREVIEW").parentElement?.querySelector("pre")?.textContent).toBe("resolved through editor\n");
-  expect((screen.getByRole("button", { name: "Mark resolved" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByText("RESULT PREVIEW")).toBeNull();
+  expect(screen.getByRole("button", { name: "Save & mark resolved" })).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Save result" }));
   expect(await screen.findByText(/Saved to the working tree/)).toBeTruthy();
   expect(editor.value).toBe("resolved through editor\n");
@@ -219,6 +229,7 @@ it("aborts resolved-state polling when the conflict window closes", async () => 
 
   const view = render(<ConflictWindow />);
   await screen.findByRole("textbox", { name: "Working result" });
+  await waitFor(() => expect((screen.getByRole("button", { name: "Mark resolved" }) as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(screen.getByRole("button", { name: "Mark resolved" }));
   await waitFor(() => expect(pollSignal).toBeTruthy());
   view.unmount();
@@ -273,36 +284,6 @@ it("aborts error-recovery preflight when the conflict window closes", async () =
   await act(async () => recoveryResponse.resolve(new Response(JSON.stringify(preview), { status: 200, headers: { "X-GitCrest-API-Version": "1" } })));
 });
 
-it("shows aligned ours/result/theirs blocks, a resolved counter, and accepts both sides", async () => {
-  const repoId = `repo_${"d".repeat(64)}`;
-  window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-blocks-1`);
-  Object.defineProperty(window, "gitcrest", {
-    configurable: true,
-    value: { getSidecarConnection: vi.fn().mockResolvedValue({ baseUrl: "http://127.0.0.1:4100", token: "conflict-scoped", windowAccess: "conflictResolution" }) },
-  });
-  const preview = {
-    repoId, taskId: "task-blocks-1", operation: "merge", headOid: "a".repeat(40), dirtyPaths: ["c.ts"],
-    omittedDirtyPathCount: 0, conflictedPaths: ["c.ts"], omittedConflictedPathCount: 0, canContinue: false, canSkip: false, canAbort: true,
-  };
-  const conflict = {
-    repoId, taskId: "task-blocks-1", path: "c.ts", operation: "merge", headOid: "a".repeat(40),
-    baseContent: "b", oursContent: "o", theirsContent: "t",
-    resultContent: "<<<<<<< ours\nA\n||||||| base\nB\n=======\nC\n>>>>>>> theirs\nmid\n<<<<<<< ours\nD\n=======\nE\n>>>>>>> theirs\n",
-    resultRevision: "e".repeat(64), isText: true, oursPresent: true, theirsPresent: true,
-  };
-  vi.stubGlobal("fetch", vi.fn<typeof fetch>().mockImplementation(async (input) => {
-    const body = String(input).includes("conflicts/file") ? conflict : preview;
-    return new Response(JSON.stringify(body), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
-  }));
-  render(<ConflictWindow />);
-  const editor = await screen.findByRole("textbox", { name: "Working result" }) as HTMLTextAreaElement;
-  expect(screen.getByText("0 of 2 resolved · 2 remaining")).toBeTruthy();
-  expect(screen.getByLabelText("Unresolved result for conflict 1").textContent).toBe("1B");
-  fireEvent.click(screen.getByRole("button", { name: "Use both for conflict 1" }));
-  expect(editor.value.startsWith("A\nC\nmid\n")).toBe(true);
-  expect(screen.getByText("1 of 2 resolved · 1 remaining")).toBeTruthy();
-});
-
 function mountConflict(resultContent: string, stages: { base: string | null; ours: string | null; theirs: string | null }, token = "e") {
   const repoId = `repo_${token.repeat(64)}`;
   window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-${token}-1`);
@@ -328,72 +309,6 @@ function mountConflict(resultContent: string, stages: { base: string | null; our
 const marked = "top\n<<<<<<< ours\nconst a = 2;\nnew line\n=======\nconst a = 3;\n>>>>>>> theirs\nbottom\n";
 const stageSet = { base: "top\nconst a = 1;\nbottom\n", ours: "top\nconst a = 2;\nnew line\nbottom\n", theirs: "top\nconst a = 3;\nbottom\n" };
 
-it("highlights changed lines and words against the base with text markers", async () => {
-  await mountConflict(marked, stageSet, "1");
-  const ours = screen.getByLabelText("Ours for conflict 1");
-  expect(ours.querySelector('[aria-label="changed line"]')?.textContent).toBe("~");
-  expect(ours.querySelector('[aria-label="added line"]')?.textContent).toBe("+");
-  expect(ours.querySelector("mark")?.textContent).toBe("2");
-  expect(screen.getByLabelText("Theirs for conflict 1").querySelector("mark")?.textContent).toBe("3");
-  expect(screen.getByLabelText("Unresolved result for conflict 1").textContent).toContain("const a = 1;");
-  expect(screen.getByText(/Changes shown against base/)).toBeTruthy();
-});
-
-it("ignores one side without resolving, then resolves to base when both sides are ignored", async () => {
-  const editor = await mountConflict(marked, stageSet, "2");
-  fireEvent.click(screen.getByRole("button", { name: "Ignore ours for conflict 1" }));
-  expect(editor.value).toBe(marked);
-  expect((screen.getByRole("button", { name: "Use ours for conflict 1" }) as HTMLButtonElement).disabled).toBe(true);
-  expect((screen.getByRole("button", { name: "Use both for conflict 1" }) as HTMLButtonElement).disabled).toBe(true);
-  expect(screen.getByRole("button", { name: "Ignore ours for conflict 1" }).getAttribute("aria-pressed")).toBe("true");
-  fireEvent.click(screen.getByRole("button", { name: "Ignore ours for conflict 1" }));
-  expect(screen.getByRole("button", { name: "Ignore ours for conflict 1" }).getAttribute("aria-pressed")).toBe("false");
-  fireEvent.click(screen.getByRole("button", { name: "Ignore ours for conflict 1" }));
-  fireEvent.click(screen.getByRole("button", { name: "Ignore theirs for conflict 1" }));
-  expect(editor.value).toBe("top\nconst a = 1;\nbottom\n");
-  expect(screen.getByText("All 1 conflicts resolved")).toBeTruthy();
-});
-
-it("undoes and redoes gutter actions", async () => {
-  const editor = await mountConflict(marked, stageSet, "3");
-  fireEvent.click(screen.getByRole("button", { name: "Use theirs for conflict 1" }));
-  expect(editor.value).toBe("top\nconst a = 3;\nbottom\n");
-  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-  expect(editor.value).toBe(marked);
-  expect((screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Redo" }));
-  expect(editor.value).toBe("top\nconst a = 3;\nbottom\n");
-});
-
-it("applies non-conflicting changes from one side after using the other side entirely, confirming before replacing edits", async () => {
-  const stages = { base: "a\nb\nc\nd\ne\n", ours: "a\nB\nc\nd\ne\n", theirs: "a\nb\nc\nd\nE\n" };
-  const editor = await mountConflict("a\n<<<<<<< ours\nB\n=======\nx\n>>>>>>> theirs\nc\nd\nE\n", stages, "4");
-  fireEvent.click(screen.getByRole("button", { name: "Use entire ours" }));
-  expect(editor.value).toBe(stages.ours);
-  fireEvent.click(screen.getByRole("button", { name: "Apply non-conflicting changes from theirs" }));
-  expect(screen.getByRole("group", { name: "Confirm apply non-conflicting changes" })).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Keep my edits" }));
-  expect(editor.value).toBe(stages.ours);
-  fireEvent.click(screen.getByRole("button", { name: "Apply all non-conflicting changes" }));
-  fireEvent.click(screen.getByRole("button", { name: "Replace working result" }));
-  expect(editor.value).toBe("a\nB\nc\nd\nE\n");
-  expect(screen.getByText(/No conflicts remain/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-  expect(editor.value).toBe(stages.ours);
-});
-
-it("rebuilds remaining conflicts with diff3 markers and disables apply when a side is absent", async () => {
-  const stages = { base: "a\nb\nc\n", ours: "a\nO\nc\nx\n", theirs: "a\nT\nc\n" };
-  const editor = await mountConflict("a\n<<<<<<< ours\nO\n=======\nT\n>>>>>>> theirs\nc\n", stages, "5");
-  fireEvent.click(screen.getByRole("button", { name: "Apply all non-conflicting changes" }));
-  expect(editor.value).toBe("a\n<<<<<<< ours\nO\n||||||| base\nb\n=======\nT\n>>>>>>> theirs\nc\nx\n");
-  expect(screen.getByText(/1 conflict left to resolve/)).toBeTruthy();
-  expect(screen.getByLabelText("Unresolved result for conflict 1").textContent).toContain("b");
-  cleanup();
-  await mountConflict("<<<<<<< ours\nx\n=======\ny\n>>>>>>> theirs\n", { base: "z\n", ours: null, theirs: "y\n" }, "6");
-  expect((screen.getByRole("button", { name: "Apply all non-conflicting changes" }) as HTMLButtonElement).disabled).toBe(true);
-});
-
 it("saves and marks a fully resolved file in one step", async () => {
   const repoId = `repo_${"d".repeat(64)}`;
   window.history.replaceState({}, "", `/?view=conflicts&repoId=${repoId}&taskId=task-one-step-1`);
@@ -415,6 +330,7 @@ it("saves and marks a fully resolved file in one step", async () => {
     const url = String(input);
     if (url.includes("conflicts/resolved")) {
       calls.push("resolve");
+      expect(JSON.parse(String(init?.body)).expectedResultRevision).toBe("c".repeat(64));
       preview = { ...preview, conflictedPaths: [], canContinue: true };
       return new Response(JSON.stringify({ taskId: "resolve-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } });
     }
@@ -434,61 +350,6 @@ it("saves and marks a fully resolved file in one step", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Save & mark resolved" }));
   await waitFor(() => expect(screen.getByText("0 unresolved")).toBeTruthy());
   expect(calls).toEqual(["save", "resolve"]);
-});
-
-it("resolves the active conflict from the keyboard with Alt+1, Alt+2 and Alt+3", async () => {
-  const content = "<<<<<<< ours\nA\n=======\nB\n>>>>>>> theirs\nmid\n<<<<<<< ours\nC\n=======\nD\n>>>>>>> theirs\nmid2\n<<<<<<< ours\nE\n=======\nF\n>>>>>>> theirs\n";
-  const editor = await mountConflict(content, { base: "x\n", ours: "A\nmid\nC\nmid2\nE\n", theirs: "B\nmid\nD\nmid2\nF\n" }, "7");
-  const main = screen.getByRole("main", { name: "Conflict resolution window" });
-  expect(screen.getByText("0 of 3 resolved · 3 remaining")).toBeTruthy();
-  fireEvent.keyDown(main, { key: "1", code: "Digit1", altKey: true });
-  expect(screen.getByText("1 of 3 resolved · 2 remaining")).toBeTruthy();
-  fireEvent.keyDown(main, { key: "µ", code: "Digit2", altKey: true });
-  expect(screen.getByText("2 of 3 resolved · 1 remaining")).toBeTruthy();
-  fireEvent.keyDown(main, { key: "3", code: "Digit3", altKey: true });
-  expect(screen.getByText("All 3 conflicts resolved")).toBeTruthy();
-  expect(editor.value).toBe("A\nmid\nD\nmid2\nE\nF\n");
-});
-
-const smartStages = { base: "a\nb\nc\nm\nx = 1;\nz\n", ours: "a\nB\nc\nm\nx = 2;\nz\n", theirs: "a\nb\nC\nm\nx = 3;\nz\n" };
-const smartMarked = "a\n<<<<<<< ours\nB\nc\n=======\nb\nC\n>>>>>>> theirs\nm\n<<<<<<< ours\nx = 2;\n=======\nx = 3;\n>>>>>>> theirs\nz\n";
-const overlapLeft = "a\nB\nC\nm\n<<<<<<< ours\nx = 2;\n=======\nx = 3;\n>>>>>>> theirs\nz\n";
-
-it("smart merges non-overlapping conflicts in one click and leaves overlapping ones to the user", async () => {
-  const editor = await mountConflict(smartMarked, smartStages, "8");
-  const bar = screen.getByRole("group", { name: "Smart Merge" });
-  expect(bar.textContent).toContain("1 of 2 remaining conflicts don't overlap and can be merged in one click. 1 conflict overlaps and needs your decision.");
-  expect(screen.getByText("Non-overlapping")).toBeTruthy();
-  expect(screen.getByText("Overlapping")).toBeTruthy();
-  expect(screen.getByLabelText("Smart Merge preview for conflict 1").textContent).toContain("B");
-  expect(screen.getByLabelText("Smart Merge preview for conflict 1").textContent).toContain("C");
-  expect(screen.getByLabelText("Unresolved result for conflict 2").textContent).toContain("x = 1;");
-  expect(screen.queryByRole("button", { name: "Smart merge conflict 2" })).toBeNull();
-
-  fireEvent.click(screen.getByRole("button", { name: "Smart Merge" }));
-  expect(editor.value).toBe(overlapLeft);
-  expect(screen.getByText(/Smart Merge resolved 1 non-overlapping conflict\. 1 conflict overlaps and needs your decision\./)).toBeTruthy();
-  expect(screen.getByText("1 of 2 resolved · 1 remaining")).toBeTruthy();
-  expect(screen.getByRole("group", { name: "Smart Merge" }).textContent).toContain("The remaining conflict overlaps.");
-  expect((screen.getByRole("button", { name: "Smart Merge" }) as HTMLButtonElement).disabled).toBe(true);
-
-  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-  expect(editor.value).toBe(smartMarked);
-});
-
-it("smart merges a single block from its row or with Alt+4, but not after a side is ignored", async () => {
-  const editor = await mountConflict(smartMarked, smartStages, "9");
-  const main = screen.getByRole("main", { name: "Conflict resolution window" });
-  fireEvent.click(screen.getByRole("button", { name: "Ignore ours for conflict 1" }));
-  expect((screen.getByRole("button", { name: "Smart merge conflict 1" }) as HTMLButtonElement).disabled).toBe(true);
-  fireEvent.keyDown(main, { key: "4", code: "Digit4", altKey: true });
-  expect(editor.value).toBe(smartMarked);
-  fireEvent.click(screen.getByRole("button", { name: "Ignore ours for conflict 1" }));
-  fireEvent.keyDown(main, { key: "4", code: "Digit4", altKey: true });
-  expect(editor.value).toBe(overlapLeft);
-  fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-  fireEvent.click(screen.getByRole("button", { name: "Smart merge conflict 1" }));
-  expect(editor.value).toBe(overlapLeft);
 });
 
 it("lets the user take a whole side for a binary file and for a delete/modify conflict", async () => {
@@ -529,4 +390,134 @@ it("lets the user take a whole side for a binary file and for a delete/modify co
   fireEvent.click(screen.getByRole("button", { name: "Accept deletion (theirs)" }));
   await waitFor(() => expect(chosen).toHaveLength(2));
   expect(chosen[1]).toMatchObject({ path: "gone.txt", side: "theirs" });
+});
+
+function fileAction(label: string) {
+  fireEvent.click(screen.getByRole("button", { name: "File actions" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: label }));
+}
+
+it("keeps a single result, blocks malformed-marker completion and supports ordered local choices", async () => {
+  const editor = await mountConflict(marked, stageSet, "1");
+  expect(screen.getAllByRole("textbox", { name: "Working result" })).toHaveLength(1);
+  expect((screen.getByRole("button", { name: "Mark resolved" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(editor, { target: { value: "<<<<<<< incomplete\n" } });
+  expect(screen.getByText("Incomplete conflict markers. Edit the result before resolving.")).toBeTruthy();
+  expect((screen.getByRole("button", { name: "Save & mark resolved" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(editor, { target: { value: marked } });
+  fireEvent.click(screen.getByRole("button", { name: "Accept both" }));
+  expect(editor.value).toBe("top\nconst a = 2;\nnew line\nconst a = 3;\nbottom\n");
+});
+
+it("protects dirty whole-file replacement consistently and keeps base inspection secondary", async () => {
+  const editor = await mountConflict(marked, stageSet, "2");
+  fireEvent.change(editor, { target: { value: marked + "manual\n" } });
+  fileAction("Use entire ours");
+  expect(screen.getByRole("dialog", { name: "Replace working result" })).toBeTruthy();
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "Keep my edits" }));
+  fireEvent.click(screen.getByRole("button", { name: "Keep my edits" }));
+  expect(editor.value).toBe(marked + "manual\n");
+  fileAction("Use entire theirs");
+  fireEvent.click(screen.getByRole("button", { name: "Replace working result" }));
+  expect(editor.value).toBe(stageSet.theirs);
+});
+
+it("preserves ignore-both semantics without presenting base as the result", async () => {
+  const editor = await mountConflict(marked, stageSet, "3");
+  fireEvent.click(screen.getByRole("button", { name: "More options" }));
+  fireEvent.click(screen.getByRole("button", { name: "Ignore ours" }));
+  expect(editor.value).toBe(marked);
+  fireEvent.click(screen.getByRole("button", { name: "Ignore theirs" }));
+  expect(editor.value).toBe(stageSet.base);
+});
+
+it("retains non-conflicting reconstruction under File actions", async () => {
+  const stages = { base: "a\nb\nc\nd\ne\n", ours: "a\nB\nc\nd\ne\n", theirs: "a\nb\nc\nd\nE\n" };
+  const editor = await mountConflict("a\n<<<<<<< ours\nB\n=======\nx\n>>>>>>> theirs\nc\nd\nE\n", stages, "4");
+  fileAction("Use entire ours");
+  expect(editor.value).toBe(stages.ours);
+  fileAction("Apply all non-conflicting changes");
+  fireEvent.click(screen.getByRole("button", { name: "Replace working result" }));
+  expect(editor.value).toBe("a\nB\nc\nd\nE\n");
+});
+
+it("retains Smart Merge and overlapping conflicts", async () => {
+  const stages = { base: "a\nb\nc\nm\nx = 1;\nz\n", ours: "a\nB\nc\nm\nx = 2;\nz\n", theirs: "a\nb\nC\nm\nx = 3;\nz\n" };
+  const marked = "a\n<<<<<<< ours\nB\nc\n=======\nb\nC\n>>>>>>> theirs\nm\n<<<<<<< ours\nx = 2;\n=======\nx = 3;\n>>>>>>> theirs\nz\n";
+  const editor = await mountConflict(marked, stages, "5");
+  fileAction("Smart Merge eligible conflicts (1)");
+  expect(editor.value).toBe("a\nB\nC\nm\n<<<<<<< ours\nx = 2;\n=======\nx = 3;\n>>>>>>> theirs\nz\n");
+  expect(screen.getByText("Conflict 1 of 1")).toBeTruthy();
+});
+
+it("does not stage after a failed save and keeps the user's draft available to retry", async () => {
+  const editor = await mountConflict(marked, stageSet, "6");
+  const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let staged = false;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes("conflicts/resolved")) staged = true;
+    if (String(input).includes("conflicts/file") && init?.method === "PUT") return new Response("save failed", { status: 500, headers: { "X-GitCrest-API-Version": "1" } });
+    return originalFetch(input, init);
+  });
+  fireEvent.change(editor, { target: { value: "reviewed result\n" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save & mark resolved" }));
+  await screen.findByRole("alert");
+  expect(staged).toBe(false);
+  expect(editor.value).toBe("reviewed result\n");
+  expect((screen.getByRole("button", { name: "Save result" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("retains the saved result and offers Mark resolved after staging fails", async () => {
+  const editor = await mountConflict(marked, stageSet, "7");
+  const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  let saved = false;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    if (String(input).includes("conflicts/resolved")) return new Response("stage failed", { status: 500, headers: { "X-GitCrest-API-Version": "1" } });
+    if (String(input).includes("conflicts/file") && init?.method === "PUT") { saved = true; return new Response(JSON.stringify({ taskId: "save-task", status: "queued" }), { status: 202, headers: { "X-GitCrest-API-Version": "1" } }); }
+    const response = await originalFetch(input, init);
+    if (saved && String(input).includes("conflicts/file")) return new Response(JSON.stringify({ ...await response.json(), resultContent: "reviewed result\n", resultRevision: "c".repeat(64) }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    return response;
+  });
+  fireEvent.change(editor, { target: { value: "reviewed result\n" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save & mark resolved" }));
+  await screen.findByRole("alert");
+  expect(editor.value).toBe("reviewed result\n");
+  expect((screen.getByRole("button", { name: "Save result" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Mark resolved" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("carries an unsaved draft across a core restart instead of reloading saved text over it", async () => {
+  await mountConflict(marked, stageSet, "8");
+  cleanup();
+  let restarted: ((status: import("../../src/api/core-status").CoreStatus) => void) | undefined;
+  window.gitcrest!.subscribeToCoreStatus = (listener) => { restarted = listener; return () => {}; };
+  render(<ConflictWindow />);
+  const editor = await screen.findByRole("textbox", { name: "Working result" });
+  fireEvent.change(editor, { target: { value: "unsaved review\r\n" } });
+  act(() => restarted?.({ state: "ready", generation: 2 }));
+  await waitFor(() => expect((screen.getByRole("textbox", { name: "Working result" }) as HTMLTextAreaElement).value).toBe("unsaved review\n"));
+  expect((screen.getByRole("button", { name: "Save result" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("keeps a recovered draft visible if the restarted core no longer lists that conflict", async () => {
+  await mountConflict(marked, stageSet, "9");
+  cleanup();
+  let restarted: ((status: import("../../src/api/core-status").CoreStatus) => void) | undefined;
+  window.gitcrest!.subscribeToCoreStatus = (listener) => { restarted = listener; return () => {}; };
+  render(<ConflictWindow />);
+  const editor = await screen.findByRole("textbox", { name: "Working result" });
+  fireEvent.change(editor, { target: { value: "keep this review\n" } });
+  const originalFetch = vi.mocked(globalThis.fetch).getMockImplementation()!;
+  vi.mocked(globalThis.fetch).mockImplementation(async (input, init) => {
+    const response = await originalFetch(input, init);
+    if (String(input).includes("recovery-preflight")) return new Response(JSON.stringify({ ...await response.json(), conflictedPaths: [] }), { status: 200, headers: { "X-GitCrest-API-Version": "1" } });
+    return response;
+  });
+  act(() => restarted?.({ state: "ready", generation: 2 }));
+  await screen.findByText("Recovered draft");
+  expect((screen.getByRole("textbox", { name: "Working result" }) as HTMLTextAreaElement).value).toBe("keep this review\n");
+  expect(screen.queryByRole("heading", { name: "All conflicts resolved" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Discard recovered draft" }));
+  fireEvent.click(screen.getByRole("dialog").querySelector<HTMLButtonElement>('.gcButton-danger')!);
+  await screen.findByRole("heading", { name: "All conflicts resolved" });
 });

@@ -696,7 +696,7 @@ button:disabled { cursor: not-allowed; }
 .conflictStage > div { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 9px; border-bottom: 1px solid var(--line); }
 .conflictStage h2 { margin: 0; color: var(--text-muted); font-size: var(--type-sm); }
 .conflictStage pre, .conflictResultPreview pre { flex: 1; min-height: 100px; margin: 0; padding: 9px; overflow: auto; color: var(--text); font: var(--code-size)/var(--code-leading) var(--font-mono); white-space: pre; tab-size: 4; }
-.conflictResultPreview { display: flex; flex-direction: column; min-height: 190px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface); }
+.conflictResultPreview { display: flex; flex-direction: column; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface); }
 .conflictResultPreview summary { padding: 8px 9px; color: var(--text); font-size: var(--type-sm); font-weight: 650; cursor: pointer; }
 .conflictToolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border: 1px solid var(--line); border-radius: var(--radius-4); background: var(--surface); position: sticky; top: -12px; z-index: 2; }
 .conflictChooseSide { display: grid; gap: 8px; padding: 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-6); background: var(--surface); font-size: var(--type-sm); }
@@ -1824,3 +1824,92 @@ input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1
 @container (max-width: 680px) {
   .structureOutline { position: static; z-index: auto; flex: 0 0 200px; width: 200px; max-width: 40%; box-shadow: none; }
 }
+/* Conflict resolver: one bounded comparison workspace and a persistent completion footer. */
+.resolverWindow { height: 100dvh; min-height: 0; overflow: hidden; }
+.resolverWindow .conflictWindowHeader { flex: 0 0 auto; }
+.resolverOperation { color: var(--text-secondary); font-size: var(--type-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.resolverLayout { position: relative; overflow: hidden; grid-template-columns: minmax(180px, 210px) minmax(0, 1fr); }
+.resolverReview { display: flex; flex-direction: column; gap: 0; min-width: 0; min-height: 0; overflow: hidden; }
+.resolverFileHeading { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line); min-width: 0; }
+.resolverFileHeading strong { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: var(--type-md); }
+.resolverFilesToggle.gcButton { display: none; }
+.resolverToolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.resolverControlGroup { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.resolverProgress { flex: 1; color: var(--text-secondary); font-size: var(--type-sm); font-variant-numeric: tabular-nums; }
+.resolverWorkspace { display: grid; flex: 1; min-height: 80px; min-width: 0; overflow: hidden; background: var(--surface); }
+.resolverPane { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
+.resolverPane > header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 10px 12px; background: var(--surface-soft); border-bottom: 1px solid var(--line); font-size: var(--type-sm); flex-wrap: wrap; }
+.resolverPane > header span { color: var(--text-secondary); font-size: var(--type-xs); }
+.resolverResult > header { background: var(--surface); }
+.resolverEditor { flex: 1; min-height: 0; min-width: 0; position: relative; }
+.resolverPane > small { padding: 6px 10px; color: var(--text-secondary); border-top: 1px solid var(--line); font-size: var(--type-xs); }
+.resolverWorkspace > .resizeSeparator { width: 6px; background: var(--surface-soft); border-inline: 1px solid var(--line); margin: 0; }
+.resolverSourceSwitch { display: none; }
+.resolverDecisions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 12px; border-top: 1px solid var(--line); background: var(--surface); }
+.resolverDecisions > span { color: var(--text-secondary); font-size: var(--type-sm); margin-right: 4px; }
+.resolverFooter { flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line-strong); background: var(--surface); }
+.resolverFeedback { min-width: 0; font-size: var(--type-sm); color: var(--text-secondary); overflow-wrap: anywhere; max-height: 100px; overflow: auto; }
+.resolverFooter > .resolverControlGroup { flex-shrink: 0; }
+.resolverComplete { flex: 1; display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 24px; text-align: center; overflow: auto; }
+.resolverComplete h2 { margin: 0 0 8px; font-size: var(--type-xl); }
+.resolverComplete p { max-width: 52ch; color: var(--text-secondary); font-size: var(--type-md); line-height: 1.6; margin: 0 0 20px; }
+.resolverDialogBody { padding: 16px; overflow: auto; }
+.resolverDialogBody pre { max-height: 240px; padding: 12px; overflow: auto; background: var(--surface-soft); font: var(--code-size)/var(--code-leading) var(--font-mono); }
+.resolverDialogBody summary { cursor: pointer; padding: 8px 0; }
+.resolverSelectedRange { background: var(--diff-conflict-bg); box-shadow: inset 1px 0 var(--accent); }
+.resolverUnresolvedRange { background: var(--diff-conflict-bg); }
+.resolverConflictGutter { background: var(--git-conflicted); width: 2px !important; margin-left: 3px; }
+@media (max-width: 1100px) {
+  .resolverLayout { grid-template-columns: minmax(0, 1fr); }
+  .resolverFiles { display: none; }
+  .resolverFiles.open { display: flex; position: absolute; inset: 0 auto 0 0; width: min(320px, 85%); z-index: 5; box-shadow: var(--shadow); }
+  .resolverFilesToggle.gcButton { display: inline-flex; }
+}
+@media (max-width: 859px) {
+  .resolverWorkspace { grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr) !important; grid-template-rows: auto minmax(0, 1fr); }
+  .resolverSourceSwitch { grid-row: 1; grid-column: 1 / -1; display: flex; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  .resolverWorkspace > .resizeSeparator { display: none; }
+  .resolverPane { grid-row: 2; }
+  .resolverResult { grid-column: 2; border-left: 1px solid var(--line); }
+  .resolverCurrent, .resolverIncoming { grid-column: 1; }
+  .source-ours .resolverIncoming, .source-theirs .resolverCurrent { display: none; }
+  .resolverFooter { flex-wrap: wrap; }
+  .resolverFooter > .resolverControlGroup { margin-left: auto; }
+  .resolverOperation { display: none; }
+}
+.resolverFilesClose.gcButton { display: none; }
+.resolverSourceChanged { background: var(--diff-add-bg); }
+.resolverChangedWord { background: var(--diff-add-token); }
+.resolverAddedGutter::before, .resolverChangedGutter::before, .resolverRemovedGutter::before { color: var(--text); font: 600 var(--code-size)/var(--code-leading) var(--font-mono); }
+.resolverAddedGutter::before { content: '+'; }
+.resolverChangedGutter::before { content: '~'; }
+.resolverRemovedGutter::before { content: '−'; }
+@media (max-width: 1100px) { .resolverFilesClose.gcButton { display: inline-flex; } }
+.actionMenu button[aria-disabled='true'] { color: var(--text-muted); cursor: default; }
+.actionMenuUnavailableReason { display: block; margin-top: 4px; max-width: 42ch; color: var(--text-secondary); font-size: var(--type-xs); white-space: normal; }
+/* Short, zoomed windows keep an editable area rather than spending it on repeated labels. */
+@media (max-height: 480px) {
+  .resolverWindow .conflictWindowHeader { min-height: 34px; }
+  .resolverFileHeading { padding: 4px 8px; }
+  .resolverToolbar { padding: 4px 8px; gap: 6px; }
+  .resolverSourceSwitch { padding: 2px 8px; }
+  .resolverPane > header { padding: 4px 8px; }
+  .resolverWorkspace { min-height: 140px; }
+  .resolverReview { overflow-y: auto; }
+  .resolverDecisions { padding: 4px 8px; gap: 4px; }
+  .resolverDecisions > span { display: none; }
+  .resolverFooter { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 6px 8px; gap: 8px; }
+  .resolverFeedback { max-height: 40px; }
+}
+.resolverFileHeading > span { color: var(--text-secondary); font-size: var(--type-xs); }
+
+.resolverMergeArrow.gcButton { width: 24px; height: 24px; min-height: 24px; padding: 3px; background: var(--surface); border: 1px solid var(--line-strong); color: var(--text); cursor: pointer; }
+.resolverEditorHost { position: relative; height: 100%; min-height: 0; }
+.resolverArrowRail { position: absolute; inset: 0 auto 0 0; width: 26px; overflow: hidden; pointer-events: none; }
+.resolverArrowRail .resolverMergeArrow { position: absolute; left: 0; pointer-events: auto; }
+.resolverMergeArrow svg { width: 16px; height: 16px; }
+.resolverMergeArrow.direction-left svg { transform: rotate(180deg); }
+.resolverMergeArrow:hover { background: var(--surface-soft); color: var(--accent); }
+.resolverMergeArrow:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.resolverMergeArrow:disabled { opacity: .5; cursor: default; }
+.resolverCurrent .resolverUnresolvedRange, .resolverIncoming .resolverUnresolvedRange { background: var(--diff-conflict-bg); }

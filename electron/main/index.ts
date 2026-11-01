@@ -26,6 +26,7 @@ import { UpdateController, type UpdateEventSource } from "./update-controller";
 import { getLinuxUpdateManifestPublicKey, isUpdateFeedConfigured } from "./update-config";
 import { requireLinuxUpdateInfoSignature } from "./update-manifest-signature";
 import WebSocket from "ws";
+import { requireConflictTaskContext, TaskCenterHandoffs } from "./task-center-handoff";
 
 // Startup phase marks for the desktop benchmark, in epoch milliseconds; kept only when the benchmark asks for them.
 const startupPhases: Record<string, number> | undefined = process.env.GITCREST_BENCH_STARTUP_PHASES === "1"
@@ -48,6 +49,11 @@ const coreRestartPolicy = new CoreRestartPolicy();
 type WindowAccess = "readWrite" | "readOnly" | "conflictResolution";
 interface ConflictWindowRequest { repoId: string; taskId: string; label?: string }
 const windowAccessByContentsId = new Map<number, WindowAccess>();
+const conflictContextByContentsId = new Map<number, ConflictWindowRequest>();
+const taskCenterHandoffs = new TaskCenterHandoffs(15_000, () => {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send("gitcrest:task-center-requests-pending");
+});
+let creatingHandoffWindow: Promise<void> | undefined;
 // One Diff window per repository: a further Diff opens as a tab there rather than as another renderer process.
 // Its requests wait here until the window takes them, so none are lost while it is still loading.
 const diffWindowsByRepoId = new Map<string, BrowserWindow>();
@@ -591,6 +597,34 @@ ipcMain.handle("gitcrest:open-conflict-window", async (event, value: unknown) =>
   await createWindow("conflictResolution", undefined, parseConflictWindowRequest(value));
 });
 
+ipcMain.handle("gitcrest:return-to-task-center", async (event) => {
+  const context = requireConflictTaskContext(windowAccessByContentsId.get(event.sender.id), conflictContextByContentsId.get(event.sender.id));
+  // Identity comes from the registered window, never from renderer input.
+  const result = taskCenterHandoffs.request(event.sender.id, context);
+  try {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      creatingHandoffWindow ??= createWindow().finally(() => { creatingHandoffWindow = undefined; });
+      await creatingHandoffWindow;
+    }
+    if (!mainWindow || mainWindow.isDestroyed()) throw new Error("Main window is unavailable.");
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show(); mainWindow.focus();
+    mainWindow.webContents.send("gitcrest:task-center-requests-pending");
+  } catch (error) { taskCenterHandoffs.failAll(error instanceof Error ? error.message : "Could not open Task Center."); }
+  return result;
+});
+
+ipcMain.handle("gitcrest:take-task-center-requests", (event) => {
+  if (event.sender.id !== mainWindow?.webContents.id || windowAccessByContentsId.get(event.sender.id) !== "readWrite") throw new Error("Only the main window may receive task navigation.");
+  return taskCenterHandoffs.take(event.sender.id);
+});
+ipcMain.handle("gitcrest:acknowledge-task-center", (event, requestId: unknown) => {
+  if (event.sender.id !== mainWindow?.webContents.id || windowAccessByContentsId.get(event.sender.id) !== "readWrite" || typeof requestId !== "string") throw new Error("Invalid Task Center acknowledgement.");
+  const acknowledged = taskCenterHandoffs.acknowledge(event.sender.id, requestId);
+  if (acknowledged) event.sender.send("gitcrest:task-center-requests-pending");
+  return acknowledged;
+});
+
 function parseConflictWindowRequest(value: unknown): ConflictWindowRequest {
   if (!value || typeof value !== "object") throw new Error("Invalid conflict window request.");
   const request = value as Partial<ConflictWindowRequest>;
@@ -673,10 +707,13 @@ async function createWindow(windowAccess: WindowAccess = "readWrite", diffReques
 
   const contentsId = window.webContents.id;
   windowAccessByContentsId.set(contentsId, windowAccess);
+  if (conflictRequest) conflictContextByContentsId.set(contentsId, conflictRequest);
   if (diffRequest) diffWindowsByRepoId.set(diffRequest.repoId, window);
   window.webContents.once("destroyed", () => {
     stopEventStream(contentsId);
     windowAccessByContentsId.delete(contentsId);
+    conflictContextByContentsId.delete(contentsId);
+    taskCenterHandoffs.cancelSource(contentsId);
     pendingDiffRequestsByContentsId.delete(contentsId);
     if (diffRequest && diffWindowsByRepoId.get(diffRequest.repoId) === window) {
       diffWindowsByRepoId.delete(diffRequest.repoId);

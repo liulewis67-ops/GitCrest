@@ -1,0 +1,216 @@
+{
+  "geometry": [
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 1280,
+      "height": 816,
+      "scroll": 816,
+      "footer": {
+        "top": 761.2000122070312,
+        "bottom": 816.0000114440918
+      },
+      "result": {
+        "width": 423.20001220703125,
+        "height": 575.7999877929688
+      }
+    },
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 960,
+      "height": 700,
+      "scroll": 700,
+      "footer": {
+        "top": 645.2000122070312,
+        "bottom": 700.0000114440918
+      },
+      "result": {
+        "width": 379.20001220703125,
+        "height": 450.8000183105469
+      }
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 1280,
+      "height": 816,
+      "scroll": 816,
+      "footer": {
+        "top": 761.2000122070312,
+        "bottom": 816.0000114440918
+      },
+      "result": {
+        "width": 423.20001220703125,
+        "height": 575.7999877929688
+      }
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 960,
+      "height": 700,
+      "scroll": 700,
+      "footer": {
+        "top": 645.2000122070312,
+        "bottom": 700.0000114440918
+      },
+      "result": {
+        "width": 379.20001220703125,
+        "height": 450.8000183105469
+      }
+    },
+    {
+      "locale": "zh",
+      "theme": "light",
+      "width": 1280,
+      "height": 816,
+      "scroll": 816,
+      "footer": {
+        "top": 761.2000122070312,
+        "bottom": 816.0000114440918
+      },
+      "result": {
+        "width": 423.20001220703125,
+        "height": 575.7999877929688
+      }
+    },
+    {
+      "locale": "zh",
+      "theme": "light",
+      "width": 960,
+      "height": 700,
+      "scroll": 700,
+      "footer": {
+        "top": 645.2000122070312,
+        "bottom": 700.0000114440918
+      },
+      "result": {
+        "width": 379.20001220703125,
+        "height": 450.8000183105469
+      }
+    },
+    {
+      "locale": "zh",
+      "theme": "dark",
+      "width": 1280,
+      "height": 816,
+      "scroll": 816,
+      "footer": {
+        "top": 761.2000122070312,
+        "bottom": 816.0000114440918
+      },
+      "result": {
+        "width": 423.20001220703125,
+        "height": 575.7999877929688
+      }
+    },
+    {
+      "locale": "zh",
+      "theme": "dark",
+      "width": 960,
+      "height": 700,
+      "scroll": 700,
+      "footer": {
+        "top": 645.2000122070312,
+        "bottom": 700.0000114440918
+      },
+      "result": {
+        "width": 379.20001220703125,
+        "height": 450.8000183105469
+      }
+    }
+  ],
+  "contrast": [
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 1280,
+      "height": 816,
+      "primary": 4.765956866294003,
+      "lineNumbers": 4.929581084927541
+    },
+    {
+      "locale": "en",
+      "theme": "light",
+      "width": 960,
+      "height": 700,
+      "primary": 4.765956866294003,
+      "lineNumbers": 4.929581084927541
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 1280,
+      "height": 816,
+      "primary": 7.185780709771321,
+      "lineNumbers": 5.053624424246929
+    },
+    {
+      "locale": "en",
+      "theme": "dark",
+      "width": 960,
+      "height": 700,
+      "primary": 7.185780709771321,
+      "lineNumbers": 5.053624424246929
+    },
+    {
+      "locale": "zh",
+      "theme": "light",
+      "width": 1280,
+      "height": 816,
+      "primary": 4.765956866294003,
+      "lineNumbers": 4.929581084927541
+    },
+    {
+      "locale": "zh",
+      "theme": "light",
+      "width": 960,
+      "height": 700,
+      "primary": 4.765956866294003,
+      "lineNumbers": 4.929581084927541
+    },
+    {
+      "locale": "zh",
+      "theme": "dark",
+      "width": 1280,
+      "height": 816,
+      "primary": 7.185780709771321,
+      "lineNumbers": 5.053624424246929
+    },
+    {
+      "locale": "zh",
+      "theme": "dark",
+      "width": 960,
+      "height": 700,
+      "primary": 7.185780709771321,
+      "lineNumbers": 5.053624424246929
+    }
+  ],
+  "zoomBounds": {
+    "width": 480,
+    "height": 350,
+    "footerBottom": 350.0000114440918
+  },
+  "largeEvidence": {
+    "bytes": 798898,
+    "lines": 30001,
+    "loadAndChoiceMs": 653
+  },
+  "errors": [],
+  "checks": "acceptance, keyboard continuity, unified undo, typing preservation, large-file typing/paste/undo, narrow source switch, 200% zoom, replacement confirmation, malformed markers, bounded highlighting on large files, save/stage, completion, task handoff, recreated main window, missing task, restricted capability",
+  "sourceFingerprints": {
+    "src/features/workflows/ui/ConflictWindow.tsx": "24d86068501cc94e685b89fc506684d10b94be2e18df84778c3ab8de25cc53e4",
+    "src/features/workflows/ui/ConflictEditor.tsx": "2c9468190502e25e2ef31f80ee2fb5ef33bf85a84f6831d7c7061de25ccb43a9",
+    "src/features/workflows/ui/ConflictWorkspace.tsx": "57cf25ce87bc7ce80eb08604d30ebdbd38a65cbf003699eb47e573109fb73c7e",
+    "src/features/workflows/model/conflict-review.ts": "70634683d4ecbc90512a80b74be4ea5dbbedde26f0f76804af08eec8e9e417d4",
+    "src/features/workflows/model/editor-line-endings.ts": "a5b8e88b7bf89cecc3210d0e34ce400dd6d42b79eb0c29164523903bf4b96bea",
+    "electron/main/task-center-handoff.ts": "b4a15911dc2d5f1a1dbff00fc74b8190073be7159beca8e5ab6ecf05908cb00d",
+    "electron/main/index.ts": "e93688d454b277453703956a9ff41b64e42654aab88bbf41cb6bc3f28bc9d20f",
+    "electron/preload/index.ts": "00c6fcf80428b8b491835cd6ef40a6dad90844a93cd20b43357b00d93b3ca4fb",
+    "src/app/controllers/use-app-connection.ts": "60a1e642e819217777841eadf8ce4335e320d5086d9774152e485955b2d05bdd",
+    "src/features/tasks/ui/TaskCenter.tsx": "daaeb12be17983b894b58f9c7a7a25616936fda23194a88227dc1714d8003e00",
+    "src/styles/globals.css": "bb722cc4662f6508c2ef3e2b7ba117adca15fdf0077e63d8ff867fe409b9026f"
+  },
+  "validationDate": "2026-11-01"
+}

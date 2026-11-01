@@ -47,7 +47,10 @@ export function findConflictBlocks(content: string): ConflictBlock[] {
       }
     }
     if (endIndex < 0) continue;
-    const baseIndex = lines.findIndex((line, index) => index > startIndex && index < separatorIndex && isConflictBase(line.text));
+    let baseIndex = -1;
+    for (let index = startIndex + 1; index < separatorIndex; index++) {
+      if (isConflictBase(lines[index].text)) { baseIndex = index; break; }
+    }
     const oursEnd = baseIndex >= 0 ? baseIndex : separatorIndex;
     const ours = content.slice(lines[startIndex].end, lines[oursEnd].start);
     const theirs = content.slice(lines[separatorIndex].end, lines[endIndex].start);
@@ -62,7 +65,7 @@ export function findConflictBlocks(content: string): ConflictBlock[] {
       ours,
       theirs,
       base: baseIndex >= 0 ? content.slice(lines[baseIndex].end, lines[separatorIndex].start) : null,
-      line: content.slice(0, lines[startIndex].start).split("\n").length,
+      line: startIndex + 1,
     });
     startIndex = endIndex;
   }

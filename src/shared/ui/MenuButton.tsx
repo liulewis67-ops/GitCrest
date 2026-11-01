@@ -1,5 +1,5 @@
 import { useMenuPlacement, navigateMenu } from "../hooks/use-menu-placement";
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 export type MenuButtonItem = {
   id: string;
@@ -14,7 +14,7 @@ export type MenuButtonItem = {
 };
 
 /** A compact button that opens a keyboard-navigable action menu below it. */
-export function MenuButton({ label, title, menuLabel, className, children, disabled, items }: {
+export function MenuButton({ label, title, menuLabel, className, children, disabled, items, explainUnavailable = false }: {
   label: string;
   title?: string;
   menuLabel: string;
@@ -22,7 +22,10 @@ export function MenuButton({ label, title, menuLabel, className, children, disab
   children: ReactNode;
   disabled?: boolean;
   items: MenuButtonItem[];
+  /** Keep unavailable actions focusable so keyboard users can inspect their reason. */
+  explainUnavailable?: boolean;
 }) {
+  const reasonId = useId();
   const [position, setPosition] = useState<{ top: number; right: number }>();
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -68,7 +71,9 @@ export function MenuButton({ label, title, menuLabel, className, children, disab
     <button ref={buttonRef} className={className} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} title={title ?? label} disabled={disabled} onClick={toggle}>{children}</button>
     {position && <div ref={menuRef} className="actionMenu" role="menu" aria-label={menuLabel} style={{ top: position.top, right: position.right }} onKeyDown={onMenuKeyDown}>
       {items.map((item, index) => <div className={item.separatorBefore || (index > 0 && Boolean(item.danger) !== Boolean(items[index - 1].danger)) ? "actionMenuGroup separated" : "actionMenuGroup"} key={item.id} role="none">
-        <button type="button" role="menuitem" className={item.danger ? "danger" : undefined} disabled={item.disabled} title={item.title} onClick={() => { closeAndRestoreFocus(); item.onSelect(); }}>{item.label}</button>
+        <button type="button" role="menuitem" className={item.danger ? "danger" : undefined} disabled={item.disabled && !explainUnavailable} aria-disabled={item.disabled && explainUnavailable || undefined} aria-describedby={item.disabled && explainUnavailable && item.title ? `${reasonId}-${index}` : undefined} title={item.title} onClick={() => { if (item.disabled) return; closeAndRestoreFocus(); item.onSelect(); }}>{item.label}
+          {item.disabled && explainUnavailable && item.title && <small className="actionMenuUnavailableReason" id={`${reasonId}-${index}`}>{item.title}</small>}
+        </button>
       </div>)}
     </div>}
   </>;

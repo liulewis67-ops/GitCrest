@@ -186,7 +186,7 @@ try {
   conflictPage = findResolver();
   if (!conflictPage) throw new Error("The fixture's conflict window did not open.");
   const conflictCdp = application ? undefined : await context.newCDPSession(conflictPage);
-  await conflictPage.locator(".conflictLine").first().waitFor();
+  await conflictPage.locator(".resolverResult .view-lines").waitFor();
   for (const theme of ["light", "dark"]) {
     await page.evaluate((theme) => {
       const appearance = JSON.parse(localStorage.getItem("gitcrest-appearance-v1") || "{}");

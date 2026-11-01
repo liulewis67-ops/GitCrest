@@ -75,6 +75,10 @@ export interface GitCrestBridge {
   /** Diff windows only: further Diffs opened for this window's repository. */
   subscribeToDiffWindowRequests?: (listener: (requests: GitCrestDiffWindowRequest[]) => void) => () => void;
   openConflictWindow: (request: { repoId: string; taskId: string; label?: string }) => Promise<void>;
+  /** Conflict windows only; the main process supplies the registered repository/task identity. */
+  returnToTaskCenter?: () => Promise<{ ok: true } | { ok: false; reason: string }>;
+  subscribeToTaskCenterRequests?: (listener: (target: { requestId: string; repoId: string; taskId: string }) => void) => () => void;
+  acknowledgeTaskCenter?: (requestId: string) => Promise<boolean>;
   /** Opens the system file manager with the file selected. */
   showItemInFolder?: (path: string) => Promise<void>;
   listLanguagePlugins?: () => Promise<GitCrestLanguagePluginListing>;
