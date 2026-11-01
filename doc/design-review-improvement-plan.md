@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0 and D1.1–D1.3 complete; D1.4 complete; D1.5 in progress; D1.6 awaiting independent review. D2–D4 remain later proposals. Updated: 2026-11-01.
+Status: D0 and D1.1–D1.3 complete; D1.4–D1.5 complete; D1.6 awaiting independent review. D2–D4 remain later proposals. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the core error contract and repository metadata persistence needed for safe removal, and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -69,7 +69,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | done |
 | D1.3 | One error per view; no endless loading | P1 | S | D1.1 | done |
 | D1.4 | Readable Task Center | P1 | M | — | done |
-| D1.5 | Fix the first-run hint layout | P2 | S | — | in progress |
+| D1.5 | Fix the first-run hint layout | P2 | S | — | done |
 | D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | not started |
 | D2 | Shared Button and Dialog components | P1 | L | D0.3 | later |
 | D3 | Keyboard and palette efficiency | P2 | L | D2 | later |
@@ -178,7 +178,7 @@ In `src/features/tasks/ui/TaskCenter.tsx`:
 
 **Pass rule:** at 960×700 and 1280×816, in light and dark, the button text stays on one line and the change list shows at least 8 rows below the hint.
 
-**Implementation 2026-11-01; final checks in progress.** The changes hint uses shorter English/Chinese guidance and keeps its title as an accessible label without a repeated visual heading. Dismiss labels never shrink or wrap. At 740px height and below, composer options use compact visible labels while preserving their full accessible names and tooltips, and the description starts at 52px while remaining resizable. The normal review fixture now has ten real change rows without changing its commit graph, ahead/behind relation or conflict-mode safety. Prototype captures measured eight visible rows at 960×700 and nine at 1280×816 in both languages and themes; `tests/e2e/hint-layout.test.ts` will check the built layout, text height and row visibility. The existing coloured stripe is retained until D2 chooses the shared notice style.
+**Done 2026-11-01.** The changes hint uses shorter English/Chinese guidance and keeps its title as an accessible label without a repeated visual heading. Dismiss labels never shrink or wrap. At 740px height and below, composer options use compact visible labels while preserving their full accessible names and tooltips, and the description starts at 52px while remaining resizable. The normal review fixture now has ten real change rows without changing its commit graph, ahead/behind relation or conflict-mode safety. Prototype captures measured eight visible rows at 960×700 and nine at 1280×816 in both languages and themes; `tests/e2e/hint-layout.test.ts` passed on the built layout, checking a one-line dismiss label and at least eight fully visible file rows in all eight size/theme/language variants. The final `pnpm check` passed (713 frontend, 336 Rust and 47 desktop E2E tests). Before captures are `.review/screens/d1.5-before/`; after captures are `.review/screens/d1.5-layout/` (eight layout variants) and `.review/screens/d1.5-after/` (56-state matrix). Source detection retains the same 11 stripe findings. The existing coloured stripe is retained until D2 chooses the shared notice style.
 
 ### D1.6 Stage D1 re-evaluation
 

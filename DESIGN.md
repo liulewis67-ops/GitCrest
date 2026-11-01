@@ -103,3 +103,5 @@ Icons currently mix local SVGs and Unicode glyphs. Keep accessible names on icon
 - Do verify Workspace, History, Diff and Conflict at the review matrix sizes.
 - Don't revive the historical third view, bottom workbench or status bar from superseded drawings.
 - Don't treat a planned Button/Dialog layer, palette policy or visual phase as already shipped.
+
+The first-use changes hint keeps its title as an accessible label, uses compact guidance, and never wraps its dismiss label. At viewport heights up to 740px the composer uses compact visible option labels with full accessible names and a 52px initial resizable description. The default review fixture retains at least eight fully visible change rows at 960×700 in both languages and themes. The existing hint stripe remains until D2 chooses the shared notice style.

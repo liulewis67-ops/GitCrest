@@ -1,4 +1,7 @@
 export const commits = {
+  "cw.aiSuggestionCompact": ["AI suggestion", "AI 建议"],
+  "cw.signOffCompact": ["Sign-off", "签署"],
+  "cw.signCompact": ["Sign", "签名"],
   "cw.aria": ["Commit", "提交"],
   "cw.message": ["Commit message", "提交说明"],
   "cw.aiResolve": ["Resolve conflicts before requesting a commit suggestion", "请求提交建议之前请先解决冲突"],

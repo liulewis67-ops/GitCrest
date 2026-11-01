@@ -93,6 +93,11 @@ export async function createReviewFixture(destination, { conflict = false } = {}
   git(path, "mv", "notes.txt", "review-notes.txt");
   await write("staged.md", "A staged addition ready to commit.\n");
   git(path, "add", "staged.md");
+  // Enough real file rows to evaluate the first-run layout without scrolling.
+  for (let index = 1; index <= 4; index++) {
+    await write(`layout-${index}.md`, "A staged file for layout review.\n");
+    git(path, "add", `layout-${index}.md`);
+  }
   await write("README.md", "# GitCrest review fixture\n\nUnstaged documentation changes.\n");
   await write("src/navigation.ts", (await readFile(join(path, "src/navigation.ts"), "utf8")).replace("Section 40", "Updated section 40"));
   await write("preview.png", Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64"));
