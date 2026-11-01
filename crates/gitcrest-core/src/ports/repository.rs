@@ -12,6 +12,13 @@ pub(crate) trait RepositoryCatalogPort: Send + Sync {
         repository: RepositoryRecord,
     ) -> Result<RepositoryRecord, RepositoryError>;
 
+    /// Updates metadata only while the recent entry still exists; never reopens it.
+    fn refresh_existing(
+        &self,
+        repo_id: &str,
+        repository: RepositoryRecord,
+    ) -> Result<Option<RepositoryRecord>, RepositoryError>;
+
     fn mark_opened(
         &self,
         repo_id: &str,

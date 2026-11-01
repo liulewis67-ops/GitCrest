@@ -85,6 +85,15 @@ impl RepositoryManager {
     }
 
     pub async fn open_path(&self, path: &str) -> Result<Repository, RepositoryError> {
+        let repository = self.read_path(path).await?;
+        let catalog = self.catalog.clone();
+        task::spawn_blocking(move || catalog.save_opened(repository.into()).map(Repository::from))
+            .await
+            .map_err(|_| RepositoryError::StorageUnavailable)?
+            .map_err(|_| RepositoryError::StorageUnavailable)
+    }
+
+    async fn read_path(&self, path: &str) -> Result<Repository, RepositoryError> {
         let path = path.trim();
         if path.is_empty() {
             return Err(RepositoryError::InvalidPath);
@@ -102,7 +111,7 @@ impl RepositoryManager {
         let head = self.git.head_oid(&root).await.unwrap_or_default();
         let branch = self.git.current_branch(&root).await.unwrap_or_default();
         let detached = branch.is_none() && head.is_some();
-        let repository = Repository {
+        Ok(Repository {
             repo_id: stable_repo_id(&root),
             path: root.to_string_lossy().into_owned(),
             head,
@@ -112,13 +121,7 @@ impl RepositoryManager {
             is_favorite: false,
             last_accessed_at: now_ms(),
             availability: "available".into(),
-        };
-
-        let catalog = self.catalog.clone();
-        task::spawn_blocking(move || catalog.save_opened(repository.into()).map(Repository::from))
-            .await
-            .map_err(|_| RepositoryError::StorageUnavailable)?
-            .map_err(|_| RepositoryError::StorageUnavailable)
+        })
     }
 
     pub async fn initialize_path(&self, path: &str) -> Result<Repository, RepositoryError> {
@@ -174,7 +177,15 @@ impl RepositoryManager {
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .map_err(|_| RepositoryError::StorageUnavailable)?
             .ok_or(RepositoryError::RepositoryNotFound)?;
-        self.open_path(&repository.path).await
+        let refreshed = self.read_path(&repository.path).await?;
+        let catalog = self.catalog.clone();
+        task::spawn_blocking(move || {
+            catalog.refresh_existing(&repository.repo_id, refreshed.into())
+        })
+        .await
+        .map_err(|_| RepositoryError::StorageUnavailable)??
+        .map(Repository::from)
+        .ok_or(RepositoryError::RepositoryNotFound)
     }
 
     pub async fn list(&self) -> Result<Vec<Repository>, RepositoryError> {
@@ -340,6 +351,36 @@ mod tests {
 
     struct FailingInitializeGit;
 
+    struct ForgetOnReadGit {
+        store: RepositoryStore,
+        repo_id: String,
+        inner: GitRepositoryAdapter,
+    }
+
+    impl RepositoryGitPort for ForgetOnReadGit {
+        fn worktree_root<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, PathBuf> {
+            // Deterministically forget after refresh read the catalog, before it saves metadata.
+            self.store.forget(&self.repo_id).unwrap();
+            self.inner.worktree_root(path)
+        }
+
+        fn head_oid<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, Option<String>> {
+            self.inner.head_oid(path)
+        }
+
+        fn current_branch<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, Option<String>> {
+            self.inner.current_branch(path)
+        }
+
+        fn common_dir<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, PathBuf> {
+            self.inner.common_dir(path)
+        }
+
+        fn initialize<'a>(&'a self, path: &'a Path) -> RepositoryGitFuture<'a, ()> {
+            self.inner.initialize(path)
+        }
+    }
+
     impl RepositoryGitPort for FailingInitializeGit {
         fn worktree_root<'a>(&'a self, _path: &'a Path) -> RepositoryGitFuture<'a, PathBuf> {
             Box::pin(async { Err(RepositoryError::InitializationFailed) })
@@ -384,6 +425,59 @@ mod tests {
             String::from_utf8_lossy(&output.stderr)
         );
         String::from_utf8_lossy(&output.stdout).trim().to_owned()
+    }
+
+    #[tokio::test]
+    async fn metadata_refresh_cannot_reopen_an_entry_forgotten_during_the_read() {
+        let fixture = GitFixture::new();
+        let manager = RepositoryManager::default();
+        let opened = manager
+            .open_path(fixture.root.to_str().unwrap())
+            .await
+            .unwrap();
+        let store = manager.store();
+        let racing_manager = RepositoryManager::with_adapters(
+            std::sync::Arc::new(store.clone()),
+            std::sync::Arc::new(ForgetOnReadGit {
+                store: store.clone(),
+                repo_id: opened.repo_id.clone(),
+                inner: GitRepositoryAdapter,
+            }),
+            std::sync::Arc::new(RepositoryFilesystemAdapter),
+        );
+        assert_eq!(
+            racing_manager
+                .refresh_metadata(&opened.repo_id)
+                .await
+                .unwrap_err(),
+            RepositoryError::RepositoryNotFound
+        );
+        assert!(store.list().unwrap().is_empty());
+        assert!(fixture.root.join(".git").exists());
+        assert!(manager
+            .open_path(fixture.root.to_str().unwrap())
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn metadata_refresh_keeps_favorites_and_recent_open_time() {
+        let fixture = GitFixture::new();
+        let manager = RepositoryManager::default();
+        let opened = manager
+            .open_path(fixture.root.to_str().unwrap())
+            .await
+            .unwrap();
+        manager.store().mark_opened(&opened.repo_id, 1).unwrap();
+        manager
+            .set_favorite(opened.repo_id.clone(), true)
+            .await
+            .unwrap();
+        fixture.commit();
+        let refreshed = manager.refresh_metadata(&opened.repo_id).await.unwrap();
+        assert!(refreshed.head.is_some());
+        assert!(refreshed.is_favorite);
+        assert_eq!(refreshed.last_accessed_at, 1);
     }
 
     #[tokio::test]

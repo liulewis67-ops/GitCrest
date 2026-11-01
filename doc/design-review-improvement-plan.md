@@ -1,7 +1,7 @@
 # Design Review Improvement Plan
 
-Status: D0 and D1.1–D1.3 complete; D1.4–D1.6 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
-Scope: visual presentation and interaction of the desktop renderer (`src/`), the error text the core returns (`crates/gitcrest-core/src/api/error.rs`), and the design documents in `doc/`.
+Status: D0 and D1.1–D1.3 complete; D1.4 in progress; D1.5–D1.6 not started. D2–D4 remain later proposals. Updated: 2026-11-01.
+Scope: visual presentation and interaction of the desktop renderer (`src/`), the core error contract and repository metadata persistence needed for safe removal, and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
 This plan comes from a design critique on 2026-10-31. Unlike the earlier reviews, it ran the app: one reviewer inspected the live window and read the docs and code, and a second ran the Impeccable detector against the source and the running window over CDP. The archived report is `.impeccable/critique/2026-10-31T09-42-27Z__src-app-app-tsx.md`.
@@ -68,7 +68,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D1.1 | Translated error messages from API codes | P1 | M | — | done |
 | D1.2 | Missing-repository detection and recovery | P1 | M | D1.1 | done |
 | D1.3 | One error per view; no endless loading | P1 | S | D1.1 | done |
-| D1.4 | Readable Task Center | P1 | M | — | not started |
+| D1.4 | Readable Task Center | P1 | M | — | in progress |
 | D1.5 | Fix the first-run hint layout | P2 | S | — | not started |
 | D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | not started |
 | D2 | Shared Button and Dialog components | P1 | L | D0.3 | later |
@@ -141,6 +141,8 @@ Both throwaway repositories used during the review had been deleted from disk, s
 
 **Done 2026-11-01.** Recent repositories reuse the core's existing path-availability check. Missing folders and typed repository-read failures expose translated Locate, Remove and Retry actions. Locate opens the selected folder and preserves the old entry and saved GitCrest data; removal uses the existing explicit confirmation. Unreadable repositories disable synchronization buttons, handlers, shortcuts and palette commands with a visible reason, retaining the failure until a read succeeds. Desktop tests cover restart after moving a folder, locating it, confirmed removal without deleting files, and blocked synchronization followed by successful retry. Before/after matrices are `.review/screens/d1.1-after/` and `.review/screens/d1.2-after/` (56 each). The runner now restores the original workspace before cleanup, stopping late fixture reads; verification found one original window, no waiting tasks and no newly registered fixture repositories. Source detection reports the same 11 existing stripe findings. Live pixel detection was unavailable because Electron reported a hidden surface; the actual light/dark error captures were inspected. `pnpm check` passed (707 frontend, 334 Rust and 45 desktop E2E tests). Dependent history content still duplicates failures and is addressed in D1.3.
 
+**Removal-race follow-up done, 2026-11-01.** Matrix cleanup exposed a real core race: metadata refresh called the insert-capable open path after removal. Metadata inspection now saves through an update-only catalog operation, preserving favorites and recent-open time; explicit Open remains able to re-register a folder. A deterministic Rust test forgets the entry between the catalog read and metadata save, and a second checks preserved preferences and fresh HEAD data. Ephemeral contexts remain unregistered. The runner reloads after removal before verifying cleanup, exercising persisted task refreshes as well. Formatting, Clippy and all 336 Rust tests passed. A fresh-profile 56-image run and a subsequent registry check verified zero repositories, zero waiting tasks and one restored 1280×816 light window. The D1.4 full check also covers this follow-up; its desktop suite is running.
+
 ### D1.3 One error per view; no endless loading
 
 - When status or history fails, show the error once in the main area of the view. Side panels that depend on the same data show an empty state, not a copy of the error.
@@ -163,6 +165,8 @@ In `src/features/tasks/ui/TaskCenter.tsx`:
 - Translate `errorCategory` labels.
 
 **Pass rule:** after a fetch, a push and a failed clone in the fixture, Task Center shows no raw identifiers, and each card can be understood without knowing the API.
+
+**Implementation 2026-11-01; final checks in progress.** Task Center groups tasks by repository display name, newest first; target-folder names are used for clones and a translated fallback for unknown repositories. Operations, status, phases and failure categories are translated, including dynamic shelf operations and unknown future values. Finished cards lead with an outcome and relative time, omit progress bars and have no live status role. Raw Git diagnostics remain in the collapsed log. The current TaskSnapshot API has no structured result, commit count or remote target, so outcomes use confirmed operation/status facts rather than inventing counts or parsing logs. Chinese unit coverage includes successful fetch/push and failed clone; existing real desktop workflows check the new outcomes and metadata visibility.
 
 ### D1.5 Fix the first-run hint layout
 

@@ -89,6 +89,27 @@ impl RepositoryStore {
             .ok_or_else(|| "saved repository could not be read".into())
     }
 
+    pub fn refresh_existing(
+        &self,
+        repo_id: &str,
+        repository: StoredRepository,
+    ) -> Result<Option<StoredRepository>, String> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| "repository database lock poisoned".to_string())?;
+        let changed = connection.execute(
+            "UPDATE repositories SET head=?2, branch=?3, detached=?4, state=?5, availability=?6 WHERE repo_id=?1",
+            params![repo_id, repository.head, repository.branch, repository.detached, repository.state, repository.availability],
+        ).map_err(|error| error.to_string())?;
+        drop(connection);
+        if changed == 0 {
+            Ok(None)
+        } else {
+            self.get(repo_id)
+        }
+    }
+
     pub fn set_favorite(
         &self,
         repo_id: &str,
@@ -125,6 +146,16 @@ impl RepositoryStore {
 }
 
 impl RepositoryCatalogPort for RepositoryStore {
+    fn refresh_existing(
+        &self,
+        repo_id: &str,
+        repository: RepositoryRecord,
+    ) -> Result<Option<RepositoryRecord>, crate::domain::error::RepositoryError> {
+        RepositoryStore::refresh_existing(self, repo_id, repository.into())
+            .map(|record| record.map(Into::into))
+            .map_err(|_| crate::domain::error::RepositoryError::StorageUnavailable)
+    }
+
     fn save_opened(
         &self,
         repository: RepositoryRecord,

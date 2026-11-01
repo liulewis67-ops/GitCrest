@@ -243,6 +243,11 @@ try {
       // finish before forgetting the entries, so a late refresh cannot recreate one.
       await page.waitForLoadState("networkidle", { timeout: 10_000 });
       for (const repoId of registered) await api(`/repositories/${repoId}`, "DELETE");
+      // Reconnect once more: persisted terminal tasks can trigger metadata refresh
+      // on startup, and a forgotten entry must remain forgotten after that work.
+      await page.reload();
+      await page.locator(".connectionBadge.connected").waitFor({ timeout: 40_000 });
+      if (original.welcome) await page.locator(".brandButton").click();
       await page.waitForLoadState("networkidle", { timeout: 10_000 });
       const remaining = (await api("/repositories")).filter((entry) => registered.includes(entry.repoId));
       if (remaining.length) throw new Error("Review repository cleanup did not finish.");

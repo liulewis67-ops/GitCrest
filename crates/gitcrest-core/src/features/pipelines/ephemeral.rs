@@ -85,6 +85,18 @@ impl EphemeralAwareCatalog {
 }
 
 impl RepositoryCatalogPort for EphemeralAwareCatalog {
+    fn refresh_existing(
+        &self,
+        repo_id: &str,
+        mut repository: RepositoryRecord,
+    ) -> Result<Option<RepositoryRecord>, RepositoryError> {
+        if self.contexts.path(repo_id).is_some() {
+            repository.repo_id = repo_id.to_owned();
+            return Ok(Some(repository));
+        }
+        self.inner.refresh_existing(repo_id, repository)
+    }
+
     fn save_opened(
         &self,
         repository: RepositoryRecord,
@@ -169,6 +181,10 @@ mod tests {
         contexts.register("eph", Path::new("/data/pipelines/run/uat"));
         let record = catalog.get("eph").unwrap().unwrap();
         assert_eq!(record.path, "/data/pipelines/run/uat");
+        assert_eq!(
+            catalog.refresh_existing("eph", record.clone()).unwrap(),
+            Some(record)
+        );
         assert!(catalog.mark_opened("eph", 5).unwrap().is_some());
         let listed: Vec<_> = catalog
             .list()
