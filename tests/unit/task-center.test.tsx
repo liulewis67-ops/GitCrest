@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import type { TaskSnapshotResponse } from "../../src/api/client";
+import type { RepositoryResponse, TaskSnapshotResponse } from "../../src/api/client";
 import { TaskCenter } from "../../src/features/tasks/ui/TaskCenter";
+import { setLocale } from "../../src/shared/i18n";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); setLocale("en"); });
 
 function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
   let api: Record<string, unknown>;
@@ -42,14 +43,33 @@ it("provides a recovery action for an authentication-failed fetch", () => {
   expect(onConfigureCredentials).toHaveBeenCalledWith(failedFetch);
 });
 
-it("announces each task status without making the entire task list a live region", () => {
+it("presents finished fetch, push and failed clone outcomes in Chinese without internal fields", () => {
+  setLocale("zh");
+  const tasks: TaskSnapshotResponse[] = [
+    { ...failedFetch, taskId: "fetch", status: "succeeded", phase: "Complete", progress: 100, errorCategory: null, createdAtMs: 1 },
+    { ...failedFetch, taskId: "push", operation: "push", status: "succeeded", phase: "Complete", progress: 100, errorCategory: null, createdAtMs: 2 },
+    { ...failedFetch, taskId: "clone", repoId: null, operation: "clone", targetPath: "C:/work/new-project", createdAtMs: 3 },
+  ];
+  const { container } = render(<TaskCenter tasks={tasks} repositories={[{ repoId: failedFetch.repoId, path: "C:/work/project" } as RepositoryResponse]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  expect([...container.querySelectorAll(".taskRepositoryGroup > h3")].map((heading) => heading.textContent)).toEqual(["new-project", "project"]);
+  expect([...container.querySelectorAll(".taskOutcome")].map((outcome) => outcome.textContent)).toEqual(["克隆失败。请查看下方日志和恢复操作。", "推送已完成。", "已获取远程引用。"]);
+  expect(container.querySelector("progress")).toBeNull();
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(container.textContent).not.toContain(failedFetch.repoId);
+  expect(screen.getByText("需要身份验证")).toBeDefined();
+});
+
+it("announces running status and keeps finished tasks out of live regions", () => {
   const { container, rerender } = render(<TaskCenter tasks={[failedFetch]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
   const taskList = container.querySelector(".taskList");
   expect(taskList?.hasAttribute("aria-live")).toBe(false);
-  expect(screen.getByRole("status").textContent).toBe("failed");
+  expect(screen.queryByRole("status")).toBeNull();
 
   rerender(<TaskCenter tasks={[{ ...failedFetch, status: "succeeded", phase: "Completed", message: "Fetch completed" }]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
-  expect(screen.getByRole("status").textContent).toBe("succeeded");
+  expect(screen.queryByRole("status")).toBeNull();
+  expect(screen.getByText("Remote references fetched.")).toBeDefined();
+  rerender(<TaskCenter tasks={[{ ...failedFetch, status: "running" }]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
+  expect(screen.getByRole("status").textContent).toBe("Running");
 });
 
 it("moves focus into the task center and closes it with Escape", async () => {
@@ -180,7 +200,8 @@ it("explains a commit that could not be signed, with Git's own lines, and links 
   };
   const { container } = render(<TaskCenter tasks={[failedCommit]} error="" actionId="" onClose={vi.fn()} onRefresh={vi.fn()} onCancel={vi.fn()} onCopy={vi.fn()} onRetryClone={vi.fn()} onConfigureCredentials={vi.fn()} onOpenSigningSettings={onOpenSigningSettings} onReviewPush={vi.fn()} onRecoverWorkflow={vi.fn()} onOpenConflictWindow={vi.fn()} />);
   expect(screen.getByText(/could not be signed/)).toBeTruthy();
-  expect(container.querySelector(".signingOutput")?.textContent).toBe("error: gpg failed to sign the data\nfatal: failed to write commit object");
+  expect(container.querySelector(".taskLogs pre")?.textContent).toContain("error: gpg failed to sign the data\nfatal: failed to write commit object");
+  expect(container.querySelector(".taskLogs")?.hasAttribute("open")).toBe(false);
   fireEvent.click(screen.getByRole("button", { name: "Open signing settings" }));
   expect(onOpenSigningSettings).toHaveBeenCalled();
 });

@@ -75,14 +75,18 @@ describe("remote sync E2E", () => {
       await pushDialog.getByRole("button", { name: "Push", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const pushTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) });
+      const pushTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="push"]') });
       await pushTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
-        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "push");
-        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "push");
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
       }, undefined, { timeout: 20_000 });
       const pushTaskBody = await pushTask.innerText();
-      if (!pushTaskBody.includes("Succeeded")) throw new Error(`Push task did not succeed: ${pushTaskBody}`);
+      if (!pushTaskBody.includes("Completed")) throw new Error(`Push task did not succeed: ${pushTaskBody}`);
+      expect(pushTaskBody).toContain("Push completed.");
+      expect(pushTaskBody).not.toMatch(/repo_[a-f0-9]{64}/);
+      expect(await pushTask.locator("progress").count()).toBe(0);
+      expect(await pushTask.locator('[role="status"]').count()).toBe(0);
 
       const remoteHead = (await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim();
       expect(remoteHead).toBe(localHead);
@@ -151,14 +155,16 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) });
+      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') });
       await fetchTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
-        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent?.startsWith("fetch"));
-        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation")?.startsWith("fetch"));
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
       }, undefined, { timeout: 20_000 });
       const fetchTaskBody = await fetchTask.innerText();
-      if (!fetchTaskBody.includes("Succeeded")) throw new Error(`Fetch task did not succeed: ${fetchTaskBody}`);
+      if (!fetchTaskBody.includes("Completed")) throw new Error(`Fetch task did not succeed: ${fetchTaskBody}`);
+      expect(fetchTaskBody).toContain("Remote references fetched.");
+      expect(fetchTaskBody).not.toMatch(/repo_[a-f0-9]{64}/);
       await tasksDialog.getByRole("button", { name: "Close tasks" }).click();
 
       await window.getByRole("button", { name: "Pull", exact: true }).click();
@@ -168,14 +174,14 @@ describe("remote sync E2E", () => {
       await expect.poll(() => pullDialog.getByRole("button", { name: "Pull with merge" }).isEnabled()).toBe(true);
       await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
 
-      const pullTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "pullMerge" }) });
+      const pullTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullMerge"]') });
       await pullTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
-        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "pullMerge");
-        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "pullMerge");
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
       }, undefined, { timeout: 20_000 });
       const pullTaskBody = await pullTask.innerText();
-      if (!pullTaskBody.includes("Succeeded")) throw new Error(`Pull task did not succeed: ${pullTaskBody}`);
+      if (!pullTaskBody.includes("Completed")) throw new Error(`Pull task did not succeed: ${pullTaskBody}`);
 
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(remoteHead);
       expect((await readFile(filePath, "utf8")).replace(/\r\n/g, "\n")).toBe("export const sync = 'fetched and pulled';\n");
@@ -311,14 +317,14 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) }).last();
+      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await fetchTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
         const cards = [...document.querySelectorAll(".taskCard")];
-        const card = cards.find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent?.startsWith("fetch"));
-        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        const card = cards.find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation")?.startsWith("fetch"));
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
       }, undefined, { timeout: 20_000 });
-      await fetchTask.getByText("failed", { exact: true }).waitFor();
+      await fetchTask.getByText("Failed", { exact: true }).waitFor();
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim()).toBe(baselineHead);
 
       const previousFetchTaskIds = await window.evaluate(async () => {
@@ -412,10 +418,10 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) }).last();
+      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await fetchTask.waitFor({ state: "visible" });
-      await fetchTask.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
-      await fetchTask.getByText("authentication:", { exact: false }).waitFor();
+      await fetchTask.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
+      await fetchTask.getByText("Authentication required", { exact: false }).waitFor();
       await fetchTask.getByRole("button", { name: "Configure credentials" }).click();
 
       const settingsDialog = window.getByRole("dialog", { name: "Settings" });
@@ -526,10 +532,10 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const failedFetch = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) }).last();
+      const failedFetch = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await failedFetch.waitFor({ state: "visible" });
-      await failedFetch.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
-      await failedFetch.getByText("authentication:", { exact: false }).waitFor();
+      await failedFetch.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
+      await failedFetch.getByText("Authentication required", { exact: false }).waitFor();
       expect(authenticationServer.authenticatedRequestCount()).toBe(0);
       await failedFetch.getByRole("button", { name: "Configure credentials" }).click();
 
@@ -629,7 +635,7 @@ describe("remote sync E2E", () => {
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) }).last();
+      const fetchTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') }).first();
       await fetchTask.waitFor({ state: "visible" });
       await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("prepared");
 
@@ -656,14 +662,14 @@ describe("remote sync E2E", () => {
       expect(queuedPull.task.operation).toBe("pullMerge");
 
       await tasksDialog.getByRole("button", { name: "Refresh" }).click();
-      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "pullMerge" }) }).last();
+      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullMerge"]') }).first();
       await pullTask.waitFor({ state: "visible" });
-      await pullTask.getByText("queued", { exact: true }).waitFor();
+      await pullTask.getByText("Queued", { exact: true }).waitFor();
       await pullTask.getByRole("button", { name: "Cancel task" }).click();
-      await pullTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+      await pullTask.getByText("Cancelled", { exact: true }).waitFor({ timeout: 20_000 });
 
       await fetchTask.getByRole("button", { name: "Cancel task" }).click();
-      await fetchTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+      await fetchTask.getByText("Cancelled", { exact: true }).waitFor({ timeout: 20_000 });
 
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", `refs/remotes/origin/${branch}`])).stdout.trim()).toBe(baselineHead);
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(baselineHead);
@@ -746,13 +752,13 @@ describe("remote sync E2E", () => {
       await pullDialog.getByRole("button", { name: "Pull with merge" }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "pullMerge" }) }).last();
+      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullMerge"]') }).first();
       await pullTask.waitFor({ state: "visible" });
       await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("started");
       await writeFile(localFile, "export const local = 'concurrent user edit preserved';\n");
       await pullTask.getByRole("button", { name: "Cancel task" }).click();
       try {
-        await pullTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+        await pullTask.getByText("Cancelled", { exact: true }).waitFor({ timeout: 20_000 });
       } catch {
         const taskState = await pullTask.innerText();
         const indexTree = await execFileAsync("git", ["-C", fixture.path, "write-tree"]).then(({ stdout }) => stdout.trim()).catch((error: unknown) => String(error));
@@ -847,11 +853,11 @@ describe("remote sync E2E", () => {
       await pullDialog.getByRole("button", { name: "Pull with rebase" }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "pullRebase" }) }).last();
+      const pullTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="pullRebase"]') }).first();
       await pullTask.waitFor({ state: "visible" });
       await expect.poll(async () => await readFile(markerPath, "utf8").catch(() => ""), { timeout: 20_000 }).toBe("started");
       await pullTask.getByRole("button", { name: "Cancel task" }).click();
-      await pullTask.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+      await pullTask.getByText("Cancelled", { exact: true }).waitFor({ timeout: 20_000 });
 
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(localHead);
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "refs/remotes/origin/" + (await execFileAsync("git", ["-C", fixture.path, "branch", "--show-current"])).stdout.trim()])).stdout.trim()).toBe(remoteHead);
@@ -1101,13 +1107,13 @@ describe("remote sync E2E", () => {
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
       await window.getByRole("button", { name: "Fetch", exact: true }).click();
-      const fetchTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "fetch" }) });
+      const fetchTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="fetch"]') });
       await fetchTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
-        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent?.startsWith("fetch"));
-        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation")?.startsWith("fetch"));
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
       }, undefined, { timeout: 20_000 });
-      expect(await fetchTask.innerText()).toContain("Succeeded");
+      expect(await fetchTask.innerText()).toContain("Completed");
       await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
 
       await window.getByRole("button", { name: "Pull", exact: true }).click();
@@ -1118,12 +1124,12 @@ describe("remote sync E2E", () => {
       await pullDialog.getByRole("button", { name: `Pull with ${strategy}` }).click();
 
       const taskDialog = window.getByRole("dialog", { name: "Tasks" });
-      const pullTask = taskDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: pullOperation }) });
+      const pullTask = taskDialog.locator(".taskCard").filter({ has: window.locator(`.taskCardHeading strong[data-operation="${pullOperation}"]`) });
       await pullTask.waitFor({ state: "visible" });
       try {
         await window.waitForFunction((operation) => {
-          const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === operation);
-          return Boolean(card && ["waitingForInput", "failed", "cancelled", "succeeded"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+          const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === operation);
+          return Boolean(card && ["waitingForInput", "failed", "cancelled", "succeeded"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
         }, pullOperation, { timeout: 20_000 });
       } catch {
         const state = await pullTask.innerText();
@@ -1132,7 +1138,7 @@ describe("remote sync E2E", () => {
         throw new Error(`Pull task did not reach a terminal or recovery state: ${state}\n${logs}`);
       }
       const pullTaskState = await pullTask.innerText();
-      if (!pullTaskState.toLowerCase().includes("waitingforinput")) {
+      if (await pullTask.locator(".taskStatus").getAttribute("data-status") !== "waitingForInput") {
         await pullTask.locator(".taskLogs summary").click();
         const logs = await pullTask.locator(".taskLogs pre").innerText();
         throw new Error(`Pull did not pause for conflict recovery: ${pullTaskState}\n${logs}`);
@@ -1251,13 +1257,13 @@ describe("remote sync E2E", () => {
       await pushDialog.getByRole("button", { name: "Push", exact: true }).click();
 
       const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-      const failedPush = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "push" }) }).last();
+      const failedPush = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="push"]') }).first();
       await failedPush.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
-        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "push");
-        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "push");
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
       }, undefined, { timeout: 20_000 });
-      await failedPush.getByText("failed", { exact: true }).waitFor();
+      await failedPush.getByText("Failed", { exact: true }).waitFor();
       expect((await execFileAsync("git", ["-C", bareRemotePath, "rev-parse", `refs/heads/${branch}`])).stdout.trim()).toBe(originalRemoteHead);
 
       await execFileAsync("git", ["init", "--bare", "--quiet", unavailableRemotePath]);

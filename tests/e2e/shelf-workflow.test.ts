@@ -75,14 +75,14 @@ describe("shelf workflow E2E", () => {
       const shelfButton = window.locator(".shelfSelectButton").filter({ hasText: "E2E working-tree shelf" });
       await shelfButton.waitFor({ state: "visible", timeout: 15_000 });
       await window.getByRole("button", { name: /Background tasks/ }).click();
-      const createTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "shelfCreate" }) });
+      const createTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="shelfCreate"]') });
       await createTask.waitFor({ state: "visible" });
       await window.waitForFunction(() => {
-        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.textContent === "shelfCreate");
-        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.textContent || ""));
+        const card = [...document.querySelectorAll(".taskCard")].find((entry) => entry.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "shelfCreate");
+        return Boolean(card && !["queued", "running"].includes(card.querySelector(".taskStatus")?.getAttribute("data-status") || ""));
       }, undefined, { timeout: 15_000 });
       const createTaskBody = await createTask.innerText();
-      if (!createTaskBody.includes("Succeeded")) throw new Error(`Shelf creation task did not succeed: ${createTaskBody}`);
+      if (!createTaskBody.includes("Completed")) throw new Error(`Shelf creation task did not succeed: ${createTaskBody}`);
       expect((await readFile(sourcePath, "utf8")).replace(/\r\n/g, "\n")).toBe(original);
       expect((await execFileAsync("git", ["-C", fixture.path, "diff", "--", "src/shelved.ts"])).stdout).toBe("");
       await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();

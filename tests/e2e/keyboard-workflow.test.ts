@@ -202,7 +202,7 @@ it("uses keyboard workflows for repository changes and reviews an AI conflict su
     expect(cherryPick.status).toBe(202);
     await enterButtonByTab(window, "Background tasks");
     const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    const cherryPickTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "cherryPick" }) });
+    const cherryPickTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="cherryPick"]') });
     await cherryPickTask.getByRole("button", { name: "Open conflict resolver" }).waitFor();
     const conflictWindowPromise = app.waitForEvent("window");
     await enterButtonByTab(window, "Open conflict resolver");

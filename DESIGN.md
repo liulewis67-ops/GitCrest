@@ -77,6 +77,8 @@ Unavailable repositories use RepositoryRecoveryPanel with Locate folder, Remove 
 
 Status and history failures replace the dependent view content with one main error and Retry action. Side panels show a neutral empty state; stale commit changes and inspector content are suppressed. Failed commit-detail reads have no SHA heading or continuing loading indicator. History pagination waits for an explicit retry after failure, so scrolling cannot replace the error or collapse its diagnostic disclosure.
 
+Task Center groups tasks by repository name, newest first. Operation, status, phase and failure category use translated labels; completed tasks lead with a confirmed outcome and relative time. Only active tasks retain progress, and only running status is a live region. Raw Git diagnostics stay in the collapsed log disclosure. Current task snapshots do not include commit counts or remote targets, so outcomes do not invent them.
+
 | Surface | Current styles and states |
 |---|---|
 | Primary button | `.primaryButton`, accent fill, on-accent text, 34px minimum height, 6px radius; stronger accent on hover, 1px pressed movement, neutral disabled state |

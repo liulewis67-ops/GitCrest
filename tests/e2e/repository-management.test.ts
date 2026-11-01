@@ -340,9 +340,12 @@ it("retries a failed clone from Task Center after the remote becomes available",
     await cloneDialog.getByRole("button", { name: "Start clone" }).click();
 
     const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    const cloneTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) });
+    const cloneTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="clone"]') });
     await cloneTask.waitFor({ state: "visible" });
-    await cloneTask.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
+    await cloneTask.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
+    expect(await cloneTask.innerText()).toContain("Clone failed.");
+    expect(await cloneTask.innerText()).not.toMatch(/repo_[a-f0-9]{64}/);
+    expect(await cloneTask.locator("progress").count()).toBe(0);
     await writeRewrite(remotePath);
     await cloneTask.getByRole("button", { name: "Retry clone" }).click();
 
@@ -401,10 +404,10 @@ it("opens account settings from a clone retry and returns to the clone draft", a
     await cloneDialog.getByRole("button", { name: "Start clone" }).click();
 
     const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    const cloneTask = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).last();
+    const cloneTask = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="clone"]') }).first();
     await cloneTask.waitFor({ state: "visible" });
-    await cloneTask.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
-    await cloneTask.getByText("authentication:", { exact: false }).waitFor();
+    await cloneTask.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
+    await cloneTask.getByText("Authentication required", { exact: false }).waitFor();
     await cloneTask.getByRole("button", { name: "Retry clone" }).click();
 
     const retryDialog = window.getByRole("dialog", { name: "Clone repository" });
@@ -494,10 +497,10 @@ it("clones successfully after saving credentials for an authentication-failed re
     await cloneDialog.getByRole("button", { name: "Start clone" }).click();
 
     const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    const failedClone = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).last();
+    const failedClone = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="clone"]') }).first();
     await failedClone.waitFor({ state: "visible" });
-    await failedClone.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
-    await failedClone.getByText("authentication:", { exact: false }).waitFor();
+    await failedClone.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
+    await failedClone.getByText("Authentication required", { exact: false }).waitFor();
     expect(authenticationServer.authenticatedRequestCount()).toBe(0);
     await failedClone.getByRole("button", { name: "Retry clone" }).click();
 
@@ -721,8 +724,8 @@ it("removes the partial destination when an active clone is cancelled", async ()
     await cloneDialog.getByRole("button", { name: "Start clone" }).click();
 
     const tasksDialog = window.getByRole("dialog", { name: "Tasks" });
-    const failedClone = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).last();
-    await failedClone.getByText("failed", { exact: true }).waitFor({ timeout: 20_000 });
+    const failedClone = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="clone"]') }).first();
+    await failedClone.getByText("Failed", { exact: true }).waitFor({ timeout: 20_000 });
     await failedClone.getByRole("button", { name: "Retry clone" }).click();
     const retryDialog = window.getByRole("dialog", { name: "Clone repository" });
     await retryDialog.getByRole("button", { name: "Manage accounts" }).click();
@@ -764,10 +767,10 @@ it("removes the partial destination when an active clone is cancelled", async ()
     expect(cloneTaskStatus, `clone task snapshot: ${JSON.stringify(cloneTaskStatus)}`).toBeDefined();
     expect(cloneTaskStatus?.status, `clone task snapshot: ${JSON.stringify(cloneTaskStatus)}`).toBe("running");
     await tasksDialog.getByRole("button", { name: "Refresh" }).click();
-    const activeClone = tasksDialog.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "clone" }) }).first();
-    await activeClone.getByText("running", { exact: true }).waitFor({ timeout: 10_000 });
+    const activeClone = tasksDialog.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="clone"]') }).first();
+    await activeClone.getByText("Running", { exact: true }).waitFor({ timeout: 10_000 });
     await activeClone.getByRole("button", { name: "Cancel task" }).click();
-    await activeClone.getByText("cancelled", { exact: true }).waitFor({ timeout: 20_000 });
+    await activeClone.getByText("Cancelled", { exact: true }).waitFor({ timeout: 20_000 });
     authenticationServer.releaseAuthenticatedRequests();
 
     expect(await readdir(cloneParent)).not.toContain(folderName);

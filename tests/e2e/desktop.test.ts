@@ -354,9 +354,9 @@ describe("desktop startup E2E", () => {
       await rebaseAction.selectOption("reword");
       await rebaseDialog.getByLabel(/Replacement message/).fill("Interactive rebase E2E message");
       await rebaseDialog.getByRole("button", { name: "Start rebase" }).click();
-      const rebaseTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "rebase" }) });
+      const rebaseTaskCard = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="rebase"]') });
       await rebaseTaskCard.waitFor({ state: "visible" });
-      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "rebase" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "rebase" && card.querySelector(".taskStatus")?.getAttribute("data-status") === "succeeded"), undefined, { timeout: 20_000 });
       await rebaseTaskCard.locator(".taskLogs summary").click();
       expect(await rebaseTaskCard.innerText()).toContain("refs/gitcrest/rebase-backups/");
       expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("Interactive rebase E2E message");
@@ -367,9 +367,9 @@ describe("desktop startup E2E", () => {
       await rollbackDialog.waitFor();
       await rollbackDialog.getByLabel(/moves the current branch/).check();
       await rollbackDialog.getByRole("button", { name: "Restore selected backup" }).click();
-      const rollbackTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "rebaseRollback" }) });
+      const rollbackTaskCard = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="rebaseRollback"]') });
       await rollbackTaskCard.waitFor({ state: "visible" });
-      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "rebaseRollback" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "rebaseRollback" && card.querySelector(".taskStatus")?.getAttribute("data-status") === "succeeded"), undefined, { timeout: 20_000 });
       expect((await execFileAsync("git", ["-C", fixture.path, "log", "-1", "--format=%s"])).stdout.trim()).toBe("change feature branch");
 
       await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
@@ -413,9 +413,9 @@ describe("desktop startup E2E", () => {
       await resetDialog.getByLabel(/I reviewed the commit and path impact/).check();
       const featureOidBeforeReset = (await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim();
       await resetDialog.getByRole("button", { name: "Reset mixed" }).click();
-      const resetTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "reset" }) });
+      const resetTaskCard = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="reset"]') });
       await resetTaskCard.waitFor({ state: "visible" });
-      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "reset" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "reset" && card.querySelector(".taskStatus")?.getAttribute("data-status") === "succeeded"), undefined, { timeout: 20_000 });
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(mainOid);
 
       await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
@@ -428,9 +428,9 @@ describe("desktop startup E2E", () => {
       await restoreResetDialog.getByRole("button", { name: "Restore selected reset backup" }).waitFor({ state: "visible" });
       await restoreResetDialog.getByLabel(/replaces the current branch and checked-out files/).check();
       await restoreResetDialog.getByRole("button", { name: "Restore selected reset backup" }).click();
-      const restoreTaskCard = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "resetRestore" }) });
+      const restoreTaskCard = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="resetRestore"]') });
       await restoreTaskCard.waitFor({ state: "visible" });
-      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "resetRestore" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 20_000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "resetRestore" && card.querySelector(".taskStatus")?.getAttribute("data-status") === "succeeded"), undefined, { timeout: 20_000 });
       expect((await execFileAsync("git", ["-C", fixture.path, "rev-parse", "HEAD"])).stdout.trim()).toBe(featureOidBeforeReset);
 
       await window.getByRole("dialog", { name: "Tasks" }).getByRole("button", { name: "Close tasks" }).click();
@@ -454,9 +454,9 @@ describe("desktop startup E2E", () => {
       await refreshStatusButton.focus();
       expect(await window.evaluate(() => document.activeElement?.getAttribute("aria-label"))).toBe("Refresh working tree status");
       await window.keyboard.press("Control+z");
-      const undoTask = window.locator(".taskCard").filter({ has: window.locator(".taskCardHeading strong", { hasText: "undoRecentOperation" }) });
+      const undoTask = window.locator(".taskCard").filter({ has: window.locator('.taskCardHeading strong[data-operation="undoRecentOperation"]') });
       await undoTask.waitFor({ state: "visible", timeout: 5000 });
-      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.textContent === "undoRecentOperation" && card.querySelector(".taskStatus")?.textContent === "succeeded"), undefined, { timeout: 10_000 });
+      await window.waitForFunction(() => Array.from(document.querySelectorAll(".taskCard")).some((card) => card.querySelector(".taskCardHeading strong")?.getAttribute("data-operation") === "undoRecentOperation" && card.querySelector(".taskStatus")?.getAttribute("data-status") === "succeeded"), undefined, { timeout: 10_000 });
       const stagedAfterUndo = (await execFileAsync("git", ["-C", fixture.path, "diff", "--cached", "--name-only"])).stdout.trim();
       expect(stagedAfterUndo).toBe(stagedBeforeUndo);
       expect((await execFileAsync("git", ["-C", fixture.path, "status", "--porcelain", "--", "src/undo-me.ts"])).stdout.trim()).toBe("?? src/undo-me.ts");
