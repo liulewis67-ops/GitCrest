@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../shared/ui/Icon";
 import { ErrorMessage } from "../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../shared/i18n/api-errors";
 import { useI18n } from "../../shared/i18n";
@@ -109,9 +110,9 @@ export function WorkspaceDiffPanel({
         </span> : scopeLabel && <span className="diffScopeTag">{scopeLabel}</span>}
         <span className="diffPanelSpacer" />
         {fileNavigation && fileNavigation.total > 1 && <span className="diffFileNav" role="group" aria-label={t("chg.filePosition", { current: fileNavigation.index + 1, total: fileNavigation.total })}>
-          <button className="quietButton compact iconButton" type="button" aria-label={t("chg.prevFile")} title={t("chg.prevFile")} disabled={fileNavigation.index <= 0} onClick={fileNavigation.onPrevious}><span aria-hidden="true">‹</span></button>
+          <button className="quietButton compact iconButton" type="button" aria-label={t("chg.prevFile")} title={t("chg.prevFile")} disabled={fileNavigation.index <= 0} onClick={fileNavigation.onPrevious}><span aria-hidden="true"><UiIcon name="chevronLeft" /></span></button>
           <span className="diffFileNavPosition" aria-hidden="true">{t("chg.filePosition", { current: fileNavigation.index + 1, total: fileNavigation.total })}</span>
-          <button className="quietButton compact iconButton" type="button" aria-label={t("chg.nextFile")} title={t("chg.nextFile")} disabled={fileNavigation.index >= fileNavigation.total - 1} onClick={fileNavigation.onNext}><span aria-hidden="true">›</span></button>
+          <button className="quietButton compact iconButton" type="button" aria-label={t("chg.nextFile")} title={t("chg.nextFile")} disabled={fileNavigation.index >= fileNavigation.total - 1} onClick={fileNavigation.onNext}><span aria-hidden="true"><UiIcon name="chevronRight" /></span></button>
         </span>}
         {diffViewPreferences.layout === "hunks" && <span className="diffScopeSwitch" role="group" aria-label={t("sd.layoutAria")}>
           <button type="button" aria-pressed={diffViewPreferences.sideBySide} className={diffViewPreferences.sideBySide ? "active" : undefined} aria-keyshortcuts={ariaShortcut(shortcuts.toggleDiffView, isMacPlatform)} title={t("sd.layoutTitle", { shortcut: displayShortcut(shortcuts.toggleDiffView, isMacPlatform) })} onClick={() => onChangeDiffViewPreferences({ sideBySide: true })}>{t("dw.split")}</button>

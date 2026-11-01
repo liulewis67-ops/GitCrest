@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
 import { lazy, Suspense, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { navigateMenu, useMenuPlacement } from "../../../shared/hooks/use-menu-placement";
@@ -179,7 +180,7 @@ export function CommitWorkbench({
       <div className="composerActions">
         <div className={`commitSplit${commit.actionIsDanger ? " danger" : ""}`}>
           <button className="primaryButton commitButton" type="button" disabled={!commit.canCommit} title={disabledReason ?? (commit.actionIsDanger ? t("cw.tDanger") : t("cw.tRun"))} onClick={() => onSubmit(commit.activeAction)}>{commit.busy ? t("cw.submitting") : commit.actionLabel}</button>
-          <button ref={actionButtonRef} className="commitSplitMenuButton" type="button" disabled={!repository || commit.busy} aria-label={t("cw.chooseAction")} aria-haspopup="menu" aria-expanded={commit.actionMenuOpen} onClick={onToggleActionMenu}>▾</button>
+          <button ref={actionButtonRef} className="commitSplitMenuButton" type="button" disabled={!repository || commit.busy} aria-label={t("cw.chooseAction")} aria-haspopup="menu" aria-expanded={commit.actionMenuOpen} onClick={onToggleActionMenu}><UiIcon name="chevronDown" /></button>
           {commit.actionMenuOpen && <div ref={actionMenuRef} tabIndex={-1} className="commitActionMenu" role="menu" aria-label={t("cw.actionsAria")} onKeyDown={(event) => navigateMenu(event, () => { onToggleActionMenu(); actionButtonRef.current?.focus(); })}>
             <button type="button" role="menuitemradio" aria-checked={commit.activeAction === "commit"} aria-keyshortcuts={ariaShortcut(shortcuts.commit, isMacPlatform)} disabled={!commit.canCommit} onClick={() => onChooseAction("commit")}><span>{t("cw.mCommit")}</span><kbd aria-hidden="true">{displayShortcut(shortcuts.commit, isMacPlatform)}</kbd></button>
             <button type="button" role="menuitemradio" aria-checked={commit.activeAction === "commitAndPush"} aria-keyshortcuts={ariaShortcut(shortcuts.commitAndPush, isMacPlatform)} disabled={!commit.canCommit} onClick={() => onChooseAction("commitAndPush")}><span>{t("cw.mCommitPush")}</span><kbd aria-hidden="true">{displayShortcut(shortcuts.commitAndPush, isMacPlatform)}</kbd></button>

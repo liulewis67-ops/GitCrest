@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useState, type MouseEvent } from "react";
@@ -103,7 +104,7 @@ export function WorktreeList({ api, repoId, refreshKey, disabled, onOpen, onNewW
       <ul className="branchList" aria-label={t("wt.listAria")}>
         {snapshot.worktrees.map((worktree) => (
           <li className={`branchItem${worktree.isCurrent ? " current" : ""}${menu?.worktree.path === worktree.path ? " menuOpen" : ""}`} key={worktree.path} onContextMenu={(event) => openMenu(event, worktree)}>
-            <span className="branchItemGlyph" aria-hidden="true">⧉</span>
+            <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="copy" /></span>
             <span className="branchItemName" title={worktree.path}>{label(worktree)}</span>
             {worktree.isDirty && !worktree.isCurrent && <span className="worktreeDirty" title={t("wt.dirtyTitle")} aria-label={t("wt.dirtyAria")}>●</span>}
             {worktree.isCurrent

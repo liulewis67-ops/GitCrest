@@ -52,6 +52,11 @@
   --red: var(--danger);
   --success: var(--green);
   --surface-2: var(--surface-raised);
+  --status-added: color-mix(in srgb, var(--git-added) 75%, var(--text));
+  --status-deleted: color-mix(in srgb, var(--git-deleted) 75%, var(--text));
+  --status-renamed: color-mix(in srgb, var(--git-renamed) 75%, var(--text));
+  --status-modified: color-mix(in srgb, var(--git-modified) 75%, var(--text));
+  --status-untracked: color-mix(in srgb, var(--git-untracked) 75%, var(--text));
   --shadow: 0 18px 56px rgb(0 0 0 / 32%);
 
   /* Git state colors: only for expressing file and ref state. */

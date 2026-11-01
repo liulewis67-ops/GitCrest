@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../shared/ui/Icon";
 import { ErrorMessage } from "../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../shared/i18n/api-errors";
 import { lazy, Suspense, useState, type KeyboardEvent, type MouseEvent } from "react";
@@ -226,7 +227,7 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
             : branch.name}</span>
         </button>
         {branch.isCurrent && <span className="branchCurrentLabel">HEAD</span>}
-        {branch.worktreePath && <span className="branchWorktreeMark" title={t("nav.checkedOutIn", { path: branch.worktreePath })} aria-label={t("nav.checkedOutElsewhere", { path: branch.worktreePath })}>⧉</span>}
+        {branch.worktreePath && <span className="branchWorktreeMark" title={t("nav.checkedOutIn", { path: branch.worktreePath })} aria-label={t("nav.checkedOutElsewhere", { path: branch.worktreePath })}><UiIcon name="copy" /></span>}
         <BranchSyncBadge
           branch={branch}
           showUnpublished
@@ -236,13 +237,13 @@ export function BranchesSidebar(props: BranchesSidebarProps) {
         />
         {!branch.isCurrent && !branch.fullName.endsWith("/HEAD") && <span className="branchActions">
           {branch.kind === "local" && !branch.worktreePath && <button className="branchAction" type="button" aria-label={t("nav.switchTo", { name: branch.name })} title={t("nav.switchTo", { name: branch.name })} disabled={blocked} onClick={() => onSwitchBranch(branch.name)}>↪</button>}
-          {branch.kind === "local" && branch.worktreePath && <button className="branchAction" type="button" aria-label={t("nav.openWorktreeOf", { name: branch.name })} title={t("nav.openWorktreeTitle", { name: branch.name, path: branch.worktreePath })} disabled={!connected || hasActiveRepositoryTask} onClick={() => onOpenWorktree(branch.worktreePath!)}>⧉</button>}
+          {branch.kind === "local" && branch.worktreePath && <button className="branchAction" type="button" aria-label={t("nav.openWorktreeOf", { name: branch.name })} title={t("nav.openWorktreeTitle", { name: branch.name, path: branch.worktreePath })} disabled={!connected || hasActiveRepositoryTask} onClick={() => onOpenWorktree(branch.worktreePath!)}><UiIcon name="copy" /></button>}
           <button className="branchAction" type="button" aria-label={t("nav.mergeAria", { name: branch.fullName })} title={t("nav.mergeTitle", { name: branch.name })} disabled={blocked} onClick={() => onMergeBranch(branch.oid, branch.name)}>⤴</button>
-          {branch.kind === "remote" && <button className="branchAction" type="button" aria-label={t("nav.newWorktreeFor", { name: branch.name })} title={t("nav.newWorktreeFor", { name: branch.name })} disabled={blocked} onClick={() => onNewWorktreeForBranch(branch.name, true)}>⧉</button>}
+          {branch.kind === "remote" && <button className="branchAction" type="button" aria-label={t("nav.newWorktreeFor", { name: branch.name })} title={t("nav.newWorktreeFor", { name: branch.name })} disabled={blocked} onClick={() => onNewWorktreeForBranch(branch.name, true)}><UiIcon name="copy" /></button>}
           {branch.kind === "local" && <BranchRowMenu branch={branch.name} checkedOutAt={branch.worktreePath} disabled={blocked} onNewWorktree={() => onNewWorktreeForBranch(branch.name, false)} onRename={() => onManageBranch(branch.name, "rename")} onDelete={() => onManageBranch(branch.name, "delete")} />}
         </span>}
-        {branch.kind === "remote" && !branch.fullName.endsWith("/HEAD") && <button className="branchRemoteDelete" type="button" aria-label={t("nav.deleteRemoteBranch", { name: branch.fullName })} title={t("nav.deleteRemoteBranch", { name: branch.fullName })} disabled={blocked} onClick={() => onDeleteRemoteBranch(branch.fullName)}>×</button>}
-        <button className={`branchFavorite${branch.isFavorite ? " active" : ""}`} type="button" aria-label={branch.isFavorite ? t("nav.favoriteRemove", { name: branch.fullName }) : t("nav.favoriteAdd", { name: branch.fullName })} aria-pressed={branch.isFavorite} onClick={() => onToggleBranchFavorite(branch.fullName, branch.isFavorite)}>{branch.isFavorite ? "★" : "☆"}</button>
+        {branch.kind === "remote" && !branch.fullName.endsWith("/HEAD") && <button className="branchRemoteDelete" type="button" aria-label={t("nav.deleteRemoteBranch", { name: branch.fullName })} title={t("nav.deleteRemoteBranch", { name: branch.fullName })} disabled={blocked} onClick={() => onDeleteRemoteBranch(branch.fullName)}><UiIcon name="close" /></button>}
+        <button className={`branchFavorite${branch.isFavorite ? " active" : ""}`} type="button" aria-label={branch.isFavorite ? t("nav.favoriteRemove", { name: branch.fullName }) : t("nav.favoriteAdd", { name: branch.fullName })} aria-pressed={branch.isFavorite} onClick={() => onToggleBranchFavorite(branch.fullName, branch.isFavorite)}>{branch.isFavorite ? <UiIcon name="star" style={{ fill: "currentColor" }} /> : <UiIcon name="star" />}</button>
       </li>
     );
   }

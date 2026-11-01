@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -201,8 +202,8 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
                     {ACTIONS.map((action) => <option key={action} value={action}>{action}</option>)}
                   </select>
                   <span className="rebaseTodoSubject" title={commit?.subject}>{commit?.subject || t("rb.noSubject")}</span>
-                  <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveUp", { oid: item.oid.slice(0, 9) })} disabled={busy || index === 0} onClick={() => moveTodo(index, -1)}>↑</Button>
-                  <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveDown", { oid: item.oid.slice(0, 9) })} disabled={busy || index === todo.length - 1} onClick={() => moveTodo(index, 1)}>↓</Button>
+                  <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveUp", { oid: item.oid.slice(0, 9) })} disabled={busy || index === 0} onClick={() => moveTodo(index, -1)}><UiIcon name="arrowUp" /></Button>
+                  <Button variant="quiet" size="compact" type="button" aria-label={t("rb.moveDown", { oid: item.oid.slice(0, 9) })} disabled={busy || index === todo.length - 1} onClick={() => moveTodo(index, 1)}><UiIcon name="arrowDown" /></Button>
                 </div>
                 {item.action === "reword" && <textarea className="rebaseMessage" aria-label={t("rb.replacement", { oid: item.oid.slice(0, 9) })} value={item.message || ""} disabled={busy} onChange={(event) => updateTodo(index, { message: event.target.value })} rows={3} />}
               </li>;

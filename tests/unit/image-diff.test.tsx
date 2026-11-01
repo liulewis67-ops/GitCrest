@@ -109,7 +109,7 @@ describe("image comparison", () => {
     const svg = { blob: new Blob(['<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'], { type: "image/svg+xml" }), type: "image/svg+xml", size: 80 };
     const { container } = render(<ImageDiff path="logo.svg" source={source({ old: svg, new: svg })} />);
     await screen.findAllByRole("img", { name: /logo.svg/ });
-    expect(container.querySelector("svg, script, object, iframe")).toBeNull();
+    expect(container.querySelector(".imageDiffSides svg, .imageDiffStack svg, script, object, iframe")).toBeNull();
     for (const image of container.querySelectorAll("img")) expect(image.getAttribute("src")).toMatch(/^blob:/);
   });
 });

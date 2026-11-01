@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -202,7 +203,7 @@ export function BranchSwitcherDialog({
                   </span>
                 </label>
                 <button className="branchChoice" type="button" disabled={branchSwitcher.busy || !connected || !effectiveWorktreePath.trim() || !isAbsoluteFolder(effectiveWorktreePath) || Boolean(folderProblem)} onClick={() => { rememberWorktreeParent(effectiveWorktreePath); void branchSwitcher.createBranch(filter, { worktreePath: effectiveWorktreePath.trim() }); }}>
-                  <span className="branchItemGlyph" aria-hidden="true">⧉</span>
+                  <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="copy" /></span>
                   <span>{t("bs.createWorktree", { name: filter.trim() })}</span>
                   <kbd>Shift+Enter</kbd>
                   {effectiveWorktreePath.trim() !== "" && !isAbsoluteFolder(effectiveWorktreePath) && <small>{t("bs.fullPath")}</small>}
@@ -214,18 +215,18 @@ export function BranchSwitcherDialog({
             {allLocalBranches.length + allRemoteBranches.length > 0 && choices.length === 0 && <p className="navEmpty">{t("bs.noMatch", { name: filter.trim() })}</p>}
             {localBranches.map((branch, position) => branch.worktreePath && onOpenWorktree ? (
               <div className="branchChoice inWorktree" key={branch.fullName}>
-                <span className="branchItemGlyph" aria-hidden="true">⧉</span>
+                <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="copy" /></span>
                 <span title={branch.worktreePath}>{branch.name}</span>
                 <small>{t("bs.openInOther")}</small>
                 <Button variant="secondary" type="button" disabled={branchSwitcher.busy} onClick={() => { branchSwitcher.close(); onOpenWorktree(branch.worktreePath!); }}>{t("bs.openWorktree")}</Button>
               </div>
             ) : (
               <button className={`branchChoice${position === highlightedIndex ? " active" : ""}`} type="button" key={branch.fullName} ref={(node) => { if (node && position === highlightedIndex) node.scrollIntoView?.({ block: "nearest" }); }} disabled={branchSwitcher.busy} onClick={() => void branchSwitcher.inspect(branch.name)}>
-                <span className="branchItemGlyph" aria-hidden="true">⑂</span>
+                <span className="branchItemGlyph" aria-hidden="true"><UiIcon name="branch" /></span>
                 <span>{branch.name}</span>
                 <BranchSyncBadge branch={branch} />
-                {branch.isFavorite && <span className="branchFavoriteMark" aria-label={t("bs.favorite")}>★</span>}
-                <span className="actionArrow" aria-hidden="true">→</span>
+                {branch.isFavorite && <span className="branchFavoriteMark" aria-label={t("bs.favorite")}><UiIcon name="star" style={{ fill: "currentColor" }} /></span>}
+                <span className="actionArrow" aria-hidden="true"><UiIcon name="arrowRight" /></span>
               </button>
             ))}
             {remoteBranches.length > 0 && <>
@@ -238,7 +239,7 @@ export function BranchSwitcherDialog({
                     <svg className="branchItemGlyph remoteGlyph" viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 12.5h7a3 3 0 0 0 .4-5.97A4 4 0 0 0 4.2 7.6 2.5 2.5 0 0 0 4.5 12.5Z" /></svg>
                     <span>{branch.name}</span>
                     <small className={local ? "branchChoiceTag" : "branchChoiceTag new"}>{local ? t("bs.remoteTracked", { name: local }) : t("bs.remoteNew")}</small>
-                    <span className="actionArrow" aria-hidden="true">→</span>
+                    <span className="actionArrow" aria-hidden="true"><UiIcon name="arrowRight" /></span>
                   </button>
                 );
               })}

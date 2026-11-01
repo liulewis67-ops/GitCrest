@@ -63,7 +63,7 @@ export const STYLE_FIELDS = Object.keys(STYLE_OPTIONS) as StyleField[];
 export type ThemeStyle = { [Field in StyleField]: typeof STYLE_OPTIONS[Field][number] };
 export type Density = ThemeStyle["density"];
 
-export const DEFAULT_STYLE: ThemeStyle = { radius: "default", density: "default", shadow: "default", graphColors: "accent" };
+export const DEFAULT_STYLE: ThemeStyle = { radius: "default", density: "default", shadow: "default", graphColors: "lanes" };
 
 /** Multiplies every corner radius; `default` keeps the 2–12px scale in tokens.css. */
 export const RADIUS_SCALE: Record<ThemeStyle["radius"], number> = { square: 0, tight: 0.5, default: 1, round: 1.75 };

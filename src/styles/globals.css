@@ -1757,3 +1757,70 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .composerStatus > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .composerStatus > span:last-child { flex: none; white-space: nowrap; }
 .composerFooter .composerTemplate { max-width: 110px; }
+
+/* D4: recent work leads Welcome; actions occupy one predictable row. */
+.gcIcon { display: inline-block; flex: none; width: 16px; height: 16px; vertical-align: -3px; }
+.gcButton:has(> .gcIcon) { display: inline-flex; align-items: center; justify-content: center; gap: 7px; }
+.welcomePage { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; padding: clamp(24px, 5vh, 48px) clamp(24px, 6vw, 80px) 20px; }
+.welcomeIntro, .recentSection { width: 100%; max-width: 1040px; margin-inline: auto; }
+.welcomeIntro h1 { margin: 0; font-size: var(--type-xl); line-height: 1.3; font-weight: 620; letter-spacing: -.02em; }
+.welcomeIntro > p { margin: 12px 0 0; max-width: 65ch; color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.6; }
+.welcomeActions { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 24px; }
+.recentListHeader { display: flex; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--line); padding-bottom: 12px; font-size: var(--type-xs); color: var(--text-secondary); }
+.recentSearch { display: flex; align-items: center; gap: 8px; width: min(440px, 70%); min-width: 180px; color: var(--text-secondary); }
+.recentSearch input { width: 100%; min-width: 0; min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); background: var(--surface); color: var(--text); padding: 6px 9px; font: var(--type-sm) var(--font-sans); }
+.recentKeyboardHelp { margin: 9px 0 8px; color: var(--text-secondary); font-size: var(--type-xs); }
+.repositoryRow { display: flex; align-items: center; gap: 8px; min-height: 64px; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+.repositoryRow:hover, .repositoryRow:focus-within { background: var(--surface-soft); }
+.repositoryState { flex: none; width: 16px; color: var(--status-added); }
+.repositoryState svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.repository-missing .repositoryState, .repository-detached .repositoryState, .repository-busy .repositoryState { color: var(--status-renamed); }
+.repositoryRowOpen { display: flex; flex: 1; align-items: center; justify-content: space-between; gap: 16px; min-width: 0; min-height: 46px; border: 0; background: transparent; padding: 4px 0; color: var(--text); text-align: left; cursor: pointer; }
+.repositoryIdentity { display: block; min-width: 0; }
+.repositoryIdentity strong, .repositoryIdentity small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.repositoryIdentity strong { font-size: var(--type-sm); font-weight: 620; }
+.repositoryIdentity small { margin-top: 4px; color: var(--text-secondary); font-size: var(--type-xs); }
+.repositoryBranch { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; max-width: 28%; overflow: hidden; color: var(--text-secondary); font-size: var(--type-xs); white-space: nowrap; text-overflow: ellipsis; }
+.recentHead, .toolbarHeadMark { flex: none; font-size: var(--type-2xs); font-weight: 650; color: var(--text-secondary); }
+.repositoryRowAction { flex: none; min-height: 30px; border: 1px solid transparent; border-radius: var(--radius-4); background: transparent; padding: 4px 6px; color: var(--text-secondary); font-size: var(--type-xs); cursor: pointer; }
+.repositoryRowAction:hover, .repositoryRowAction:focus-visible { border-color: var(--line-strong); color: var(--text); }
+.emptyRepositories { padding: 32px 0; color: var(--text-secondary); }
+.emptyRepositories h3, .recentEmptyHeading { margin: 0; color: var(--text); font-size: var(--type-md); font-weight: 620; }
+.emptyRepositories p { margin: 10px 0 0; font-size: var(--type-sm); line-height: 1.6; }
+.recentNoMatches { padding: 24px 0; color: var(--text-secondary); font-size: var(--type-sm); }
+.welcomeFooter { display: flex; justify-content: space-between; gap: 16px; margin-top: auto; padding-top: 28px; color: var(--text-secondary); font-size: var(--type-xs); }
+.welcomeError { padding: 10px 12px; margin-bottom: 16px; border: 1px solid var(--danger); color: var(--danger); font-size: var(--type-sm); }
+input::placeholder, textarea::placeholder { color: var(--text-muted); opacity: 1; }
+.branchRemotePrefix { opacity: 1; }
+.branchesSidebar .branchCurrentLabel { background: var(--surface-raised); color: var(--accent-strong); border: 1px solid var(--line-strong); }
+.status-added, .status-copied, .diffPreviewAdd, .branchSyncArrow.ahead, .branchSyncButton.ahead, .remoteDefaultTag { color: var(--status-added); }
+.status-deleted, .diffPreviewDel { color: var(--status-deleted); }
+.status-renamed, .branchSyncArrow.behind, .branchSyncButton.behind { color: var(--status-renamed); }
+.status-modified, .status-typeChanged { color: var(--status-modified); }
+.status-untracked { color: var(--status-untracked); }
+.settingsHint { max-width: 75ch; }
+.fileDiffSides > div { align-items: center; }
+.fileDiffSides > div > .gcIcon { width: 13px; height: 13px; }
+.commandItem.selected { background: var(--accent-soft); outline: 2px solid var(--accent-strong); outline-offset: -2px; }
+.resetRecovery summary { color: var(--text-secondary); font-size: var(--type-sm); cursor: pointer; }
+.resetRecovery[open] summary { margin-bottom: 10px; }
+.fileDiffOptions { position: relative; }
+.fileDiffOptions summary { cursor: pointer; border: 1px solid var(--line-strong); border-radius: var(--radius-4); padding: 3px 7px; color: var(--text-secondary); }
+.fileDiffOptionsBody { position: absolute; z-index: 5; top: calc(100% + 5px); right: 0; display: grid; gap: 8px; width: 220px; padding: 12px; border: 1px solid var(--line-strong); border-radius: var(--radius-5); background: var(--surface-raised); box-shadow: var(--shadow); }
+.fileDiffOptions summary:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 2px; }
+.inlineHintCopy { margin: 2px 0 0; color: var(--text-secondary); }
+.structureHelp { margin-top: 6px; }
+.structureHelp summary, .resetModeHelp summary { color: var(--text-secondary); cursor: pointer; }
+.structureHelp p { line-height: 1.5; }
+.repositoryParent { color: var(--text-secondary); font-weight: 400; }
+.commitChangesStats .added, .commitFileButton .added, .status-added .structureStatus, .structureFact.fact-added { color: var(--status-added); }
+.commitChangesStats .deleted, .commitFileButton .deleted, .status-removed .structureStatus, .structureFact.fact-removed { color: var(--status-deleted); }
+.quickGuideBody { min-height: 0; overflow: auto; padding: 16px; }
+.quickGuideTopic + .quickGuideTopic { margin-top: 24px; }
+.quickGuideTopic h3 { margin: 0 0 8px; color: var(--text); font-size: var(--type-md); }
+.quickGuideTopic p { margin: 0 0 8px; max-width: 70ch; color: var(--text-secondary); font-size: var(--type-sm); line-height: 1.6; }
+.quickGuideTopic kbd { color: var(--text-secondary); font-size: var(--type-xs); }
+.quickGuide .shortcutSearch { margin-top: 0; }
+@container (max-width: 680px) {
+  .structureOutline { position: static; z-index: auto; flex: 0 0 200px; width: 200px; max-width: 40%; box-shadow: none; }
+}

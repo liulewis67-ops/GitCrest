@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useEffect, useState } from "react";
 import { GitCrestApiError } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -95,7 +96,7 @@ export function ImageDiff({ path, source }: { path: string; source: ImageSource 
     </div>
     <p className="imageDiffFacts" role="status">
       <span>{t("img.before")}: {describe(before)}</span>
-      <span aria-hidden="true">→</span>
+      <span aria-hidden="true"><UiIcon name="arrowRight" /></span>
       <span>{t("img.after")}: {describe(after)}</span>
       {change && <strong>{t("img.change", { change })}</strong>}
     </p>

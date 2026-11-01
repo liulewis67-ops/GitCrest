@@ -114,24 +114,13 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
         </label>
         <label className="rebaseTargetField" htmlFor="reset-mode">{t("rs.mode")}
           <select id="reset-mode" value={mode} disabled={disabled || loading || busy} onChange={(event) => { setMode(event.target.value as ResetMode); setPreview(undefined); setConfirmed(false); }}>
-            {MODES.map((option) => <option key={option} value={option}>{option}</option>)}
+            {MODES.map((option) => <option key={option} value={option}>{t(`rs.mode.${option}`)}</option>)}
           </select>
         </label>
-        <p className="cloneHelp">{t("rs.modeHelp")}</p>
+        <p className="cloneHelp" role="note">{t(`rs.consequence.${mode}`)}</p>
+        <details className="resetModeHelp"><summary>{t("rs.compareModes")}</summary><p className="cloneHelp">{t("rs.modeHelp")}</p></details>
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <section className="rebaseRollbackPanel" aria-labelledby="reset-restore-heading">
-          <h3 id="reset-restore-heading">{t("rs.restoreHeading")}</h3>
-          {backupSnapshot?.backups.length ? <>
-            <label className="rebaseTargetField" htmlFor="reset-backup">{t("rs.savedState")}
-              <select id="reset-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRestore(false); }}>
-                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} · {backup.oid.slice(0, 9)}</option>)}
-              </select>
-            </label>
-            {!backupSnapshot.canRestore && <p className="cloneHelp">{t("rs.restoreOnly")}</p>}
-            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRestore} onChange={(event) => setConfirmRestore(event.target.checked)} />{t("rs.restoreConfirm")}</label>
-            <Button variant="danger" size="compact" type="button" disabled={!backupSnapshot.canRestore || !confirmRestore || disabled || busy} onClick={() => void restore()}>{busy ? t("rs.starting") : t("rs.restoreBtn")}</Button>
-          </> : <p className="cloneHelp">{t("rs.noBackups")}</p>}
-        </section>
+
         {loading && <p role="status">{t("rs.reviewing")}</p>}
         {preview && <>
           <div className="rebasePreviewFacts">
@@ -157,7 +146,20 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
           <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("rs.reviewedConfirm")}</label>
         </>}
 
-      </div>
+      <details className="rebaseRollbackPanel resetRecovery"><summary id="reset-restore-heading">{t("rs.restoreHeading")}</summary>
+
+          {backupSnapshot?.backups.length ? <>
+            <label className="rebaseTargetField" htmlFor="reset-backup">{t("rs.savedState")}
+              <select id="reset-backup" value={selectedBackup} disabled={disabled || busy} onChange={(event) => { setSelectedBackup(event.target.value); setConfirmRestore(false); }}>
+                {backupSnapshot.backups.map((backup) => <option key={backup.reference} value={backup.reference}>{backup.subject || t("push.noSubject")} · {backup.oid.slice(0, 9)}</option>)}
+              </select>
+            </label>
+            {!backupSnapshot.canRestore && <p className="cloneHelp">{t("rs.restoreOnly")}</p>}
+            <label className="rebaseConfirm"><input type="checkbox" checked={confirmRestore} onChange={(event) => setConfirmRestore(event.target.checked)} />{t("rs.restoreConfirm")}</label>
+            <Button variant="danger" size="compact" type="button" disabled={!backupSnapshot.canRestore || !confirmRestore || disabled || busy} onClick={() => void restore()}>{busy ? t("rs.starting") : t("rs.restoreBtn")}</Button>
+          </> : <p className="cloneHelp">{t("rs.noBackups")}</p>}
+        </details>
+</div>
       <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant={preview ? "quiet" : "primary"} type="button" disabled={!targetOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rs.reviewingBtn") : t("rs.review")}</Button>
           <Button variant="danger" type="button" disabled={!preview?.canStart || !confirmed || disabled || busy} onClick={() => void start()}>{busy ? t("rs.starting") : t("rs.start", { mode })}</Button>

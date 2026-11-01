@@ -151,4 +151,18 @@ describe("command palette", () => {
     expect(workspace.getAttribute("aria-keyshortcuts")).toBe("Control+1");
     expect(screen.getByRole("button", { name: "Go to Welcome" }).querySelector("kbd")).toBeNull();
   });
+
+  it("keeps the search focused while arrow-scanning so the query can be refined immediately", () => {
+    render(<Harness />);
+    const search = screen.getByRole("textbox", { name: "Search commands" });
+    search.focus();
+    fireEvent.change(search, { target: { value: "reset" } });
+    const first = search.getAttribute("aria-activedescendant");
+    fireEvent.keyDown(search, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(search);
+    expect(search.getAttribute("aria-activedescendant")).not.toBe(first);
+    fireEvent.change(search, { target: { value: "reset zoom" } });
+    expect((search as HTMLInputElement).value).toBe("reset zoom");
+    expect(document.querySelectorAll(".commandItemMain small")).toHaveLength(1);
+  });
 });

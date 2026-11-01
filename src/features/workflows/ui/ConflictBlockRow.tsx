@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
 import type { BlockChoice, ConflictBlock } from "../model/conflict-blocks";
 import type { SmartMergeOutcome } from "../model/smart-merge";
@@ -38,7 +39,7 @@ export function ConflictBlockRow({ block, base, smart, ignored, busy, active, ro
       </div>
       <div className="conflictGutter">
         <button type="button" aria-label={t("cb.useOursAria", { n })} title={t("cb.acceptOurs")} disabled={busy || ignored.ours} onClick={() => onApply("ours")}>»</button>
-        <button type="button" className="conflictIgnore" aria-label={t("cb.ignoreOursAria", { n })} aria-pressed={Boolean(ignored.ours)} title={ignored.theirs ? t("cb.ignoreBoth") : t("cb.ignoreOurs")} disabled={busy} onClick={() => onIgnore("ours")}>×</button>
+        <button type="button" className="conflictIgnore" aria-label={t("cb.ignoreOursAria", { n })} aria-pressed={Boolean(ignored.ours)} title={ignored.theirs ? t("cb.ignoreBoth") : t("cb.ignoreOurs")} disabled={busy} onClick={() => onIgnore("ours")}><UiIcon name="close" /></button>
       </div>
       <div className="conflictResultCell">
         {merged !== null
@@ -57,7 +58,7 @@ export function ConflictBlockRow({ block, base, smart, ignored, busy, active, ro
       </div>
       <div className="conflictGutter">
         <button type="button" aria-label={t("cb.useTheirsAria", { n })} title={t("cb.acceptTheirs")} disabled={busy || ignored.theirs} onClick={() => onApply("theirs")}>«</button>
-        <button type="button" className="conflictIgnore" aria-label={t("cb.ignoreTheirsAria", { n })} aria-pressed={Boolean(ignored.theirs)} title={ignored.ours ? t("cb.ignoreBoth") : t("cb.ignoreTheirs")} disabled={busy} onClick={() => onIgnore("theirs")}>×</button>
+        <button type="button" className="conflictIgnore" aria-label={t("cb.ignoreTheirsAria", { n })} aria-pressed={Boolean(ignored.theirs)} title={ignored.ours ? t("cb.ignoreBoth") : t("cb.ignoreTheirs")} disabled={busy} onClick={() => onIgnore("theirs")}><UiIcon name="close" /></button>
       </div>
       <div className={`conflictSide theirs${ignored.theirs ? " ignored" : ""}`} role="group" aria-label={t("cb.theirsAria", { n })}>
         {ignored.theirs && <span className="conflictIgnoredTag">{t("cb.ignored")}</span>}

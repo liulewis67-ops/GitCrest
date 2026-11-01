@@ -106,6 +106,7 @@ describe("FileDiffViewer", () => {
     expect(screen.getByText("Your version")).toBeDefined();
 
     fireEvent.change(screen.getByRole("combobox", { name: "Diff layout" }), { target: { value: "unified" } });
+    fireEvent.click(screen.getByText("Diff options"));
     fireEvent.change(screen.getByRole("combobox", { name: "Whitespace" }), { target: { value: "ignore" } });
     fireEvent.click(screen.getByRole("button", { name: "Collapse unchanged" }));
     fireEvent.click(screen.getByRole("button", { name: "Select lines…" }));

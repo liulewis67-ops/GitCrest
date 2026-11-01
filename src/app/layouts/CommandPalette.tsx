@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../shared/ui/Icon";
 import { Dialog, DialogHeader } from "../../shared/ui/Dialog";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n, type MessageKey } from "../../shared/i18n";
@@ -66,7 +67,8 @@ export function CommandPalette({
     if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "Enter") return;
     const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>(".commandItem:not(:disabled)"));
     if (items.length === 0) return;
-    const current = items.indexOf(document.activeElement as HTMLButtonElement);
+    const fromSearch = document.activeElement?.matches(".paletteSearch input");
+    const current = fromSearch ? items.findIndex((item) => item.id === `palette-command-${activeId}`) : items.indexOf(document.activeElement as HTMLButtonElement);
     if (event.key === "Enter") {
       event.preventDefault();
       (current >= 0 ? items[current] : items[0]).click();
@@ -76,18 +78,22 @@ export function CommandPalette({
     const next = event.key === "ArrowDown"
       ? (current + 1) % items.length
       : (current <= 0 ? items.length - 1 : current - 1);
-    items[next].focus();
+    if (fromSearch) {
+      setSelectedId(items[next].dataset.commandId);
+      items[next].scrollIntoView?.({ block: "nearest" });
+    } else items[next].focus();
   }
 
   return (
     <Dialog className="commandPalette" role="dialog" aria-labelledby="palette-title" onKeyDown={handleKeyDown} onClose={onClose} busy={false}>
         <DialogHeader><h2 id="palette-title" >{t("palette.title")}</h2></DialogHeader>
         <div className="paletteSearch">
-          <span aria-hidden="true">⌕</span>
+          <span aria-hidden="true"><UiIcon name="search" /></span>
           <input
             autoFocus
             data-dialog-initial-focus
             aria-label={t("palette.searchLabel")}
+            aria-activedescendant={activeId ? `palette-command-${activeId}` : undefined}
             placeholder={t("palette.placeholder")}
             value={query}
             onChange={(event) => { setSelectedId(undefined); onQueryChange(event.target.value); }}
@@ -102,7 +108,9 @@ export function CommandPalette({
               {items.map((command) => (
                 <button
                   key={command.id}
-                  className="commandItem"
+                  id={`palette-command-${command.id}`}
+                  data-command-id={command.id}
+                  className={`commandItem${activeId === command.id ? " selected" : ""}`}
                   type="button"
                   aria-label={command.label}
                   aria-disabled={!command.available || undefined}
@@ -125,7 +133,7 @@ export function CommandPalette({
               ))}
             </div>
           ))}
-          {unavailable.length > 0 && <button className="commandItem commandUnavailableToggle" type="button" aria-expanded={showUnavailable} onFocus={() => setSelectedId("unavailable")} onClick={() => setShowUnavailable((value) => !value)}>{t(unavailable.every((command) => command.requiresRepository) ? "palette.requiresRepository" : "palette.unavailableCount", { count: unavailable.length })}</button>}
+          {unavailable.length > 0 && <button id="palette-command-unavailable" data-command-id="unavailable" className={`commandItem commandUnavailableToggle${activeId === "unavailable" ? " selected" : ""}`} type="button" aria-expanded={showUnavailable} onFocus={() => setSelectedId("unavailable")} onClick={() => setShowUnavailable((value) => !value)}>{t(unavailable.every((command) => command.requiresRepository) ? "palette.requiresRepository" : "palette.unavailableCount", { count: unavailable.length })}</button>}
           {matches.length === 0 && <p className="noCommands">{t("palette.noMatch", { query })}</p>}
         </div>
         <div className="paletteFooter"><span>{t("palette.navigate")}</span><span>{t("palette.run")}</span><span>{t("palette.close")}</span></div>

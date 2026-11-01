@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useMenuPlacement } from "../../../shared/hooks/use-menu-placement";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { GitCrestApiClient, WorktreeSnapshotResponse } from "../../../api/client";
@@ -147,7 +148,7 @@ export function WorktreeSwitcher({ api, repoId, refreshKey, disabled, onOpen }: 
     >
       <FolderIcon />
       <span className="branchSelectorName">{leafName(current.path)}</span>
-      <span className="branchSelectorCaret" aria-hidden="true">▾</span>
+      <span className="branchSelectorCaret" aria-hidden="true"><UiIcon name="chevronDown" /></span>
     </button>
     {position && <div ref={menuRef} className="worktreeSwitcherMenu" style={{ top: position.top, left: position.left, width: MENU_WIDTH }} onKeyDown={onMenuKeyDown}>
       <input ref={filterRef} className="worktreeSwitcherFilter" type="search" value={filter} placeholder={t("wts.filter")} aria-label={t("wts.filter")} onChange={(event) => setFilter(event.target.value)} />

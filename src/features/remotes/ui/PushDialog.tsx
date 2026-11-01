@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -42,7 +43,7 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
           {loading && <p role="status" className="cloneHelp">{t("push.checking")}</p>}
           {!loading && !snapshot && <p className="cloneHelp">{t("push.unavailable")}</p>}
           {snapshot && <>
-            <div className="pushTarget"><span>{t("pull.target")}</span><strong>{snapshot.remoteName}/{snapshot.remoteBranch}</strong><small>{snapshot.localBranch} → {snapshot.remoteName}/{snapshot.remoteBranch}</small></div>
+            <div className="pushTarget"><span>{t("pull.target")}</span><strong>{snapshot.remoteName}/{snapshot.remoteBranch}</strong><small>{snapshot.localBranch} <UiIcon name="arrowRight" />{snapshot.remoteName}/{snapshot.remoteBranch}</small></div>
             <div className="pushCounts"><div><strong>{snapshot.ahead}</strong><span>{t("push.commitsToPush")}</span></div><div><strong>{snapshot.behind}</strong><span>{t("push.remoteOnly")}</span></div><div><strong>{snapshot.changedPathCount}</strong><span>{t("push.changedPaths")}</span></div></div>
             {snapshot.behind > 0 && <div className="pushWarning" role="alert"><strong>{t("push.fetchBefore")}</strong><span>{snapshot.behind === 1 ? t("push.remoteHasOne", { count: snapshot.behind }) : t("push.remoteHasMany", { count: snapshot.behind })}</span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onFetch}>{t("push.fetchReview")}</Button></div>}
             {snapshot.ahead === 0 && <p className="cloneHelp">{t("push.nothing")}</p>}

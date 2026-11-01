@@ -1,4 +1,12 @@
 export const layout = {
+  "welcome.repositoryActions": ["Repository actions", "仓库操作"],
+  "welcome.searchRecent": ["Filter recent repositories", "筛选最近仓库"],
+  "welcome.keyboardHelp": ["↑↓ move between repositories · ←→ reach row actions · Enter opens", "↑↓ 切换仓库 · ←→ 访问行内操作 · Enter 打开"],
+  "welcome.noMatches": ["No repositories match this filter.", "没有符合筛选条件的仓库。"],
+  "welcome.state.ready": ["Repository available", "仓库可用"],
+  "welcome.state.missing": ["Repository unavailable", "仓库不可用"],
+  "welcome.state.detached": ["Detached HEAD", "游离 HEAD"],
+  "welcome.state.busy": ["Git operation in progress", "Git 操作进行中"],
   // Task views
   "view.navAria": ["Workspace views", "工作区视图"],
   "view.changes": ["Workspace", "工作区"],

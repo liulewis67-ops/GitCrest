@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
@@ -269,7 +270,7 @@ export function SplitDiff({ document, onStageSelection, onDiscardSelection, onCo
       aria-label={t("sd.diffAria", { scope: document.scope, path: document.path })}
       tabIndex={0}
     >
-      {showFileMeta && <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} → {document.path}</small>}</div>}
+      {showFileMeta && <div className="splitDiffFileMeta"><span className="diffScopeBadge">{document.scope === "commit" ? t("sd.scopeCommit") : document.scope === "index" ? t("sd.scopeIndex") : t("sd.scopeWorking")}</span><strong>{document.path}</strong>{document.originalPath && <small>{document.originalPath} <UiIcon name="arrowRight" />{document.path}</small>}</div>}
       <div className="splitDiffNavigation" aria-label={t("sd.navAria")}>
         <span>{navigableHunks.length ? t("sd.changes", { current: activeHunk === null ? 0 : navigableHunks.indexOf(activeHunk) + 1, total: navigableHunks.length }) : t("sd.noChanges")}</span>
         {showStructure && codeReview && <button type="button" aria-pressed={codeReview.open} title={t("cr.toggleTitle")} onClick={codeReview.onToggle}>{t("cr.toggle")}</button>}

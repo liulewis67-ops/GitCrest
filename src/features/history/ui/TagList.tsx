@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
@@ -117,7 +118,7 @@ export function TagList({ api, repoId, refreshKey, selectedOid, remoteNames = []
             { id: "delete", label: t("tags.delete"), separatorBefore: true, danger: true, onSelect: () => setAction({ kind: "delete", tag }) },
             { id: "remoteDelete", label: t("tags.deleteRemote"), danger: true, disabled: remoteNames.length === 0, title: remoteNames.length === 0 ? t("tags.noRemotes") : undefined, onSelect: () => setAction({ kind: "remoteDelete", tag }) },
           ]}
-        ><span aria-hidden="true">⋯</span></MenuButton>
+        ><span aria-hidden="true"><UiIcon name="more" /></span></MenuButton>
       </li>)}
     </ul>}
     {nextOffset !== null && <button className="quietButton compact" type="button" disabled={loading} onClick={() => void loadMore()}>{t("tags.loadMore")}</button>}

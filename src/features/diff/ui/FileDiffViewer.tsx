@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
 import type { DiffDocumentResponse } from "../../../api/client";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -96,22 +97,25 @@ export function FileDiffViewer({ document, commitOid, preferences, onChangePrefe
   return (
     <div className="fileDiffViewer" aria-label={t("sd.diffAria", { scope: document.scope, path: document.path })}>
       <div className="fileDiffToolbar" role="toolbar" aria-label={t("sd.navAria")}>
-        <button className="fileDiffIconButton" type="button" aria-label={t("sd.prev")} title={t("sd.prevTitle")} disabled={tooLarge || !position?.total} onClick={() => editorRef.current?.goToDiff("previous")}>↑</button>
-        <button className="fileDiffIconButton" type="button" aria-label={t("sd.next")} title={t("sd.nextTitle")} disabled={tooLarge || !position?.total} onClick={() => editorRef.current?.goToDiff("next")}>↓</button>
+        <button className="fileDiffIconButton" type="button" aria-label={t("sd.prev")} title={t("sd.prevTitle")} disabled={tooLarge || !position?.total} onClick={() => editorRef.current?.goToDiff("previous")}><UiIcon name="arrowUp" /></button>
+        <button className="fileDiffIconButton" type="button" aria-label={t("sd.next")} title={t("sd.nextTitle")} disabled={tooLarge || !position?.total} onClick={() => editorRef.current?.goToDiff("next")}><UiIcon name="arrowDown" /></button>
         <span className="fileDiffToolbarDivider" aria-hidden="true" />
         {showStructure && <button type="button" aria-pressed={preferences.structureOutline} title={t("cr.toggleTitle")} onClick={toggleOutline}>{t("cr.toggle")}</button>}
         <select aria-label={t("fd.viewerAria")} value={preferences.sideBySide ? "sideBySide" : "unified"} onChange={(event) => onChangePreferences({ sideBySide: event.target.value === "sideBySide" })}>
           <option value="sideBySide">{t("fd.sideBySide")}</option>
           <option value="unified">{t("fd.unified")}</option>
         </select>
+        <details className="fileDiffOptions" onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); event.currentTarget.open = false; event.currentTarget.querySelector("summary")?.focus(); } }}>
+          <summary>{t("fd.options")}</summary><div className="fileDiffOptionsBody">
         <select aria-label={t("fd.whitespaceAria")} value={preferences.ignoreWhitespace ? "ignore" : "keep"} onChange={(event) => onChangePreferences({ ignoreWhitespace: event.target.value === "ignore" })}>
           <option value="keep">{t("fd.doNotIgnore")}</option>
           <option value="ignore">{t("fd.ignoreWhitespace")}</option>
         </select>
         <button type="button" aria-pressed={preferences.collapseUnchanged} title={t("fd.collapseTitle")} onClick={() => onChangePreferences({ collapseUnchanged: !preferences.collapseUnchanged })}>{t("fd.collapseUnchanged")}</button>
+          </div></details>
         <span className="fileDiffToolbarDivider" aria-hidden="true" />
         <button type="button" title={document.scope === "commit" ? t("fd.hunksTitle") : t("fd.selectLinesTitle")} onClick={onShowHunks}>{hunkToggleLabel}</button>
-        {onOpenWindow && <button type="button" title={t("sd.openWindow")} aria-label={t("sd.openWindow")} onClick={onOpenWindow}>↗</button>}
+        {onOpenWindow && <button type="button" title={t("sd.openWindow")} aria-label={t("sd.openWindow")} onClick={onOpenWindow}><UiIcon name="external" /></button>}
         <span className="fileDiffDifferences" role="status" aria-live="polite">{tooLarge ? "" : differences}</span>
       </div>
       <div className="fileDiffBody">
@@ -127,9 +131,9 @@ export function FileDiffViewer({ document, commitOid, preferences, onChangePrefe
         <div className="fileDiffMain">
           <div className={`fileDiffSides${preferences.sideBySide ? "" : " unified"}`}>
             {preferences.sideBySide ? <>
-              <div title={leftLabel}><span className="fileDiffLock" aria-hidden="true">🔒</span>{leftLabel}{document.originalPath && <small>{document.originalPath}</small>}</div>
+              <div title={leftLabel}><span className="fileDiffLock" aria-hidden="true"><UiIcon name="lock" /></span>{leftLabel}{document.originalPath && <small>{document.originalPath}</small>}</div>
               <div title={rightLabel}>{rightLabel}<small>{document.path}</small></div>
-            </> : <div><span className="fileDiffLock" aria-hidden="true">🔒</span>{leftLabel}<span aria-hidden="true">→</span>{rightLabel}<small>{document.originalPath ? `${document.originalPath} → ${document.path}` : document.path}</small></div>}
+            </> : <div><span className="fileDiffLock" aria-hidden="true"><UiIcon name="lock" /></span>{leftLabel}<span aria-hidden="true"><UiIcon name="arrowRight" /></span>{rightLabel}<small>{document.originalPath ? `${document.originalPath} → ${document.path}` : document.path}</small></div>}
           </div>
           {tooLarge ? <div className="diffSpecialState" role="status">
             <p>{t("fd.tooLarge")}</p>

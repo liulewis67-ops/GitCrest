@@ -33,11 +33,11 @@ describe("i18n rendering", () => {
 
   it("renders English by default and switches components live to Chinese", () => {
     render(<WelcomePage {...welcomeProps} />);
-    expect(screen.getByRole("button", { name: /Open a repository/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Open local repository/ })).toBeTruthy();
     expect(screen.getByText("No repositories yet")).toBeTruthy();
 
     act(() => setLocale("zh"));
-    expect(screen.getByRole("button", { name: /打开仓库/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /打开本地仓库/ })).toBeTruthy();
     expect(screen.getByText("还没有仓库")).toBeTruthy();
     expect(screen.queryByText("No repositories yet")).toBeNull();
   });

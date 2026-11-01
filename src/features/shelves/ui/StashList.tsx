@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useEffect, useRef, useState } from "react";
@@ -108,7 +109,7 @@ export function StashList({ api, repoId, refreshKey, disabled = false, onOpenFil
             { id: "import", label: t("stash.import"), separatorBefore: true, onSelect: () => setAction({ kind: "import", stash }) },
             { id: "drop", label: t("stash.drop"), danger: true, separatorBefore: true, onSelect: () => setAction({ kind: "drop", stash }) },
           ]}
-        ><span aria-hidden="true">⋯</span></MenuButton>
+        ><span aria-hidden="true"><UiIcon name="more" /></span></MenuButton>
         {open && <div className="shelfDetail" role="region" aria-label={t("stash.filesAria", { name: stash.message })}>
           {!files && !filesError && <p role="status" className="cloneHelp">{t("stash.loadingFiles")}</p>}
           {filesError && <p role="alert" className="shelfInlineError"><ErrorMessage error={filesError} /></p>}

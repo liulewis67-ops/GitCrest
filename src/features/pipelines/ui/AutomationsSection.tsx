@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useCallback, useEffect, useState } from "react";
@@ -223,8 +224,8 @@ export function AutomationsSection({ api, repoId }: { api: GitCrestApiClient; re
             {hasProtectedTarget(rule) && <p className="cloneHelp">{t("pl.rules.askAlways")}</p>}
           </div>
           <div className="pipelineRuleActions">
-            <button className="quietButton compact" type="button" disabled={saving || index === 0} aria-label={`${t("pl.rules.moveUp")}: ${rule.name}`} onClick={() => void saveRules(moveItem(rules, index, index - 1))}>↑</button>
-            <button className="quietButton compact" type="button" disabled={saving || index === rules.length - 1} aria-label={`${t("pl.rules.moveDown")}: ${rule.name}`} onClick={() => void saveRules(moveItem(rules, index, index + 1))}>↓</button>
+            <button className="quietButton compact" type="button" disabled={saving || index === 0} aria-label={`${t("pl.rules.moveUp")}: ${rule.name}`} onClick={() => void saveRules(moveItem(rules, index, index - 1))}><UiIcon name="arrowUp" /></button>
+            <button className="quietButton compact" type="button" disabled={saving || index === rules.length - 1} aria-label={`${t("pl.rules.moveDown")}: ${rule.name}`} onClick={() => void saveRules(moveItem(rules, index, index + 1))}><UiIcon name="arrowDown" /></button>
             <button className="quietButton compact" type="button" disabled={Boolean(editing)} onClick={() => { setEditorError(""); setEditing({ rule, isNew: false }); }}>{t("pl.rules.edit")}</button>
             <button className="quietButton compact" type="button" disabled={saving} onClick={() => void saveRules(rules.filter((other) => other.ruleId !== rule.ruleId))}>{t("pl.rules.delete")}</button>
           </div>

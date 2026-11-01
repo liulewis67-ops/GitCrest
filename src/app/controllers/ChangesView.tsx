@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../shared/ui/Icon";
 import { ErrorMessage } from "../../shared/ui/ErrorMessage";
 import { Suspense } from "react";
 import { getGitCrestBridge } from "../../api/bridge";
@@ -92,7 +93,7 @@ export function ChangesView({ ctx }: { ctx: AppContext }) {
                 ? <div className="viewEmpty" role="alert"><p><ErrorMessage error={activeStatusError} /></p><button className="secondaryButton" type="button" onClick={() => void refreshRepositoryStatus(selectedRepository.repoId, true)}>{t("nav.retry")}</button></div>
                 : !activeStatus ? <div className="viewEmpty" role="status"><span className="loadingSpinner" aria-hidden="true" /><p>{t("nav.loadingStatus")}</p></div>
                 : reviewableFiles.length === 0 ? <div className="viewEmpty cleanState" role="status">
-                  <span className="viewEmptyGlyph" aria-hidden="true">✓</span>
+                  <span className="viewEmptyGlyph" aria-hidden="true"><UiIcon name="check" /></span>
                   <h2>{t("chg.cleanTitle")}</h2>
                   <p>{t("chg.cleanBody")}</p>
                   <button className="secondaryButton" type="button" onClick={() => changeWorkspaceMode("history")}>{t("chg.browseHistory")}</button>

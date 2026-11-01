@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
 import type { DisplayError } from "../../../shared/i18n/api-errors";
@@ -125,7 +126,7 @@ export function CommitChanges({ api, repoId, oid, openPath, openPathOid, filesHi
                       {directory && <span className="commitFileDirectory">{directory}</span>}
                       <small>{file.additions === null || file.deletions === null ? t("cd.binary") : <><span className="added">+{file.additions}</span> <span className="deleted">−{file.deletions}</span></>}</small>
                     </button>
-                    <button className="commitFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, oid)}>↗</button>
+                    <button className="commitFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, oid)}><UiIcon name="external" /></button>
                   </li>;
                 })}</ul>}
         </nav>}

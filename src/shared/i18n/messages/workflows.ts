@@ -1,4 +1,11 @@
 export const workflows = {
+  "rs.mode.soft": ["Soft — keep staged changes and files", "Soft — 保留暂存内容和文件"],
+  "rs.mode.mixed": ["Mixed — keep files, unstage changes", "Mixed — 保留文件，取消暂存"],
+  "rs.mode.hard": ["Hard — replace tracked files", "Hard — 替换已跟踪的文件"],
+  "rs.consequence.soft": ["Moves this branch to the target commit. Your staged changes and files stay as they are.", "将当前分支移到目标提交。暂存内容和文件保持不变。"],
+  "rs.consequence.mixed": ["Moves this branch to the target commit and clears its staged changes. Your files stay as they are.", "将当前分支移到目标提交并清除其暂存内容。文件保持不变。"],
+  "rs.consequence.hard": ["Replaces tracked files with the target commit. Review the affected paths first; local changes block this operation.", "用目标提交替换已跟踪的文件。请先查看受影响的路径；存在本地更改时此操作会被阻止。"],
+  "rs.compareModes": ["Compare reset modes", "比较重置模式"],
   "wf.inspectFailed": ["Could not inspect this Git operation.", "无法检查此 Git 操作。"],
   "wf.startFailed": ["Could not start this Git operation.", "无法启动此 Git 操作。"],
   "wf.merge": ["Merge", "合并"],

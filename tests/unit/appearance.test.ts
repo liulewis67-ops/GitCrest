@@ -161,7 +161,7 @@ describe("stored appearance", () => {
     expect(parsed.darkThemeId).toBe("gitcrest-dark");
     expect(parsed.customThemes.map((theme) => theme.id)).toEqual(["custom-test-1"]);
     expect(parsed.typography).toMatchObject({ uiFontSize: 12, codeFontSize: 20, uiFontFamily: "Inter color: red" });
-    expect(parsed).toMatchObject({ style: { radius: "default", density: "default", shadow: "default", graphColors: "accent" }, motion: "system" });
+    expect(parsed).toMatchObject({ style: { radius: "default", density: "default", shadow: "default", graphColors: "lanes" }, motion: "system" });
   });
 
   it("reads stored style and motion choices field by field", () => {

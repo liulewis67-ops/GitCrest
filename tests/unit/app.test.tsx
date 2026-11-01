@@ -293,7 +293,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("Core connected");
-    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
 
     expect(await screen.findByText("C:/fixture", { selector: ".workspaceCrumb .mutedText" })).toBeDefined();
     expect(chooseRepository).toHaveBeenCalledOnce();
@@ -383,7 +383,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("Core connected");
-    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
     await screen.findByText("C:/switch", { selector: ".workspaceCrumb .mutedText" });
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     const dialog = await screen.findByRole("dialog", { name: "Switch branch" });
@@ -452,7 +452,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("Core connected");
-    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
     await screen.findByText("C:/rows", { selector: ".workspaceCrumb .mutedText" });
     fireEvent.click(screen.getByRole("tab", { name: "History" }));
     expect(screen.queryByRole("button", { name: "Switch to main" })).toBeNull();
@@ -541,7 +541,7 @@ describe("App", () => {
 
     render(<App />);
     await screen.findByText("Core connected");
-    fireEvent.click(screen.getByRole("button", { name: "Open a repository" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open local repository" }));
     await screen.findByText("C:/auto-shelf", { selector: ".workspaceCrumb .mutedText" });
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     const switchDialog = await screen.findByRole("dialog", { name: "Switch branch" });

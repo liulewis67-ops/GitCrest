@@ -98,6 +98,7 @@ it("requires confirmation before restoring a reset backup", async () => {
   const onStarted = vi.fn();
   render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={vi.fn()} onStarted={onStarted} />);
 
+  fireEvent.click(screen.getByText("Restore a reset backup"));
   const restore = await screen.findByRole("button", { name: "Restore selected reset backup" });
   expect((restore as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(screen.getByLabelText(/replaces the current branch and checked-out files/));

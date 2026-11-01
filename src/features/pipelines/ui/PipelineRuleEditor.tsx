@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { type DisplayError } from "../../../shared/i18n/api-errors";
 import { useMemo, useState } from "react";
@@ -83,8 +84,8 @@ export function PipelineRuleEditor({ rule, otherRules, localBranches, remoteBran
       <ol>
         {draft.targets.map((target, index) => <li key={`${target.remote}/${target.branch}`}>
           <span className="monoText">{target.remote}/{target.branch}</span>
-          <button className="quietButton compact" type="button" disabled={index === 0} aria-label={t("pl.editor.moveTarget", { target: target.branch })} onClick={() => update({ targets: moveItem(draft.targets, index, index - 1) })}>↑</button>
-          <button className="quietButton compact" type="button" aria-label={t("pl.editor.removeTarget", { target: target.branch })} onClick={() => update({ targets: draft.targets.filter((_, position) => position !== index) })}>×</button>
+          <button className="quietButton compact" type="button" disabled={index === 0} aria-label={t("pl.editor.moveTarget", { target: target.branch })} onClick={() => update({ targets: moveItem(draft.targets, index, index - 1) })}><UiIcon name="arrowUp" /></button>
+          <button className="quietButton compact" type="button" aria-label={t("pl.editor.removeTarget", { target: target.branch })} onClick={() => update({ targets: draft.targets.filter((_, position) => position !== index) })}><UiIcon name="close" /></button>
         </li>)}
       </ol>
       <div className="pipelineAddTarget">

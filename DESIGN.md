@@ -71,7 +71,7 @@ Corners use `--radius-2/3/4/5/6/7/8/9/12`, multiplied by the user's `--radius-sc
 
 ## Components
 
-Current shared UI includes Button, Dialog, DialogHeader, DialogFooter, BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint, NoticeRegion and ErrorMessage. API failures use translated recovery guidance; their original diagnostics sit behind a collapsed Details disclosure. Shared controls use global semantic CSS and existing tokens; no UI library dependency is required.
+Current shared UI includes Button, Dialog, DialogHeader, DialogFooter, Icon, BrandMark, ContextMenu, MenuButton, ResizeSeparator, WindowControls, EmptyState, InlineHint, NoticeRegion and ErrorMessage. API failures use translated recovery guidance; their original diagnostics sit behind a collapsed Details disclosure. Shared controls use global semantic CSS and existing tokens; no UI library dependency is required.
 
 Unavailable repositories use RepositoryRecoveryPanel with Locate folder, Remove from list and optional Retry actions. RepositoryRemoveDialog reuses the existing removal confirmation in Welcome and the workspace; Cancel receives initial focus. Locate preserves the previous entry and saved data. Repository read failures keep synchronization actions disabled, with a visible reason, until a successful read.
 
@@ -93,7 +93,7 @@ Task Center groups tasks by repository name, newest first. Operation, status, ph
 
 Focus on buttons, inputs, selects, textareas and separators uses a 2px `--accent-strong` outline with 2px offset; window controls inset their outline. Menu and working-list focus uses the same 2px outline inset to stay visible within rows. Preserve visible keyboard focus and disabled explanations when changing a component. Respect reduced-motion preferences; common hover transitions are 120ms ease-out.
 
-Icons currently mix local SVGs and Unicode glyphs. Keep accessible names on icon-only buttons, hide decorative icons from assistive technology, and use `currentColor`. A unified SVG set is planned; no new icon dependency is required by this document.
+Decorative action glyphs use the authored `shared/ui/Icon` SVG set: 16px viewBox, 1.5px rounded stroke and currentColor. Existing geometric Git diagrams and specialized SVGs remain local. Git direction/count notation (↑2 / ↓1), rename arrows within path data and image dimensions are content, not icon substitutes. Icon-only controls retain accessible names; decorative SVGs are hidden from assistive technology. No icon package is required.
 
 ## Do's and Don'ts
 
@@ -109,3 +109,9 @@ The first-use changes hint keeps its title as an accessible label, uses compact 
 Semantic token aliases `--red`, `--success`, and `--surface-2` resolve to danger, green, and raised surface respectively, so legacy consumers follow both themes and custom palettes.
 
 D3 palette rows show a description only for the selected command; unavailable commands live behind one expandable count, retaining focusable reasons without execution. Shortcut settings search names and current bindings across five task groups. Commit actions show their actual remapped shortcuts. Workflow footers stay outside scrolling content; Reset/Rebase start on their target field and emphasize review before final submission.
+
+D4 Welcome leads with Recent repositories when populated. Open, Clone and Initialize share one action row; there is no preview-workspace action. The filter matches names, paths and branches. Each row has one Tab stop; ↑↓/Home/End move between rows and ←→ reach its secondary actions, as the visible hint explains. Availability and detached/in-progress states have a shape and accessible label beside status color. The repository toolbar and recent branch labels identify HEAD; new appearance preferences use colored graph lanes, preserving explicitly saved choices.
+
+Text status roles `--status-added/deleted/renamed/modified/untracked` mix the underlying Git color with content text for readable small labels and selected states. The original Git colors still own backgrounds and graph/syntax preferences. Placeholders explicitly use text-muted with full opacity; recent paths use text-secondary; remote prefixes no longer apply faded opacity; HEAD badges use a neutral surface. Diff options group secondary settings, and the narrow structure rail stays in flow instead of covering headers. Palette arrow scanning preserves the search input; menu Tab advances beyond the trigger, while Escape returns to it. Reset recovery is a collapsed secondary disclosure after the impact/acknowledgement.
+
+Duplicate recent names include the shortest distinguishing parent suffix beside the project name, with full paths retained. Structure onboarding leads with one short instruction and puts its longer explanation behind Learn how. Reset mode choices state their consequences, show only the selected explanation and keep a comparison disclosure. The titlebar Help entry opens a searchable local task guide for review/staging, commits/signing, synchronization, branch/history work and recovery; it displays current remapped bindings and uses the shared modal lifecycle.

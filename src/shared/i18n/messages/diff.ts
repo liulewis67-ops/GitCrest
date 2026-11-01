@@ -1,4 +1,5 @@
 export const diff = {
+  "fd.options": ["Diff options", "差异选项"],
   "dc.eyebrow": ["DISCARD WORKING-TREE CHANGES", "丢弃工作区变更"],
   "dc.title": ["Discard selected changes?", "要丢弃所选变更吗？"],
   "dc.close": ["Close", "关闭"],

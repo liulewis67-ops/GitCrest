@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { useState } from "react";
 import { useI18n, type MessageKey, type TranslateParams } from "../../../shared/i18n";
@@ -144,7 +145,7 @@ export function AppearanceSettings() {
                       <span className="themeSwatchButton" style={{ background: palette.accent }} />
                     </span>
                   </span>
-                  <span className="themeCardName">{name}{showing && <span className="themeCardCheck" aria-hidden="true">✓</span>}</span>
+                  <span className="themeCardName">{name}{showing && <span className="themeCardCheck" aria-hidden="true"><UiIcon name="check" /></span>}</span>
                   <span className="themeCardMeta">{slotLabel || t(theme.base === "light" ? "appearance.baseLight" : "appearance.baseDark")}</span>
                 </button>
                 {confirmDeleteId === theme.id ? (

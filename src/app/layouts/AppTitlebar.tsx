@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../shared/ui/Icon";
 import { getGitCrestBridge } from "../../api/bridge";
 import type { RepositoryResponse } from "../../api/client";
 import { ariaShortcut, displayShortcut, type ShortcutPreferences } from "../../features/settings";
@@ -7,6 +8,8 @@ import { BrandMark } from "../../shared/ui/BrandMark";
 import { WindowControls } from "../../shared/ui/WindowControls";
 import { NewRepositoryTabMenu } from "./NewRepositoryTabMenu";
 import { SettingsMenu } from "./SettingsMenu";
+import { useState } from "react";
+import { QuickGuideDialog } from "./QuickGuideDialog";
 
 export type AppPage = "welcome" | "workspace";
 
@@ -65,8 +68,9 @@ export function AppTitlebar({
   const connecting = connectingProp ?? status.startsWith("Starting");
   const connectionLabel = connected ? t("titlebar.coreConnected") : connecting ? t("titlebar.coreStarting") : t("titlebar.coreUnavailable");
 
+  const [helpOpen, setHelpOpen] = useState(false);
   return (
-    <header className="titlebar">
+    <><header className="titlebar">
       <button className="brandButton" type="button" onClick={() => onPageChange("welcome")} aria-label={t("titlebar.goWelcome")} title={t("titlebar.goWelcome")}>
         <BrandMark className="brandMark" />
         <span className="brandName">GitCrest</span>
@@ -100,13 +104,14 @@ export function AppTitlebar({
       />
       <div className="titlebarSpacer" />
       <button className="quietButton searchShortcut" type="button" onClick={onOpenCommandPalette} aria-keyshortcuts={ariaShortcut(shortcuts.commandPalette, isMacPlatform)}>
-        <span aria-hidden="true">⌕</span><span>{t("titlebar.searchCommands")}</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>
+        <span aria-hidden="true"><UiIcon name="search" /></span><span>{t("titlebar.searchCommands")}</span><kbd>{displayShortcut(shortcuts.commandPalette, isMacPlatform)}</kbd>
       </button>
       {/* Always reachable for task history; it only draws attention while something runs. */}
       <button className={`quietButton taskCenterButton${activeTaskCount > 0 ? " running" : ""}`} type="button" onClick={onOpenTasks} aria-label={t("titlebar.tasksLabel", { count: activeTaskCount })} title={t("titlebar.tasksLabel", { count: activeTaskCount })}>
         {activeTaskCount > 0 ? <><span className="loadingSpinner small" aria-hidden="true" /><span>{t("shell.tasksRunning", { count: activeTaskCount })}</span></> : <><svg className="titlebarIcon" viewBox="0 0 16 16" aria-hidden="true"><path d="M3 4.5h10M3 8h10M3 11.5h6" /></svg><span className="titlebarLabel">{t("titlebar.tasks")}</span></>}
       </button>
       <SettingsMenu shortcuts={shortcuts} isMacPlatform={isMacPlatform} onOpenSettings={onOpenSettings} />
+      <button type="button" className="quietButton titlebarHelp" onClick={() => setHelpOpen(true)}>{t("guide.help")}</button>
       {/* A healthy connection is a quiet dot; starting or failing shows its label. */}
       <div className={`connectionBadge ${connected ? "connected" : connecting ? "starting" : "failed"}`} role="status" aria-live="polite" aria-label={status} title={status}>
         <span className="connectionDot" aria-hidden="true" />
@@ -114,6 +119,6 @@ export function AppTitlebar({
       </div>
       {!connected && !connecting && onRestartCore && <button className="quietButton compact" type="button" title={status} onClick={onRestartCore}>{t("titlebar.restartCore")}</button>}
       <WindowControls controls={windowControls} />
-    </header>
+    </header>{helpOpen && <QuickGuideDialog shortcuts={shortcuts} isMacPlatform={isMacPlatform} onClose={() => setHelpOpen(false)} />}</>
   );
 }

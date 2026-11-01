@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MenuButton } from "../../src/shared/ui/MenuButton";
 import { ContextMenu } from "../../src/shared/ui/ContextMenu";
@@ -37,4 +37,16 @@ it("keeps a long context menu open while scrolling its contents and dismisses on
   expect(onClose).not.toHaveBeenCalled();
   fireEvent.scroll(document.body);
   expect(onClose).toHaveBeenCalledOnce();
+});
+
+it("closes with Tab and moves past the trigger in either direction", async () => {
+  vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([new DOMRect(0, 0, 10, 10)] as unknown as DOMRectList);
+  render(<><button>Before</button><MenuButton label="Actions" menuLabel="Actions" items={[{ id: "a", label: "Review", onSelect: vi.fn() }]}>More</MenuButton><button>After</button></>);
+  const trigger = screen.getByRole("button", { name: "Actions" });
+  fireEvent.click(trigger);
+  fireEvent.keyDown(screen.getByRole("menuitem"), { key: "Tab" });
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "After" })));
+  fireEvent.click(trigger);
+  fireEvent.keyDown(screen.getByRole("menuitem"), { key: "Tab", shiftKey: true });
+  await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: "Before" })));
 });

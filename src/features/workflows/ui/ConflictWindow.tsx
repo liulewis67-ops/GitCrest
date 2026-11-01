@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { describeApiError, type DisplayError } from "../../../shared/i18n/api-errors";
 import { useI18n } from "../../../shared/i18n";
@@ -391,8 +392,8 @@ export function ConflictWindow() {
           {!currentFile.data.isText || !currentFile.data.oursPresent || !currentFile.data.theirsPresent ? null : <>
             <div className="conflictToolbar" role="toolbar" aria-label={t("cf.navAria")}>
               <div className="conflictToolbarGroup">
-                <button type="button" aria-label={t("cf.prevAria")} title={t("cf.prevTitle")} disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock - 1)}>↑</button>
-                <button type="button" aria-label={t("cf.nextAria")} title={t("cf.nextTitle")} disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock + 1)}>↓</button>
+                <button type="button" aria-label={t("cf.prevAria")} title={t("cf.prevTitle")} disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock - 1)}><UiIcon name="arrowUp" /></button>
+                <button type="button" aria-label={t("cf.nextAria")} title={t("cf.nextTitle")} disabled={conflictBlocks.length < 2} onClick={() => focusBlock(activeBlock + 1)}><UiIcon name="arrowDown" /></button>
               </div>
               <div className="conflictToolbarGroup">
                 <button type="button" aria-label={t("cf.undo")} title={t("cf.undoTitle")} disabled={busy || !history.canUndo} onClick={undo}>{t("cf.undo")}</button>

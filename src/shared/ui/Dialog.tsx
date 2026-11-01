@@ -2,6 +2,7 @@ import { createContext, useContext, useLayoutEffect, useRef, type HTMLAttributes
 import { useDialogFocus } from "../hooks/use-dialog-focus";
 import { useI18n } from "../i18n";
 import { Button } from "./Button";
+import { Icon } from "./Icon";
 
 const DialogContext = createContext<{ onClose: () => void; busy: boolean; closeLabel?: string } | undefined>(undefined);
 
@@ -53,7 +54,7 @@ export function DialogHeader({ children, className = "", ...props }: HTMLAttribu
   return <header {...props} className={`sharedDialogHeader ${className}`.trim()}>
     {children}
     <Button className="sharedDialogClose" variant="quiet" size="compact" disabled={context.busy} aria-label={context.closeLabel || t("common.close")} onClick={context.onClose} data-dialog-close>
-      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="m4 4 8 8M12 4l-8 8" /></svg>
+      <Icon name="close" />
     </Button>
   </header>;
 }

@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
 import { useI18n } from "../../../shared/i18n";
 import { useEffect, useState } from "react";
@@ -118,6 +119,6 @@ export function CommitDetails({
     <button className="quietButton compact" type="button" onClick={applyCommitMessage}>{t("cd.replaceDraftYes")}</button>
     <button className="quietButton compact" type="button" onClick={() => setConfirmReplace(false)}>{t("cd.replaceDraftNo")}</button></div>}
     <div className="commitDetailStats"><strong>{detail.stats.filesChanged}</strong> {t("cd.files")} <span>+</span>{detail.stats.insertions} <span>−</span>{detail.stats.deletions}</div>
-    {showFiles && <div className="commitDetailFiles" aria-label={t("cd.changedFiles")}>{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className={`commitDetailFile${file.path === selectedPath ? " selected" : ""}`} type="button" aria-label={t("cd.openDiffFor", { path: file.path })} aria-pressed={file.path === selectedPath} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, detail.oid)}>↗</button>}</div>)}</div>}
+    {showFiles && <div className="commitDetailFiles" aria-label={t("cd.changedFiles")}>{detail.files.map((file) => <div className="commitDetailFileRow" key={file.path}><button className={`commitDetailFile${file.path === selectedPath ? " selected" : ""}`} type="button" aria-label={t("cd.openDiffFor", { path: file.path })} aria-pressed={file.path === selectedPath} onClick={() => onOpenFile?.(file.path, detail.oid)}><span title={file.path}>{file.path}</span><small>{file.additions === null || file.deletions === null ? t("cd.binary") : `+${file.additions} −${file.deletions}`}</small></button>{onOpenDiffWindow && <button className="commitDetailFileWindow" type="button" aria-label={t("cd.openWindowFor", { path: file.path })} title={t("cd.openWindowTitle")} onClick={() => onOpenDiffWindow(file.path, detail.oid)}><UiIcon name="external" /></button>}</div>)}</div>}
   </div>;
 }

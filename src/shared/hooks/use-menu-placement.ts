@@ -44,5 +44,15 @@ export function navigateMenu(event: KeyboardEvent<HTMLElement>, closeAndRestoreF
     event.preventDefault();
     event.stopPropagation();
     closeAndRestoreFocus();
+    if (event.key === "Tab") {
+      const trigger = document.activeElement;
+      const menu = event.currentTarget;
+      const direction = event.shiftKey ? -1 : 1;
+      queueMicrotask(() => {
+        const controls = [...document.querySelectorAll<HTMLElement>("button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href], [tabindex]")].filter((element) => element.tabIndex >= 0 && !menu.contains(element) && !element.closest("[inert], [hidden], [aria-hidden='true']") && element.getClientRects().length > 0);
+        const index = controls.indexOf(trigger as HTMLElement);
+        if (index >= 0) controls[index + direction]?.focus();
+      });
+    }
   }
 }

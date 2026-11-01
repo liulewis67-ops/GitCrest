@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0–D3 complete; D4 scheduled. Updated: 2026-11-01.
+Status: D0–D4 complete. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the core error contract and repository metadata persistence needed for safe removal, and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -45,14 +45,14 @@ Correction from checking the code while writing this plan: the core **already** 
 
 ## 3. Document conflicts to resolve in D0.3
 
-D0.3 resolved the current-state conflicts below. D2 chose global semantic classes for shared components; D3.2's palette collapse remains pending; current styling and palette behavior are explicitly recorded in DESIGN.md and `15`/`07`.
+D0.3 resolved the current-state conflicts below. D2 chose global semantic classes for shared components; D3.2 adopted a single expandable unavailable-command count; current styling and palette behavior are explicitly recorded in DESIGN.md and `15`/`07`.
 
 | Conflict | Documents | Resolution |
 |---|---|---|
 | Colour values and type scale differ from the shipped tokens; dark is called the default though the app follows the system | `06` vs `src/styles/tokens.css` | `tokens.css` wins; `DESIGN.md` records it; `06` marked superseded for colour and type |
 | Three views with Ctrl+1/2/3, a bottom workbench and a status bar | `03`, `05`, `09` vs the app (two views: 工作区 / 历史) | The app wins; `05` and `09` marked superseded |
 | Status bar: "none" vs a target layout and checklist that assume one | `03` vs `visual-optimization-plan.md` §3.1, §6.9, §11 | Decide once in `DESIGN.md`; recommendation: no status bar, matching the app |
-| Palette shows or hides unavailable commands | `07` §2 vs U5.1 | Decide in D3.2; recommendation: collapse them into one row (see D3.2) |
+| Palette shows or hides unavailable commands | `07` §2 vs U5.1 | D3.2 collapsed them into one expandable row, with focusable reasons retained |
 | shadcn, `shared/ui` primitives and Tailwind-only styling | `15` vs the code (global CSS classes, no primitives, `cn()` unused) | D2 chose global semantic classes and updated `15` to match |
 | Status headers say "not implemented" / "nothing started" | `visual-optimization-plan.md`, `ux-functional-improvement-plan.md` | Update the headers to the real status |
 
@@ -73,7 +73,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | done |
 | D2 | Shared Button and Dialog components | P1 | L | D0.3 | done |
 | D3 | Keyboard and palette efficiency | P2 | L | D2 | done |
-| D4 | Welcome, contrast and Git cues | P2 | M | D0.3 | not started |
+| D4 | Welcome, contrast and Git cues | P2 | M | D0.3 | done |
 
 ## 5. Stage D0: make evaluation repeatable
 
@@ -115,7 +115,7 @@ Both throwaway repositories used during the review had been deleted from disk, s
 
 **Pass rule:** no two documents in `doc/` give different values for the same token, view count or layout element; every superseded document says so in its first lines.
 
-**Done 2026-11-01.** Root `DESIGN.md` documents shipped light/dark colour roles, type and spacing scales, configurable density/corners, component states, dialog/focus behavior and the current mixed icon inventory. It preserves the agreed calm neutral direction with meaningful Git cues. `00` defines precedence; `03` now describes two views and the sidebar composer; `05`, `06` and `09` identify superseded material in their opening lines. The visual plan's status-bar proposal is retired, its historical/proposed status is explicit, and `15` removes its competing palette example and records actual CSS/Tailwind usage with Button/Dialog deferred to D2. `07` and the U5.1 ledger now agree on the current unavailable-command behavior; D3.2 remains a proposal. The UX status header reflects its completed ledger. `git diff --check` and `pnpm check` passed; no renderer behavior changed.
+**Done 2026-11-01.** Root `DESIGN.md` documents shipped light/dark colour roles, type and spacing scales, configurable density/corners, component states, dialog/focus behavior and the current mixed icon inventory. It preserves the agreed calm neutral direction with meaningful Git cues. `00` defines precedence; `03` now describes two views and the sidebar composer; `05`, `06` and `09` identify superseded material in their opening lines. The visual plan's status-bar proposal is retired, its historical/proposed status is explicit, and `15` removes its competing palette example and records actual CSS/Tailwind usage with Button/Dialog deferred to D2. At D0.3, `07` and U5.1 agreed on the then-current unavailable-command behavior; D3.2 subsequently implemented its collapsed-row proposal. The UX status header reflects its completed ledger. `git diff --check` and `pnpm check` passed; no renderer behavior changed.
 
 ## 6. Stage D1: errors and feedback
 
@@ -219,6 +219,8 @@ Remaining P2 findings: palette hints disagree with actual view shortcuts (D3.2);
 - Replace Unicode glyph icons (⌕ ↗ ⇣ ＋ → ⋯ ▾ ×) with one icon set.
 - Add the Git cues from the tone decision: graph lane colour and a HEAD mark on the current branch in the titlebar or branch switcher, and status colours in the recent list.
 
+**Done 2026-11-01.** D4 delivers: recent-first Welcome with one action row, repository filtering, one Tab stop per row and arrow access to secondary actions; semantic status text contrast, explicit placeholders, neutral HEAD badges and readable metadata; shared authored SVG icons; toolbar/recent HEAD cues and colored graph lanes for new preferences. The final D3 review follow-ups preserve palette search focus, move menu Tab onward, collapse Reset recovery after the current impact review, and keep the narrow structure rail in flow. Fresh boundary baseline: `.review/screens/d3-final/` (56 captures, unchanged D3 build); Final D4 after: `.review/screens/d4-final/` (56 captures; the earlier `.review/screens/d4-after/` records the first review iteration). Rendered default-theme contrast/navigation coverage is in `tests/e2e/visual-cues.test.ts`. The initial independent D4 design review scored 30/40 and identified narrow hint density, duplicate checkout identity, selected Reset consequences and task-level help as improvements. Those were addressed with shorter disclosed guidance, distinguishing parent labels, consequence-first mode text and a searchable local Help guide. A fresh isolated final design assessment scored **34/40**, exceeding the ≥32 target, with no P0/P1/P2 issue established in the sampled flows. The combined archive is `.impeccable/critique/2026-11-01T06-37-08Z__src-app-app-tsx.md`. `pnpm check` passed: **728 frontend, 336 Rust, 49 desktop tests**. The final detector update verified selected History additions at 5.9055:1 light / 7.3991:1 dark and found no confirmed priority issue; source retains nine semantic/functional stripe records, final live History light/dark and Help scans contain only font/reading-measure advisories. Three P3 polish items remain: narrow structure summary truncation, repeated Reset blocker wording and guide shortcut captions. NVDA announcement behavior is untested, not asserted as a failure. The requirement evidence audit, five complete 56-image matrix audits and zero-fixture/zero-active-task review cleanup are retained under `.review/`; the owned Electron process exited successfully. The initial detector verified all requested new contrast targets in both themes; its extra History added-count miss (4.4978:1) now uses the stronger status-text role as well.
+
 ## 8. Evaluation method
 
 For every stage from D1 on:
@@ -239,3 +241,4 @@ Score targets: **28/40 or more after D2**, **32/40 or more after D4**.
 | 2026-11-01 | D1 | 30/40 | 0 | 0 new observed | Independent sequential design/detector reviews; system status 3/4, error recovery 3/4; 56 fresh captures; final check 713 frontend / 336 Rust / 47 E2E. Contrast and P2 efficiency findings remain later work. |
 | 2026-11-01 | D2 | 31/40 | 0 | 0 observed | Independent design/detector reviews; 32 shared dialog surfaces, 56 after captures; check 716 frontend / 336 Rust / 48 E2E. D3 workflow efficiency and D4 contrast findings remain explicit. |
 | 2026-11-01 | D3 | 32/40 | 0 | 0 observed | Independent design/detector reviews; visible focus, bottom-edge menu fitting and persistent Reset footer verified; check 722 frontend / 336 Rust / 48 E2E; 56 final captures. |
+| 2026-11-01 | D4 final | 34/40 | 0 | 0 observed | Initial 30/40 review findings addressed before fresh independent final review; 56 final captures; final check 728 frontend / 336 Rust / 49 E2E; default-theme text contrasts pass. Three P3 polish items and NVDA coverage boundary documented. |

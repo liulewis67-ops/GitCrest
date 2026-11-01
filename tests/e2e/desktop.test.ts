@@ -425,6 +425,7 @@ describe("desktop startup E2E", () => {
       const restorePalette = window.getByRole("dialog", { name: "Command palette" });
       await restorePalette.getByRole("button", { name: "Reset current branch", exact: true }).click();
       const restoreResetDialog = window.getByRole("dialog", { name: "Reset current branch" });
+      await restoreResetDialog.getByText("Restore a reset backup", { exact: true }).click();
       await restoreResetDialog.getByRole("button", { name: "Restore selected reset backup" }).waitFor({ state: "visible" });
       await restoreResetDialog.getByLabel(/replaces the current branch and checked-out files/).check();
       await restoreResetDialog.getByRole("button", { name: "Restore selected reset backup" }).click();

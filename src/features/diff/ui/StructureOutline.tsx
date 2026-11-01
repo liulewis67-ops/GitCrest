@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useI18n, type MessageKey } from "../../../shared/i18n";
 import { OTHER_STRUCTURE_ID, type ChangeFactKind, type CodeReviewAnalysis, type ReviewStructure, type SideLine } from "../model/code-review-analysis";
@@ -129,11 +130,11 @@ export function StructureOutline({ state, activeId, onActivate, onJump, reviewKe
 
   return (
     <aside className="structureOutline" aria-label={t("cr.title")}>
-      <InlineHint id="structure" title={t("hint.structureTitle")}>{t("hint.structure")}</InlineHint>
+      <InlineHint id="structure" label={t("hint.structureTitle")}><span>{t("hint.structureShort")}</span><details className="structureHelp"><summary>{t("hint.learnHow")}</summary><p>{t("hint.structure")}</p></details></InlineHint>
       <header className="structureOutlineHeader">
         <strong>{t("cr.title")}</strong>
         {analysis && <span>{t("cr.summary", { structures: listedCount, lines: analysis.atoms.length })}</span>}
-        <button className="structureOutlineClose" type="button" aria-label={t("cr.hide")} title={t("cr.hide")} onClick={onClose}>×</button>
+        <button className="structureOutlineClose" type="button" aria-label={t("cr.hide")} title={t("cr.hide")} onClick={onClose}><UiIcon name="close" /></button>
       </header>
       {state.status === "analyzing" && <p className="structureOutlineNote" role="status"><span className="loadingSpinner" aria-hidden="true" />{t("cr.analyzing")}</p>}
       {state.status === "unavailable" && <p className="structureOutlineNote" role="status">{t(state.reason === "tooLarge" ? "cr.tooLarge" : state.reason === "fullFile" ? "cr.fullFile" : "cr.parserUnavailable")}</p>}
@@ -177,7 +178,7 @@ export function StructureOutline({ state, activeId, onActivate, onJump, reviewKe
                 <span className="structureStatus" aria-label={t(structure.status === "added" ? "cr.statusAdded" : structure.status === "removed" ? "cr.statusRemoved" : "cr.statusModified")}>{STATUS_GLYPHS[structure.status]}</span>
                 <span className="structureKind">{t(`cr.kind.${structure.kind}` as MessageKey)}</span>
                 <span className="structureName">{structureDisplayName(structure, t)}</span>
-                {reviewed && <span className="structureReviewed" aria-label={t("cr.reviewed")}>✓</span>}
+                {reviewed && <span className="structureReviewed" aria-label={t("cr.reviewed")}><UiIcon name="check" /></span>}
                 <span className="structureCount" aria-label={t("cr.lines", { count })}>{count}</span>
               </div>
             );

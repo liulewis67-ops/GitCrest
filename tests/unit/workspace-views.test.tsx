@@ -83,7 +83,8 @@ describe("WorkspacePage", () => {
     const { onOpenPullDialog } = renderPage();
     const group = screen.getByRole("group", { name: "Synchronize with remotes" });
     const pull = within(group).getByRole("button", { name: "Pull" });
-    expect(pull.textContent).toBe("Pull↓1");
+    expect(pull.textContent).toBe("Pull1");
+    expect(pull.querySelector("svg")).not.toBeNull();
     expect(pull.getAttribute("title")).toContain("1 incoming commits");
     expect(within(group).getByRole("button", { name: "Push" }).getAttribute("title")).toContain("2 outgoing commits");
     fireEvent.click(pull);

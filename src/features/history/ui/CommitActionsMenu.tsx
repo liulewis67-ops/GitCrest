@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { useI18n } from "../../../shared/i18n";
 import { MenuButton } from "../../../shared/ui/MenuButton";
 
@@ -43,5 +44,5 @@ export function CommitActionsMenu({ oid, workflowDisabledReason, onWorkflow, onC
       { id: "revert", label: t("hv.revert"), disabled: blocked, title: workflowDisabledReason, onSelect: () => onWorkflow("revert", oid) },
       ...(onReset ? [{ id: "reset", danger: true, separatorBefore: true, label: t("hv.reset"), disabled: blocked || Boolean(resetDisabledReason), title: workflowDisabledReason ?? resetDisabledReason, onSelect: () => onReset(oid) }] : []),
     ]}
-  ><span aria-hidden="true">⋯</span></MenuButton>;
+  ><span aria-hidden="true"><UiIcon name="more" /></span></MenuButton>;
 }

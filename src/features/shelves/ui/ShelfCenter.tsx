@@ -1,3 +1,4 @@
+import { Icon as UiIcon } from "../../../shared/ui/Icon";
 import { Button } from "../../../shared/ui/Button";
 import { Dialog, DialogHeader, DialogFooter } from "../../../shared/ui/Dialog";
 import { ErrorMessage } from "../../../shared/ui/ErrorMessage";
@@ -308,7 +309,7 @@ export function ShelfCenter({
       <InlineHint id="shelves" title={t("hint.shelvesTitle")}>{t("hint.shelves")}</InlineHint>
       <div className="navGroupTitle"><span>{t("sh.title")}</span><span className="countBadge">{shelves.length}</span></div>
       <button className="shelfCreateButton" type="button" disabled={disabled} onClick={() => { setComposerOpen(true); setLoadError(""); }}>
-        <span aria-hidden="true">＋</span> {t("sh.shelveSelected")}
+        <span aria-hidden="true"><UiIcon name="plus" /></span> {t("sh.shelveSelected")}
       </button>
       {loadError && <div className="shelfInlineError" role="alert"><ErrorMessage error={loadError} /></div>}
       {shelves.length === 0 && !loadError && <EmptyState actionLabel={t("sh.emptyAction")} onAction={() => { setComposerOpen(true); setLoadError(""); }} actionDisabled={disabled} actionTitle={disabled ? t("sh.emptyDisabled") : undefined}>{t("sh.none")} {t("sh.emptyHint")}</EmptyState>}
@@ -318,7 +319,7 @@ export function ShelfCenter({
             <span className="shelfItemName" title={shelf.name}>{shelf.name}</span>
             <span className="shelfItemMeta">{t("sh.files", { count: shelf.paths.length, scope: shelf.scope || t("sh.scopeUnknown") })}</span>
           </button>
-          <button className="shelfDeleteButton" type="button" aria-label={t("sh.reviewDeletion", { name: shelf.name })} disabled={disabled || busy} onClick={() => setDeleteConfirm(shelf)}>×</button>
+          <button className="shelfDeleteButton" type="button" aria-label={t("sh.reviewDeletion", { name: shelf.name })} disabled={disabled || busy} onClick={() => setDeleteConfirm(shelf)}><UiIcon name="close" /></button>
         </div>
       ))}
 
