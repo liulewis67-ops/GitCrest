@@ -109,7 +109,7 @@ export function TagActionsDialog({ api, repoId, action, tag, remoteNames, onClos
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
       <DialogFooter className="cloneDialogActions">
-        <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
         <Button variant={danger ? "danger" : "primary"} type="button" disabled={busy || checking || !canRun} onClick={() => void run()}>
           {busy ? t("tags.working") : action === "push" ? t("tags.doPush") : action === "delete" ? t("tags.doDelete") : t("tags.doDeleteRemote")}
         </Button>

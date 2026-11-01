@@ -218,7 +218,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
           </p>
           <div className="settingsActions">
             <Button variant="primary" type="submit" disabled={busy || !draft.host.trim() || !draft.token.trim()}>{busyAction === "sign-in" ? t("accounts.form.signingIn") : t("accounts.form.signIn")}</Button>
-            <Button variant="quiet" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
+            <Button variant="secondary" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
           </div>
         </>}
 
@@ -226,7 +226,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
           <p className="settingsHint">{t("accounts.browser.hint", { host: draft.host.trim() })}</p>
           <div className="settingsActions">
             <Button variant="primary" type="submit" disabled={busy}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.start")}</Button>
-            <Button variant="quiet" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
+            <Button variant="secondary" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
           </div>
         </>}
 
@@ -237,7 +237,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
             <div className="settingsActions">
               <a className="primaryButton" href={flow.verificationUriComplete ?? flow.verificationUri} target="_blank" rel="noreferrer" onClick={() => void copyCode(flow.userCode)}>{t("accounts.browser.copyAndOpen", { provider: draftProvider })}</a>
               <Button variant="secondary" type="button" onClick={() => void copyCode(flow.userCode)}>{codeCopied ? t("accounts.browser.copied") : t("accounts.browser.copy")}</Button>
-              <Button variant="quiet" type="button" onClick={closeForm}>{t("accounts.form.cancel")}</Button>
+              <Button variant="secondary" type="button" onClick={closeForm}>{t("accounts.form.cancel")}</Button>
             </div>
             <p className="settingsHint" role="status">{t("accounts.browser.waiting", { host: flow.host })}</p>
           </> : <>
@@ -248,7 +248,7 @@ export function AccountsSection({ api, credentialHosts }: AccountsSectionProps) 
             </p>
             <div className="settingsActions">
               <Button variant="primary" type="button" disabled={busy} onClick={() => void startBrowserSignIn()}>{busyAction === "browser" ? t("accounts.browser.starting") : t("accounts.browser.retry")}</Button>
-              <Button variant="quiet" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
+              <Button variant="secondary" type="button" disabled={busy} onClick={closeForm}>{t("accounts.form.cancel")}</Button>
             </div>
           </>}
         </div>}

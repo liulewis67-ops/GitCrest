@@ -77,7 +77,7 @@ export function IgnoreRuleDialog({ api, repoId, path, mode, onClose, onAdded }: 
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
       <DialogFooter className="cloneDialogActions">
-        <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
         <Button variant="primary" type="button" disabled={busy || !rule} onClick={() => void add()}>{busy ? t("ign.adding") : t("ign.add")}</Button>
       </DialogFooter>
     </Dialog>;

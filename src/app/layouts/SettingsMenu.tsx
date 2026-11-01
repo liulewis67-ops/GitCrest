@@ -1,3 +1,4 @@
+import { useMenuPlacement, navigateMenu } from "../../shared/hooks/use-menu-placement";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { ariaShortcut, displayShortcut, THEME_CYCLE, useThemePreference, type ShortcutPreferences, type Theme } from "../../features/settings";
 import { LOCALES, useI18n } from "../../shared/i18n";
@@ -25,6 +26,7 @@ export function SettingsMenu({ shortcuts, isMacPlatform, onOpenSettings }: {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = Boolean(position);
+  useMenuPlacement(menuRef, buttonRef, open, "end");
 
   useEffect(() => {
     if (!open) return;
@@ -66,15 +68,7 @@ export function SettingsMenu({ shortcuts, isMacPlatform, onOpenSettings }: {
   }
 
   /** Up and Down move through every item, wrapping at the ends; Tab still leaves the menu. */
-  function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    if (event.key !== "ArrowDown" && event.key !== "ArrowUp" && event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
-    const items = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("[role^='menuitem']") ?? [])];
-    const index = items.indexOf(document.activeElement as HTMLButtonElement);
-    if (index < 0) return;
-    event.preventDefault();
-    const step = event.key === "ArrowDown" || event.key === "ArrowRight" ? 1 : -1;
-    items[(index + step + items.length) % items.length]?.focus();
-  }
+  function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) { navigateMenu(event, () => { setPosition(undefined); buttonRef.current?.focus(); }); }
 
   return <>
     <button

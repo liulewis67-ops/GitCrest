@@ -1733,3 +1733,27 @@ p.structureOutlineNote:has(.loadingSpinner) { flex-direction: row; align-items: 
 .sharedDialogInline .sharedDialogHeader h2 { font-size: var(--type-sm); }
 .sharedDialogFullPage { z-index: 10; }
 .sharedDialogFullPage > .sharedDialogHeader { background: var(--surface); }
+
+/* Keyboard movement has the same visible target across menus and working lists. */
+[role="menu"] [role^="menuitem"]:focus-visible, .worktreeSwitcherFilter:focus-visible, .changeTreeFile:focus-visible, .branchChoice:focus-visible, .commandItem:focus-visible, .repositoryRowOpen:focus-visible {
+  outline: 2px solid var(--accent-strong); outline-offset: -2px;
+}
+.actionMenu, .branchRowMenu, .newRepositoryTabMenu, .quickSettingsMenu, .worktreeSwitcherMenu, .commitActionMenu { max-width: calc(100vw - 16px); max-height: calc(100dvh - 16px); overflow-y: auto; overscroll-behavior: contain; }
+.branchRowMenu .separated, .commitActionMenu .dangerMenuItem { margin-top: 5px; border-top: 1px solid var(--line); padding-top: 9px; }
+.contextMenu { max-height: calc(100dvh - 12px); }
+.commandItem { min-height: calc(32px * var(--density)); gap: 12px; }
+.commandItemMain { min-width: 0; flex: 1; }
+.commandItemMain strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commandItemMain small { line-height: 1.45; }
+.commandItem[aria-disabled="true"] { color: var(--text-secondary); cursor: default; }
+.commandUnavailableToggle { color: var(--text-secondary); border-top: 1px solid var(--line); border-radius: 0; margin-top: 5px; }
+.shortcutSearch { display: grid; gap: 6px; margin: 12px 0 18px; font-size: var(--type-sm); }
+.shortcutSearch input { width: 100%; min-height: 34px; border: 1px solid var(--line-strong); border-radius: var(--radius-4); padding: 6px 9px; background: var(--canvas); color: var(--text); font: inherit; }
+.shortcutGroup + .shortcutGroup { margin-top: 24px; }
+.shortcutGroup h4 { margin: 0 0 8px; color: var(--text); font-size: var(--type-sm); font-weight: 620; }
+.commitActionMenu button { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.commitActionMenu kbd { color: var(--text-secondary); font-size: var(--type-xs); white-space: nowrap; }
+.composerStatus { display: flex; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: clip; }
+.composerStatus > span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composerStatus > span:last-child { flex: none; white-space: nowrap; }
+.composerFooter .composerTemplate { max-width: 110px; }

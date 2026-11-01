@@ -242,8 +242,27 @@ export function CommitPanel({
           type="button"
           aria-label={`${file.kind} ${file.path}`}
           aria-pressed={selected}
+          aria-keyshortcuts={checkable ? "Space Enter" : "Enter"}
           title={file.originalPath ? `${file.originalPath} → ${file.path}` : t("nav.review", { path: file.path })}
           onClick={() => onOpenFileDiff(file.path, openScope)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            const rows = [...(event.currentTarget.closest(".changeTree")?.querySelectorAll<HTMLButtonElement>(".changeTreeFile") ?? [])];
+            const index = rows.indexOf(event.currentTarget);
+            const target = event.key === "ArrowDown" ? rows[Math.min(index + 1, rows.length - 1)]
+              : event.key === "ArrowUp" ? rows[Math.max(0, index - 1)]
+                : event.key === "Home" ? rows[0] : event.key === "End" ? rows[rows.length - 1] : undefined;
+            if (target) {
+              event.preventDefault();
+              event.stopPropagation();
+              target.focus();
+              target.scrollIntoView?.({ block: "nearest" });
+            } else if (event.key === " " && checkable) {
+              event.preventDefault();
+              event.stopPropagation();
+              if (!event.repeat && !stagingBlocked) toggleFile(entry);
+            }
+          }}
         >
           <span className={`statusFileCode status-${file.kind}`} aria-label={file.kind}>{changeCode(file.kind)}</span>
           <span className={`changeTreeName status-${file.kind}`}>{file.path.slice(slash + 1)}</span>

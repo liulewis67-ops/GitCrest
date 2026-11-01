@@ -54,7 +54,7 @@ export function PushTargetDialog({ remotes, branches, disabled, disabledReason, 
           {disabled && disabledReason && <p className="cloneHelp" role="note">{disabledReason}</p>}
         </div>
         <DialogFooter className="cloneDialogActions">
-          <Button variant="quiet" type="button" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="secondary" type="button" onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="primary" type="button" disabled={disabled || !remoteName || !remoteBranch} onClick={() => onChoose({ remoteName, remoteBranch })}>{t("pt.review")}</Button>
         </DialogFooter>
       </Dialog>

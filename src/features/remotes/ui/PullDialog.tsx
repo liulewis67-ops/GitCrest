@@ -50,7 +50,7 @@ export function PullDialog({ snapshot, loading, busy, error, disabled, disabledR
           {error && <div className="taskCenterError" role="alert"><span><ErrorMessage error={error} /></span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</Button></div>}
         </div>
         <DialogFooter className="cloneDialogActions">
-          <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="quiet" size="compact" type="button" disabled={busy || disabled || loading} onClick={onRefresh}>{t("pull.refresh")}</Button>
           <Button variant="primary" type="button" disabled={busy || disabled || loading || !canPull || !snapshot} onClick={() => onPull(strategy)}>{busy ? t("pull.starting") : strategy === "merge" ? t("pull.withMerge") : t("pull.withRebase")}</Button>
         </DialogFooter>

@@ -37,6 +37,14 @@ export const shortcutActions = [
 export type ShortcutAction = (typeof shortcutActions)[number]["id"];
 export type ShortcutPreferences = Record<ShortcutAction, string>;
 
+export const shortcutGroups: ReadonlyArray<{ id: "navigation" | "repositories" | "changes" | "commits" | "display"; actions: readonly ShortcutAction[] }> = [
+  { id: "navigation", actions: ["commandPalette", "viewChanges", "viewHistory", "searchCommits", "toggleSidebar", "toggleInspector", "focusMode", "settings"] },
+  { id: "repositories", actions: ["openRepository", "cloneRepository", "initializeRepository", "branchSwitcher", "refreshStatus", "fetch", "pull", "push"] },
+  { id: "changes", actions: ["stageAll", "openDiff", "toggleDiffView", "shelve", "undoRecentOperation"] },
+  { id: "commits", actions: ["commit", "commitAndPush", "rebase", "cherryPick", "createTag", "aiCommitMessage"] },
+  { id: "display", actions: ["zoomIn", "zoomOut", "zoomReset"] },
+];
+
 export const defaultShortcutPreferences: ShortcutPreferences = Object.fromEntries(
   shortcutActions.map(({ id, defaultBinding }) => [id, defaultBinding]),
 ) as ShortcutPreferences;

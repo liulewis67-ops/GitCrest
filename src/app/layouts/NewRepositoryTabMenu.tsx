@@ -1,3 +1,4 @@
+import { useMenuPlacement, navigateMenu } from "../../shared/hooks/use-menu-placement";
 import { useEffect, useRef, useState } from "react";
 import { displayShortcut, type ShortcutPreferences } from "../../features/settings";
 import { useI18n } from "../../shared/i18n";
@@ -19,6 +20,7 @@ export function NewRepositoryTabMenu({ connected, openingRepository, shortcuts, 
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = Boolean(position);
+  useMenuPlacement(menuRef, buttonRef, open, "start");
 
   useEffect(() => {
     if (!open) return;
@@ -66,7 +68,7 @@ export function NewRepositoryTabMenu({ connected, openingRepository, shortcuts, 
     <button ref={buttonRef} className="newRepositoryTab" type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("titlebar.newTab")} title={t("titlebar.newTab")} onClick={toggle}>
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9" /></svg>
     </button>
-    {position && <div ref={menuRef} className="newRepositoryTabMenu" role="menu" aria-label={t("titlebar.newTab")} style={{ top: position.top, left: position.left, width: MENU_WIDTH }}>
+    {position && <div ref={menuRef} onKeyDown={(event) => navigateMenu(event, () => { setPosition(undefined); buttonRef.current?.focus(); })} className="newRepositoryTabMenu" role="menu" aria-label={t("titlebar.newTab")} style={{ top: position.top, left: position.left, width: MENU_WIDTH }}>
       {items.map((item) => (
         <button key={item.id} type="button" role="menuitem" disabled={item.disabled} onClick={choose(item.run)}>
           <span className="newRepositoryTabMenuText"><strong>{item.label}</strong><span>{item.hint}</span></span>

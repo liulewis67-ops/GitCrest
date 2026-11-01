@@ -153,7 +153,7 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
       </DialogHeader>
       <div className="workflowDialogBody">
         <label className="rebaseTargetField" htmlFor="rebase-onto">{t("rb.onto")}
-          <select id="rebase-onto" value={ontoOid} disabled={disabled || loading || busy || targets.length === 0} onChange={(event) => { setOntoOid(event.target.value); setPreview(undefined); setTodo([]); }}>
+          <select data-dialog-initial-focus id="rebase-onto" value={ontoOid} disabled={disabled || loading || busy || targets.length === 0} onChange={(event) => { setOntoOid(event.target.value); setPreview(undefined); setTodo([]); }}>
             {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} · {branch.oid.slice(0, 9)}</option>)}
           </select>
         </label>
@@ -210,11 +210,12 @@ export function RebaseDialog({ api, repoId, branches, initialOntoOid, disabled, 
           </ol>
           {dropCount > 0 && <label className="rebaseConfirm"><input type="checkbox" checked={confirmDrop} onChange={(event) => setConfirmDrop(event.target.checked)} />{t("rb.dropConfirm", { count: dropCount })}</label>}
         </>}
-        <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
-          <Button variant="quiet" size="compact" type="button" disabled={!ontoOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rb.reviewingBtn") : t("rb.refresh")}</Button>
-          <Button variant="primary" type="button" disabled={!canStart} onClick={() => void start()}>{busy ? t("rb.starting") : t("rb.start")}</Button>
-        </DialogFooter>
+
         {preview && <p className="cloneHelp">{t("rb.footer")}</p>}
       </div>
+      <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant={preview ? "quiet" : "primary"} type="button" disabled={!ontoOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rb.reviewingBtn") : t("rb.refresh")}</Button>
+          <Button variant="primary" type="button" disabled={!canStart} onClick={() => void start()}>{busy ? t("rb.starting") : t("rb.start")}</Button>
+        </DialogFooter>
     </Dialog>;
 }

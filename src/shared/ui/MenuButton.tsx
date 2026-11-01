@@ -1,3 +1,4 @@
+import { useMenuPlacement, navigateMenu } from "../hooks/use-menu-placement";
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 
 export type MenuButtonItem = {
@@ -26,6 +27,7 @@ export function MenuButton({ label, title, menuLabel, className, children, disab
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = Boolean(position);
+  useMenuPlacement(menuRef, buttonRef, open, "end");
 
   useEffect(() => {
     if (!open) return;
@@ -36,12 +38,13 @@ export function MenuButton({ label, title, menuLabel, className, children, disab
     };
     document.addEventListener("mousedown", onPointerDown);
     window.addEventListener("resize", close);
-    document.addEventListener("scroll", close, true);
+    const onScroll = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) close(); };
+    document.addEventListener("scroll", onScroll, true);
     menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("resize", close);
-      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
 
@@ -59,29 +62,12 @@ export function MenuButton({ label, title, menuLabel, className, children, disab
     buttonRef.current?.focus();
   }
 
-  function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const enabled = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
-    const index = enabled.indexOf(document.activeElement as HTMLButtonElement);
-    const target = event.key === "ArrowDown" ? enabled[(index + 1) % enabled.length]
-      : event.key === "ArrowUp" ? enabled[(index - 1 + enabled.length) % enabled.length]
-        : event.key === "Home" ? enabled[0]
-          : event.key === "End" ? enabled[enabled.length - 1] : undefined;
-    if (target) {
-      event.preventDefault();
-      target.focus();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      closeAndRestoreFocus();
-    } else if (event.key === "Tab") {
-      setPosition(undefined);
-    }
-  }
+  function onMenuKeyDown(event: KeyboardEvent<HTMLDivElement>) { navigateMenu(event, () => { setPosition(undefined); buttonRef.current?.focus(); }); }
 
   return <>
     <button ref={buttonRef} className={className} type="button" aria-haspopup="menu" aria-expanded={open} aria-label={label} title={title ?? label} disabled={disabled} onClick={toggle}>{children}</button>
     {position && <div ref={menuRef} className="actionMenu" role="menu" aria-label={menuLabel} style={{ top: position.top, right: position.right }} onKeyDown={onMenuKeyDown}>
-      {items.map((item) => <div className={item.separatorBefore ? "actionMenuGroup separated" : "actionMenuGroup"} key={item.id} role="none">
+      {items.map((item, index) => <div className={item.separatorBefore || (index > 0 && Boolean(item.danger) !== Boolean(items[index - 1].danger)) ? "actionMenuGroup separated" : "actionMenuGroup"} key={item.id} role="none">
         <button type="button" role="menuitem" className={item.danger ? "danger" : undefined} disabled={item.disabled} title={item.title} onClick={() => { closeAndRestoreFocus(); item.onSelect(); }}>{item.label}</button>
       </div>)}
     </div>}

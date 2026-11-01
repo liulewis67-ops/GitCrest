@@ -56,7 +56,7 @@ export function CloneDialog({ initialRemoteUrl = "", initialDirectoryName = "", 
           <div className="cloneDestination"><div><strong>{t("clone.location")}</strong><small>{selectedParent || t("clone.chooseParentHint")}</small></div><Button variant="secondary" type="button" disabled={busy} onClick={() => void chooseParent()}>{t("clone.chooseFolder")}</Button></div>
           {(error || parentError) && <p className="taskCenterError" role="alert"><ErrorMessage error={error || parentError} /></p>}
           </div>
-          <DialogFooter className="cloneDialogActions"><Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" disabled={busy || !remoteUrl.trim() || !directoryName.trim() || !selectedParent}>{busy ? t("clone.starting") : t("clone.start")}</Button></DialogFooter>
+          <DialogFooter className="cloneDialogActions"><Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" disabled={busy || !remoteUrl.trim() || !directoryName.trim() || !selectedParent}>{busy ? t("clone.starting") : t("clone.start")}</Button></DialogFooter>
         </form>
       </Dialog>
   );

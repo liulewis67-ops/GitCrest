@@ -11,6 +11,7 @@ export interface CommandPaletteCommand {
   available: boolean;
   /** Why an unavailable command cannot run now; shown instead of the description. */
   unavailableReason?: string;
+  requiresRepository?: boolean;
   /** The remappable shortcut that runs the same action; the palette shows its current binding. */
   shortcut?: ShortcutAction;
   run: () => void;
@@ -172,7 +173,7 @@ export function createPaletteCommands(input: PaletteInput): CommandPaletteComman
       label: t(labelKey),
       detail,
       available: !reason,
-      ...(reason ? { unavailableReason: reason } : {}),
+      ...(reason ? { unavailableReason: reason, requiresRepository: reason === why.noRepo } : {}),
       ...(shortcut ? { shortcut } : {}),
       run: action,
     };

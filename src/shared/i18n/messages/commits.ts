@@ -1,4 +1,6 @@
 export const commits = {
+  "cw.signOffHelp": ["Add a Signed-off-by line with your name and email. This does not cryptographically sign the commit.", "添加包含姓名和邮箱的 Signed-off-by 行。这不会对提交进行加密签名。"],
+  "cw.signHelp": ["Sign the commit with the signing key configured in Git.", "使用 Git 中配置的签名密钥为提交签名。"],
   "cw.aiSuggestionCompact": ["AI suggestion", "AI 建议"],
   "cw.signOffCompact": ["Sign-off", "签署"],
   "cw.signCompact": ["Sign", "签名"],

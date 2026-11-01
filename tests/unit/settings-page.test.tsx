@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, expect, it, vi } from "vitest";
 import type { GitCrestApiClient } from "../../src/api/client";
 import { SettingsPage } from "../../src/features/settings/ui/SettingsPage";
-import { defaultShortcutPreferences } from "../../src/features/settings/model/shortcut-preferences";
+import { defaultShortcutPreferences, shortcutActions, shortcutGroups } from "../../src/features/settings/model/shortcut-preferences";
 import { reloadAppearance } from "../../src/features/settings/model/appearance-store";
 import { PrivacyScopePreview } from "../../src/features/settings/ui/PrivacyScopePreview";
 
@@ -12,6 +12,20 @@ afterEach(cleanup);
 
 const NO_PROVIDERS = { activeProviderId: null, providers: [], configPath: null };
 const ONE_PROVIDER = { activeProviderId: "openai", providers: [{ id: "openai", name: "OpenAI", apiFormat: "openAiResponses" as const, baseUrl: "https://api.openai.com/v1", model: "gpt-model", maxOutputTokens: null, hasApiKey: true, isLocal: false }], configPath: null };
+
+it("groups every shortcut once and searches both action names and current bindings", () => {
+  const grouped = shortcutGroups.flatMap((group) => group.actions);
+  expect([...grouped].sort()).toEqual(shortcutActions.map(({ id }) => id).sort());
+  render(<SettingsPage api={cancellableApi({ getAiSettings: vi.fn().mockResolvedValue(NO_PROVIDERS) })} onClose={vi.fn()} />);
+  const search = screen.getByRole("searchbox", { name: "Search shortcuts" });
+  fireEvent.change(search, { target: { value: "Shelve" } });
+  expect(screen.getByRole("button", { name: "Record shortcut for Shelve changes" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Record shortcut for Commit staged changes" })).toBeNull();
+  fireEvent.change(search, { target: { value: "Ctrl+Shift+S" } });
+  expect(document.querySelectorAll(".shortcutCaptureButton")).toHaveLength(1);
+  fireEvent.change(search, { target: { value: "no such shortcut" } });
+  expect(screen.getByText("No matching shortcuts.")).toBeTruthy();
+});
 
 function cancellableApi(methods: Record<string, unknown>, signals: AbortSignal[] = []) {
   let api: Record<string, unknown>;

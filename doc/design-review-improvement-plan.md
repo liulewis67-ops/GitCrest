@@ -1,6 +1,6 @@
 # Design Review Improvement Plan
 
-Status: D0–D2 complete; D3/D4 scheduled. Updated: 2026-11-01.
+Status: D0–D3 complete; D4 scheduled. Updated: 2026-11-01.
 Scope: visual presentation and interaction of the desktop renderer (`src/`), the core error contract and repository metadata persistence needed for safe removal, and the design documents in `doc/`.
 Related: [07-interaction-accessibility.md](07-interaction-accessibility.md) (keyboard, feedback and safety rules), [visual-optimization-plan.md](visual-optimization-plan.md) (earlier visual plan, Phase 1 shipped), [ux-functional-improvement-plan.md](ux-functional-improvement-plan.md) (functional gaps, U stages), [15-frontend-development-guidelines.md](15-frontend-development-guidelines.md) (frontend rules).
 
@@ -72,7 +72,7 @@ Precedence rule to add to `00-README.md`: **shipped code and `DESIGN.md` describ
 | D1.5 | Fix the first-run hint layout | P2 | S | — | done |
 | D1.6 | Stage D1 re-evaluation | P1 | S | D1.1–D1.5, D0.2 | done |
 | D2 | Shared Button and Dialog components | P1 | L | D0.3 | done |
-| D3 | Keyboard and palette efficiency | P2 | L | D2 | not started |
+| D3 | Keyboard and palette efficiency | P2 | L | D2 | done |
 | D4 | Welcome, contrast and Git cues | P2 | M | D0.3 | not started |
 
 ## 5. Stage D0: make evaluation repeatable
@@ -210,6 +210,8 @@ Remaining P2 findings: palette hints disagree with actual view shortcuts (D3.2);
 - **D3.3** Keyboard staging in the change tree: arrow keys to move, Space to stage or unstage, Enter to open the diff.
 - **D3.4** Shortcut settings: search box and groups; shortcuts shown in the commit ⋯ menu.
 
+**Done 2026-11-01.** D3 delivers: shared menu placement/navigation, inset focus and separated destructive groups; collapsed unavailable palette commands with selected descriptions and actual shortcut bindings; keyboard file staging; searchable grouped shortcut settings and commit-menu bindings. D2 review follow-ups move Reset/Rebase focus into the target field, emphasize preflight, keep workflow footers visible, and standardize ordinary Cancel. Staged counts stay visible while the branch summary can truncate; signing controls have local descriptions. Baseline: `.review/screens/d3-before/` (56 fresh captures). `pnpm check` passed (722 frontend, 336 Rust, 48 desktop tests), including keyboard staging/unstaging/Enter review, remapped shortcut persistence, Reset recovery and eight visible rows in both languages/themes/sizes. Final after matrix: `.review/screens/d3-final/` (56 captures), which is also the fresh unchanged baseline for D4. Independent sequential critique scored 32/40 with no P0/P1 observed; archive `.impeccable/critique/2026-11-01T06-07-17Z__src-app-app-tsx.md`. Source detector retains nine semantic/functional stripes; five live scans produced 71 overlapping records with hidden Settings background false positives excluded. Follow-ups in the final pass: continuous palette typing, menu Tab progression, Reset recovery hierarchy and narrow diff/header occlusion; contrast/icons remain D4.
+
 ### D4 Welcome, contrast and Git cues
 
 - When recent repositories exist, the list becomes the main element of Welcome, with arrow-key navigation and one Tab stop per row; one row of actions; remove "预览工作区".
@@ -236,3 +238,4 @@ Score targets: **28/40 or more after D2**, **32/40 or more after D4**.
 | 2026-10-31 | Baseline | 23/40 | 0 | 3 | Graph, diff and composer judged from code only (fixture repositories were missing) |
 | 2026-11-01 | D1 | 30/40 | 0 | 0 new observed | Independent sequential design/detector reviews; system status 3/4, error recovery 3/4; 56 fresh captures; final check 713 frontend / 336 Rust / 47 E2E. Contrast and P2 efficiency findings remain later work. |
 | 2026-11-01 | D2 | 31/40 | 0 | 0 observed | Independent design/detector reviews; 32 shared dialog surfaces, 56 after captures; check 716 frontend / 336 Rust / 48 E2E. D3 workflow efficiency and D4 contrast findings remain explicit. |
+| 2026-11-01 | D3 | 32/40 | 0 | 0 observed | Independent design/detector reviews; visible focus, bottom-edge menu fitting and persistent Reset footer verified; check 722 frontend / 336 Rust / 48 E2E; 56 final captures. |

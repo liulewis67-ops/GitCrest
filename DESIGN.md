@@ -87,11 +87,11 @@ Task Center groups tasks by repository name, newest first. Operation, status, ph
 | Danger action | Final destructive actions use `Button variant="danger"`, tinted background and danger text/border; never a text link |
 | Inputs | Neutral surfaces, strong boundary, shared type scale; native disabled semantics and visible focus |
 | Lists / refs | Selected and hover states use accent-soft or raised surfaces; Git-state text and reference badges retain their semantic roles |
-| Menus | MenuButton and ContextMenu support disabled reasons, danger items and keyboard navigation; focus contrast and long-menu behavior are D3 review items |
+| Menus | MenuButton and ContextMenu share visible inset focus, arrow/Home/End/Escape navigation, viewport fitting and grouped danger actions; internal scrolling keeps the menu open |
 | Dialogs | Shared Dialog owns initial focus, trapped Tab, busy dismissal protection, Escape and return focus. DialogHeader supplies title and SVG close; DialogFooter aligns Cancel before the main action on the right. Workflow bodies retain their local layout. Settings makes background siblings inert and restores them before returning focus. |
 | Feedback | NoticeRegion is the shared polite live region; InlineHint is dismissible instructional text; task cards show ongoing and completed work |
 
-Focus on buttons, inputs, selects, textareas and separators uses a 2px `--accent-strong` outline with 2px offset; window controls inset their outline. Some menu styles override this and remain tracked in D3. Preserve visible keyboard focus and disabled explanations when changing a component. Respect reduced-motion preferences; common hover transitions are 120ms ease-out.
+Focus on buttons, inputs, selects, textareas and separators uses a 2px `--accent-strong` outline with 2px offset; window controls inset their outline. Menu and working-list focus uses the same 2px outline inset to stay visible within rows. Preserve visible keyboard focus and disabled explanations when changing a component. Respect reduced-motion preferences; common hover transitions are 120ms ease-out.
 
 Icons currently mix local SVGs and Unicode glyphs. Keep accessible names on icon-only buttons, hide decorative icons from assistive technology, and use `currentColor`. A unified SVG set is planned; no new icon dependency is required by this document.
 
@@ -102,8 +102,10 @@ Icons currently mix local SVGs and Unicode glyphs. Keep accessible names on icon
 - Do keep destructive operations behind explicit review and show actionable errors in both languages.
 - Do verify Workspace, History, Diff and Conflict at the review matrix sizes.
 - Don't revive the historical third view, bottom workbench or status bar from superseded drawings.
-- Don't treat a planned Button/Dialog layer, palette policy or visual phase as already shipped.
+- Don't treat historical visual proposals as shipped behavior.
 
 The first-use changes hint keeps its title as an accessible label, uses compact guidance, and never wraps its dismiss label. At viewport heights up to 740px the composer uses compact visible option labels with full accessible names and a 52px initial resizable description. The default review fixture retains at least eight fully visible change rows at 960×700 in both languages and themes. Hints and notices use a neutral boundary without an accent stripe; notice severity is conveyed by text and its semantic indicator.
 
 Semantic token aliases `--red`, `--success`, and `--surface-2` resolve to danger, green, and raised surface respectively, so legacy consumers follow both themes and custom palettes.
+
+D3 palette rows show a description only for the selected command; unavailable commands live behind one expandable count, retaining focusable reasons without execution. Shortcut settings search names and current bindings across five task groups. Commit actions show their actual remapped shortcuts. Workflow footers stay outside scrolling content; Reset/Rebase start on their target field and emphasize review before final submission.

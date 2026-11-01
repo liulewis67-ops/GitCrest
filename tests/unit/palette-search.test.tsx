@@ -90,7 +90,7 @@ describe("recent commands", () => {
 describe("command palette", () => {
   function Harness({ run }: { run?: Partial<PaletteInput["run"]> }) {
     const [query, setQuery] = useState("");
-    return <CommandPalette open context="ctx" commands={createPaletteCommands(input(run))} navigationShortcut="Ctrl" shortcuts={defaultShortcutPreferences} isMacPlatform={false} query={query} onQueryChange={setQuery} onClose={vi.fn()} />;
+    return <CommandPalette open context="ctx" commands={createPaletteCommands(input(run))} shortcuts={defaultShortcutPreferences} isMacPlatform={false} query={query} onQueryChange={setQuery} onClose={vi.fn()} />;
   }
 
   it("moves the commands just used to a Recent group at the top", () => {
@@ -120,5 +120,35 @@ describe("command palette", () => {
     render(<Harness />);
     const button = screen.getByRole("button", { name: /Search commit history/ });
     expect(button.textContent).toContain("Ctrl+F");
+  });
+
+  it("collapses unavailable commands and exposes their reasons without running them", () => {
+    const options = { ...input(), repository: undefined, page: "welcome" as const };
+    const commands = createPaletteCommands(options);
+    render(<CommandPalette open context="No repository" commands={commands} shortcuts={defaultShortcutPreferences} isMacPlatform={false} query="" onQueryChange={vi.fn()} onClose={vi.fn()} />);
+    const commit = commands.find((command) => command.id === "commit")!;
+    expect(screen.queryByRole("button", { name: commit.label })).toBeNull();
+    const toggle = screen.getByRole("button", { name: /Requires a repository \(\d+\)/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    fireEvent.click(toggle);
+    const disabled = screen.getByRole("button", { name: commit.label });
+    expect(disabled.getAttribute("aria-disabled")).toBe("true");
+    fireEvent.focus(disabled);
+    expect(disabled.textContent).toContain(commit.unavailableReason);
+    fireEvent.click(disabled);
+    expect(options.run.commit).not.toHaveBeenCalled();
+  });
+
+  it("shows only the selected description and gives Ctrl+1 its actual Workspace meaning", () => {
+    render(<Harness />);
+    expect(document.querySelectorAll(".commandItemMain small")).toHaveLength(1);
+    const fetch = screen.getByRole("button", { name: "Fetch from remotes" });
+    fireEvent.focus(fetch);
+    expect(document.querySelectorAll(".commandItemMain small")).toHaveLength(1);
+    expect(fetch.querySelector("small")).not.toBeNull();
+    const workspace = screen.getByRole("button", { name: "Show Workspace" });
+    expect(workspace.textContent).toContain("Ctrl+1");
+    expect(workspace.getAttribute("aria-keyshortcuts")).toBe("Control+1");
+    expect(screen.getByRole("button", { name: "Go to Welcome" }).querySelector("kbd")).toBeNull();
   });
 });

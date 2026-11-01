@@ -148,7 +148,7 @@ The core has no stash code, so stashes made in the CLI or another IDE are invisi
 **U5.1 Complete command-palette coverage** (P0, M)
 - Problem: the palette (`src/app/App.tsx:867-886`) lacks merge, cherry-pick, revert, create/rename/delete branch, shelve, tags, settings, worktree actions, close tab, initialize repository, refresh and undo.
 - Deliver: move the command list out of `App.tsx` into a registry (`src/app/commands/`) that each feature contributes to. Every action that has a shortcut in `shortcut-preferences.ts` must have a palette entry, and vice versa where it makes sense. A unit test enforces this.
-- Accept: all P0 flows in `07` can be started from the palette; unavailable commands stay listed with their reason; the palette shows each command's current shortcut.
+- Accept: all P0 flows in `07` can be started from the palette; unavailable commands remain discoverable with their reason (collapsed behind one expandable row since D3.2); the palette shows each command's current shortcut.
 
 **U5.2 Palette search, grouping and recent commands** (P2, S)
 - Deliver: fuzzy matching on label and synonyms (for example "stash" finds Shelve), groups by area, and the last five commands at the top.

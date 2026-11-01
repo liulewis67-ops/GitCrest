@@ -19,7 +19,7 @@ import { InPlacePipelineBanner } from "../../features/pipelines";
 export function AppView({ ctx }: { ctx: AppContext }) {
   const [removeCandidate, setRemoveCandidate] = useState<RepositoryResponse>();
   const { repositoryReadable, repositoryReadError, repositoryReadErrors } = ctx;
-  const { activeBranchError, activeBranchesLoading, activeRemotes, activeStatus, apiRef, branchSwitchShelfFlow, branchSwitcher, changeWorkspaceMode, checkForUpdates, cloneSubmission, closeRepositoryTab, closeSettings, commandKey, commands, conflictCount, connected, connectionState, currentBranch, fetchRepository, focusMode, forgetRepository, hasActiveRepositoryTask, hasBranchSnapshot, historyRequests, inspectorVisible, installUpdate, isMacPlatform, mode, openError, openPullDialog, openPushDialog, orderedBranches, page, paletteContext, paletteOpen, paletteQuery, pullDisabledReason, pushDisabledReason, repositories, repositoryOpening, restartCore, reviewableFiles, selectedRepository, setCreateBranchAt, setPage, setPaletteOpen, setPaletteQuery, setSettingsView, setShortcuts, setTasksOpen, settingsView, shortcuts, showCommitComposer, sidebarVisible, status, t, tasks, toggleFavorite, toggleInspector, toggleSidebar, updateStatus, version, workspaceSession } = ctx;
+  const { activeBranchError, activeBranchesLoading, activeRemotes, activeStatus, apiRef, branchSwitchShelfFlow, branchSwitcher, changeWorkspaceMode, checkForUpdates, cloneSubmission, closeRepositoryTab, closeSettings, commands, conflictCount, connected, connectionState, currentBranch, fetchRepository, focusMode, forgetRepository, hasActiveRepositoryTask, hasBranchSnapshot, historyRequests, inspectorVisible, installUpdate, isMacPlatform, mode, openError, openPullDialog, openPushDialog, orderedBranches, page, paletteContext, paletteOpen, paletteQuery, pullDisabledReason, pushDisabledReason, repositories, repositoryOpening, restartCore, reviewableFiles, selectedRepository, setCreateBranchAt, setPage, setPaletteOpen, setPaletteQuery, setSettingsView, setShortcuts, setTasksOpen, settingsView, shortcuts, showCommitComposer, sidebarVisible, status, t, tasks, toggleFavorite, toggleInspector, toggleSidebar, updateStatus, version, workspaceSession } = ctx;
   const historyError = selectedRepository ? ctx.historyReadErrors[selectedRepository.repoId] : undefined;
   const showRepositoryRecovery = selectedRepository && (selectedRepository.availability !== "available"
     || isRepositoryReadFailure(ctx.activeStatusError) || (mode === "changes" && isRepositoryReadFailure(historyError)));
@@ -163,7 +163,6 @@ export function AppView({ ctx }: { ctx: AppContext }) {
         commands={commands}
         shortcuts={shortcuts}
         isMacPlatform={isMacPlatform}
-        navigationShortcut={commandKey}
         query={paletteQuery}
         onQueryChange={setPaletteQuery}
         onClose={() => setPaletteOpen(false)}

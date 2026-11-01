@@ -114,7 +114,7 @@ export function StashActionDialog({ api, repoId, stash, action, disabled, onClos
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
       </div>
       <DialogFooter className="cloneDialogActions">
-        <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+        <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
         <Button variant={action === "drop" ? "danger" : "primary"} type="button" disabled={busy || !canRun} onClick={() => void run()}>{busy ? t("stash.working") : t(runKey)}</Button>
       </DialogFooter>
     </Dialog>;

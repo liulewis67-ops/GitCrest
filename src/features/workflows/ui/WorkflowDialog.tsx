@@ -74,7 +74,8 @@ export function WorkflowDialog({ api, repoId, targetOid, action, targetLabel, on
           {!snapshot.canStart && !snapshot.operationInProgress && snapshot.isClean && snapshot.mergeKind !== "upToDate" && <p className="cloneHelp">{t("wf.notAvailable")}</p>}
         </>}
         {error && <p className="taskCenterError" role="alert"><ErrorMessage error={error} /></p>}
-        <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button><Button variant="quiet" size="compact" type="button" disabled={busy || state.loading} onClick={() => { setError(""); setRefreshKey((current) => current + 1); }}>{t("wf.refresh")}</Button><Button variant="primary" type="button" disabled={!snapshot?.canStart || !snapshot.headOid || busy} onClick={() => void confirm()}>{busy ? t("wf.starting") : startLabels[action]}</Button></DialogFooter>
+
       </div>
+      <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button><Button variant="quiet" size="compact" type="button" disabled={busy || state.loading} onClick={() => { setError(""); setRefreshKey((current) => current + 1); }}>{t("wf.refresh")}</Button><Button variant="primary" type="button" disabled={!snapshot?.canStart || !snapshot.headOid || busy} onClick={() => void confirm()}>{busy ? t("wf.starting") : startLabels[action]}</Button></DialogFooter>
     </Dialog>;
 }

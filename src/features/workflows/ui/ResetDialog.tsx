@@ -106,7 +106,7 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
       </DialogHeader>
       <div className="workflowDialogBody">
         <label className="rebaseTargetField" htmlFor="reset-target">{t("rs.moveTo", { name: current?.fullName || t("rs.currentBranch") })}
-          <select id="reset-target" value={targetOid} disabled={disabled || loading || busy} onChange={(event) => { setTargetOid(event.target.value); setPreview(undefined); setConfirmed(false); }}>
+          <select data-dialog-initial-focus id="reset-target" value={targetOid} disabled={disabled || loading || busy} onChange={(event) => { setTargetOid(event.target.value); setPreview(undefined); setConfirmed(false); }}>
             <option value="">{t("rs.chooseCommit")}</option>
             {initialTargetOid && !targets.some((branch) => branch.oid === initialTargetOid) && <option value={initialTargetOid}>{t("rs.commitOption", { oid: initialTargetOid.slice(0, 9) })}</option>}
             {targets.map((branch) => <option key={`${branch.fullName}:${branch.oid}`} value={branch.oid}>{branch.fullName} · {branch.oid.slice(0, 9)}</option>)}
@@ -156,10 +156,11 @@ export function ResetDialog({ api, repoId, branches, initialTargetOid, disabled,
           {preview.dirtyPaths.length > 0 && <p className="cloneHelp">{t("rs.localPresent", { count: preview.dirtyPaths.length })}</p>}
           <label className="rebaseConfirm"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />{t("rs.reviewedConfirm")}</label>
         </>}
-        <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
-          <Button variant="quiet" size="compact" type="button" disabled={!targetOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rs.reviewingBtn") : t("rs.review")}</Button>
+
+      </div>
+      <DialogFooter className="taskCenterActions"><Button variant="secondary" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant={preview ? "quiet" : "primary"} type="button" disabled={!targetOid || disabled || loading || busy} onClick={() => void inspect()}>{loading ? t("rs.reviewingBtn") : t("rs.review")}</Button>
           <Button variant="danger" type="button" disabled={!preview?.canStart || !confirmed || disabled || busy} onClick={() => void start()}>{busy ? t("rs.starting") : t("rs.start", { mode })}</Button>
         </DialogFooter>
-      </div>
     </Dialog>;
 }

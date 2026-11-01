@@ -61,7 +61,7 @@ export function PushDialog({ snapshot, loading, busy, error, disabled, disabledR
           {error && <div className="taskCenterError" role="alert"><span><ErrorMessage error={error} /></span><Button variant="quiet" type="button" disabled={busy || disabled} onClick={onRefresh}>{t("pull.refresh")}</Button></div>}
         </div>
         <DialogFooter className="cloneDialogActions">
-          <Button variant="quiet" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
+          <Button variant="secondary" type="button" disabled={busy} onClick={onClose}>{t("common.cancel")}</Button>
           <Button variant="quiet" size="compact" type="button" disabled={busy || disabled || loading} onClick={onRefresh}>{t("pull.refresh")}</Button>
           {forceAvailable && !confirmLease && <Button ref={forceButtonRef} variant="danger" type="button" disabled={busy || disabled} onClick={() => setConfirmLease(true)}>{t("push.forceLease")}</Button>}
           {snapshot && snapshot.ahead > 0 && snapshot.behind === 0 && !forceWithLeaseOnly && <Button variant="primary" type="button" disabled={busy || disabled} onClick={() => onPush(false, tags)}>{busy ? t("push.starting") : t("push.push")}</Button>}

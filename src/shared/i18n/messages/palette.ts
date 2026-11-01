@@ -1,4 +1,6 @@
 export const paletteMessages = {
+  "palette.requiresRepository": ["Requires a repository ({count})", "需要仓库 ({count})"],
+  "palette.unavailableCount": ["Unavailable commands ({count})", "暂不可用的命令 ({count})"],
   "cmd.init": ["Initialize repository", "初始化仓库"],
   "cmd.initDetail": ["Choose a folder and run git init in it", "选择一个文件夹并在其中运行 git init"],
   "cmd.commit": ["Commit staged changes", "提交已暂存的更改"],

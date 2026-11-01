@@ -118,8 +118,8 @@ it("moves focus into the reset dialog and closes it with Escape", async () => {
   });
   render(<ResetDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={onClose} onStarted={vi.fn()} />);
   const dialog = screen.getByRole("dialog", { name: "Reset current branch" });
-  const close = screen.getByRole("button", { name: "Close" });
-  await waitFor(() => expect(document.activeElement).toBe(close));
+  const target = screen.getByRole("dialog").querySelector("#reset-target");
+  await waitFor(() => expect(document.activeElement).toBe(target));
 
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(onClose).toHaveBeenCalledOnce();

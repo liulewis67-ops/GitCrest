@@ -122,8 +122,8 @@ it("moves focus into the rebase dialog and closes it with Escape", async () => {
   });
   render(<RebaseDialog api={api} repoId="repo_fixture" branches={branches} disabled={false} onClose={onClose} onStarted={vi.fn()} />);
   const dialog = screen.getByRole("dialog", { name: "Interactive rebase" });
-  const close = screen.getByRole("button", { name: "Close" });
-  await waitFor(() => expect(document.activeElement).toBe(close));
+  const target = screen.getByRole("dialog").querySelector("#rebase-onto");
+  await waitFor(() => expect(document.activeElement).toBe(target));
 
   fireEvent.keyDown(dialog, { key: "Escape" });
   expect(onClose).toHaveBeenCalledOnce();

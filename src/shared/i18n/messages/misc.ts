@@ -12,7 +12,7 @@ export const misc = {
   "hint.aria": ["Tip", "提示"],
   "hint.gotIt": ["Got it", "知道了"],
   "hint.changesTitle": ["Choose what goes into the commit", "选择哪些内容进入提交"],
-  "hint.changes": ["Tick files or stage lines in the diff. Only staged changes are committed.", "勾选文件或在差异中暂存行；仅提交已暂存的变更。"],
+  "hint.changes": ["↑↓ move · Space stage · Enter review. Commit staged changes only.", "↑↓ 移动 · 空格暂存 · Enter 查看。仅提交已暂存的变更。"],
   "hint.shelvesTitle": ["Shelves instead of stash", "用搁置代替 stash"],
   "hint.shelves": ["A shelf puts chosen changes aside, file by file, and keeps them until you apply or delete them. Shelves made with git stash show up below too.", "搁置可以把选定的更改逐文件放在一边，直到你应用或删除为止。用 git stash 创建的条目也会显示在下方。"],
   "hint.structureTitle": ["Review by code structure", "按代码结构审阅"],

@@ -13,7 +13,6 @@ interface CommandPaletteProps {
   open: boolean;
   context: string;
   commands: CommandPaletteCommand[];
-  navigationShortcut: string;
   shortcuts: ShortcutPreferences;
   isMacPlatform: boolean;
   query: string;
@@ -25,7 +24,6 @@ export function CommandPalette({
   open,
   context,
   commands,
-  navigationShortcut,
   shortcuts,
   isMacPlatform,
   query,
@@ -35,15 +33,24 @@ export function CommandPalette({
   const { t } = useI18n();
 
   const [recentIds, setRecentIds] = useState<string[]>([]);
+  const [showUnavailable, setShowUnavailable] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>();
   useEffect(() => {
-    if (open) setRecentIds(readRecentCommands());
+    if (open) {
+      setRecentIds(readRecentCommands());
+      setShowUnavailable(false);
+      setSelectedId(undefined);
+    }
   }, [open]);
   if (!open) return null;
 
   const searching = query.trim().length > 0;
-  const filteredCommands = rankCommands(commands, query);
+  const matches = rankCommands(commands, query);
+  const unavailable = matches.filter((command) => !command.available);
+  const filteredCommands = showUnavailable ? matches : matches.filter((command) => command.available);
   // A search shows one ranked list; without one, the last commands used lead and the rest follow in groups.
-  const recent = searching ? [] : recentCommands(commands, recentIds);
+  const recent = searching ? [] : recentCommands(commands.filter((command) => command.available), recentIds);
+  const activeId = selectedId ?? recent[0]?.id ?? filteredCommands[0]?.id;
   const recentSet = new Set(recent.map((command) => command.id));
   const groups: Array<{ group: CommandGroup | "recent" | "results"; items: CommandPaletteCommand[] }> = searching
     ? [{ group: "results", items: filteredCommands }]
@@ -83,7 +90,7 @@ export function CommandPalette({
             aria-label={t("palette.searchLabel")}
             placeholder={t("palette.placeholder")}
             value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
+            onChange={(event) => { setSelectedId(undefined); onQueryChange(event.target.value); }}
           />
           <kbd>ESC</kbd>
         </div>
@@ -97,23 +104,29 @@ export function CommandPalette({
                   key={command.id}
                   className="commandItem"
                   type="button"
-                  disabled={!command.available}
+                  aria-label={command.label}
+                  aria-disabled={!command.available || undefined}
+                  aria-describedby={activeId === command.id ? `command-detail-${command.id}` : undefined}
+                  onFocus={() => setSelectedId(command.id)}
+                  onMouseEnter={() => setSelectedId(command.id)}
                   aria-keyshortcuts={command.shortcut ? ariaShortcut(shortcuts[command.shortcut], isMacPlatform) : undefined}
                   onClick={() => {
+                    if (!command.available) return;
                     setRecentIds(rememberRecentCommand(command.id, recentIds));
                     command.run();
                     onClose();
                   }}
                 >
-                  <span className="commandItemMain"><strong>{command.label}</strong><small>{!command.available && command.unavailableReason ? command.unavailableReason : command.detail}</small></span>
+                  <span className="commandItemMain"><strong>{command.label}</strong>{activeId === command.id && <small id={`command-detail-${command.id}`}>{!command.available && command.unavailableReason ? command.unavailableReason : command.detail}</small>}</span>
                   {command.available
-                    ? <kbd>{command.id === "workspace" ? `${navigationShortcut} 2` : command.id === "welcome" ? `${navigationShortcut} 1` : command.shortcut ? displayShortcut(shortcuts[command.shortcut], isMacPlatform) : "↵"}</kbd>
+                    ? command.shortcut && <kbd>{displayShortcut(shortcuts[command.shortcut], isMacPlatform)}</kbd>
                     : <span className="unavailableTag">{t("palette.unavailable")}</span>}
                 </button>
               ))}
             </div>
           ))}
-          {filteredCommands.length === 0 && <p className="noCommands">{t("palette.noMatch", { query })}</p>}
+          {unavailable.length > 0 && <button className="commandItem commandUnavailableToggle" type="button" aria-expanded={showUnavailable} onFocus={() => setSelectedId("unavailable")} onClick={() => setShowUnavailable((value) => !value)}>{t(unavailable.every((command) => command.requiresRepository) ? "palette.requiresRepository" : "palette.unavailableCount", { count: unavailable.length })}</button>}
+          {matches.length === 0 && <p className="noCommands">{t("palette.noMatch", { query })}</p>}
         </div>
         <div className="paletteFooter"><span>{t("palette.navigate")}</span><span>{t("palette.run")}</span><span>{t("palette.close")}</span></div>
       </Dialog>

@@ -1,3 +1,4 @@
+import { useMenuPlacement } from "../../../shared/hooks/use-menu-placement";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { GitCrestApiClient, WorktreeSnapshotResponse } from "../../../api/client";
 import { useI18n } from "../../../shared/i18n";
@@ -33,6 +34,7 @@ export function WorktreeSwitcher({ api, repoId, refreshKey, disabled, onOpen }: 
   const menuRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef<HTMLInputElement>(null);
   const open = Boolean(position);
+  useMenuPlacement(menuRef, buttonRef, open, "start");
 
   // Read again on every opening as well, so worktrees added or removed outside GitCrest show up.
   useEffect(() => {

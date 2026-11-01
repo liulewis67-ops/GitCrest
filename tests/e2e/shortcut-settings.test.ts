@@ -19,9 +19,11 @@ describe("shortcut settings E2E", () => {
     try {
       await mkdir(resolve(fixture.path, "src"), { recursive: true });
       await writeFile(sourcePath, "export const shortcut = 'base';\n");
-      await execFileAsync("git", ["-C", fixture.path, "add", "src/shortcut.ts"]);
+      await writeFile(resolve(fixture.path, "src/second.ts"), "export const second = 'base';\n");
+      await execFileAsync("git", ["-C", fixture.path, "add", "src"]);
       await execFileAsync("git", ["-C", fixture.path, "commit", "--quiet", "-m", "add shortcut fixture"]);
       await writeFile(sourcePath, "export const shortcut = 'changed';\n");
+      await writeFile(resolve(fixture.path, "src/second.ts"), "export const second = 'changed';\n");
 
       app = await electron.launch({
         args: [".", "--lang=en-US", "--user-data-dir", resolve(appDataPath, "profile")],
@@ -51,10 +53,27 @@ describe("shortcut settings E2E", () => {
       await window.getByRole("heading", { name: "Recent repositories" }).waitFor();
       await window.locator(".repositoryRowOpen").click();
       await window.locator(".workspaceCrumb").waitFor();
+      const rows = window.locator(".changeTreeFile");
+      await expect.poll(() => rows.count()).toBe(2);
+      await rows.first().focus();
+      await window.keyboard.press("ArrowDown");
+      expect(await rows.nth(1).evaluate((node) => node === document.activeElement)).toBe(true);
+      const stagedPath = await rows.nth(1).getAttribute("aria-label");
+      const checkbox = window.getByRole("checkbox", { name: `Stage ${stagedPath!.replace(/^modified /, "")}`, exact: true });
+      await window.keyboard.press("Space");
+      await expect.poll(() => checkbox.isChecked(), { timeout: 10_000 }).toBe(true);
+      await expect.poll(() => checkbox.isEnabled(), { timeout: 10_000 }).toBe(true);
+      await window.keyboard.press("Space");
+      await expect.poll(() => checkbox.isChecked(), { timeout: 10_000 }).toBe(false);
+      expect(await rows.nth(1).evaluate((node) => node === document.activeElement)).toBe(true);
+      await window.keyboard.press("Enter");
+      await expect.poll(() => rows.nth(1).getAttribute("aria-pressed")).toBe("true");
+      await window.locator(".diffPanel .splitDiff, .diffPanel .fileDiffViewer").first().waitFor();
       await window.getByRole("button", { name: "Settings" }).click();
       await window.getByRole("menuitem", { name: /All settings/ }).click();
 
       const settings = window.getByRole("dialog", { name: "Settings" });
+      await settings.getByRole("searchbox", { name: "Search shortcuts" }).fill("Shelve");
       const shelveBinding = settings.getByRole("button", { name: "Record shortcut for Shelve changes" });
       await shelveBinding.click();
       await window.keyboard.press("Control+Shift+j");

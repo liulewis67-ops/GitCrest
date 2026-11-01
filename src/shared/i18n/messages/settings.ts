@@ -1,4 +1,11 @@
 export const settings = {
+  "settings.searchShortcuts": ["Search shortcuts", "搜索快捷键"],
+  "settings.noShortcuts": ["No matching shortcuts.", "没有匹配的快捷键。"],
+  "settings.shortcutGroup.navigation": ["Navigation", "导航"],
+  "settings.shortcutGroup.repositories": ["Repositories and remotes", "仓库与远程"],
+  "settings.shortcutGroup.changes": ["Changes and review", "更改与审查"],
+  "settings.shortcutGroup.commits": ["Commits and history", "提交与历史"],
+  "settings.shortcutGroup.display": ["Display", "显示"],
   "settings.closeTitle": ["Close settings (Esc)", "关闭设置（Esc）"],
   "settings.sections": ["Settings sections", "设置分区"],
   "settings.section.general": ["General", "通用"],

@@ -1,3 +1,4 @@
+import { navigateMenu } from "../hooks/use-menu-placement";
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
@@ -54,12 +55,13 @@ export function ContextMenu({ x, y, label, items, returnFocusTo, onClose }: {
     document.addEventListener("mousedown", onPointerDown);
     window.addEventListener("resize", dismiss);
     window.addEventListener("blur", dismiss);
-    document.addEventListener("scroll", dismiss, true);
+    const onScroll = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) dismiss(); };
+    document.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       window.removeEventListener("resize", dismiss);
       window.removeEventListener("blur", dismiss);
-      document.removeEventListener("scroll", dismiss, true);
+      document.removeEventListener("scroll", onScroll, true);
     };
   }, []);
 
@@ -73,25 +75,7 @@ export function ContextMenu({ x, y, label, items, returnFocusTo, onClose }: {
     returnFocusTo?.focus();
   }
 
-  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) {
-    const enabled = [...(menuRef.current?.querySelectorAll<HTMLButtonElement>("button:not(:disabled)") ?? [])];
-    const index = enabled.indexOf(document.activeElement as HTMLButtonElement);
-    const target = event.key === "ArrowDown" ? enabled[(index + 1) % enabled.length]
-      : event.key === "ArrowUp" ? enabled[(index - 1 + enabled.length) % enabled.length]
-        : event.key === "Home" ? enabled[0]
-          : event.key === "End" ? enabled[enabled.length - 1] : undefined;
-    if (target) {
-      event.preventDefault();
-      target.focus();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      event.stopPropagation();
-      closeAndRestoreFocus();
-    } else if (event.key === "Tab") {
-      event.preventDefault();
-      closeAndRestoreFocus();
-    }
-  }
+  function onKeyDown(event: KeyboardEvent<HTMLDivElement>) { navigateMenu(event, closeAndRestoreFocus); }
 
   return createPortal(
     <div
@@ -103,7 +87,7 @@ export function ContextMenu({ x, y, label, items, returnFocusTo, onClose }: {
       onKeyDown={onKeyDown}
       onContextMenu={(event) => event.preventDefault()}
     >
-      {items.map((item) => <div className={item.separatorBefore ? "actionMenuGroup separated" : "actionMenuGroup"} key={item.id} role="none">
+      {items.map((item, index) => <div className={item.separatorBefore || (index > 0 && Boolean(item.danger) !== Boolean(items[index - 1].danger)) ? "actionMenuGroup separated" : "actionMenuGroup"} key={item.id} role="none">
         <button type="button" role="menuitem" className={item.danger ? "danger" : undefined} disabled={item.disabled} title={item.title} onClick={() => { closeAndRestoreFocus(); item.onSelect(); }}>
           <span className="contextMenuIcon" aria-hidden="true">{item.icon}</span>
           <span>{item.label}</span>

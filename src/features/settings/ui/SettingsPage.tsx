@@ -7,7 +7,7 @@ import type { GitCrestApiClient } from "../../../api/client";
 import {
   defaultShortcutPreferences,
   displayShortcut,
-  shortcutActions,
+  shortcutGroups,
   shortcutConflict,
   shortcutFromEvent,
   type ShortcutAction,
@@ -54,12 +54,14 @@ export function SettingsPage({
   const { t, locale, setLocale } = useI18n();
   const anyHintDismissed = useAnyHintDismissed();
   const [recordingShortcut, setRecordingShortcut] = useState<ShortcutAction>();
+  const [shortcutQuery, setShortcutQuery] = useState("");
   const [shortcutError, setShortcutError] = useState<DisplayError>("");
   const [activeSection, setActiveSection] = useState<SettingsSectionId>(initialSection ?? "general");
   const contentRef = useRef<HTMLDivElement>(null);
 
   const isMac = navigator.platform.toLowerCase().includes("mac");
   const sections = SETTINGS_SECTIONS.filter((id) => id !== "updates" || updateStatus);
+  const matchingShortcutGroups = shortcutGroups.map((group) => ({ ...group, actions: group.actions.filter((id) => `${t(`sc.${id}`)} ${displayShortcut(shortcuts[id], isMac)}`.toLocaleLowerCase().includes(shortcutQuery.trim().toLocaleLowerCase())) })).filter((group) => group.actions.length > 0);
 
   // A theme left half-edited is never saved by closing Settings.
   useEffect(() => () => previewTheme(undefined), []);
@@ -202,8 +204,11 @@ export function SettingsPage({
               </div>
               <div className="settingsCard">
                 <p className="settingsHint">{t("settings.shortcutsHelp")}</p>
-                <div className="shortcutPreferenceList">
-                  {shortcutActions.map(({ id }) => <div className="shortcutPreferenceRow" key={id}>
+                <label className="shortcutSearch">{t("settings.searchShortcuts")}<input type="search" value={shortcutQuery} onChange={(event) => setShortcutQuery(event.target.value)} /></label>
+                {matchingShortcutGroups.map((group) => <section className="shortcutGroup" key={group.id} aria-labelledby={`shortcut-group-${group.id}`}>
+                  <h4 id={`shortcut-group-${group.id}`}>{t(`settings.shortcutGroup.${group.id}`)}</h4>
+                  <div className="shortcutPreferenceList">
+                  {group.actions.map((id) => <div className="shortcutPreferenceRow" key={id}>
                     <span>{t(`sc.${id}`)}</span>
                     <button
                       type="button"
@@ -215,7 +220,9 @@ export function SettingsPage({
                       <kbd>{recordingShortcut === id ? t("settings.pressShortcut") : displayShortcut(shortcuts[id], isMac)}</kbd>
                     </button>
                   </div>)}
-                </div>
+                  </div>
+                </section>)}
+                {matchingShortcutGroups.length === 0 && <p className="settingsHint" role="status">{t("settings.noShortcuts")}</p>}
                 {shortcutError && <p className="formError" role="alert"><ErrorMessage error={shortcutError} /></p>}
               </div>
             </section>

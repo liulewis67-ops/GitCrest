@@ -1,3 +1,4 @@
+import { useMenuPlacement, navigateMenu } from "../../../shared/hooks/use-menu-placement";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "../../../shared/i18n";
 
@@ -16,6 +17,7 @@ export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, o
   const buttonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const open = Boolean(position);
+  useMenuPlacement(menuRef, buttonRef, open, "end");
 
   useEffect(() => {
     if (!open) return;
@@ -33,13 +35,14 @@ export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, o
     document.addEventListener("mousedown", onPointerDown);
     document.addEventListener("keydown", onKeyDown);
     window.addEventListener("resize", close);
-    document.addEventListener("scroll", close, true);
+    const onScroll = (event: Event) => { if (!menuRef.current?.contains(event.target as Node)) close(); };
+    document.addEventListener("scroll", onScroll, true);
     menuRef.current?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
     return () => {
       document.removeEventListener("mousedown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("resize", close);
-      document.removeEventListener("scroll", close, true);
+      document.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
 
@@ -58,10 +61,10 @@ export function BranchRowMenu({ branch, disabled, checkedOutAt, onNewWorktree, o
 
   return <>
     <button ref={buttonRef} className="branchAction" type="button" aria-haspopup="menu" aria-expanded={open} aria-label={t("br.moreActionsFor", { branch })} title={t("br.moreActions")} disabled={disabled} onClick={toggle}>⋯</button>
-    {position && <div ref={menuRef} className="branchRowMenu" role="menu" aria-label={t("br.actionsFor", { branch })} style={{ top: position.top, right: position.right }}>
+    {position && <div ref={menuRef} onKeyDown={(event) => navigateMenu(event, () => { setPosition(undefined); buttonRef.current?.focus(); })} className="branchRowMenu" role="menu" aria-label={t("br.actionsFor", { branch })} style={{ top: position.top, right: position.right }}>
       <button type="button" role="menuitem" aria-label={t("br.openNewWorktreeAria", { branch })} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? t("br.alreadyCheckedOut", { path: checkedOutAt }) : undefined} onClick={choose(onNewWorktree)}>{t("br.openNewWorktree")}</button>
       <button type="button" role="menuitem" aria-label={t("br.renameAria", { branch })} onClick={choose(onRename)}>{t("br.rename")}</button>
-      <button type="button" role="menuitem" className="danger" aria-label={t("br.deleteAria", { branch })} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? t("br.removeWorktreeFirst") : undefined} onClick={choose(onDelete)}>{t("br.delete")}</button>
+      <button type="button" role="menuitem" className="danger separated" aria-label={t("br.deleteAria", { branch })} disabled={Boolean(checkedOutAt)} title={checkedOutAt ? t("br.removeWorktreeFirst") : undefined} onClick={choose(onDelete)}>{t("br.delete")}</button>
     </div>}
   </>;
 }

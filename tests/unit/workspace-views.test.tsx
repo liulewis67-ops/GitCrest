@@ -275,6 +275,27 @@ describe("CommitPanel", () => {
     expect(screen.getByText("composer")).toBeDefined();
   });
 
+  it("moves through file rows with arrows and stages or unstages the focused row with Space", () => {
+    const { onStageChanges } = renderPanel();
+    const rows = [...document.querySelectorAll<HTMLButtonElement>(".changeTreeFile")];
+    rows[0].focus();
+    fireEvent.keyDown(rows[0], { key: "ArrowDown" });
+    expect(document.activeElement).toBe(rows[1]);
+    fireEvent.keyDown(rows[1], { key: " " });
+    expect(onStageChanges).toHaveBeenLastCalledWith("stageFile", "src/b.ts");
+    fireEvent.keyDown(rows[1], { key: "ArrowDown" });
+    fireEvent.keyDown(rows[2], { key: " " });
+    expect(onStageChanges).toHaveBeenLastCalledWith("unstageFile", "c.ts");
+    fireEvent.keyDown(rows[2], { key: "End" });
+    expect(document.activeElement).toBe(rows[rows.length - 1]);
+    fireEvent.keyDown(rows[rows.length - 1], { key: "Home" });
+    expect(document.activeElement).toBe(rows[0]);
+    cleanup();
+    const blocked = renderPanel({ stagingBusy: true });
+    fireEvent.keyDown(screen.getByRole("button", { name: "modified src/a.ts" }), { key: " " });
+    expect(blocked.onStageChanges).not.toHaveBeenCalled();
+  });
+
   it("stages a whole group in one request, and unstages it once every file is staged", () => {
     const { onStageChanges } = renderPanel();
     const groupBox = screen.getByRole("checkbox", { name: "Stage every file in Changes" }) as HTMLInputElement;

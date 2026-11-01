@@ -41,7 +41,7 @@ export function CommitActionsMenu({ oid, workflowDisabledReason, onWorkflow, onC
       { id: "merge", label: t("hv.merge"), disabled: blocked, title: workflowDisabledReason, separatorBefore: true, onSelect: () => onWorkflow("merge", oid) },
       { id: "cherryPick", label: t("hv.cherryPick"), disabled: blocked, title: workflowDisabledReason, onSelect: () => onWorkflow("cherryPick", oid) },
       { id: "revert", label: t("hv.revert"), disabled: blocked, title: workflowDisabledReason, onSelect: () => onWorkflow("revert", oid) },
-      ...(onReset ? [{ id: "reset", label: t("hv.reset"), disabled: blocked || Boolean(resetDisabledReason), title: workflowDisabledReason ?? resetDisabledReason, onSelect: () => onReset(oid) }] : []),
+      ...(onReset ? [{ id: "reset", danger: true, separatorBefore: true, label: t("hv.reset"), disabled: blocked || Boolean(resetDisabledReason), title: workflowDisabledReason ?? resetDisabledReason, onSelect: () => onReset(oid) }] : []),
     ]}
   ><span aria-hidden="true">⋯</span></MenuButton>;
 }

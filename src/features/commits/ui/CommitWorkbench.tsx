@@ -1,5 +1,6 @@
 import { useI18n } from "../../../shared/i18n";
-import { lazy, Suspense, useRef, useState, type KeyboardEvent } from "react";
+import { lazy, Suspense, useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { navigateMenu, useMenuPlacement } from "../../../shared/hooks/use-menu-placement";
 import type { CommitRequest, GitCrestApiClient, RepositoryResponse, StatusSnapshotResponse } from "../../../api/client";
 import { ariaShortcut, displayShortcut, matchesShortcut, type ShortcutPreferences } from "../../settings";
 import { GitIdentityEditor } from "../../identity";
@@ -85,6 +86,21 @@ export function CommitWorkbench({
 }: CommitWorkbenchProps) {
   const { t } = useI18n();
   const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const actionButtonRef = useRef<HTMLButtonElement>(null);
+  const actionMenuRef = useRef<HTMLDivElement>(null);
+  const toggleMenuRef = useRef(onToggleActionMenu);
+  toggleMenuRef.current = onToggleActionMenu;
+  useMenuPlacement(actionMenuRef, actionButtonRef, commit.actionMenuOpen);
+  useEffect(() => {
+    if (!commit.actionMenuOpen) return;
+    const menu = actionMenuRef.current;
+    (menu?.querySelector<HTMLElement>("[aria-checked='true']:not(:disabled)") ?? menu?.querySelector<HTMLElement>("button:not(:disabled)") ?? menu)?.focus();
+    const dismiss = (event: MouseEvent) => {
+      if (!actionMenuRef.current?.contains(event.target as Node) && !actionButtonRef.current?.contains(event.target as Node)) toggleMenuRef.current();
+    };
+    document.addEventListener("mousedown", dismiss);
+    return () => document.removeEventListener("mousedown", dismiss);
+  }, [commit.actionMenuOpen]);
   const [identityOpen, setIdentityOpen] = useState(false);
   const commitKeyShortcuts = `${ariaShortcut(shortcuts.commit, isMacPlatform)} ${ariaShortcut(shortcuts.commitAndPush, isMacPlatform)}`;
   const summaryLength = commit.summary.trim().length;
@@ -109,11 +125,13 @@ export function CommitWorkbench({
     <section className="commitComposer" aria-label={t("cw.aria")}>
       <div className="composerOptions">
         <label className="disabledCheck"><input type="checkbox" checked={commit.amend} disabled={!repository?.head || commit.busy} onChange={(event) => onSelectAmend(event.target.checked)} /> {t("cw.amend")}</label>
-        <label className="disabledCheck" title={t("cw.signOff")}><input type="checkbox" aria-label={t("cw.signOff")} checked={commit.signOff} disabled={!repository || commit.busy} onChange={(event) => onSelectSignOff(event.target.checked)} /> <span className="composerLabelFull">{t("cw.signOff")}</span><span className="composerLabelCompact">{t("cw.signOffCompact")}</span></label>
-        <label className="disabledCheck" title={t("cw.sign")}><input type="checkbox" aria-label={t("cw.sign")} checked={commit.sign} disabled={!repository || commit.busy} onChange={(event) => onSelectSign(event.target.checked)} /> <span className="composerLabelFull">{t("cw.sign")}</span><span className="composerLabelCompact">{t("cw.signCompact")}</span></label>
+        <label className="disabledCheck" title={t("cw.signOffHelp")}><input type="checkbox" aria-label={t("cw.signOff")} aria-describedby="commit-signoff-help" checked={commit.signOff} disabled={!repository || commit.busy} onChange={(event) => onSelectSignOff(event.target.checked)} /> <span className="composerLabelFull">{t("cw.signOff")}</span><span className="composerLabelCompact">{t("cw.signOffCompact")}</span></label>
+        <label className="disabledCheck" title={t("cw.signHelp")}><input type="checkbox" aria-label={t("cw.sign")} aria-describedby="commit-sign-help" checked={commit.sign} disabled={!repository || commit.busy} onChange={(event) => onSelectSign(event.target.checked)} /> <span className="composerLabelFull">{t("cw.sign")}</span><span className="composerLabelCompact">{t("cw.signCompact")}</span></label>
         <span className="composerHeaderSpacer" />
         <button type="button" className="textButton commitAiTrigger" aria-label={t("cw.aiSuggestion", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) })} aria-keyshortcuts={ariaShortcut(shortcuts.aiCommitMessage, isMacPlatform)} disabled={!repository || status.stagedCount === 0 || status.hasConflicts || commit.busy} title={status.hasConflicts ? t("cw.aiResolve") : status.stagedCount === 0 ? t("cw.aiStage") : t("cw.aiReview", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) })} onClick={() => onAssistantOpenChange(!commit.assistantOpen)}><span className="composerLabelFull">{t("cw.aiSuggestion", { shortcut: displayShortcut(shortcuts.aiCommitMessage, isMacPlatform) })}</span><span className="composerLabelCompact">{t("cw.aiSuggestionCompact")}</span></button>
       </div>
+      <p id="commit-signoff-help" className="srOnly">{t("cw.signOffHelp")}</p>
+      <p id="commit-sign-help" className="srOnly">{t("cw.signHelp")}</p>
       <div className="commitSummaryField">
         <input
           id="commit-message"
@@ -161,10 +179,10 @@ export function CommitWorkbench({
       <div className="composerActions">
         <div className={`commitSplit${commit.actionIsDanger ? " danger" : ""}`}>
           <button className="primaryButton commitButton" type="button" disabled={!commit.canCommit} title={disabledReason ?? (commit.actionIsDanger ? t("cw.tDanger") : t("cw.tRun"))} onClick={() => onSubmit(commit.activeAction)}>{commit.busy ? t("cw.submitting") : commit.actionLabel}</button>
-          <button className="commitSplitMenuButton" type="button" disabled={!repository || commit.busy} aria-label={t("cw.chooseAction")} aria-haspopup="menu" aria-expanded={commit.actionMenuOpen} onClick={onToggleActionMenu}>▾</button>
-          {commit.actionMenuOpen && <div className="commitActionMenu" role="menu" aria-label={t("cw.actionsAria")}>
-            <button type="button" role="menuitemradio" aria-checked={commit.activeAction === "commit"} disabled={!commit.canCommit} onClick={() => onChooseAction("commit")}>{t("cw.mCommit")}</button>
-            <button type="button" role="menuitemradio" aria-checked={commit.activeAction === "commitAndPush"} disabled={!commit.canCommit} onClick={() => onChooseAction("commitAndPush")}>{t("cw.mCommitPush")}</button>
+          <button ref={actionButtonRef} className="commitSplitMenuButton" type="button" disabled={!repository || commit.busy} aria-label={t("cw.chooseAction")} aria-haspopup="menu" aria-expanded={commit.actionMenuOpen} onClick={onToggleActionMenu}>▾</button>
+          {commit.actionMenuOpen && <div ref={actionMenuRef} tabIndex={-1} className="commitActionMenu" role="menu" aria-label={t("cw.actionsAria")} onKeyDown={(event) => navigateMenu(event, () => { onToggleActionMenu(); actionButtonRef.current?.focus(); })}>
+            <button type="button" role="menuitemradio" aria-checked={commit.activeAction === "commit"} aria-keyshortcuts={ariaShortcut(shortcuts.commit, isMacPlatform)} disabled={!commit.canCommit} onClick={() => onChooseAction("commit")}><span>{t("cw.mCommit")}</span><kbd aria-hidden="true">{displayShortcut(shortcuts.commit, isMacPlatform)}</kbd></button>
+            <button type="button" role="menuitemradio" aria-checked={commit.activeAction === "commitAndPush"} aria-keyshortcuts={ariaShortcut(shortcuts.commitAndPush, isMacPlatform)} disabled={!commit.canCommit} onClick={() => onChooseAction("commitAndPush")}><span>{t("cw.mCommitPush")}</span><kbd aria-hidden="true">{displayShortcut(shortcuts.commitAndPush, isMacPlatform)}</kbd></button>
             <button type="button" role="menuitemradio" aria-checked={commit.activeAction === "commitAndPushTo"} disabled={!commit.canCommit} onClick={() => onChooseAction("commitAndPushTo")}>{t("cw.mCommitPushTo")}</button>
             <button className="dangerMenuItem" type="button" role="menuitemradio" aria-checked={commit.activeAction === "commitAndPushForce"} disabled={!commit.canCommit} onClick={() => onChooseAction("commitAndPushForce")}>{t("cw.mForce")}</button>
           </div>}
@@ -173,7 +191,7 @@ export function CommitWorkbench({
         {commit.activeAction === "commit" && <button className="secondaryButton commitButton" type="button" disabled={!commit.canCommit} title={disabledReason ?? t("cmp.commitAndPushTitle")} onClick={() => onSubmit("commitAndPushTo")}>{commit.amend ? t("app.amendAndPushTo") : t("app.commitAndPushTo")}</button>}
       </div>
       <div className="composerFooter">
-        <p className="composerStatus"><span title={target}>{target}</span> · <span className={status.stagedCount === 0 ? "empty" : undefined}>{stagedLabel}</span></p>
+        <p className="composerStatus"><span title={target}>{target}</span><span className={status.stagedCount === 0 ? "empty" : undefined}>{stagedLabel}</span></p>
           <label className="srOnly" htmlFor="commit-template">{t("cw.template")}</label>
           <select id="commit-template" className="composerTemplate" aria-label={t("cw.template")} value={commit.template} disabled={!repository || !connected || commit.busy} onChange={(event) => onChangeTemplate(event.target.value)}>
             <option value="plain">{t("cw.plain")}</option>
